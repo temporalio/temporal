@@ -360,6 +360,9 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	//   started --timeout--> timed_out: a real schedule-to-close timer on a never-completing
 	//   async operation (the force-timeout hook fires on the attempt, not once started).
 	explore(asyncStart, timeoutCaller, 10*time.Second)
+	//   unspecified --reject--> rejected: a synchronous rejection (invalid input) — the Monitor
+	//   models the RPC error as the operation reaching the rejected terminal (E3, UMPIRE_ERR.md).
+	exploreEnv(s.nexusGenExecPlan([]umpire.Action{action.StartUnknownEndpoint}), 15*time.Second)
 
 	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
 	require.True(t, ok)
@@ -368,7 +371,7 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	for _, e := range rep.Missing() {
 		t.Logf("[exploration]   MISSING: %s --%s--> %s", e.From, e.Event, e.To)
 	}
-	// All 16 modelled edges are now exercised, across both hostings: the workflow (Embedded)
+	// Every modelled edge is now exercised, across both hostings: the workflow (Embedded)
 	// driver covers the shared lifecycle, and the standalone driver covers the three
 	// {scheduled,backing_off,started} --terminate--> terminated edges that are Standalone-only
 	// (terminated is reached via the operation's own Terminate RPC — a workflow-child op has

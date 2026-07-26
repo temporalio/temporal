@@ -342,27 +342,35 @@ Built on top of the actions model (`UMPIRE_ACTIONS.md`). The Temporal concretion
 
 - **E1 — rejection round-trip (done).** `umpire.Action.Reject` + the `RejectSink` seam: `Drive`
   records a Fire outcome on a `Reject` action (error, or nil if accepted) and continues instead of
-  aborting. Domain side: the `rpcStartInvalid` realizer, the declared `StartUnknownEndpoint`
-  (well-formed request, non-existent endpoint → NotFound, no entity), `RejectionDrift` (the
-  client-error contract, via `serviceerror.ToStatus`), and `CountEntities`. Round-tripped by
-  `TestProbeNexusRejectedStart`.
+  aborting. The declared `StartUnknownEndpoint` (well-formed request, non-existent endpoint →
+  NotFound) exercises it.
 - **E2 — per-field variant enumeration (done).** The `Param` / `Domain` / `Variant` /
   `ValidityClass` schema, plus `reflectStringParams` walking the request descriptor to mint a
   `stringDomain`'s standard mutants per scalar string field. `rpcStartMutated` applies a single
   field mutation to the valid base via protoreflect; `StartFieldVariants` enumerates the negative
-  set. Round-tripped by `TestProbeNexusReflectedVariant` (drives `operation_id=empty`).
+  set. Exercised by `TestProbeNexusReflectedVariant` (`operation_id=empty`).
+- **E3 — rejection judged by the model (done).** A rejection is now a *fact*, not a domain-side
+  check. The gRPC interceptor passes the handler error to `Monitor.RecordRejection`
+  (`RejectionRecorder`); the decoder's `ImportRejection` turns a client-error-class
+  `StartNexusOperationExecution` failure into a `NexusOperationRejected` fact (gated by
+  `fact.RejectionCode`), routed by request id under the namespace. The NexusOperation lifecycle
+  gains a `reject` edge to a `rejected` `Failure` terminal, so the invalid action's `reject` Effect
+  is confirmed by the ordinary `umpire.Reconcile` — the former `RejectionDrift` is retired.
+  Name→id, which a request-only fact lacks, is seeded into the Monitor by the driver (`NewCtx` →
+  `SetNamespaceID`). A non-client-error failure produces no fact, so its absent transition surfaces
+  as drift rather than a pass. `reject` is the 17th modelled edge and is covered by the exploration.
 
 ### What remains
 
-- **E3** — `reject:*` lifecycle terminals + Monitor-decoder integration, so a rejection is judged
-  uniformly as a fact (via `Classify` / `Reconcile`) rather than by the domain-side `RejectionDrift`
-  side check.
 - **E4** — the differential oracle over the server's validator registry (§6): run the server's own
   `ValidateAndNormalize` in-process as the oracle where the field is covered.
 - **E5** — variant coverage as a planning goal, and non-string domains (enum / int / duration /
   payload) beyond E2's string reflection.
 - **Normalize outcomes** — §2's `Normalize` (e.g. empty `request_id` → UUID) is designed but not yet
   driven; today such a variant would read as an accepted request.
+- **Rejection classes as terminals** — E3 models all client-error rejections as one `rejected`
+  terminal (the code is kept as the outcome). Splitting into `reject:NotFound` /
+  `reject:InvalidArgument` terminals (§3a) is deferred until a rule needs to distinguish them.
 
 ## Relationship to the other umpire pieces
 
