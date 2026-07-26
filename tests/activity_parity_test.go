@@ -50,10 +50,12 @@ const nextRetryDelayOverride = 10 * time.Second
 func (s *activityParityTestSuite) TestParityNonRetryableErrorTypes() {
 	env := newActivityParityEnv(s.T())
 
-	both := func(t *testing.T, cfg activityConfig, elapses model.Event, timeoutType enumspb.TimeoutType) {
+	both := func(t *testing.T, elapses model.Event, timeoutType enumspb.TimeoutType) {
 		trace := []model.Event{model.Poll, elapses}
-		cfg.MaxAttempts = 3
-		cfg.NonRetryableErrorTypes = []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType.String()}
+		cfg := activityConfig{
+			MaxAttempts:            3,
+			NonRetryableErrorTypes: []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType.String()},
+		}
 
 		t.Run("WorkflowActivity", func(t *testing.T) {
 			require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
@@ -68,10 +70,10 @@ func (s *activityParityTestSuite) TestParityNonRetryableErrorTypes() {
 	}
 
 	s.T().Run("StartToClose", func(t *testing.T) {
-		both(t, activityConfig{StartToClose: activityShortTimeout}, model.StartToCloseElapses, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+		both(t, model.StartToCloseElapses, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	})
 	s.T().Run("Heartbeat", func(t *testing.T) {
-		both(t, activityConfig{Heartbeat: activityShortTimeout}, model.HeartbeatElapses, enumspb.TIMEOUT_TYPE_HEARTBEAT)
+		both(t, model.HeartbeatElapses, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 	})
 }
 
