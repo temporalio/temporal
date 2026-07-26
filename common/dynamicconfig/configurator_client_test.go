@@ -38,6 +38,7 @@ func restoreExprSettings(t *testing.T) {
 	t.Helper()
 	for _, s := range []GenericSetting{
 		exprTaskQueueInt, exprNamespaceInt, exprTQPartitions, exprDuration, exprNsBool,
+		EnableEagerWorkflowStart,
 		HistoryPersistenceMaxQPS, MatchingRPS,
 	} {
 		if queryRegistry(s.Key()) == nil {
@@ -88,6 +89,7 @@ system.visibilityAllowList:          # bool
 // Boolean logic over deployment-scoped dimensions: the point of the exercise.
 func TestConfiguratorClient_AmbientDimensions(t *testing.T) {
 	const cfg = `
+constraintKeys: [deployRing]
 matching.historyMaxPageSize:
   defaultValue: 1
   overrides:

@@ -63,6 +63,26 @@ func TestDemoExpressionConfig(t *testing.T) {
 	t.Run("keys absent from the file are untouched", func(t *testing.T) {
 		require.Equal(t, MatchingRPS.Get(NewNoopCollection())(), MatchingRPS.Get(matching)())
 	})
+
+	t.Run("per-caller dimensions", func(t *testing.T) {
+		history := load(t, AmbientConstraints{AvailabilityZone: "us-west-2", ServiceName: "history"})
+		get := EnableEagerWorkflowStart.GetC(history)
+
+		// an SDK version the config singles out
+		require.False(t, get(ConstraintsWithNS("ns").
+			With(CKSDKName, "temporal-go").With(CKSDKMajor, 1).With(CKSDKMinor, 27)))
+		// a newer one is unaffected
+		require.True(t, get(ConstraintsWithNS("ns").
+			With(CKSDKName, "temporal-go").With(CKSDKMajor, 1).With(CKSDKMinor, 28)))
+		// and a different SDK entirely
+		require.True(t, get(ConstraintsWithNS("ns").
+			With(CKSDKName, "temporal-java").With(CKSDKMajor, 1).With(CKSDKMinor, 27)))
+
+		// the namespace override still applies, and needs no SDK information
+		require.False(t, get(ConstraintsWithNS("canary")))
+		// a caller supplying nothing gets the default, since neither override can match
+		require.True(t, get(nil))
+	})
 }
 
 // TestDemoExpressionConfigReload covers the watch path against a real file on disk.

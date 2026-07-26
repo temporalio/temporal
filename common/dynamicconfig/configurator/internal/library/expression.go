@@ -2,28 +2,28 @@ package configurator
 
 import "go.temporal.io/server/common/dynamicconfig/configurator/types"
 
-func (c *Expression) Matches(constraints types.Constraints) (bool, error) {
+func (c *Expression) Matches(constraints types.Lookup) (bool, error) {
 	switch c.Operator {
 	case OpEqual:
-		constraintVal, ok := constraints[string(c.Key)]
+		constraintVal, ok := constraints.Get(string(c.Key))
 		if !ok {
 			break
 		}
 		return c.Value.CompareAny(constraintVal) == 0, nil
 	case OpNotEqual:
-		constraintVal, ok := constraints[string(c.Key)]
+		constraintVal, ok := constraints.Get(string(c.Key))
 		if !ok {
 			break
 		}
 		return c.Value.CompareAny(constraintVal) != 0, nil
 	case OpGreater:
-		constraintVal, ok := constraints[string(c.Key)]
+		constraintVal, ok := constraints.Get(string(c.Key))
 		if !ok {
 			break
 		}
 		return c.Value.CompareAny(constraintVal) > 0, nil
 	case OpLess:
-		constraintVal, ok := constraints[string(c.Key)]
+		constraintVal, ok := constraints.Get(string(c.Key))
 		if !ok {
 			break
 		}
@@ -36,7 +36,7 @@ func (c *Expression) Matches(constraints types.Constraints) (bool, error) {
 	return false, nil
 }
 
-func (e *Expression) matchesAllSubexpressionsWithAnd(constraints types.Constraints) (bool, error) {
+func (e *Expression) matchesAllSubexpressionsWithAnd(constraints types.Lookup) (bool, error) {
 	for _, subexpr := range e.Subexpressions {
 		matches, err := subexpr.Matches(constraints)
 		if err != nil {
@@ -49,7 +49,7 @@ func (e *Expression) matchesAllSubexpressionsWithAnd(constraints types.Constrain
 	return true, nil
 }
 
-func (e *Expression) matchesAllSubexpressionsWithOr(constraints types.Constraints) (bool, error) {
+func (e *Expression) matchesAllSubexpressionsWithOr(constraints types.Lookup) (bool, error) {
 	for _, subexpr := range e.Subexpressions {
 		matches, err := subexpr.Matches(constraints)
 		if err != nil {

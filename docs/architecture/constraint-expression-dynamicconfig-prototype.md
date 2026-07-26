@@ -52,23 +52,57 @@ in the expression file is served entirely from there; every other key is delegat
 Reloads, subscriptions, and the mtime-poll watcher all reuse the existing plumbing
 (`NotifyingClientImpl`, `Collection.keysChanged`).
 
-### What it cannot do
+### The `GetC` accessors: caller-supplied dimensions
 
-`GetValue` is handed a `Key` and nothing else. It is not told the namespace, task queue, or
-shard of the call, so an expression referencing those dimensions has nothing to match against
-and falls through to its default.
-`TestConfiguratorClient_CannotSeePerRequestDimensions` pins this down.
+`GetValue` is handed a `Key` and nothing else, so on its own it cannot see the namespace, the
+calling SDK, or anything else about the request. The `GetC` accessors close that gap.
 
-**Expressions can constrain by *where the server is*, not by *what is being asked of it*.**
-Per-request dimensions stay in the ordinary dynamic config file, which handles them well.
+Where `Get` returns a function shaped by the setting's precedence — `func(namespace string) T`,
+`func(ns, tq string, tqType enumspb.TaskQueueType) T`, and six more — `GetC` returns the
+**same shape for every setting**:
 
-This was a deliberate choice. An earlier revision of this branch also hooked
-`Collection.matchAndConvert`, where the per-call constraints *are* known, and added a
-`WithConstraints` view so components could attach ad-hoc dimensions such as task queue
-partition index. It worked, but it cost a hook in the core, a read-path cost of ~230 ns and
-three allocations on configured keys, and a good deal of surface area, in exchange for a
-capability nothing was yet asking for. It is in the history of this branch if it is wanted
-later; see "if per-request dimensions are wanted" below.
+```go
+type TypedPropertyFnC[T any] func(ConstraintsMap) T
+```
+
+The caller puts its dimensions in a `ConstraintsMap`, including the ones that used to be
+positional:
+
+```go
+c := dynamicconfig.ConstraintsFromContext(ctx).   // sdkName, sdkVersion, sdkMajor/Minor/Patch, caller info
+        WithNS(s.namespace.Name()).
+        With("workflowID", request.WorkflowId)
+
+enabled := s.shardContext.GetConfig().EnableEagerWorkflowStart(c)
+```
+
+This is the part that dissolves the precedence system rather than layering on it: with one
+signature, the precedence axis no longer has to appear in the generated code at all.
+
+Three properties make it safe to adopt gradually:
+
+- **`Get` and `GetC` coexist.** `GetC` is additive; nothing that uses `Get` changed.
+- **Ambient always applies.** Process-scoped constraints are held by the client and merged
+  into every evaluation, so `GetC(nil)` still resolves `'"zone" = "us-west-2"'`.
+- **File config still applies.** Known keys are projected back out of the map onto the
+  precedence list, so a call site that moves to `GetC` keeps honouring constrained values in
+  the dynamic config file. `TestGetC_FallsBackToFileConstrainedValues` pins this down.
+
+`Subscribe` is deliberately left alone: a variadic cannot precede its callback parameter, and
+per-call dimensions are meaningless for a long-lived subscription. Subscribers see the
+ambient resolution, which is what `GetValue` serves.
+
+### Which entries are evaluated when
+
+At load, each entry's expressions are inspected for the constraint keys they test
+(`ReferencedKeys`). An entry that only tests keys this process supplies itself is resolved
+once, up front, and served through `GetValue` — no evaluation on the read path at all. Only
+entries that test something a caller could supply are evaluated per read, and even then the
+load-time answer is reused when the caller has not supplied any of the keys that entry
+actually cares about (`canUseResolved`).
+
+The one subtlety: a caller *can* shadow an ambient dimension by putting it in its own map,
+and that correctly forces a re-evaluation.
 
 ## Results
 
@@ -107,20 +141,37 @@ easy to get wrong.
 Ordered first-match is a genuine improvement over the implicit precedence table: what wins is
 visible in the file rather than in `gendynamicconfig/main.go`.
 
-### Performance — free
+### Performance — zero allocations on every path
 
-`go test ./common/dynamicconfig/ -bench BenchmarkConfiguratorClient -benchmem`, M5 Max:
+`go test ./common/dynamicconfig/ -bench 'BenchmarkGetC|BenchmarkConfiguratorClient' -benchmem`,
+M5 Max:
 
 | Case | ns/op | B/op | allocs/op |
 | --- | --- | --- | --- |
-| today's path | 52.2 | 0 | 0 |
-| expression-backed key | 48.3 | 0 | 0 |
-| key delegated to the inner client | 52.9 | 0 | 0 |
+| `Get`, today's path | 53.3 | 0 | 0 |
+| `Get`, expression-backed key | 49.8 | 0 | 0 |
+| `Get`, key delegated to the inner client | 54.3 | 0 | 0 |
+| `GetC(nil)`, unconfigured key | 32.6 | 0 | 0 |
+| `GetC(nil)`, ambient-only key | 23.6 | 0 | 0 |
+| `GetC(c)`, per-caller key, 1 caller dimension | 62.5 | 0 | 0 |
+| `GetC(c)`, per-caller key, 5 caller dimensions | 62.1 | 0 | 0 |
+| building one `ConstraintsMap` per request | 75.5 | 336 | 2 |
 
-Not merely close to today's path — it *is* today's path. Expressions are evaluated once at
-load, and what `Collection` sees afterwards is an ordinary `[]ConstrainedValue`. The
-expression-backed row benches marginally faster only because its one-element slice is smaller
-than the baseline's two-element one.
+The `Get` rows are unchanged from before this work, and are not merely close to today's path —
+they *are* today's path, since ambient-only entries are resolved at load and what `Collection`
+sees afterwards is an ordinary `[]ConstrainedValue`.
+
+The `GetC` rows are the new result, and better than the plan targeted: **per-read evaluation
+allocates nothing**, and does not grow with the number of caller dimensions. That is down to
+two things — expressions resolve an *index* into values decoded at load, so nothing is
+unmarshalled per read; and caller and ambient constraints are presented to the evaluator as a
+layered view (`types.Lookup`) rather than merged into a fresh map. An earlier revision that
+copied into a pooled map cost 230 ns and 3 allocations for the same work.
+
+The last row is the real per-request cost and the reason to build one `ConstraintsMap` per
+request rather than per lookup: 336 B once, then ~62 ns per setting read. (It benchmarks as
+free if you let escape analysis keep it on the stack — the benchmark deliberately sinks it to
+a package variable to avoid reporting a number callers will not see.)
 
 ## Behaviours worth knowing
 
@@ -138,53 +189,65 @@ than the baseline's two-element one.
 - **`service` is only set when a process hosts exactly one service.** One client is shared by
   all services in a binary.
 - **No metrics.** The file based client reports `DynamicConfigUpdateFailure`; this only logs.
+- **Constraint keys are declared in the file.** A `constraintKeys:` list at the top declares
+  the caller-supplied dimensions the expressions may use; anything an expression references
+  that is neither built in nor declared is rejected at load. This exists because every other
+  mistake in this system fails *silently* to the default — a misspelled key, a key that call
+  site never supplies, and a quoted number compared against an integer are all
+  indistinguishable from "no override applies". The vocabulary cannot be inferred, precisely
+  because the point of `GetC` is that a call site can invent a dimension.
+- **Write numbers bare.** `"deployRing" = "2"` does not match the integer 2: a quoted literal
+  compares against the parsed number, which is 0 for a string. The reverse — a string
+  constraint against a bare number — does work.
 
 ## Problems found in the library
 
-1. **The module path does not match the repo URL.** `go.mod` declares
-   `github.com/davidporter-id-au/constraints-config`; the repo is `.../configurator`, so
-   `go get` cannot resolve it. This is why the code is vendored. It also has no tags.
-2. **`LoadKey` races with `Eval`.** `internal/library/impl.go` writes `c.loads[key]` on a bare
+The vendored copy is now the source of truth, so these are ours to fix rather than upstream's.
+
+1. **`LoadKey` races with `Eval`.** `internal/library/impl.go` writes `c.loads[key]` on a bare
    map while `Eval` reads it, so registering a new key concurrently with reads is a data race.
-   Updating an existing key is safe. Avoided here by building a fresh `Configurator` per
-   reload and never mutating a live one.
-3. **No change notification.** Supplied by the adapter, reusing Temporal's mtime-poll and
+   Updating an existing key is safe. Avoided for now by building a fresh `Configurator` per
+   reload and never mutating a live one, but worth fixing properly.
+2. **No change notification.** Supplied by the client, reusing Temporal's mtime-poll and
    subscription plumbing.
-4. **`Eval` decodes JSON on every call in the obvious usage.** Avoided by having the library
+3. **`Eval` decoded JSON on every call in the obvious usage.** Avoided by having the library
    resolve an *index* into a table of values decoded once at load, using Temporal's own YAML
-   conventions and validated against the settings registry. Only possible because the adapter
-   controls the config fed to `LoadKey`.
+   conventions and validated against the settings registry.
+4. **Matching took a concrete map.** Changed to a `types.Lookup` interface so that ambient and
+   caller constraints can be layered without copying, which is what makes per-read evaluation
+   allocation-free. `ReferencedKeys` was added alongside it.
+5. **The module path does not match the repo URL,** and there are no tags, so `go get` cannot
+   resolve it at all. Moot now that this copy is authoritative.
 
 ## Recommendation
 
-Ship the constraint model at this seam. It is ~350 lines, changes nothing in the dynamic
-config core, costs nothing at read time, and delivers arbitrary deployment-scoped dimensions
-for all ~677 settings. A server with no expression file configured is byte-for-byte the server
-we have today, which makes it about as low-risk as a config change can be.
+The constraint model works, at both seams, and costs nothing when unused. A server with no
+expression file configured behaves exactly as it does today, and the `Get` accessors are
+untouched, so adoption is entirely opt-in per call site.
 
-Two things must be resolved before it is more than a prototype:
+**Migrating call sites to `GetC` is the path to removing the precedence system.** With one
+uniform signature the precedence axis stops being a code-generation concern: today
+`gendynamicconfig` emits 7 value types × 8 precedences — 2280 lines, 56 `Get` property-fn
+aliases and 8 hardcoded precedence orders — against 7 `GetC` aliases for the same coverage.
+The migration is mechanical but large: ~400 non-test call sites of namespace-filtered settings
+alone, perhaps three times that across all precedences, plus ~71 test func-literal overrides.
+Frontend and history are ~60% of it, with `chasm/lib` a third bucket at ~80.
 
-1. **Percentage and time-phased rollout must exist in the DSL**, or the DSL must compose with
-   `GradualChange`. Without it this cannot replace what matching already relies on.
-2. **The library needs a fixed module path, a tag, and the `LoadKey` race fixed** before it
-   can be a dependency rather than a vendored copy.
+Three things block finishing it:
 
-Beyond that, `>=`/`<=`, `in`, and prefix matching are the operators actually missed in
-practice.
+1. **Percentage and time-phased rollout must exist in the DSL**, or compose with
+   `GradualChange`. `matching.useNewMatcher` and `enableFairness` ship on it today, so the DSL
+   is not yet a superset of what the current system does. This is the real blocker.
+2. **Constrained defaults** (`defaultNumTaskQueuePartitions`, `shared_constants.go:11`) are
+   Go-side and outrank an unconstrained value. They need to become DSL, or stay as an explicit
+   fallback.
+3. **The shipped YAML needs converting.** Mechanical — each `[{value, constraints}]` list
+   becomes ordered overrides sorted by that setting's old precedence — but it deserves a
+   converter with a round-trip test over `config/dynamicconfig/*.yaml` asserting every key
+   resolves identically before and after.
 
-### If per-request dimensions are wanted later
-
-Two options, in increasing order of cost:
-
-- **Compile equality expressions into `ConstrainedValue`s at load.** `"namespace" = "canary"`
-  becomes `{Constraints: {Namespace: "canary"}}`, and `or` expands into several values. Stays
-  entirely at the `Client` seam. Sharp edges: `!=`, `>` and `<` over those fields cannot be
-  enumerated; the emitted tuple must exactly match an entry in that setting's precedence list
-  or it never fires; and first-match-in-file-order silently becomes precedence-order, so a
-  config whose broad override precedes its narrow one changes meaning.
-- **Hook `Collection.matchAndConvert`**, as the earlier revision of this branch did. Fully
-  general, including ad-hoc component dimensions via a `WithConstraints` view, at the cost of
-  a core hook and ~230 ns per read on configured keys.
+Beyond those, `>=`/`<=`, `in`, and prefix matching are the operators actually missed in
+practice, and semver comparison would remove the need for callers to split versions by hand.
 
 ## Trying it
 
@@ -194,8 +257,12 @@ go run ./cmd/server validate-expression-config config/dynamicconfig/expressions-
 
 # unit tests and benchmarks
 go test -race ./common/dynamicconfig/...
-go test ./common/dynamicconfig/ -run XXX -bench BenchmarkConfiguratorClient -benchmem
+go test ./common/dynamicconfig/ -run XXX -bench 'BenchmarkGetC|BenchmarkConfiguratorClient' -benchmem
 ```
+
+The one migrated call site is `service/history/api/startworkflow/api.go`, reading
+`system.enableEagerWorkflowStart` through `GetC` with the namespace, the calling SDK, and the
+workflow id.
 
 To run a server with it, add to the `dynamicConfigClient` block of a config file:
 

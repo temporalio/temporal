@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -26,11 +27,19 @@ import (
 // It matches the minimum poll interval of the file based client.
 const ExpressionFilePollInterval = 5 * time.Second
 
+// constraintKeysDirective is a reserved top-level key in the expression file, holding the
+// list of caller-supplied dimensions its expressions are allowed to reference. Every dynamic
+// config key contains a dot, so this cannot collide with a setting name.
+const constraintKeysDirective = "constraintKeys"
+
 // AmbientConstraints describes the process-scoped dimensions that expressions can match on.
 //
 // These are exactly the dimensions the Constraints struct cannot express: adding one today
 // means a new field, a new precedence order in cmd/tools/gendynamicconfig, and regenerating
 // setting_gen.go. Here they are configuration.
+//
+// They are held by the client and merged into every evaluation, so a caller that supplies
+// nothing at all still gets them.
 type AmbientConstraints struct {
 	// Environment, e.g. "production" or "staging".
 	Environment string
@@ -46,86 +55,134 @@ type AmbientConstraints struct {
 	Custom map[string]any
 }
 
-func (a AmbientConstraints) asMap() map[string]any {
-	m := make(map[string]any, len(a.Custom)+6)
+func (a AmbientConstraints) asMap() types.Constraints {
+	m := make(types.Constraints, len(a.Custom)+6)
 	maps.Copy(m, a.Custom)
-	putNonEmpty(m, "env", a.Environment)
-	putNonEmpty(m, "zone", a.AvailabilityZone)
-	putNonEmpty(m, "cluster", a.ClusterName)
-	putNonEmpty(m, "service", a.ServiceName)
-	putNonEmpty(m, "serverVersion", headers.ServerVersion)
+	putNonEmpty(m, CKEnvironment, a.Environment)
+	putNonEmpty(m, CKZone, a.AvailabilityZone)
+	putNonEmpty(m, CKCluster, a.ClusterName)
+	putNonEmpty(m, CKService, a.ServiceName)
+	putNonEmpty(m, CKServerVersion, headers.ServerVersion)
 	if host, err := os.Hostname(); err == nil {
-		putNonEmpty(m, "host", host)
+		putNonEmpty(m, CKHost, host)
 	}
 	return m
 }
 
-func putNonEmpty(m map[string]any, key, value string) {
+// ambientKeyNames is the set of keys this process can supply by itself, which determines
+// whether an entry can be resolved once at load or has to be evaluated on every read.
+func (a AmbientConstraints) ambientKeyNames() map[string]struct{} {
+	names := map[string]struct{}{
+		CKEnvironment: {}, CKZone: {}, CKCluster: {}, CKService: {}, CKHost: {}, CKServerVersion: {},
+	}
+	for k := range a.Custom {
+		names[k] = struct{}{}
+	}
+	return names
+}
+
+func putNonEmpty(m types.Constraints, key, value string) {
 	if value != "" {
 		m[key] = value
 	}
 }
 
-// ConfiguratorClient is a dynamicconfig.Client that resolves values by evaluating constraint
-// expressions (see common/dynamicconfig/configurator/README.md) against the deployment
-// dimensions of the running process.
+// ConfiguratorClient resolves dynamic config by evaluating constraint expressions (see
+// common/dynamicconfig/configurator/README.md).
+//
+// It serves two seams:
+//
+//   - As a Client, for the ordinary Get accessors. Entries are resolved against this
+//     process's ambient constraints and published as a single ConstrainedValue with empty
+//     Constraints. Every precedence order ends in the empty Constraints
+//     (cmd/tools/gendynamicconfig/main.go), so that one value is matched by every setting at
+//     every precedence, and nothing needs enumerating. Reads cost what they cost today.
+//   - As an Evaluator, for the GetC accessors, which hand it a caller-supplied
+//     ConstraintsMap. Entries whose expressions reference anything the caller could supply
+//     are evaluated per read, over a layered view of caller constraints and ambient ones.
+//
+// Entries whose expressions only reference ambient keys never take the second path: their
+// value cannot depend on the caller, so it is computed once at load.
 //
 // It layers over an inner Client, normally the file based one. A key present in the
-// expression file is served entirely from there; every other key is delegated untouched. The
-// two are not merged for a single key, so each key is configured in exactly one place.
-//
-// # How it fits the Client contract
-//
-// Expressions are evaluated once per key at load time, and the result is published as a
-// single ConstrainedValue with *empty* Constraints. Every precedence order ends in the empty
-// Constraints (cmd/tools/gendynamicconfig/main.go), so that one value is matched by every
-// setting at every precedence, and nothing needs to be enumerated. GetValue is then a map
-// lookup returning a stable slice, so reads cost what they cost today and Collection's
-// conversion cache still hits.
-//
-// # What it cannot do
-//
-// GetValue is handed a Key and nothing else: it is not told the namespace, task queue, or
-// shard of the call. An expression referencing those dimensions therefore has nothing to
-// match against and falls through to its default. Expressions can constrain by *where the
-// server is*, not by *what is being asked of it*.
-//
-// Note also that an unconstrained value loses to a more specific constrained default
-// (findAndResolveWithConstrainedDefaults), exactly as an unconstrained value in the dynamic
-// config file does today.
+// expression file is served entirely from there; every other key is delegated untouched.
 type ConfiguratorClient struct {
 	logger  log.Logger
 	inner   Client
-	ambient map[string]any
+	ambient types.Constraints
+	// vocabulary is the set of constraint keys an expression may reference. Anything else is
+	// rejected at load, so a typo fails loudly rather than silently matching nothing.
+	vocabulary map[string]struct{}
+	// ambientKeys is the subset of vocabulary this process supplies itself.
+	ambientKeys map[string]struct{}
 
-	// values is replaced wholesale on reload; it is never mutated in place, both because
-	// readers are lock-free and because the library's LoadKey is not safe to call
-	// concurrently with Eval.
-	values atomic.Pointer[ConfigValueMap]
+	// snapshot is replaced wholesale on reload; never mutated in place, both because readers
+	// are lock-free and because the library's LoadKey is not safe to call concurrently with
+	// Eval.
+	snapshot atomic.Pointer[exprSnapshot]
 
 	cancelInnerSubscription func()
+	errCount                atomic.Int64
 
 	NotifyingClientImpl
 }
 
-var _ Client = (*ConfiguratorClient)(nil)
-var _ NotifyingClient = (*ConfiguratorClient)(nil)
+type (
+	// exprSnapshot is one immutable generation of the expression configuration.
+	exprSnapshot struct {
+		// cfg resolves a key to an *index* into the entry's outcomes rather than to the value
+		// itself, so values are decoded once at load using Temporal's own YAML conventions
+		// and validated against the settings registry, and Eval never unmarshals.
+		cfg     configurator.Configurator[int]
+		entries map[Key]*exprEntry
+	}
+
+	exprEntry struct {
+		name string
+		// outcomes[0] is the default; outcomes[i+1] is override i's result, in file order.
+		// Pointers are stable for the life of the snapshot so that Collection can cache
+		// conversions against them with weak pointers.
+		outcomes []*ConstrainedValue
+		// referenced is the sorted set of constraint keys this entry's expressions test.
+		referenced []string
+		// ambientOnly is true when every referenced key is one this process supplies itself.
+		// Such an entry is resolved at load — unless a caller explicitly supplies one of the
+		// referenced keys, which shadows the ambient value and forces a re-evaluation.
+		ambientOnly bool
+		// resolved is the ambient-only resolution, served through GetValue. Also the answer
+		// for any caller that supplies nothing.
+		resolved []ConstrainedValue
+	}
+)
+
+var (
+	_ Client    = (*ConfiguratorClient)(nil)
+	_ Evaluator = (*ConfiguratorClient)(nil)
+)
 
 // NewConfiguratorClient returns a client with no expression configuration loaded, which
-// therefore delegates everything to inner. inner may be nil, in which case keys that the
+// therefore delegates everything to inner. inner may be nil, in which case keys the
 // expression file does not configure have no values and settings use their compiled-in
 // defaults.
 func NewConfiguratorClient(ambient AmbientConstraints, inner Client, logger log.Logger) *ConfiguratorClient {
+	ambientKeys := ambient.ambientKeyNames()
+	vocabulary := make(map[string]struct{}, len(builtinConstraintKeys)+len(ambientKeys))
+	maps.Copy(vocabulary, builtinConstraintKeys)
+	maps.Copy(vocabulary, ambientKeys)
+
 	c := &ConfiguratorClient{
 		logger:              logger,
 		inner:               inner,
 		ambient:             ambient.asMap(),
+		vocabulary:          vocabulary,
+		ambientKeys:         ambientKeys,
 		NotifyingClientImpl: NewNotifyingClientImpl(),
 	}
-	c.values.Store(&ConfigValueMap{})
+	c.errCount.Store(-1)
+	c.snapshot.Store(&exprSnapshot{entries: map[Key]*exprEntry{}})
 
-	// Forward the inner client's updates, so subscribers still see changes to the keys we
-	// are not overriding.
+	// Forward the inner client's updates, so subscribers still see changes to keys we are not
+	// overriding.
 	if notifying, ok := inner.(NotifyingClient); ok {
 		c.cancelInnerSubscription = notifying.Subscribe(c.innerKeysChanged)
 	}
@@ -139,10 +196,12 @@ func (c *ConfiguratorClient) Stop() {
 	}
 }
 
-// GetValue implements Client.
+// GetValue implements Client. It returns the ambient-only resolution, which is the right
+// answer for any caller that supplies no constraints of its own — including every subscriber,
+// since Subscribe has no way to pass them.
 func (c *ConfiguratorClient) GetValue(key Key) []ConstrainedValue {
-	if cvs, ok := (*c.values.Load())[key]; ok {
-		return cvs
+	if e, ok := c.snapshot.Load().entries[key]; ok {
+		return e.resolved
 	}
 	if c.inner == nil {
 		return nil
@@ -150,15 +209,101 @@ func (c *ConfiguratorClient) GetValue(key Key) []ConstrainedValue {
 	return c.inner.GetValue(key)
 }
 
+// Has implements Evaluator.
+func (c *ConfiguratorClient) Has(key Key) bool {
+	_, ok := c.snapshot.Load().entries[key]
+	return ok
+}
+
+// Eval implements Evaluator, resolving key against the caller's constraints layered over this
+// process's ambient ones. Returns nil when the key is not expression-configured, or when its
+// value cannot depend on the caller, in which case the Client path applies.
+func (c *ConfiguratorClient) Eval(key Key, cm ConstraintsMap) *ConstrainedValue {
+	snap := c.snapshot.Load()
+	e, ok := snap.entries[key]
+	if !ok {
+		return nil
+	}
+	if e.canUseResolved(cm) {
+		if len(e.resolved) == 1 {
+			return &e.resolved[0]
+		}
+		return nil
+	}
+
+	// A layered view rather than a merged copy, so this allocates nothing: the pooled
+	// layeredLookup is a pointer, so boxing it into the interface is free.
+	l := lookupPool.Get().(*layeredLookup) //nolint:revive // unchecked-type-assertion
+	l.caller, l.ambient = cm, c.ambient
+	idx, err := snap.cfg.Eval(context.Background(), e.name, l)
+	l.caller, l.ambient = nil, nil
+	lookupPool.Put(l)
+
+	if err != nil {
+		if c.throttleLog() {
+			c.logger.Warn("Failed to evaluate expression config, falling back to file config",
+				tag.Key(key.String()), tag.Error(err))
+		}
+		return nil
+	}
+	if idx < 0 || idx >= len(e.outcomes) {
+		// Not reachable: indexes are generated alongside outcomes in parseEntry.
+		return nil
+	}
+	return e.outcomes[idx]
+}
+
+// canUseResolved reports whether the value resolved at load is still correct for this call,
+// which spares a full evaluation. It is, when the caller supplied nothing, or when the entry
+// depends only on dimensions this process supplies and the caller has not overridden any of
+// them. The scan is over the entry's referenced keys, typically one or two, rather than over
+// the caller's map.
+func (e *exprEntry) canUseResolved(cm ConstraintsMap) bool {
+	if len(cm) == 0 {
+		return true
+	}
+	if !e.ambientOnly {
+		return false
+	}
+	for _, k := range e.referenced {
+		if _, shadowed := cm[k]; shadowed {
+			return false
+		}
+	}
+	return true
+}
+
+// layeredLookup presents caller-supplied and ambient constraints as a single view, with the
+// caller's taking precedence. Pooled, so evaluation never allocates.
+type layeredLookup struct {
+	caller  ConstraintsMap
+	ambient types.Constraints
+}
+
+func (l *layeredLookup) Get(key string) (any, bool) {
+	if v, ok := l.caller[key]; ok {
+		return v, true
+	}
+	v, ok := l.ambient[key]
+	return v, ok
+}
+
+var lookupPool = sync.Pool{New: func() any { return new(layeredLookup) }}
+
+func (c *ConfiguratorClient) throttleLog() bool {
+	n := c.errCount.Add(1)
+	return n < errCountLogThreshold || n%errCountLogThreshold == 0
+}
+
 // innerKeysChanged republishes an update from the inner client, substituting the effective
 // value so that a key we are overriding is not reported as having changed to the inner
 // client's value.
 func (c *ConfiguratorClient) innerKeysChanged(changed map[Key][]ConstrainedValue) {
-	overrides := *c.values.Load()
+	entries := c.snapshot.Load().entries
 	effective := make(map[Key][]ConstrainedValue, len(changed))
 	for key := range changed {
-		if cvs, ok := overrides[key]; ok {
-			effective[key] = cvs
+		if e, ok := entries[key]; ok {
+			effective[key] = e.resolved
 		} else {
 			effective[key] = changed[key]
 		}
@@ -182,98 +327,144 @@ type yamlExprEntry struct {
 	} `yaml:"overrides" json:"overrides"`
 }
 
-// LoadFile parses contents, evaluates every key against this process's ambient constraints,
-// and atomically installs the results. On any error the previous values are left in place, so
+// LoadFile parses contents, resolves every entry against this process's ambient constraints,
+// and atomically installs the result. On any error the previous values are left in place, so
 // a bad edit degrades to the last good state rather than to compiled-in defaults.
 func (c *ConfiguratorClient) LoadFile(contents []byte) error {
-	var entries map[string]yamlExprEntry
-	if err := yaml.Unmarshal(contents, &entries); err != nil {
-		return fmt.Errorf("decoding expression config: %w", err)
+	entries, vocabulary, err := c.decodeFile(contents)
+	if err != nil {
+		return err
 	}
 
-	cfg := configurator.New[int]()
-	outcomes := make(map[Key][]any, len(entries))
-	names := make(map[Key]string, len(entries))
+	snap := &exprSnapshot{
+		cfg:     configurator.New[int](),
+		entries: make(map[Key]*exprEntry, len(entries)),
+	}
 
 	var errs []error
 	for name, entry := range entries {
 		key := MakeKey(name)
-		vals, blob, err := c.parseEntry(key, entry)
+		e, blob, err := c.parseEntry(key, entry)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 		// LoadKey also parses every matchString, so a malformed expression fails here rather
 		// than silently never matching at runtime.
-		if err := cfg.LoadKey(key.String(), blob); err != nil {
+		if err := snap.cfg.LoadKey(e.name, blob); err != nil {
 			errs = append(errs, fmt.Errorf("key %q: %w", name, err))
 			continue
 		}
-		outcomes[key], names[key] = vals, key.String()
+		snap.entries[key] = e
 	}
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
 
-	values := make(ConfigValueMap, len(outcomes))
-	for key, vals := range outcomes {
-		idx, err := cfg.Eval(context.Background(), names[key], c.ambient)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("key %q: %w", key, err))
-			continue
+	// Now that expressions are parsed, check the vocabulary and work out which entries can be
+	// resolved once here rather than on every read.
+	for key, e := range snap.entries {
+		if err := c.classifyAndResolve(snap, key, e, vocabulary); err != nil {
+			errs = append(errs, err)
 		}
-		if idx < 0 || idx >= len(vals) {
-			// Not reachable: indexes are generated alongside vals in parseEntry.
-			errs = append(errs, fmt.Errorf("key %q: expression produced out-of-range outcome %d", key, idx))
-			continue
-		}
-		values[key] = []ConstrainedValue{{Value: vals[idx]}}
 	}
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
 
-	old := c.values.Swap(&values)
-	if changed := c.changedSince(*old, values); len(changed) > 0 {
+	old := c.snapshot.Swap(snap)
+	if changed := c.changedSince(old, snap); len(changed) > 0 {
 		c.PublishUpdates(changed)
 	}
 	return nil
 }
 
-// changedSince reports the keys whose effective value differs between two generations,
-// including keys added and keys removed. It must be called after the swap, because a key
-// that is no longer overridden reports the *inner* client's value: publishing nil would
-// tell subscribers the key has no value at all and drop them to the compiled-in default.
-func (c *ConfiguratorClient) changedSince(prev, next ConfigValueMap) map[Key][]ConstrainedValue {
-	changed := make(map[Key][]ConstrainedValue)
-	for key, cvs := range next {
-		before, ok := prev[key]
-		if !ok || !sameValues(before, cvs) {
-			changed[key] = cvs
-		}
+// decodeFile splits the file into its entries and the vocabulary its expressions may draw on.
+//
+// The vocabulary cannot be derived from what this process knows: the point of the
+// ConstraintsMap accessors is that a call site can invent a dimension, and the client has no
+// way to learn about it. So the file declares the dimensions its expressions use, and
+// anything outside that set is a typo.
+func (c *ConfiguratorClient) decodeFile(contents []byte) (map[string]yamlExprEntry, map[string]struct{}, error) {
+	var raw map[string]yaml.Node
+	if err := yaml.Unmarshal(contents, &raw); err != nil {
+		return nil, nil, fmt.Errorf("decoding expression config: %w", err)
 	}
-	for key := range prev {
-		if _, ok := next[key]; !ok {
-			changed[key] = c.GetValue(key)
+
+	vocabulary := maps.Clone(c.vocabulary)
+	if node, ok := raw[constraintKeysDirective]; ok {
+		var declared []string
+		if err := node.Decode(&declared); err != nil {
+			return nil, nil, fmt.Errorf("decoding %s: %w", constraintKeysDirective, err)
 		}
+		for _, k := range declared {
+			vocabulary[k] = struct{}{}
+		}
+		delete(raw, constraintKeysDirective)
 	}
-	return changed
+
+	entries := make(map[string]yamlExprEntry, len(raw))
+	for name, node := range raw {
+		var entry yamlExprEntry
+		if err := node.Decode(&entry); err != nil {
+			return nil, nil, fmt.Errorf("decoding entry %q: %w", name, err)
+		}
+		entries[name] = entry
+	}
+	return entries, vocabulary, nil
 }
 
-// parseEntry converts one YAML entry into the table of possible values plus the JSON blob
-// handed to the library.
-//
-// The library is asked to resolve an *index* into that table rather than a value, so that
-// values are decoded once here, using Temporal's own YAML conventions and validated against
-// the settings registry, instead of being JSON-decoded by the library on every evaluation.
-func (c *ConfiguratorClient) parseEntry(key Key, entry yamlExprEntry) ([]any, []byte, error) {
+// classifyAndResolve records which constraint keys an entry tests, rejects any that are not
+// in the vocabulary, and resolves the entry against ambient constraints so that callers
+// supplying nothing — including every subscriber — have an answer without evaluating.
+func (c *ConfiguratorClient) classifyAndResolve(
+	snap *exprSnapshot,
+	key Key,
+	e *exprEntry,
+	vocabulary map[string]struct{},
+) error {
+	referenced, ok := snap.cfg.ReferencedKeys(e.name)
+	if !ok {
+		return nil
+	}
+
+	var unknown []string
+	e.referenced = referenced
+	e.ambientOnly = true
+	for _, k := range referenced {
+		if _, isVocab := vocabulary[k]; !isVocab {
+			unknown = append(unknown, k)
+		}
+		if _, isAmbient := c.ambientKeys[k]; !isAmbient {
+			e.ambientOnly = false
+		}
+	}
+	if len(unknown) > 0 {
+		return fmt.Errorf(
+			"key %q references unknown constraint %v; declare it under %s or expressionConstraints, or fix the spelling",
+			key, unknown, constraintKeysDirective)
+	}
+
+	idx, err := snap.cfg.Eval(context.Background(), e.name, c.ambient)
+	if err != nil {
+		return fmt.Errorf("key %q: %w", key, err)
+	}
+	// A single value with no constraints: every precedence order ends in {}, so this matches
+	// whatever the caller asks for.
+	e.resolved = []ConstrainedValue{{Value: e.outcomes[idx].Value}}
+	return nil
+}
+
+// parseEntry converts one YAML entry into its table of possible values plus the JSON blob
+// handed to the library, which carries outcome *indexes* rather than values.
+func (c *ConfiguratorClient) parseEntry(key Key, entry yamlExprEntry) (*exprEntry, []byte, error) {
 	setting := queryRegistry(key)
 	if setting == nil {
 		c.logger.Warn("Expression config contains unregistered dynamic config key",
 			tag.Key(key.String()))
 	}
 
-	outcome := func(v any, what string) (any, error) {
+	outcome := func(v any, what string) (*ConstrainedValue, error) {
 		// yaml decodes nested maps as map[any]any; dynamic config values need string keys.
 		converted, err := convertKeyTypeToString(v)
 		if err != nil {
@@ -284,7 +475,7 @@ func (c *ConfiguratorClient) parseEntry(key Key, entry yamlExprEntry) ([]any, []
 				return nil, fmt.Errorf("key %q %s: %w", key, what, valErr)
 			}
 		}
-		return converted, nil
+		return &ConstrainedValue{Value: converted}, nil
 	}
 
 	def, err := outcome(entry.DefaultValue, "defaultValue")
@@ -292,20 +483,23 @@ func (c *ConfiguratorClient) parseEntry(key Key, entry yamlExprEntry) ([]any, []
 		return nil, nil, err
 	}
 
-	vals := make([]any, 0, len(entry.Overrides)+1)
-	vals = append(vals, def)
+	e := &exprEntry{
+		name:     key.String(),
+		outcomes: make([]*ConstrainedValue, 0, len(entry.Overrides)+1),
+	}
+	e.outcomes = append(e.outcomes, def)
 
 	libraryCfg := types.Config{DefaultValue: json.RawMessage("0")}
 	for i, o := range entry.Overrides {
-		v, err := outcome(o.MatchResult, fmt.Sprintf("override %d (%q)", i, o.MatchString))
+		cv, err := outcome(o.MatchResult, fmt.Sprintf("override %d (%q)", i, o.MatchString))
 		if err != nil {
 			return nil, nil, err
 		}
-		vals = append(vals, v)
+		e.outcomes = append(e.outcomes, cv)
 		libraryCfg.Overrides = append(libraryCfg.Overrides, types.Override{
 			MatchString: o.MatchString,
-			// index into vals; 0 is the default, so overrides start at 1
-			MatchResult: json.RawMessage(strconv.Itoa(len(vals) - 1)),
+			// index into outcomes; 0 is the default, so overrides start at 1
+			MatchResult: json.RawMessage(strconv.Itoa(len(e.outcomes) - 1)),
 		})
 	}
 
@@ -313,7 +507,27 @@ func (c *ConfiguratorClient) parseEntry(key Key, entry yamlExprEntry) ([]any, []
 	if err != nil {
 		return nil, nil, fmt.Errorf("key %q: %w", key, err)
 	}
-	return vals, blob, nil
+	return e, blob, nil
+}
+
+// changedSince reports the keys whose effective value differs between two generations,
+// including keys added and removed. It must be called after the swap: a key that is no longer
+// overridden reports the *inner* client's value, because publishing nil would tell
+// subscribers the key has no value at all and drop them to the compiled-in default.
+func (c *ConfiguratorClient) changedSince(prev, next *exprSnapshot) map[Key][]ConstrainedValue {
+	changed := make(map[Key][]ConstrainedValue)
+	for key, e := range next.entries {
+		before, ok := prev.entries[key]
+		if !ok || !sameValues(before.resolved, e.resolved) {
+			changed[key] = e.resolved
+		}
+	}
+	for key := range prev.entries {
+		if _, ok := next.entries[key]; !ok {
+			changed[key] = c.GetValue(key)
+		}
+	}
+	return changed
 }
 
 func sameValues(a, b []ConstrainedValue) bool {
@@ -358,8 +572,8 @@ func (c *ConfiguratorClient) Watch(ctx context.Context, path string, interval ti
 	return ctx.Err()
 }
 
-// StartWatching begins watching path in the background. The returned func stops it and is
-// safe to call more than once.
+// StartWatching begins watching path in the background. The returned func stops it and is safe
+// to call more than once.
 func (c *ConfiguratorClient) StartWatching(path string, interval time.Duration) func() {
 	// Stat before returning, so the baseline is the file as it was at the caller's initial
 	// load rather than whenever the goroutine happens to be scheduled.
@@ -380,4 +594,15 @@ func (c *ConfiguratorClient) StartWatching(path string, interval time.Duration) 
 			g.Wait()
 		})
 	}
+}
+
+// ExpressionKeys returns the configured keys, sorted. For diagnostics and tests.
+func (c *ConfiguratorClient) ExpressionKeys() []string {
+	entries := c.snapshot.Load().entries
+	keys := make([]string, 0, len(entries))
+	for k := range entries {
+		keys = append(keys, k.String())
+	}
+	slices.Sort(keys)
+	return keys
 }

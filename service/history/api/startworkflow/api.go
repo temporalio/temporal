@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -145,8 +146,16 @@ func (s *Starter) prepare(ctx context.Context) error {
 		metricsHandler := s.getMetricsHandler()
 		metrics.WorkflowEagerExecutionCounter.With(metricsHandler).Record(1)
 
+		// PROTOTYPE: resolved against the caller's own dimensions as well as the namespace, so
+		// eager start can be turned off for, say, one SDK version that mishandles it, without
+		// a release. ConstraintsFromContext picks up the SDK name and version out of the gRPC
+		// metadata the frontend propagated.
+		constraints := dynamicconfig.ConstraintsFromContext(ctx).
+			WithNS(s.namespace.Name()).
+			With("workflowID", request.WorkflowId)
+
 		// Override to false to avoid having to look up the dynamic config throughout the different code paths.
-		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(s.namespace.Name().String()) {
+		if !s.shardContext.GetConfig().EnableEagerWorkflowStart(constraints) {
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDynamicConfigDisabled))
 			request.RequestEagerExecution = false

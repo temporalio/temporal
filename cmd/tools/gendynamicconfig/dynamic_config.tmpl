@@ -17,6 +17,18 @@ const (
 	Precedence{{.Name}}
 {{- end}}
 )
+
+// TypedPropertyFnC is the accessor returned by Setting.GetC. Unlike the Get accessors it has
+// the same shape for every precedence: the caller supplies its dimensions in a ConstraintsMap
+// rather than as positional filter arguments, so it can pass dimensions that the Constraints
+// struct has no field for.
+type TypedPropertyFnC[T any] func(ConstraintsMap) T
+
+// GetTypedPropertyFnC returns an accessor that always yields value, for tests and for
+// hard-coded configuration.
+func GetTypedPropertyFnC[T any](value T) TypedPropertyFnC[T] {
+	return func(ConstraintsMap) T { return value }
+}
 {{$Precedences := .Precedences }}
 {{- range $T :=.Types}}
 {{- range $P := $Precedences}}
@@ -130,6 +142,37 @@ func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPr
 	}
 }
 
+// GetC is Get for callers that supply their own constraints instead of positional filter
+// arguments. Unlike Get, the returned function has the same signature for every precedence,
+// which is what lets a caller pass dimensions that Constraints has no field for. Known keys
+// in the map are still projected onto the precedence list, so values configured in the
+// dynamic config file continue to apply to a call site that has moved to GetC.
+func (s {{$P.Name}}TypedSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertC(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			cm,
+			{{$P.MapExpr}},
+		)
+	}
+}
+
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertCWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			cm,
+			{{$P.MapExpr}},
+		)
+	}
+}
+
 {{if eq $P.Name "Global" -}}
 type TypedSubscribable[T any] func(callback func(T)) (v T, cancel func())
 {{- else -}}
@@ -207,6 +250,14 @@ func New{{$P.Name}}{{$T.Name}}SettingWithConstrainedDefault(key string, cdef []T
 
 {{if eq $P.Name "Global" -}}
 type {{$T.Name}}PropertyFn = TypedPropertyFn[{{$T.GoType}}]
+
+// {{$T.Name}}PropertyFnC is the constraints-based accessor. There is one per value type
+// rather than one per value type per precedence, because GetC has a uniform signature.
+type {{$T.Name}}PropertyFnC = TypedPropertyFnC[{{$T.GoType}}]
+
+func Get{{$T.Name}}PropertyFnC(value {{$T.GoType}}) {{$T.Name}}PropertyFnC {
+	return GetTypedPropertyFnC(value)
+}
 {{- else -}}
 type {{$T.Name}}PropertyFnWith{{$P.Name}}Filter = TypedPropertyFnWith{{$P.Name}}Filter[{{$T.GoType}}]
 {{- end}}

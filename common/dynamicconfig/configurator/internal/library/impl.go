@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -122,7 +123,7 @@ func (c *configurator[T]) LoadKey(key string, data []byte) error {
 	return nil
 }
 
-func (c *configurator[T]) Eval(ctx context.Context, key string, constraints types.Constraints) (T, error) {
+func (c *configurator[T]) Eval(ctx context.Context, key string, constraints types.Lookup) (T, error) {
 	var zero T
 	ptr, ok := c.loads[key]
 	if !ok {
@@ -141,4 +142,35 @@ func (c *configurator[T]) Eval(ctx context.Context, key string, constraints type
 	}
 
 	return cfg.DefaultValue, nil
+}
+
+// ReferencedKeys returns the set of constraint keys the expressions for key can test.
+//
+// LOCAL ADDITION (not upstream): lets a caller tell, at load time, whether a config entry can
+// be resolved from a fixed set of constraints — and therefore evaluated once up front —
+// rather than needing evaluation on every read.
+func (c *configurator[T]) ReferencedKeys(key string) ([]string, bool) {
+	ptr, ok := c.loads[key]
+	if !ok {
+		return nil, false
+	}
+	seen := map[string]struct{}{}
+	for _, condition := range ptr.Load().Overrides {
+		collectKeys(&condition.Expression, seen)
+	}
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys, true
+}
+
+func collectKeys(e *Expression, seen map[string]struct{}) {
+	if k := string(e.Key); k != "" {
+		seen[k] = struct{}{}
+	}
+	for _, sub := range e.Subexpressions {
+		collectKeys(sub, seen)
+	}
 }
