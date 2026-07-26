@@ -50,30 +50,30 @@ const nextRetryDelayOverride = 10 * time.Second
 func (s *activityParityTestSuite) TestParityNonRetryableErrorTypes() {
 	env := newActivityParityEnv(s.T())
 
-	both := func(t *testing.T, elapses model.Event) {
-		trace := []model.Event{model.Poll, elapses}
+	testTimeoutWhileAttemptInProgress := func(t *testing.T, timeout model.Event) {
+		trace := []model.Event{model.Poll, timeout}
 		cfg := activityConfig{
 			MaxAttempts:            3,
-			NonRetryableErrorTypes: []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType(elapses).String()},
+			NonRetryableErrorTypes: []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType(timeout).String()},
 		}
 
 		t.Run("WorkflowActivity", func(t *testing.T) {
 			require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 				newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t),
-				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType(elapses))
+				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType(timeout))
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
 			require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 				newSAADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t),
-				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType(elapses))
+				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType(timeout))
 		})
 	}
 
 	s.T().Run("StartToClose", func(t *testing.T) {
-		both(t, model.StartToCloseElapses)
+		testTimeoutWhileAttemptInProgress(t, model.StartToCloseElapses)
 	})
 	s.T().Run("Heartbeat", func(t *testing.T) {
-		both(t, model.HeartbeatElapses)
+		testTimeoutWhileAttemptInProgress(t, model.HeartbeatElapses)
 	})
 }
 
