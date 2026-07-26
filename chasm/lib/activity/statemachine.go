@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -358,6 +359,7 @@ var TransitionCanceled = chasm.NewTransition(
 type timeoutEvent struct {
 	metricsHandler metrics.Handler
 	timeoutType    enumspb.TimeoutType
+	retryState     enumspb.RetryState
 	fromStatus     activitypb.ActivityExecutionStatus
 }
 
@@ -380,7 +382,11 @@ var TransitionTimedOut = chasm.NewTransition(
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-				err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
+				err = a.recordScheduleToStartOrCloseTimeoutFailure(
+					ctx,
+					timeoutType,
+					fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
+				)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
 				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
@@ -394,6 +400,15 @@ var TransitionTimedOut = chasm.NewTransition(
 			}
 			if err != nil {
 				return err
+			}
+			if event.retryState == enumspb.RETRY_STATE_TIMEOUT {
+				if err := a.recordScheduleToStartOrCloseTimeoutFailure(
+					ctx,
+					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+					common.FailureReasonActivityRetryScheduleToCloseTimeout,
+				); err != nil {
+					return err
+				}
 			}
 
 			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)

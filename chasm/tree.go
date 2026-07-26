@@ -1998,7 +1998,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	taskOffset := int64(1)
-	taskValidationContext := NewContext(newContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
+	taskValidationContext := NewContext(NewContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
 
 	archetypeID := n.ArchetypeID()
 
@@ -3506,7 +3506,7 @@ func (n *Node) ExecutePureTask(
 		return false, fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	progressIntentCtx := newContextWithOperationIntent(baseCtx, OperationIntentProgress)
+	progressIntentCtx := NewContextWithOperationIntent(baseCtx, OperationIntentProgress)
 	validationContext := NewContext(progressIntentCtx, n)
 
 	// Ensure this node's component value is hydrated before execution.
@@ -3640,7 +3640,7 @@ func (n *Node) ValidateSideEffectTask(
 	// All structural checks passed — the task exists in the tree.
 
 	// Component must be hydrated before the task's validator is called.
-	validateCtx := NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n)
+	validateCtx := NewContext(NewContextWithOperationIntent(ctx, OperationIntentProgress), n)
 	if err := node.prepareComponentValue(validateCtx); err != nil {
 		return false, false, err
 	}
@@ -3795,7 +3795,7 @@ func (n *Node) invokeSideEffectTaskFn(
 		validationFn: makeValidationFn(registrableTask, validate, chasmTask.Attempt, taskAttributes, taskValue),
 	}
 
-	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
+	ctx = NewContextWithOperationIntent(ctx, OperationIntentProgress)
 
 	defer log.CapturePanic(n.logger, &retErr)
 

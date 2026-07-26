@@ -386,7 +386,9 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
-	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
@@ -404,8 +406,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = dc.GetIntPropertyFnFilteredByNamespace(5)
 	s.config.WorkerHeartbeatsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.WorkflowPauseEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.EnableChasm = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.StandaloneNexusOperationsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1024)
@@ -425,8 +426,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowPause)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivities)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerCommands)
@@ -434,6 +434,15 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+
+	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.Activity.EnableStandaloneActivityOperatorCommands = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: "ns",
+	})
+	s.Require().NoError(err)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
