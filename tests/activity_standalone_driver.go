@@ -60,6 +60,17 @@ const activityLongTimeout = time.Hour
 // activityShortTimeout is a timeout short enough for a trace to wait out.
 const activityShortTimeout = 2 * time.Second
 
+// activityLongRetryInterval is a retry interval long enough to observe an activity while it is still
+// backing off.
+const activityLongRetryInterval = 30 * time.Second
+
+// activityShortRetryInterval is a retry interval short enough for a trace to wait the backoff out. Not
+// much shorter is useful: a timer task's fire time is floored at now + TimerProcessorMaxTimeShift (~1s).
+const activityShortRetryInterval = 1 * time.Second
+
+// activityLongStartDelay is a start delay long enough to keep the first attempt pending for a whole test.
+const activityLongStartDelay = time.Hour
+
 func (c activityConfig) retryInterval() time.Duration {
 	return cmp.Or(c.RetryInterval, activityDefaultRetryInterval)
 }
