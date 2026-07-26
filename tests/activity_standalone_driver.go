@@ -222,12 +222,13 @@ func (a *saaHandle) awaitStateTransition(t require.TestingT, e model.Event, dead
 // window: under a non-constant backoff the two differ, and only the server knows which attempt is
 // waiting.
 func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
-	next := a.describe(t).GetInfo().GetNextAttemptScheduleTime()
+	info := a.describe(t).GetInfo()
+	next := info.GetNextAttemptScheduleTime()
 	if next == nil {
 		return // the dispatch time has already passed
 	}
 	deadline := next.AsTime().Add(activityDriverWallClockSettle)
-	var p activityInfoProjection
+	p := projectSAA(info)
 	if activityDriverPollUntil(deadline, func() bool { p = a.projection(t); return !p.NextAttemptScheduleSet }) {
 		return
 	}
