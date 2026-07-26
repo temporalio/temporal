@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -94,15 +95,9 @@ func (c activityConfig) window(e model.Event) time.Duration {
 type saaDriver struct {
 	env        *testcore.TestEnv
 	ctx        context.Context
-	chasmCtx   context.Context // memoized by chasmContext
 	cfg        activityConfig
 	numStarted int
 	idBase     string // activity-id prefix
-
-	positivePollTimeout time.Duration // bounds a "must dispatch" poll; 0 => activityDriverPositivePollTimeout
-
-	// customizeStart mutates the StartActivityExecutionRequest before it is sent.
-	customizeStart func(*workflowservice.StartActivityExecutionRequest)
 }
 
 // newSAADriver builds a driver with the test-scoped context and its own activity-id prefix.
@@ -130,22 +125,11 @@ const activityDriverPollInterval = 100 * time.Millisecond
 // saaHandle is a handle to one activity instance: the ids that address it, plus the token last
 // dispatched to it.
 type saaHandle struct {
-	d             *saaDriver
-	activityID    string
-	taskQueue     string
-	runID         string
-	token         []byte
-	lastHeartbeat *workflowservice.RecordActivityTaskHeartbeatResponse
-	// establishedReqID[eventType] is the request id that established the current state for an operator
-	// command; a SameRequestID event reuses it. lastReqID is the most recent operator RPC's id, promoted
-	// into establishedReqID by apply when that RPC changes state.
-	establishedReqID map[model.EventType]string
-	lastReqID        string
-	path             []model.Event // events driven to reach the edge under test, for failure reports
-
-	// Raw stamps, shifted cur->prev by each observed() read; see checkTaskInvalidation.
-	prevStamp, curStamp       int32
-	prevSTCStamp, curSTCStamp int32
+	d          *saaDriver
+	activityID string
+	taskQueue  string
+	runID      string
+	token      []byte
 }
 
 // driveTrace runs a trace on a fresh activity and returns a handle at the reached state. Model-free:
@@ -160,14 +144,12 @@ func (d *saaDriver) driveTrace(t require.TestingT, trace []model.Event) *saaHand
 
 // driveEvent advances the activity by one event.
 func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
-	d := a.d
 	switch {
 	case e.Type == model.PollType:
 		// A poll captures the dispatched task token. Every Poll a trace drives is a positive poll — the
 		// activity is meant to be dispatchable — so finding no task is a failure, not a step to skip.
-		timeout := cmp.Or(d.positivePollTimeout, activityDriverPositivePollTimeout)
-		resp := a.pollForTask(t, timeout)
-		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, timeout)
+		resp := a.pollForTask(t, activityDriverPositivePollTimeout)
+		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverPositivePollTimeout)
 		a.token = resp.GetTaskToken()
 	case isWallClockEvent(e.Type):
 		// A wall-clock event is realized by waiting out its configured window.
@@ -259,7 +241,7 @@ func (d *saaDriver) start(t require.TestingT) *saaHandle {
 	id := fmt.Sprintf("%s-%d", d.idBase, d.numStarted)
 	resp, err := d.env.FrontendClient().StartActivityExecution(d.ctx, d.startRequest(id, id))
 	require.NoError(t, err)
-	return &saaHandle{d: d, activityID: id, taskQueue: id, runID: resp.RunId, establishedReqID: map[model.EventType]string{}}
+	return &saaHandle{d: d, activityID: id, taskQueue: id, runID: resp.RunId}
 }
 
 func (d *saaDriver) startRequest(activityID, taskQueue string) *workflowservice.StartActivityExecutionRequest {
@@ -270,7 +252,7 @@ func (d *saaDriver) startRequest(activityID, taskQueue string) *workflowservice.
 		}
 		return durationpb.New(v)
 	}
-	req := &workflowservice.StartActivityExecutionRequest{
+	return &workflowservice.StartActivityExecutionRequest{
 		Namespace:              d.env.Namespace().String(),
 		ActivityId:             activityID,
 		ActivityType:           d.env.Tv().ActivityType(),
@@ -291,10 +273,6 @@ func (d *saaDriver) startRequest(activityID, taskQueue string) *workflowservice.
 		},
 		RequestId: uuid.NewString(),
 	}
-	if d.customizeStart != nil {
-		d.customizeStart(req)
-	}
-	return req
 }
 
 // describe returns the DescribeActivityExecution response, including the outcome, the last failure, and
@@ -317,24 +295,9 @@ func (a *saaHandle) projection(t require.TestingT) activityInfoProjection {
 	return projectSAA(a.describe(t).GetInfo())
 }
 
-// terminal is the terminal status from Info plus the failure discriminant from the Outcome.
-func (a *saaHandle) terminal(t require.TestingT) activityTerminalProjection {
-	resp := a.describe(t)
-	return activityTerminalProjection{
-		Status:      resp.GetInfo().GetStatus(),
-		FailureType: saaFailureType(resp.GetOutcome().GetFailure()),
-	}
-}
-
-// saaFailureType is the application failure Type, the TimeoutType string, or "" for neither.
-func saaFailureType(f *failurepb.Failure) string {
-	if app := f.GetApplicationFailureInfo(); app != nil {
-		return app.GetType()
-	}
-	if to := f.GetTimeoutFailureInfo(); to != nil {
-		return to.GetTimeoutType().String()
-	}
-	return ""
+// terminalStatus is the activity's terminal status.
+func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
+	return a.describe(t).GetInfo().GetStatus()
 }
 
 func projectSAA(i *apiactivitypb.ActivityExecutionInfo) activityInfoProjection {
