@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/server/tests/umpire/planner"
 )
 
 // TEMPORAL_OTEL_DEBUG enables the generic chasm.transition telemetry the umpire Monitor
@@ -128,4 +129,45 @@ func (s *UmpireTestSuite) TestProbeNexusFlagged() {
 
 	require.Equal(t, probe.Flagged, report.Baseline.Verdict, "an operation that never settles must be flagged")
 	require.NotEmpty(t, report.Baseline.Violations, "EntityProgress should flag the stuck operation")
+}
+
+// TestProbeNexusExploration drives the NexusOperation through several distinct
+// outcomes — each in its own isolated namespace — accumulating transition coverage
+// into one shared tracker, and reports which of the model's valid edges the real
+// implementation actually exercised (and which remain unexercised). It is the
+// "explore as fully as possible + summary" mode.
+func (s *UmpireTestSuite) TestProbeNexusExploration() {
+	t := s.T()
+	cov := probe.NewCoverage()
+
+	explore := func(handler nexustest.Handler, timeout time.Duration) {
+		probe.Umpire(t).
+			WithCoverage(cov).
+			Reach("NexusOperation", "succeeded"). // plan validation only; the handler drives the actual outcome
+			Execution(s.nexusExec(handler)).
+			Timeout(timeout).
+			Judge()
+	}
+
+	// Sync success and op-failure each settle in a single observed transition (a
+	// forward jump), contributing no direct edges — but they exercise the drive path.
+	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+	}}, 10*time.Second)
+	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		return nil, nexus.NewOperationFailedError("umpire probe: injected operation failure")
+	}}, 10*time.Second)
+	// The retryable path cycles scheduled <-> backing_off, exercising those direct edges.
+	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
+	}}, 8*time.Second)
+
+	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
+	require.True(t, ok)
+	rep := cov.Report("NexusOperation", lc.Edges())
+	t.Logf("[exploration] NexusOperation transition coverage: %d/%d edges exercised", rep.Covered, rep.Total)
+	for _, e := range rep.Missing() {
+		t.Logf("[exploration]   MISSING: %s --%s--> %s", e.From, e.Event, e.To)
+	}
+	require.GreaterOrEqual(t, rep.Covered, 2, "the retryable path should exercise the backing_off<->scheduled edges")
 }
