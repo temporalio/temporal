@@ -7,10 +7,9 @@ import (
 	"google.golang.org/grpc"
 )
 
-// AddNonNilResponseInterceptor is a no-op in production builds.
-func AddNonNilResponseInterceptor(
-	interceptors []grpc.UnaryServerInterceptor,
+// NewNonNilResponseInterceptor returns nil in production builds.
+func NewNonNilResponseInterceptor(
 	_ log.Logger,
-) []grpc.UnaryServerInterceptor {
-	return interceptors
+) grpc.UnaryServerInterceptor {
+	return nil
 }

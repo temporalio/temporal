@@ -307,7 +307,9 @@ func GrpcServerOptionsProvider(
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
-	unaryInterceptors = interceptor.AddNonNilResponseInterceptor(unaryInterceptors, logger)
+	if nonNilResponseInterceptor := interceptor.NewNonNilResponseInterceptor(logger); nonNilResponseInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, nonNilResponseInterceptor)
+	}
 	// retry interceptor should be the most inner interceptor
 	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
 

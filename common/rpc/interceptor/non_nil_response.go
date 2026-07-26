@@ -14,12 +14,11 @@ import (
 
 const nilResponseMessage = "gRPC handler returned nil response without error"
 
-// AddNonNilResponseInterceptor adds a test-only check for successful nil responses.
-func AddNonNilResponseInterceptor(
-	interceptors []grpc.UnaryServerInterceptor,
+// NewNonNilResponseInterceptor returns a test-only check for successful nil responses.
+func NewNonNilResponseInterceptor(
 	logger log.Logger,
-) []grpc.UnaryServerInterceptor {
-	return append(interceptors, func(
+) grpc.UnaryServerInterceptor {
+	return func(
 		ctx context.Context,
 		req any,
 		info *grpc.UnaryServerInfo,
@@ -28,7 +27,7 @@ func AddNonNilResponseInterceptor(
 		resp, err := handler(ctx, req)
 		softassert.That(logger, err != nil || !isNil(resp), nilResponseMessage, tag.Operation(info.FullMethod))
 		return resp, err
-	})
+	}
 }
 
 func isNil(value any) bool {

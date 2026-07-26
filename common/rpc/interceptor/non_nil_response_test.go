@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-func TestAddNonNilResponseInterceptor(t *testing.T) {
+func TestNewNonNilResponseInterceptor(t *testing.T) {
 	const fullMethod = "/test.Service/Test"
 
 	handlerResp := &emptypb.Empty{}
@@ -69,10 +69,10 @@ func TestAddNonNilResponseInterceptor(t *testing.T) {
 				)
 			}
 
-			interceptors := AddNonNilResponseInterceptor(nil, logger)
-			require.Len(t, interceptors, 1)
+			interceptor := NewNonNilResponseInterceptor(logger)
+			require.NotNil(t, interceptor)
 
-			resp, err := interceptors[0](
+			resp, err := interceptor(
 				t.Context(),
 				nil,
 				&grpc.UnaryServerInfo{FullMethod: fullMethod},
