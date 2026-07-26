@@ -426,7 +426,8 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 // statically declared Entry points: it drives the standalone completion path once under observation
 // and reduces the observed calls to fault targets. The result is non-empty (the drive makes internal
 // calls) and excludes the plan's own client-entry RPC (StartNexusOperationExecution) — a drop of
-// which would just fail the drive rather than test resilience.
+// which would just fail the drive rather than test resilience. It then reconciles the plan's
+// *declared* footprint (Action.Footprint) against the observed one — a wire-level regression gate.
 func (s *UmpireTestSuite) TestProbeNexusLearnedFootprint() {
 	t := s.T()
 	env := s.newNexusStandaloneEnv(t)
@@ -450,6 +451,77 @@ func (s *UmpireTestSuite) TestProbeNexusLearnedFootprint() {
 		require.NotContains(t, m, "StartNexusOperationExecution", "the client-entry RPC must not be a fault target")
 	}
 	t.Logf("[footprint] learned %d call(s); %d fault target(s): %v", len(learned), len(targets), targets)
+
+	// The plan's declared footprint (Action.Footprint) must match what was observed — no expected
+	// internal call missing, no undeclared call observed. This is the wire-level analog of the
+	// effect-level Reconcile: a refactor that changes which internal calls the transition makes
+	// trips a drift here that the effect check would miss.
+	drift := action.ReconcileFootprint(plan, learned)
+	require.Empty(t, drift, "declared footprint should ground against the observed calls: %v", drift)
+}
+
+// TestProbeNexusCoverageGuidedFaults is the coverage-guided upgrade of the uniform-random fuzz
+// loop: it learns each plan's footprint once, then ScheduleFaults hands back a novelty-prioritized,
+// budget-bounded drive list — each distinct fault target once before any repeat. It drives the
+// scheduled faults and asserts the rulebook invariant (no fault may flag a violation), logging what
+// the budget forced it to drop so the coverage cost is explicit, never a silent truncation.
+func (s *UmpireTestSuite) TestProbeNexusCoverageGuidedFaults() {
+	t := s.T()
+
+	// Learn phase: drive each plan's baseline once under observation to learn its footprint. Two
+	// standalone plans with differing footprints, so the scheduler has breadth to prioritize.
+	type spec struct {
+		label string
+		plan  []umpire.Action
+	}
+	specs := []spec{
+		{"standalone-completion", action.StandaloneCompletion()},
+		{"standalone-terminate", action.StandaloneTerminate(model.NexusScheduled)},
+	}
+	learn := func(plan []umpire.Action) []string {
+		env := s.newNexusStandaloneEnv(t)
+		policy := action.NewResponsePolicy()
+		endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+		dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
+		defer cancel()
+		rc := action.NewCtx(env.TestEnv, endpoint, policy, 0)
+		defer rc.Cleanup()
+		learned, err := action.LearnFootprint(dctx, rc, action.Oracle{Env: env.TestEnv}, action.Resolver{}, 50*time.Millisecond, plan)
+		require.NoError(t, err, "the observed drive should reach its terminal")
+		return learned
+	}
+
+	var pfs []action.PlanFootprint
+	for _, sp := range specs {
+		learned := learn(sp.plan)
+		pfs = append(pfs, action.PlanFootprint{Plan: sp.plan, Label: sp.label, Learned: learned})
+		t.Logf("[cov-faults] learned %s: %d call(s), %d target(s)", sp.label, len(learned), len(action.FaultTargets(sp.plan, learned)))
+	}
+
+	const budget = 3
+	drives, dropped := action.ScheduleFaults(pfs, budget)
+	require.NotEmpty(t, drives, "the learned footprints should yield fault drives")
+	t.Logf("[cov-faults] scheduled %d fault drive(s), dropped %d by budget %d", len(drives), len(dropped), budget)
+	for _, d := range dropped {
+		t.Logf("[cov-faults]   dropped by budget: %s", d.Label)
+	}
+
+	cov := probe.NewCoverage()
+	for _, d := range drives {
+		t.Logf("[cov-faults] drive: %s", d.Label)
+		report := probe.Umpire(t).
+			WithCoverage(cov).
+			Reach("NexusOperation", "succeeded"). // plan validation only; the plan drives the real outcome
+			Execution(s.nexusGenExecPlan(d.Plan)).
+			Timeout(20 * time.Second).
+			Judge()
+		require.Empty(t, report.Baseline.Violations, "%s: an injected fault must not flag a conformance violation", d.Label)
+	}
+
+	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
+	require.True(t, ok)
+	rep := cov.Report("NexusOperation", lc.Edges())
+	t.Logf("[cov-faults] transition coverage after %d guided fault drives: %d/%d edges", len(drives), rep.Covered, rep.Total)
 }
 
 // TestProbeNexusRandomized is the seeded fuzz loop over the actions model: each iteration draws a

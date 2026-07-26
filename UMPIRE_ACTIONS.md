@@ -286,11 +286,14 @@ fires on the attempt, not once started).
 
 ## What remains
 
-- **Coverage-guided fault exploration** — the scheduler that ties `AutoCoverPlans` ×
-  `FaultVariants`/learned-footprint × per-execution testEnvs into a novelty-prioritized loop
-  under a budget. The pieces exist (now including `LearnFootprint`); the loop does not. This is
-  the direct upgrade of `TestProbeNexusRandomized` (uniform → coverage-biased sampling) and the
-  "coverage-guided sampling" open question in [`UMPIRE_MATRIX.md`](./UMPIRE_MATRIX.md).
+- ~~**Coverage-guided fault exploration**~~ **(done)** — `ScheduleFaults(plans, budget)` ties
+  `AutoCoverPlans` / learned footprints × per-execution testEnvs into a novelty-prioritized,
+  budget-bounded drive list: each distinct fault target is scheduled once (breadth) before any
+  repeat, and the overflow is reported as `dropped` — never a silent truncation. It is the
+  deterministic upgrade of the uniform-random `TestProbeNexusRandomized`. See
+  `tests/umpire/action/schedule.go` and `TestProbeNexusCoverageGuidedFaults`. (Smarter novelty —
+  weighting a fault by the *new edges* it would exercise — remains a future upgrade, and feeds the
+  "coverage-guided sampling" open question in [`UMPIRE_MATRIX.md`](./UMPIRE_MATRIX.md).)
 - ~~**`Faultable` from the learned footprint**~~ **(done)** — the static field was renamed
   `Action.Entry` (the client-entry RPCs a Drop just fails on) and fault targeting now derives from
   the *observed* footprint: `LearnFootprint` drives a plan under observation, `FaultTargets` reduces
@@ -299,9 +302,11 @@ fires on the attempt, not once started).
   `TestProbeNexusLearnedFootprint`.
 - **Beyond `NexusOperation`** — the schema is generic, but only `NexusOperation` has declared
   actions so far.
-- **Footprint reconciliation** — `Reconcile` grounds effects, not yet the footprint. Now
-  unblocked: with `LearnFootprint` in place, an action could declare an *expected* footprint and
-  `Reconcile` assert the observed calls match it (wire-level drift, not just effect drift).
+- ~~**Footprint reconciliation**~~ **(done)** — an action now declares an expected footprint
+  (`Action.Footprint`), and `ReconcileFootprint(plan, observed)` grounds it against the learned
+  footprint: an expected internal call that never fired, or an observed non-ambient call outside the
+  plan's `Entry ∪ Footprint`, is wire-level drift (the analog of `Reconcile`'s effect drift). Opt-in
+  per action. See `tests/umpire/action/footprint.go` and `TestProbeNexusLearnedFootprint`.
 
 ## Relationship to the other umpire pieces
 

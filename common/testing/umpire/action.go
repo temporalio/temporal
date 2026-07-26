@@ -62,6 +62,14 @@ type Action struct {
 	// discovered by observing a drive, not declared here (see tests/umpire/action fault.go:
 	// LearnFootprint / FaultTargets).
 	Entry []string
+	// Footprint names the internal RPC(s) / HTTP path(s) this action is *expected* to trigger
+	// downstream (beyond the Entry call it issues directly). It is the wire-level analog of Effects:
+	// where Effects declare the lifecycle transitions an action causes, Footprint declares the calls
+	// it should make to cause them, reconciled against the observed footprint (see
+	// tests/umpire/action footprint.go: ReconcileFootprint) to catch drift a refactor introduces —
+	// a new or removed internal call — that the effect-level check would miss. Opt-in: a nil
+	// Footprint is not reconciled.
+	Footprint []string
 	// Reject, when non-nil, declares this action is expected to be rejected synchronously rather
 	// than produce its Effects — an invalid input (malformed / unknown / stale; see UMPIRE_ERR.md).
 	// Drive treats a Fire error on such an action as the expected outcome (recorded via RejectSink,

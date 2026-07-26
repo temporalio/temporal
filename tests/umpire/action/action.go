@@ -340,7 +340,11 @@ var (
 		Name: "StartNexusOperationExecution", Kind: umpire.ClientRPC, Hosting: umpire.Standalone,
 		Effects: []umpire.Effect{{Ref: nexusOp("op", true), Event: model.NexusSchedule}},
 		Entry:   []string{"StartNexusOperationExecution"},
-		Realize: rpcStartStandalone{},
+		// The internal calls a standalone start triggers: the CHASM operation task and the outbound
+		// Nexus HTTP invocation to the handler (service/operation of the mock endpoint). Learned via
+		// LearnFootprint; declared here so ReconcileFootprint catches wire-level drift.
+		Footprint: []string{"StartNexusOperation", "HTTP POST /service/operation"},
+		Realize:   rpcStartStandalone{},
 	}
 	HandlerAsyncAck = umpire.Action{
 		Name: "handler:AsyncAck", Kind: umpire.HandlerResponse,
