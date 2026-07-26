@@ -59,12 +59,13 @@ type Probe struct {
 	maxFaults int
 	dropN     int
 	timeout   time.Duration
+	cov       *Coverage
 }
 
 // Umpire starts a probe. The cluster's Monitor observes and judges every namespace;
 // each execution gets its own namespace via Execution.
 func Umpire(t *testing.T) *Probe {
-	return &Probe{t: t, timeout: 30 * time.Second, maxFaults: defaultMaxFaults, dropN: 1}
+	return &Probe{t: t, timeout: 30 * time.Second, maxFaults: defaultMaxFaults, dropN: 1, cov: NewCoverage()}
 }
 
 // Timeout bounds how long one drive may take before it is deemed not to have
@@ -127,9 +128,20 @@ func (s *Probe) Judge() Report {
 	for i, m := range s.faults {
 		rep.Scenarios = append(rep.Scenarios, s.run(i+1, m, "drop "+shortName(m)))
 	}
+	if lc, ok := planner.DefaultModels().Lifecycle(s.entity); ok {
+		rep.Coverage = s.cov.Report(s.entity, lc.Edges())
+	}
 	rep.log(s.t)
 	return rep
 }
+
+// Coverage returns the probe's transition-coverage tracker, so several probe runs can
+// accumulate into a shared summary. Set it before Judge to aggregate across runs.
+func (s *Probe) Coverage() *Coverage { return s.cov }
+
+// WithCoverage makes the probe accumulate into an existing coverage tracker (shared
+// across runs) rather than its own.
+func (s *Probe) WithCoverage(c *Coverage) *Probe { s.cov = c; return s }
 
 // recordAndRun drives the happy path once in a fresh namespace with a recording
 // callback, returning the sorted set of distinct gRPC methods it made and the baseline.
@@ -224,20 +236,25 @@ func (s *Probe) judge(env *testcore.TestEnv, nsID string, sc *Scenario) {
 	}
 }
 
-// inspectTarget returns the target entity's terminal state and modeled disposition,
-// or ("", Unset) if no entity of the target type settled in the namespace.
+// inspectTarget returns the target entity's terminal state and modeled disposition
+// (or "", Unset if none settled), and records every target-entity's traversed edges
+// into the coverage tracker — so a run accumulates which model transitions the real
+// impl actually exercised.
 func (s *Probe) inspectTarget(env *testcore.TestEnv, nsID string) (string, umpire.Disposition) {
 	nsRoot := umpire.NewEntityID(model.NamespaceType, nsID)
+	term, disp := "", umpire.Unset
 	for _, e := range env.GetMonitor().ModelState().QueryEntities(umpire.EntityType(s.entity), 0, &nsRoot) {
 		lc, ok := e.Entity.(umpire.Lifecycled)
 		if !ok {
 			continue
 		}
-		if l := lc.Lifecycle(); l.IsTerminal() {
-			return l.Current(), l.CurrentDisposition()
+		l := lc.Lifecycle()
+		s.cov.Record(s.entity, l.VisitedEdges())
+		if term == "" && l.IsTerminal() {
+			term, disp = l.Current(), l.CurrentDisposition()
 		}
 	}
-	return "", umpire.Unset
+	return term, disp
 }
 
 // armDrop registers a namespace-scoped fault that transiently fails the matching

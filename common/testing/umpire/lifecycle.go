@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"iter"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/looplab/fsm"
@@ -202,6 +203,7 @@ type Lifecycle struct {
 	declared     bool // true when States was used (enables the declared-state check)
 	entered      map[string]time.Time
 	illegal      []IllegalTransition
+	visited      map[string]struct{} // direct edges actually traversed (coverage)
 }
 
 // NewLifecycle builds a Lifecycle from a spec.
@@ -384,6 +386,7 @@ func (l *Lifecycle) Fire(ctx context.Context, event string) bool {
 	case Advance:
 		if _, isEdge := l.edges[o.From][event]; isEdge {
 			_ = l.fsm.Event(ctx, event) // direct legal edge
+			l.recordVisit(o.From, event, o.To)
 		} else {
 			l.fsm.SetState(o.To) // forward jump over unobserved intermediate states
 		}
@@ -496,6 +499,31 @@ func (l *Lifecycle) EdgeRequires(from, event string) []Capability {
 
 // Illegal returns the illegal transitions observed so far.
 func (l *Lifecycle) Illegal() []IllegalTransition { return l.illegal }
+
+func (l *Lifecycle) recordVisit(from, event, to string) {
+	if l.visited == nil {
+		l.visited = map[string]struct{}{}
+	}
+	l.visited[from+"\x00"+event+"\x00"+to] = struct{}{}
+}
+
+// VisitedEdges returns the direct transition edges this entity actually traversed —
+// the coverage this one instance contributes. Forward jumps over unobserved states
+// are not counted (their skipped edges were never really traversed). Stable order.
+func (l *Lifecycle) VisitedEdges() []Edge {
+	out := make([]Edge, 0, len(l.visited))
+	for k := range l.visited {
+		p := strings.SplitN(k, "\x00", 3)
+		out = append(out, Edge{From: p[0], Event: p[1], To: p[2]})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].From != out[j].From {
+			return out[i].From < out[j].From
+		}
+		return out[i].Event < out[j].Event
+	})
+	return out
+}
 
 // States returns all states declared by the spec (including the initial state), sorted.
 func (l *Lifecycle) States() []string { return append([]string(nil), l.states...) }

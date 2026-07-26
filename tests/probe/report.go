@@ -38,13 +38,15 @@ func (v Verdict) String() string {
 }
 
 // Report is the outcome of a probe: the plan, the observed happy-path footprint,
-// the fault-free baseline, and one scenario per faulted call.
+// the fault-free baseline, one scenario per faulted call, and the transition coverage
+// the run accumulated.
 type Report struct {
 	Entity, State string
 	Routes        [][]string
 	Observed      []string // gRPC calls the happy path made (when FaultEachObservedCall is used)
 	Baseline      Scenario
 	Scenarios     []Scenario
+	Coverage      CoverageReport
 }
 
 // Scenario is what happened for one drive: whether the fault fired, the terminal
@@ -76,6 +78,19 @@ func (r Report) log(t *testing.T) {
 	if len(r.Scenarios) > 0 {
 		t.Logf("[probe] summary: %d faulted call(s) -> %d recovered, %d degraded, %d FLAGGED, %d target-not-reached",
 			len(r.Scenarios), byVerdict[Recovered], byVerdict[Degraded], byVerdict[Flagged], byVerdict[Unreached])
+	}
+	if cov := r.Coverage; cov.Total > 0 {
+		t.Logf("[probe] transition coverage for %s: %d/%d edges exercised", cov.Entity, cov.Covered, cov.Total)
+		for _, ec := range cov.Edges {
+			mark := " "
+			if ec.Covered {
+				mark = "x"
+			}
+			t.Logf("[probe]   [%s] %s --%s--> %s", mark, ec.Edge.From, ec.Edge.Event, ec.Edge.To)
+		}
+		if miss := cov.Missing(); len(miss) > 0 {
+			t.Logf("[probe] %d valid transition(s) NOT yet exercised (drive more outcomes to cover them)", len(miss))
+		}
 	}
 }
 
