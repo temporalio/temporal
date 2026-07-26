@@ -96,34 +96,50 @@ func bindFresh(rc umpire.RealizeContext, a umpire.Action, id string) {
 	}
 }
 
-// Oracle implements umpire.StateOracle over a live env's Monitor model. Phase 1 handles
-// NexusOperation, keyed by its captured WorkflowID (the operation's execution id for a
-// standalone op, the caller workflow id for an embedded one).
+// Oracle implements umpire.StateOracle / VisitedOracle over a live env's Monitor model. It is
+// entity-agnostic: it finds the entity of type t whose identity matches id (see entityID) and reads
+// its Lifecycle, so it serves NexusOperation and Workflow (and any future Lifecycled entity) alike.
 type Oracle struct{ Env *testcore.TestEnv }
 
 func (o Oracle) Current(t umpire.EntityType, id string) (string, bool) {
-	if op := o.find(t, id); op != nil {
-		return op.FSM.Current(), true
+	if lc := o.find(t, id); lc != nil {
+		return lc.Current(), true
 	}
 	return "", false
 }
 
 // Visited implements umpire.VisitedOracle for reconciliation.
 func (o Oracle) Visited(t umpire.EntityType, id string) ([]umpire.Edge, bool) {
-	if op := o.find(t, id); op != nil {
-		return op.FSM.VisitedEdges(), true
+	if lc := o.find(t, id); lc != nil {
+		return lc.VisitedEdges(), true
 	}
 	return nil, false
 }
 
-func (o Oracle) find(t umpire.EntityType, id string) *model.NexusOperation {
+func (o Oracle) find(t umpire.EntityType, id string) *umpire.Lifecycle {
 	nsRoot := umpire.NewEntityID(model.NamespaceType, o.Env.NamespaceID().String())
 	for _, e := range o.Env.GetMonitor().ModelState().QueryEntities(t, 0, &nsRoot) {
-		if op, ok := e.Entity.(*model.NexusOperation); ok && op.WorkflowID == id {
-			return op
+		if entityID(e.Entity) != id {
+			continue
+		}
+		if lced, ok := e.Entity.(umpire.Lifecycled); ok {
+			return lced.Lifecycle()
 		}
 	}
 	return nil
+}
+
+// entityID returns the identity an action binds an entity to — its captured WorkflowID (the
+// operation's execution id for a standalone op, the caller workflow id for an embedded one; the
+// workflow id for a Workflow). Per-type because the identity field is not a shared method.
+func entityID(e umpire.Entity) string {
+	switch x := e.(type) {
+	case *model.NexusOperation:
+		return x.WorkflowID
+	case *model.Workflow:
+		return x.WorkflowID
+	}
+	return ""
 }
 
 // Resolver implements umpire.EffectResolver over the default entity lifecycles.

@@ -300,8 +300,17 @@ fires on the attempt, not once started).
   the result (observed − entry − ambient) to the internal calls, and `FaultVariants(plan, learned)`
   builds one Drop-variant per target. See `tests/umpire/action/fault.go` and
   `TestProbeNexusLearnedFootprint`.
-- **Beyond `NexusOperation`** — the schema is generic, but only `NexusOperation` has declared
-  actions so far.
+- **Beyond `NexusOperation`** — a second entity (`Workflow`) is now driven by the same generic
+  runtime: the Nexus-specific `actionFor`/`PlanEdge`/`settlingEdges` were split into an
+  entity-agnostic core (`planEdge` / `settlingEdgesFor`, parameterised by a lifecycle + an
+  `actionForFunc`), the `Oracle` was generalised over any `Lifecycled` entity, and `workflow.go`
+  adds the Workflow registry, realizers, `WorkflowPlanEdge`, and `WorkflowAutoCoverPlans`. Proven by
+  `TestWorkflowPlanEdge` / `TestWorkflowAutoCoverPlans` (planner) and `TestProbeWorkflowGenerated`
+  (a live drive to `completed`). Caveat: the Monitor does not yet observe `WorkflowStart` (the
+  `WorkflowStarted` fact decodes the *history* `StartWorkflowExecution`, which the frontend
+  interceptor does not see), so the model's intermediate `started` is unobserved and the drive uses
+  a self-completing workflow; a clean `Reconcile` on the two-step start→complete path needs that
+  Monitor observation gap closed. More entities (Activity, WorkflowUpdate) are further follow-ups.
 - ~~**Footprint reconciliation**~~ **(done)** — an action now declares an expected footprint
   (`Action.Footprint`), and `ReconcileFootprint(plan, observed)` grounds it against the learned
   footprint: an expected internal call that never fired, or an observed non-ambient call outside the
