@@ -492,7 +492,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	}
 
 	var newPM *taskQueuePartitionManagerImpl
-	tqConfig := newTaskQueueConfig(partition, e.config, namespaceEntry.Name())
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
@@ -1440,7 +1440,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if err != nil {
 			return nil, err
 		}
-		tqConfig := newTaskQueueConfig(rootPartition, e.config, namespace.Name(req.Namespace))
+		tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, namespace.Name(req.Namespace))
 		if !rootPartition.IsRoot() || rootPartition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL || rootPartition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			return nil, serviceerror.NewInvalidArgument("DescribeTaskQueue must be called on the root partition of workflow task queue if api mode is DESCRIBE_TASK_QUEUE_MODE_ENHANCED")
 		}

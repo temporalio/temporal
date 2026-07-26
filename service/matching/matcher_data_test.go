@@ -42,7 +42,7 @@ func TestMatcherDataSuite(t *testing.T) {
 
 func (s *MatcherDataSuite) SetupTest() {
 	cfg := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
+		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 		NewConfig(dynamicconfig.NewNoopCollection()),
 		"nsname",
 	)
@@ -1131,7 +1131,7 @@ func TestCheckConstants(t *testing.T) {
 func FuzzMatcherData(f *testing.F) {
 	f.Fuzz(func(t *testing.T, tape []byte) {
 		cfg := newTaskQueueConfig(
-			tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
+			tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 			NewConfig(dynamicconfig.NewNoopCollection()),
 			"nsname",
 		)

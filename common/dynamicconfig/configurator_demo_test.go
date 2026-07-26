@@ -17,63 +17,58 @@ const demoConfigPath = "../../config/dynamicconfig/expressions-demo.yaml"
 // comments claim, so the documentation cannot drift from the behaviour.
 func TestDemoExpressionConfig(t *testing.T) {
 	restoreExprSettings(t)
-	e := NewConfiguratorEvaluator(AmbientConstraints{
+
+	load := func(t *testing.T, ambient AmbientConstraints) *Collection {
+		t.Helper()
+		c := NewConfiguratorClient(ambient, nil, log.NewTestLogger())
+		require.NoError(t, c.LoadFileFrom(demoConfigPath))
+		return NewCollection(c, log.NewTestLogger())
+	}
+
+	matching := load(t, AmbientConstraints{
 		Environment:      "staging",
 		AvailabilityZone: "us-west-2",
 		ClusterName:      "active",
 		ServiceName:      "matching",
 		Custom:           map[string]any{"deployRing": 2},
-	}, log.NewTestLogger())
-	require.NoError(t, e.LoadFileFrom(demoConfigPath))
-
-	col := NewCollectionWithEvaluator(NewNoopClient(), log.NewTestLogger(), e)
+	})
 
 	t.Run("boolean logic over deployment dimensions", func(t *testing.T) {
-		get := MatchingGetTasksBatchSize.Get(col)
-		// env=staging and zone=us-west-2 matches the first override
-		require.Equal(t, 250, get("ns", "tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+		// env=staging and zone=us-west-2 matches the override
+		require.Equal(t, 250,
+			MatchingGetTasksBatchSize.Get(matching)("ns", "tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW))
 	})
 
 	t.Run("custom ambient dimension", func(t *testing.T) {
-		// deployRing=2 > 1
-		require.True(t, VisibilityAllowList.Get(col)("ns"))
+		require.True(t, VisibilityAllowList.Get(matching)("ns")) // deployRing=2 > 1
 	})
 
 	t.Run("service targeting", func(t *testing.T) {
-		// this evaluator says service=matching, so the history-only override must not match
-		require.Equal(t, 9000, HistoryPersistenceMaxQPS.Get(col)())
+		// this process says service=matching, so the history-only override must not match
+		require.Equal(t, 9000, HistoryPersistenceMaxQPS.Get(matching)())
 
-		hist := NewConfiguratorEvaluator(AmbientConstraints{
-			AvailabilityZone: "us-west-2", ServiceName: "history",
-		}, log.NewTestLogger())
-		require.NoError(t, hist.LoadFileFrom(demoConfigPath))
-		histCol := NewCollectionWithEvaluator(NewNoopClient(), log.NewTestLogger(), hist)
-		require.Equal(t, 18000, HistoryPersistenceMaxQPS.Get(histCol)())
+		history := load(t, AmbientConstraints{AvailabilityZone: "us-west-2", ServiceName: "history"})
+		require.Equal(t, 18000, HistoryPersistenceMaxQPS.Get(history)())
 	})
 
-	t.Run("partition dimensions", func(t *testing.T) {
-		get := MatchingMaxWaitForPollerBeforeFwd.Get(col)
-		root := col.WithConstraints(map[string]any{"taskQueueIsRoot": true})
-		child := col.WithConstraints(map[string]any{"taskQueueIsRoot": false})
+	t.Run("cluster targeting", func(t *testing.T) {
+		require.Equal(t, time.Minute,
+			MatchingLongPollExpirationInterval.Get(matching)("ns", "tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW))
 
-		require.Equal(t, time.Second, MatchingMaxWaitForPollerBeforeFwd.Get(root)(
-			"ns", "tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW))
-		require.Equal(t, 200*time.Millisecond, MatchingMaxWaitForPollerBeforeFwd.Get(child)(
-			"ns", "tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW))
-		// with no partition dimensions attached at all, the default applies
-		require.Equal(t, 200*time.Millisecond, get("ns", "tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+		standby := load(t, AmbientConstraints{ClusterName: "standby"})
+		require.Equal(t, 20*time.Second,
+			MatchingLongPollExpirationInterval.Get(standby)("ns", "tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW))
 	})
 
 	t.Run("keys absent from the file are untouched", func(t *testing.T) {
-		require.Equal(t,
-			MatchingRPS.Get(NewNoopCollection())(),
-			MatchingRPS.Get(col)())
+		require.Equal(t, MatchingRPS.Get(NewNoopCollection())(), MatchingRPS.Get(matching)())
 	})
 }
 
 // TestDemoExpressionConfigReload covers the watch path against a real file on disk.
 func TestDemoExpressionConfigReload(t *testing.T) {
 	restoreExprSettings(t)
+
 	path := filepath.Join(t.TempDir(), "expr.yaml")
 	// The watcher keys off modification time, which on some filesystems has coarse
 	// granularity, so stamp each write explicitly rather than sleeping between them.
@@ -85,23 +80,23 @@ func TestDemoExpressionConfigReload(t *testing.T) {
 	}
 	write("matching.historyMaxPageSize:\n  defaultValue: 11\n")
 
-	e := NewConfiguratorEvaluator(AmbientConstraints{}, log.NewTestLogger())
-	require.NoError(t, e.LoadFileFrom(path))
+	c := NewConfiguratorClient(AmbientConstraints{}, nil, log.NewTestLogger())
+	t.Cleanup(c.Stop)
+	require.NoError(t, c.LoadFileFrom(path))
 
-	col := NewCollectionWithEvaluator(NewNoopClient(), log.NewTestLogger(), e)
-	cancelSub := e.Subscribe(col.EvaluatorKeysChanged)
-	defer cancelSub()
+	col := NewCollection(c, log.NewTestLogger())
+	col.Start()
+	t.Cleanup(col.Stop)
 
 	updates := make(chan int, 4)
 	init, cancel := MatchingHistoryMaxPageSize.Subscribe(col)("ns", func(v int) { updates <- v })
-	defer cancel()
+	t.Cleanup(cancel)
 	require.Equal(t, 11, init)
 
-	stop := e.StartWatching(path, 20*time.Millisecond)
-	defer stop()
+	stop := c.StartWatching(path, 20*time.Millisecond)
+	t.Cleanup(stop)
 
 	write("matching.historyMaxPageSize:\n  defaultValue: 22\n")
-
 	select {
 	case v := <-updates:
 		require.Equal(t, 22, v)
@@ -114,7 +109,7 @@ func TestDemoExpressionConfigReload(t *testing.T) {
 	// directly rather than through the watcher so there is nothing to race with.
 	stop()
 	write("matching.historyMaxPageSize:\n  defaultValue: not-an-int\n")
-	require.Error(t, e.LoadFileFrom(path))
+	require.Error(t, c.LoadFileFrom(path))
 	require.Equal(t, 22, MatchingHistoryMaxPageSize.Get(col)("ns"))
 	require.Empty(t, updates, "a failed reload must not notify subscribers")
 }

@@ -111,14 +111,14 @@ func buildCLI() *cli.App {
 				"value types, and expression syntax (PROTOTYPE)",
 			ArgsUsage: "<file> ...",
 			Action: func(c *cli.Context) error {
-				// A throwaway evaluator: LoadFile does all the validation, parsing every
+				// A throwaway client: LoadFile does all the validation, parsing every
 				// expression and checking every value against its setting's converter.
-				evaluator := dynamicconfig.NewConfiguratorEvaluator(
-					dynamicconfig.AmbientConstraints{}, log.NewCLILogger())
+				client := dynamicconfig.NewConfiguratorClient(
+					dynamicconfig.AmbientConstraints{}, nil, log.NewCLILogger())
 				var total int
 				for _, fileName := range c.Args().Slice() {
 					fmt.Println(fileName)
-					if err := evaluator.LoadFileFrom(fileName); err != nil {
+					if err := client.LoadFileFrom(fileName); err != nil {
 						total++
 						fmt.Printf("  error: %v\n", err)
 					}

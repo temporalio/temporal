@@ -97,7 +97,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	tqConfig := newTaskQueueConfig(partition, engine.config, ns.Name())
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
 	s.userDataMgr = &mockUserDataManager{}
 
 	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, s.userDataMgr)
@@ -1419,7 +1419,7 @@ func (s *PartitionManagerTestSuite) TestConstructionDoesNotRegisterDynamicConfig
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.Require().NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	tqConfig := newTaskQueueConfig(partition, s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
 
 	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metrics.NoopMetricsHandler, &mockUserDataManager{})
 	s.Require().NoError(err)
@@ -1437,7 +1437,7 @@ func (s *PartitionManagerTestSuite) setupPartitionManagerWithTaskHookFactories(t
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.Require().NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	tqConfig := newTaskQueueConfig(partition, s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
 	s.partitionMgr.engine.taskHookFactories = taskHookFactories
 
 	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metrics.NoopMetricsHandler, s.userDataMgr)
@@ -1465,7 +1465,7 @@ func (s *PartitionManagerTestSuite) setupPartitionManagerWithCapture(
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.Require().NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
-	tqConfig := newTaskQueueConfig(partition, s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
 
 	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
 	s.Require().NoError(err)
@@ -2174,7 +2174,7 @@ func TestWorkerCommandsPollTask_VersioningFieldsIgnored(t *testing.T) {
 			f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 			require.NoError(t, err)
 			partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition()
-			tqConfig := newTaskQueueConfig(partition, engine.config, ns.Name())
+			tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
 			userDataMgr := &mockUserDataManager{}
 
 			pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)

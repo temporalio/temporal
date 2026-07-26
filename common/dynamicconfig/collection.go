@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"math"
 	"reflect"
 	"runtime"
@@ -33,12 +32,6 @@ type (
 		client   Client
 		logger   log.Logger
 		errCount int64
-
-		// evaluator, if non-nil, is consulted before client on every lookup. See evaluator.go.
-		evaluator Evaluator
-		// extra holds ad-hoc constraint dimensions passed to the evaluator, set by
-		// WithConstraints. Nil on a root Collection. Immutable once set.
-		extra map[string]any
 
 		cancelClientSubscription func()
 
@@ -118,12 +111,6 @@ var (
 // NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
 // Get will work without Start/Stop.
 func NewCollection(client Client, logger log.Logger) *Collection {
-	return NewCollectionWithEvaluator(client, logger, nil)
-}
-
-// NewCollectionWithEvaluator creates a new collection that consults evaluator before client
-// on every lookup. A nil evaluator is equivalent to NewCollection. See evaluator.go.
-func NewCollectionWithEvaluator(client Client, logger log.Logger, evaluator Evaluator) *Collection {
 	// Do this at the first convenient place we have a logger:
 	logSharedStructureWarnings(logger)
 
@@ -131,64 +118,10 @@ func NewCollectionWithEvaluator(client Client, logger log.Logger, evaluator Eval
 		client:        client,
 		logger:        logger,
 		errCount:      -1,
-		evaluator:     evaluator,
 		subscriptions: make(map[Key]map[int]any),
 		convertCache:  new(sync.Map),
 		indexCache:    new(sync.Map),
 	}
-}
-
-// NewCollectionForService is NewCollectionWithEvaluator with the service name attached as a
-// constraint dimension ("service"), so that an expression can target a single service. The
-// result is a root Collection, so unlike WithConstraints it supports subscriptions.
-func NewCollectionForService(client Client, logger log.Logger, evaluator Evaluator, service string) *Collection {
-	c := NewCollectionWithEvaluator(client, logger, evaluator)
-	if service != "" {
-		c.extra = map[string]any{"service": service}
-	}
-	return c
-}
-
-// WithConstraints returns a read-only view of c whose lookups carry additional, ad-hoc
-// constraint dimensions into the Evaluator, on top of the dimensions implied by each
-// setting's precedence. It lets a component constrain settings by things that Constraints
-// cannot express, e.g.:
-//
-//	dc.WithConstraints(map[string]any{"taskQueuePartitionID": p.PartitionId()})
-//
-// The view shares the client, evaluator, and conversion/index caches with c, so it is cheap,
-// but it is intended to be built once per long-lived component rather than per request.
-//
-// The extra map must not be mutated after this call. If c has no Evaluator the view behaves
-// exactly like c.
-//
-// Subscribe is not supported on a derived view: it keeps its own (unstarted) subscription
-// state, so callbacks registered on it will never fire. Subscribe on the root Collection.
-func (c *Collection) WithConstraints(extra map[string]any) *Collection {
-	// Note: every field copied here is either immutable or already a pointer to shared state,
-	// so no sync.Mutex is copied by value.
-	return &Collection{
-		client:        c.client,
-		logger:        c.logger,
-		errCount:      -1,
-		evaluator:     c.evaluator,
-		extra:         mergeConstraints(c.extra, extra),
-		subscriptions: make(map[Key]map[int]any),
-		convertCache:  c.convertCache,
-		indexCache:    c.indexCache,
-	}
-}
-
-func mergeConstraints(base, extra map[string]any) map[string]any {
-	if len(base) == 0 {
-		return extra
-	} else if len(extra) == 0 {
-		return base
-	}
-	merged := make(map[string]any, len(base)+len(extra))
-	maps.Copy(merged, base)
-	maps.Copy(merged, extra)
-	return merged
 }
 
 func (c *Collection) Start() {
@@ -245,32 +178,6 @@ func (c *Collection) pollOnce() {
 		}
 		for _, sub := range subs {
 			cvs := c.client.GetValue(key)
-			setting.dispatchUpdate(c, sub, cvs)
-		}
-	}
-}
-
-// EvaluatorKeysChanged notifies subscribers that the Evaluator's configuration changed for
-// the given keys. Unlike keysChanged it does not receive new values, because the Evaluator
-// resolves them per subscriber; it re-reads the client's values so that a key which was
-// *removed* from the expression config correctly falls back to the file configured value
-// rather than to the compiled-in default.
-func (c *Collection) EvaluatorKeysChanged(keys []Key) {
-	c.subscriptionLock.Lock()
-	defer c.subscriptionLock.Unlock()
-
-	for _, key := range keys {
-		setting := queryRegistry(key)
-		if setting == nil {
-			continue
-		}
-		// use setting.Key instead of key to avoid changing case again
-		subs := c.subscriptions[setting.Key()]
-		if len(subs) == 0 {
-			continue
-		}
-		cvs := c.client.GetValue(setting.Key())
-		for _, sub := range subs {
 			setting.dispatchUpdate(c, sub, cvs)
 		}
 	}
@@ -372,9 +279,6 @@ func matchAndConvert[T any](
 	convert func(value any) (T, error),
 	precedence []Constraints,
 ) T {
-	if v, _, ok := evalOverride(c, key, convert, precedence); ok {
-		return v
-	}
 	cvs := c.client.GetValue(key)
 	v, _ := matchAndConvertCvs(c, key, def, convert, precedence, cvs)
 	return v
@@ -480,11 +384,6 @@ func matchAndConvertWithConstrainedDefault[T any](
 	convert func(value any) (T, error),
 	precedence []Constraints,
 ) T {
-	// Note: an expression config value wins over a constrained default, matching the
-	// intent that an explicitly configured value overrides a built-in default.
-	if v, _, ok := evalOverride(c, key, convert, precedence); ok {
-		return v
-	}
 	cvs := c.client.GetValue(key)
 	value, _ := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, precedence)
 	return value
@@ -503,11 +402,8 @@ func subscribe[T any](
 
 	// get one value immediately (note that subscriptionLock is held here so we can't race with
 	// an update)
-	init, raw, ok := evalOverride(c, key, convert, prec)
-	if !ok {
-		cvs := c.client.GetValue(key)
-		init, raw = matchAndConvertCvs(c, key, def, convert, prec, cvs)
-	}
+	cvs := c.client.GetValue(key)
+	init, raw := matchAndConvertCvs(c, key, def, convert, prec, cvs)
 
 	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
 	// current value and skip the subscription.  The cancellation func returned is also nil.
@@ -549,11 +445,8 @@ func subscribeWithConstrainedDefault[T any](
 
 	// get one value immediately (note that subscriptionLock is held here so we can't race with
 	// an update)
-	init, raw, ok := evalOverride(c, key, convert, prec)
-	if !ok {
-		cvs := c.client.GetValue(key)
-		init, raw = findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, prec)
-	}
+	cvs := c.client.GetValue(key)
+	init, raw := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, prec)
 
 	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
 	// current value and skip the subscription. The cancellation func returned is also nil.
@@ -590,11 +483,6 @@ func dispatchUpdate[T any](
 	sub *subscription[T],
 	cvs []ConstrainedValue,
 ) {
-	if v, raw, ok := evalOverride(c, key, convert, sub.prec); ok {
-		dispatchIfChanged(sub, v, raw)
-		return
-	}
-
 	var raw any
 	cvp, err := findMatch(c.indexCache, cvs, sub.prec)
 	if err != nil {
@@ -639,11 +527,6 @@ func dispatchUpdateWithConstrainedDefault[T any](
 	sub *subscription[T],
 	cvs []ConstrainedValue,
 ) {
-	if v, raw, ok := evalOverride(c, key, convert, sub.prec); ok {
-		dispatchIfChanged(sub, v, raw)
-		return
-	}
-
 	// Note: This performs the conversion even if the raw value is unchanged. This isn't ideal,
 	// but so far constrained default settings are only used for primitive values so it's okay.
 	// If we have a constrained default value with a complex conversion function, this could be

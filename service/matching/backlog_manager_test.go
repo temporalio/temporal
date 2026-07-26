@@ -90,7 +90,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 	queue := UnversionedQueueKey(prtn)
-	tlCfg := newTaskQueueConfig(prtn, NewConfig(s.cfgcol), "test-namespace")
+	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), NewConfig(s.cfgcol), "test-namespace")
 
 	s.ptqMgr = NewMockphysicalTaskQueueManager(s.controller)
 	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()

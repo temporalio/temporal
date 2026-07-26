@@ -275,7 +275,7 @@ func newMatchingEngine(
 }
 
 func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *Config) taskQueuePartitionManager {
-	tqConfig := newTaskQueueConfig(prtn, config, matchingTestNamespace)
+	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
 	logger, _, metricsHandler := s.matchingEngine.loggerAndMetricsForPartition(s.ns, prtn, tqConfig)
 	pm, err := newTaskQueuePartitionManager(s.matchingEngine, s.ns, prtn, tqConfig, logger, logger, metricsHandler, &mockUserDataManager{})
 	s.Require().NoError(err)
@@ -5817,7 +5817,7 @@ func TestLoggerAndMetricsForPartition_BreakdownEnabled(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			capture := captureHandler.StartCapture()
-			tqConfig := newTaskQueueConfig(tc.partition, config, matchingTestNamespace)
+			tqConfig := newTaskQueueConfig(tc.partition.TaskQueue(), config, matchingTestNamespace)
 			_, _, handler := e.loggerAndMetricsForPartition(ns, tc.partition, tqConfig)
 			metrics.PollSuccessPerTaskQueueCounter.With(handler).Record(1)
 			snap := capture.Snapshot()
@@ -5880,7 +5880,7 @@ func TestLoggerAndMetricsForPartition_BreakdownDisabled(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			capture := captureHandler.StartCapture()
-			tqConfig := newTaskQueueConfig(tc.partition, config, matchingTestNamespace)
+			tqConfig := newTaskQueueConfig(tc.partition.TaskQueue(), config, matchingTestNamespace)
 			_, _, handler := e.loggerAndMetricsForPartition(ns, tc.partition, tqConfig)
 			metrics.PollSuccessPerTaskQueueCounter.With(handler).Record(1)
 			snap := capture.Snapshot()
@@ -6469,7 +6469,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		rootPartition := tqid.UnsafeTaskQueueFamily("test-namespace-id", "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 		mockPM := NewMocktaskQueuePartitionManager(ctrl)
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
-		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition, config, nsName))
+		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
 		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
 
 		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
@@ -6586,7 +6586,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		rootPartition := tqid.UnsafeTaskQueueFamily(namespaceID, "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 		mockPM := NewMocktaskQueuePartitionManager(ctrl)
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
-		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition, config, nsName))
+		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
 		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
 
 		var rawClient matchingservice.MatchingServiceClient
@@ -6830,7 +6830,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			mockPM := NewMocktaskQueuePartitionManager(ctrl)
 			mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 			if i == 0 {
-				mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(partition, config, nsName))
+				mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(partition.TaskQueue(), config, nsName))
 			}
 			// Each partition must get RemovePoller called exactly once with the worker identity.
 			mockPM.EXPECT().RemovePoller(pollerIdentity("worker-identity")).Times(1)
@@ -7046,7 +7046,7 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	require.NoError(t, err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 
-	tqConfig := newTaskQueueConfig(partition, engine.config, ns.Name())
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
 
 	userData := &mockUserDataManager{
 		data: &persistencespb.VersionedTaskQueueUserData{
@@ -7143,7 +7143,7 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	require.NoError(t, err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 
-	tqConfig := newTaskQueueConfig(partition, engine.config, ns.Name())
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
 
 	userData := &mockUserDataManager{
 		data: &persistencespb.VersionedTaskQueueUserData{

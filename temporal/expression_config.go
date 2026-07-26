@@ -7,27 +7,32 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/resource"
 )
 
-// expressionEvaluatorProvider builds the optional constraint-expression layer over dynamic
-// config. It returns nil unless dynamicConfigClient.expressionFilepath is set, in which case
-// dynamic config resolves exactly as it did before.
+// withExpressionConfig optionally layers constraint-expression configuration over the
+// dynamic config client. It returns inner unchanged unless
+// dynamicConfigClient.expressionFilepath is set, so by default dynamic config resolves
+// exactly as it did before.
 //
-// PROTOTYPE: this is an experiment in constraint-expression configuration
+// PROTOTYPE: an experiment in constraint-expression configuration
 // (see common/dynamicconfig/configurator/README.md), not a supported way to configure the
-// server. Config in the expression file wins over the same key in the dynamic config file.
+// server. A key in the expression file is served from there; every other key comes from
+// inner as usual.
 //
-// Unlike the file based client, a failure to load at startup is fatal: silently running with
-// compiled-in defaults when the operator asked for an expression file would be worse than
-// refusing to start.
-func expressionEvaluatorProvider(
+// Unlike the file based client, a failure to load at startup is fatal: silently running
+// with compiled-in defaults when the operator asked for an expression file would be worse
+// than refusing to start.
+func withExpressionConfig(
 	cfg *config.Config,
+	inner dynamicconfig.Client,
+	serviceNames resource.ServiceNames,
 	logger log.Logger,
 	stopChan chan any,
-) (dynamicconfig.Evaluator, error) {
+) (dynamicconfig.Client, error) {
 	dcConfig := cfg.DynamicConfigClient
 	if dcConfig == nil || dcConfig.ExpressionFilepath == "" {
-		return nil, nil
+		return inner, nil
 	}
 
 	ambient := dynamicconfig.AmbientConstraints{
@@ -40,20 +45,28 @@ func expressionEvaluatorProvider(
 	if v, ok := dcConfig.ExpressionConstraints["zone"].(string); ok {
 		ambient.AvailabilityZone = v
 	}
+	// The client is shared by every service in this process, so "service" is only a
+	// meaningful dimension when the process hosts exactly one.
+	if len(serviceNames) == 1 {
+		for name := range serviceNames {
+			ambient.ServiceName = string(name)
+		}
+	}
 
-	evaluator := dynamicconfig.NewConfiguratorEvaluator(ambient, logger)
-	if err := evaluator.LoadFileFrom(dcConfig.ExpressionFilepath); err != nil {
+	client := dynamicconfig.NewConfiguratorClient(ambient, inner, logger)
+	if err := client.LoadFileFrom(dcConfig.ExpressionFilepath); err != nil {
 		return nil, fmt.Errorf("unable to load dynamic config expression file: %w", err)
 	}
 	logger.Info("Loaded dynamic config expression file",
 		tag.NewStringTag("path", dcConfig.ExpressionFilepath))
 
 	pollInterval := max(dcConfig.PollInterval, dynamicconfig.ExpressionFilePollInterval)
-	stopWatching := evaluator.StartWatching(dcConfig.ExpressionFilepath, pollInterval)
+	stopWatching := client.StartWatching(dcConfig.ExpressionFilepath, pollInterval)
 	go func() {
 		<-stopChan
 		stopWatching()
+		client.Stop()
 	}()
 
-	return evaluator, nil
+	return client, nil
 }
