@@ -48,8 +48,8 @@ const (
 	// nextRetryDelayOverride is a worker-supplied next_retry_delay, distinct from backingOffInterval so
 	// the reported interval cannot be confused with the policy's.
 	nextRetryDelayOverride = 10 * time.Second
-	// startDelay keeps a first attempt pending dispatch for the whole test.
-	startDelay = time.Hour
+	// activityStartDelay keeps a first attempt pending dispatch for the whole test.
+	activityStartDelay = time.Hour
 )
 
 // A StartToClose or Heartbeat timeout whose type is listed in the retry policy's NonRetryableErrorTypes
@@ -101,7 +101,7 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	// First attempt within its start delay (SAA only): the pending dispatch is in the future and is
 	// not a retry.
 	s.T().Run("StartDelayPending", func(t *testing.T) {
-		cfg := activityConfig{MaxAttempts: 3, RetryInterval: backingOffInterval, StartDelay: startDelay}
+		cfg := activityConfig{MaxAttempts: 3, RetryInterval: backingOffInterval, StartDelay: activityStartDelay}
 		info := newSAADriver(t, env, cfg).driveTrace(t, nil).describe(t).GetInfo()
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
 		require.Equal(t, info.GetExecutionTime().AsTime(), info.GetNextAttemptScheduleTime().AsTime(),
@@ -133,20 +133,14 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	// Backing off after a worker-supplied next_retry_delay: the reported interval is the worker's
 	// override.
 	s.T().Run("NextRetryDelayOverride", func(t *testing.T) {
-		trace := []model.Event{model.Poll, model.FailRetryably}
-		expected := activityInfoProjection{
-			State:                  enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
-			Attempt:                2,
-			CurrentRetryInterval:   nextRetryDelayOverride,
-			NextAttemptScheduleSet: true,
-		}
-		cfg := activityConfig{MaxAttempts: 3, RetryInterval: backingOffInterval, NextRetryDelay: nextRetryDelayOverride}
-		t.Run("WorkflowActivity", func(t *testing.T) {
-			require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).projection(t))
-		})
-		t.Run("StandaloneActivity", func(t *testing.T) {
-			require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).projection(t))
-		})
+		both(t, activityConfig{MaxAttempts: 3, RetryInterval: backingOffInterval, NextRetryDelay: nextRetryDelayOverride},
+			[]model.Event{model.Poll, model.FailRetryably},
+			activityInfoProjection{
+				State:                  enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+				Attempt:                2,
+				CurrentRetryInterval:   nextRetryDelayOverride,
+				NextAttemptScheduleSet: true,
+			})
 	})
 
 	// Retry dispatched to Matching but not yet polled: both fields are nil.
