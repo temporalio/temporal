@@ -1,5 +1,10 @@
 # UMPIRE — The Actions Model
 
+> **Status: implemented (Phases 1–5).** This document is both the design and, now, a description
+> of working code — see the **Implementation** section below and `PLAN.md` for the phased build
+> and what remains. The hand-coded `EnvFunc`s the "Why" describes have largely been retired in
+> favour of a generic runtime + declared actions + a planner that computes the drives.
+
 ## Why
 
 Umpire today has two of the three layers it needs to auto-drive coverage:
@@ -241,20 +246,57 @@ is well-typed rather than a guessed method name. The search space becomes
 The endgame: **the model is the test.** Drivers, fault placements, and exploration plans are
 synthesized, not written.
 
-## Concrete first step
+## Implementation
 
-Don't design it in the abstract — **derive it from what already exists.** Umpire currently has
-16 `NexusOperation` edges and ~8 implicit drivers; each driver *is* an action sequence.
+Built as `PLAN.md` describes, split along umpire's existing framework/registration seam.
 
-1. Extract those into ~10 declared `Action`s (realization / hosting / effects / faultable),
-   covering: `StartNexusOperationExecution`, `cmd:ScheduleNexusOperation`, the handler
-   responses, the completion callbacks, `timer:ForceTimeout`, `TerminateNexusOperationExecution`.
-2. Replace **one** hand-coded `EnvFunc` — the completion path is the best proof, since it has a
-   precondition (`@started`), a wait, and a callback — with a **generated** driver read from
-   the actions model.
-3. If that round-trips (declared → planned → driven → observed matches declared), the schema is
-   validated and the rest generalizes. This also immediately yields declared/observed
-   reconciliation as a real conformance check on the action layer.
+**`common/testing/umpire/action.go`** — the domain-agnostic schema and runtime:
+- `Action`, `Ref`, `Pre`, `Effect`, `Kind` (`ClientRPC` / `WorkerCommand` / `HandlerResponse` /
+  `CompletionCallback` / `Timer` / `Fault`).
+- Interfaces `Realizer`, `RealizeContext`, `StateOracle`, `EffectResolver`, `VisitedOracle` —
+  implemented Temporal-side, so `common` stays free of `testcore`/RPC deps.
+- `Drive` — installs standing/reactive actions, fires proactive actions in order (each waiting
+  on its preconditions via the oracle), then confirms the final action's effects. **Only
+  proactive actions wait on preconditions**: a reactive action passes through its precondition
+  state as a transient the client can't observe, so waiting on it would race.
+- `Reconcile` — returns declared effects the run did not produce (drift), same intent as the FSM
+  conformance check, one layer up.
+
+**`tests/umpire/action/`** — the Temporal concretions:
+- `action.go` — `Ctx` (the `RealizeContext`, with fault cleanups), `Oracle` (`StateOracle` +
+  `VisitedOracle` over the Monitor's `ModelState`), `Resolver` (`EffectResolver` over the
+  lifecycles), `ResponsePolicy` (a programmable mock Nexus handler), the realizers, and the
+  declared `NexusOperation` actions for both hostings.
+- `plan.go` — `actionFor(from, event, hosting)` (the registry), `PlanEdge` (routes to `from`
+  via the entity planner, maps each event to its action, validates the target edge's hosting),
+  and `AutoCoverPlans` (one plan per settling edge — the coverage list, computed from the model).
+- `fault.go` — `Drop` / `Hold` fault actions arming the `RPCFaultGenerator` (gRPC + Nexus HTTP),
+  and `FaultVariants`.
+- `plan_test.go` — unit tests for `PlanEdge` (no cluster).
+
+**`tests/umpire_probe_test.go`** — one generated driver, `nexusGenExecPlan(plan)`, runs any
+plan through `umpire.Drive` + `umpire.Reconcile`; the exploration computes its drive list from
+`AutoCoverPlans()`. Seven bespoke `EnvFunc`s were retired into it; `Resilience` runs the
+learned-footprint fault exploration over a generated plan; `TestPlanEdge` /
+`TestProbeNexusGeneratedCompletion` / `TestProbeNexusFaultAction` are the round-trip proofs.
+
+**Two edges stay bespoke, by nature** (no atomic action): the `backing_off→scheduled` retry
+reschedule and `started→timed_out` (a real schedule-to-close timer — the force-timeout hook
+fires on the attempt, not once started).
+
+## What remains
+
+- **Coverage-guided fault exploration** — the scheduler that ties `AutoCoverPlans` ×
+  `FaultVariants`/learned-footprint × per-execution testEnvs into a novelty-prioritized loop
+  under a budget. The pieces exist; the loop does not.
+- **`Faultable` from the learned footprint** — the declared `Faultable` fields are not the
+  resilience targets (dropping a client-entry RPC just fails the drive); today fault exploration
+  uses the *observed* footprint. Wiring the learned footprint back onto actions would unify them.
+- **Beyond `NexusOperation`** — the schema is generic, but only `NexusOperation` has declared
+  actions so far.
+- **Footprint reconciliation** — `Reconcile` grounds effects, not yet the `Faultable` footprint.
+- **Planner-core lift** — moving `advanceEdges`/`shortestRoute`/`hostingOK` into `common` so
+  `PlanEdge` need not live beside the Temporal planner (mechanical).
 
 ## Relationship to the other umpire pieces
 
@@ -263,10 +305,12 @@ Don't design it in the abstract — **derive it from what already exists.** Umpi
 - **Footprint / Mechanism** (see UMPIRE_TRACING.md) — the RPC-level realization an action
   references; the actions model is the semantic operator, the footprint is its wire-level
   detail.
-- **Planner** (`tests/umpire/planner`) — already routes over entity edges with capability and
-  hosting constraints; extends to goal-regression over actions.
-- **Probe / drivers** (`tests/probe`, `tests/umpire_probe_test.go`) — the current hand-coded
-  drivers are the ground truth to derive the first actions model from, and the target the
-  generated runtime replaces.
+- **Planner** (`tests/umpire/planner`) — routes over entity edges with capability and hosting
+  constraints; `PlanEdge` (in `tests/umpire/action`) reuses it, mapping each route event to an
+  action.
+- **Probe / drivers** (`tests/probe`, `tests/umpire_probe_test.go`) — the probe's judge /
+  coverage / verdict machinery is unchanged; only the drive is now generated
+  (`nexusGenExecPlan`), and the exploration's drive list is computed by `AutoCoverPlans`.
 - **Faults** (`common/rpc/faultinjection`, the probe's `armDrop`/`armHold`, the
-  `NexusOperationForceTimeout` hook) — the realization primitives faults decorate actions with.
+  `NexusOperationForceTimeout` hook) — the realization primitives; `Drop`/`Hold`/`timer:ForceTimeout`
+  actions arm them, and the probe's `FaultEachObservedCall` supplies the learned footprint.
