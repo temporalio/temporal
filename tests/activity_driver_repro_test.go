@@ -262,3 +262,26 @@ func (s *activityParityTestSuite) TestDriversAcceptDispatchPolledDuringTheWait()
 		require.False(t, rec.failed, "a dispatch taken by a worker during the wait is still a dispatch")
 	})
 }
+
+// A paused activity reports no pending dispatch, whatever its backoff is doing, so the drivers cannot
+// see a dispatch delay elapse while it is paused and must not claim they have.
+func (s *activityParityTestSuite) TestDriversRejectDispatchDelayWhilePaused() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	trace := []model.Event{model.Poll, model.FailRetryably, model.Pause}
+
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		a := newSAADriver(t, env, cfg).driveTrace(t, trace)
+		rec := &activityDriverErrorRecorder{}
+		a.driveEvent(rec, model.BackoffElapses)
+		require.True(t, rec.failed, "a paused activity shows no pending dispatch, so none can be seen to elapse")
+	})
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		a := newWFADriver(t, env, cfg).driveTrace(t, trace)
+		rec := &activityDriverErrorRecorder{}
+		a.driveEvent(rec, model.BackoffElapses)
+		require.True(t, rec.failed, "a paused activity shows no pending dispatch, so none can be seen to elapse")
+	})
+}
