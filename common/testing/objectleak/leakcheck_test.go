@@ -22,11 +22,20 @@ type graphLeaf struct {
 	Value int
 }
 
+type aliasOuter struct {
+	aliasInner
+}
+
+type aliasInner struct {
+	Value int
+}
+
 func TestObjectLeak_Check(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		opts            []Option
 		setup           func(*ObjectLeakCheck, []any) Baseline
+		gcSettleTimeout time.Duration
 		wantErrContains []string
 		wantReport      string
 	}{
@@ -143,6 +152,7 @@ stale prunes:
 				WithExpected("*objectleak.graphRoot"),
 				WithExpected("*objectleak.graphNode"),
 				WithPruneType(reflect.TypeFor[graphNode]().PkgPath() + ".graphNode"),
+				WithPruneType(reflect.TypeFor[graphNode]().PkgPath() + ".graphN*"),
 			},
 			wantReport: `object leak report
 
@@ -161,18 +171,19 @@ baseline retained objects:
   none`,
 		},
 		{
-			name: "ignores current objects",
+			name: "reports baseline-only expected patterns stale",
 			opts: []Option{
 				WithExpected("*objectleak.graphLeaf"),
 			},
 			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
 				check.Track(roots[0])
 				baseline := check.IgnoreCurrent()
-				check.Track(roots[1])
+				check.Track(roots[1]) // shared node and leaf remain baseline-covered
 				return baseline
 			},
 			wantErrContains: []string{
 				"unexpected retained objects",
+				"stale expected patterns",
 			},
 			wantReport: `object leak report
 
@@ -188,6 +199,145 @@ expected retained objects:
 
 baseline retained objects:
   1 object: *objectleak.graphRoot
+  1 object: Node (*objectleak.graphNode)
+  1 object: Node.Leaf (*objectleak.graphLeaf)
+
+stale expected patterns:
+  *objectleak.graphLeaf`,
+		},
+		{
+			name:            "reports check GC settle timeout",
+			gcSettleTimeout: time.Nanosecond,
+			wantErrContains: []string{
+				"check GC settling timed out",
+				"unexpected retained objects",
+			},
+			wantReport: `object leak report
+
+tracked root objects: 2
+check GC settling timed out
+retained paths: 6 total, 0 baseline, 0 expected, 6 unexpected
+retained objects: 4 total, 0 baseline, 0 expected, 4 unexpected
+
+unexpected retained objects:
+  2 objects: *objectleak.graphRoot
+  2 paths, 1 object: Node (*objectleak.graphNode)
+  2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  none`,
+		},
+		{
+			name:            "reports baseline GC settle timeout",
+			gcSettleTimeout: time.Nanosecond,
+			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
+				check.Track(roots[0])
+				baseline := check.IgnoreCurrent()                    // records the baseline settle timeout
+				check.gcSettleTimeout = checkGCMinWait + time.Second // lets Check settle normally
+				check.Track(roots[1])
+				return baseline
+			},
+			wantErrContains: []string{
+				"baseline GC settling timed out",
+				"unexpected retained objects",
+			},
+			wantReport: `object leak report
+
+tracked root objects: 1
+baseline GC settling timed out
+retained paths: 4 total, 3 baseline, 0 expected, 1 unexpected
+retained objects: 4 total, 3 baseline, 0 expected, 1 unexpected
+
+unexpected retained objects:
+  1 object: *objectleak.graphRoot
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  1 object: *objectleak.graphRoot
+  1 object: Node (*objectleak.graphNode)
+  1 object: Node.Leaf (*objectleak.graphLeaf)`,
+		},
+		{
+			name: "deduplicates baseline objects across roots",
+			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
+				check.Track(roots[0])
+				check.Track(roots[1]) // duplicates the shared node and leaf across Track calls
+				baseline := check.IgnoreCurrent()
+				check.Track(roots[0]) // all objects remain covered by the deduplicated baseline
+				return baseline
+			},
+			wantReport: `object leak report
+
+tracked root objects: 1
+retained paths: 6 total, 6 baseline, 0 expected, 0 unexpected
+retained objects: 4 total, 4 baseline, 0 expected, 0 unexpected
+
+unexpected retained objects:
+  none
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  2 objects: *objectleak.graphRoot
+  2 paths, 1 object: Node (*objectleak.graphNode)
+  2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)`,
+		},
+		{
+			name: "matches baseline objects by address",
+			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
+				outer := &aliasOuter{}
+				roots[0] = outer
+				check.Track(outer)
+				baseline := check.IgnoreCurrent()
+				check.Track(&outer.aliasInner) // same address as outer, but a different pointer type
+				return baseline
+			},
+			wantReport: `object leak report
+
+tracked root objects: 1
+retained paths: 1 total, 1 baseline, 0 expected, 0 unexpected
+retained objects: 1 total, 1 baseline, 0 expected, 0 unexpected
+
+unexpected retained objects:
+  none
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  1 object: *objectleak.aliasOuter`,
+		},
+		{
+			name: "drops collected baseline objects",
+			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
+				check.Track(roots[0])
+				baseline := check.IgnoreCurrent()
+				roots[0] = nil // allows the baselined root to be collected before Check
+				check.Track(roots[1])
+				return baseline
+			},
+			wantErrContains: []string{
+				"unexpected retained objects",
+			},
+			wantReport: `object leak report
+
+tracked root objects: 1
+retained paths: 3 total, 2 baseline, 0 expected, 1 unexpected
+retained objects: 3 total, 2 baseline, 0 expected, 1 unexpected
+
+unexpected retained objects:
+  1 object: *objectleak.graphRoot
+
+expected retained objects:
+  none
+
+baseline retained objects:
   1 object: Node (*objectleak.graphNode)
   1 object: Node.Leaf (*objectleak.graphLeaf)`,
 		},
@@ -205,7 +355,11 @@ baseline retained objects:
 			}
 
 			opts := append([]Option{}, tc.opts...)
-			opts = append(opts, WithGCSettleTimeout(10*time.Millisecond))
+			gcSettleTimeout := tc.gcSettleTimeout
+			if gcSettleTimeout == 0 {
+				gcSettleTimeout = checkGCMinWait + time.Second
+			}
+			opts = append(opts, WithGCSettleTimeout(gcSettleTimeout))
 
 			check, err := NewObjectLeakCheck(opts...)
 			require.NoError(t, err)
