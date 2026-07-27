@@ -105,18 +105,19 @@ func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
 		collectedByID: make(map[objectIdentity]*atomic.Bool),
 	}
 	for _, obj := range t.objects {
-		if !obj.collected.Load() {
-			identity := obj.identity()
-			if collected, ok := baseline.collectedByID[identity]; ok {
-				obj.cleanup.Stop()
-				obj.collected = collected
-			} else {
-				baseline.collectedByID[identity] = obj.collected
-			}
-			baseline.objects = append(baseline.objects, obj)
+		if obj.collected.Load() {
+			obj.cleanup.Stop()
 			continue
 		}
-		obj.cleanup.Stop()
+
+		identity := obj.identity()
+		if canonicalCollected, ok := baseline.collectedByID[identity]; ok {
+			obj.cleanup.Stop()
+			obj.collected = canonicalCollected
+		} else {
+			baseline.collectedByID[identity] = obj.collected
+		}
+		baseline.objects = append(baseline.objects, obj)
 	}
 	t.objects = nil
 	t.roots = 0
