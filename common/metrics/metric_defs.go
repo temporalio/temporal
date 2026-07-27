@@ -42,6 +42,7 @@ const (
 	MatchingRoleTagValue      = "matching"
 	FrontendRoleTagValue      = "frontend"
 	AdminRoleTagValue         = "admin"
+	OperatorRoleTagValue      = "operator"
 	DCRedirectionRoleTagValue = "dc_redirection"
 	BlobstoreRoleTagValue     = "blobstore"
 
@@ -1214,9 +1215,13 @@ var (
 		"workflow_task_completion_paginated_bytes",
 		WithDescription("Total wire size of successfully completed paginated RespondWorkflowTaskCompleted requests. count givens the total number of successful paginated requests."),
 	)
+	WorkflowTaskCompletionBufferInflightBytes = NewGaugeDef(
+		"workflow_task_completion_buffer_inflight_bytes",
+		WithDescription("Process-wide total bytes currently held across all in-flight workflow task completion pagination buffers."),
+	)
 	WorkflowTaskCompletionBufferLost = NewCounterDef(
 		"workflow_task_completion_buffer_lost",
-		WithDescription("Paginated workflow task completions aborted because the buffer was lost (evicted or a page was missing)."),
+		WithDescription("Paginated workflow task completions aborted because the buffer was lost (evicted, process limit exceeded, or a page was missing)."),
 	)
 
 	// Matching
@@ -1240,7 +1245,6 @@ var (
 	)
 	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
-	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired") // TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
 	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")

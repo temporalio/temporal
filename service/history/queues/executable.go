@@ -390,6 +390,9 @@ func (e *executableImpl) Execute() (retErr error) {
 		// reset task priority since it changes between active/standby
 		e.resetAttempt()
 		e.priority = e.priorityAssigner.Assign(e)
+		// reset accumulated in-memory latency: time accrued under the previous
+		// active/standby regime must not be reported as this regime's TaskLatency
+		e.inMemoryNoUserLatency = 0
 	}
 	e.lastActiveness = resp.ExecutedAsActive
 

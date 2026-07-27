@@ -14,6 +14,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -751,13 +752,17 @@ func (b *MutableStateRebuilderImpl) applyChasmEvent(
 	if !b.mutableState.ChasmEnabled() {
 		return false, nil
 	}
-	// Creating a Nexus operation is routed by the per-namespace nexusoperation.enableChasmWorkflowOperations
-	// flag: when off, new operations are created in the HSM tree (legacy behavior). This routing applies only
-	// to the create event; non-create events are matched against wherever the operation already lives. A reset
-	// therefore realigns an operation to whichever framework new operations are created in today.
+	// Create events use the same rollout predicate as live commands so reset does
+	// not move out-of-rollout workflows to CHASM. Non-create events apply wherever
+	// the operation already lives.
 	if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
 		nsName := b.mutableState.GetNamespaceEntry().Name().String()
-		if !b.shard.GetConfig().EnableChasmNexusWorkflowOperations(nsName) {
+		cfg := b.shard.GetConfig()
+		if !nexusoperation.UseChasmForWorkflow(
+			cfg.EnableChasmNexusWorkflowOperations(nsName),
+			cfg.ChasmNexusWorkflowOperationsRolloutPercent(nsName),
+			nsName, b.mutableState.GetExecutionInfo().WorkflowId,
+		) {
 			return false, nil
 		}
 	}

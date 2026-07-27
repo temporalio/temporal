@@ -14,7 +14,7 @@ env:
   # Space- or newline-separated list of temporalio team slugs whose
   # members' PRs should receive an automated Claude review. Empty means only
   # PRs labeled with REVIEW_OPT_IN_LABEL by a temporalio org member are reviewed.
-  REVIEW_TEAMS: ""
+  REVIEW_TEAMS: "nexus"
   REVIEW_OPT_IN_LABEL: request-claude-review
   REVIEW_OPT_OUT_LABEL: skip-claude-review
 
