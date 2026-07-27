@@ -186,23 +186,21 @@ func (a *wfaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
 	if next := pa.GetNextAttemptScheduleTime(); next != nil {
 		deadline = next.AsTime().Add(activityDriverTimerMargin)
 	}
-	for {
-		switch {
-		case pa == nil:
-			t.Errorf("%s: the activity is no longer pending, so its delayed dispatch never happened", e)
-			return
-		case pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
-			t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
-			return
-		case pa.GetNextAttemptScheduleTime() == nil:
-			return
-		case !time.Now().Before(deadline):
-			t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
-				"Last observed: %+v", e, activityDriverTimerMargin, wfaActivityInfo(pa))
-			return
-		}
-		time.Sleep(activityDriverPollInterval)
+	settled := func() bool {
 		pa = a.pendingActivity(t)
+		return pa == nil || pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_STARTED ||
+			pa.GetNextAttemptScheduleTime() == nil
+	}
+	if !activityDriverPollUntil(deadline, settled) {
+		t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
+			"Last observed: %+v", e, activityDriverTimerMargin, wfaActivityInfo(pa))
+		return
+	}
+	switch {
+	case pa == nil:
+		t.Errorf("%s: the activity is no longer pending, so its delayed dispatch never happened", e)
+	case pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
+		t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
 	}
 }
 
