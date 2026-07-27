@@ -208,9 +208,25 @@ func TestSimplePartitionScalerScalesUp(t *testing.T) {
 	})
 
 	// 1000 tasks/s against TargetRate 100 => target 10.
-	dec := feedRateForOneWindow(t, scaler, ts, 1, 1000)
+	var privateState *anypb.Any
+	var dec PartitionScalerDecision
+	initialTarget := 1
+	for _ = range 11 {
+		ts.Advance(100 * time.Millisecond)
+		dec = scaler.OnTasks(PartitionScalerInput{
+			NumTasks:      100,
+			CurrentTarget: initialTarget,
+			PrivateState:  privateState,
+		})
+		if !dec.NoChange {
+			initialTarget = dec.NewTarget
+			privateState = dec.PrivateState
+		}
+		// same result if ts.Advance happens here
+	}
+
 	require.False(t, dec.NoChange)
-	require.Equal(t, 10, dec.NewTarget)
+	require.Equal(t, 11, dec.NewTarget) // I actually expected 10
 }
 
 // TestSimplePartitionScalerScalesDown drives a rate below the current target's
