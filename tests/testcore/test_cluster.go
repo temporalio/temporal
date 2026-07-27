@@ -487,6 +487,11 @@ func enableArchivalConfig(cfg *config.Config) {
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() (errs error) {
+	defer func() {
+		tc.host.clearReferences()
+		tc.host = nil
+	}()
+
 	errs = tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
 	if !UseSQLVisibility() {
@@ -496,7 +501,6 @@ func (tc *TestCluster) TearDownCluster() (errs error) {
 			}
 		}
 	}
-	tc.host.clearReferences()
 	return errs
 }
 

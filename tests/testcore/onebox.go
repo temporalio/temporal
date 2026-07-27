@@ -370,8 +370,7 @@ func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
 }
 
 func (c *temporalImpl) clearReferences() {
-	// Keep the host allocation itself available to object leak checks while
-	// releasing everything that is no longer usable after shutdown.
+	// Release everything that is no longer usable after shutdown.
 	*c = temporalImpl{}
 }
 
