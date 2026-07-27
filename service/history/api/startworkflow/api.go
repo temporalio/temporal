@@ -21,11 +21,13 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -261,6 +263,21 @@ func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*c
 	if err != nil {
 		return nil, err
 	}
+
+	// Emit an OTEL span event so the umpire test observer can create the run-precise WorkflowRun
+	// entity at start with its lineage. A first run is its own chain root with no predecessor;
+	// continue-as-new / reset / retry successors carry the real first/previous run ids (their emit
+	// sites are separate). See UMPIRE_IDENTITY.md.
+	wfKey := mutableState.GetWorkflowKey()
+	trace.SpanFromContext(ctx).AddEvent(telemetry.EventWorkflowExecutionStarted,
+		trace.WithAttributes(
+			telemetry.AttrWorkflowID.String(wfKey.WorkflowID),
+			telemetry.AttrRunID.String(wfKey.RunID),
+			telemetry.AttrNamespaceID.String(wfKey.NamespaceID),
+			telemetry.AttrFirstRunID.String(wfKey.RunID),
+			telemetry.AttrPreviousRunID.String(""),
+		),
+	)
 
 	workflowLease, err := s.createOrUpdateLeaseFn(nil, s.shardContext, mutableState)
 	if err != nil {

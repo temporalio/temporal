@@ -28,6 +28,8 @@ func NewFactDecoder() *FactDecoder {
 	// entity; both are emitted for the event (see ImportSpan). Its Name() is its own identity, so it
 	// is registered under the OTEL event name explicitly.
 	d.registerSpanFactAs(telemetry.EventWorkflowExecutionCompleted, func() fact.SpanFact { return &fact.WorkflowRunCompleted{} })
+	// A run is also observed at start, with its lineage (first / previous run) for the run graph.
+	d.registerSpanFactAs(telemetry.EventWorkflowExecutionStarted, func() fact.SpanFact { return &fact.WorkflowRunStarted{} })
 
 	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationScheduled{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationAttemptFailed{} })

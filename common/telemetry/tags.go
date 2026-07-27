@@ -18,6 +18,11 @@ const (
 
 	AttrWorkflowID    attribute.Key = "workflow.id"
 	AttrRunID         attribute.Key = "workflow.run_id"
+	// AttrFirstRunID / AttrPreviousRunID carry a run's lineage: the chain root and the immediate
+	// predecessor (continue-as-new / reset / retry). Empty previous means a first run. They let an
+	// observer reconstruct the run graph under a WorkflowID (see UMPIRE_IDENTITY.md).
+	AttrFirstRunID    attribute.Key = "workflow.first_run_id"
+	AttrPreviousRunID attribute.Key = "workflow.previous_run_id"
 	AttrNamespaceID   attribute.Key = "namespace.id"
 	AttrTaskQueue     attribute.Key = "task.queue"
 	AttrUpdateID      attribute.Key = "update.id"
@@ -57,6 +62,7 @@ const (
 	EventWorkflowUpdateAccepted           = "WorkflowUpdateAccepted"
 	EventWorkflowUpdateCompleted          = "WorkflowUpdateCompleted"
 	EventWorkflowUpdateRejected           = "WorkflowUpdateRejected"
+	EventWorkflowExecutionStarted         = "WorkflowExecutionStarted"
 	EventWorkflowExecutionCompleted       = "WorkflowExecutionCompleted"
 	EventWorkflowTerminated               = "WorkflowTerminated"
 

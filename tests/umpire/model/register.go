@@ -25,7 +25,7 @@ func DefaultEntities() []DefaultEntity {
 		},
 		{
 			New:   func() umpire.Entity { return NewWorkflowRun() },
-			Facts: []umpire.Fact{&fact.WorkflowRunCompleted{}},
+			Facts: []umpire.Fact{&fact.WorkflowRunStarted{}, &fact.WorkflowRunCompleted{}},
 		},
 		{
 			New:   func() umpire.Entity { return NewTaskQueue() },
