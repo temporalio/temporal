@@ -4,6 +4,7 @@ import (
 	"errors"
 	"runtime"
 	runtimedebug "runtime/debug"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,11 +19,21 @@ const (
 // ObjectLeakCheck tracks objects reachable from roots and reports objects
 // that remain reachable after GC.
 type ObjectLeakCheck struct {
-	objects         []trackedObject
-	roots           int
+	tracked         trackedObjects
+	baselineByID    map[objectIdentity]trackedObject
 	expected        patterns
 	pruneTypes      patterns
 	gcSettleTimeout time.Duration
+}
+
+type trackedObjects struct {
+	objects []trackedObject
+	roots   int
+}
+
+type objectIdentity struct {
+	addr     uintptr
+	typeName string
 }
 
 type Option func(*ObjectLeakCheck) error
@@ -71,12 +82,64 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 	return t, nil
 }
 
+// IgnoreCurrent waits for currently tracked objects to settle, records the
+// identities that remain reachable as the baseline, and resets tracked roots.
+func (t *ObjectLeakCheck) IgnoreCurrent() {
+	settleGC(t.gcSettleTimeout, func() [3]int {
+		retained := 0
+		for _, obj := range t.tracked.objects {
+			if !obj.collected.Load() {
+				retained++
+			}
+		}
+		return [3]int{retained}
+	})
+
+	if t.baselineByID == nil {
+		t.baselineByID = make(map[objectIdentity]trackedObject)
+	}
+	for _, obj := range t.tracked.objects {
+		if !obj.collected.Load() {
+			identity := obj.identity()
+			baseline, ok := t.baselineByID[identity]
+			if !ok || baseline.collected.Load() {
+				t.baselineByID[identity] = obj
+				continue
+			}
+		}
+		obj.cleanup.Stop()
+	}
+	t.tracked = trackedObjects{}
+}
+
 // Track walks all values reachable from root and tracks pointer objects it finds.
 func (t *ObjectLeakCheck) Track(root any) {
-	walker := newObjectWalker(t.pruneTypes)
+	objects := t.tracked.track(root, t.pruneTypes)
+	for i := range objects {
+		objects[i].baselineCollected = t.baselineCollected(objects[i])
+	}
+}
+
+func (t *trackedObjects) track(root any, pruneTypes patterns) []trackedObject {
+	walker := newObjectWalker(pruneTypes)
 	walker.track(root)
 	t.roots++
+	start := len(t.objects)
 	t.objects = append(t.objects, walker.objects...)
+	return t.objects[start:]
+}
+
+func (t *ObjectLeakCheck) baselineCollected(obj trackedObject) *atomic.Bool {
+	identity := obj.identity()
+	baseline, ok := t.baselineByID[identity]
+	if !ok {
+		return nil
+	}
+	if baseline.collected.Load() {
+		delete(t.baselineByID, identity)
+		return nil
+	}
+	return baseline.collected
 }
 
 // Check settles GC, then returns a full retained-object report and an error for
@@ -84,15 +147,24 @@ func (t *ObjectLeakCheck) Track(root any) {
 // longer match any tracked object, or prune rules that did not match during
 // tracking.
 func (t *ObjectLeakCheck) Check() (string, error) {
+	var report report
+	var err error
+	settleGC(t.gcSettleTimeout, func() [3]int {
+		report = newReport(t.tracked.objects, t.tracked.roots, t.expected, t.pruneTypes)
+		err = report.failures()
+		return report.totals()
+	})
+	return report.string(), err
+}
+
+func settleGC(timeout time.Duration, totals func() [3]int) {
 	start := time.Now()
 	minWaitDeadline := start.Add(checkGCMinWait)
-	deadline := start.Add(t.gcSettleTimeout)
+	deadline := start.Add(timeout)
 	settledDeadline := minWaitDeadline
 
 	var lastTotals [3]int
 	var haveLastTotals bool
-	var report report
-	var err error
 	for {
 		// AddCleanup callbacks run after GC proves tracked objects are
 		// unreachable. Run a small burst and yield so callbacks can mark tracked
@@ -105,15 +177,13 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 		runtimedebug.FreeOSMemory()
 		runtime.Gosched()
 
-		report = newReport(t.objects, t.roots, t.expected, t.pruneTypes)
-		err = report.failures()
 		now := time.Now()
 
 		// Wait for the report totals to stop changing instead of returning on
 		// the first passing report. This lets delayed cleanup callbacks remove
 		// both unexpected objects and now-stale expected patterns before we decide.
-		if totals := report.totals(); !haveLastTotals || totals != lastTotals {
-			lastTotals = totals
+		if currentTotals := totals(); !haveLastTotals || currentTotals != lastTotals {
+			lastTotals = currentTotals
 			haveLastTotals = true
 			settledDeadline = now.Add(checkGCQuiet)
 			if minWaitDeadline.After(settledDeadline) {
@@ -125,7 +195,7 @@ func (t *ObjectLeakCheck) Check() (string, error) {
 		// quiet window then handles normal cleanup latency; the timeout bounds a
 		// genuinely stuck object graph so the test can still report diagnostics.
 		if now.After(settledDeadline) || now.After(deadline) {
-			return report.string(), err
+			return
 		}
 		time.Sleep(checkGCPause)
 	}
