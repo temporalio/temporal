@@ -616,6 +616,7 @@ func (a *Activity) HandleFailed(
 
 	if err := TransitionFailed.Apply(a, ctx, failedEvent{
 		req:            event.Request,
+		retryState:     retryState,
 		metricsHandler: metricsHandler,
 	}); err != nil {
 		return nil, err
@@ -1318,6 +1319,12 @@ func (a *Activity) tryReschedule(
 	overridingRetryInterval time.Duration,
 	failure *failurepb.Failure,
 ) (enumspb.RetryState, error) {
+	if a.GetRetryPolicy() == nil {
+		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
+	}
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
+	}
 	retryState, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
 	if !failureRetryable {
 		retryState = enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
@@ -1877,7 +1884,8 @@ func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOu
 	}
 	if failure := a.terminalFailure(ctx); failure != nil {
 		return &apiactivitypb.ActivityExecutionOutcome{
-			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
+			Value:      &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
+			RetryState: activityOutcome.GetRetryState(),
 		}
 	}
 	return nil

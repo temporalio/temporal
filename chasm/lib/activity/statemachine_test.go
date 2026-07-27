@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
@@ -514,8 +516,14 @@ func TestTransitionTimedout(t *testing.T) {
 			counterTaskTimeout.EXPECT().Record(int64(1), timeoutTag).Times(1)
 			metricsHandler.EXPECT().Counter(metrics.ActivityTaskTimeout.Name()).Return(counterTaskTimeout)
 
+			retryState := enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
+			if tc.timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START ||
+				tc.timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE {
+				retryState = enumspb.RETRY_STATE_TIMEOUT
+			}
 			event := timeoutEvent{
 				timeoutType:    tc.timeoutType,
+				retryState:     retryState,
 				metricsHandler: metricsHandler,
 				fromStatus:     tc.startStatus,
 			}
@@ -533,6 +541,8 @@ func TestTransitionTimedout(t *testing.T) {
 				require.Nil(t, attemptState.GetCompleteTime())
 				outcomeFailure := outcome.GetFailed().GetFailure()
 				require.NotNil(t, outcomeFailure)
+				require.Equal(t, tc.timeoutType, outcomeFailure.GetTimeoutFailureInfo().GetTimeoutType())
+				require.Equal(t, fmt.Sprintf(common.FailureReasonActivityTimeout, tc.timeoutType.String()), outcomeFailure.GetMessage())
 				// The last heartbeat details must be surfaced on the timeout failure so callers can
 				// inspect the activity's last reported progress.
 				protorequire.ProtoEqual(t, tc.heartbeatDetails, outcomeFailure.GetTimeoutFailureInfo().GetLastHeartbeatDetails())
@@ -554,6 +564,8 @@ func TestTransitionTimedout(t *testing.T) {
 				t.Fatalf("unexpected timeout type: %v", tc.timeoutType)
 			}
 
+			require.Equal(t, retryState, outcome.GetRetryState())
+			require.Equal(t, retryState, activity.outcome(ctx).GetRetryState())
 			require.Empty(t, ctx.Tasks)
 		})
 	}
@@ -675,6 +687,7 @@ func TestTransitionFailed(t *testing.T) {
 
 	err := TransitionFailed.Apply(activity, ctx, failedEvent{
 		req:            req,
+		retryState:     enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 		metricsHandler: metricsHandler,
 	})
 
@@ -688,6 +701,8 @@ func TestTransitionFailed(t *testing.T) {
 	protorequire.ProtoEqual(t, failure, attemptState.GetLastFailureDetails().GetFailure())
 	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
 	require.Nil(t, outcome.GetFailed())
+	require.Equal(t, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, outcome.GetRetryState())
+	require.Equal(t, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activity.outcome(ctx).GetRetryState())
 }
 
 func TestTransitionTerminated(t *testing.T) {

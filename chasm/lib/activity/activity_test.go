@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -28,6 +30,58 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
+	testCases := []struct {
+		name        string
+		status      activitypb.ActivityExecutionStatus
+		retryPolicy *commonpb.RetryPolicy
+		expected    enumspb.RetryState
+	}{
+		{
+			name:     "retry policy not set",
+			status:   activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			expected: enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+		},
+		{
+			name:     "retry policy not set takes precedence over cancellation",
+			status:   activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			expected: enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+		},
+		{
+			name:        "cancellation requested",
+			status:      activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			retryPolicy: defaultRetryPolicy,
+			expected:    enumspb.RETRY_STATE_CANCEL_REQUESTED,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time {
+						return defaultTime.Add(2 * time.Second)
+					},
+				},
+			}
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status:                 tc.status,
+					RetryPolicy:            tc.retryPolicy,
+					ScheduleTime:           timestamppb.New(defaultTime),
+					ScheduleToCloseTimeout: durationpb.New(time.Second),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
+			}
+
+			retryState, err := activity.tryReschedule(ctx, false, 0, &failurepb.Failure{})
+
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, retryState)
+		})
+	}
+}
 
 func TestSearchAttributesIncludesExecutionTime(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
