@@ -828,7 +828,7 @@ func testCassandraQueueV2MinMessageIDOptimization(t *testing.T, cluster *cassand
 	assert.Equal(t, queueType, args[0])
 	assert.Equal(t, queueName, args[1])
 	assert.Equal(t, 0, args[2])
-	assert.Equal(t, persistence.FirstQueueMessageID+1, args[3], "We should skip the first "+
+	require.Equal(t, int64(persistence.FirstQueueMessageID+1), args[3], "We should skip the first "+
 		"message ID because we deleted it")
 	assert.Equal(t, pageSize, args[4])
 }

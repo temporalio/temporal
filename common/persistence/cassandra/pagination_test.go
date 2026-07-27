@@ -231,6 +231,79 @@ func TestListQueuesReturnsIteratorPageState(t *testing.T) {
 	require.Equal(t, []byte("next-page"), resp.NextPageToken)
 }
 
+func TestListQueuesFillsLogicalPageAcrossCassandraPages(t *testing.T) {
+	queueBytes, err := (&persistencespb.Queue{
+		Partitions: map[int32]*persistencespb.QueuePartition{
+			0: {
+				MinMessageId: p.FirstQueueMessageID,
+			},
+		},
+	}).Marshal()
+	require.NoError(t, err)
+
+	firstPageState := []byte("first-page")
+	nextPageState := []byte("next-page")
+	session := &recordingSession{
+		t: t,
+		queryFn: func(stmt string, args ...any) cgocql.Query {
+			switch stmt {
+			case templateGetQueueNamesQuery:
+				require.Equal(t, []any{p.QueueTypeHistoryDLQ}, args)
+				return &recordingQuery{
+					iterFn: func(q *recordingQuery) cgocql.Iter {
+						switch string(q.pageState) {
+						case "":
+							require.Equal(t, 3, q.pageSize)
+							return &recordingIter{
+								pageState: firstPageState,
+								scanRows: [][]any{
+									{"queue-0", queueBytes, enumspb.ENCODING_TYPE_PROTO3.String(), int64(0)},
+								},
+							}
+						case string(firstPageState):
+							require.Equal(t, 2, q.pageSize)
+							return &recordingIter{
+								pageState: nextPageState,
+								scanRows: [][]any{
+									{"queue-1", queueBytes, enumspb.ENCODING_TYPE_PROTO3.String(), int64(0)},
+									{"queue-2", queueBytes, enumspb.ENCODING_TYPE_PROTO3.String(), int64(0)},
+								},
+							}
+						default:
+							t.Fatalf("unexpected page state: %q", q.pageState)
+							return nil
+						}
+					},
+				}
+			case TemplateGetMaxMessageIDQuery:
+				return &recordingQuery{
+					scanFn: func(dest ...any) error {
+						return gocql.ErrNotFound
+					},
+				}
+			default:
+				t.Fatalf("unexpected query: %s", stmt)
+				return nil
+			}
+		},
+	}
+	store := &queueV2Store{session: session}
+
+	resp, err := store.ListQueues(t.Context(), &p.InternalListQueuesRequest{
+		QueueType: p.QueueTypeHistoryDLQ,
+		PageSize:  3,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, resp.Queues, 3)
+	require.Equal(t, []byte("next-page"), resp.NextPageToken)
+	require.Equal(t, []string{"queue-0", "queue-1", "queue-2"}, []string{
+		resp.Queues[0].QueueName,
+		resp.Queues[1].QueueName,
+		resp.Queues[2].QueueName,
+	})
+}
+
 func TestListQueuesQueryKeepsUpgradeCompatibleQueueSchema(t *testing.T) {
 	require.Contains(t, templateGetQueueNamesQuery, "ALLOW FILTERING")
 }
