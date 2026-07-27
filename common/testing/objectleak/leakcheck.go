@@ -91,14 +91,14 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 // IgnoreCurrent waits for currently tracked objects to settle, returns the
 // retained objects as a baseline, and resets tracked roots.
 func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
-	settleGC(t.gcSettleTimeout, func() [3]int {
+	settleGC(t.gcSettleTimeout, func() int {
 		retained := 0
 		for _, obj := range t.objects {
 			if !obj.collected.Load() {
 				retained++
 			}
 		}
-		return [3]int{retained}
+		return retained
 	})
 
 	baseline := Baseline{
@@ -144,14 +144,14 @@ func (t *ObjectLeakCheck) Check(baseline Baseline) (string, error) {
 	return report.string(), report.failures()
 }
 
-func settleGC(timeout time.Duration, totals func() [3]int) {
+func settleGC[T comparable](timeout time.Duration, snapshot func() T) {
 	start := time.Now()
 	minWaitDeadline := start.Add(checkGCMinWait)
 	deadline := start.Add(timeout)
 	settledDeadline := minWaitDeadline
 
-	var lastTotals [3]int
-	var haveLastTotals bool
+	var lastSnapshot T
+	var haveLastSnapshot bool
 	for {
 		// AddCleanup callbacks run after GC proves tracked objects are
 		// unreachable. Run a small burst and yield so callbacks can mark tracked
@@ -166,12 +166,12 @@ func settleGC(timeout time.Duration, totals func() [3]int) {
 
 		now := time.Now()
 
-		// Wait for the report totals to stop changing instead of returning on
-		// the first passing report. This lets delayed cleanup callbacks remove
-		// both unexpected objects and now-stale expected patterns before we decide.
-		if currentTotals := totals(); !haveLastTotals || currentTotals != lastTotals {
-			lastTotals = currentTotals
-			haveLastTotals = true
+		// Wait for the snapshot to stop changing instead of returning on the
+		// first passing state. This lets delayed cleanup callbacks finish before
+		// we decide.
+		if currentSnapshot := snapshot(); !haveLastSnapshot || currentSnapshot != lastSnapshot {
+			lastSnapshot = currentSnapshot
+			haveLastSnapshot = true
 			settledDeadline = now.Add(checkGCQuiet)
 			if minWaitDeadline.After(settledDeadline) {
 				settledDeadline = minWaitDeadline
