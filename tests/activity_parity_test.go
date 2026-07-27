@@ -47,7 +47,7 @@ const nextRetryDelayOverride = 10 * time.Second
 // Heartbeat timeout whose type is listed in the retry policy's NonRetryableErrorTypes using the
 // special TemporalTimeout: syntax must fail the activity terminally (TimedOut) when it fires,
 // rather than retrying.
-func (s *activityParityTestSuite) TestParityNonRetryableErrorTypes() {
+func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 	env := newActivityParityEnv(s.T())
 
 	testTimeoutWhileAttemptInProgress := func(t *testing.T, timeout model.Event) {
@@ -82,7 +82,7 @@ func (s *activityParityTestSuite) TestParityNonRetryableErrorTypes() {
 // current_retry_interval and next_attempt_schedule_time are reported while a retry is backing off
 // (before it is dispatched to Matching), and for next_attempt_schedule_time also during start delay
 // (SAA only). Once the attempt is dispatched, or while the activity is paused, both are nil.
-func (s *activityParityTestSuite) TestParityCurrentRetryIntervalAndNextAttemptScheduleTime() {
+func (s *activityParityTestSuite) TestCurrentRetryIntervalAndNextAttemptScheduleTime() {
 	env := newActivityParityEnv(s.T())
 
 	// both drives a trace through both surfaces, asserting each reports expected.
