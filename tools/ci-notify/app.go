@@ -52,6 +52,30 @@ func NewCliApp() *cli.App {
 			Action: runAlertCommand,
 		},
 		{
+			Name:  "data-race",
+			Usage: "Send a notification when data races are detected in a CI run",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagRunID,
+					Usage:    "GitHub Actions run ID",
+					Required: true,
+					EnvVars:  []string{"GITHUB_RUN_ID"},
+				},
+				&cli.StringFlag{
+					Name:     FlagSlackWebhook,
+					Usage:    "Slack webhook URL",
+					Required: false, // Not required for dry-run
+					EnvVars:  []string{"SLACK_WEBHOOK"},
+				},
+				&cli.BoolFlag{
+					Name:  FlagDryRun,
+					Usage: "Print message without sending to Slack",
+					Value: false,
+				},
+			},
+			Action: runDataRaceCommand,
+		},
+		{
 			Name:  "digest",
 			Usage: "Generate digest report for CI runs",
 			Flags: []cli.Flag{
@@ -116,10 +140,8 @@ func runAlertCommand(c *cli.Context) error {
 	}
 
 	logger.Info("Built failure report",
-		zap.String("workflow", report.Workflow.Name),
-		zap.String("sha", report.Commit.ShortSHA),
-		zap.String("author", report.Commit.Author),
 		zap.Int("failed_jobs", len(report.FailedJobs)),
+		zap.Int("failures", len(report.Failures)),
 		zap.Int("total_jobs", report.TotalJobs),
 	)
 
@@ -147,6 +169,78 @@ func runAlertCommand(c *cli.Context) error {
 
 	// Build and send Slack message
 	message := BuildFailureMessage(report)
+
+	logger.Info("Sending Slack notification")
+	if err := SendSlackMessage(slackWebhook, message); err != nil {
+		logger.Error("Failed to send Slack message", zap.Error(err))
+		// Don't fail CI if notification fails
+		return nil
+	}
+
+	logger.Info("Slack notification sent successfully")
+	return nil
+}
+
+func runDataRaceCommand(c *cli.Context) error {
+	// Set up logger
+	logger, err := zap.NewProduction()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create logger: %v\n", err)
+		return nil // Don't fail CI if notification fails
+	}
+	defer func() { _ = logger.Sync() }()
+
+	runID := c.String(FlagRunID)
+	slackWebhook := c.String(FlagSlackWebhook)
+	dryRun := c.Bool(FlagDryRun)
+
+	logger.Info("Starting `ci-notify data-race`",
+		zap.String("run_id", runID),
+		zap.Bool("dry_run", dryRun),
+	)
+
+	// Build data race report
+	report, err := BuildDataRaceReport(runID)
+	if err != nil {
+		logger.Error("Failed to build data race report", zap.Error(err))
+		// Don't fail CI if notification fails
+		return nil
+	}
+
+	logger.Info("Built data race report",
+		zap.Int("data_races", len(report.DataRaces)),
+	)
+
+	// Nothing to report: stay silent so green runs don't spam the channel.
+	if len(report.DataRaces) == 0 {
+		logger.Info("No data races detected; skipping notification")
+		return nil
+	}
+
+	// Handle dry-run mode
+	if dryRun {
+		logger.Info("Dry-run mode: printing message to stdout")
+		fmt.Println(FormatDataRaceForDebug(report))
+		fmt.Println("\n--- Slack JSON Payload ---")
+		message := BuildDataRaceMessage(report)
+		payload, err := marshalIndent(message)
+		if err != nil {
+			logger.Error("Failed to marshal message for display", zap.Error(err))
+			return nil
+		}
+		fmt.Println(payload)
+		return nil
+	}
+
+	// Validate webhook URL
+	if slackWebhook == "" {
+		logger.Error("Slack webhook URL is required when not in dry-run mode")
+		// Don't fail CI if notification fails
+		return nil
+	}
+
+	// Build and send Slack message
+	message := BuildDataRaceMessage(report)
 
 	logger.Info("Sending Slack notification")
 	if err := SendSlackMessage(slackWebhook, message); err != nil {
