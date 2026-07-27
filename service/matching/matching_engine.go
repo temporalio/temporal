@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -2535,7 +2536,7 @@ func nexusSpanAttributes(namespaceName string, request *nexuspb.Request) telemet
 		attrs.Operation = cancelOperation.GetOperation()
 	}
 	if attrs.RequestID == "" {
-		attrs.RequestID = request.GetHeader()[telemetry.NexusRequestIDHeader]
+		attrs.RequestID = request.GetHeader()[nexusrpc.HeaderRequestID]
 	}
 	return attrs
 }

@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
 type httpClientTransport struct {
@@ -37,7 +38,7 @@ func NewHTTPClientTransport(
 	tracerProvider trace.TracerProvider,
 	propagator propagation.TextMapPropagator,
 ) http.RoundTripper {
-	if tracerProvider == nil {
+	if !isEnabled(tracerProvider) {
 		return rt
 	}
 	if propagator == nil {
@@ -61,7 +62,7 @@ func NewHTTPHandler(
 	tracerProvider trace.TracerProvider,
 	propagator propagation.TextMapPropagator,
 ) http.Handler {
-	if tracerProvider == nil {
+	if !isEnabled(tracerProvider) {
 		return handler
 	}
 	if propagator == nil {
@@ -123,7 +124,7 @@ func annotateNexusHTTPRequest(span trace.Span, req *http.Request) {
 		Request:             true,
 		NamespaceName:       nexusAttrs.namespaceName,
 		TargetNamespaceName: nexusAttrs.targetNamespaceName,
-		RequestID:           req.Header.Get(NexusRequestIDHeader),
+		RequestID:           req.Header.Get(nexusrpc.HeaderRequestID),
 	})
 }
 

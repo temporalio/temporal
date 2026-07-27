@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/util"
 )
 
@@ -384,11 +385,11 @@ func TestAnnotateInboundSpan_SetsTemporalAttributes(t *testing.T) {
 	for _, kv := range s.Attributes() {
 		attrs[string(kv.Key)] = kv.Value.AsString()
 	}
-	require.Equal(t, "test-namespace", attrs[namespaceAttrKey])
-	require.Equal(t, "test-endpoint", attrs[nexusEndpointAttrKey])
-	require.Equal(t, "svc", attrs[nexusServiceAttrKey])
-	require.Equal(t, "op", attrs[nexusOperationAttrKey])
-	require.Equal(t, "request-id", attrs[nexusRequestIDAttrKey])
+	require.Equal(t, "test-namespace", attrs[telemetry.NamespaceKey])
+	require.Equal(t, "test-endpoint", attrs[telemetry.NexusEndpointKey])
+	require.Equal(t, "svc", attrs[telemetry.NexusServiceKey])
+	require.Equal(t, "op", attrs[telemetry.NexusOperationKey])
+	require.Equal(t, "request-id", attrs[telemetry.NexusRequestIDKey])
 }
 
 // TestRecordInboundSpanStatus_RecordsError verifies that recordInboundSpanStatus records a

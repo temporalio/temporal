@@ -40,16 +40,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// OpenTelemetry attribute keys for Nexus inbound spans. Standard http.* attributes are set by
-// the otelhttp wrapper; the temporal.* attributes carry Temporal-domain semantics.
-const (
-	namespaceAttrKey      = telemetry.NamespaceKey
-	nexusEndpointAttrKey  = telemetry.NexusEndpointKey
-	nexusServiceAttrKey   = telemetry.NexusServiceKey
-	nexusOperationAttrKey = telemetry.NexusOperationKey
-	nexusRequestIDAttrKey = telemetry.NexusRequestIDKey
-)
-
 const (
 	// user-agent header contains Nexus SDK client info in the form <sdk-name>/v<sdk-version>
 	headerUserAgent        = "user-agent"

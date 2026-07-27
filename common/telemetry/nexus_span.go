@@ -5,8 +5,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const NexusRequestIDHeader = "nexus-request-id"
-
 type NexusSpanAttributes struct {
 	Request             bool
 	NamespaceName       string

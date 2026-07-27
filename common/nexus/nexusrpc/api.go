@@ -21,11 +21,13 @@ import (
 const (
 	// Nexus specific headers.
 	headerOperationState     = "nexus-operation-state"
-	headerRequestID          = "nexus-request-id"
 	headerLink               = "nexus-link"
 	headerOperationStartTime = "nexus-operation-start-time"
 	headerOperationCloseTime = "nexus-operation-close-time"
 	headerRetryable          = "nexus-request-retryable"
+
+	// HeaderRequestID is the Nexus protocol request ID header.
+	HeaderRequestID = "nexus-request-id"
 
 	// HeaderTemporalNexusFailureSupport is a Temporal specific header that toggles behavior of how failures are
 	// serialized over the wire when set to the string "true".

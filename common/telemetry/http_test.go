@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/telemetry"
 )
 
@@ -63,7 +64,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
 		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
-		req.Header.Set(telemetry.NexusRequestIDHeader, "request-id")
+		req.Header.Set(nexusrpc.HeaderRequestID, "request-id")
 		telemetry.MarkNexusHTTPRequest(req, "caller-namespace", "target-namespace")
 
 		resp, err := wrapped.RoundTrip(req)

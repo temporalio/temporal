@@ -204,7 +204,7 @@ func (h *httpHandler) startOperation(service, operation string, writer http.Resp
 		return
 	}
 	options := nexus.StartOperationOptions{
-		RequestID:      request.Header.Get(headerRequestID),
+		RequestID:      request.Header.Get(HeaderRequestID),
 		CallbackURL:    request.URL.Query().Get(queryCallbackURL),
 		CallbackHeader: prefixStrippedHTTPHeaderToNexusHeader(request.Header, "nexus-callback-"),
 		Header:         httpHeaderToNexusHeader(request.Header, "content-", "nexus-callback-"),

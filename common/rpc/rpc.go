@@ -37,9 +37,9 @@ import (
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
 
-// Option defines a function type to modify an RPCFactory instance.
 type Option func(*RPCFactory)
 
+// WithOTELTracing instruments local frontend HTTP clients with OpenTelemetry.
 func WithOTELTracing(
 	provider trace.TracerProvider,
 	propagator propagation.TextMapPropagator) Option {
@@ -125,7 +125,6 @@ func NewFactory(
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
 
-	// Apply various Option functions to set any additional fields.
 	for _, opt := range opts {
 		opt(f)
 	}
@@ -388,7 +387,7 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		address = d.frontendHTTPURL
 	}
 	client := http.Client{
-		Transport: d.wrapWithOTEL(clientTransport),
+		Transport: telemetry.NewHTTPClientTransport(clientTransport, d.otelTracerProvider, d.otelPropagator),
 	}
 
 	return &common.FrontendHTTPClient{
@@ -396,12 +395,6 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		Address: address,
 		Scheme:  scheme,
 	}, nil
-}
-
-// wrapWithOTEL wraps an HTTP RoundTripper so outbound requests sent through the local
-// client will carry TraceContext headers and produce a client span.
-func (d *RPCFactory) wrapWithOTEL(rt http.RoundTripper) http.RoundTripper {
-	return telemetry.NewHTTPClientTransport(rt, d.otelTracerProvider, d.otelPropagator)
 }
 
 type roundTripper struct {

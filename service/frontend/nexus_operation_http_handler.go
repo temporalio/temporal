@@ -12,7 +12,6 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	otelnoop "go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -73,12 +72,6 @@ func NewNexusOperationHTTPHandler(
 	tracerProvider trace.TracerProvider,
 	propagator propagation.TextMapPropagator,
 ) *NexusOperationHTTPHandler {
-	if tracerProvider == nil {
-		tracerProvider = otelnoop.NewTracerProvider()
-	}
-	if propagator == nil {
-		propagator = propagation.TraceContext{}
-	}
 	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
