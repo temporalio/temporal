@@ -53,6 +53,8 @@ type saaHandle struct {
 	runID      string
 	taskQueue  string
 	token      []byte
+	// startedAttempt is the attempt number returned by the last successful Poll.
+	startedAttempt int32
 }
 
 // driveTrace schedules an activity, and then advances that activity through a sequence of events (a
@@ -73,6 +75,7 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 		resp := a.pollForTask(t, activityDriverTimeout)
 		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
 		a.token = resp.GetTaskToken()
+		a.startedAttempt = resp.GetAttempt()
 	case isDispatchDelayEvent(e.Type):
 		a.awaitDispatchDelay(t, e)
 	case isTimerEvent(e.Type):
@@ -84,19 +87,13 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 }
 
 // awaitTimeout blocks until the activity reports the timeout the event names, and fails if it does
-// not within (window + margin). Waiting for the activity to change instead accepts a different
-// timeout firing, and misses one that fired before the wait began.
-//
-// A timeout ends an attempt, so a reported type only belongs to this event if the activity has
-// moved on since the wait began, or has closed and so can report nothing further. Otherwise the
-// same type left over from an earlier attempt would satisfy the wait at once.
+// not within (window + margin).
 func (a *saaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline time.Time) {
 	want := timeoutType(e)
-	before := a.timeoutInfo(t)
 	var got activityTimeoutInfo
 	fired := func() bool {
 		got = a.timeoutInfo(t)
-		return got.timeout == want && (got.closed || got != before)
+		return got.timeout == want && (got.terminal || got.attempt > a.startedAttempt)
 	}
 	if activityDriverPollUntil(deadline, fired) {
 		return
@@ -106,8 +103,7 @@ func (a *saaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline tim
 		e, want, a.cfg.timerDuration(e)+activityDriverTimerMargin, got.timeout)
 }
 
-// timeoutInfo is the most recent timeout the activity reports, with the attempt and closed-ness that
-// place it in the activity's history.
+// timeoutInfo is the most recent timeout the activity reports.
 func (a *saaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 	response := a.describe(t)
 	info := response.GetInfo()
@@ -118,9 +114,9 @@ func (a *saaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 		timeout = response.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType()
 	}
 	return activityTimeoutInfo{
-		timeout: timeout,
-		attempt: info.GetAttempt(),
-		closed:  info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+		timeout:  timeout,
+		attempt:  info.GetAttempt(),
+		terminal: info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 	}
 }
 

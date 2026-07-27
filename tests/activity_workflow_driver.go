@@ -50,6 +50,8 @@ type wfaHandle struct {
 	activityID string
 	taskQueue  string
 	token      []byte
+	// startedAttempt is the attempt number returned by the last successful Poll.
+	startedAttempt int32
 }
 
 // driveTrace starts a workflow, which schedules an activity, and then advances that activity
@@ -70,6 +72,7 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 		resp := a.pollForTask(t, activityDriverTimeout)
 		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
 		a.token = resp.GetTaskToken()
+		a.startedAttempt = resp.GetAttempt()
 	case isDispatchDelayEvent(e.Type):
 		a.awaitDispatchDelay(t, e)
 	case isTimerEvent(e.Type):
@@ -81,14 +84,13 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 }
 
 // awaitTimeout blocks until the activity reports the timeout the event names, and fails if it does
-// not within (window + margin). See saaHandle.awaitTimeout.
+// not within (window + margin).
 func (a *wfaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline time.Time) {
 	want := timeoutType(e)
-	before := a.timeoutInfo(t)
 	var got activityTimeoutInfo
 	fired := func() bool {
 		got = a.timeoutInfo(t)
-		return got.timeout == want && (got.closed || got != before)
+		return got.timeout == want && (got.terminal || got.attempt > a.startedAttempt)
 	}
 	if activityDriverPollUntil(deadline, fired) {
 		return
@@ -110,9 +112,9 @@ func (a *wfaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 	}
 	var timeoutErr *temporal.TimeoutError
 	if errors.As(a.run.Get(a.d.ctx, nil), &timeoutErr) {
-		return activityTimeoutInfo{timeout: timeoutErr.TimeoutType(), closed: true}
+		return activityTimeoutInfo{timeout: timeoutErr.TimeoutType(), terminal: true}
 	}
-	return activityTimeoutInfo{closed: true}
+	return activityTimeoutInfo{terminal: true}
 }
 
 // awaitDispatchDelay waits for the public dispatch deadline to become due. A following Poll is what

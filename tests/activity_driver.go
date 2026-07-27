@@ -213,12 +213,11 @@ func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Fa
 	}
 }
 
-// activityTimeoutInfo is what a driver compares to decide that the timeout an event names is this
-// event's, rather than one left over from an earlier attempt.
+// activityTimeoutInfo is the information a driver uses to identify a timeout.
 type activityTimeoutInfo struct {
-	timeout enumspb.TimeoutType
-	attempt int32
-	closed  bool
+	timeout  enumspb.TimeoutType // Timeout type currently reported; unspecified when none is reported.
+	attempt  int32               // Current attempt; advances when a retryable per-attempt timeout fires.
+	terminal bool                // Whether the activity is terminal, as every non-retrying timeout makes it.
 }
 
 // activityDriverPollUntil reports whether cond held before the deadline, reading every activityDriverPollInterval.
