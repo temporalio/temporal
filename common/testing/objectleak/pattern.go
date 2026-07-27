@@ -2,7 +2,6 @@ package objectleak
 
 import (
 	"reflect"
-	"slices"
 	"strings"
 )
 
@@ -43,14 +42,15 @@ func (ps patterns) matchObject(path string, typeName string) bool {
 	return matched
 }
 
-func (ps patterns) matchAny(values ...string) bool {
+func (ps patterns) matchValue(value string) bool {
+	matched := false
 	for i := range ps {
-		if slices.ContainsFunc(values, ps[i].matches) {
+		if ps[i].matches(value) {
 			ps[i].matched = true
-			return true
+			matched = true
 		}
 	}
-	return false
+	return matched
 }
 
 func (ps patterns) matchType(t reflect.Type) bool {
@@ -58,9 +58,9 @@ func (ps patterns) matchType(t reflect.Type) bool {
 		t = t.Elem()
 	}
 	if t.Name() != "" {
-		return ps.matchAny(t.PkgPath() + "." + t.Name())
+		return ps.matchValue(t.PkgPath() + "." + t.Name())
 	}
-	return ps.matchAny(t.String())
+	return ps.matchValue(t.String())
 }
 
 func (ps patterns) unmatched() []string {

@@ -15,13 +15,6 @@ type trackedObject struct {
 	cleanup   runtime.Cleanup
 }
 
-func (o trackedObject) identity() objectIdentity {
-	return objectIdentity{
-		addr:     o.addr,
-		typeName: o.typeName,
-	}
-}
-
 type objectWalker struct {
 	objects    []trackedObject
 	seen       map[uintptr]struct{}
