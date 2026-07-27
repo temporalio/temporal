@@ -164,14 +164,6 @@ func (r report) failures() error {
 	return errors.Join(failures...)
 }
 
-func (r report) totals() [3]int {
-	return [3]int{
-		r.totalRetainedObjects,
-		r.unexpectedRetainedObjects,
-		len(r.unmatchedExpected) + len(r.unmatchedPrunes),
-	}
-}
-
 func (r report) string() string {
 	var out strings.Builder
 	r.writeSummary(&out)
