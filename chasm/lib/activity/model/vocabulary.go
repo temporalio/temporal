@@ -76,10 +76,7 @@ func (t EventType) String() string {
 // String is a label for an event; it includes flags that affect its outcome.
 func (e Event) String() string {
 	if e.Type == RespondFailedType {
-		if e.Retryable {
-			return "RespondFailed[retryable=true]"
-		}
-		return "RespondFailed[retryable=false]"
+		return fmt.Sprintf("%s[retryable=%v]", e.Type.String(), e.Retryable)
 	}
 	return e.Type.String()
 }
