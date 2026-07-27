@@ -34,8 +34,6 @@ var objectLeakOpts = []objectleak.Option{
 	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
 	objectleak.WithExpected("FunctionalTestBase.testClusterConfig"),
-	// TODO: This is not fully garbage collected because of the goroutine leak above. Nothing to be done here.
-	objectleak.WithExpected("sdkClient*"),
 }
 
 // TestClusterShutdownLeak is a goroutine-leak regression test for the functional
@@ -83,8 +81,9 @@ func TestClusterShutdownLeak(t *testing.T) {
 		buildRunTeardownCluster(t, &leakCheck)
 	}
 
-	// Wait for warmup goroutines to drain before snapshotting the baseline.
+	// Wait for warmup goroutines to drain before snapshotting the object and goroutine baselines.
 	_ = goleak.Find(goleakOpts...)
+	leakCheck.IgnoreCurrent()
 	baseline := goleak.IgnoreCurrent()
 
 	// Run the leak test: build, run, and tear down a cluster per iteration.
