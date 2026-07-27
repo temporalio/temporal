@@ -212,6 +212,14 @@ func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Fa
 	}
 }
 
+// activityTimeoutMark is what a driver compares to decide that the timeout an event names is this
+// event's, rather than one left over from an earlier attempt.
+type activityTimeoutMark struct {
+	timeout enumspb.TimeoutType
+	attempt int32
+	closed  bool
+}
+
 // activityDriverPollUntil reports whether cond held before the deadline, reading every activityDriverPollInterval.
 //
 // common/testing/await is the usual way to write this, but await.Require and await.RequireTrue take a

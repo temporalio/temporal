@@ -139,38 +139,67 @@ func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
 		a.awaitDispatchTimePassed(t, e)
 		return
 	}
-	deadline := time.Now().Add(a.cfg.window(e) + activityDriverWallClockSettle)
-	before, beforePending := a.pendingActivityInfo(t)
-	changed := func() bool {
-		now, nowPending := a.pendingActivityInfo(t)
-		return nowPending != beforePending || (nowPending && now != before)
-	}
-	if activityDriverPollUntil(deadline, changed) {
-		return
-	}
-	t.Errorf("%s: the activity did not change within %s of driving the event, so the event did not "+
-		"take effect. Last observed: %+v", e, a.cfg.window(e)+activityDriverWallClockSettle, before)
+	a.awaitTimeout(t, e, time.Now().Add(a.cfg.window(e)+activityDriverWallClockSettle))
 }
 
-// awaitDispatchTimePassed polls the activity until the dispatch time has passed, and fails if it
-// has not.
-func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
-	next := a.pendingActivity(t).GetNextAttemptScheduleTime()
-	if next == nil {
-		return // the dispatch time has already passed, or the activity is no longer pending
+// awaitTimeout blocks until the activity reports the timeout the event names, and fails if it does
+// not within (window + settle). See saaHandle.awaitTimeout.
+func (a *wfaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline time.Time) {
+	want := timeoutType(e)
+	before := a.timeoutMark(t)
+	var got activityTimeoutMark
+	fired := func() bool {
+		got = a.timeoutMark(t)
+		return got.timeout == want && (got.closed || got != before)
 	}
-	deadline := next.AsTime().Add(activityDriverWallClockSettle)
-	var p activityInfo
-	dispatched := func() bool {
-		var pending bool
-		p, pending = a.pendingActivityInfo(t)
-		return !pending || !p.NextAttemptScheduleTimeSet
-	}
-	if activityDriverPollUntil(deadline, dispatched) {
+	if activityDriverPollUntil(deadline, fired) {
 		return
 	}
-	t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for, so the "+
-		"window did not elapse. Last observed: %+v", e, activityDriverWallClockSettle, p)
+	t.Errorf("%s: the activity did not report a %s timeout within %s of driving the event; it reports %s. "+
+		"Check that the config makes this the timeout that fires.",
+		e, want, a.cfg.window(e)+activityDriverWallClockSettle, got.timeout)
+}
+
+// timeoutMark is the most recent timeout the activity reports. A closed activity has left the pending
+// set, so its timeout comes from the workflow result instead.
+func (a *wfaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
+	if pa := a.pendingActivity(t); pa != nil {
+		return activityTimeoutMark{
+			timeout: pa.GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+			attempt: pa.GetAttempt(),
+		}
+	}
+	var timeoutErr *temporal.TimeoutError
+	if errors.As(a.run.Get(a.d.ctx, nil), &timeoutErr) {
+		return activityTimeoutMark{timeout: timeoutErr.TimeoutType(), closed: true}
+	}
+	return activityTimeoutMark{closed: true}
+}
+
+// awaitDispatchTimePassed polls the activity until the delayed dispatch is no longer pending, and
+// fails if it is still pending, or if the activity ended first and so never dispatched at all.
+// See saaHandle.awaitDispatchTimePassed.
+func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
+	pa := a.pendingActivity(t)
+	deadline := time.Now().Add(activityDriverWallClockSettle)
+	if next := pa.GetNextAttemptScheduleTime(); next != nil {
+		deadline = next.AsTime().Add(activityDriverWallClockSettle)
+	}
+	for {
+		switch {
+		case pa == nil:
+			t.Errorf("%s: the activity is no longer pending, so its delayed dispatch never happened", e)
+			return
+		case pa.GetNextAttemptScheduleTime() == nil:
+			return
+		case !time.Now().Before(deadline):
+			t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
+				"Last observed: %+v", e, activityDriverWallClockSettle, wfaActivityInfo(pa))
+			return
+		}
+		time.Sleep(activityDriverPollInterval)
+		pa = a.pendingActivity(t)
+	}
 }
 
 // pendingActivity is the activity's entry in the workflow's pending set, nil once it is no longer
