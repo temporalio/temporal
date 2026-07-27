@@ -33,7 +33,7 @@ func (i *CallerInfoInterceptor) Intercept(
 ) (any, error) {
 	ctx = PopulateCallerInfo(
 		ctx,
-		func() string { return string(MustGetNamespaceName(i.namespaceRegistry, req)) },
+		func() string { ns, _ := GetCachedNamespaceName(ctx, i.namespaceRegistry, req); return string(ns) },
 		func() string { return api.MethodName(info.FullMethod) },
 	)
 
