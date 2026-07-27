@@ -5,6 +5,7 @@ import (
 	"iter"
 	"runtime"
 	runtimedebug "runtime/debug"
+	"slices"
 	"sync/atomic"
 	"time"
 )
@@ -93,7 +94,7 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 // retained objects as a baseline, and resets tracked roots.
 func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
 	settleGC(t.gcSettleTimeout, func() int {
-		return retainedCount(t.objects)
+		return len(slices.Collect(retainedObjects(t.objects)))
 	})
 
 	baseline := Baseline{
@@ -128,18 +129,11 @@ func (t *ObjectLeakCheck) Track(root any) {
 // tracking.
 func (t *ObjectLeakCheck) Check(baseline Baseline) (string, error) {
 	settleGC(t.gcSettleTimeout, func() int {
-		return retainedCount(t.objects) + retainedCount(baseline.objects)
+		return len(slices.Collect(retainedObjects(t.objects))) +
+			len(slices.Collect(retainedObjects(baseline.objects)))
 	})
 	report := newReport(t.objects, baseline, t.roots, t.expected, t.pruneTypes)
 	return report.string(), report.failures()
-}
-
-func retainedCount(objects []trackedObject) int {
-	retained := 0
-	for range retainedObjects(objects) {
-		retained++
-	}
-	return retained
 }
 
 func retainedObjects(objects []trackedObject) iter.Seq[trackedObject] {
