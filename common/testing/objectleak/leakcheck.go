@@ -98,12 +98,7 @@ func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
 	baseline := Baseline{
 		collectedByID: make(map[objectIdentity]*atomic.Bool),
 	}
-	for _, obj := range t.objects {
-		if obj.collected.Load() {
-			obj.cleanup.Stop()
-			continue
-		}
-
+	forEachRetained(t.objects, func(obj trackedObject) {
 		identity := obj.identity()
 		if canonicalCollected, ok := baseline.collectedByID[identity]; ok {
 			obj.cleanup.Stop()
@@ -112,7 +107,7 @@ func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
 			baseline.collectedByID[identity] = obj.collected
 		}
 		baseline.objects = append(baseline.objects, obj)
-	}
+	})
 	t.objects = nil
 	t.roots = 0
 	return baseline
@@ -140,12 +135,18 @@ func (t *ObjectLeakCheck) Check(baseline Baseline) (string, error) {
 
 func retainedCount(objects []trackedObject) int {
 	retained := 0
+	forEachRetained(objects, func(trackedObject) {
+		retained++
+	})
+	return retained
+}
+
+func forEachRetained(objects []trackedObject, visit func(trackedObject)) {
 	for _, obj := range objects {
 		if !obj.collected.Load() {
-			retained++
+			visit(obj)
 		}
 	}
-	return retained
 }
 
 func settleGC(timeout time.Duration, snapshot func() int) {
