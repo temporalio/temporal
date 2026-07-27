@@ -92,10 +92,10 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 // same type left over from an earlier attempt would satisfy the wait at once.
 func (a *saaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline time.Time) {
 	want := timeoutType(e)
-	before := a.timeoutMark(t)
-	var got activityTimeoutMark
+	before := a.timeoutInfo(t)
+	var got activityTimeoutInfo
 	fired := func() bool {
-		got = a.timeoutMark(t)
+		got = a.timeoutInfo(t)
 		return got.timeout == want && (got.closed || got != before)
 	}
 	if activityDriverPollUntil(deadline, fired) {
@@ -106,9 +106,9 @@ func (a *saaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline tim
 		e, want, a.cfg.timerDuration(e)+activityDriverTimerMargin, got.timeout)
 }
 
-// timeoutMark is the most recent timeout the activity reports, with the attempt and closed-ness that
+// timeoutInfo is the most recent timeout the activity reports, with the attempt and closed-ness that
 // place it in the activity's history.
-func (a *saaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
+func (a *saaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 	response := a.describe(t)
 	info := response.GetInfo()
 	timeout := info.GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType()
@@ -117,7 +117,7 @@ func (a *saaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
 		// directly and are reported only in the terminal Outcome.
 		timeout = response.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType()
 	}
-	return activityTimeoutMark{
+	return activityTimeoutInfo{
 		timeout: timeout,
 		attempt: info.GetAttempt(),
 		closed:  info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,

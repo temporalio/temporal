@@ -213,9 +213,9 @@ func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Fa
 	}
 }
 
-// activityTimeoutMark is what a driver compares to decide that the timeout an event names is this
+// activityTimeoutInfo is what a driver compares to decide that the timeout an event names is this
 // event's, rather than one left over from an earlier attempt.
-type activityTimeoutMark struct {
+type activityTimeoutInfo struct {
 	timeout enumspb.TimeoutType
 	attempt int32
 	closed  bool
