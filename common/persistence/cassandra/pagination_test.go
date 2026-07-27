@@ -358,6 +358,7 @@ func TestHistoryNodeRangeDeleteUsesBranchPartition(t *testing.T) {
 func TestLegacyQueueMessageIDRangeSchemaPartitionsByQueueType(t *testing.T) {
 	requireLegacyQueueMessageIDRangeSchemaPartitionsByQueueType(t, "../../../schema/cassandra/temporal/schema.cql")
 	requireLegacyQueueMessageIDRangeSchemaPartitionsByQueueType(t, "../../../schema/cassandra/temporal/versioned/v1.0/schema.cql")
+	requireLegacyQueueMessageIDRangeSchemaPartitionsByQueueType(t, "../../../schema/cassandra/temporal/versioned/v1.14/queue_message_id_ranges.cql")
 }
 
 func TestQueueMetadataSchemaKeepsUpgradeCompatiblePrimaryKey(t *testing.T) {
@@ -389,7 +390,7 @@ func requireLegacyQueueMessageIDRangeSchemaPartitionsByQueueType(t *testing.T, s
 	require.NoError(t, err)
 
 	for _, stmt := range statements {
-		if strings.Contains(stmt, "CREATE TABLE queue_message_id_range") {
+		if strings.Contains(stmt, "queue_message_id_range") && !strings.Contains(stmt, "queue_message_id_ranges") {
 			require.Contains(t, stmt, "PRIMARY KEY (queue_type)")
 			return
 		}
