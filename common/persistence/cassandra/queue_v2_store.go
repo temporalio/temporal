@@ -416,8 +416,7 @@ func (s *queueV2Store) nextMessageID(
 		queueName: queueName,
 	}
 	if cachedRange, ok := s.messageIDRanges.Load(key); ok {
-		messageIDRange := cachedRange.(queueV2MessageIDRange)
-		if messageIDRange.nextMessageID < messageIDRange.exclusiveMaxMessageID {
+		if messageIDRange, ok := cachedRange.(queueV2MessageIDRange); ok && messageIDRange.nextMessageID < messageIDRange.exclusiveMaxMessageID {
 			messageID := messageIDRange.nextMessageID
 			messageIDRange.nextMessageID++
 			s.messageIDRanges.Store(key, messageIDRange)
@@ -530,7 +529,10 @@ func (s *queueV2Store) lockQueue(queueType persistence.QueueV2Type, queueName st
 		queueType: queueType,
 		queueName: queueName,
 	}, &sync.Mutex{})
-	mutex := lock.(*sync.Mutex)
+	mutex, ok := lock.(*sync.Mutex)
+	if !ok {
+		mutex = &sync.Mutex{}
+	}
 	mutex.Lock()
 	return mutex.Unlock
 }

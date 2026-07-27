@@ -386,7 +386,7 @@ func TestCountTaskQueuesByBuildIDUsesLimit(t *testing.T) {
 	session := &recordingSession{
 		t: t,
 		queryFn: func(stmt string, args ...any) cgocql.Query {
-			require.Equal(t, templateLimitedCountTaskQueueByBuildIdQuery, stmt)
+			require.Equal(t, templateLimitedCountTaskQueueByBuildIDQuery, stmt)
 			require.Equal(t, []any{"namespace-id", "build-id", 2}, args)
 			return &recordingQuery{
 				iter: &recordingIter{
@@ -408,14 +408,14 @@ func TestCountTaskQueuesByBuildIDUsesLimit(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, 2, count)
-	require.Equal(t, []string{templateLimitedCountTaskQueueByBuildIdQuery}, recordedStatements(session.queries))
+	require.Equal(t, []string{templateLimitedCountTaskQueueByBuildIDQuery}, recordedStatements(session.queries))
 }
 
 func TestCountTaskQueuesByBuildIDConvertsExactCountError(t *testing.T) {
 	session := &recordingSession{
 		t: t,
 		queryFn: func(stmt string, args ...any) cgocql.Query {
-			require.Equal(t, templateCountTaskQueueByBuildIdQuery, stmt)
+			require.Equal(t, templateCountTaskQueueByBuildIDQuery, stmt)
 			require.Equal(t, []any{"namespace-id", "build-id"}, args)
 			return &recordingQuery{
 				scanFn: func(dest ...any) error {
@@ -1070,13 +1070,7 @@ func TestQueueV2EnqueueCachesKnownQueue(t *testing.T) {
 			}
 		case TemplateGetQueueQuery:
 			t.Fatal("enqueue should use queue existence cache after CreateQueue")
-		case TemplateGetQueueMessageIDRangeQuery:
-			return &recordingQuery{
-				scanFn: func(dest ...any) error {
-					return gocql.ErrNotFound
-				},
-			}
-		case TemplateGetMaxMessageIDQuery:
+		case TemplateGetQueueMessageIDRangeQuery, TemplateGetMaxMessageIDQuery:
 			return &recordingQuery{
 				scanFn: func(dest ...any) error {
 					return gocql.ErrNotFound
@@ -1168,7 +1162,7 @@ func TestQueueV2EnqueueCachesMessageIDRange(t *testing.T) {
 		QueueName: "test-queue",
 	})
 	require.NoError(t, err)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		resp, err := store.EnqueueMessage(t.Context(), &p.InternalEnqueueMessageRequest{
 			QueueType: p.QueueTypeHistoryNormal,
 			QueueName: "test-queue",
@@ -1346,7 +1340,7 @@ func TestQueueV2EnqueueMessageIDRangeConflictRefreshesRange(t *testing.T) {
 		QueueName: "test-queue",
 	})
 	require.NoError(t, err)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		resp, err := store.EnqueueMessage(t.Context(), &p.InternalEnqueueMessageRequest{
 			QueueType: p.QueueTypeHistoryNormal,
 			QueueName: "test-queue",
@@ -1438,7 +1432,7 @@ func TestQueueV2EnqueueReservesNewRangeAfterCachedRangeExhausted(t *testing.T) {
 		exclusiveMaxMessageID: queueV2MessageIDRangeAllocationSize,
 	})
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		resp, err := store.EnqueueMessage(t.Context(), &p.InternalEnqueueMessageRequest{
 			QueueType: queueType,
 			QueueName: queueName,

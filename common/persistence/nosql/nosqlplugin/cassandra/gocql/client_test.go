@@ -9,6 +9,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
@@ -168,7 +169,7 @@ func TestNewCassandraCluster(t *testing.T) {
 				MaxExcessShardConnectionsRate: util.Ptr[float32](4),
 			},
 			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
-				assert.Equal(t, float32(4), cluster.MaxExcessShardConnectionsRate)
+				require.InDelta(t, float32(4), cluster.MaxExcessShardConnectionsRate, 0)
 			},
 		},
 		"scylla_zero_max_excess_shard_connections_rate": {
@@ -176,7 +177,7 @@ func TestNewCassandraCluster(t *testing.T) {
 				MaxExcessShardConnectionsRate: util.Ptr[float32](0),
 			},
 			verify: func(t *testing.T, cluster *gocql.ClusterConfig) {
-				assert.Equal(t, float32(0), cluster.MaxExcessShardConnectionsRate)
+				require.InDelta(t, float32(0), cluster.MaxExcessShardConnectionsRate, 0)
 			},
 		},
 	}

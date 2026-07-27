@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//parallelize:ignore
 func TestNewCassandraConfigUsesScyllaConnectionEnv(t *testing.T) {
 	t.Setenv(testCassandraMaxConnsEnv, "12")
 	t.Setenv(testCassandraMaxExcessShardConnectionsEnv, "0")
@@ -14,5 +15,5 @@ func TestNewCassandraConfigUsesScyllaConnectionEnv(t *testing.T) {
 
 	require.Equal(t, 12, cfg.MaxConns)
 	require.NotNil(t, cfg.MaxExcessShardConnectionsRate)
-	require.Equal(t, float32(0), *cfg.MaxExcessShardConnectionsRate)
+	require.InDelta(t, float32(0), *cfg.MaxExcessShardConnectionsRate, 0)
 }

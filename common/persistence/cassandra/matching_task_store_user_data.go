@@ -35,8 +35,8 @@ const (
 	(?           , ?       , ?)`
 	templateDeleteBuildIdTaskQueueMappingQuery = `DELETE FROM task_queue_user_data
 	WHERE namespace_id = ? AND build_id = ? AND task_queue_name = ?`
-	templateCountTaskQueueByBuildIdQuery        = `SELECT COUNT(*) FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ?`
-	templateLimitedCountTaskQueueByBuildIdQuery = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ? LIMIT ?`
+	templateCountTaskQueueByBuildIDQuery        = `SELECT COUNT(*) FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ?`
+	templateLimitedCountTaskQueueByBuildIDQuery = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ? LIMIT ?`
 )
 
 type userDataStore struct {
@@ -214,7 +214,7 @@ func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.G
 
 func (d *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request *p.CountTaskQueuesByBuildIdRequest) (int, error) {
 	if request.Limit > 0 {
-		query := d.Session.Query(templateLimitedCountTaskQueueByBuildIdQuery, request.NamespaceID, request.BuildID, request.Limit).WithContext(ctx)
+		query := d.Session.Query(templateLimitedCountTaskQueueByBuildIDQuery, request.NamespaceID, request.BuildID, request.Limit).WithContext(ctx)
 		iter := query.PageSize(request.Limit).Iter()
 		count := 0
 		var taskQueue string
@@ -228,7 +228,7 @@ func (d *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request *p
 	}
 
 	var count int
-	query := d.Session.Query(templateCountTaskQueueByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
+	query := d.Session.Query(templateCountTaskQueueByBuildIDQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
 	err := query.Scan(&count)
 	if err != nil {
 		return 0, gocql.ConvertError("CountTaskQueuesByBuildId", err)

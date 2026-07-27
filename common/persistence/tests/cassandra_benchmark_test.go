@@ -181,7 +181,7 @@ func BenchmarkCassandraQueueV2EnqueueRead(b *testing.B) {
 	})
 
 	b.Run("list", func(b *testing.B) {
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			createBenchmarkQueue(ctx, b, queue, benchmarkQueueName(b, fmt.Sprintf("list-%03d", i)))
 		}
 		b.ResetTimer()
@@ -356,7 +356,7 @@ func seedBenchmarkHistoryNodes(
 ) {
 	b.Helper()
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		nodeID := int64(i) + common.FirstEventID
 		history := newBenchmarkHistoryBlob(b, serializer, nodeID)
 		_, err := manager.AppendRawHistoryNodes(ctx, &p.AppendRawHistoryNodesRequest{
@@ -411,7 +411,7 @@ func seedBenchmarkQueueMessages(
 ) {
 	b.Helper()
 
-	for i := 0; i < count; i++ {
+	for range count {
 		_, err := queue.EnqueueMessage(ctx, &p.InternalEnqueueMessageRequest{
 			QueueType: p.QueueTypeHistoryNormal,
 			QueueName: queueName,
@@ -430,7 +430,7 @@ func seedBenchmarkLegacyQueueMessages(
 ) {
 	b.Helper()
 
-	for i := 0; i < count; i++ {
+	for range count {
 		err := queue.EnqueueMessage(ctx, blob)
 		require.NoError(b, err)
 	}
@@ -451,7 +451,7 @@ func seedBenchmarkTaskQueueUserData(
 ) {
 	b.Helper()
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		err := manager.UpdateTaskQueueUserData(ctx, &p.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID,
 			Updates: map[string]*p.SingleTaskQueueUserDataUpdate{

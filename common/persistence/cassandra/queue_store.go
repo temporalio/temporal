@@ -357,7 +357,10 @@ func (q *QueueStore) Close() {
 
 func (q *QueueStore) lockQueue(queueType persistence.QueueType) func() {
 	lock, _ := q.queueLocks.LoadOrStore(queueType, &sync.Mutex{})
-	mutex := lock.(*sync.Mutex)
+	mutex, ok := lock.(*sync.Mutex)
+	if !ok {
+		mutex = &sync.Mutex{}
+	}
 	mutex.Lock()
 	return mutex.Unlock
 }
@@ -371,8 +374,7 @@ func (q *QueueStore) nextMessageID(
 	queueType persistence.QueueType,
 ) (int64, error) {
 	if cachedRange, ok := q.messageIDRanges.Load(queueType); ok {
-		messageIDRange := cachedRange.(queueMessageIDRange)
-		if messageIDRange.nextMessageID < messageIDRange.exclusiveMaxMessageID {
+		if messageIDRange, ok := cachedRange.(queueMessageIDRange); ok && messageIDRange.nextMessageID < messageIDRange.exclusiveMaxMessageID {
 			messageID := messageIDRange.nextMessageID
 			messageIDRange.nextMessageID++
 			q.messageIDRanges.Store(queueType, messageIDRange)

@@ -491,7 +491,7 @@ func testCassandraQueueV2ErrEnqueueMessageGetMessageIDRangeQuery(t *testing.T, c
 	require.Error(t, err)
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
 	assert.ErrorContains(t, err, assert.AnError.Error())
-	assert.ErrorContains(t, err, "QueueV2GetMessageIDRange")
+	require.ErrorContains(t, err, "QueueV2GetMessageIDRange")
 }
 
 func testCassandraQueueV2ErrEnqueueMessageCreateMessageIDRangeQuery(t *testing.T, cluster *cassandra.TestCluster) {
@@ -509,9 +509,9 @@ func testCassandraQueueV2ErrEnqueueMessageCreateMessageIDRangeQuery(t *testing.T
 	require.NoError(t, err)
 	_, err = persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
 	require.Error(t, err)
-	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
-	assert.ErrorContains(t, err, assert.AnError.Error())
-	assert.ErrorContains(t, err, "QueueV2CreateMessageIDRange")
+	require.ErrorAs(t, err, new(*serviceerror.Unavailable))
+	require.ErrorContains(t, err, "assert.AnError general error for testing")
+	require.ErrorContains(t, err, "QueueV2CreateMessageIDRange")
 }
 
 func testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t *testing.T, cluster *cassandra.TestCluster) {

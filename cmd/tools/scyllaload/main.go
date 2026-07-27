@@ -261,10 +261,10 @@ func validateConfig(cfg runConfig) error {
 	return nil
 }
 
-func (nopLogger) Debug(string, ...interface{}) {}
-func (nopLogger) Info(string, ...interface{})  {}
-func (nopLogger) Warn(string, ...interface{})  {}
-func (nopLogger) Error(string, ...interface{}) {}
+func (nopLogger) Debug(string, ...any) {}
+func (nopLogger) Info(string, ...any)  {}
+func (nopLogger) Warn(string, ...any)  {}
+func (nopLogger) Error(string, ...any) {}
 
 func startWorker(c client.Client, cfg runConfig) (worker.Worker, error) {
 	if !cfg.runWorker {
