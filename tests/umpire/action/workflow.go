@@ -55,13 +55,11 @@ func (completeWorkflow) Fire(ctx context.Context, rc umpire.RealizeContext, a um
 	return c.Env.SdkClient().SignalWorkflow(ctx, wfID, "", "finish", nil)
 }
 
-// selfCompletingWorkflow returns immediately — its start and completion collapse into the single
-// settling transition the Monitor actually observes. The Workflow model's intermediate `started`
-// state is not yet observed at runtime (the frontend StartWorkflowExecution reaches the Monitor,
-// but the WorkflowStarted fact decodes the *history* request, which the frontend interceptor does
-// not see), so a two-step start-then-complete drive cannot confirm `started`. Until that Monitor
-// gap is closed, the functional second-entity drive uses this observable one-shot completion; the
-// two-step StartWorkflow/CompleteWorkflow actions above still prove the entity-agnostic *planner*.
+// selfCompletingWorkflow returns immediately; its completion is the single transition the Monitor
+// observes for a run — the completion span carries the RunID, so it grounds the run-precise
+// WorkflowRun entity (created→completed). A run-level `started` awaits observing WorkflowStart (the
+// frontend StartWorkflowExecution reaches the Monitor, but the WorkflowStarted fact decodes the
+// history request the frontend interceptor does not see; see UMPIRE_ACTIONS.md).
 func selfCompletingWorkflow(workflow.Context) error { return nil }
 
 type runWorkflow struct{}
@@ -71,27 +69,32 @@ func (runWorkflow) Fire(ctx context.Context, rc umpire.RealizeContext, a umpire.
 	c := rc.(*Ctx)
 	wfID := fmt.Sprintf("umpire-action-wf-%d", c.Iter)
 	c.Env.SdkWorker().RegisterWorkflow(selfCompletingWorkflow)
-	if _, err := c.Env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	run, err := c.Env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        wfID,
 		TaskQueue: c.Env.WorkerTaskQueue(),
-	}, selfCompletingWorkflow); err != nil {
+	}, selfCompletingWorkflow)
+	if err != nil {
 		return err
 	}
-	bindFresh(rc, a, wfID)
+	bindFresh(rc, a, run.GetRunID()) // the run entity is keyed by RunID
 	return nil
 }
 
-// RunWorkflow starts a self-completing workflow; its observed completion is the settling
-// transition (created→completed, as `started` is not observed — see selfCompletingWorkflow).
+func runRef(fresh bool) umpire.Ref {
+	return umpire.Ref{Type: model.WorkflowRunType, Var: "run", Fresh: fresh}
+}
+
+// RunWorkflow starts a self-completing workflow execution; its observed completion is the settling
+// transition of the run-precise WorkflowRun entity (created→completed).
 var RunWorkflow = umpire.Action{
 	Name: "StartWorkflowExecution(self-completing)", Kind: umpire.ClientRPC, Hosting: umpire.Standalone,
-	Effects: []umpire.Effect{{Ref: wfRef(true), Event: model.WorkflowComplete}},
+	Effects: []umpire.Effect{{Ref: runRef(true), Event: model.WorkflowRunComplete}},
 	Entry:   []string{"StartWorkflowExecution"},
 	Realize: runWorkflow{},
 }
 
-// WorkflowRun is the named plan that drives a workflow to completed via one observable transition.
-func WorkflowRun() []umpire.Action { return []umpire.Action{RunWorkflow} }
+// WorkflowRunPlan is the named plan that drives a workflow execution to completed.
+func WorkflowRunPlan() []umpire.Action { return []umpire.Action{RunWorkflow} }
 
 func wfRef(fresh bool) umpire.Ref {
 	return umpire.Ref{Type: model.WorkflowType, Var: "wf", Fresh: fresh}

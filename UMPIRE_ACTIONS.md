@@ -300,17 +300,34 @@ fires on the attempt, not once started).
   the result (observed − entry − ambient) to the internal calls, and `FaultVariants(plan, learned)`
   builds one Drop-variant per target. See `tests/umpire/action/fault.go` and
   `TestProbeNexusLearnedFootprint`.
-- **Beyond `NexusOperation`** — a second entity (`Workflow`) is now driven by the same generic
-  runtime: the Nexus-specific `actionFor`/`PlanEdge`/`settlingEdges` were split into an
-  entity-agnostic core (`planEdge` / `settlingEdgesFor`, parameterised by a lifecycle + an
-  `actionForFunc`), the `Oracle` was generalised over any `Lifecycled` entity, and `workflow.go`
-  adds the Workflow registry, realizers, `WorkflowPlanEdge`, and `WorkflowAutoCoverPlans`. Proven by
-  `TestWorkflowPlanEdge` / `TestWorkflowAutoCoverPlans` (planner) and `TestProbeWorkflowGenerated`
-  (a live drive to `completed`). Caveat: the Monitor does not yet observe `WorkflowStart` (the
-  `WorkflowStarted` fact decodes the *history* `StartWorkflowExecution`, which the frontend
-  interceptor does not see), so the model's intermediate `started` is unobserved and the drive uses
-  a self-completing workflow; a clean `Reconcile` on the two-step start→complete path needs that
-  Monitor observation gap closed. More entities (Activity, WorkflowUpdate) are further follow-ups.
+- **Beyond `NexusOperation`** — a second entity is now driven by the same generic runtime. The
+  Nexus-specific `actionFor`/`PlanEdge`/`settlingEdges` were split into an entity-agnostic core
+  (`planEdge` / `settlingEdgesFor`, parameterised by a lifecycle + an `actionForFunc`), the `Oracle`
+  was generalised over any `Lifecycled` entity, and `workflow.go` adds the Workflow-family registry
+  and realizers. Two levels are modelled:
+  - **`Workflow`** (by id) — the logical handle / aggregate, with `StartWorkflow`/`CompleteWorkflow`
+    actions proving the planner generalises to a richer lifecycle (`TestWorkflowPlanEdge` /
+    `TestWorkflowAutoCoverPlans`).
+  - **`WorkflowRun`** (by RunID, a child of `Workflow`) — the run-precise execution entity, so
+    multiple runs of one WorkflowID (continue-as-new / retry / reset) are distinct. Its lifecycle is
+    `created→completed` (the completion span carries the RunID), which matches observation exactly,
+    so `TestProbeWorkflowGenerated` drives it to `completed` with a **clean `Reconcile`**. The
+    completion span now yields two facts (`WorkflowExecutionCompleted` → `Workflow`,
+    `WorkflowRunCompleted` → `WorkflowRun`) via a decoder that allows several facts per event.
+
+  Known gaps / follow-ups on this entity:
+  - **Observe `WorkflowStart`.** The `WorkflowStarted` fact decodes the *history*
+    `StartWorkflowExecution`, which the frontend interceptor does not see, so `Workflow.started` (and
+    a run-level `started`) is unobserved. Fix: decode the frontend request and resolve its namespace
+    *name*→id via the seeded map (as `RecordRejection` does). Deferred by choice; the run drive is
+    clean without it.
+  - **`WorkflowRun` beyond completed** — `failed`/`canceled`/`terminated`/`timed_out`/
+    `continued_as_new` transitions, and a `started` once observation lands.
+  - **Namespace name→id robustness.** Resolution is a pre-seeded map (`SetNamespaceID`) with
+    drop-if-unknown — correct for driver-seeded tests, but passive observation of an un-seeded
+    namespace would need stash-and-reconcile (buffer name-only facts, flush when the mapping is
+    learned) or a registry lookup.
+  - More entities (Activity, WorkflowUpdate).
 - ~~**Footprint reconciliation**~~ **(done)** — an action now declares an expected footprint
   (`Action.Footprint`), and `ReconcileFootprint(plan, observed)` grounds it against the learned
   footprint: an expected internal call that never fired, or an observed non-ambient call outside the

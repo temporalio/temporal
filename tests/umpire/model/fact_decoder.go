@@ -4,25 +4,30 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/fact"
 )
 
 // FactDecoder decodes gRPC requests and OTEL spans into canonical events.
 type FactDecoder struct {
-	spanFacts    map[string]func() fact.SpanFact
+	spanFacts    map[string][]func() fact.SpanFact
 	requestFacts []func() fact.RequestFact
 }
 
 // NewFactDecoder creates a new event decoder.
 func NewFactDecoder() *FactDecoder {
-	d := &FactDecoder{spanFacts: make(map[string]func() fact.SpanFact)}
+	d := &FactDecoder{spanFacts: make(map[string][]func() fact.SpanFact)}
 
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowTaskStored{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowTaskDiscarded{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowTerminated{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.SpeculativeWorkflowTaskScheduled{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowExecutionCompleted{} })
+	// The same completion event also yields a run-precise fact (keyed by RunID) for the WorkflowRun
+	// entity; both are emitted for the event (see ImportSpan). Its Name() is its own identity, so it
+	// is registered under the OTEL event name explicitly.
+	d.registerSpanFactAs(telemetry.EventWorkflowExecutionCompleted, func() fact.SpanFact { return &fact.WorkflowRunCompleted{} })
 
 	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationScheduled{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationAttemptFailed{} })
@@ -43,8 +48,13 @@ func NewFactDecoder() *FactDecoder {
 }
 
 func (d *FactDecoder) registerSpanFact(factory func() fact.SpanFact) {
-	probe := factory()
-	d.spanFacts[probe.Name()] = factory
+	d.registerSpanFactAs(factory().Name(), factory)
+}
+
+// registerSpanFactAs registers a span fact under an explicit OTEL event name, decoupling the event
+// it decodes from its own Name() (identity). Used when several facts derive from one event.
+func (d *FactDecoder) registerSpanFactAs(eventName string, factory func() fact.SpanFact) {
+	d.spanFacts[eventName] = append(d.spanFacts[eventName], factory)
 }
 
 func (d *FactDecoder) registerRequestFact(factory func() fact.RequestFact) {
@@ -110,14 +120,16 @@ func fromResponse(req, resp any) umpire.Fact {
 func (d *FactDecoder) ImportSpan(span sdktrace.ReadOnlySpan) []umpire.Fact {
 	var facts []umpire.Fact
 	for _, ev := range span.Events() {
-		factory, ok := d.spanFacts[ev.Name]
+		factories, ok := d.spanFacts[ev.Name]
 		if !ok {
 			continue
 		}
 		attrs := attribute.NewSet(ev.Attributes...)
-		f := factory()
-		if f.ImportSpanEvent(attrs) {
-			facts = append(facts, f)
+		for _, factory := range factories {
+			f := factory()
+			if f.ImportSpanEvent(attrs) {
+				facts = append(facts, f)
+			}
 		}
 	}
 	return facts

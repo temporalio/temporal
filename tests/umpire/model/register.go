@@ -24,6 +24,10 @@ func DefaultEntities() []DefaultEntity {
 			Facts: []umpire.Fact{&fact.WorkflowStarted{}, &fact.WorkflowExecutionCompleted{}},
 		},
 		{
+			New:   func() umpire.Entity { return NewWorkflowRun() },
+			Facts: []umpire.Fact{&fact.WorkflowRunCompleted{}},
+		},
+		{
 			New:   func() umpire.Entity { return NewTaskQueue() },
 			Facts: []umpire.Fact{&fact.WorkflowTaskAdded{}, &fact.WorkflowTaskPolled{}},
 		},
@@ -60,6 +64,7 @@ func defaultFacts() []umpire.Fact {
 	return []umpire.Fact{
 		&fact.WorkflowStarted{},
 		&fact.WorkflowExecutionCompleted{},
+		&fact.WorkflowRunCompleted{},
 		&fact.WorkflowTaskAdded{},
 		&fact.WorkflowTaskPolled{},
 		&fact.WorkflowTaskStored{},

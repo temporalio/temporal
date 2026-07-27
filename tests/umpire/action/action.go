@@ -138,6 +138,8 @@ func entityID(e umpire.Entity) string {
 		return x.WorkflowID
 	case *model.Workflow:
 		return x.WorkflowID
+	case *model.WorkflowRun:
+		return x.RunID
 	}
 	return ""
 }
