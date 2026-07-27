@@ -219,13 +219,13 @@ The vendored copy is now the source of truth, so these are ours to fix rather th
 5. **The module path does not match the repo URL,** and there are no tags, so `go get` cannot
    resolve it at all. Moot now that this copy is authoritative.
 
-### Why values are passed to the library as indexes
+### Why the library treats values as opaque
 
-The library is generic over the value type — `Configurator[T]` — and decodes config values
-into `T` with `encoding/json` when a key is loaded. Since Temporal has seven value types
-(bool, int, float, string, duration, map, arbitrary structs) and the library instance is
-chosen per type, the obvious integration is one `Configurator[any]` for everything. That
-does not work, for three separate reasons.
+The library used to be generic over the *decoded* value type — `Configurator[T]` — and
+decoded config values into `T` with `encoding/json` when a key was loaded. Since Temporal has
+seven value types (bool, int, float, string, duration, map, arbitrary structs) and the
+instance is chosen per type, the obvious integration was one `Configurator[any]` for
+everything. That does not work, for three separate reasons.
 
 **JSON erases the Go types Temporal's converters expect.** `encoding/json` decodes every
 number into a `float64`, and `convertInt` (`collection.go:577`) accepts only the integer
@@ -238,48 +238,48 @@ matching.historyMaxPageSize:
 
 comes back as `float64(100)`, `convertInt` reports `value type is not int`, and the setting
 silently falls back to its compiled-in default. That is ~250 int settings, the largest group.
-Durations are worse than that, because they fail *quietly in the other direction*:
-`convertDuration` does accept a float and reads it as seconds, so a mistyped value produces a
-plausible wrong duration rather than an error.
+Durations are worse, because they fail *quietly in the other direction*: `convertDuration`
+does accept a float and reads it as seconds, so a mistyped value produces a plausible wrong
+duration rather than an error.
 
 **JSON also bypasses Temporal's own loading conventions.** Values in the dynamic config file
 go through `convertKeyTypeToString`, which fixes up the `map[any]any` that YAML produces for
-nested maps, and through `setting.Validate` against the settings registry, which is what
-turns a type error into a load-time failure instead of a silent default at read time. Handing
-raw JSON to the library skips both.
+nested maps, and through `setting.Validate` against the settings registry, which is what turns
+a type error into a load-time failure instead of a silent default at read time.
 
-**And `Eval` returns a value, not a stable pointer.** `Collection` memoises conversions using
-weak pointers into the `ConstrainedValue` the client returned (`collection.go:549`, and the
-contract note at `client.go:26-30`). A bare value has no stable address to key that cache on,
-so every read would re-run the converter. For the 22 typed settings that means a full
-mapstructure decode over a deep copy of the default, on every lookup.
+**And a decoded value has no stable address.** `Collection` memoises conversions using weak
+pointers into the `ConstrainedValue` the client returned (`collection.go:549`, and the
+contract note at `client.go:26-30`). A bare value gives the cache nothing to key on, so every
+read would re-run the converter. For the 22 typed settings that means a full mapstructure
+decode over a deep copy of the default, on every lookup.
 
-So the library is not asked to carry values at all. It is handed a config whose results are
-the integers `0..N` — index 0 the default, index *i* override *i* in file order:
+The fix was to notice that the library was already generic over values internally —
+`parsedConfig[V]`, `Condition[V]` and `Eval` all carry `V` and never look inside it — and that
+only the *boundary* insisted on JSON. So the boundary changed:
 
 ```go
-libraryCfg := types.Config{DefaultValue: json.RawMessage("0")}
-for i, o := range entry.Overrides {
-    libraryCfg.Overrides = append(libraryCfg.Overrides, types.Override{
-        MatchString: o.MatchString,
-        MatchResult: json.RawMessage(strconv.Itoa(i + 1)),
-    })
+type Config[V any] struct {
+    DefaultValue V
+    Overrides    []Override[V]   // { MatchString string; MatchResult V }
 }
 ```
 
-Temporal decodes the real values itself, straight from YAML, keeping `int` an `int`, running
-`convertKeyTypeToString`, and validating each one against the registry — all at load. They
-live in a `[]*ConstrainedValue` owned by the snapshot. `Eval` returns an index and the client
-returns `outcomes[idx]`.
+`V` is opaque. The library parses match expressions and returns whichever `V` won; it never
+inspects, decodes or converts one. Temporal passes `V = *ConstrainedValue`, decoded from YAML
+with its own conventions, validated against the registry, and owned by the snapshot so the
+pointers are stable. All three problems disappear at once, and `encoding/json` leaves both the
+library's evaluation path and the adapter entirely.
 
-The payoff is that all three problems disappear at once: no JSON on the read path, Go types
-preserved so the existing converters and their lenient coercion rules apply unchanged,
-validation at load, and stable pointers so the conversion cache behaves exactly as it does
-for the file based client. It also means one `Configurator[int]` serves every setting
-regardless of its value type, instead of seven instances.
+An earlier revision of this branch got the same effect by handing the library integer
+*indexes* into a side table of values — `Configurator[int]` where the int was not a config
+value at all. It worked, but the generic parameter was a lie and the adapter carried an
+outcomes slice, index arithmetic and an unreachable bounds check to maintain the illusion.
+Making `V` opaque is the same idea said honestly.
 
-The catch is that this only works because the adapter controls the config fed to `LoadKey`.
-It would not be available to someone using the library directly.
+The one thing given up is the library's own "hand me JSON and I'll decode it" convenience,
+which its standalone example relied on. That is preserved as a layer rather than a core
+concern — `configurator.JSONConfig[T]([]byte) (Config[T], error)`, one extra line at the call
+site. Its tests pin the float64 behaviour, as a warning to anyone reaching for it.
 
 ## Recommendation
 

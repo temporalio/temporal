@@ -2,13 +2,11 @@ package dynamicconfig
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"slices"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -130,19 +128,17 @@ type ConfiguratorClient struct {
 type (
 	// exprSnapshot is one immutable generation of the expression configuration.
 	exprSnapshot struct {
-		// cfg resolves a key to an *index* into the entry's outcomes rather than to the value
-		// itself, so values are decoded once at load using Temporal's own YAML conventions
-		// and validated against the settings registry, and Eval never unmarshals.
-		cfg     configurator.Configurator[int]
+		// cfg carries *ConstrainedValue directly: the library treats values as opaque, so
+		// they are decoded once here from YAML using Temporal's own conventions and validated
+		// against the settings registry, and nothing is ever unmarshalled on the read path.
+		// The pointers are owned by cfg and stable for the life of the snapshot, which is what
+		// lets Collection cache conversions against them with weak pointers.
+		cfg     configurator.Configurator[*ConstrainedValue]
 		entries map[Key]*exprEntry
 	}
 
 	exprEntry struct {
 		name string
-		// outcomes[0] is the default; outcomes[i+1] is override i's result, in file order.
-		// Pointers are stable for the life of the snapshot so that Collection can cache
-		// conversions against them with weak pointers.
-		outcomes []*ConstrainedValue
 		// referenced is the sorted set of constraint keys this entry's expressions test.
 		referenced []string
 		// ambientOnly is true when every referenced key is one this process supplies itself.
@@ -229,7 +225,7 @@ func (c *ConfiguratorClient) Eval(key Key, cm ConstraintsMap) *ConstrainedValue 
 	// layeredLookup is a pointer, so boxing it into the interface is free.
 	l := lookupPool.Get().(*layeredLookup) //nolint:revive // unchecked-type-assertion
 	l.caller, l.ambient = cm, c.ambient
-	idx, err := snap.cfg.Eval(context.Background(), e.name, l)
+	cvp, err := snap.cfg.Eval(context.Background(), e.name, l)
 	l.caller, l.ambient = nil, nil
 	lookupPool.Put(l)
 
@@ -240,11 +236,7 @@ func (c *ConfiguratorClient) Eval(key Key, cm ConstraintsMap) *ConstrainedValue 
 		}
 		return nil
 	}
-	if idx < 0 || idx >= len(e.outcomes) {
-		// Not reachable: indexes are generated alongside outcomes in parseEntry.
-		return nil
-	}
-	return e.outcomes[idx]
+	return cvp
 }
 
 // canUseResolved reports whether the value resolved at load is still correct for this call,
@@ -331,21 +323,21 @@ func (c *ConfiguratorClient) LoadFile(contents []byte) error {
 	}
 
 	snap := &exprSnapshot{
-		cfg:     configurator.New[int](),
+		cfg:     configurator.New[*ConstrainedValue](),
 		entries: make(map[Key]*exprEntry, len(entries)),
 	}
 
 	var errs []error
 	for name, entry := range entries {
 		key := MakeKey(name)
-		e, blob, err := c.parseEntry(key, entry)
+		e, cfg, err := c.parseEntry(key, entry)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		// LoadKey also parses every matchString, so a malformed expression fails here rather
-		// than silently never matching at runtime.
-		if err := snap.cfg.LoadKey(e.name, blob); err != nil {
+		// Load parses every matchString, so a malformed expression fails here rather than
+		// silently never matching at runtime.
+		if err := snap.cfg.Load(e.name, cfg); err != nil {
 			errs = append(errs, fmt.Errorf("key %q: %w", name, err))
 			continue
 		}
@@ -439,19 +431,27 @@ func (c *ConfiguratorClient) classifyAndResolve(
 			key, unknown, constraintKeysDirective)
 	}
 
-	idx, err := snap.cfg.Eval(context.Background(), e.name, c.ambient)
+	cvp, err := snap.cfg.Eval(context.Background(), e.name, c.ambient)
 	if err != nil {
 		return fmt.Errorf("key %q: %w", key, err)
 	}
 	// A single value with no constraints: every precedence order ends in {}, so this matches
 	// whatever the caller asks for.
-	e.resolved = []ConstrainedValue{{Value: e.outcomes[idx].Value}}
+	e.resolved = []ConstrainedValue{{Value: cvp.Value}}
 	return nil
 }
 
-// parseEntry converts one YAML entry into its table of possible values plus the JSON blob
-// handed to the library, which carries outcome *indexes* rather than values.
-func (c *ConfiguratorClient) parseEntry(key Key, entry yamlExprEntry) (*exprEntry, []byte, error) {
+// parseEntry converts one YAML entry into the config handed to the library.
+//
+// Values are decoded here rather than by the library: they go through Temporal's own YAML
+// conventions, which keeps an int an int, and are validated against the settings registry so
+// a type error fails the load instead of silently yielding the default at read time. The
+// library carries the resulting *ConstrainedValue through untouched.
+func (c *ConfiguratorClient) parseEntry(
+	key Key,
+	entry yamlExprEntry,
+) (*exprEntry, configurator.Config[*ConstrainedValue], error) {
+	var empty configurator.Config[*ConstrainedValue]
 	setting := queryRegistry(key)
 	if setting == nil {
 		c.logger.Warn("Expression config contains unregistered dynamic config key",
@@ -474,34 +474,25 @@ func (c *ConfiguratorClient) parseEntry(key Key, entry yamlExprEntry) (*exprEntr
 
 	def, err := outcome(entry.DefaultValue, "defaultValue")
 	if err != nil {
-		return nil, nil, err
+		return nil, empty, err
 	}
 
-	e := &exprEntry{
-		name:     key.String(),
-		outcomes: make([]*ConstrainedValue, 0, len(entry.Overrides)+1),
+	cfg := configurator.Config[*ConstrainedValue]{
+		DefaultValue: def,
+		Overrides:    make([]configurator.Override[*ConstrainedValue], 0, len(entry.Overrides)),
 	}
-	e.outcomes = append(e.outcomes, def)
-
-	libraryCfg := types.Config{DefaultValue: json.RawMessage("0")}
 	for i, o := range entry.Overrides {
 		cv, err := outcome(o.MatchResult, fmt.Sprintf("override %d (%q)", i, o.MatchString))
 		if err != nil {
-			return nil, nil, err
+			return nil, empty, err
 		}
-		e.outcomes = append(e.outcomes, cv)
-		libraryCfg.Overrides = append(libraryCfg.Overrides, types.Override{
+		cfg.Overrides = append(cfg.Overrides, configurator.Override[*ConstrainedValue]{
 			MatchString: o.MatchString,
-			// index into outcomes; 0 is the default, so overrides start at 1
-			MatchResult: json.RawMessage(strconv.Itoa(len(e.outcomes) - 1)),
+			MatchResult: cv,
 		})
 	}
 
-	blob, err := json.Marshal(libraryCfg)
-	if err != nil {
-		return nil, nil, fmt.Errorf("key %q: %w", key, err)
-	}
-	return e, blob, nil
+	return &exprEntry{name: key.String()}, cfg, nil
 }
 
 // changedSince reports the keys whose effective value differs between two generations,

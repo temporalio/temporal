@@ -2,7 +2,7 @@ package configurator
 
 import (
 	"context"
-	"encoding/json"
+
 	"fmt"
 	"sort"
 	"strconv"
@@ -60,61 +60,48 @@ func (v ParsedValue) compareNum(cf float64) int {
 }
 
 // parsedConfig is the runtime representation of a loaded config entry.
-// Values are decoded into T at load time so Eval never needs to unmarshal.
-type parsedConfig[T any] struct {
-	DefaultValue T
-	Overrides    []*Condition[T]
+type parsedConfig[V any] struct {
+	DefaultValue V
+	Overrides    []*Condition[V]
 }
 
-// loadConfig parses the DSL expressions and decodes all values into T.
-// Errors here surface at Load time rather than at Eval time.
-func loadConfig[T any](c *Config) (*parsedConfig[T], error) {
-	var defaultVal T
-	if err := json.Unmarshal(c.DefaultValue, &defaultVal); err != nil {
-		return nil, fmt.Errorf("decoding default value: %w", err)
-	}
-	out := &parsedConfig[T]{DefaultValue: defaultVal}
+// loadConfig parses the DSL expressions. Values are carried through untouched, so a parse
+// error is the only thing that can fail here, and it fails at load rather than at Eval.
+func loadConfig[V any](c types.Config[V]) (*parsedConfig[V], error) {
+	out := &parsedConfig[V]{DefaultValue: c.DefaultValue}
 	for _, v := range c.Overrides {
 		parsedExpression, err := ParseExpression(v.MatchString)
 		if err != nil {
 			return nil, fmt.Errorf("couldn't parse %v: %w", v.MatchString, err)
 		}
-		var matchResult T
-		if err := json.Unmarshal(v.MatchResult, &matchResult); err != nil {
-			return nil, fmt.Errorf("decoding match result for %q: %w", v.MatchString, err)
-		}
-		out.Overrides = append(out.Overrides, &Condition[T]{
+		out.Overrides = append(out.Overrides, &Condition[V]{
 			Expression:  *parsedExpression,
-			MatchResult: matchResult,
+			MatchResult: v.MatchResult,
 		})
 	}
 	return out, nil
 }
 
-type configurator[T any] struct {
-	loads map[string]*atomic.Pointer[parsedConfig[T]]
+type configurator[V any] struct {
+	loads map[string]*atomic.Pointer[parsedConfig[V]]
 }
 
-// New constructs a Configurator[T] that decodes config values into T at load time using encoding/json.
-func New[T any]() *configurator[T] {
-	return &configurator[T]{
-		loads: map[string]*atomic.Pointer[parsedConfig[T]]{},
+// New constructs a Configurator[V]. V is opaque to the library; see types.Config.
+func New[V any]() *configurator[V] {
+	return &configurator[V]{
+		loads: map[string]*atomic.Pointer[parsedConfig[V]]{},
 	}
 }
 
-func (c *configurator[T]) LoadKey(key string, data []byte) error {
-	cfg := Config{}
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return err
-	}
-	parsed, err := loadConfig[T](&cfg)
+func (c *configurator[V]) Load(key string, cfg types.Config[V]) error {
+	parsed, err := loadConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("couldn't load %q: %w", key, err)
 	}
 
 	existing, ok := c.loads[key]
 	if !ok {
-		p := &atomic.Pointer[parsedConfig[T]]{}
+		p := &atomic.Pointer[parsedConfig[V]]{}
 		p.Store(parsed)
 		c.loads[key] = p
 		return nil
@@ -123,8 +110,8 @@ func (c *configurator[T]) LoadKey(key string, data []byte) error {
 	return nil
 }
 
-func (c *configurator[T]) Eval(ctx context.Context, key string, constraints types.Lookup) (T, error) {
-	var zero T
+func (c *configurator[V]) Eval(ctx context.Context, key string, constraints types.Lookup) (V, error) {
+	var zero V
 	ptr, ok := c.loads[key]
 	if !ok {
 		return zero, fmt.Errorf("no configured value for %q", key)
@@ -149,7 +136,7 @@ func (c *configurator[T]) Eval(ctx context.Context, key string, constraints type
 // LOCAL ADDITION (not upstream): lets a caller tell, at load time, whether a config entry can
 // be resolved from a fixed set of constraints — and therefore evaluated once up front —
 // rather than needing evaluation on every read.
-func (c *configurator[T]) ReferencedKeys(key string) ([]string, bool) {
+func (c *configurator[V]) ReferencedKeys(key string) ([]string, bool) {
 	ptr, ok := c.loads[key]
 	if !ok {
 		return nil, false

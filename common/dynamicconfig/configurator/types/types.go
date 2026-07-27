@@ -1,7 +1,5 @@
 package types
 
-import "encoding/json"
-
 // Lookup resolves a constraint key to its value for one evaluation.
 //
 // LOCAL MODIFICATION (not upstream): expression matching takes a Lookup rather than a
@@ -34,13 +32,23 @@ const (
 	OpOr
 )
 
-type Override struct {
+// Override is one conditional value: if MatchString evaluates true against the constraints,
+// MatchResult is the answer.
+type Override[V any] struct {
 	MatchString string
-	MatchResult json.RawMessage
+	MatchResult V
 }
 
-// Config is the persisted representation of a configuration entry.
-type Config struct {
-	DefaultValue json.RawMessage
-	Overrides    []Override
+// Config is one configuration entry: a default plus overrides tried in order.
+//
+// V is opaque. The library parses and evaluates the match expressions and hands back
+// whichever V won; it never inspects, decodes or converts a value. Callers that want values
+// decoded from JSON can use configurator.JSONConfig.
+//
+// Keeping values opaque is deliberate. Decoding here would mean the library imposing its own
+// type system on the caller's, and for a caller whose "type" of a setting is an arbitrary
+// conversion function rather than a fixed set, there is no type system to impose.
+type Config[V any] struct {
+	DefaultValue V
+	Overrides    []Override[V]
 }

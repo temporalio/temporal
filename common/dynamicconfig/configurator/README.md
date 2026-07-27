@@ -22,6 +22,12 @@ directly rather than being sent upstream and re-vendored. Local changes so far:
 - `Configurator.ReferencedKeys(key)`, returning the constraint keys an entry's expressions
   test. Used to tell at load time whether an entry can be resolved once up front, and to
   reject expressions that reference an undeclared key.
+- **Values are opaque.** `Config[V]` carries already-decoded values of the caller's choosing
+  instead of `json.RawMessage`, and the library never inspects, decodes or converts one — it
+  parses the match expressions and hands back whichever `V` won. Decoding here would mean
+  imposing a type system on the caller, and Temporal's notion of a setting's "type" is an
+  arbitrary conversion function, not a fixed set. `JSONConfig[T]` keeps the old
+  decode-from-JSON behaviour available for callers that want it.
 - The `go:generate pigeon` directive is omitted from `internal/library/parse.go`, so
   `go generate ./...` does not fail for anyone without pigeon installed. `expr.pigeon` is not
   vendored; the grammar has not needed to change.
@@ -45,11 +51,11 @@ supplied map never matches.
 
 ## Known issues
 
-- `internal/library/impl.go` `LoadKey` writes to a bare `map` while `Eval` reads it, so
+- `internal/library/impl.go` `Load` writes to a bare `map` while `Eval` reads it, so
   registering a *new* key concurrently with reads is a data race. Updating an *existing*
   key is safe (`atomic.Pointer`). `../configurator_client.go` therefore builds a fresh
   `Configurator` per reload and swaps it behind a single `atomic.Pointer`, and never calls
-  `LoadKey` on a live instance. Worth fixing here rather than working around.
+  `Load` on a live instance. Worth fixing here rather than working around.
 - The DSL has no `>=`, `<=`, `in`, `not`, regex, or percentage-rollout operators.
 - There is no semver comparison: `"v" < "1.28.0"` compares lexicographically, so `1.9.0`
   reads as greater. Callers pass numeric components instead (`sdkMajor`, `sdkMinor`).

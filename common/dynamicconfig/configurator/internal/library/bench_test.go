@@ -2,7 +2,6 @@ package configurator
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"go.temporal.io/server/common/dynamicconfig/configurator/types"
@@ -90,24 +89,26 @@ func buildYAMLConfig() *yamlLevel {
 //	Default:                                                  → "do-not-deploy"
 func buildDSLConfig() *configurator[string] {
 	c := New[string]()
-	data, _ := json.Marshal(Config{
-		DefaultValue: json.RawMessage(`"do-not-deploy"`),
-		Overrides: []Override{
+	data := types.Config[string]{
+		DefaultValue: "do-not-deploy",
+		Overrides: []types.Override[string]{
 			{
 				MatchString: `"env" = "prod" and "region" = "us-west-1" and "account" = "foo"`,
-				MatchResult: json.RawMessage(`"deploy"`),
+				MatchResult: "deploy",
 			},
 			{
 				MatchString: `"env" = "prod" and "region" = "us-west-1" and "account" = "bar"`,
-				MatchResult: json.RawMessage(`"deploy"`),
+				MatchResult: "deploy",
 			},
 			{
 				MatchString: `"env" = "staging"`,
-				MatchResult: json.RawMessage(`"deploy"`),
+				MatchResult: "deploy",
 			},
 		},
-	})
-	c.LoadKey("flag", data)
+	}
+	if err := c.Load("flag", data); err != nil {
+		panic(err)
+	}
 	return c
 }
 

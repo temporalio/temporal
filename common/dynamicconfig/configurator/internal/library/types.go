@@ -1,10 +1,6 @@
 package configurator
 
-import (
-	"encoding/json"
-
-	"go.temporal.io/server/common/dynamicconfig/configurator/types"
-)
+import "go.temporal.io/server/common/dynamicconfig/configurator/types"
 
 // ParsedValueKind identifies the type of a parsed DSL value.
 type ParsedValueKind int
@@ -37,21 +33,11 @@ type Expression struct {
 	Value          ParsedValue
 	Operator       types.Operator
 	Subexpressions []*Expression
-	MatchResult    json.RawMessage
 }
 
-type Condition[T any] struct {
+// Condition pairs a parsed expression with the value it yields when it matches. V is opaque;
+// see types.Config.
+type Condition[V any] struct {
 	Expression  Expression
-	MatchResult T
-}
-
-type Override struct {
-	MatchString string
-	MatchResult json.RawMessage
-}
-
-// Config is the persisted representation of a configuration entry.
-type Config struct {
-	DefaultValue json.RawMessage
-	Overrides    []Override
+	MatchResult V
 }

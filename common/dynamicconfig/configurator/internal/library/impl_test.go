@@ -2,27 +2,26 @@ package configurator
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
-	"go.temporal.io/server/common/dynamicconfig/configurator/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/dynamicconfig/configurator/types"
 )
 
 func TestE2E(t *testing.T) {
-	configData, _ := json.Marshal(Config{
-		DefaultValue: json.RawMessage(`"do-not-deploy"`),
-		Overrides: []Override{
+	configData := types.Config[string]{
+		DefaultValue: "do-not-deploy",
+		Overrides: []types.Override[string]{
 			{
 				MatchString: `("env" = "prod" and "region" = "us-west-1") or "env" = "staging"`,
-				MatchResult: json.RawMessage(`"deploy"`),
+				MatchResult: "deploy",
 			},
 		},
-	})
+	}
 
 	configstore := New[string]()
-	configstore.LoadKey("key", []byte(configData))
+	require.NoError(t, configstore.Load("key", configData))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -56,16 +55,16 @@ func TestE2E(t *testing.T) {
 
 	// canary rollout: deploy only to shards in range 100 < shard-id < 200
 	// uses unquoted integer literals parsed at load time
-	canaryData, _ := json.Marshal(Config{
-		DefaultValue: json.RawMessage(`"off"`),
-		Overrides: []Override{
+	canaryData := types.Config[string]{
+		DefaultValue: "off",
+		Overrides: []types.Override[string]{
 			{
 				MatchString: `"shard-id" > 100 and "shard-id" < 200`,
-				MatchResult: json.RawMessage(`"on"`),
+				MatchResult: "on",
 			},
 		},
-	})
-	require.NoError(t, configstore.LoadKey("canary", canaryData))
+	}
+	require.NoError(t, configstore.Load("canary", canaryData))
 
 	for _, tc := range []struct {
 		shardID string
@@ -84,16 +83,16 @@ func TestE2E(t *testing.T) {
 
 	// float threshold: rollout to users with ratio above 0.5
 	// uses unquoted float literal parsed at load time
-	floatData, _ := json.Marshal(Config{
-		DefaultValue: json.RawMessage(`"off"`),
-		Overrides: []Override{
+	floatData := types.Config[string]{
+		DefaultValue: "off",
+		Overrides: []types.Override[string]{
 			{
 				MatchString: `"ratio" > 0.5`,
-				MatchResult: json.RawMessage(`"on"`),
+				MatchResult: "on",
 			},
 		},
-	})
-	require.NoError(t, configstore.LoadKey("float-flag", floatData))
+	}
+	require.NoError(t, configstore.Load("float-flag", floatData))
 
 	for _, tc := range []struct {
 		ratio string
@@ -140,15 +139,15 @@ func TestE2E(t *testing.T) {
 		assert.Equal(t, tc.want, res, "ratio=%v (native float64)", tc.ratio)
 	}
 
-	// bool config: no decoder needed, json.Unmarshal handles bool natively
+	// bool config: values are carried through as-is, whatever their type
 	boolConfigstore := New[bool]()
-	boolData, _ := json.Marshal(Config{
-		DefaultValue: json.RawMessage(`false`),
-		Overrides: []Override{
-			{MatchString: `"env" = "prod"`, MatchResult: json.RawMessage(`true`)},
+	boolData := types.Config[bool]{
+		DefaultValue: false,
+		Overrides: []types.Override[bool]{
+			{MatchString: `"env" = "prod"`, MatchResult: true},
 		},
-	})
-	require.NoError(t, boolConfigstore.LoadKey("flag", boolData))
+	}
+	require.NoError(t, boolConfigstore.Load("flag", boolData))
 	boolRes, err := boolConfigstore.Eval(ctx, "flag", types.Constraints{"env": "prod"})
 	assert.NoError(t, err)
 	assert.True(t, boolRes)
