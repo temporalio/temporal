@@ -195,12 +195,6 @@ baseline retained objects:
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			opts := append([]Option{}, tc.opts...)
-			opts = append(opts, WithGCSettleTimeout(10*time.Millisecond))
-
-			check, err := NewObjectLeakCheck(opts...)
-			require.NoError(t, err)
-
 			node := &graphNode{
 				Leaf:  &graphLeaf{Value: 2},
 				Value: 1,
@@ -209,6 +203,13 @@ baseline retained objects:
 				&graphRoot{Node: node},
 				&graphRoot{Node: node},
 			}
+
+			opts := append([]Option{}, tc.opts...)
+			opts = append(opts, WithGCSettleTimeout(10*time.Millisecond))
+
+			check, err := NewObjectLeakCheck(opts...)
+			require.NoError(t, err)
+
 			var baseline Baseline
 			if tc.setup != nil {
 				baseline = tc.setup(&check, roots)
