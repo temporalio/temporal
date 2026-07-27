@@ -39,7 +39,6 @@ const (
 )
 
 type attempt struct {
-	runner           *runner
 	number           int
 	exitErr          *exec.ExitError
 	junitReport      *junitReport
@@ -61,9 +60,9 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	err := cmd.Run()
 	stdout := output.String() + stderr.String()
 	report, reportErr := output.junitReport()
-	if reportErr != nil && err == nil {
-		err = reportErr
-	} else if reportErr == nil {
+	if reportErr != nil {
+		err = errors.Join(err, reportErr)
+	} else {
 		a.junitReport = report
 	}
 	return stdout, err
@@ -205,7 +204,6 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 
 func (r *runner) newAttempt() *attempt {
 	a := &attempt{
-		runner: r,
 		number: len(r.attempts) + 1,
 		coverProfilePath: fmt.Sprintf(
 			"%v_%v%v",
