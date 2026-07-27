@@ -248,34 +248,39 @@ func activityDriverPollUntil(deadline time.Time, cond func() bool) bool {
 func awaitActivityDispatchDelay(
 	t require.TestingT,
 	e model.Event,
-	observe func() (available bool, state enumspb.PendingActivityState, next *timestamppb.Timestamp, details any),
+	observe func() (
+		activityInProgress bool,
+		runState enumspb.PendingActivityState,
+		nextAttemptScheduleTime *timestamppb.Timestamp,
+		details any,
+	),
 ) {
-	available, state, next, details := observe()
+	activityInProgress, runState, nextAttemptScheduleTime, details := observe()
 	switch {
-	case state == enumspb.PENDING_ACTIVITY_STATE_STARTED:
+	case runState == enumspb.PENDING_ACTIVITY_STATE_STARTED:
 		return
-	case !available || state != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
+	case !activityInProgress || runState != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
 		t.Errorf("%s: no delayed dispatch can elapse; last observed: %+v", e, details)
 		return
-	case next == nil:
+	case nextAttemptScheduleTime == nil:
 		return
 	}
 
-	deadline := next.AsTime().Add(activityDriverTimerMargin)
+	deadline := nextAttemptScheduleTime.AsTime().Add(activityDriverTimerMargin)
 	settled := activityDriverPollUntil(deadline, func() bool {
-		available, state, next, details = observe()
-		return !available ||
-			state != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED ||
-			next == nil
+		activityInProgress, runState, nextAttemptScheduleTime, details = observe()
+		return !activityInProgress ||
+			runState != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED ||
+			nextAttemptScheduleTime == nil
 	})
 	if !settled {
 		t.Errorf("%s: the dispatch deadline was still pending %s after it was due; last observed: %+v",
 			e, activityDriverTimerMargin, details)
 		return
 	}
-	if !available ||
-		(state != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED &&
-			state != enumspb.PENDING_ACTIVITY_STATE_STARTED) {
+	if !activityInProgress ||
+		(runState != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED &&
+			runState != enumspb.PENDING_ACTIVITY_STATE_STARTED) {
 		t.Errorf("%s: the delayed dispatch became unavailable before the driver observed it becoming due; last observed: %+v",
 			e, details)
 	}
