@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // --- the activity under test -----------------------------------------------------------------
@@ -151,51 +152,16 @@ func (a *saaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
 	}
 }
 
-// awaitDispatchDelay polls the activity until the delayed dispatch is no longer pending, and fails
-// if it is still pending, or if the activity ended first and so never dispatched at all.
-//
-// Whether a dispatch is pending is only observable while it is pending, so the two states that say
-// none is are checked once, before waiting. Afterwards a running attempt means the opposite: the
-// dispatch happened and a worker took it inside a poll interval.
+// awaitDispatchDelay waits for the public dispatch deadline to become due. A following Poll is what
+// proves that the task actually reached Matching.
 func (a *saaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
-	// Nothing to wait for: a closed activity dispatches nothing more, and a running attempt means
-	// whatever was pending has already been dispatched and taken.
-	info := a.describe(t).GetInfo()
-	switch {
-	case info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING:
-		t.Errorf("%s: the activity is %s, so no dispatch is pending and none can elapse", e, info.GetStatus())
-		return
-	case info.GetRunState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
-		t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
-		return
-	default:
-	}
-	// Wait until the time the server itself scheduled the dispatch for, not the configured window:
-	// under a non-constant backoff the two differ, and only the server knows which attempt is waiting.
-	deadline := time.Now().Add(activityDriverTimerMargin)
-	if next := info.GetNextAttemptScheduleTime(); next != nil {
-		deadline = next.AsTime().Add(activityDriverTimerMargin)
-	}
-	// Three things end the wait. Usually the dispatch time passes and nothing is pending any more.
-	// A running attempt is the same dispatch seen a moment later, after a worker took the task. The
-	// activity closing means nothing further will happen and the dispatch never came.
-	settled := func() bool {
-		info = a.describe(t).GetInfo()
-		return info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING ||
-			info.GetRunState() == enumspb.PENDING_ACTIVITY_STATE_STARTED ||
-			info.GetNextAttemptScheduleTime() == nil
-	}
-	if !activityDriverPollUntil(deadline, settled) {
-		t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
-			"Last observed: %+v", e, activityDriverTimerMargin, saaActivityInfo(info))
-		return
-	}
-	// Of the three, only the activity closing is a failure. A dispatch that closed the activity
-	// moments later is indistinguishable from one that never happened, so this reports the latter.
-	if info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING {
-		t.Errorf("%s: the activity ended as %s before its delayed dispatch, so the dispatch never happened",
-			e, info.GetStatus())
-	}
+	awaitActivityDispatchDelay(t, e, func() (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
+		info := a.describe(t).GetInfo()
+		return info.GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+			info.GetRunState(),
+			info.GetNextAttemptScheduleTime(),
+			saaActivityInfo(info)
+	})
 }
 
 func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
