@@ -253,6 +253,12 @@ func (v *visibilityArchiver) queryPrefix(ctx context.Context, uri archiver.URI, 
 			return nil, &serviceerror.InvalidArgument{Message: err.Error()}
 		}
 
+		// ExecutionStatus is not part of the filename, so it can only be matched after the
+		// record is decoded. Skip non-matching records before converting them.
+		if request.parsedQuery.status != nil && record.Status != *request.parsedQuery.status {
+			continue
+		}
+
 		executionInfo, err := convertToExecutionInfo(record, saTypeMap)
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())

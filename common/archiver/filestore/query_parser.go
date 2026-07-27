@@ -10,7 +10,6 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/sqlquery"
 	"go.temporal.io/server/common/util"
 )
@@ -158,7 +157,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		if op != "=" {
 			return fmt.Errorf("only operation = is support for %s", ExecutionStatus)
 		}
-		status, err := convertStatusStr(val)
+		status, err := sqlquery.ConvertStatusStr(val)
 		if err != nil {
 			return err
 		}
@@ -201,24 +200,4 @@ func (p *queryParser) convertCloseTime(timestamp time.Time, op string, parsedQue
 		return fmt.Errorf("operator %s is not supported for close time", op)
 	}
 	return nil
-}
-
-func convertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error) {
-	statusStr = strings.ToLower(strings.TrimSpace(statusStr))
-	switch statusStr {
-	case "completed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)):
-		return enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, nil
-	case "failed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)):
-		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, nil
-	case "canceled", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
-		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, nil
-	case "terminated", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)):
-		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, nil
-	case "continuedasnew", "continued_as_new", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
-		return enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, nil
-	case "timedout", "timed_out", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
-		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nil
-	default:
-		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
-	}
 }

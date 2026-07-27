@@ -264,6 +264,41 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	s.ProtoEqual(ei, response.Executions[0])
 }
 
+func (s *visibilityArchiverSuite) TestQuery_Success_ExecutionStatusFilter() {
+	ctx := context.Background()
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
+	s.NoError(err)
+	filename := "closeTimeout_2020-02-05T09:56:14Z_test-workflow-id_MobileOnlyWorkflow::processMobileOnly_test-run-id.visibility"
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
+	storageWrapper.EXPECT().QueryWithFilters(gomock.Any(), URI, gomock.Any(), 10, 0, gomock.Any()).Return([]string{filename}, true, 1, nil)
+	storageWrapper.EXPECT().Get(gomock.Any(), URI, "test-namespace-id/"+filename).Return([]byte(exampleVisibilityRecord), nil)
+
+	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
+
+	// the archived record is Completed, so a Failed filter must exclude it
+	mockParser := NewMockQueryParser(s.controller)
+	dayPrecision := "Day"
+	closeTime, _ := time.Parse(time.RFC3339, "2019-10-04T11:00:00+00:00")
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		closeTime:       closeTime,
+		searchPrecision: &dayPrecision,
+		workflowID:      new(testWorkflowID),
+		status:          new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+	}, nil)
+	visibilityArchiver.queryParser = mockParser
+	request := &archiver.QueryVisibilityRequest{
+		NamespaceID: testNamespaceID,
+		PageSize:    10,
+		Query:       "parsed by mockParser",
+	}
+
+	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap())
+	s.NoError(err)
+	s.NotNil(response)
+	s.Empty(response.Executions)
+}
+
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	pageSize := 2
 	ctx := context.Background()
