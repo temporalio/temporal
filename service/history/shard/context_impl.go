@@ -1282,10 +1282,10 @@ func (s *ContextImpl) updateShardInfo(
 	return nil
 }
 
-type immediateBacklog struct {
-	category tasks.Category
-	minKey   tasks.Key
-	maxKey   tasks.Key
+type immediateBacklogRange struct {
+	category        tasks.Category
+	inclusiveMinKey tasks.Key
+	exclusiveMaxKey tasks.Key
 }
 
 func (s *ContextImpl) emitShardInfoMetricsLogs() {
@@ -1297,7 +1297,11 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 		if s.lifecycleCtx.Err() != nil {
 			return
 		}
-		oldest, ok := s.oldestImmediateTaskVisibilityTime(backlog.category, backlog.minKey, backlog.maxKey)
+		oldest, ok := s.oldestImmediateTaskVisibilityTime(
+			backlog.category,
+			backlog.inclusiveMinKey,
+			backlog.exclusiveMaxKey,
+		)
 		if !ok {
 			continue
 		}
@@ -1314,10 +1318,10 @@ func (s *ContextImpl) emitImmediateQueueLagLocked(
 	queueState *persistencespb.QueueState,
 	metricsHandler metrics.Handler,
 	emitShardLagLog bool,
-) (immediateBacklog, bool) {
+) (immediateBacklogRange, bool) {
 	minTaskKey := getMinTaskKey(queueState)
 	if minTaskKey == nil {
-		return immediateBacklog{}, false
+		return immediateBacklogRange{}, false
 	}
 	highWatermark := s.taskKeyManager.getExclusiveReaderHighWatermark(category)
 	lag := highWatermark.TaskID - minTaskKey.TaskID
@@ -1332,15 +1336,19 @@ func (s *ContextImpl) emitImmediateQueueLagLocked(
 		Record(lag, metrics.TaskCategoryTag(category.Name()))
 
 	if lag <= 0 {
-		return immediateBacklog{}, false
+		return immediateBacklogRange{}, false
 	}
-	return immediateBacklog{category: category, minKey: *minTaskKey, maxKey: highWatermark}, true
+	return immediateBacklogRange{
+		category:        category,
+		inclusiveMinKey: *minTaskKey,
+		exclusiveMaxKey: highWatermark,
+	}, true
 }
 
 // emitQueueLagMetrics records the per-category queue lag, returning the backlogs to read afterwards
 // so that read stays off the shard lock.
-func (s *ContextImpl) emitQueueLagMetrics(metricsHandler metrics.Handler) []immediateBacklog {
-	var immediateBacklogs []immediateBacklog
+func (s *ContextImpl) emitQueueLagMetrics(metricsHandler metrics.Handler) []immediateBacklogRange {
+	var immediateBacklogs []immediateBacklogRange
 
 	s.rLock()
 	defer s.rUnlock()
