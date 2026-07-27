@@ -32,58 +32,60 @@ func newReport(
 	expected patterns,
 	pruneTypes patterns,
 ) report {
-	report := report{
+	r := report{
 		trackedRoots: trackedRoots,
 	}
 
 	// Matching mutates pattern.matched for stale-expected pattern detection.
 	activeExpected := slices.Clone(expected)
 
-	for class := range retentionClassCount {
-		report.retained[class] = newRetentionStats()
-	}
+	var retained [retentionClassCount]retentionAccumulator
 	retainedAddresses := make(map[uintptr]struct{})
 
-	// Classify each retained object and fold equivalent normalized paths into
-	// a single report row.
-	addRetained := func(obj trackedObject, class retentionClass) {
+	// Record each classified retained object and fold equivalent normalized
+	// paths into a single report row.
+	addRetained := func(obj trackedObject, path string, class retentionClass) {
 		retainedAddresses[obj.addr] = struct{}{}
-		report.retained[class].add(obj)
+		retained[class].add(obj, path)
 	}
 	for obj := range retainedObjects(baseline.objects) {
-		activeExpected.matchObject(obj)
-		addRetained(obj, retentionBaseline)
+		path := obj.path.normalized()
+		// Baseline objects still satisfy expected patterns so those patterns are
+		// not reported as stale.
+		activeExpected.matchObject(path, obj.typeName)
+		addRetained(obj, path, retentionBaseline)
 	}
 	for obj := range retainedObjects(objects) {
-		expectedBy := activeExpected.matchObject(obj)
+		path := obj.path.normalized()
+		isExpected := activeExpected.matchObject(path, obj.typeName)
 		if baseline.contains(obj) {
 			continue
 		}
-		if len(expectedBy) > 0 {
-			addRetained(obj, retentionExpected)
+		if isExpected {
+			addRetained(obj, path, retentionExpected)
 		} else {
-			addRetained(obj, retentionUnexpected)
+			addRetained(obj, path, retentionUnexpected)
 		}
 	}
-	report.totalRetainedObjects = len(retainedAddresses)
+	r.totalRetainedObjects = len(retainedAddresses)
 
 	// Expected patterns that never matched any tracked object are stale and
 	// should be removed with the fix that made them unnecessary.
-	report.unmatchedExpected = activeExpected.unmatched()
-	report.unmatchedPrunes = pruneTypes.unmatched()
+	r.unmatchedExpected = activeExpected.unmatched()
+	r.unmatchedPrunes = pruneTypes.unmatched()
 
 	// Keep report output stable across map iteration order and repeated runs.
 	for class := range retentionClassCount {
-		report.retained[class].finish()
+		r.retained[class] = retained[class].finalize()
 	}
-	slices.Sort(report.unmatchedExpected)
-	slices.Sort(report.unmatchedPrunes)
-	return report
+	slices.Sort(r.unmatchedExpected)
+	slices.Sort(r.unmatchedPrunes)
+	return r
 }
 
 func (r report) failures() error {
 	var failures []error
-	if len(r.retained[retentionUnexpected].groups) > 0 {
+	if r.retained[retentionUnexpected].paths > 0 {
 		failures = append(failures, errors.New("unexpected retained objects"))
 	}
 	if len(r.unmatchedExpected) > 0 {
@@ -152,9 +154,9 @@ func (r report) writeSummary(out *strings.Builder) {
 		out,
 		"retained objects: %d total, %d baseline, %d expected, %d unexpected\n",
 		r.totalRetainedObjects,
-		len(baseline.addresses),
-		len(expected.addresses),
-		len(unexpected.addresses),
+		baseline.objects,
+		expected.objects,
+		unexpected.objects,
 	)
 }
 
@@ -164,47 +166,64 @@ type objectGroupKey struct {
 }
 
 type retentionStats struct {
-	groups      []objectGroup
-	paths       int
-	addresses   map[uintptr]struct{}
-	groupsByKey map[objectGroupKey]*objectGroup
+	groups  []objectGroup
+	paths   int
+	objects int
 }
 
-func newRetentionStats() retentionStats {
-	return retentionStats{
-		addresses:   make(map[uintptr]struct{}),
-		groupsByKey: make(map[objectGroupKey]*objectGroup),
+type retentionAccumulator struct {
+	groups    map[objectGroupKey]*objectGroupAccumulator
+	paths     int
+	addresses map[uintptr]struct{}
+}
+
+type objectGroupAccumulator struct {
+	path      string
+	typeName  string
+	paths     int
+	addresses map[uintptr]struct{}
+}
+
+func (a *retentionAccumulator) add(obj trackedObject, path string) {
+	a.paths++
+	if a.addresses == nil {
+		a.addresses = make(map[uintptr]struct{})
+		a.groups = make(map[objectGroupKey]*objectGroupAccumulator)
 	}
-}
-
-func (s *retentionStats) add(obj trackedObject) {
-	s.paths++
-	s.addresses[obj.addr] = struct{}{}
+	a.addresses[obj.addr] = struct{}{}
 
 	key := objectGroupKey{
-		path:     obj.path.normalized(),
+		path:     path,
 		typeName: obj.typeName,
 	}
-	group := s.groupsByKey[key]
+	group := a.groups[key]
 	if group == nil {
-		group = &objectGroup{
+		group = &objectGroupAccumulator{
 			path:      key.path,
 			typeName:  key.typeName,
 			addresses: make(map[uintptr]struct{}),
 		}
-		s.groupsByKey[key] = group
+		a.groups[key] = group
 	}
 	group.paths++
 	group.addresses[obj.addr] = struct{}{}
 }
 
-func (s *retentionStats) finish() {
-	for _, group := range s.groupsByKey {
-		s.groups = append(s.groups, *group)
+func (a retentionAccumulator) finalize() retentionStats {
+	stats := retentionStats{
+		paths:   a.paths,
+		objects: len(a.addresses),
 	}
-	s.groupsByKey = nil
-	slices.SortFunc(s.groups, func(a objectGroup, b objectGroup) int {
-		if c := cmp.Compare(b.objectCount(), a.objectCount()); c != 0 {
+	for _, group := range a.groups {
+		stats.groups = append(stats.groups, objectGroup{
+			path:     group.path,
+			typeName: group.typeName,
+			paths:    group.paths,
+			objects:  len(group.addresses),
+		})
+	}
+	slices.SortFunc(stats.groups, func(a objectGroup, b objectGroup) int {
+		if c := cmp.Compare(b.objects, a.objects); c != 0 {
 			return c
 		}
 		if c := cmp.Compare(b.paths, a.paths); c != 0 {
@@ -215,13 +234,14 @@ func (s *retentionStats) finish() {
 		}
 		return cmp.Compare(a.typeName, b.typeName)
 	})
+	return stats
 }
 
 type objectGroup struct {
-	path      string
-	typeName  string
-	paths     int
-	addresses map[uintptr]struct{}
+	path     string
+	typeName string
+	paths    int
+	objects  int
 }
 
 func (g objectGroup) name() string {
@@ -231,16 +251,11 @@ func (g objectGroup) name() string {
 	return fmt.Sprintf("%s (%s)", g.path, g.typeName)
 }
 
-func (g objectGroup) objectCount() int {
-	return len(g.addresses)
-}
-
 func (g objectGroup) counts() string {
-	objects := g.objectCount()
-	if g.paths == objects {
-		return formatCount(objects, "object")
+	if g.paths == g.objects {
+		return formatCount(g.objects, "object")
 	}
-	return fmt.Sprintf("%s, %s", formatCount(g.paths, "path"), formatCount(objects, "object"))
+	return fmt.Sprintf("%s, %s", formatCount(g.paths, "path"), formatCount(g.objects, "object"))
 }
 
 func formatCount(count int, label string) string {
