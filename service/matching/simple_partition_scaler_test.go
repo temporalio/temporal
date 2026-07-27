@@ -30,11 +30,10 @@ func newTestScaler(ts clock.TimeSource, settings dynamicconfig.SimplePartitionSc
 // The zero-task call is a test device, not a model of production.
 // The zero-task read call means that the measured rate equals tasksPerSecond exactly,
 // so tests asserting on rate/TargetRate arithmetic are not also asserting on the
-// tracker's add-then-read behavior -- a call that adds and reads at once measures a span
-// bounded by increment instants at both ends, so it counts one increment too many.
+// tracker's add-then-read behavior.
 //
 // (A zero-task call is realistic on its own, since the timer can fire with an empty
-// batch, but production never uses one as a separate reading step.)
+// batch, but production never uses one as an intentional separate reading step.)
 // TestSimplePartitionScalerRateReadsHighOnAddThenRead covers what production does see.
 func feedRateForOneWindow(
 	t *testing.T,
@@ -44,19 +43,62 @@ func feedRateForOneWindow(
 ) PartitionScalerDecision {
 	t.Helper()
 
-	perBucket := tasksPerSecond * int(scalerBucketSize) / int(time.Second)
-	require.Equal(t, tasksPerSecond, perBucket*int(time.Second)/int(scalerBucketSize),
-		"tasksPerSecond must divide evenly into per-bucket increments")
+	target, dec := feedRate(t, scaler, ts, initialTarget, tasksPerSecond, scalerWindow, scalerBucketSize)
 
-	// One window of load. No call here sees a full window (the last lands at a timestamp one
-	// bucket short of the boundary), so they all report NoChange and initialTarget is untouched.
-	dec := onTasksLoop(initialTarget, scaler, ts, perBucket, int(scalerWindow/scalerBucketSize), scalerBucketSize)
+	// The load phase ends one bucket short of the boundary, so nothing was decided yet.
 	require.True(t, dec.NoChange, "the load phase should end just short of a full window")
 
-	// The clock now sits exactly on the boundary and the buckets hold exactly one
-	// window of tasks, so this reads the rate the caller asked for.
-	return scaler.OnTasks(PartitionScalerInput{NumTasks: 0, CurrentTarget: initialTarget})
+	return readRate(scaler, target)
 }
+
+// feedRate adds tasksPerSecond of load for dur, in interval-sized increments, and returns
+// the resulting target along with the decision from the final call.
+func feedRate(
+	t *testing.T,
+	scaler *simplePartitionScaler,
+	ts *clock.EventTimeSource,
+	target, tasksPerSecond int,
+	dur, interval time.Duration,
+) (int, PartitionScalerDecision) {
+	t.Helper()
+
+	perCall := tasksPerSecond * int(interval) / int(time.Second)
+	require.Equal(t, tasksPerSecond, perCall*int(time.Second)/int(interval),
+		"tasksPerSecond must divide evenly into interval-sized increments")
+	reps := int(dur / interval)
+	require.Equal(t, dur, time.Duration(reps)*interval, "dur must be a whole number of intervals")
+
+	dec := onTasksLoop(target, scaler, ts, perCall, reps, interval)
+	if !dec.NoChange {
+		target = dec.NewTarget
+	}
+	return target, dec
+}
+
+// readRate takes a reading without adding anything. Because it adds nothing, the measured
+// rate is exact for every configured window at once, however their bucket sizes differ --
+// see TestSimplePartitionScalerRateReadsHighOnAddThenRead for why adding and reading in one
+// call is not.
+func readRate(scaler *simplePartitionScaler, target int) PartitionScalerDecision {
+	return scaler.OnTasks(PartitionScalerInput{NumTasks: 0, CurrentTarget: target})
+}
+
+// crossoverUps is a potential production Ups config: a long window with a lower TargetRate
+// to govern sustained load, and a short window with a higher TargetRate to catch bursts.
+// Which one decides depends on the traffic, since Ups take the max across windows.
+func crossoverUps() dynamicconfig.SimplePartitionScalerSettings {
+	return dynamicconfig.SimplePartitionScalerSettings{
+		Enabled: true,
+		Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+			{Window: 2 * scalerWindow, TargetRate: 500},
+			{Window: scalerWindow, TargetRate: 600},
+		},
+	}
+}
+
+// multiWindowInterval divides evenly into the bucket size of both windows used by the
+// multi-window tests (scalerWindow/10 and 2*scalerWindow/10).
+const multiWindowInterval = scalerBucketSize / 5
 
 // onTasksLoop calls OnTasks with the same numTasks for numRepetitions.
 func onTasksLoop(initialTarget int, scaler *simplePartitionScaler, ts *clock.EventTimeSource, numTasks, numRepetitions int, delay time.Duration) (dec PartitionScalerDecision) {
@@ -152,7 +194,8 @@ func TestSimplePartitionScalerEnabledNoWindows(t *testing.T) {
 }
 
 // TestSimplePartitionScalerScalesUp drives a sustained rate above the Up target
-// rate and asserts the partition target rises to rate/TargetRate.
+// rate and asserts the partition target rises to rate/TargetRate after the first
+// full window.
 func TestSimplePartitionScalerScalesUp(t *testing.T) {
 	t.Parallel()
 
@@ -171,7 +214,8 @@ func TestSimplePartitionScalerScalesUp(t *testing.T) {
 }
 
 // TestSimplePartitionScalerScalesDown drives a rate below the current target's
-// capacity and asserts the target shrinks toward rate/TargetRate.
+// capacity and asserts the target shrinks toward rate/TargetRate after the first
+// full window.
 func TestSimplePartitionScalerScalesDown(t *testing.T) {
 	t.Parallel()
 
@@ -349,33 +393,123 @@ func TestSimplePartitionScalerHysteresisDeadband(t *testing.T) {
 	require.Equal(t, 2, dec.NewTarget, "exceeding the Up threshold scales back up")
 }
 
-// TestSimplePartitionScalerMultipleWindows verifies that distinct windows create
-// distinct trackers and that a decision is produced only once every window is
-// full (the longest window gates the first decision).
-func TestSimplePartitionScalerMultipleWindows(t *testing.T) {
+// TestSimplePartitionScalerLongWindowGovernsSustainedLoad checks which of two windows with
+// different TargetRates decides, when both see the same sustained rate.
+func TestSimplePartitionScalerLongWindowGovernsSustainedLoad(t *testing.T) {
+	t.Parallel()
+
+	// Under steady load every window measures the same rate, so the one with the lower
+	// TargetRate asks for more partitions and wins the max: the 2s window wants
+	// 3000/500 = 6 while the 1s window only wants 3000/600 = 5.
+	ts := clock.NewEventTimeSource()
+	scaler := newTestScaler(ts, crossoverUps())
+	target, _ := feedRate(t, scaler, ts, 1, 3000, 2*scalerWindow, multiWindowInterval)
+	dec := readRate(scaler, target)
+	require.False(t, dec.NoChange)
+	require.Equal(t, 6, dec.NewTarget, "the window asking for more partitions wins")
+
+	// Ups are combined with max, so listing them in the other order changes nothing.
+	tsRev := clock.NewEventTimeSource()
+	scalerRev := newTestScaler(tsRev, dynamicconfig.SimplePartitionScalerSettings{
+		Enabled: true,
+		Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+			{Window: scalerWindow, TargetRate: 600},
+			{Window: 2 * scalerWindow, TargetRate: 500},
+		},
+	})
+	targetRev, _ := feedRate(t, scalerRev, tsRev, 1, 3000, 2*scalerWindow, multiWindowInterval)
+	require.Equal(t, 6, readRate(scalerRev, targetRev).NewTarget, "Ups order does not matter")
+}
+
+// TestSimplePartitionScalerShortWindowCatchesBurst is the other half of the crossover: the
+// same config as above, but a burst too short for the long window to notice.
+func TestSimplePartitionScalerShortWindowCatchesBurst(t *testing.T) {
+	t.Parallel()
+
+	ts := clock.NewEventTimeSource()
+	scaler := newTestScaler(ts, crossoverUps())
+
+	// Idle long enough to fill both windows.
+	target, _ := feedRate(t, scaler, ts, 1, 0, 2*scalerWindow, multiWindowInterval)
+	require.Equal(t, 1, target, "no load holds at the floor of one partition")
+
+	// Now burst for exactly the length of the short window. The 1s window holds nothing
+	// but burst traffic (6000/s => 10), while the 2s window averages the burst with the
+	// idle period before it (3000/s => 6), so this time the short window governs.
+	target, _ = feedRate(t, scaler, ts, target, 6000, scalerWindow, multiWindowInterval)
+	dec := readRate(scaler, target)
+	require.False(t, dec.NoChange)
+	require.Equal(t, 10, dec.NewTarget, "a burst shorter than the long window is caught by the short one")
+}
+
+// TestSimplePartitionScalerUpsTakePriorityOverDowns pins the order of the two loops in
+// updateAddTarget, which the SimplePartitionScalerSettings doc calls out ("Ups take
+// priority") but nothing previously checked.
+func TestSimplePartitionScalerUpsTakePriorityOverDowns(t *testing.T) {
 	t.Parallel()
 
 	ts := clock.NewEventTimeSource()
 	scaler := newTestScaler(ts, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
-		Ups: []dynamicconfig.SimplePartitionScalerThreshold{
-			{Window: 1 * time.Second, TargetRate: 1000},
-			{Window: 2 * time.Second, TargetRate: 1000},
+		Downs:   []dynamicconfig.SimplePartitionScalerThreshold{{Window: scalerWindow, TargetRate: 100}},
+		Ups:     []dynamicconfig.SimplePartitionScalerThreshold{{Window: 2 * scalerWindow, TargetRate: 50}},
+	})
+
+	// At 500/s the Down window wants 500/100 = 5 and the Up window wants 500/50 = 10.
+	// Downs run first with min and Ups second with max, so starting from 20 the Down pulls
+	// the target to 5 and the Up pushes it back up to 10. All three orderings give
+	// different answers -- 10 as written, 5 if Ups ran first, 20 if neither applied -- so
+	// this cannot pass by coincidence.
+	target, _ := feedRate(t, scaler, ts, 20, 500, 2*scalerWindow, multiWindowInterval)
+	dec := readRate(scaler, target)
+	require.False(t, dec.NoChange)
+	require.Equal(t, 10, dec.NewTarget, "Ups run after Downs and so win")
+}
+
+// TestSimplePartitionScalerMostConservativeDownWindowWins is the Downs mirror of the Ups
+// max: Downs are combined with min, so the window asking for the fewest partitions decides.
+// Worth knowing before adding Downs -- a short Down window will pull the target down on a
+// brief lull no matter what the longer windows think.
+func TestSimplePartitionScalerMostConservativeDownWindowWins(t *testing.T) {
+	t.Parallel()
+
+	ts := clock.NewEventTimeSource()
+	scaler := newTestScaler(ts, dynamicconfig.SimplePartitionScalerSettings{
+		Enabled: true,
+		Downs: []dynamicconfig.SimplePartitionScalerThreshold{
+			{Window: scalerWindow, TargetRate: 100},
+			{Window: 2 * scalerWindow, TargetRate: 300},
 		},
 	})
 
-	dec := scaler.OnTasks(PartitionScalerInput{NumTasks: 10, CurrentTarget: 1})
-	require.True(t, dec.NoChange, "no window is full on the first call")
+	// At 600/s the 1s window wants 600/100 = 6 and the 2s window wants 600/300 = 2.
+	target, _ := feedRate(t, scaler, ts, 20, 600, 2*scalerWindow, multiWindowInterval)
+	dec := readRate(scaler, target)
+	require.False(t, dec.NoChange)
+	require.Equal(t, 2, dec.NewTarget, "the window asking for fewer partitions wins")
+}
 
-	// After 1s the 1s window is full but the 2s window is not: still no decision.
-	ts.Advance(1 * time.Second)
-	dec = scaler.OnTasks(PartitionScalerInput{NumTasks: 10, CurrentTarget: 1})
-	require.True(t, dec.NoChange, "a decision requires every window to be full")
+// TestSimplePartitionScalerLongestWindowGatesFirstDecision verifies that no decision is
+// produced until every window is full, so the longest one sets the warm-up time.
+func TestSimplePartitionScalerLongestWindowGatesFirstDecision(t *testing.T) {
+	t.Parallel()
 
-	// After 2s total both windows are full and a decision is produced.
-	ts.Advance(1 * time.Second)
-	dec = scaler.OnTasks(PartitionScalerInput{NumTasks: 10, CurrentTarget: 1})
-	require.False(t, dec.NoChange, "all windows full -> decision produced")
+	// The two windows have different TargetRates, so they are not interchangeable: the
+	// answer once a decision appears is the long window's 6, not the short window's 5.
+	for _, fed := range []time.Duration{scalerWindow / 2, scalerWindow, 3 * scalerWindow / 2} {
+		ts := clock.NewEventTimeSource()
+		scaler := newTestScaler(ts, crossoverUps())
+		target, _ := feedRate(t, scaler, ts, 1, 3000, fed, multiWindowInterval)
+		require.True(t, readRate(scaler, target).NoChange,
+			"only %v has elapsed, so the 2s window is not full yet", fed)
+	}
+
+	ts := clock.NewEventTimeSource()
+	scaler := newTestScaler(ts, crossoverUps())
+	target, _ := feedRate(t, scaler, ts, 1, 3000, 2*scalerWindow, multiWindowInterval)
+	dec := readRate(scaler, target)
+	require.False(t, dec.NoChange, "every window full -> decision produced")
+	require.Equal(t, 6, dec.NewTarget)
 }
 
 // encodeCounts builds a Compact8-encoded backlog-count slice from raw values,
