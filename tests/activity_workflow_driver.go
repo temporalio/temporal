@@ -23,6 +23,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/activity/model"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -66,7 +67,7 @@ func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
 }
 
 // driveEvent advances the activity by one event.
-func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
+func (a *wfaHandle) driveEvent(t testing.TB, e model.Event) {
 	switch {
 	case e.Type == model.PollType:
 		resp := a.pollForTask(t, activityDriverTimeout)
@@ -85,19 +86,16 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 
 // awaitTimeout blocks until the activity reports the timeout the event names, and fails if it does
 // not within (window + margin).
-func (a *wfaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline time.Time) {
+func (a *wfaHandle) awaitTimeout(t testing.TB, e model.Event, deadline time.Time) {
 	want := timeoutType(e)
 	var got activityTimeoutInfo
-	fired := func() bool {
+	await.Require(a.d.ctx, t, func(t *await.T) {
 		got = a.timeoutInfo(t)
-		return got.timeout == want && (got.terminal || got.attempt > a.startedAttempt)
-	}
-	if activityDriverPollUntil(deadline, fired) {
-		return
-	}
-	t.Errorf("%s: the activity did not report a %s timeout within %s of driving the event; it reports %s. "+
-		"Check that the config makes this the timeout that fires.",
-		e, want, a.cfg.timerDuration(e)+activityDriverTimerMargin, got.timeout)
+		fired := got.timeout == want && (got.terminal || got.attempt > a.startedAttempt)
+		t.Require().Truef(fired,
+			"%s: activity reports timeout %s at attempt %d (terminal=%v), want %s after attempt %d",
+			e, got.timeout, got.attempt, got.terminal, want, a.startedAttempt)
+	}, max(0, time.Until(deadline)), activityDriverPollInterval)
 }
 
 // timeoutInfo is the most recent timeout the activity reports. DescribeWorkflowExecution exposes the
@@ -119,8 +117,8 @@ func (a *wfaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 
 // awaitDispatchDelay waits for the public dispatch deadline to become due. A following Poll is what
 // proves that the task actually reached Matching.
-func (a *wfaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
-	awaitActivityDispatchDelay(t, e, func() (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
+func (a *wfaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
+	awaitActivityDispatchDelay(a.d.ctx, t, e, func(t require.TestingT) (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
 		pa := a.pendingActivityInfo(t)
 		if pa == nil {
 			return false, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, nil, "activity is no longer in progress"
@@ -151,12 +149,10 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 	require.NoError(t, err)
 	a := &wfaHandle{d: d, cfg: cfg, run: run, workflowID: wfID, runID: run.GetRunID(), activityID: actID, taskQueue: actTQ}
 	// The workflow schedules the activity, so it does not exist yet when ExecuteWorkflow returns.
-	require.Truef(t, activityDriverPollUntil(time.Now().Add(activityDriverTimeout),
-		func() bool {
-			_, activityInProgress := a.activityInfoIfInProgress(t)
-			return activityInProgress
-		}),
-		"the workflow did not schedule its activity within %s", activityDriverTimeout)
+	await.Require(d.ctx, t, func(t *await.T) {
+		_, activityInProgress := a.activityInfoIfInProgress(t)
+		t.Require().True(activityInProgress, "the workflow has not scheduled its activity")
+	}, activityDriverTimeout, activityDriverPollInterval)
 	return a
 }
 

@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -59,7 +60,7 @@ type saaHandle struct {
 
 // driveTrace schedules an activity, and then advances that activity through a sequence of events (a
 // 'trace'). Returns a handle to the activity at the reached state.
-func (d *saaDriver) driveTrace(t require.TestingT, trace []model.Event) *saaHandle {
+func (d *saaDriver) driveTrace(t testing.TB, trace []model.Event) *saaHandle {
 	validateTrace(t, trace)
 	a := d.start(t, d.cfg.forTrace(trace))
 	for _, e := range trace {
@@ -69,7 +70,7 @@ func (d *saaDriver) driveTrace(t require.TestingT, trace []model.Event) *saaHand
 }
 
 // driveEvent advances the activity by one event.
-func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
+func (a *saaHandle) driveEvent(t testing.TB, e model.Event) {
 	switch {
 	case e.Type == model.PollType:
 		resp := a.pollForTask(t, activityDriverTimeout)
@@ -88,19 +89,16 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 
 // awaitTimeout blocks until the activity reports the timeout the event names, and fails if it does
 // not within (window + margin).
-func (a *saaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline time.Time) {
+func (a *saaHandle) awaitTimeout(t testing.TB, e model.Event, deadline time.Time) {
 	want := timeoutType(e)
 	var got activityTimeoutInfo
-	fired := func() bool {
+	await.Require(a.d.ctx, t, func(t *await.T) {
 		got = a.timeoutInfo(t)
-		return got.timeout == want && (got.terminal || got.attempt > a.startedAttempt)
-	}
-	if activityDriverPollUntil(deadline, fired) {
-		return
-	}
-	t.Errorf("%s: the activity did not report a %s timeout within %s of driving the event; it reports %s. "+
-		"Check that the config makes this the timeout that fires.",
-		e, want, a.cfg.timerDuration(e)+activityDriverTimerMargin, got.timeout)
+		fired := got.timeout == want && (got.terminal || got.attempt > a.startedAttempt)
+		t.Require().Truef(fired,
+			"%s: activity reports timeout %s at attempt %d (terminal=%v), want %s after attempt %d",
+			e, got.timeout, got.attempt, got.terminal, want, a.startedAttempt)
+	}, max(0, time.Until(deadline)), activityDriverPollInterval)
 }
 
 // timeoutInfo is the most recent timeout the activity reports.
@@ -122,8 +120,8 @@ func (a *saaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 
 // awaitDispatchDelay waits for the public dispatch deadline to become due. A following Poll is what
 // proves that the task actually reached Matching.
-func (a *saaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
-	awaitActivityDispatchDelay(t, e, func() (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
+func (a *saaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
+	awaitActivityDispatchDelay(a.d.ctx, t, e, func(t require.TestingT) (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
 		info := a.describe(t).GetInfo()
 		return info.GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			info.GetRunState(),

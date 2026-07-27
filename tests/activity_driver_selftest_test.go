@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
+	"go.temporal.io/server/common/testing/await"
 )
 
 // TestDriversRecognizeTimeoutObservedBeforeWait reproduces a race in awaitTimeout: a retryable timeout
@@ -23,28 +24,26 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 		StartToClose:  activityShortTimeout,
 	}
 
-	waitUntilTimeoutVisible := func(t *testing.T, timeoutInfo func() activityTimeoutInfo) {
+	waitUntilTimeoutVisible := func(t *testing.T, timeoutInfo func(require.TestingT) activityTimeoutInfo) {
 		var got activityTimeoutInfo
-		require.Truef(t, activityDriverPollUntil(
-			time.Now().Add(cfg.StartToClose+activityDriverTimerMargin),
-			func() bool {
-				got = timeoutInfo()
-				return got.timeout == enumspb.TIMEOUT_TYPE_START_TO_CLOSE && got.attempt == 2
-			},
-		), "attempt 1 did not time out and reschedule attempt 2; last observed: %+v", got)
+		await.Require(t.Context(), t, func(t *await.T) {
+			got = timeoutInfo(t)
+			t.Require().Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, got.timeout)
+			t.Require().Equal(int32(2), got.attempt)
+		}, cfg.StartToClose+activityDriverTimerMargin, activityDriverPollInterval)
 	}
 
 	s.T().Run("WorkflowActivity", func(t *testing.T) {
 		a := newWFADriver(t, newActivityParityEnv(t), cfg).start(t, cfg)
 		a.driveEvent(t, model.Poll)
-		waitUntilTimeoutVisible(t, func() activityTimeoutInfo { return a.timeoutInfo(t) })
+		waitUntilTimeoutVisible(t, a.timeoutInfo)
 		a.awaitTimeout(t, model.StartToCloseElapses, time.Now().Add(waitForDriver))
 	})
 
 	s.T().Run("StandaloneActivity", func(t *testing.T) {
 		a := newSAADriver(t, newActivityParityEnv(t), cfg).start(t, cfg)
 		a.driveEvent(t, model.Poll)
-		waitUntilTimeoutVisible(t, func() activityTimeoutInfo { return a.timeoutInfo(t) })
+		waitUntilTimeoutVisible(t, a.timeoutInfo)
 		a.awaitTimeout(t, model.StartToCloseElapses, time.Now().Add(waitForDriver))
 	})
 }

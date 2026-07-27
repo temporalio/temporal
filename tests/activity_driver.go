@@ -4,6 +4,8 @@ package tests
 
 import (
 	"cmp"
+	"context"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -12,6 +14,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/await"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -220,40 +223,23 @@ type activityTimeoutInfo struct {
 	terminal bool                // Whether the activity is terminal, as every non-retrying timeout makes it.
 }
 
-// activityDriverPollUntil reports whether cond held before the deadline, reading every activityDriverPollInterval.
-//
-// common/testing/await is the usual way to write this, but await.Require and await.RequireTrue take a
-// testing.TB, which has an unexported method and so admits only *testing.T. The drivers take a
-// require.TestingT instead, which is what lets their self-tests hand them a recorder and assert on
-// what they reported.
-func activityDriverPollUntil(deadline time.Time, cond func() bool) bool {
-	for {
-		if cond() {
-			return true
-		}
-		if !time.Now().Before(deadline) {
-			return false
-		}
-		time.Sleep(activityDriverPollInterval) //nolint:forbidigo
-	}
-}
-
 // awaitActivityDispatchDelay waits until the server no longer reports a future dispatch deadline.
 // NextAttemptScheduleTime disappearing establishes only that the dispatch is due, not that its task
 // reached Matching; a subsequent Poll proves that. Started is also success because it proves a racing
 // poller consumed the dispatch. Any other state hides or removes the deadline, so cannot establish
 // this trace event.
 func awaitActivityDispatchDelay(
-	t require.TestingT,
+	ctx context.Context,
+	t testing.TB,
 	e model.Event,
-	observe func() (
+	observe func(require.TestingT) (
 		activityInProgress bool,
 		runState enumspb.PendingActivityState,
 		nextAttemptScheduleTime *timestamppb.Timestamp,
 		details any,
 	),
 ) {
-	activityInProgress, runState, nextAttemptScheduleTime, details := observe()
+	activityInProgress, runState, nextAttemptScheduleTime, details := observe(t)
 	switch {
 	case runState == enumspb.PENDING_ACTIVITY_STATE_STARTED:
 		return
@@ -265,17 +251,13 @@ func awaitActivityDispatchDelay(
 	}
 
 	deadline := nextAttemptScheduleTime.AsTime().Add(activityDriverTimerMargin)
-	settled := activityDriverPollUntil(deadline, func() bool {
-		activityInProgress, runState, nextAttemptScheduleTime, details = observe()
-		return !activityInProgress ||
+	await.Require(ctx, t, func(t *await.T) {
+		activityInProgress, runState, nextAttemptScheduleTime, details = observe(t)
+		settled := !activityInProgress ||
 			runState != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED ||
 			nextAttemptScheduleTime == nil
-	})
-	if !settled {
-		t.Errorf("%s: the dispatch deadline was still pending %s after it was due; last observed: %+v",
-			e, activityDriverTimerMargin, details)
-		return
-	}
+		t.Require().Truef(settled, "%s: dispatch deadline is still pending; last observed: %+v", e, details)
+	}, max(0, time.Until(deadline)), activityDriverPollInterval)
 	if !activityInProgress ||
 		(runState != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED &&
 			runState != enumspb.PENDING_ACTIVITY_STATE_STARTED) {
