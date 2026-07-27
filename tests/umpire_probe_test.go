@@ -10,6 +10,8 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
@@ -510,6 +512,44 @@ func (s *UmpireTestSuite) TestProbeWorkflowContinueAsNew() {
 	require.Equal(t, first.RunID, succ.FirstRunID, "both runs share the chain root")
 	require.Equal(t, first.RunID, first.FirstRunID, "the first run is its own chain root")
 	t.Logf("[can] first=%s succ=%s (prev=%s root=%s)", first.RunID, succ.RunID, succ.PreviousRunID, succ.FirstRunID)
+}
+
+// immediateWorkflow completes as soon as it runs — a base run to reset.
+func immediateWorkflow(workflow.Context) error { return nil }
+
+// TestProbeWorkflowReset proves the reset (tree-fork) lineage edge: resetting a run forks a new
+// run, and the Monitor models it with the base run as its predecessor — from the reset run's start
+// telemetry. Unlike continue-as-new (a chain), reset forks, but the edge is captured the same way.
+func (s *UmpireTestSuite) TestProbeWorkflowReset() {
+	t := s.T()
+	env := testcore.NewEnv(t)
+	env.SdkWorker().RegisterWorkflow(immediateWorkflow)
+
+	run, err := env.SdkClient().ExecuteWorkflow(env.Context(), sdkclient.StartWorkflowOptions{
+		ID:        "umpire-reset-wf",
+		TaskQueue: env.WorkerTaskQueue(),
+	}, immediateWorkflow)
+	require.NoError(t, err)
+	baseRunID := run.GetRunID()
+	require.NoError(t, run.Get(env.Context(), nil), "the base run should complete")
+
+	// Reset to the first workflow task completed (event 4), forking a new run from the base.
+	resetResp, err := env.SdkClient().ResetWorkflowExecution(env.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: "umpire-reset-wf", RunId: baseRunID},
+		Reason:                    "umpire reset test",
+		WorkflowTaskFinishEventId: 4,
+		RequestId:                 "umpire-reset-req",
+	})
+	require.NoError(t, err)
+	resetRunID := resetResp.GetRunId()
+	require.NotEqual(t, baseRunID, resetRunID, "reset forks a new run")
+
+	require.Eventually(t, func() bool {
+		r := workflowRun(env, resetRunID)
+		return r != nil && r.PreviousRunID == baseRunID
+	}, 15*time.Second, 200*time.Millisecond, "the reset run should be modelled with the base run as predecessor")
+	t.Logf("[reset] base=%s reset=%s", baseRunID, resetRunID)
 }
 
 // workflowRun returns the modelled WorkflowRun with the given RunID, or nil.

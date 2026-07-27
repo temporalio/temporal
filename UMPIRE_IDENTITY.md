@@ -8,12 +8,12 @@ mechanism but three, because the ids have three different origins. For the whole
 for the driver read [`UMPIRE_ACTIONS.md`](./UMPIRE_ACTIONS.md); the rejection resolution this
 generalises is in [`UMPIRE_ERR.md`](./UMPIRE_ERR.md).
 
-> **Status: in progress.** The namespace mechanism is implemented. Phase 1 has started: the server
-> now emits `EventWorkflowExecutionStarted` with lineage attributes (`AttrFirstRunID` /
-> `AttrPreviousRunID`) at the **first-run** start site, and the `WorkflowRun` entity is observed at
-> start (created→started→completed) with its lineage captured. The remaining emit sites
-> (continue-as-new / reset / retry successors) and the run **graph** (Phases 2–4) are the design
-> below.
+> **Status: in progress.** The namespace mechanism is implemented. **Phase 1 is done**: the server
+> emits `EventWorkflowExecutionStarted` with lineage attributes (`AttrFirstRunID` /
+> `AttrPreviousRunID`) at every run-creation site — first run, continue-as-new, reset, and
+> retry/cron — and the `WorkflowRun` entity is observed at start (created→started→completed) with
+> its lineage captured. Continue-as-new (chain) and reset (tree) edges are proven end-to-end. The
+> typed run **graph** and the action-model integration (Phases 2–4) are the design below.
 
 ## Why
 
@@ -154,11 +154,16 @@ child entities keyed under a parent) is already in place.
    - **done: continue-as-new emit** — `handleCommandContinueAsNewWorkflow` emits the successor's
      start with `AttrPreviousRunID` = the run performing the CaN and `AttrFirstRunID` = the chain
      root. `TestProbeWorkflowContinueAsNew` proves the Monitor models both runs of one WorkflowID,
-     linked by lineage — the first graph *edge*.
-   - **todo: reset / retry emits** — reset (the reset handler's forked run) and retry
-     (`service/history/workflow/retry.go`), each setting `AttrPreviousRunID` / `AttrFirstRunID` from
-     the run's lineage. (A CaN predecessor run currently stays `started` — a `continued_as_new`
-     terminal for the closing run is a Phase-2 addition.)
+     linked by lineage — the first graph *edge* (a chain).
+   - **done: reset emit** — `workflowResetterImpl.ResetWorkflow` emits the forked run's start with
+     `AttrPreviousRunID` = the base run. `TestProbeWorkflowReset` proves the fork edge (a tree).
+   - **done: retry / cron emit** — `SetupNewWorkflowForRetryOrCron` emits the successor's start with
+     its lineage (covers both retry and cron). Builds green; a dedicated functional test is a
+     nice-to-have follow-up (same emit path as cron).
+
+   All three successor topologies (chain / tree / retry) now carry lineage. Known gap: a CaN/reset
+   *predecessor* run currently stays `started` — a `continued_as_new` / `reset` terminal for the
+   closing run is a Phase-2 addition (the run graph's typed *node* states, alongside typed edges).
 2. **Run-graph model.** `WorkflowRun` nodes + lineage edges under `Workflow`; facts populate nodes
    and links. Fold today's single-run node in as the one-node case; move its correlation from
    bind-from-response to lineage.
