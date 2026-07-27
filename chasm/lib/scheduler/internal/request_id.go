@@ -1,4 +1,4 @@
-package schedules
+package internal
 
 import (
 	"fmt"
@@ -26,14 +26,18 @@ func GenerateRequestID(
 	if backfillID == "" {
 		backfillID = "auto"
 	}
+
 	return fmt.Sprintf(
-		"sched-%s-%s-%s-%d-%d-%d",
+		"sched-%s-%s",
 		backfillID,
-		namespaceID,
-		scheduleID,
-		conflictToken,
-		nominal.UnixMilli(),
-		actual.UnixMilli(),
+		uuid.NewSHA1(uuid.Nil, fmt.Appendf(nil,
+			"%q-%q-%d-%d-%d",
+			namespaceID,
+			scheduleID,
+			conflictToken,
+			nominal.UnixMilli(),
+			actual.UnixMilli(),
+		)),
 	)
 }
 
