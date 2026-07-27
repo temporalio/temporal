@@ -26,7 +26,8 @@ type ObjectLeakCheck struct {
 	gcSettleTimeout time.Duration
 }
 
-type objectBaseline struct {
+// Baseline contains the retained objects captured by IgnoreCurrent.
+type Baseline struct {
 	objects       []trackedObject
 	collectedByID map[objectIdentity]*atomic.Bool
 }
@@ -36,19 +37,12 @@ type objectIdentity struct {
 	typeName string
 }
 
-func (b objectBaseline) contains(obj trackedObject) bool {
+func (b Baseline) contains(obj trackedObject) bool {
 	collected, ok := b.collectedByID[obj.identity()]
 	return ok && !collected.Load()
 }
 
 type Option func(*ObjectLeakCheck) error
-
-// CheckOption configures a single Check call.
-type CheckOption func(*checkOptions)
-
-type checkOptions struct {
-	baseline objectBaseline
-}
 
 // WithExpected marks retained objects whose reflected path or type name matches
 // pattern as expected. A trailing '*' matches any suffix.
@@ -94,10 +88,9 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 	return t, nil
 }
 
-// IgnoreCurrent waits for currently tracked objects to settle and returns a
-// CheckOption that ignores the retained objects when passed to future Check
-// calls. It also resets tracked roots.
-func (t *ObjectLeakCheck) IgnoreCurrent() CheckOption {
+// IgnoreCurrent waits for currently tracked objects to settle, returns the
+// retained objects as a baseline, and resets tracked roots.
+func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
 	settleGC(t.gcSettleTimeout, func() [3]int {
 		retained := 0
 		for _, obj := range t.objects {
@@ -108,7 +101,7 @@ func (t *ObjectLeakCheck) IgnoreCurrent() CheckOption {
 		return [3]int{retained}
 	})
 
-	baseline := objectBaseline{
+	baseline := Baseline{
 		collectedByID: make(map[objectIdentity]*atomic.Bool),
 	}
 	for _, obj := range t.objects {
@@ -127,9 +120,7 @@ func (t *ObjectLeakCheck) IgnoreCurrent() CheckOption {
 	}
 	t.objects = nil
 	t.roots = 0
-	return func(opts *checkOptions) {
-		opts.baseline = baseline
-	}
+	return baseline
 }
 
 // Track walks all values reachable from root and tracks pointer objects it finds.
@@ -144,15 +135,10 @@ func (t *ObjectLeakCheck) Track(root any) {
 // retained objects not covered by expected patterns, expected patterns that no
 // longer match any tracked object, or prune rules that did not match during
 // tracking.
-func (t *ObjectLeakCheck) Check(opts ...CheckOption) (string, error) {
-	checkOpts := checkOptions{}
-	for _, opt := range opts {
-		opt(&checkOpts)
-	}
-
+func (t *ObjectLeakCheck) Check(baseline Baseline) (string, error) {
 	var report report
 	settleGC(t.gcSettleTimeout, func() [3]int {
-		report = newReport(t.objects, checkOpts.baseline, t.roots, t.expected, t.pruneTypes)
+		report = newReport(t.objects, baseline, t.roots, t.expected, t.pruneTypes)
 		return report.totals()
 	})
 	return report.string(), report.failures()
