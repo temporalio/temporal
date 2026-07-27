@@ -87,7 +87,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
 	// init, proto registries, ...) are created before we snapshot the baseline.
 	for range warmupIters {
-		buildRunTeardownCluster(t, nil)
+		buildRunTeardownCluster(t)
 	}
 
 	// Wait for warmup goroutines to drain before snapshotting the baseline.
@@ -96,7 +96,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 	// Run the leak test: build, run, and tear down a cluster per iteration.
 	for i := range iters {
-		buildRunTeardownCluster(t, &leakCheck)
+		leakCheck.Track(buildRunTeardownCluster(t))
 		t.Logf("cluster %2d: goroutines=%d", i, runtime.NumGoroutine())
 	}
 
@@ -130,7 +130,9 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 // buildRunTeardownCluster creates a dedicated cluster, runs a trivial
 // workflow on it to exercise the full server path, then tears it down.
-func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) {
+func buildRunTeardownCluster(t *testing.T) *clusterLeakRoots {
+	var roots *clusterLeakRoots
+
 	// The subtest ensures all env cleanups complete before this returns.
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
@@ -146,15 +148,12 @@ func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck
 		require.NoError(t, err)
 		require.NoError(t, run.Get(context.Background(), nil))
 
-		if leakCheck != nil {
-			// Track the roots before teardown so the checker sees the complete
-			// graph and can verify which objects cleanup makes collectible.
-			leakCheck.Track(&clusterLeakRoots{
-				testCluster: env.GetTestCluster(),
-				sdkClient:   env.SdkClient(),
-			})
+		roots = &clusterLeakRoots{
+			testCluster: env.GetTestCluster(),
+			sdkClient:   env.SdkClient(),
 		}
 	})
+	return roots
 }
 
 func smokeWorkflow(workflow.Context) error { return nil }

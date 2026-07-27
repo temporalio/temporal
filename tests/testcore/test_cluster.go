@@ -486,8 +486,8 @@ func enableArchivalConfig(cfg *config.Config) {
 }
 
 // TearDownCluster tears down the test cluster
-func (tc *TestCluster) TearDownCluster() error {
-	errs := tc.host.Stop()
+func (tc *TestCluster) TearDownCluster() (errs error) {
+	errs = tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
 	if !UseSQLVisibility() {
 		if esConfig := tc.host.serverConfig.Persistence.DataStores[tc.host.serverConfig.Persistence.VisibilityStore].Elasticsearch; esConfig != nil {

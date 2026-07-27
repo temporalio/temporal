@@ -42,6 +42,7 @@ import (
 type (
 	temporalImpl struct {
 		clients
+		*testServerState
 		server temporal.Server
 
 		logger       log.Logger
@@ -63,7 +64,6 @@ type (
 		chasmVisibilityMgr chasm.VisibilityManager
 
 		replicationStreamRecorder *ReplicationStreamRecorder
-		*testServerState
 	}
 
 	testServerState struct {
@@ -352,13 +352,6 @@ func (c *temporalImpl) ChasmContext(ctx context.Context) (context.Context, error
 	return ctx, nil
 }
 
-func (s *testServerState) GetHistoryTaskRecorder() *HistoryTaskRecorder {
-	if s == nil {
-		return nil
-	}
-	return s.historyTaskRecorder
-}
-
 func (c *temporalImpl) TLSConfigProvider() *encryption.FixedTLSConfigProvider {
 	return c.tlsConfigProvider
 }
@@ -374,44 +367,6 @@ func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
 		return c.captureMetricsHandler
 	}
 	return metrics.NoopMetricsHandler
-}
-
-func (s *testServerState) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
-	s.callbackLock.Lock()
-	s.onGetClaims = fn
-	s.callbackLock.Unlock()
-}
-
-func (s *testServerState) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
-	s.callbackLock.RLock()
-	onGetClaims := s.onGetClaims
-	s.callbackLock.RUnlock()
-	if onGetClaims != nil {
-		return onGetClaims(authInfo)
-	}
-	return &authorization.Claims{System: authorization.RoleAdmin}, nil
-}
-
-func (s *testServerState) SetOnAuthorize(
-	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
-) {
-	s.callbackLock.Lock()
-	s.onAuthorize = fn
-	s.callbackLock.Unlock()
-}
-
-func (s *testServerState) Authorize(
-	ctx context.Context,
-	caller *authorization.Claims,
-	target *authorization.CallTarget,
-) (authorization.Result, error) {
-	s.callbackLock.RLock()
-	onAuthorize := s.onAuthorize
-	s.callbackLock.RUnlock()
-	if onAuthorize != nil {
-		return onAuthorize(ctx, caller, target)
-	}
-	return authorization.Result{Decision: authorization.DecisionAllow}, nil
 }
 
 func (c *temporalImpl) clearReferences() {
@@ -476,6 +431,51 @@ func (c *temporalImpl) injectHook(t *testing.T, hook testhooks.Hook, scope any) 
 	cleanup := hook.Apply(c.testHooks, scope)
 	t.Cleanup(cleanup)
 	return cleanup
+}
+
+func (s *testServerState) GetHistoryTaskRecorder() *HistoryTaskRecorder {
+	if s == nil {
+		return nil
+	}
+	return s.historyTaskRecorder
+}
+
+func (s *testServerState) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+	s.callbackLock.Lock()
+	s.onGetClaims = fn
+	s.callbackLock.Unlock()
+}
+
+func (s *testServerState) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	s.callbackLock.RLock()
+	onGetClaims := s.onGetClaims
+	s.callbackLock.RUnlock()
+	if onGetClaims != nil {
+		return onGetClaims(authInfo)
+	}
+	return &authorization.Claims{System: authorization.RoleAdmin}, nil
+}
+
+func (s *testServerState) SetOnAuthorize(
+	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
+) {
+	s.callbackLock.Lock()
+	s.onAuthorize = fn
+	s.callbackLock.Unlock()
+}
+
+func (s *testServerState) Authorize(
+	ctx context.Context,
+	caller *authorization.Claims,
+	target *authorization.CallTarget,
+) (authorization.Result, error) {
+	s.callbackLock.RLock()
+	onAuthorize := s.onAuthorize
+	s.callbackLock.RUnlock()
+	if onAuthorize != nil {
+		return onAuthorize(ctx, caller, target)
+	}
+	return authorization.Result{Decision: authorization.DecisionAllow}, nil
 }
 
 func mustSplitHostPort(addr string) (string, int) {
