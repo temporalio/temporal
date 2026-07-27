@@ -1,4 +1,4 @@
-// Package model is an implementation-independent vocabulary for specifyin a sequence of events (a
+// Package model is an implementation-independent vocabulary for specifying a sequence of events (a
 // 'trace') in the lifetime of an activity. Drivers exist that can realize these events for both
 // Standalone Activity and Workflow Activity.
 package model
