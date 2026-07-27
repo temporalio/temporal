@@ -281,7 +281,7 @@ func awaitActivityDispatchDelay(
 	if !activityInProgress ||
 		(runState != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED &&
 			runState != enumspb.PENDING_ACTIVITY_STATE_STARTED) {
-		t.Errorf("%s: the delayed dispatch became unavailable before the driver observed it becoming due; last observed: %+v",
+		t.Errorf("%s: the activity stopped being in progress before the driver observed its delayed dispatch becoming due; last observed: %+v",
 			e, details)
 	}
 }
