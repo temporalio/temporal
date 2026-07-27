@@ -209,11 +209,13 @@ func (s *activityParityTestSuite) TestCancel() {
 	trace := []model.Event{model.Poll, model.RequestCancel, model.RespondCanceled}
 	cfg := activityConfig{MaxAttempts: 1}
 
-	s.T().Run("WorkflowActivity", func(t *testing.T) {
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 			newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
 	})
-	s.T().Run("StandaloneActivity", func(t *testing.T) {
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 			newSAADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
 	})
