@@ -92,13 +92,7 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 // retained objects as a baseline, and resets tracked roots.
 func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
 	settleGC(t.gcSettleTimeout, func() int {
-		retained := 0
-		for _, obj := range t.objects {
-			if !obj.collected.Load() {
-				retained++
-			}
-		}
-		return retained
+		return retainedCount(t.objects)
 	})
 
 	baseline := Baseline{
@@ -137,21 +131,30 @@ func (t *ObjectLeakCheck) Track(root any) {
 // longer match any tracked object, or prune rules that did not match during
 // tracking.
 func (t *ObjectLeakCheck) Check(baseline Baseline) (string, error) {
-	var report report
-	settleGC(t.gcSettleTimeout, func() [3]int {
-		report = newReport(t.objects, baseline, t.roots, t.expected, t.pruneTypes)
-		return report.totals()
+	settleGC(t.gcSettleTimeout, func() int {
+		return retainedCount(t.objects) + retainedCount(baseline.objects)
 	})
+	report := newReport(t.objects, baseline, t.roots, t.expected, t.pruneTypes)
 	return report.string(), report.failures()
 }
 
-func settleGC[T comparable](timeout time.Duration, snapshot func() T) {
+func retainedCount(objects []trackedObject) int {
+	retained := 0
+	for _, obj := range objects {
+		if !obj.collected.Load() {
+			retained++
+		}
+	}
+	return retained
+}
+
+func settleGC(timeout time.Duration, snapshot func() int) {
 	start := time.Now()
 	minWaitDeadline := start.Add(checkGCMinWait)
 	deadline := start.Add(timeout)
 	settledDeadline := minWaitDeadline
 
-	var lastSnapshot T
+	var lastSnapshot int
 	var haveLastSnapshot bool
 	for {
 		// AddCleanup callbacks run after GC proves tracked objects are
