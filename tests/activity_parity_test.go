@@ -229,6 +229,30 @@ func (s *activityParityTestSuite) TestDriversRejectBackoffElapseWhenScheduleToCl
 	}
 }
 
+func (s *activityParityTestSuite) TestDriversRejectBackoffElapseWithoutPendingBackoff() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll}
+
+	tests := map[string]func(*testing.T) func(require.TestingT, model.Event){
+		"WorkflowActivity": func(t *testing.T) func(require.TestingT, model.Event) {
+			return newWFADriver(t, env, activityConfig{}).driveTrace(t, trace).driveEvent
+		},
+		"StandaloneActivity": func(t *testing.T) func(require.TestingT, model.Event) {
+			return newSAADriver(t, env, activityConfig{}).driveTrace(t, trace).driveEvent
+		},
+	}
+	for name, setup := range tests {
+		s.Run(name, func(s *activityParityTestSuite) {
+			t := s.T()
+			drive := setup(t)
+			recorder := &activityDriverErrorRecorder{}
+			drive(recorder, model.BackoffElapses)
+			require.True(t, recorder.failed,
+				"BackoffElapses must fail while the first attempt is running and no backoff is pending")
+		})
+	}
+}
+
 func (s *activityParityTestSuite) TestDriversRejectTimeoutElapseWhenDifferentTimeoutWins() {
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{
@@ -256,6 +280,32 @@ func (s *activityParityTestSuite) TestDriversRejectTimeoutElapseWhenDifferentTim
 				"HeartbeatElapses must fail when StartToClose times out first")
 		})
 	}
+}
+
+func (s *activityParityTestSuite) TestDriversAllowTimeoutsOnSeparateAttempts() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{
+		MaxAttempts:   2,
+		RetryInterval: activityShortRetryInterval,
+	}
+	trace := []model.Event{
+		model.Poll,
+		model.StartToCloseElapses,
+		model.BackoffElapses,
+		model.Poll,
+		model.StartToCloseElapses,
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			newSAADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
+	})
 }
 
 func (s *activityParityTestSuite) TestDriversAcceptTimeoutElapseThatAlreadyOccurred() {
@@ -310,4 +360,32 @@ func (s *activityParityTestSuite) TestDriversDoNotLeakInferredTimeoutsAcrossTrac
 				"a timeout inferred for one trace must not become configuration for the next")
 		})
 	}
+}
+
+func (s *activityParityTestSuite) TestWFADriverWaitsForActivityToBeScheduled() {
+	t := s.T()
+	env := newActivityParityEnv(t)
+
+	info := newWFADriver(t, env, activityConfig{}).driveTrace(t, nil).activityInfo(t)
+	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.RunState)
+	require.Equal(t, int32(1), info.Attempt)
+}
+
+func (s *activityParityTestSuite) TestParityActivityInput() {
+	env := newActivityParityEnv(s.T())
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		a := newWFADriver(t, env, activityConfig{}).driveTrace(t, nil)
+		task := a.pollForTask(t, activityDriverPositivePollTimeout)
+		require.NotNil(t, task)
+		require.Equal(t, "Input", testcore.DecodeString(t, task.GetInput()))
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		a := newSAADriver(t, env, activityConfig{}).driveTrace(t, nil)
+		task := a.pollForTask(t, activityDriverPositivePollTimeout)
+		require.NotNil(t, task)
+		require.Equal(t, "Input", testcore.DecodeString(t, task.GetInput()))
+	})
 }
