@@ -369,11 +369,6 @@ func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
 	return metrics.NoopMetricsHandler
 }
 
-func (c *temporalImpl) clearReferences() {
-	// Release everything that is no longer usable after shutdown.
-	*c = temporalImpl{}
-}
-
 // copyPersistenceConfig makes a deep copy of persistence config.
 // This is just a temp fix for the race condition of persistence config.
 // The race condition happens because all the services are using the same datastore map in the config.
