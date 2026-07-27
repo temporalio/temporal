@@ -109,11 +109,18 @@ func (a *saaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline tim
 // timeoutMark is the most recent timeout the activity reports, with the attempt and closed-ness that
 // place it in the activity's history.
 func (a *saaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
-	i := a.describe(t).GetInfo()
+	response := a.describe(t)
+	info := response.GetInfo()
+	timeout := info.GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType()
+	if timeout == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
+		// Per-attempt timeouts are reported as LastFailure. Schedule timeouts close the activity
+		// directly and are reported only in the terminal Outcome.
+		timeout = response.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType()
+	}
 	return activityTimeoutMark{
-		timeout: i.GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType(),
-		attempt: i.GetAttempt(),
-		closed:  i.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+		timeout: timeout,
+		attempt: info.GetAttempt(),
+		closed:  info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 	}
 }
 
