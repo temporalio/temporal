@@ -19,21 +19,27 @@ const (
 // ObjectLeakCheck tracks objects reachable from roots and reports objects
 // that remain reachable after GC.
 type ObjectLeakCheck struct {
-	tracked         trackedObjects
-	baselineByID    map[objectIdentity]trackedObject
+	objects         []trackedObject
+	roots           int
+	baseline        objectBaseline
 	expected        patterns
 	pruneTypes      patterns
 	gcSettleTimeout time.Duration
 }
 
-type trackedObjects struct {
-	objects []trackedObject
-	roots   int
+type objectBaseline struct {
+	objects       []trackedObject
+	collectedByID map[objectIdentity]*atomic.Bool
 }
 
 type objectIdentity struct {
 	addr     uintptr
 	typeName string
+}
+
+func (b objectBaseline) contains(obj trackedObject) bool {
+	collected, ok := b.collectedByID[obj.identity()]
+	return ok && !collected.Load()
 }
 
 type Option func(*ObjectLeakCheck) error
@@ -57,8 +63,8 @@ func WithPruneType(pattern string) Option {
 	}
 }
 
-// WithGCSettleTimeout sets the maximum time Check spends forcing GC and waiting
-// for retained-object counts to settle.
+// WithGCSettleTimeout sets the maximum time Check and IgnoreCurrent spend
+// forcing GC and waiting for retained-object counts to settle.
 func WithGCSettleTimeout(timeout time.Duration) Option {
 	return func(t *ObjectLeakCheck) error {
 		if timeout <= 0 {
@@ -87,7 +93,7 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 func (t *ObjectLeakCheck) IgnoreCurrent() {
 	settleGC(t.gcSettleTimeout, func() [3]int {
 		retained := 0
-		for _, obj := range t.tracked.objects {
+		for _, obj := range t.objects {
 			if !obj.collected.Load() {
 				retained++
 			}
@@ -95,51 +101,34 @@ func (t *ObjectLeakCheck) IgnoreCurrent() {
 		return [3]int{retained}
 	})
 
-	if t.baselineByID == nil {
-		t.baselineByID = make(map[objectIdentity]trackedObject)
+	baseline := objectBaseline{
+		collectedByID: make(map[objectIdentity]*atomic.Bool),
 	}
-	for _, obj := range t.tracked.objects {
+	for _, obj := range t.objects {
 		if !obj.collected.Load() {
 			identity := obj.identity()
-			baseline, ok := t.baselineByID[identity]
-			if !ok || baseline.collected.Load() {
-				t.baselineByID[identity] = obj
-				continue
+			if collected, ok := baseline.collectedByID[identity]; ok {
+				obj.cleanup.Stop()
+				obj.collected = collected
+			} else {
+				baseline.collectedByID[identity] = obj.collected
 			}
+			baseline.objects = append(baseline.objects, obj)
+			continue
 		}
 		obj.cleanup.Stop()
 	}
-	t.tracked = trackedObjects{}
+	t.baseline = baseline
+	t.objects = nil
+	t.roots = 0
 }
 
 // Track walks all values reachable from root and tracks pointer objects it finds.
 func (t *ObjectLeakCheck) Track(root any) {
-	objects := t.tracked.track(root, t.pruneTypes)
-	for i := range objects {
-		objects[i].baselineCollected = t.baselineCollected(objects[i])
-	}
-}
-
-func (t *trackedObjects) track(root any, pruneTypes patterns) []trackedObject {
-	walker := newObjectWalker(pruneTypes)
+	walker := newObjectWalker(t.pruneTypes)
 	walker.track(root)
 	t.roots++
-	start := len(t.objects)
 	t.objects = append(t.objects, walker.objects...)
-	return t.objects[start:]
-}
-
-func (t *ObjectLeakCheck) baselineCollected(obj trackedObject) *atomic.Bool {
-	identity := obj.identity()
-	baseline, ok := t.baselineByID[identity]
-	if !ok {
-		return nil
-	}
-	if baseline.collected.Load() {
-		delete(t.baselineByID, identity)
-		return nil
-	}
-	return baseline.collected
 }
 
 // Check settles GC, then returns a full retained-object report and an error for
@@ -148,13 +137,11 @@ func (t *ObjectLeakCheck) baselineCollected(obj trackedObject) *atomic.Bool {
 // tracking.
 func (t *ObjectLeakCheck) Check() (string, error) {
 	var report report
-	var err error
 	settleGC(t.gcSettleTimeout, func() [3]int {
-		report = newReport(t.tracked.objects, t.tracked.roots, t.expected, t.pruneTypes)
-		err = report.failures()
+		report = newReport(t.objects, t.baseline, t.roots, t.expected, t.pruneTypes)
 		return report.totals()
 	})
-	return report.string(), err
+	return report.string(), report.failures()
 }
 
 func settleGC(timeout time.Duration, totals func() [3]int) {

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/testing/await"
 )
 
 type graphRoot struct {
@@ -39,8 +38,8 @@ func TestObjectLeak_Check(t *testing.T) {
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 6 total, 0 expected, 6 unexpected
-retained objects: 4 total, 0 expected, 4 unexpected
+retained paths: 6 total, 0 baseline, 0 expected, 6 unexpected
+retained objects: 4 total, 0 baseline, 0 expected, 4 unexpected
 
 unexpected retained objects:
   2 objects: *objectleak.graphRoot
@@ -48,6 +47,9 @@ unexpected retained objects:
   2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
 
 expected retained objects:
+  none
+
+baseline retained objects:
   none`,
 		},
 		{
@@ -61,8 +63,8 @@ expected retained objects:
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 6 total, 6 expected, 0 unexpected
-retained objects: 4 total, 4 expected, 0 unexpected
+retained paths: 6 total, 0 baseline, 6 expected, 0 unexpected
+retained objects: 4 total, 0 baseline, 4 expected, 0 unexpected
 
 unexpected retained objects:
   none
@@ -70,7 +72,10 @@ unexpected retained objects:
 expected retained objects:
   2 objects: *objectleak.graphRoot
   2 paths, 1 object: Node (*objectleak.graphNode)
-  2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)`,
+  2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+
+baseline retained objects:
+  none`,
 		},
 		{
 			name: "fails stale expected pattern",
@@ -85,8 +90,8 @@ expected retained objects:
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 6 total, 6 expected, 0 unexpected
-retained objects: 4 total, 4 expected, 0 unexpected
+retained paths: 6 total, 0 baseline, 6 expected, 0 unexpected
+retained objects: 4 total, 0 baseline, 4 expected, 0 unexpected
 
 unexpected retained objects:
   none
@@ -95,6 +100,9 @@ expected retained objects:
   2 objects: *objectleak.graphRoot
   2 paths, 1 object: Node (*objectleak.graphNode)
   2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+
+baseline retained objects:
+  none
 
 stale expected patterns:
   does.not.match`,
@@ -112,8 +120,8 @@ stale expected patterns:
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 6 total, 6 expected, 0 unexpected
-retained objects: 4 total, 4 expected, 0 unexpected
+retained paths: 6 total, 0 baseline, 6 expected, 0 unexpected
+retained objects: 4 total, 0 baseline, 4 expected, 0 unexpected
 
 unexpected retained objects:
   none
@@ -122,6 +130,9 @@ expected retained objects:
   2 objects: *objectleak.graphRoot
   2 paths, 1 object: Node (*objectleak.graphNode)
   2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+
+baseline retained objects:
+  none
 
 stale prunes:
   does.not.Match`,
@@ -136,15 +147,18 @@ stale prunes:
 			wantReport: `object leak report
 
 tracked root objects: 2
-retained paths: 4 total, 4 expected, 0 unexpected
-retained objects: 3 total, 3 expected, 0 unexpected
+retained paths: 4 total, 0 baseline, 4 expected, 0 unexpected
+retained objects: 3 total, 0 baseline, 3 expected, 0 unexpected
 
 unexpected retained objects:
   none
 
 expected retained objects:
   2 objects: *objectleak.graphRoot
-  2 paths, 1 object: Node (*objectleak.graphNode)`,
+  2 paths, 1 object: Node (*objectleak.graphNode)
+
+baseline retained objects:
+  none`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -184,78 +198,64 @@ expected retained objects:
 }
 
 func TestObjectLeak_IgnoreCurrent(t *testing.T) {
-	sharedLeaf := &graphLeaf{Value: 2}
 	baselineRoot := &graphRoot{
-		Node: &graphNode{Leaf: sharedLeaf},
+		Node: &graphNode{Leaf: &graphLeaf{Value: 2}},
 	}
 
-	check, err := NewObjectLeakCheck(WithGCSettleTimeout(10 * time.Millisecond))
+	check, err := NewObjectLeakCheck(
+		WithExpected("*objectleak.graphLeaf"),
+		WithGCSettleTimeout(10*time.Millisecond),
+	)
 	require.NoError(t, err)
 	check.Track(baselineRoot)
-	baselineRoot = nil
 	check.IgnoreCurrent()
 
-	root := &graphRoot{
-		Node: &graphNode{Leaf: sharedLeaf},
-	}
+	root := &graphRoot{}
 	check.Track(root)
 
 	report, err := check.Check()
+	runtime.KeepAlive(baselineRoot)
 	runtime.KeepAlive(root)
 	require.Error(t, err)
 	require.Equal(t, `object leak report
 
 tracked root objects: 1
-retained paths: 3 total, 1 baseline, 0 expected, 2 unexpected
-retained objects: 3 total, 1 baseline, 0 expected, 2 unexpected
+retained paths: 4 total, 3 baseline, 0 expected, 1 unexpected
+retained objects: 4 total, 3 baseline, 0 expected, 1 unexpected
 
 unexpected retained objects:
   1 object: *objectleak.graphRoot
-  1 object: Node (*objectleak.graphNode)
 
 expected retained objects:
   none
 
 baseline retained objects:
+  1 object: *objectleak.graphRoot
+  1 object: Node (*objectleak.graphNode)
   1 object: Node.Leaf (*objectleak.graphLeaf)`, report)
 }
 
-func TestObjectLeak_IgnoreCurrentObjectCollectedAfterSnapshot(t *testing.T) {
-	root := &graphRoot{}
-	check, err := NewObjectLeakCheck(WithGCSettleTimeout(10 * time.Millisecond))
-	require.NoError(t, err)
-	check.Track(root)
-	check.IgnoreCurrent()
-	runtime.KeepAlive(root)
-
-	require.Len(t, check.baselineByID, 1)
-	var identity objectIdentity
-	var baseline trackedObject
-	for identity, baseline = range check.baselineByID {
-	}
-
-	root = nil
-	await.RequireTrue(t, func() bool {
-		runtime.GC()
-		return baseline.collected.Load()
-	}, time.Second, 10*time.Millisecond)
-	require.Nil(t, check.baselineCollected(trackedObject{
-		addr:     identity.addr,
-		typeName: identity.typeName,
-	}))
-}
-
-func TestObjectLeak_IgnoreCurrentCollectionAfterTrack(t *testing.T) {
+func TestNewReport_CollectedBaselineIsUnexpected(t *testing.T) {
 	baselineCollected := &atomic.Bool{}
+	baselineObj := trackedObject{
+		addr:      1,
+		typeName:  "*objectleak.graphRoot",
+		collected: baselineCollected,
+	}
 	obj := trackedObject{
-		addr:              1,
-		typeName:          "*objectleak.graphRoot",
-		baselineCollected: baselineCollected,
-		collected:         &atomic.Bool{},
+		addr:      1,
+		typeName:  "*objectleak.graphRoot",
+		collected: &atomic.Bool{},
+	}
+	baseline := objectBaseline{
+		objects: []trackedObject{baselineObj},
+		collectedByID: map[objectIdentity]*atomic.Bool{
+			baselineObj.identity(): baselineCollected,
+		},
 	}
 	baselineCollected.Store(true)
 
-	report := newReport([]trackedObject{obj}, 1, nil, nil)
+	report := newReport([]trackedObject{obj}, baseline, 1, nil, nil)
 	require.Zero(t, report.baselineRetainedObjects)
 	require.Equal(t, 1, report.unexpectedRetainedObjects)
 }

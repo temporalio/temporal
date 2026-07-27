@@ -32,7 +32,13 @@ type objectGroup struct {
 	addresses map[uintptr]struct{}
 }
 
-func newReport(objects []trackedObject, trackedRoots int, expected patterns, pruneTypes patterns) report {
+func newReport(
+	objects []trackedObject,
+	baseline objectBaseline,
+	trackedRoots int,
+	expected patterns,
+	pruneTypes patterns,
+) report {
 	report := report{
 		trackedRoots: trackedRoots,
 	}
@@ -54,20 +60,23 @@ func newReport(objects []trackedObject, trackedRoots int, expected patterns, pru
 
 	// Classify each retained object and fold equivalent normalized paths into
 	// a single report row.
-	for _, obj := range objects {
+	addRetained := func(obj trackedObject, isBaseline bool) {
 		if obj.collected.Load() {
-			continue
+			return
 		}
 
+		expectedBy := activeExpected.matchObject(obj)
+		if !isBaseline && baseline.contains(obj) {
+			return
+		}
 		report.totalRetainedPaths++
 		retainedAddresses[obj.addr] = struct{}{}
-		baseline := obj.baselineCollected != nil && !obj.baselineCollected.Load()
-		expected := false
-		if baseline {
+		isExpected := false
+		if isBaseline {
 			report.baselineRetainedPaths++
 			baselineAddresses[obj.addr] = struct{}{}
-		} else if expectedBy := activeExpected.matchObject(obj); len(expectedBy) > 0 {
-			expected = true
+		} else if len(expectedBy) > 0 {
+			isExpected = true
 			report.expectedRetainedPaths++
 			expectedAddresses[obj.addr] = struct{}{}
 		} else {
@@ -78,8 +87,8 @@ func newReport(objects []trackedObject, trackedRoots int, expected patterns, pru
 		key := groupKey{
 			path:     obj.path.normalized(),
 			typeName: obj.typeName,
-			baseline: baseline,
-			expected: expected,
+			baseline: isBaseline,
+			expected: isExpected,
 		}
 		group := groupByKey[key]
 		if group == nil {
@@ -92,6 +101,12 @@ func newReport(objects []trackedObject, trackedRoots int, expected patterns, pru
 		}
 		group.paths++
 		group.addresses[obj.addr] = struct{}{}
+	}
+	for _, obj := range baseline.objects {
+		addRetained(obj, true)
+	}
+	for _, obj := range objects {
+		addRetained(obj, false)
 	}
 	report.totalRetainedObjects = len(retainedAddresses)
 	report.baselineRetainedObjects = len(baselineAddresses)
@@ -175,10 +190,8 @@ func (r report) string() string {
 	writeGroups("unexpected retained objects", r.unexpectedObjects)
 	out.WriteByte('\n')
 	writeGroups("expected retained objects", r.expectedObjects)
-	if len(r.baselineObjects) > 0 {
-		out.WriteByte('\n')
-		writeGroups("baseline retained objects", r.baselineObjects)
-	}
+	out.WriteByte('\n')
+	writeGroups("baseline retained objects", r.baselineObjects)
 
 	if len(r.unmatchedExpected) > 0 {
 		out.WriteString("\nstale expected patterns:\n")
@@ -199,36 +212,19 @@ func (r report) string() string {
 func (r report) writeSummary(out *strings.Builder) {
 	out.WriteString("object leak report\n\n")
 	fmt.Fprintf(out, "tracked root objects: %d\n", r.trackedRoots)
-	if r.baselineRetainedPaths > 0 {
-		fmt.Fprintf(
-			out,
-			"retained paths: %d total, %d baseline, %d expected, %d unexpected\n",
-			r.totalRetainedPaths,
-			r.baselineRetainedPaths,
-			r.expectedRetainedPaths,
-			r.unexpectedRetainedPaths,
-		)
-		fmt.Fprintf(
-			out,
-			"retained objects: %d total, %d baseline, %d expected, %d unexpected\n",
-			r.totalRetainedObjects,
-			r.baselineRetainedObjects,
-			r.expectedRetainedObjects,
-			r.unexpectedRetainedObjects,
-		)
-		return
-	}
 	fmt.Fprintf(
 		out,
-		"retained paths: %d total, %d expected, %d unexpected\n",
+		"retained paths: %d total, %d baseline, %d expected, %d unexpected\n",
 		r.totalRetainedPaths,
+		r.baselineRetainedPaths,
 		r.expectedRetainedPaths,
 		r.unexpectedRetainedPaths,
 	)
 	fmt.Fprintf(
 		out,
-		"retained objects: %d total, %d expected, %d unexpected\n",
+		"retained objects: %d total, %d baseline, %d expected, %d unexpected\n",
 		r.totalRetainedObjects,
+		r.baselineRetainedObjects,
 		r.expectedRetainedObjects,
 		r.unexpectedRetainedObjects,
 	)
