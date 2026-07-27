@@ -63,19 +63,14 @@ type (
 		chasmVisibilityMgr chasm.VisibilityManager
 
 		replicationStreamRecorder *ReplicationStreamRecorder
-		historyTaskRecorder       *historyTaskRecorderRef
-
-		authCallbacks *testAuthCallbacks
+		*testServerState
 	}
 
-	historyTaskRecorderRef struct {
-		recorder *HistoryTaskRecorder
-	}
-
-	testAuthCallbacks struct {
-		callbackLock sync.RWMutex
-		onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
-		onAuthorize  func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+	testServerState struct {
+		historyTaskRecorder *HistoryTaskRecorder
+		callbackLock        sync.RWMutex
+		onGetClaims         func(*authorization.AuthInfo) (*authorization.Claims, error)
+		onAuthorize         func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -136,13 +131,12 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		hostsByProtocolByService:  params.HostsByProtocolByService,
 		workerConfig:              params.WorkerConfig,
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
-		historyTaskRecorder:       &historyTaskRecorderRef{},
-		authCallbacks:             &testAuthCallbacks{},
+		testServerState:           &testServerState{},
 	}
 
 	// Base options are independent of which services this test cluster starts.
 	// [Start] adds the per-service config and static host map.
-	authCallbacks := impl.authCallbacks
+	serverState := impl.testServerState
 	baseServerOptions := []temporal.ServerOption{
 		temporal.WithLogger(impl.logger),
 		temporal.WithNamespaceLogger(impl.logger),
@@ -154,8 +148,8 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 			mockAdminClient: params.MockAdminClient,
 		}),
 		temporal.WithTestHooks(impl.testHooks),
-		temporal.WithAuthorizer(authCallbacks),
-		temporal.WithClaimMapper(func(*config.Config) authorization.ClaimMapper { return authCallbacks }),
+		temporal.WithAuthorizer(serverState),
+		temporal.WithClaimMapper(func(*config.Config) authorization.ClaimMapper { return serverState }),
 		temporal.WithAudienceGetter(func(*config.Config) authorization.JWTAudienceMapper { return nil }),
 		temporal.WithSearchAttributesMapper(nil),
 		temporal.WithPersistenceServiceResolver(resolver.NewNoopResolver()),
@@ -174,7 +168,6 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 	}
 	if params.EnableHistoryTaskRecorder {
 		base := temporal.PersistenceFactoryProvider()
-		recorderRef := impl.historyTaskRecorder
 		// Only history gets the recording wrapper; other services keep the production factory.
 		baseServerOptions = append(baseServerOptions, temporal.WithPersistenceFactoryProvider(func(params persistenceClient.NewFactoryParams) persistenceClient.Factory {
 			factory := base(params)
@@ -185,7 +178,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 				Factory: factory,
 				logger:  params.Logger,
 				setRecorder: func(recorder *HistoryTaskRecorder) {
-					recorderRef.recorder = recorder
+					serverState.historyTaskRecorder = recorder
 				},
 			}
 		}))
@@ -319,11 +312,8 @@ func (c *temporalImpl) Stop() error {
 	var errs []error
 	if c.server != nil {
 		errs = append(errs, c.server.Stop())
-		c.server = nil
 	}
 	errs = append(errs, c.close()...)
-	c.chasmEngine = nil
-	c.chasmVisibilityMgr = nil
 	return multierr.Combine(errs...)
 }
 
@@ -362,11 +352,11 @@ func (c *temporalImpl) ChasmContext(ctx context.Context) (context.Context, error
 	return ctx, nil
 }
 
-func (c *temporalImpl) GetHistoryTaskRecorder() *HistoryTaskRecorder {
-	if c.historyTaskRecorder == nil {
+func (s *testServerState) GetHistoryTaskRecorder() *HistoryTaskRecorder {
+	if s == nil {
 		return nil
 	}
-	return c.historyTaskRecorder.recorder
+	return s.historyTaskRecorder
 }
 
 func (c *temporalImpl) TLSConfigProvider() *encryption.FixedTLSConfigProvider {
@@ -386,48 +376,38 @@ func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
 	return metrics.NoopMetricsHandler
 }
 
-func (c *temporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
-	c.authCallbacks.SetOnGetClaims(fn)
+func (s *testServerState) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+	s.callbackLock.Lock()
+	s.onGetClaims = fn
+	s.callbackLock.Unlock()
 }
 
-func (a *testAuthCallbacks) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
-	a.callbackLock.Lock()
-	a.onGetClaims = fn
-	a.callbackLock.Unlock()
-}
-
-func (a *testAuthCallbacks) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
-	a.callbackLock.RLock()
-	onGetClaims := a.onGetClaims
-	a.callbackLock.RUnlock()
+func (s *testServerState) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	s.callbackLock.RLock()
+	onGetClaims := s.onGetClaims
+	s.callbackLock.RUnlock()
 	if onGetClaims != nil {
 		return onGetClaims(authInfo)
 	}
 	return &authorization.Claims{System: authorization.RoleAdmin}, nil
 }
 
-func (c *temporalImpl) SetOnAuthorize(
+func (s *testServerState) SetOnAuthorize(
 	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
 ) {
-	c.authCallbacks.SetOnAuthorize(fn)
+	s.callbackLock.Lock()
+	s.onAuthorize = fn
+	s.callbackLock.Unlock()
 }
 
-func (a *testAuthCallbacks) SetOnAuthorize(
-	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
-) {
-	a.callbackLock.Lock()
-	a.onAuthorize = fn
-	a.callbackLock.Unlock()
-}
-
-func (a *testAuthCallbacks) Authorize(
+func (s *testServerState) Authorize(
 	ctx context.Context,
 	caller *authorization.Claims,
 	target *authorization.CallTarget,
 ) (authorization.Result, error) {
-	a.callbackLock.RLock()
-	onAuthorize := a.onAuthorize
-	a.callbackLock.RUnlock()
+	s.callbackLock.RLock()
+	onAuthorize := s.onAuthorize
+	s.callbackLock.RUnlock()
 	if onAuthorize != nil {
 		return onAuthorize(ctx, caller, target)
 	}

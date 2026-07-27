@@ -40,7 +40,7 @@ var objectLeakOpts = []objectleak.Option{
 	objectleak.WithExpected("sdkClient*"),
 }
 
-type clusterResources struct {
+type clusterLeakRoots struct {
 	testCluster *testcore.TestCluster
 	sdkClient   sdkclient.Client
 }
@@ -131,8 +131,6 @@ func TestClusterShutdownLeak(t *testing.T) {
 // buildRunTeardownCluster creates a dedicated cluster, runs a trivial
 // workflow on it to exercise the full server path, then tears it down.
 func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) {
-	var resources *clusterResources
-
 	// The subtest ensures all env cleanups complete before this returns.
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
@@ -149,17 +147,14 @@ func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck
 		require.NoError(t, run.Get(context.Background(), nil))
 
 		if leakCheck != nil {
-			resources = &clusterResources{
+			// Track the roots before teardown so the checker sees the complete
+			// graph and can verify which objects cleanup makes collectible.
+			leakCheck.Track(&clusterLeakRoots{
 				testCluster: env.GetTestCluster(),
 				sdkClient:   env.SdkClient(),
-			}
+			})
 		}
 	})
-	if resources != nil {
-		// Track the stopped roots after teardown so severed server internals
-		// aren't promoted to independent leak roots.
-		leakCheck.Track(resources)
-	}
 }
 
 func smokeWorkflow(workflow.Context) error { return nil }
