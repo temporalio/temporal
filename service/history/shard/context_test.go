@@ -55,8 +55,7 @@ func TestShardContextSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-// SetupSubTest rebinds the embedded assertions so a failure inside s.Run reports against the
-// subtest rather than calling FailNow on the parent from another goroutine.
+// SetupSubTest rebinds the embedded assertions so an s.Run failure reports against the subtest.
 func (s *contextSuite) SetupSubTest() {
 	s.Assertions = require.New(s.T())
 }
@@ -999,10 +998,9 @@ func (s *contextSuite) TestEmitShardInfoMetricsLogs_ImmediateBacklogAge() {
 	s.mockShard.SetMetricsHandler(captureHandler)
 	now := s.timeSource.Now()
 
-	// Persist an ack level below the generated task ids so the queue looks backlogged.
 	frontier := tasks.NewImmediateKey(100)
-	// Replication is also an immediate category, but its ack level tracks remote clusters, so it must
-	// not be read. Its reader state is for an enabled remote cluster so trimShardInfo keeps it.
+	// Replication is immediate too but must not be read. Its reader state names an enabled cluster so
+	// trimShardInfo keeps it.
 	s.mockShard.shardInfo.QueueStates = map[int32]*persistencespb.QueueState{
 		int32(tasks.CategoryIDTransfer): {
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
@@ -1024,14 +1022,13 @@ func (s *contextSuite) TestEmitShardInfoMetricsLogs_ImmediateBacklogAge() {
 		},
 	}
 
-	// Exactly one read: transfer only, never replication.
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
 			s.Equal(tasks.CategoryTransfer, req.TaskCategory)
 			s.Equal(frontier, req.InclusiveMinTaskKey)
-			// A metric read must be shed before real task loading, not share its reserved priority.
+			// Shed before real task loading rather than sharing its priority.
 			s.Equal(headers.CallerTypePreemptable, headers.GetCallerInfo(ctx).CallerType)
-			// The read must happen after the shard lock is released, so it is takeable here.
+			// Takeable only if the read runs after the shard lock is released.
 			s.True(s.mockShard.rwLock.TryLock(), "shard lock must be released before the read")
 			s.mockShard.rwLock.Unlock()
 			return &persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
@@ -1064,7 +1061,7 @@ func (s *contextSuite) TestEmitShardInfoMetricsLogs_FutureVisibilityTime_Clamped
 			},
 		},
 	}
-	// A task stamped by a host whose clock is ahead must not report a negative age.
+	// A host with a fast clock must not produce a negative age.
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(
 		&persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
 			&tasks.ActivityTask{VisibilityTimestamp: now.Add(time.Minute)},
@@ -1084,7 +1081,7 @@ func (s *contextSuite) TestEmitShardInfoMetricsLogs_CaughtUp_NoRead() {
 	captureHandler := metricstest.NewCaptureHandler()
 	s.mockShard.SetMetricsHandler(captureHandler)
 
-	// Ack level at the generated task id boundary: no lag, so nothing to read.
+	// Ack level at the task id boundary: no lag, nothing to read.
 	highWatermark := s.mockShard.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryTransfer)
 	s.mockShard.shardInfo.QueueStates = map[int32]*persistencespb.QueueState{
 		int32(tasks.CategoryIDTransfer): {
@@ -1096,7 +1093,7 @@ func (s *contextSuite) TestEmitShardInfoMetricsLogs_CaughtUp_NoRead() {
 	}
 
 	capture := captureHandler.StartCapture()
-	// No GetHistoryTasks expectation is set, so an unexpected read fails the test.
+	// No GetHistoryTasks expectation, so any read fails the test.
 	s.mockShard.emitShardInfoMetricsLogs()
 	snap := capture.Snapshot()
 	captureHandler.StopCapture(capture)

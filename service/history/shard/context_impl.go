@@ -1277,7 +1277,6 @@ func (s *ContextImpl) updateShardInfo(
 	return nil
 }
 
-// An immediate queue's backlog, whose age needs a persistence read to resolve.
 type immediateBacklog struct {
 	category tasks.Category
 	minKey   tasks.Key
@@ -1288,8 +1287,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 	immediateBacklogs := s.emitQueueLagMetrics(metricsHandler)
 
-	// Immediate task keys carry no timestamp, so unlike the scheduled lag the age cannot be derived
-	// from the queue state. Read the oldest task instead, now that the shard lock is released.
+	// Immediate task keys carry no timestamp, so the age needs the task itself, read off the lock.
 	for _, backlog := range immediateBacklogs {
 		if s.lifecycleCtx.Err() != nil {
 			return
@@ -1304,8 +1302,8 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	}
 }
 
-// emitImmediateQueueLagLocked records an immediate queue's lag and returns its backlog when the age still
-// has to be read from persistence.
+// emitImmediateQueueLagLocked records an immediate queue's lag, reporting a backlog when its age
+// still has to be read.
 func (s *ContextImpl) emitImmediateQueueLagLocked(
 	category tasks.Category,
 	queueState *persistencespb.QueueState,
@@ -1328,16 +1326,16 @@ func (s *ContextImpl) emitImmediateQueueLagLocked(
 		With(metricsHandler).
 		Record(lag, metrics.TaskCategoryTag(category.Name()))
 
-	// Replication ack levels track how far remote clusters have consumed rather than local task
-	// processing, and have their own lag metrics, so their age is not comparable here.
+	// A replication ack level tracks remote cluster progress, not local processing, so its age is not
+	// comparable and has its own metrics.
 	if lag <= 0 || category.ID() == tasks.CategoryIDReplication {
 		return immediateBacklog{}, false
 	}
 	return immediateBacklog{category: category, minKey: *minTaskKey, maxKey: highWatermark}, true
 }
 
-// emitQueueLagMetrics records the per-category queue lag and returns the immediate backlogs whose
-// age still has to be read from persistence, so that read happens off the shard lock.
+// emitQueueLagMetrics records the per-category queue lag, returning the backlogs to read afterwards
+// so that read stays off the shard lock.
 func (s *ContextImpl) emitQueueLagMetrics(metricsHandler metrics.Handler) []immediateBacklog {
 	var immediateBacklogs []immediateBacklog
 
@@ -1382,9 +1380,9 @@ Loop:
 	return immediateBacklogs
 }
 
-// oldestImmediateTaskVisibilityTime reads the oldest task at or after inclusiveMinKey and returns its
-// visibility time. Best effort: it reads persistence directly, since an immediate task read cannot
-// report lost shard ownership and a failed metric read should not affect shard health.
+// oldestImmediateTaskVisibilityTime reads the oldest task in the range. It goes straight to
+// persistence: an immediate read cannot report lost ownership, and a failed metric must not affect
+// shard health.
 func (s *ContextImpl) oldestImmediateTaskVisibilityTime(
 	category tasks.Category,
 	inclusiveMinKey tasks.Key,
@@ -1392,8 +1390,7 @@ func (s *ContextImpl) oldestImmediateTaskVisibilityTime(
 ) (time.Time, bool) {
 	ctx, cancel := s.newIOContext()
 	defer cancel()
-	// Task loading holds a reserved persistence priority that assumes it can always proceed. This is
-	// only a metric, so let it be shed first instead of competing for those tokens.
+	// Task loading holds a reserved persistence priority; a metric should be shed before it.
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 
 	resp, err := s.executionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
