@@ -3959,6 +3959,10 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errIDReusePolicyNotAllowed
 	}
 
+	if err := worker_versioning.ValidateVersioningOverrideStructure(startWorkflow.GetVersioningOverride()); err != nil {
+		return err
+	}
+
 	// Unalias startWorkflow search attributes only for validation.
 	// Keep aliases in the request, because the request will be
 	// sent back to frontend to start workflows, which will unalias at that point.

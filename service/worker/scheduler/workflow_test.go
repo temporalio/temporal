@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -326,6 +327,18 @@ func (s *workflowSuite) TestStart() {
 	}
 	action := s.defaultAction("myid")
 	action.Action.(*schedulepb.ScheduleAction_StartWorkflow).StartWorkflow.UserMetadata = userMetadata
+	versioningOverride := &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "deployment",
+					BuildId:        "build-id",
+				},
+			},
+		},
+	}
+	action.GetStartWorkflow().VersioningOverride = versioningOverride
 
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
@@ -339,6 +352,7 @@ func (s *workflowSuite) TestStart() {
 		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById]))
 		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime]))
 		protoassert.ProtoEqual(s.T(), userMetadata, req.Request.GetUserMetadata())
+		protoassert.ProtoEqual(s.T(), versioningOverride, req.Request.GetVersioningOverride())
 
 		return nil, nil
 	})
