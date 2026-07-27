@@ -8,14 +8,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 )
 

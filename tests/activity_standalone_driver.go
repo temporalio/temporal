@@ -89,52 +89,67 @@ func (a *saaHandle) awaitWallClock(t require.TestingT, e model.Event) {
 		a.awaitDispatchTimePassed(t, e)
 		return
 	}
-	a.awaitStateTransition(t, e, time.Now().Add(a.cfg.window(e)+activityDriverWallClockSettle))
+	a.awaitTimeout(t, e, time.Now().Add(a.cfg.window(e)+activityDriverWallClockSettle))
 }
 
-// awaitStateTransition long-polls DescribeActivityExecution until the transition-history version
-// advances past the token's, and fails if none does by the deadline. An empty response means the
-// server's long-poll window expired, so resubmit.
-func (a *saaHandle) awaitStateTransition(t require.TestingT, e model.Event, deadline time.Time) {
-	token := a.describe(t).GetLongPollToken()
-	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithDeadline(a.d.ctx, deadline)
-		resp, err := a.d.env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:     a.d.env.Namespace().String(),
-			ActivityId:    a.activityID,
-			RunId:         a.runID,
-			LongPollToken: token,
-		})
-		cancel()
-		if err != nil {
-			if time.Now().Before(deadline) {
-				require.NoError(t, err)
-			}
-			break // the deadline cancelled the long poll
-		}
-		if resp.GetInfo() != nil {
-			return // non-empty: the state advanced
-		}
+// awaitTimeout blocks until the activity reports the timeout the event names, and fails if it does
+// not within (window + settle). Waiting for the activity to change instead accepts a different
+// timeout firing, and misses one that fired before the wait began.
+//
+// A timeout ends an attempt, so a reported type only belongs to this event if the activity has moved
+// on since the wait began, or has closed and so can report nothing further. Otherwise the same type
+// left over from an earlier attempt would satisfy the wait at once.
+func (a *saaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline time.Time) {
+	want := timeoutType(e)
+	before := a.timeoutMark(t)
+	var got activityTimeoutMark
+	fired := func() bool {
+		got = a.timeoutMark(t)
+		return got.timeout == want && (got.closed || got != before)
 	}
-	t.Errorf("%s: the activity did not transition within %s of driving the event, so the event did not take "+
-		"effect. Last observed: %+v", e, a.cfg.window(e)+activityDriverWallClockSettle, a.activityInfo(t))
-}
-
-// awaitDispatchTimePassed polls the activity until the dispatch time has passed, and fails if it
-// has not.
-func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
-	info := a.describe(t).GetInfo()
-	next := info.GetNextAttemptScheduleTime()
-	if next == nil {
-		return // the dispatch time has already passed
-	}
-	deadline := next.AsTime().Add(activityDriverWallClockSettle)
-	p := saaActivityInfo(info)
-	if activityDriverPollUntil(deadline, func() bool { p = a.activityInfo(t); return !p.NextAttemptScheduleTimeSet }) {
+	if activityDriverPollUntil(deadline, fired) {
 		return
 	}
-	t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for, so the "+
-		"window did not elapse. Last observed: %+v", e, activityDriverWallClockSettle, p)
+	t.Errorf("%s: the activity did not report a %s timeout within %s of driving the event; it reports %s. "+
+		"Check that the config makes this the timeout that fires.",
+		e, want, a.cfg.window(e)+activityDriverWallClockSettle, got.timeout)
+}
+
+// timeoutMark is the most recent timeout the activity reports, with the attempt and closed-ness that
+// place it in the activity's history.
+func (a *saaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
+	i := a.describe(t).GetInfo()
+	return activityTimeoutMark{
+		timeout: i.GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType(),
+		attempt: i.GetAttempt(),
+		closed:  i.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+	}
+}
+
+// awaitDispatchTimePassed polls the activity until the delayed dispatch is no longer pending, and
+// fails if it is still pending, or if the activity ended first and so never dispatched at all.
+func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
+	info := a.describe(t).GetInfo()
+	deadline := time.Now().Add(activityDriverWallClockSettle)
+	if next := info.GetNextAttemptScheduleTime(); next != nil {
+		deadline = next.AsTime().Add(activityDriverWallClockSettle)
+	}
+	for {
+		switch {
+		case info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING:
+			t.Errorf("%s: the activity ended as %s before its delayed dispatch, so the dispatch never happened",
+				e, info.GetStatus())
+			return
+		case info.GetNextAttemptScheduleTime() == nil:
+			return
+		case !time.Now().Before(deadline):
+			t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
+				"Last observed: %+v", e, activityDriverWallClockSettle, saaActivityInfo(info))
+			return
+		}
+		time.Sleep(activityDriverPollInterval)
+		info = a.describe(t).GetInfo()
+	}
 }
 
 func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
