@@ -14,12 +14,11 @@ type objectWalker struct {
 }
 
 type trackedObject struct {
-	addr              uintptr
-	path              path
-	typeName          string
-	baselineCollected *atomic.Bool
-	collected         *atomic.Bool
-	cleanup           runtime.Cleanup
+	addr      uintptr
+	path      path
+	typeName  string
+	collected *atomic.Bool
+	cleanup   runtime.Cleanup
 }
 
 func (o trackedObject) identity() objectIdentity {
