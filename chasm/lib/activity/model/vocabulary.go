@@ -9,18 +9,20 @@ import "fmt"
 type EventType int
 
 const (
+	// RPC events
 	PollType EventType = iota
 	RespondFailedType
 	PauseType
 
-	// Timeout deadlines elapsing: the configured deadline window has passed in wall-clock (a timer
-	// may or may not have actually fired)
+	// Timer events
+
+	// Timeout task timers elapsing (a timer may or may not have actually fired)
 	ScheduleToStartElapsesType
 	ScheduleToCloseElapsesType
 	StartToCloseElapsesType
 	HeartbeatElapsesType
 
-	// Dispatch-delay clocks elapsing. On elapse the delayed dispatch becomes available.
+	// Dispatch-delay timers elapsing. On elapse the delayed dispatch becomes available.
 	StartDelayElapsesType
 	BackoffElapsesType
 )

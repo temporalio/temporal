@@ -11,13 +11,14 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
-	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // activityConfig is the activity a driver starts.
 //
-// activityConfig.forTrace takes a trace and computes defaults for the confi, so you will often be
+// activityConfig.forTrace takes a trace and computes defaults for the config, so you will often be
 // able to supply a trace and not worry about the config. Timeouts are usually left unset:
 // activityConfig.forTrace gives a short window to each one the trace fires, so that adding e.g.
 // model.HeartbeatElapses to a trace is all you need to do to specify that the activity has a
@@ -29,52 +30,47 @@ import (
 // absent when unset.
 type activityConfig struct {
 	MaxAttempts            int32         // RetryPolicy MaximumAttempts; 0 = unlimited
-	RetryInterval          time.Duration // RetryPolicy InitialInterval; 0 => activityDefaultRetryInterval
+	RetryInterval          time.Duration // RetryPolicy InitialInterval; 0 => activityShortRetryInterval
 	BackoffCoefficient     float64       // RetryPolicy BackoffCoefficient; 0 => 1.0 (constant interval)
 	MaxRetryInterval       time.Duration // RetryPolicy MaximumInterval; 0 => RetryInterval
 	NextRetryDelay         time.Duration // ApplicationFailureInfo.NextRetryDelay sent with RespondFailed
 	NonRetryableErrorTypes []string      // RetryPolicy NonRetryableErrorTypes
 
-	StartToClose    time.Duration // 0 => activityLongTimeout, so it does not fire
-	ScheduleToClose time.Duration // 0 = unset
-	ScheduleToStart time.Duration // 0 = unset
-	Heartbeat       time.Duration // 0 = unset
-	StartDelay      time.Duration // SAA only: WFA has no per-activity start delay
+	StartToClose     time.Duration // 0 => activityLongDuration, so it does not fire
+	ScheduleToClose  time.Duration // 0 = unset
+	ScheduleToStart  time.Duration // 0 = unset
+	HeartbeatTimeout time.Duration // 0 = unset
+	StartDelay       time.Duration // SAA only: WFA has no per-activity start delay
 }
 
-// activityParityDefaultInput is the payload the drivers start activities with.
-var activityParityDefaultInput = payloads.EncodeString(activityParityInput)
+// activityInput is what both SAA and WFA send, so a worker sees the same input either way.
+const activityInput = "Input"
 
-// activityParityInput is what both surfaces send, so a worker sees the same input either way.
-const activityParityInput = "Input"
+// timerProcessorMaxShift is the floor the timer queue puts on a task's fire time: it will not fire one
+// earlier than now + this.
+var timerProcessorMaxShift = dynamicconfig.TimerProcessorMaxTimeShift.Get(
+	dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))()
 
-// activityLongTimeout is a timeout long enough not to fire during a test.
-const activityLongTimeout = 24 * time.Hour
+// activityLongDuration is a timeout, retry interval or start delay long enough not to elapse during a
+// test.
+const activityLongDuration = 24 * time.Hour
 
-// activityShortTimeout is a timeout short enough for a trace to wait out during a test.
-const activityShortTimeout = 2 * time.Second
+// activityShortTimeout is a timeout short enough to wait for while driving a trace
+var activityShortTimeout = 2 * timerProcessorMaxShift
 
-// activityLongRetryInterval is a retry interval long enough to observe an activity while it is still
-// backing off.
-const activityLongRetryInterval = 30 * time.Second
-
-// activityShortRetryInterval is a retry interval short enough for a trace to wait the backoff out. Not
-// much shorter is useful: a timer task's fire time is floored at now + TimerProcessorMaxTimeShift (~1s).
-const activityShortRetryInterval = 1 * time.Second
-
-// activityLongStartDelay is a start delay long enough to keep the first attempt pending for a whole test.
-const activityLongStartDelay = time.Hour
+// activityShortDispatchDelay is a retry interval or start delay short enough to wait for while
+// driving a trace. Note that the queue will not fire the dispatch timer any earlier than
+// timerProcessorMaxShift.
+var activityShortDispatchDelay = timerProcessorMaxShift
 
 func (c activityConfig) retryInterval() time.Duration {
-	return cmp.Or(c.RetryInterval, activityDefaultRetryInterval)
+	return cmp.Or(c.RetryInterval, activityShortDispatchDelay)
 }
 func (c activityConfig) startToClose() time.Duration {
-	return cmp.Or(c.StartToClose, activityLongTimeout)
+	return cmp.Or(c.StartToClose, activityLongDuration)
 }
 
-// forTrace is the config with a short window for each timeout the trace fires, so that it can. A
-// timeout the author set is left alone: only they can say how long a timeout that the trace does not
-// fire should be, or that a fired one has a duration the test depends on.
+// forTrace replaces missing values in the config with appropriate values for the given trace.
 func (c activityConfig) forTrace(trace []model.Event) activityConfig {
 	for _, e := range trace {
 		switch e.Type {
@@ -85,15 +81,14 @@ func (c activityConfig) forTrace(trace []model.Event) activityConfig {
 		case model.StartToCloseElapsesType:
 			c.StartToClose = cmp.Or(c.StartToClose, activityShortTimeout)
 		case model.HeartbeatElapsesType:
-			c.Heartbeat = cmp.Or(c.Heartbeat, activityShortTimeout)
+			c.HeartbeatTimeout = cmp.Or(c.HeartbeatTimeout, activityShortTimeout)
 		}
 	}
 	return c
 }
 
-// window is how long the clock behind a wall-clock event takes to elapse, from the option that event
-// fires on. Zero for an event whose option is not configured, which no trace should drive.
-func (c activityConfig) window(e model.Event) time.Duration {
+// timerDuration is how long the timer behind a timer event takes to elapse.
+func (c activityConfig) timerDuration(e model.Event) time.Duration {
 	switch e.Type {
 	case model.StartDelayElapsesType:
 		return c.StartDelay
@@ -108,16 +103,14 @@ func (c activityConfig) window(e model.Event) time.Duration {
 	case model.ScheduleToStartElapsesType:
 		return c.ScheduleToStart
 	case model.HeartbeatElapsesType:
-		return c.Heartbeat
+		return c.HeartbeatTimeout
 	default:
-		return 0
+		panic("unknown event type: " + e.Type.String())
 	}
 }
 
-// --- what both surfaces report ----------------------------------------------------------------
-
-// activityInfo is user-visible activity state projected out of the two different messages that
-// carry it: SAA's ActivityExecutionInfo and WFA's PendingActivityInfo.
+// activityInfo is user-visible activity state projected out of SAA's ActivityExecutionInfo and
+// WFA's PendingActivityInfo.
 //
 // CurrentRetryInterval is rounded to the second, because WFA derives it by subtracting two stored
 // timestamps while SAA stores it exactly. NextAttemptScheduleTime is reduced to whether it is set
@@ -129,25 +122,16 @@ type activityInfo struct {
 	NextAttemptScheduleTimeSet bool
 }
 
-// --- driving a trace --------------------------------------------------------------------------
+// activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
+// poll for, schedule the activity a workflow owns, close an activity the trace has finished with. A
+// wait for a configured window is bounded by that window plus activityDriverTimerMargin instead.
+const activityDriverTimeout = 10 * time.Second
 
-// activityDefaultRetryInterval is the RetryPolicy InitialInterval when a driver sets none.
-const activityDefaultRetryInterval = 200 * time.Millisecond
+// activityDriverTimerMargin is margin added to a timer event's duration when polling for its effect.
+var activityDriverTimerMargin = 2 * timerProcessorMaxShift
 
-// activityDriverPositivePollTimeout bounds a poll that must find a task.
-const activityDriverPositivePollTimeout = 10 * time.Second
-
-// activityDriverWallClockSettle is slack added to a wall-clock event's window when waiting for its effect.
-const activityDriverWallClockSettle = 2 * time.Second
-
-// activityDriverPollInterval is the gap between reads when polling for a wall-clock event's effect.
+// activityDriverPollInterval is the gap between reads when polling for a timer event's effect.
 const activityDriverPollInterval = 100 * time.Millisecond
-
-// activityDriverScheduleTimeout bounds the wait for a workflow to schedule the activity it owns.
-const activityDriverScheduleTimeout = 10 * time.Second
-
-// activityDriverTerminalTimeout bounds the wait for an activity the trace has driven to a terminal status.
-const activityDriverTerminalTimeout = 10 * time.Second
 
 // timeoutType is the TimeoutType a timeout-elapse event reports when it fires,
 // TIMEOUT_TYPE_UNSPECIFIED for any other event. The model names no API types, so the correspondence
@@ -184,7 +168,7 @@ func validateTrace(t require.TestingT, trace []model.Event) {
 		switch {
 		case e.Type == model.PollType:
 			timeouts = nil // a new attempt arms its timeouts afresh
-		case isWallClockEvent(e.Type) && !isDispatchDelayEvent(e.Type):
+		case isTimerEvent(e.Type) && !isDispatchDelayEvent(e.Type):
 			timeouts = append(timeouts, e)
 		}
 		if len(timeouts) > 1 {
@@ -196,9 +180,9 @@ func validateTrace(t require.TestingT, trace []model.Event) {
 	}
 }
 
-// isWallClockEvent reports whether an event fires on wall-clock time rather than synchronously.
-func isWallClockEvent(k model.EventType) bool {
-	switch k {
+// isTimerEvent reports whether an event represents a timer elapsing, as opposed to an RPC.
+func isTimerEvent(et model.EventType) bool {
+	switch et {
 	case model.ScheduleToStartElapsesType, model.ScheduleToCloseElapsesType, model.StartToCloseElapsesType,
 		model.HeartbeatElapsesType, model.StartDelayElapsesType, model.BackoffElapsesType:
 		return true
@@ -210,8 +194,8 @@ func isWallClockEvent(k model.EventType) bool {
 // isDispatchDelayEvent reports whether an event is a dispatch-delay window elapsing rather than a timeout.
 // A dispatch delay advances no transition-history version; its effect is the pending dispatch time
 // passing.
-func isDispatchDelayEvent(k model.EventType) bool {
-	return k == model.StartDelayElapsesType || k == model.BackoffElapsesType
+func isDispatchDelayEvent(et model.EventType) bool {
+	return et == model.StartDelayElapsesType || et == model.BackoffElapsesType
 }
 
 func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Failure {

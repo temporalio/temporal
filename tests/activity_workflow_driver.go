@@ -1,7 +1,7 @@
 package tests
 
 // Driver for workflow-activity (WFA) tests: it drives an activity scheduled by a workflow through a
-// sequence of events (a 'trace'). Each event is either a frontend RPC, a poll, or a wall-clock
+// sequence of events (a 'trace'). Each event is either a frontend RPC, a poll, or a timer
 // wait. The event vocabulary is in chasm/lib/activity/model.
 
 import (
@@ -85,7 +85,7 @@ func wfaSingleActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error 
 		StartToCloseTimeout:    c.startToClose(),
 		ScheduleToCloseTimeout: c.ScheduleToClose,
 		ScheduleToStartTimeout: c.ScheduleToStart,
-		HeartbeatTimeout:       c.Heartbeat,
+		HeartbeatTimeout:       c.HeartbeatTimeout,
 		WaitForCancellation:    true,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:        c.retryInterval(),
@@ -95,7 +95,7 @@ func wfaSingleActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error 
 			NonRetryableErrorTypes: c.NonRetryableErrorTypes,
 		},
 	})
-	fut := workflow.ExecuteActivity(actCtx, "testWFA", activityParityInput)
+	fut := workflow.ExecuteActivity(actCtx, "testWFA", activityInput)
 	workflow.Go(ctx, func(gctx workflow.Context) {
 		workflow.GetSignalChannel(gctx, wfaCancelSignal).Receive(gctx, nil)
 		cancelActivity()
@@ -121,25 +121,26 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 		// When a trace includes a poll event, the implication is that the activity should be
 		// dispatchable and that the poll will yield an activity task, so finding no task is a
 		// failure.
-		resp := a.pollForTask(t, activityDriverPositivePollTimeout)
-		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverPositivePollTimeout)
+		resp := a.pollForTask(t, activityDriverTimeout)
+		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
 		a.token = resp.GetTaskToken()
-	case isWallClockEvent(e.Type):
-		// A wall-clock event is realized by waiting out its configured window.
+	case isTimerEvent(e.Type):
+		// A timer event is realized by waiting out its configured window.
 		a.awaitWallClock(t, e)
 	default:
+		// An RPC
 		require.NoError(t, a.rpc(e))
 	}
 }
 
-// awaitWallClock blocks until a wall-clock event's effect shows up in the workflow's view of the
+// awaitWallClock blocks until a timer event's effect shows up in the workflow's view of the
 // activity, and fails if it does not within (window + settle).
 func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
 	if isDispatchDelayEvent(e.Type) {
-		a.awaitDispatchTimePassed(t, e)
+		a.awaitDispatchDelay(t, e)
 		return
 	}
-	a.awaitTimeout(t, e, time.Now().Add(a.cfg.window(e)+activityDriverWallClockSettle))
+	a.awaitTimeout(t, e, time.Now().Add(a.cfg.timerDuration(e)+activityDriverTimerMargin))
 }
 
 // awaitTimeout blocks until the activity reports the timeout the event names, and fails if it does
@@ -157,7 +158,7 @@ func (a *wfaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline tim
 	}
 	t.Errorf("%s: the activity did not report a %s timeout within %s of driving the event; it reports %s. "+
 		"Check that the config makes this the timeout that fires.",
-		e, want, a.cfg.window(e)+activityDriverWallClockSettle, got.timeout)
+		e, want, a.cfg.timerDuration(e)+activityDriverTimerMargin, got.timeout)
 }
 
 // timeoutMark is the most recent timeout the activity reports. A closed activity has left the pending
@@ -176,14 +177,14 @@ func (a *wfaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
 	return activityTimeoutMark{closed: true}
 }
 
-// awaitDispatchTimePassed polls the activity until the delayed dispatch is no longer pending, and
+// awaitDispatchDelay polls the activity until the delayed dispatch is no longer pending, and
 // fails if it is still pending, or if the activity ended first and so never dispatched at all.
-// See saaHandle.awaitDispatchTimePassed.
-func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
+// See saaHandle.awaitDispatchDelay.
+func (a *wfaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
 	pa := a.pendingActivity(t)
-	deadline := time.Now().Add(activityDriverWallClockSettle)
+	deadline := time.Now().Add(activityDriverTimerMargin)
 	if next := pa.GetNextAttemptScheduleTime(); next != nil {
-		deadline = next.AsTime().Add(activityDriverWallClockSettle)
+		deadline = next.AsTime().Add(activityDriverTimerMargin)
 	}
 	for {
 		switch {
@@ -197,7 +198,7 @@ func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 			return
 		case !time.Now().Before(deadline):
 			t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
-				"Last observed: %+v", e, activityDriverWallClockSettle, wfaActivityInfo(pa))
+				"Last observed: %+v", e, activityDriverTimerMargin, wfaActivityInfo(pa))
 			return
 		}
 		time.Sleep(activityDriverPollInterval)
@@ -247,9 +248,9 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 	require.NoError(t, err)
 	a := &wfaHandle{d: d, cfg: cfg, run: run, workflowID: wfID, runID: run.GetRunID(), activityID: actID, activityTQ: actTQ}
 	// The workflow schedules the activity, so it does not exist yet when ExecuteWorkflow returns.
-	require.Truef(t, activityDriverPollUntil(time.Now().Add(activityDriverScheduleTimeout),
+	require.Truef(t, activityDriverPollUntil(time.Now().Add(activityDriverTimeout),
 		func() bool { return a.pendingActivity(t) != nil }),
-		"the workflow did not schedule its activity within %s", activityDriverScheduleTimeout)
+		"the workflow did not schedule its activity within %s", activityDriverTimeout)
 	return a
 }
 
@@ -287,7 +288,7 @@ func (a *wfaHandle) pollForTask(t require.TestingT, timeout time.Duration) *work
 	return resp
 }
 
-// rpc performs the frontend RPC for a non-Poll, non-wall-clock event and returns its error.
+// rpc performs the frontend RPC for a non-Poll, non-timer event and returns its error.
 func (a *wfaHandle) rpc(e model.Event) error {
 	fc := a.d.env.FrontendClient()
 	ns := a.d.env.Namespace().String()
