@@ -87,7 +87,7 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 // become visible within (window + margin).
 func (a *saaHandle) awaitTimerEvent(t require.TestingT, e model.Event) {
 	if isDispatchDelayEvent(e.Type) {
-		a.awaitDispatchTimePassed(t, e)
+		a.awaitDispatchDelay(t, e)
 		return
 	}
 	a.awaitTimeout(t, e, time.Now().Add(a.cfg.timerDuration(e)+activityDriverTimerMargin))
@@ -127,9 +127,9 @@ func (a *saaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
 	}
 }
 
-// awaitDispatchTimePassed polls the activity until the delayed dispatch is no longer pending, and
+// awaitDispatchDelay polls the activity until the delayed dispatch is no longer pending, and
 // fails if it is still pending, or if the activity ended first and so never dispatched at all.
-func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
+func (a *saaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
 	info := a.describe(t).GetInfo()
 	deadline := time.Now().Add(activityDriverTimerMargin)
 	if next := info.GetNextAttemptScheduleTime(); next != nil {

@@ -1,6 +1,6 @@
-// Package model is an implementation-independent vocabulary for driving a CHASM activity through a
-// sequence of events (a 'trace').  Drivers realize these events for Standalone Activity or for
-// Workflow Activity, so the same trace can be driven for both.
+// Package model is an implementation-independent vocabulary for specifyin a sequence of events (a
+// 'trace') in the lifetime of an activity. Drivers exist that can realize these events for both
+// Standalone Activity and Workflow Activity.
 package model
 
 import "fmt"
