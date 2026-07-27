@@ -43,7 +43,7 @@ import (
 // OpenTelemetry attribute keys for Nexus inbound spans. Standard http.* attributes are set by
 // the otelhttp wrapper; the temporal.* attributes carry Temporal-domain semantics.
 const (
-	namespaceAttrKey      = telemetry.TemporalNamespaceKey
+	namespaceAttrKey      = telemetry.NamespaceKey
 	nexusEndpointAttrKey  = telemetry.NexusEndpointKey
 	nexusServiceAttrKey   = telemetry.NexusServiceKey
 	nexusOperationAttrKey = telemetry.NexusOperationKey
@@ -353,7 +353,7 @@ func annotateInboundSpan(
 	oc *operationContext,
 	service, operation, requestID string,
 ) {
-	telemetry.AnnotateNexusSpan(ctx, telemetry.NexusSpanAttributes{
+	telemetry.SetNexusSpanAttributes(trace.SpanFromContext(ctx), telemetry.NexusSpanAttributes{
 		Request:       true,
 		NamespaceName: oc.namespaceName,
 		Endpoint:      oc.endpointName,

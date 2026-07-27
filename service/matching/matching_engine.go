@@ -2517,11 +2517,10 @@ type nexusResult struct {
 	internalError            error
 }
 
-func nexusSpanAttributes(namespaceName, taskQueue string, request *nexuspb.Request) telemetry.NexusSpanAttributes {
+func nexusSpanAttributes(namespaceName string, request *nexuspb.Request) telemetry.NexusSpanAttributes {
 	attrs := telemetry.NexusSpanAttributes{
 		Request:       true,
 		NamespaceName: namespaceName,
-		TaskQueue:     taskQueue,
 	}
 	if request == nil {
 		return attrs
@@ -2558,9 +2557,8 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	if err != nil {
 		return nil, err
 	}
-	telemetry.AnnotateNexusSpan(ctx, nexusSpanAttributes(
+	telemetry.SetNexusSpanAttributes(trace.SpanFromContext(ctx), nexusSpanAttributes(
 		ns.Name().String(),
-		request.GetTaskQueue().GetName(),
 		request.GetRequest(),
 	))
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -2673,9 +2671,8 @@ pollLoop:
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
 			response := task.pollNexusTaskQueueResponse()
-			telemetry.AnnotateNexusSpan(ctx, nexusSpanAttributes(
+			telemetry.SetNexusSpanAttributes(trace.SpanFromContext(ctx), nexusSpanAttributes(
 				ns.Name().String(),
-				taskQueueName,
 				response.GetResponse().GetRequest(),
 			))
 			return response, nil
@@ -2705,7 +2702,7 @@ pollLoop:
 		}
 
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), ns.Name().String(), pollMetadata)
-		telemetry.AnnotateNexusSpan(ctx, nexusSpanAttributes(ns.Name().String(), taskQueueName, nexusReq))
+		telemetry.SetNexusSpanAttributes(trace.SpanFromContext(ctx), nexusSpanAttributes(ns.Name().String(), nexusReq))
 		trace.SpanFromContext(ctx).SetAttributes(
 			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeNexus),
 			attribute.String(telemetry.WorkerTaskIDKey, task.nexus.taskID),
