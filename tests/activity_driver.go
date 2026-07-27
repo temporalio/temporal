@@ -82,7 +82,9 @@ func (c activityConfig) forTrace(trace []model.Event) activityConfig {
 			c.StartToClose = cmp.Or(c.StartToClose, activityShortTimeout)
 		case model.HeartbeatElapsesType:
 			c.HeartbeatTimeout = cmp.Or(c.HeartbeatTimeout, activityShortTimeout)
-		default: // a non-timeout event
+		case model.StartDelayElapsesType:
+			c.StartDelay = cmp.Or(c.StartDelay, activityShortDispatchDelay)
+		default: // an event that arms no window of its own
 		}
 	}
 	return c
