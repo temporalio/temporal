@@ -1562,11 +1562,6 @@ scoped by namespace and/or task queue.`,
 		StaticGradualChange(false),
 		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
 	)
-	MatchingEnableMigration = NewTaskQueueBoolSetting(
-		"matching.enableMigration",
-		true,
-		`Allows migration between v1 and v2 (fairness) task backlogs.`,
-	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
 		5,
