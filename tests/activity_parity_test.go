@@ -8,16 +8,31 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type activityParityTestSuite struct {
 	parallelsuite.Suite[*activityParityTestSuite]
+}
+
+type activityDriverErrorRecorder struct {
+	failed bool
+}
+
+func (r *activityDriverErrorRecorder) Errorf(string, ...any) {
+	r.failed = true
+}
+
+func (r *activityDriverErrorRecorder) FailNow() {
+	r.failed = true
 }
 
 func TestActivityParityTestSuite(t *testing.T) {
@@ -186,4 +201,116 @@ func (s *activityParityTestSuite) TestParityCurrentRetryIntervalAndNextAttemptSc
 				Attempt:  2,
 			})
 	})
+}
+
+func (s *activityParityTestSuite) TestDriversRejectBackoffElapseWhenScheduleToCloseWins() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{
+		MaxAttempts:     3,
+		RetryInterval:   activityLongRetryInterval,
+		ScheduleToClose: activityShortTimeout,
+	}
+	trace := []model.Event{model.Poll, model.FailRetryably}
+
+	tests := map[string]func(*testing.T) func(require.TestingT, model.Event){
+		"WorkflowActivity": func(t *testing.T) func(require.TestingT, model.Event) {
+			return newWFADriver(t, env, cfg).driveTrace(t, trace).driveEvent
+		},
+		"StandaloneActivity": func(t *testing.T) func(require.TestingT, model.Event) {
+			return newSAADriver(t, env, cfg).driveTrace(t, trace).driveEvent
+		},
+	}
+	for name, setup := range tests {
+		s.Run(name, func(s *activityParityTestSuite) {
+			t := s.T()
+			drive := setup(t)
+			recorder := &activityDriverErrorRecorder{}
+			drive(recorder, model.BackoffElapses)
+			require.True(t, recorder.failed,
+				"BackoffElapses must fail when ScheduleToClose removes the activity before its retry time")
+		})
+	}
+}
+
+func (s *activityParityTestSuite) TestDriversRejectTimeoutElapseWhenDifferentTimeoutWins() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{
+		MaxAttempts:  1,
+		StartToClose: activityShortTimeout,
+		Heartbeat:    2 * activityShortTimeout,
+	}
+	trace := []model.Event{model.Poll}
+
+	tests := map[string]func(*testing.T) func(require.TestingT, model.Event){
+		"WorkflowActivity": func(t *testing.T) func(require.TestingT, model.Event) {
+			return newWFADriver(t, env, cfg).driveTrace(t, trace).driveEvent
+		},
+		"StandaloneActivity": func(t *testing.T) func(require.TestingT, model.Event) {
+			return newSAADriver(t, env, cfg).driveTrace(t, trace).driveEvent
+		},
+	}
+	for name, setup := range tests {
+		s.Run(name, func(s *activityParityTestSuite) {
+			t := s.T()
+			drive := setup(t)
+			recorder := &activityDriverErrorRecorder{}
+			drive(recorder, model.HeartbeatElapses)
+			require.True(t, recorder.failed,
+				"HeartbeatElapses must fail when StartToClose times out first")
+		})
+	}
+}
+
+func (s *activityParityTestSuite) TestDriversAcceptTimeoutElapseThatAlreadyOccurred() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{
+		MaxAttempts:  1,
+		StartToClose: activityShortTimeout,
+	}
+	trace := []model.Event{model.Poll}
+
+	tests := map[string]func(*testing.T) func(require.TestingT, model.Event){
+		"WorkflowActivity": func(t *testing.T) func(require.TestingT, model.Event) {
+			a := newWFADriver(t, env, cfg).driveTrace(t, trace)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, a.terminalStatus(t))
+			return a.driveEvent
+		},
+		"StandaloneActivity": func(t *testing.T) func(require.TestingT, model.Event) {
+			a := newSAADriver(t, env, cfg).driveTrace(t, trace)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, a.terminalStatus(t))
+			return a.driveEvent
+		},
+	}
+	for name, setup := range tests {
+		s.Run(name, func(s *activityParityTestSuite) {
+			t := s.T()
+			setup(t)(t, model.StartToCloseElapses)
+		})
+	}
+}
+
+func (s *activityParityTestSuite) TestDriversDoNotLeakInferredTimeoutsAcrossTraces() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 1}
+	trace := []model.Event{model.Poll, model.StartToCloseElapses}
+
+	tests := map[string]func(*testing.T) time.Duration{
+		"WorkflowActivity": func(t *testing.T) time.Duration {
+			d := newWFADriver(t, env, cfg)
+			d.driveTrace(t, trace)
+			return d.cfg.StartToClose
+		},
+		"StandaloneActivity": func(t *testing.T) time.Duration {
+			d := newSAADriver(t, env, cfg)
+			d.driveTrace(t, trace)
+			return d.cfg.StartToClose
+		},
+	}
+	for name, setup := range tests {
+		s.Run(name, func(s *activityParityTestSuite) {
+			t := s.T()
+			require.Zero(t, setup(t),
+				"a timeout inferred for one trace must not become configuration for the next")
+		})
+	}
 }
