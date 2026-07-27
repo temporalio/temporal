@@ -21,10 +21,12 @@ type Evaluator interface {
 	// It is called on every GetC read, including for the great majority of settings that are
 	// not expression-configured at all, so returning nil must be cheap and must not allocate.
 	//
-	// The returned pointer must be stable — the same value for the same inputs until the
-	// configuration is reloaded — because Collection caches conversions against it using weak
-	// pointers. See the comment on Client.GetValue.
-	Eval(key Key, c ConstraintsMap) *ConstrainedValue
+	// The result is shaped like Client.GetValue's — a slice, in practice of one unconstrained
+	// value — so that it can be fed to the same matching machinery, which matters for settings
+	// with constrained defaults. The slice must be stable: the same slice for the same inputs
+	// until the configuration is reloaded, because Collection caches conversions against
+	// pointers into it using weak pointers. See the comment on Client.GetValue.
+	Eval(key Key, c ConstraintsMap) []ConstrainedValue
 }
 
 // matchAndConvertC is the GetC counterpart of matchAndConvert. It consults the Evaluator with
@@ -49,6 +51,14 @@ func matchAndConvertC[T any](
 
 // matchAndConvertCWithConstrainedDefault is matchAndConvertC for settings whose default is
 // itself constrained.
+//
+// The expression value is fed into the normal constrained-default resolution rather than
+// short-circuiting it, so a built-in constrained default that is more specific still wins.
+// That keeps GetC in step with Get, which reaches the same value through Client.GetValue and
+// therefore always went through this path. It matters: the constrained default of one
+// partition for the per-namespace worker task queue is a correctness invariant, not a
+// preference, and an operator setting a fleet-wide partition count does not mean to override
+// it.
 func matchAndConvertCWithConstrainedDefault[T any](
 	c *Collection,
 	key Key,
@@ -57,11 +67,10 @@ func matchAndConvertCWithConstrainedDefault[T any](
 	cm ConstraintsMap,
 	precedence []Constraints,
 ) T {
-	// An explicitly configured expression value wins over a built-in constrained default.
-	if v, ok := evalConstraints(c, key, convert, cm); ok {
-		return v
+	cvs := evalConstraintValues(c, key, cm)
+	if cvs == nil {
+		cvs = c.client.GetValue(key)
 	}
-	cvs := c.client.GetValue(key)
 	value, _ := findAndResolveWithConstrainedDefaults(c, key, convert, cvs, cdef, precedence)
 	return value
 }
@@ -77,13 +86,13 @@ func evalConstraints[T any](
 	convert func(value any) (T, error),
 	cm ConstraintsMap,
 ) (value T, ok bool) {
-	if c.evaluator == nil {
+	cvs := evalConstraintValues(c, key, cm)
+	if len(cvs) == 0 {
 		return value, false
 	}
-	cvp := c.evaluator.Eval(key, cm)
-	if cvp == nil {
-		return value, false
-	}
+	// The slice is owned by the Evaluator's snapshot, so this pointer is stable and the
+	// conversion cache can key on it.
+	cvp := &cvs[0]
 	typedVal, err := convertWithCache(c, key, convert, cvp)
 	if err != nil {
 		if c.throttleLog() {
@@ -93,4 +102,13 @@ func evalConstraints[T any](
 		return value, false
 	}
 	return typedVal, true
+}
+
+// evalConstraintValues asks the Collection's Evaluator, if any, for key. Returns nil when
+// there is no Evaluator or it does not configure key.
+func evalConstraintValues(c *Collection, key Key, cm ConstraintsMap) []ConstrainedValue {
+	if c.evaluator == nil {
+		return nil
+	}
+	return c.evaluator.Eval(key, cm)
 }

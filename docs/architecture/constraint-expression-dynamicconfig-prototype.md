@@ -174,16 +174,39 @@ request rather than per lookup: 336 B once, then ~60 ns per setting read. (It be
 free if you let escape analysis keep it on the stack — the benchmark deliberately sinks it to
 a package variable to avoid reporting a number callers will not see.)
 
-## Behaviours worth knowing
+## Who wins
 
-- **A key is configured in exactly one place.** If a key appears in the expression file, the
-  inner client is ignored for it entirely — including constrained values that look more
-  specific. `TestConfiguratorClient_ExpressionKeyIgnoresInnerConstraints`.
-- **Constrained defaults still win over an unconstrained expression value.** For example
-  `matching.numTaskqueueReadPartitions` has a built-in default of 1 for the per-namespace
-  worker task queue, and that beats an unconstrained value of 16. This is not new: an
-  unconstrained value in the dynamic config file behaves identically. Pinned by
-  `TestConfiguratorClient_ConstrainedDefaultsStillWin` because it is surprising.
+Three sources can have something to say about one setting. In order:
+
+1. **A more specific Go-side constrained default** (`New*SettingWithConstrainedDefault`).
+2. **The expression file.**
+3. **The dynamic config file.**
+4. The compiled-in default.
+
+Both accessors resolve this identically; `TestGetC_AgreesWithGetOnConflicts` pins that down.
+
+**Expression file over dynamic config file, wholesale.** If a key appears in the expression
+file, the inner client is not consulted for it at all — not merged, replaced. A *more
+specific* constrained value in the dynamic config file still loses, because the key is served
+from one place or the other. `TestConfiguratorClient_ExpressionKeyIgnoresInnerConstraints`.
+
+**But constrained defaults over the expression file.** An expression resolves to a single
+value with *empty* constraints, so a built-in constrained default that matches at a more
+specific precedence position outranks it —
+`findAndResolveWithConstrainedDefaults`. `matching.numTaskqueueReadPartitions` keeps its
+default of 1 for the per-namespace worker task queue even if the expression file says 16.
+
+That is deliberate rather than incidental. It is exactly how an unconstrained value in the
+dynamic config file already behaves, so the expression file introduces no new rule; and the
+defaults it protects tend to be correctness invariants rather than preferences — one worker
+runs per per-namespace task queue, so more than one partition is simply wrong. An operator
+setting a fleet-wide partition count does not mean to override that.
+
+It is worth stating because it is the one case where writing a value in the expression file
+does not produce it, and nothing warns you.
+
+## Other behaviours worth knowing
+
 - **A failed reload keeps the previous values**, rather than falling back to compiled-in
   defaults. A failed load at *startup* is fatal instead: running with defaults when the
   operator asked for an expression file would be worse than refusing to start.

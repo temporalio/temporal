@@ -161,6 +161,54 @@ func TestGetC_ConstrainedDefaults(t *testing.T) {
 		MatchingNumTaskqueueReadPartitions.GetC(col)(other))
 }
 
+// Get and GetC must resolve a conflict the same way, whichever source wins. They reach the
+// value by different routes — Get through Client.GetValue, GetC through the Evaluator — and
+// an earlier revision had GetC short-circuit the constrained-default resolution, so the same
+// config gave 16 through one accessor and 1 through the other.
+func TestGetC_AgreesWithGetOnConflicts(t *testing.T) {
+	inner := StaticClient{
+		// deliberately more specific than the unconstrained expression value
+		exprNamespaceInt.Key(): []ConstrainedValue{
+			{Constraints: Constraints{Namespace: "canary"}, Value: 7},
+			{Value: 8},
+		},
+		exprTQPartitions.Key(): []ConstrainedValue{{Value: 99}},
+	}
+	col := NewCollection(newTestExprClient(t, inner, `
+matching.historyMaxPageSize:
+  defaultValue: 42
+matching.numTaskqueueReadPartitions:
+  defaultValue: 16
+`), log.NewTestLogger())
+
+	t.Run("expression beats the dynamic config file, however constrained", func(t *testing.T) {
+		require.Equal(t, 42, exprNamespaceInt.Get(col)("canary"))
+		require.Equal(t, 42, exprNamespaceInt.GetC(col)(ConstraintsWithNS("canary")))
+	})
+
+	t.Run("a more specific constrained default still beats the expression", func(t *testing.T) {
+		// One partition for the per-namespace worker task queue is a correctness invariant,
+		// not a preference: a fleet-wide partition count must not override it.
+		perNS := ConstraintsWithNS("ns").
+			With(CKTaskQueueName, primitives.PerNSWorkerTaskQueue).
+			With(CKTaskQueueType, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+		require.Equal(t, 1, exprTQPartitions.Get(col)(
+			"ns", primitives.PerNSWorkerTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+		require.Equal(t, 1, exprTQPartitions.GetC(col)(perNS))
+	})
+
+	t.Run("and the expression applies where no constrained default does", func(t *testing.T) {
+		ordinary := ConstraintsWithNS("ns").
+			With(CKTaskQueueName, "ordinary").
+			With(CKTaskQueueType, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+		require.Equal(t, 16, exprTQPartitions.Get(col)(
+			"ns", "ordinary", enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+		require.Equal(t, 16, exprTQPartitions.GetC(col)(ordinary))
+	})
+}
+
 func TestGetC_UnknownConstraintKeyRejected(t *testing.T) {
 	restoreExprSettings(t)
 	c := NewConfiguratorClient(testExprAmbient, nil, log.NewTestLogger())

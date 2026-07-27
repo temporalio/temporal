@@ -128,12 +128,16 @@ type ConfiguratorClient struct {
 type (
 	// exprSnapshot is one immutable generation of the expression configuration.
 	exprSnapshot struct {
-		// cfg carries *ConstrainedValue directly: the library treats values as opaque, so
-		// they are decoded once here from YAML using Temporal's own conventions and validated
-		// against the settings registry, and nothing is ever unmarshalled on the read path.
-		// The pointers are owned by cfg and stable for the life of the snapshot, which is what
-		// lets Collection cache conversions against them with weak pointers.
-		cfg     configurator.Configurator[*ConstrainedValue]
+		// cfg carries values in the same shape Client.GetValue returns them — a slice of one
+		// unconstrained ConstrainedValue — so an expression result can be fed to the same
+		// matching machinery, which is what keeps GetC in step with Get for settings that
+		// have constrained defaults.
+		//
+		// The library treats values as opaque, so they are decoded once here from YAML using
+		// Temporal's own conventions and validated against the settings registry; nothing is
+		// unmarshalled on the read path. The slices are owned by cfg and stable for the life
+		// of the snapshot, which lets Collection cache conversions against pointers into them.
+		cfg     configurator.Configurator[[]ConstrainedValue]
 		entries map[Key]*exprEntry
 	}
 
@@ -208,24 +212,21 @@ func (c *ConfiguratorClient) GetValue(key Key) []ConstrainedValue {
 // Eval implements Evaluator, resolving key against the caller's constraints layered over this
 // process's ambient ones. Returns nil when the key is not expression-configured, or when its
 // value cannot depend on the caller, in which case the Client path applies.
-func (c *ConfiguratorClient) Eval(key Key, cm ConstraintsMap) *ConstrainedValue {
+func (c *ConfiguratorClient) Eval(key Key, cm ConstraintsMap) []ConstrainedValue {
 	snap := c.snapshot.Load()
 	e, ok := snap.entries[key]
 	if !ok {
 		return nil
 	}
 	if e.canUseResolved(cm) {
-		if len(e.resolved) == 1 {
-			return &e.resolved[0]
-		}
-		return nil
+		return e.resolved
 	}
 
 	// A layered view rather than a merged copy, so this allocates nothing: the pooled
 	// layeredLookup is a pointer, so boxing it into the interface is free.
 	l := lookupPool.Get().(*layeredLookup) //nolint:revive // unchecked-type-assertion
 	l.caller, l.ambient = cm, c.ambient
-	cvp, err := snap.cfg.Eval(context.Background(), e.name, l)
+	cvs, err := snap.cfg.Eval(context.Background(), e.name, l)
 	l.caller, l.ambient = nil, nil
 	lookupPool.Put(l)
 
@@ -236,7 +237,7 @@ func (c *ConfiguratorClient) Eval(key Key, cm ConstraintsMap) *ConstrainedValue 
 		}
 		return nil
 	}
-	return cvp
+	return cvs
 }
 
 // canUseResolved reports whether the value resolved at load is still correct for this call,
@@ -323,7 +324,7 @@ func (c *ConfiguratorClient) LoadFile(contents []byte) error {
 	}
 
 	snap := &exprSnapshot{
-		cfg:     configurator.New[*ConstrainedValue](),
+		cfg:     configurator.New[[]ConstrainedValue](),
 		entries: make(map[Key]*exprEntry, len(entries)),
 	}
 
@@ -431,13 +432,13 @@ func (c *ConfiguratorClient) classifyAndResolve(
 			key, unknown, constraintKeysDirective)
 	}
 
-	cvp, err := snap.cfg.Eval(context.Background(), e.name, c.ambient)
+	// A single value with no constraints: every precedence order ends in {}, so this matches
+	// whatever the caller asks for. The slice is the library's own, so it stays stable.
+	resolved, err := snap.cfg.Eval(context.Background(), e.name, c.ambient)
 	if err != nil {
 		return fmt.Errorf("key %q: %w", key, err)
 	}
-	// A single value with no constraints: every precedence order ends in {}, so this matches
-	// whatever the caller asks for.
-	e.resolved = []ConstrainedValue{{Value: cvp.Value}}
+	e.resolved = resolved
 	return nil
 }
 
@@ -450,15 +451,15 @@ func (c *ConfiguratorClient) classifyAndResolve(
 func (c *ConfiguratorClient) parseEntry(
 	key Key,
 	entry yamlExprEntry,
-) (*exprEntry, configurator.Config[*ConstrainedValue], error) {
-	var empty configurator.Config[*ConstrainedValue]
+) (*exprEntry, configurator.Config[[]ConstrainedValue], error) {
+	var empty configurator.Config[[]ConstrainedValue]
 	setting := queryRegistry(key)
 	if setting == nil {
 		c.logger.Warn("Expression config contains unregistered dynamic config key",
 			tag.Key(key.String()))
 	}
 
-	outcome := func(v any, what string) (*ConstrainedValue, error) {
+	outcome := func(v any, what string) ([]ConstrainedValue, error) {
 		// yaml decodes nested maps as map[any]any; dynamic config values need string keys.
 		converted, err := convertKeyTypeToString(v)
 		if err != nil {
@@ -469,7 +470,7 @@ func (c *ConfiguratorClient) parseEntry(
 				return nil, fmt.Errorf("key %q %s: %w", key, what, valErr)
 			}
 		}
-		return &ConstrainedValue{Value: converted}, nil
+		return []ConstrainedValue{{Value: converted}}, nil
 	}
 
 	def, err := outcome(entry.DefaultValue, "defaultValue")
@@ -477,16 +478,16 @@ func (c *ConfiguratorClient) parseEntry(
 		return nil, empty, err
 	}
 
-	cfg := configurator.Config[*ConstrainedValue]{
+	cfg := configurator.Config[[]ConstrainedValue]{
 		DefaultValue: def,
-		Overrides:    make([]configurator.Override[*ConstrainedValue], 0, len(entry.Overrides)),
+		Overrides:    make([]configurator.Override[[]ConstrainedValue], 0, len(entry.Overrides)),
 	}
 	for i, o := range entry.Overrides {
 		cv, err := outcome(o.MatchResult, fmt.Sprintf("override %d (%q)", i, o.MatchString))
 		if err != nil {
 			return nil, empty, err
 		}
-		cfg.Overrides = append(cfg.Overrides, configurator.Override[*ConstrainedValue]{
+		cfg.Overrides = append(cfg.Overrides, configurator.Override[[]ConstrainedValue]{
 			MatchString: o.MatchString,
 			MatchResult: cv,
 		})
