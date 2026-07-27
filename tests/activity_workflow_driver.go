@@ -125,15 +125,30 @@ func (a *wfaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
 	return m
 }
 
-// awaitDispatchDelay polls the activity until the delayed dispatch is no longer pending, and
-// fails if it is still pending, or if the activity ended first and so never dispatched at all.
+// awaitDispatchDelay polls the activity until the delayed dispatch is no longer pending, and fails
+// if it is still pending, or if the activity ended first and so never dispatched at all.
 // See saaHandle.awaitDispatchDelay.
 func (a *wfaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
+	// Nothing to wait for unless the activity is waiting to be dispatched. An activity that is no
+	// longer pending dispatches nothing more; a running attempt means whatever was pending has
+	// already been dispatched and taken; and a paused one reports no pending dispatch whatever its
+	// backoff is doing, so none can be seen to elapse.
 	pa := a.pendingActivity(t)
+	switch {
+	case pa == nil:
+		t.Errorf("%s: the activity is not pending, so no dispatch is pending and none can elapse", e)
+		return
+	case pa.GetState() != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
+		t.Errorf("%s: the activity is %s, so no dispatch is pending and none can elapse", e, pa.GetState())
+		return
+	default:
+	}
 	deadline := time.Now().Add(activityDriverTimerMargin)
 	if next := pa.GetNextAttemptScheduleTime(); next != nil {
 		deadline = next.AsTime().Add(activityDriverTimerMargin)
 	}
+	// Three things end the wait: the dispatch time passing, a worker having taken the task, or the
+	// activity leaving the pending set. Only the last is a failure.
 	settled := func() bool {
 		pa = a.pendingActivity(t)
 		return pa == nil || pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_STARTED ||
@@ -144,11 +159,8 @@ func (a *wfaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
 			"Last observed: %+v", e, activityDriverTimerMargin, wfaActivityInfo(pa))
 		return
 	}
-	switch {
-	case pa == nil:
+	if pa == nil {
 		t.Errorf("%s: the activity is no longer pending, so its delayed dispatch never happened", e)
-	case pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
-		t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
 	}
 }
 

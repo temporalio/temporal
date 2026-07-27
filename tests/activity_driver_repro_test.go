@@ -285,3 +285,28 @@ func (s *activityParityTestSuite) TestDriversRejectDispatchDelayWhilePaused() {
 		require.True(t, rec.failed, "a paused activity shows no pending dispatch, so none can be seen to elapse")
 	})
 }
+
+// Once a dispatch has happened there is no second one to wait for. The activity is still scheduled,
+// unpaused and unstarted, and reports no pending dispatch — which the drivers must not read as a
+// dispatch delay that has elapsed. The model cursor rejects this, which is why the drivers need no
+// check of their own: a dispatch delay cannot occur from a dispatchable state.
+func (s *activityParityTestSuite) TestDriversRejectDispatchDelayAlreadyDispatched() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityShortDispatchDelay}
+	trace := []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses}
+
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		a := newSAADriver(t, env, cfg).driveTrace(t, trace)
+		rec := &activityDriverErrorRecorder{}
+		a.driveEvent(rec, model.BackoffElapses)
+		require.True(t, rec.failed, "the dispatch already happened, so no second delay can elapse")
+	})
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		a := newWFADriver(t, env, cfg).driveTrace(t, trace)
+		rec := &activityDriverErrorRecorder{}
+		a.driveEvent(rec, model.BackoffElapses)
+		require.True(t, rec.failed, "the dispatch already happened, so no second delay can elapse")
+	})
+}
