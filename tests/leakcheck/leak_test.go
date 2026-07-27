@@ -28,13 +28,35 @@ var goleakOpts = []goleak.Option{
 
 var objectLeakOpts = []objectleak.Option{
 	objectleak.WithPruneType("google.golang.org/protobuf/internal/impl.*"),
-	objectleak.WithExpected("FunctionalTestBase"),
+	// The parent test retains the shared test logger until its own cleanup completes.
 	objectleak.WithExpected("FunctionalTestBase.Logger*"),
+	// Testify keeps the suite's testing.T reachable until the parent test returns.
 	objectleak.WithExpected("FunctionalTestBase.Suite*"),
-	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
-	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
-	objectleak.WithExpected("FunctionalTestBase.testClusterConfig"),
-	// Closed SDK client internals remain reachable after worker shutdown.
+	// The stopped CHASM engine remains reachable through process-lifetime component registrations.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host.chasmEngine*"),
+	// The stopped CHASM visibility manager is retained alongside the CHASM engine.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host.chasmVisibilityMgr"),
+	// Dynamic config override handles remain reachable through process-lifetime registrations.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host.clients.dcClient*"),
+	// The capture handler is shared with the stopped server graph.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host.clients.metricsHandler*"),
+	// Generated frontend clients remain reachable through the stopped server graph.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host.clients.frontend*"),
+	// Test hooks remain registered for the lifetime of the stopped server graph.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host.clients.testHooks*"),
+	// The stopped Fx application retains its dependency graph for the process lifetime.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host.server*"),
+	// Cluster metadata is shared with process-lifetime server registrations.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host.serverConfig.ClusterMetadata"),
+	// Server callbacks remain reachable from the stopped Fx application.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.host.testServerState"),
+	// SQLite intentionally keeps one *sql.DB per file DSN for the process lifetime.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase.ShardMgr.persistence.persistence.shardStore.SqlStore.DB.DB.db*"),
+	// The namespace queue uses the package-level namespaceQueueRetryPolicy from persistence/client/factory.go.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase.NamespaceReplicationQueue.queue.policy"),
+	// Persistence managers use the package-level retryPolicy from persistence/client/factory.go.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase.ShardMgr.policy"),
+	// Client.Close stops transports but retains immutable SDK converters and gRPC buffer pools.
 	objectleak.WithExpected("sdkClient*"),
 }
 
@@ -80,7 +102,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
 	// init, proto registries, ...) are created before we snapshot the baseline.
 	for range warmupIters {
-		buildRunTeardownCluster(t, &leakCheck)
+		buildRunTeardownCluster(t, nil)
 	}
 
 	// Wait for warmup goroutines to drain before snapshotting the baseline.
@@ -139,7 +161,9 @@ func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck
 		require.NoError(t, err)
 		require.NoError(t, run.Get(context.Background(), nil))
 
-		leakCheck.Track(env)
+		if leakCheck != nil {
+			leakCheck.Track(env)
+		}
 	})
 }
 
