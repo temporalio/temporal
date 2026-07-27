@@ -49,8 +49,8 @@ type saaHandle struct {
 	d          *saaDriver
 	cfg        activityConfig // d.cfg with the windows this trace needs; see activityConfig.forTrace
 	activityID string
-	taskQueue  string
 	runID      string
+	taskQueue  string
 	token      []byte
 }
 
@@ -79,6 +79,7 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 		// A timer event is realized by waiting out its configured window.
 		a.awaitTimerEvent(t, e)
 	default:
+		// An RPC
 		require.NoError(t, a.rpc(e))
 	}
 }
@@ -160,7 +161,7 @@ func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	id := fmt.Sprintf("%s-%d", d.activityIDPrefix, d.numStarted)
 	resp, err := d.env.FrontendClient().StartActivityExecution(d.ctx, d.startRequest(cfg, id, id))
 	require.NoError(t, err)
-	return &saaHandle{d: d, cfg: cfg, activityID: id, taskQueue: id, runID: resp.RunId}
+	return &saaHandle{d: d, cfg: cfg, activityID: id, runID: resp.RunId, taskQueue: id}
 }
 
 func (d *saaDriver) startRequest(c activityConfig, activityID, taskQueue string) *workflowservice.StartActivityExecutionRequest {
