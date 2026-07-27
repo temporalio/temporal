@@ -6,8 +6,8 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/siderolabs/grpc-proxy v0.5.2
 	github.com/stretchr/testify v1.11.1
-	github.com/temporalio/omes v0.0.0-20260528212322-14460bcc246f
-	go.temporal.io/api v1.63.4-0.20260723165907-8335003978d3
+	github.com/temporalio/omes v0.0.0-20260529203146-c6ee1f56c726
+	go.temporal.io/api v1.63.4
 	go.temporal.io/server v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
