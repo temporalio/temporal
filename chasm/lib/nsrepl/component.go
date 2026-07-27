@@ -9,8 +9,12 @@ import (
 // namespace mutation: local CAS commit on the host cell, then parallel apply-if-higher
 // fan-out to peer cells via the cross-cluster admin RPC.
 //
-// One component per mutation. BusinessID = namespace_id gives per-namespace
-// serialization via UpdateWithStartExecution + BusinessIDConflictPolicyFail.
+// One component per mutation invocation. BusinessID = namespace_id:mutation_uuid
+// (unique per invocation), so concurrent mutations on the same namespace each get
+// their own component rather than blocking one another; the component is started
+// with chasm.StartExecution and awaited with chasm.PollComponent. Serialization of
+// concurrent same-namespace mutations happens at the metadata store's version-CAS
+// in ApplyLocalTask (matching legacy UpdateNamespace), not in the CHASM engine.
 type NamespaceMutationComponent struct {
 	chasm.UnimplementedComponent
 

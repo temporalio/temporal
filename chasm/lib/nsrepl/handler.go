@@ -32,7 +32,7 @@ func newHandler(logger log.Logger) *handler {
 // (`namespace_id:mutation_uuid`), so concurrent calls to the same namespace
 // each create their own component. Serialization happens at the metadata
 // store's version-CAS (matching legacy behavior); a CAS conflict surfaces to
-// the caller as FailedPrecondition, and the caller re-issues UpdateNamespace
+// the caller as Unavailable (retriable), and the caller re-issues UpdateNamespace
 // with fresh state.
 //
 // Returns:
@@ -106,11 +106,8 @@ func (h *handler) TriggerNamespaceMutation(
 					NewVersion: local.GetNewVersion(),
 				}, true, nil
 			case nsreplpb.LOCAL_APPLY_OUTCOME_FAILED:
-				msg := "local apply failed"
-				if f := local.GetFailure(); f != nil && f.GetMessage() != "" {
-					msg = f.GetMessage()
-				}
-				return nil, true, serviceerror.NewFailedPrecondition(msg)
+				f := local.GetFailure()
+				return nil, true, localApplyError(f.GetApplicationFailureInfo().GetType(), f.GetMessage())
 			default:
 				// Still pending; keep waiting.
 				return nil, false, nil
@@ -122,4 +119,26 @@ func (h *handler) TriggerNamespaceMutation(
 		return nil, pollErr
 	}
 	return out, nil
+}
+
+// localApplyError reconstructs the caller-facing gRPC error from a terminal
+// local-apply failure. The error class was determined at failure time by
+// classifyLocalErr and stored in the persisted failure's
+// ApplicationFailureInfo.Type; here we map it back so the caller sees
+// legacy-equivalent semantics — Unavailable is retriable (the frontend retry
+// interceptor and SDK/activity retry re-issue with fresh state), while
+// InvalidArgument and Internal are terminal. An empty/unknown class defaults to
+// Internal (a failure recorded without classification is treated as degenerate).
+func localApplyError(errType, msg string) error {
+	if msg == "" {
+		msg = "local apply failed"
+	}
+	switch errType {
+	case localFailureUnavailable:
+		return serviceerror.NewUnavailable(msg)
+	case localFailureInvalidArgument:
+		return serviceerror.NewInvalidArgument(msg)
+	default:
+		return serviceerror.NewInternal(msg)
+	}
 }

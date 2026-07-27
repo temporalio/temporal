@@ -4,20 +4,17 @@ import (
 	"context"
 	"fmt"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	namespacepb "go.temporal.io/api/namespace/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	nsreplpb "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1"
 	serverclient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/fx"
 )
@@ -170,8 +167,10 @@ func (h *applyLocalTaskHandler) recordLocalFailure(
 	ref chasm.ComponentRef,
 	applyErr error,
 ) error {
+	errType := classifyLocalErr(applyErr)
 	h.logger.Warn("nsrepl local apply failed",
 		tag.NewStringTag("namespace_id", ref.BusinessID),
+		tag.NewStringTag("error_type", errType),
 		tag.Error(applyErr),
 	)
 	_, _, err := chasm.UpdateComponent(
@@ -179,13 +178,50 @@ func (h *applyLocalTaskHandler) recordLocalFailure(
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
 			return nil, TransitionLocalFailed.Apply(c, mctx, EventLocalFailed{
-				Time: mctx.Now(c),
-				Err:  applyErr,
+				Time:    mctx.Now(c),
+				Err:     applyErr,
+				ErrType: errType,
 			})
 		},
 		nil,
 	)
 	return err
+}
+
+// Local-apply failure classes. These are carried in the persisted failure's
+// ApplicationFailureInfo.Type (see TransitionLocalFailed) and mapped back to a
+// caller-facing gRPC error in the TriggerNamespaceMutation poll predicate (see
+// localApplyError). Kept as plain strings rather than a proto enum: this is a
+// purely internal producer/consumer discriminator within the nsrepl package,
+// not part of any wire contract.
+const (
+	// localFailureUnavailable: CAS conflict or transient store failure. Retriable
+	// — the frontend's retry interceptor and SDK/activity retry re-issue the
+	// mutation with fresh state, matching legacy metadataMgr.UpdateNamespace.
+	localFailureUnavailable = "Unavailable"
+	// localFailureInvalidArgument: bad request / validation. Terminal.
+	localFailureInvalidArgument = "InvalidArgument"
+	// localFailureInternal: degenerate cases (unsupported operation, post-write
+	// read-back failure, etc.). Terminal.
+	localFailureInternal = "Internal"
+)
+
+// classifyLocalErr maps a local-apply error to the caller-facing gRPC error
+// class, mirroring legacy metadataMgr.UpdateNamespace semantics: a CAS conflict
+// or transient store failure is Unavailable (retriable), an invalid argument is
+// terminal, and anything else is a degenerate Internal failure. Symmetric with
+// classifyPeerErr on the peer path.
+func classifyLocalErr(err error) string {
+	switch err.(type) {
+	case *serviceerror.Unavailable,
+		*serviceerror.ResourceExhausted,
+		*serviceerror.DeadlineExceeded:
+		return localFailureUnavailable
+	case *serviceerror.InvalidArgument:
+		return localFailureInvalidArgument
+	default:
+		return localFailureInternal
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -212,10 +248,9 @@ type applyPeerTaskHandler struct {
 	//   - nsrepl_apply_duration_seconds{target_cell, source_cell}           histogram
 	// metricsHandler is wired through fx but not yet used.
 	//
-	// TODO(nsrepl): configure an explicit retry policy for retriable peer
-	// failures. Target shape: exponential backoff, ~1 hour total budget,
-	// ~20 attempts. Today we return the error and rely on CHASM's default task
-	// retry, which works but won't absorb long peer outages as gracefully.
+	// Retriable peer failures are retried with capped exponential backoff over a
+	// 7-day budget by recordPeerOutcome + TransitionPeerRetry (see statemachine.go),
+	// not by CHASM's default task retry.
 	metricsHandler metrics.Handler
 	logger         log.Logger
 }
@@ -295,7 +330,7 @@ func (h *applyPeerTaskHandler) Execute(
 	// NamespaceTaskAttributes wire shape so the receiver-side apply-if-higher
 	// logic can be reused unchanged.
 	req := &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask: buildNamespaceTaskAttributes(loaded.Operation, loaded.Detail),
+		NamespaceTask: nsreplication.NamespaceDetailToTaskAttributes(loaded.Operation, loaded.Detail),
 	}
 	resp, rpcErr := adminClient.ApplyNamespaceMutation(ctx, req)
 	if rpcErr != nil {
@@ -416,61 +451,4 @@ func convertOperation(op nsreplpb.NamespaceOperation) enumsspb.NamespaceOperatio
 	default:
 		return enumsspb.NAMESPACE_OPERATION_UNSPECIFIED
 	}
-}
-
-// buildNamespaceTaskAttributes converts the mutation into the NamespaceTaskAttributes
-// wire shape that the receiver-side apply-if-higher logic consumes. Mirrors the
-// conversion in transmission_task_handler.go's HandleTransmissionTask.
-func buildNamespaceTaskAttributes(
-	op enumsspb.NamespaceOperation,
-	detail *persistencespb.NamespaceDetail,
-) *replicationspb.NamespaceTaskAttributes {
-	info := detail.GetInfo()
-	config := detail.GetConfig()
-	replConfig := detail.GetReplicationConfig()
-
-	clusters := make([]*replicationpb.ClusterReplicationConfig, 0, len(replConfig.GetClusters()))
-	for _, c := range replConfig.GetClusters() {
-		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{ClusterName: c})
-	}
-
-	history := make([]*replicationpb.FailoverStatus, 0, len(replConfig.GetFailoverHistory()))
-	for _, s := range replConfig.GetFailoverHistory() {
-		history = append(history, &replicationpb.FailoverStatus{
-			FailoverTime:    s.GetFailoverTime(),
-			FailoverVersion: s.GetFailoverVersion(),
-		})
-	}
-
-	attrs := &replicationspb.NamespaceTaskAttributes{
-		NamespaceOperation: op,
-		Id:                 info.GetId(),
-		Info: &namespacepb.NamespaceInfo{
-			Name:        info.GetName(),
-			State:       info.GetState(),
-			Description: info.GetDescription(),
-			OwnerEmail:  info.GetOwner(),
-			Data:        info.GetData(),
-		},
-		Config: &namespacepb.NamespaceConfig{
-			WorkflowExecutionRetentionTtl: config.GetRetention(),
-			HistoryArchivalState:          config.GetHistoryArchivalState(),
-			HistoryArchivalUri:            config.GetHistoryArchivalUri(),
-			VisibilityArchivalState:       config.GetVisibilityArchivalState(),
-			VisibilityArchivalUri:         config.GetVisibilityArchivalUri(),
-			BadBinaries:                   config.GetBadBinaries(),
-			CustomSearchAttributeAliases:  config.GetCustomSearchAttributeAliases(),
-		},
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			ActiveClusterName: replConfig.GetActiveClusterName(),
-			Clusters:          clusters,
-		},
-		ConfigVersion:   detail.GetConfigVersion(),
-		FailoverVersion: detail.GetFailoverVersion(),
-		FailoverHistory: history,
-	}
-	if replConfig.GetState() == enumspb.REPLICATION_STATE_NORMAL {
-		attrs.ReplicationConfig.State = replConfig.GetState()
-	}
-	return attrs
 }

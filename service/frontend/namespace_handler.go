@@ -251,7 +251,7 @@ func (d *namespaceHandler) RegisterNamespace(
 	// Branch on the CHASM transport flag. Note: for CREATE there is no
 	// pre-existing notification_version to CAS against — pass 0 as
 	// ExpectedVersion; the metadata store treats this as a create-only path.
-	useCHASM := d.shouldUseCHASMReplication(isGlobalNamespace, false, replicationConfig)
+	useCHASM := d.shouldUseCHASMReplication(isGlobalNamespace, false, info.State, replicationConfig)
 	var namespaceID string
 	if useCHASM {
 		if err := d.invokeCHASMNamespaceMutation(
@@ -608,6 +608,11 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 	}
 
+	// Decide the replication transport once: the shared gate (global, has a peer,
+	// not a deletion) gated by the dynamic-config flag. Reused below for both the
+	// write branch and the legacy-queue fan-out skip so they can't disagree.
+	useCHASM := d.shouldUseCHASMReplication(isGlobalNamespace, clusterListChanged, info.State, replicationConfig)
+
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
 	} else if configurationChanged || activeClusterChanged || needsNamespacePromotion {
@@ -648,7 +653,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		// namespaces, the CHASM component does the local CAS write + peer fan-out
 		// (replacing both metadataMgr.UpdateNamespace and HandleTransmissionTask).
 		// Otherwise, fall back to today's queue-based path.
-		if d.shouldUseCHASMReplication(isGlobalNamespace, clusterListChanged, replicationConfig) {
+		if useCHASM {
 			if err := d.invokeCHASMNamespaceMutation(
 				ctx,
 				nsreplpb.NAMESPACE_OPERATION_UPDATE,
@@ -671,7 +676,7 @@ func (d *namespaceHandler) UpdateNamespace(
 
 	// HandleTransmissionTask publishes to the legacy queue. Skip it when the CHASM
 	// transport handled the peer fan-out for this mutation.
-	if !d.shouldUseCHASMReplication(isGlobalNamespace, clusterListChanged, replicationConfig) {
+	if !useCHASM {
 		err = d.namespaceReplicator.HandleTransmissionTask(
 			ctx,
 			enumsspb.NAMESPACE_OPERATION_UPDATE,
@@ -1251,22 +1256,23 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 }
 
 // shouldUseCHASMReplication reports whether the CHASM transport should handle
-// this mutation. True only when:
-//   - the namespace is global (replication is needed at all), AND
-//   - there is a peer to replicate to (>1 cluster, or the cluster list changed), AND
-//   - the UseCHASMNamespaceReplication dynamic config flag is enabled.
+// this mutation. True only when the mutation must replicate to peers at all
+// (see nsreplication.ShouldReplicateNamespace — global, has a peer, and not a
+// deletion) AND the UseCHASMNamespaceReplication dynamic config flag is enabled.
+// The replicate decision is shared with the legacy queue path so the two
+// transports can never disagree on which mutations replicate.
 func (d *namespaceHandler) shouldUseCHASMReplication(
 	isGlobalNamespace bool,
 	clusterListChanged bool,
+	state enumspb.NamespaceState,
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) bool {
-	if !isGlobalNamespace {
-		return false
-	}
-	if len(replicationConfig.GetClusters()) <= 1 && !clusterListChanged {
-		return false
-	}
-	return d.config.UseCHASMNamespaceReplication()
+	return nsreplication.ShouldReplicateNamespace(
+		isGlobalNamespace,
+		replicationConfig.GetClusters(),
+		clusterListChanged,
+		state,
+	) && d.config.UseCHASMNamespaceReplication()
 }
 
 // invokeCHASMNamespaceMutation routes the mutation through the CHASM transport.

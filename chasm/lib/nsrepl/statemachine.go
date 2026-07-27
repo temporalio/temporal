@@ -59,8 +59,9 @@ var TransitionLocalCommitted = chasm.NewTransition(
 // peers are never contacted. This is the "no divergence on caller-visible failure"
 // guarantee.
 type EventLocalFailed struct {
-	Time time.Time
-	Err  error
+	Time    time.Time
+	Err     error
+	ErrType string // caller-facing gRPC error class; see classifyLocalErr
 }
 
 var TransitionLocalFailed = chasm.NewTransition(
@@ -73,7 +74,13 @@ var TransitionLocalFailed = chasm.NewTransition(
 			Failure: &failurepb.Failure{
 				Message: event.Err.Error(),
 				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						// Type carries the caller-facing error class so the handler's
+						// poll predicate can reconstruct the right gRPC error; only a
+						// CAS conflict / transient store failure (Unavailable) is retriable.
+						Type:         event.ErrType,
+						NonRetryable: event.ErrType != localFailureUnavailable,
+					},
 				},
 			},
 		}
