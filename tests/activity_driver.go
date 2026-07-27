@@ -1,8 +1,7 @@
 package tests
 
-// Shared by the two activity drivers, activity_standalone_driver.go and activity_workflow_driver.go:
-// the activity a trace configures, the activity info both surfaces expose, and the event vocabulary
-// and waiting machinery that belongs to neither.
+// Config shared by the two activity drivers, activity_standalone_driver.go and
+// activity_workflow_driver.go.
 
 import (
 	"cmp"
@@ -16,18 +15,14 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// --- the activity under test ------------------------------------------------------------------
-
-// activityConfig is the activity a driver starts. One value configures either surface, so a parity
-// test describes a single activity rather than two that might differ.
+// activityConfig is the activity a driver starts.
 //
-// Every field is the value it names. A zero duration leaves that option unset, which for a timeout
-// means it never fires; the exceptions are noted.
-//
-// Timeouts are usually left unset: forTrace gives a short window to each one the trace fires, so
-// writing model.HeartbeatElapses is itself the statement that this activity has a heartbeat timeout.
-// Set one explicitly only to say something the trace cannot — that it exists without firing, or that
-// its exact duration is what the test is about.
+// activityConfig.forTrace takes a trace and computes defaults for the confi, so you will often be
+// able to supply a trace and not worry about the config. Timeouts are usually left unset:
+// activityConfig.forTrace gives a short window to each one the trace fires, so that adding e.g.
+// model.HeartbeatElapses to a trace is all you need to do to specify that the activity has a
+// heartbeat timeout. Set a timeout explicitly in the config only to say something the trace cannot
+// — that it exists without firing, or that its exact duration is what the test is about.
 //
 // The server rejects an activity with neither start-to-close nor schedule-to-close set. The drivers
 // always send start-to-close, defaulted long enough not to fire. The other timeouts are simply
@@ -41,19 +36,19 @@ type activityConfig struct {
 	NonRetryableErrorTypes []string      // RetryPolicy NonRetryableErrorTypes
 
 	StartToClose    time.Duration // 0 => activityLongTimeout, so it does not fire
-	ScheduleToClose time.Duration
-	ScheduleToStart time.Duration
-	Heartbeat       time.Duration
+	ScheduleToClose time.Duration // 0 = unset
+	ScheduleToStart time.Duration // 0 = unset
+	Heartbeat       time.Duration // 0 = unset
 	StartDelay      time.Duration // SAA only: WFA has no per-activity start delay
 }
 
-// activityParityDefaultInput is the payload the drivers start activities with. Its content is never asserted on.
+// activityParityDefaultInput is the payload the drivers start activities with.
 var activityParityDefaultInput = payloads.EncodeString("Input")
 
 // activityLongTimeout is a timeout long enough not to fire during a test.
-const activityLongTimeout = time.Hour
+const activityLongTimeout = 24 * time.Hour
 
-// activityShortTimeout is a timeout short enough for a trace to wait out.
+// activityShortTimeout is a timeout short enough for a trace to wait out during a test.
 const activityShortTimeout = 2 * time.Second
 
 // activityLongRetryInterval is a retry interval long enough to observe an activity while it is still
