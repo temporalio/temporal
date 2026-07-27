@@ -3,6 +3,9 @@
 **Status: prototype, for evaluation.** Nothing here is on by default. With
 `expressionFilepath` unset, dynamic config behaves exactly as it does today.
 
+For the case for and against adopting this, without the implementation detail, see
+[constraint-expression-dynamicconfig-overview.md](./constraint-expression-dynamicconfig-overview.md).
+
 ## The problem
 
 Today a dynamic config value is selected by exact-equality match against
@@ -38,7 +41,7 @@ changes nothing about how the existing `Get` accessors behave.
 The whole integration rests on one property. `Client.GetValue(key)` returns
 `[]ConstrainedValue`, and `Collection` picks among them by walking the setting's precedence
 list. Every precedence list ends in the empty `Constraints`
-(`cmd/tools/gendynamicconfig/main.go:63-118`). So:
+(the `Precedences` table in `cmd/tools/gendynamicconfig/main.go`). So:
 
 > A single `ConstrainedValue` with empty `Constraints` is matched by every setting at every
 > precedence — global, namespace, task queue, shard, destination, the lot.
@@ -89,9 +92,10 @@ Three properties make it safe to adopt gradually:
   precedence list, so a call site that moves to `GetC` keeps honouring constrained values in
   the dynamic config file. `TestGetC_FallsBackToFileConstrainedValues` pins this down.
 
-`Subscribe` is deliberately left alone: a variadic cannot precede its callback parameter, and
-per-call dimensions are meaningless for a long-lived subscription. Subscribers see the
-ambient resolution, which is what `GetValue` serves.
+`Subscribe` is deliberately left alone. There is no technical obstacle — a
+`func(ConstraintsMap, callback func(T))` would be easy enough — but per-call dimensions are
+meaningless for a subscription that outlives any one call. Subscribers get the ambient
+resolution, which is what `GetValue` serves.
 
 ### Which entries are evaluated when
 
@@ -107,12 +111,14 @@ and that correctly forces a re-evaluation.
 
 ## Results
 
-### Arbitrary constraint dimensions — confirmed, for deployment scope
+### Arbitrary constraint dimensions — confirmed
 
-`config/dynamicconfig/expressions-demo.yaml` targets `env`, `zone`, `cluster`, `service`, and
-an operator-invented `deployRing`. None is expressible today; all are configuration-only here,
-with no code change and no codegen. `TestDemoExpressionConfig` asserts the demo file resolves
-as its comments claim, so the documentation cannot drift from the behaviour.
+`config/dynamicconfig/expressions-demo.yaml` targets deployment dimensions — `env`, `zone`,
+`cluster`, `service`, and an operator-invented `deployRing` — and, through `GetC`, per-caller
+ones: `sdkName`, `sdkMajor`/`sdkMinor`, and `namespace` on the same setting. None of them is
+expressible today; all are configuration-only here, with no code change and no codegen.
+`TestDemoExpressionConfig` asserts the demo file resolves as its comments claim, so the
+documentation cannot drift from the behaviour.
 
 ### Boolean logic — confirmed, with gaps
 
@@ -149,14 +155,14 @@ M5 Max:
 
 | Case | ns/op | B/op | allocs/op |
 | --- | --- | --- | --- |
-| `Get`, today's path | 53.3 | 0 | 0 |
-| `Get`, expression-backed key | 49.8 | 0 | 0 |
-| `Get`, key delegated to the inner client | 54.3 | 0 | 0 |
-| `GetC(nil)`, unconfigured key | 33.1 | 0 | 0 |
-| `GetC(nil)`, ambient-only key | 21.7 | 0 | 0 |
-| `GetC(c)`, per-caller key, 1 caller dimension | 59.3 | 0 | 0 |
-| `GetC(c)`, per-caller key, 5 caller dimensions | 60.8 | 0 | 0 |
-| building one `ConstraintsMap` per request | 72.5 | 336 | 2 |
+| `Get`, today's path | 50.6 | 0 | 0 |
+| `Get`, expression-backed key | 47.2 | 0 | 0 |
+| `Get`, key delegated to the inner client | 51.9 | 0 | 0 |
+| `GetC(nil)`, unconfigured key | 32.5 | 0 | 0 |
+| `GetC(nil)`, ambient-only key | 21.4 | 0 | 0 |
+| `GetC(c)`, per-caller key, 1 caller dimension | 59.2 | 0 | 0 |
+| `GetC(c)`, per-caller key, 5 caller dimensions | 58.1 | 0 | 0 |
+| building one `ConstraintsMap` per request | 71.6 | 336 | 2 |
 
 The `Get` rows are unchanged from before this work, and are not merely close to today's path —
 they *are* today's path, since ambient-only entries are resolved at load and what `Collection`
@@ -164,9 +170,9 @@ sees afterwards is an ordinary `[]ConstrainedValue`.
 
 The `GetC` rows are the new result, and better than the plan targeted: **per-read evaluation
 allocates nothing**, and does not grow with the number of caller dimensions. That is down to
-two things — expressions resolve an *index* into values decoded at load, so nothing is
-unmarshalled per read; and caller and ambient constraints are presented to the evaluator as a
-layered view (`types.Lookup`) rather than merged into a fresh map. An earlier revision that
+two things — the library carries already-decoded values and never unmarshals on the read
+path (see below); and caller and ambient constraints are presented to it as a layered view
+(`types.Lookup`) rather than merged into a fresh map. An earlier revision that
 copied into a pooled map cost 230 ns and 3 allocations for the same work.
 
 The last row is the real per-request cost and the reason to build one `ConstraintsMap` per
@@ -176,7 +182,7 @@ a package variable to avoid reporting a number callers will not see.)
 
 ## Who wins
 
-Three sources can have something to say about one setting. In order:
+Four things can have something to say about one setting. In order:
 
 1. **A more specific Go-side constrained default** (`New*SettingWithConstrainedDefault`).
 2. **The expression file.**
@@ -251,7 +257,7 @@ instance is chosen per type, the obvious integration was one `Configurator[any]`
 everything. That does not work, for three separate reasons.
 
 **JSON erases the Go types Temporal's converters expect.** `encoding/json` decodes every
-number into a `float64`, and `convertInt` (`collection.go:577`) accepts only the integer
+number into a `float64`, and `convertInt` (`collection.go`) accepts only the integer
 kinds — there is no `float64` case. So a perfectly ordinary setting:
 
 ```yaml
@@ -271,8 +277,7 @@ nested maps, and through `setting.Validate` against the settings registry, which
 a type error into a load-time failure instead of a silent default at read time.
 
 **And a decoded value has no stable address.** `Collection` memoises conversions using weak
-pointers into the `ConstrainedValue` the client returned (`collection.go:549`, and the
-contract note at `client.go:26-30`). A bare value gives the cache nothing to key on, so every
+pointers into the `ConstrainedValue` the client returned (`convertWithCache`, and the contract note on `Client.GetValue`). A bare value gives the cache nothing to key on, so every
 read would re-run the converter. For the 22 typed settings that means a full mapstructure
 decode over a deep copy of the default, on every lookup.
 
@@ -311,9 +316,11 @@ expression file configured behaves exactly as it does today, and the `Get` acces
 untouched, so adoption is entirely opt-in per call site.
 
 **Migrating call sites to `GetC` is the path to removing the precedence system.** With one
-uniform signature the precedence axis stops being a code-generation concern: today
-`gendynamicconfig` emits 7 value types × 8 precedences — 2280 lines, 56 `Get` property-fn
-aliases and 8 hardcoded precedence orders — against 7 `GetC` aliases for the same coverage.
+uniform signature the precedence axis stops being a code-generation concern. Before this
+work `gendynamicconfig` emitted 7 value types × 8 precedences: 1972 lines, 56 `Get`
+property-fn aliases and 8 hardcoded precedence orders. `GetC` covers the same ground with 7
+aliases and no precedence axis at all — so once call sites have moved, most of that
+generated code can go.
 The migration is mechanical but large: ~400 non-test call sites of namespace-filtered settings
 alone, perhaps three times that across all precedences, plus ~71 test func-literal overrides.
 Frontend and history are ~60% of it, with `chasm/lib` a third bucket at ~80.
@@ -323,7 +330,7 @@ Three things block finishing it:
 1. **Percentage and time-phased rollout must exist in the DSL**, or compose with
    `GradualChange`. `matching.useNewMatcher` and `enableFairness` ship on it today, so the DSL
    is not yet a superset of what the current system does. This is the real blocker.
-2. **Constrained defaults** (`defaultNumTaskQueuePartitions`, `shared_constants.go:11`) are
+2. **Constrained defaults** (`defaultNumTaskQueuePartitions` in `shared_constants.go`) are
    Go-side and outrank an unconstrained value. They need to become DSL, or stay as an explicit
    fallback.
 3. **The shipped YAML needs converting.** Mechanical — each `[{value, constraints}]` list
