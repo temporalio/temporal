@@ -208,12 +208,12 @@ func TestObjectLeak_IgnoreCurrent(t *testing.T) {
 	)
 	require.NoError(t, err)
 	check.Track(baselineRoot)
-	check.IgnoreCurrent()
+	baseline := check.IgnoreCurrent()
 
 	root := &graphRoot{}
 	check.Track(root)
 
-	report, err := check.Check()
+	report, err := check.Check(baseline)
 	runtime.KeepAlive(baselineRoot)
 	runtime.KeepAlive(root)
 	require.Error(t, err)
