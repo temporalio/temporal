@@ -135,24 +135,23 @@ func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 	if next := info.GetNextAttemptScheduleTime(); next != nil {
 		deadline = next.AsTime().Add(activityDriverTimerMargin)
 	}
-	for {
-		switch {
-		case info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING:
-			t.Errorf("%s: the activity ended as %s before its delayed dispatch, so the dispatch never happened",
-				e, info.GetStatus())
-			return
-		case info.GetRunState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
-			t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
-			return
-		case info.GetNextAttemptScheduleTime() == nil:
-			return
-		case !time.Now().Before(deadline):
-			t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
-				"Last observed: %+v", e, activityDriverTimerMargin, saaActivityInfo(info))
-			return
-		}
-		time.Sleep(activityDriverPollInterval)
+	settled := func() bool {
 		info = a.describe(t).GetInfo()
+		return info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING ||
+			info.GetRunState() == enumspb.PENDING_ACTIVITY_STATE_STARTED ||
+			info.GetNextAttemptScheduleTime() == nil
+	}
+	if !activityDriverPollUntil(deadline, settled) {
+		t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
+			"Last observed: %+v", e, activityDriverTimerMargin, saaActivityInfo(info))
+		return
+	}
+	switch {
+	case info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING:
+		t.Errorf("%s: the activity ended as %s before its delayed dispatch, so the dispatch never happened",
+			e, info.GetStatus())
+	case info.GetRunState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
+		t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
 	}
 }
 
