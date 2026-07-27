@@ -107,7 +107,7 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 
 	// review which method is allowed
 	methodName := api.MethodName(info.FullMethod)
-	namespaceName := MustGetNamespaceName(i.namespaceRegistry, req)
+	namespaceName, ctx := GetCachedNamespaceName(ctx, i.namespaceRegistry, req)
 
 	if namespaceName != namespace.EmptyName && i.enabledForNS(namespaceName.String()) {
 		var waitTime *time.Duration

@@ -72,7 +72,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
-	nsName := MustGetNamespaceName(ni.namespaceRegistry, req)
+	nsName, ctx := GetCachedNamespaceName(ctx, ni.namespaceRegistry, req)
 	mh := GetMetricsHandlerFromContext(ctx, ni.logger)
 	cleanup, err := ni.Allow(nsName, info.FullMethod, mh, req)
 	defer cleanup()

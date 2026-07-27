@@ -169,7 +169,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	handler grpc.UnaryHandler,
 ) (any, error) {
 	methodName := api.MethodName(info.FullMethod)
-	nsName := MustGetNamespaceName(ti.namespaceRegistry, req)
+	nsName, ctx := GetCachedNamespaceName(ctx, ti.namespaceRegistry, req)
 
 	metricsHandler, logTags := ti.unaryMetricsHandlerLogTags(req, info.FullMethod, methodName, nsName)
 
