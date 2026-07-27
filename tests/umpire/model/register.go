@@ -64,6 +64,7 @@ func defaultFacts() []umpire.Fact {
 	return []umpire.Fact{
 		&fact.WorkflowStarted{},
 		&fact.WorkflowExecutionCompleted{},
+		&fact.WorkflowRunStarted{},
 		&fact.WorkflowRunCompleted{},
 		&fact.WorkflowTaskAdded{},
 		&fact.WorkflowTaskPolled{},

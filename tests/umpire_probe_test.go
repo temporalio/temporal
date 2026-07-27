@@ -441,7 +441,7 @@ func (s *UmpireTestSuite) TestProbeWorkflowGenerated() {
 	oracle := action.Oracle{Env: env}
 
 	require.NoError(t, umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan),
-		"the generic runtime should drive the WorkflowRun entity to completed")
+		"the generic runtime should drive the WorkflowRun entity created→started→completed")
 	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "the run lifecycle should ground clean")
 
 	runID, ok := rc.Binding("run")
@@ -449,7 +449,78 @@ func (s *UmpireTestSuite) TestProbeWorkflowGenerated() {
 	state, ok := oracle.Current(model.WorkflowRunType, runID)
 	require.True(t, ok, "the run should be modelled")
 	require.Equal(t, model.WorkflowRunCompleted, state, "the run should reach completed")
-	t.Logf("[workflow] drove run %s to %s", runID, state)
+
+	// The run was observed at start with its lineage: a first run is its own chain root with no
+	// predecessor (the foundation the continue-as-new / reset graph builds on).
+	run := workflowRun(env, runID)
+	require.NotNil(t, run, "the run entity should be modelled")
+	require.Equal(t, runID, run.FirstRunID, "a first run is its own chain root")
+	require.Empty(t, run.PreviousRunID, "a first run has no predecessor")
+	t.Logf("[workflow] drove run %s to %s (first=%s prev=%q)", runID, state, run.FirstRunID, run.PreviousRunID)
+}
+
+// continueAsNewOnceWorkflow continues-as-new once (first run), then completes (successor run) — so
+// one WorkflowID has two runs linked by lineage.
+func continueAsNewOnceWorkflow(ctx workflow.Context, done bool) error {
+	if done {
+		return nil
+	}
+	return workflow.NewContinueAsNewError(ctx, continueAsNewOnceWorkflow, true)
+}
+
+// TestProbeWorkflowContinueAsNew is the run-graph proof: a continue-as-new produces two runs of one
+// WorkflowID, and the Monitor models both — the first (its own chain root, no predecessor) and the
+// successor (predecessor = the first run, same root) — from the start telemetry's lineage
+// attributes. This is the foundation the CAN/reset action model (relationship refs) builds on.
+func (s *UmpireTestSuite) TestProbeWorkflowContinueAsNew() {
+	t := s.T()
+	env := testcore.NewEnv(t)
+	env.SdkWorker().RegisterWorkflow(continueAsNewOnceWorkflow)
+
+	run, err := env.SdkClient().ExecuteWorkflow(env.Context(), sdkclient.StartWorkflowOptions{
+		ID:        "umpire-can-wf",
+		TaskQueue: env.WorkerTaskQueue(),
+	}, continueAsNewOnceWorkflow, false)
+	require.NoError(t, err)
+	require.NoError(t, run.Get(env.Context(), nil), "the continue-as-new chain should complete")
+
+	nsRoot := umpire.NewEntityID(model.NamespaceType, env.NamespaceID().String())
+	var runs []*model.WorkflowRun
+	require.Eventually(t, func() bool {
+		runs = nil
+		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowRunType, 0, &nsRoot) {
+			if r, ok := e.Entity.(*model.WorkflowRun); ok {
+				runs = append(runs, r)
+			}
+		}
+		return len(runs) == 2
+	}, 15*time.Second, 200*time.Millisecond, "both runs should be modelled")
+
+	var first, succ *model.WorkflowRun
+	for _, r := range runs {
+		if r.PreviousRunID == "" {
+			first = r
+		} else {
+			succ = r
+		}
+	}
+	require.NotNil(t, first, "the first run has no predecessor")
+	require.NotNil(t, succ, "the continue-as-new successor has a predecessor")
+	require.Equal(t, first.RunID, succ.PreviousRunID, "the successor's predecessor is the first run")
+	require.Equal(t, first.RunID, succ.FirstRunID, "both runs share the chain root")
+	require.Equal(t, first.RunID, first.FirstRunID, "the first run is its own chain root")
+	t.Logf("[can] first=%s succ=%s (prev=%s root=%s)", first.RunID, succ.RunID, succ.PreviousRunID, succ.FirstRunID)
+}
+
+// workflowRun returns the modelled WorkflowRun with the given RunID, or nil.
+func workflowRun(env *testcore.TestEnv, runID string) *model.WorkflowRun {
+	nsRoot := umpire.NewEntityID(model.NamespaceType, env.NamespaceID().String())
+	for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowRunType, 0, &nsRoot) {
+		if r, ok := e.Entity.(*model.WorkflowRun); ok && r.RunID == runID {
+			return r
+		}
+	}
+	return nil
 }
 
 // TestProbeNexusLearnedFootprint proves fault targeting comes from the *learned* footprint, not the

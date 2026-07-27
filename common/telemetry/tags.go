@@ -16,8 +16,8 @@ const (
 	BusinessIDKey = "temporalBusinessID"
 	RunIDKey      = "temporalRunID"
 
-	AttrWorkflowID    attribute.Key = "workflow.id"
-	AttrRunID         attribute.Key = "workflow.run_id"
+	AttrWorkflowID attribute.Key = "workflow.id"
+	AttrRunID      attribute.Key = "workflow.run_id"
 	// AttrFirstRunID / AttrPreviousRunID carry a run's lineage: the chain root and the immediate
 	// predecessor (continue-as-new / reset / retry). Empty previous means a first run. They let an
 	// observer reconstruct the run graph under a WorkflowID (see UMPIRE_IDENTITY.md).

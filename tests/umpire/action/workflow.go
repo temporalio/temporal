@@ -84,11 +84,14 @@ func runRef(fresh bool) umpire.Ref {
 	return umpire.Ref{Type: model.WorkflowRunType, Var: "run", Fresh: fresh}
 }
 
-// RunWorkflow starts a self-completing workflow execution; its observed completion is the settling
-// transition of the run-precise WorkflowRun entity (created→completed).
+// RunWorkflow starts a self-completing workflow execution; the run-precise WorkflowRun entity is
+// observed through its full lifecycle — created→started (start span) →completed (completion span).
 var RunWorkflow = umpire.Action{
 	Name: "StartWorkflowExecution(self-completing)", Kind: umpire.ClientRPC, Hosting: umpire.Standalone,
-	Effects: []umpire.Effect{{Ref: runRef(true), Event: model.WorkflowRunComplete}},
+	Effects: []umpire.Effect{
+		{Ref: runRef(true), Event: model.WorkflowRunStart},
+		{Ref: runRef(false), Event: model.WorkflowRunComplete},
+	},
 	Entry:   []string{"StartWorkflowExecution"},
 	Realize: runWorkflow{},
 }

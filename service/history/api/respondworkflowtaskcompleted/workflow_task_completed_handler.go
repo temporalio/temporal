@@ -1150,6 +1150,21 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	}
 
 	handler.newMutableState = newMutableState
+
+	// Emit an OTEL span event for the continue-as-new successor's start, carrying its lineage — the
+	// previous run (the one performing the CaN) and the chain root — so the umpire observer links it
+	// into the run graph under the WorkflowID. See UMPIRE_IDENTITY.md.
+	newKey := newMutableState.GetWorkflowKey()
+	trace.SpanFromContext(ctx).AddEvent(telemetry.EventWorkflowExecutionStarted,
+		trace.WithAttributes(
+			telemetry.AttrWorkflowID.String(newKey.WorkflowID),
+			telemetry.AttrRunID.String(newKey.RunID),
+			telemetry.AttrNamespaceID.String(newKey.NamespaceID),
+			telemetry.AttrFirstRunID.String(newMutableState.GetExecutionInfo().GetFirstExecutionRunId()),
+			telemetry.AttrPreviousRunID.String(handler.mutableState.GetWorkflowKey().RunID),
+		),
+	)
+
 	return event, nil
 }
 

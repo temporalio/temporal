@@ -115,6 +115,114 @@ Footprint capture therefore lives in the `traces`+`internals` environments (`loc
 `cicd` for the gRPC-only subset). It is **not** a canary capability — canary sees only `rpc`
 (SPEC, *Environments & capabilities*).
 
+## Ordering & reconciliation — delayed, out-of-order traces
+
+Association answers *which entity* an operation belongs to. This answers *in what order* the
+operations (and the transition delimiters that window them) actually happened — the harder half
+in a distributed setting, where spans arrive delayed and reordered. Two distinct problems hide
+under "out of order":
+
+1. **Arrival order ≠ event order.** OTEL fires `OnEnd` in span-*completion* order; an async task
+   boundary lets a child unit-of-work's span land before or after its parent; a remote collector
+   adds batching + network delay. Today the Monitor judges on *arrival* order — `lifecycle.go`
+   stamps `entered[state] = time.Now()` and every entity `*At` is `time.Now()` at fact-processing
+   time, applied in the order facts arrive. This is the observation-time-not-event-time gap
+   (`UMPIRE_PLAN.md`, gap #2; risk #7 below).
+2. **Delayed arrival.** A span for an early event shows up *after* the Monitor already judged (or
+   after teardown). This is what makes `Closure`/`HistoryOrdering` false-positive prone and what
+   drove `EntityTransitionLegality` vacuous: `Classify → NoOp` papers over reorder by refusing to
+   call a forward-jump illegal, and that refusal is exactly what cost the rule its teeth
+   (`UMPIRE_PLAN.md`).
+
+### Use the clock that exists — but not every transition has one
+
+The textbook answer is vector clocks. They are the wrong *first* tool here, for two reasons:
+
+- **You'd have to build the propagation** — thread a clock through task-create → persist →
+  rehydrate, merging on every boundary. That is the *same* hot-path server change as the
+  OTEL-Link causal-linking option above ("Association", *Causal linking*), and it is deferred for
+  the same reason. A vector clock is strictly *more* work than span-links and buys the same
+  partial causal order.
+- **Temporal already ships strong clocks for a large subset of transitions** — use those before
+  inventing anything.
+
+But there is no *single* universal clock, and pretending otherwise is the trap. The transitions
+Umpire observes fall into three ordering tiers:
+
+| Tier | Transitions | Clock | Order |
+|---|---|---|---|
+| **History-materialized** | workflow lifecycle, `WorkflowTask` scheduled/started/completed, update **accepted/completed** | history **`EventID`** (via `GetWorkflowHistory`) | **total**, per run, durable |
+| **Internal, counter-backed** | CHASM/HSM transitions, mutable-state writes | `TransitionCount` / version / `DBRecordVersion` | total *within that component*, needs `internals` |
+| **Clockless** | update **`admitted`** (frontend-side, pre-history), **speculative** WFT states (deliberately *not* in history until converted), `TaskQueue`, matching `AddWorkflowTask`, persistence ops, shard/membership/global, **cross-run** | none | only wall-clock arrival, or none at all |
+
+So `EventID` is the *strongest* key where it exists and resolves the flagship cross-entity
+invariants (`Closure`, `HistoryOrdering`, update ↔ close ↔ task) — but it covers only the top tier.
+The clockless tier is exactly the footprint's persistence/matching/speculative surface, and it does
+**not** get a per-transition order. Two honest fallbacks for it:
+
+- **Window-anchoring.** A clockless op is ordered only *relative to the transition delimiters that
+  bracket it* — it happened within the `[prev-transition, this-transition]` window, whose endpoints
+  *are* clocked (the delimiter is usually a history event or a counter-backed CHASM transition). The
+  op's position *inside* the window is unresolved, so the footprint treats those ops as an **unordered
+  set within a clocked window**, not a sequence. This is the same call as risk #1 (some edges are only
+  stable as a subset invariant, not an exact ordered set) — ordering and determinism are the same
+  problem wearing two hats.
+- **Span-links** resolve the clockless tier faithfully but cost the deferred causal-tracing effort;
+  reserve them for the residue that window-anchoring can't place (entity-less shard/membership, or a
+  clockless op whose bracketing window is itself ambiguous).
+
+So the reconciliation key is **tiered — `EventID` first, internal counters where `internals` is
+available, window-anchoring for the clockless set** — and the fix on top of it is layered:
+
+| Layer | What | Where it runs | Cost |
+|---|---|---|---|
+| **1. Carry an order-key** | put the best available key in each `Fact` — `EventID`, else internal counter, else nothing — plus server event-time; derive `entered[state]`/`*At` from it, not `time.Now()` | everywhere | a field copy — free |
+| **2. Order-insensitive fold** | entity holds the *set* of observed `(event, order-key)` and recomputes state as the terminal/max over it, so a late *earlier* event can't regress state and a late *later* event still advances it; keyless events fall back to arrival with `NoOp` tolerance | live/per-PR (`inproc`) | O(k log k) over tiny k |
+| **3. Judge over the settled, sorted log** | at **eval** (run/eval split, SPEC), sort the `FactLog` by order-key per entity where one exists and judge the complete set; delayed/reordered arrival stops mattering for the clocked tiers | eval; `cicd` adds a watermark reorder-buffer on the live path | buffer memory + watermark latency, per isolated namespace |
+
+Layer 1 is the unlock and is **forced by the replay constraint**, not just correctness: the SPEC
+requires "same seed + inputs ⇒ reproduces," and arrival order is inherently non-deterministic
+(goroutine scheduling, collector batching), so judging on arrival order can *never* be replayable.
+Layer 3 is where `EntityTransitionLegality` regains teeth — for the history-materialized tier a
+sound event order finally distinguishes a genuine illegal skip from a merely-unobserved
+intermediate. The clockless tier gains no total order from any of this; it stays a
+window-anchored set (above), and rules over it must be set/subset invariants, not sequence
+assertions.
+
+### Don't reconcile by trying combinations
+
+Brute-forcing candidate orderings at judge time is exponential and non-deterministic — the
+opposite of replayable. Two things dissolve the ambiguity instead of reconciling it:
+
+- **At the source:** the Planner drives **one entity in an isolated namespace** (see *Association*
+  and risk #2). Co-occurrence ≈ causality when only one entity is in flight, so little is left to
+  reorder.
+- **For coverage:** trying combinations is the **Planner's** job (route modes `all` / `random`+seed
+  in `UMPIRE_PLANNER.md`), where each combination is a *separately seeded, replayable run* — not a
+  reconciliation of one ambiguous trace. Combinations explore state space; they don't disambiguate
+  order.
+
+### Worst where it matters least
+
+The reconciliation burden lands almost entirely in the local/cicd `traces` path and is nearly
+absent in prod:
+
+- **`canary` (most prod-like) sees `rpc` only — not `traces`.** The flagship rules re-sourced to
+  `GetWorkflowHistory` + `PollWorkflowExecutionUpdate` + response errors read history that is
+  **already totally ordered by `EventID`** — prod *reads* the canonical order off the RPC response,
+  it does not reconcile anything (SPEC / `UMPIRE_PLAN.md`, *reclassification insight*).
+- **`local-rpc` / in-process:** synchronous, no collector, no network reorder, one isolated
+  entity — Layers 1–2 add essentially nothing.
+- **`cicd` (remote):** real collector + batching + delay is the only place the watermark
+  reorder-buffer earns its keep; the cost is on the *collection* path, not the SUT.
+- **The heavy trace-derived footprinting stays nightly/opt-in, never per-PR** (see *Practicality*),
+  regardless.
+
+Net: reconciliation machinery lives in `traces`+`internals` (local/cicd), is anchored on `EventID`,
+and runs nightly for the heavy parts; prod/canary sidesteps it by reading ordered history over RPC.
+Vector clocks and combination-replay are both avoidable — the first because `EventID` already is the
+clock, the second because isolated-namespace driving removes the ambiguity at the source.
+
 ## Storage format (sketch)
 
 ```jsonc
@@ -250,7 +358,8 @@ op** and a fixed budget, and `log()` what was skipped (no silent truncation).
    the stores footprints actually reference first.
 7. **Event-time ordering** (the standing `UMPIRE_PLAN.md` gap) bites here too: windowing
    operations between transition delimiters needs order-sound timestamps, not observation-time
-   `time.Now()`.
+   `time.Now()`. See *Ordering & reconciliation* for the tiered clock (`EventID` / internal
+   counter / window-anchored set) and why vector clocks are the wrong first tool.
 
 ## Status
 

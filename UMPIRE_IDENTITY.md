@@ -8,9 +8,12 @@ mechanism but three, because the ids have three different origins. For the whole
 for the driver read [`UMPIRE_ACTIONS.md`](./UMPIRE_ACTIONS.md); the rejection resolution this
 generalises is in [`UMPIRE_ERR.md`](./UMPIRE_ERR.md).
 
-> **Status: design.** The namespace mechanism is implemented; the single-run `WorkflowRun` entity
-> is implemented as the degenerate (one-node) case; the run **graph** (continue-as-new / reset /
-> retry) and the telemetry it needs are the design below. Not yet built.
+> **Status: in progress.** The namespace mechanism is implemented. Phase 1 has started: the server
+> now emits `EventWorkflowExecutionStarted` with lineage attributes (`AttrFirstRunID` /
+> `AttrPreviousRunID`) at the **first-run** start site, and the `WorkflowRun` entity is observed at
+> start (created→started→completed) with its lineage captured. The remaining emit sites
+> (continue-as-new / reset / retry successors) and the run **graph** (Phases 2–4) are the design
+> below.
 
 ## Why
 
@@ -143,9 +146,19 @@ child entities keyed under a parent) is already in place.
 ## Plan
 
 1. **Run-lifecycle telemetry with lineage** (server-side). Emit `EventWorkflowExecutionStarted`
-   (and CAN/reset markers) carrying `RunID` + `ContinuedExecutionRunId` + `FirstExecutionRunId` +
-   reset base, mirroring the completion `AddEvent`. This is the prerequisite — without it there is
-   no successor id or edge to correlate to.
+   carrying `RunID` + `AttrFirstRunID` + `AttrPreviousRunID`, mirroring the completion `AddEvent`.
+   This is the prerequisite — without it there is no successor id or edge to correlate to.
+   - **done: first-run emit** — `service/history/api/startworkflow/api.go` (`prepareNewWorkflow`),
+     consumed by `fact.WorkflowRunStarted` → `model.WorkflowRun` (start + lineage). A first run is
+     its own chain root with no predecessor.
+   - **done: continue-as-new emit** — `handleCommandContinueAsNewWorkflow` emits the successor's
+     start with `AttrPreviousRunID` = the run performing the CaN and `AttrFirstRunID` = the chain
+     root. `TestProbeWorkflowContinueAsNew` proves the Monitor models both runs of one WorkflowID,
+     linked by lineage — the first graph *edge*.
+   - **todo: reset / retry emits** — reset (the reset handler's forked run) and retry
+     (`service/history/workflow/retry.go`), each setting `AttrPreviousRunID` / `AttrFirstRunID` from
+     the run's lineage. (A CaN predecessor run currently stays `started` — a `continued_as_new`
+     terminal for the closing run is a Phase-2 addition.)
 2. **Run-graph model.** `WorkflowRun` nodes + lineage edges under `Workflow`; facts populate nodes
    and links. Fold today's single-run node in as the one-node case; move its correlation from
    bind-from-response to lineage.
