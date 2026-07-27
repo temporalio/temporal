@@ -158,6 +158,11 @@ func (r report) writeSummary(out *strings.Builder) {
 	)
 }
 
+type objectGroupKey struct {
+	path     string
+	typeName string
+}
+
 type retentionStats struct {
 	groups      []objectGroup
 	paths       int
@@ -170,11 +175,6 @@ func newRetentionStats() retentionStats {
 		addresses:   make(map[uintptr]struct{}),
 		groupsByKey: make(map[objectGroupKey]*objectGroup),
 	}
-}
-
-type objectGroupKey struct {
-	path     string
-	typeName string
 }
 
 func (s *retentionStats) add(obj trackedObject) {
