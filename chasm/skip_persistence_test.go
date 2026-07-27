@@ -20,6 +20,7 @@ func (s *nodeSuite) newSkipPersistenceTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 	enabled func() bool,
 ) *Node {
+	s.nodeBackend.HandleChasmSkipPersistenceEnabled = enabled
 	if len(serializedNodes) == 0 {
 		return NewEmptyTree(
 			s.registry,
@@ -28,7 +29,6 @@ func (s *nodeSuite) newSkipPersistenceTestTree(
 			s.nodePathEncoder,
 			s.logger,
 			s.metricsHandler,
-			WithSkipPersistenceIfClean(enabled),
 		)
 	}
 
@@ -40,7 +40,6 @@ func (s *nodeSuite) newSkipPersistenceTestTree(
 		s.nodePathEncoder,
 		s.logger,
 		s.metricsHandler,
-		WithSkipPersistenceIfClean(enabled),
 	)
 	s.NoError(err)
 	return root
