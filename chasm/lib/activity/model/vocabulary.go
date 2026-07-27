@@ -15,6 +15,7 @@ const (
 	RespondCanceledType
 	RequestCancelType
 	PauseType
+	ResetType
 
 	// Timer events
 
@@ -33,7 +34,8 @@ const (
 type Event struct {
 	Type EventType
 
-	Retryable bool // RespondFailed: the failure is retryable. Whether it actually retries also depends on the retry policy.
+	Retryable  bool // RespondFailed: the failure is retryable. Whether it actually retries also depends on the retry policy.
+	KeepPaused bool // Reset: a paused activity stays paused across the reset.
 }
 
 // Canonical Event values for the variants frequently used in traces
@@ -43,6 +45,7 @@ var (
 	RespondCanceled        = Event{Type: RespondCanceledType}
 	RequestCancel          = Event{Type: RequestCancelType}
 	Pause                  = Event{Type: PauseType}
+	ResetKeepPaused        = Event{Type: ResetType, KeepPaused: true}
 	StartToCloseElapses    = Event{Type: StartToCloseElapsesType}
 	ScheduleToCloseElapses = Event{Type: ScheduleToCloseElapsesType}
 	ScheduleToStartElapses = Event{Type: ScheduleToStartElapsesType}
@@ -64,6 +67,8 @@ func (t EventType) String() string {
 		return "RequestCancel"
 	case PauseType:
 		return "Pause"
+	case ResetType:
+		return "Reset"
 	case ScheduleToStartElapsesType:
 		return "ScheduleToStartElapses"
 	case ScheduleToCloseElapsesType:
@@ -83,8 +88,12 @@ func (t EventType) String() string {
 
 // String is a label for an event; it includes flags that affect its outcome.
 func (e Event) String() string {
-	if e.Type == RespondFailedType {
+	switch e.Type {
+	case RespondFailedType:
 		return fmt.Sprintf("%s[retryable=%v]", e.Type.String(), e.Retryable)
+	case ResetType:
+		return fmt.Sprintf("%s[keepPaused=%v]", e.Type.String(), e.KeepPaused)
+	default:
+		return e.Type.String()
 	}
-	return e.Type.String()
 }

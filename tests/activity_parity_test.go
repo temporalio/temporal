@@ -201,6 +201,25 @@ func (s *activityParityTestSuite) TestCurrentRetryIntervalAndNextAttemptSchedule
 	})
 }
 
+// Resetting a running paused activity with keepPaused preserves the pending pause while the worker
+// still owns its task. Describe must continue to report PAUSE_REQUESTED until that worker yields.
+func (s *activityParityTestSuite) TestPauseRequestedAfterResetKeepPaused() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, model.Pause, model.ResetKeepPaused}
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
+			newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).RunState)
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
+			newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).RunState)
+	})
+}
+
 // TestCancel drives a running activity through cancellation in both implementations. RequestCancel uses the
 // standalone activity RPC for SAA and workflow cancellation for WFA; the worker then acknowledges the
 // request with RespondActivityTaskCanceled.
