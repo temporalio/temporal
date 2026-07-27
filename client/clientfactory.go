@@ -3,6 +3,7 @@
 package client
 
 import (
+	"sync"
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -16,6 +17,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -33,6 +35,7 @@ type (
 		NewLocalFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
 		NewRemoteAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient
 		NewLocalAdminClientWithTimeout(timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
+		Close()
 	}
 
 	// FactoryProvider can be used to provide a customized client Factory implementation.
@@ -61,6 +64,10 @@ type (
 		numberOfHistoryShards int32
 		logger                log.Logger
 		throttledLogger       log.Logger
+
+		connectionsLock sync.Mutex
+		connections     map[*grpc.ClientConn]struct{}
+		closed          bool
 	}
 
 	factoryProviderImpl struct {
@@ -157,7 +164,7 @@ func (cf *rpcClientFactory) NewRemoteFrontendClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient) {
-	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress)
+	connection := cf.trackConnection(cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress))
 	client := workflowservice.NewWorkflowServiceClient(connection)
 	return connection, cf.newFrontendClient(client, timeout, longPollTimeout)
 }
@@ -166,7 +173,7 @@ func (cf *rpcClientFactory) NewLocalFrontendClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error) {
-	connection := cf.rpcFactory.CreateLocalFrontendGRPCConnection()
+	connection := cf.trackConnection(cf.rpcFactory.CreateLocalFrontendGRPCConnection())
 	client := workflowservice.NewWorkflowServiceClient(connection)
 	return connection, cf.newFrontendClient(client, timeout, longPollTimeout), nil
 }
@@ -176,7 +183,7 @@ func (cf *rpcClientFactory) NewRemoteAdminClientWithTimeout(
 	timeout time.Duration,
 	largeTimeout time.Duration,
 ) adminservice.AdminServiceClient {
-	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress)
+	connection := cf.trackConnection(cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress))
 	client := adminservice.NewAdminServiceClient(connection)
 	return cf.newAdminClient(client, timeout, largeTimeout)
 }
@@ -185,9 +192,46 @@ func (cf *rpcClientFactory) NewLocalAdminClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (adminservice.AdminServiceClient, error) {
-	connection := cf.rpcFactory.CreateLocalFrontendGRPCConnection()
+	connection := cf.trackConnection(cf.rpcFactory.CreateLocalFrontendGRPCConnection())
 	client := adminservice.NewAdminServiceClient(connection)
 	return cf.newAdminClient(client, timeout, longPollTimeout), nil
+}
+
+// Close releases all frontend connections created by the factory. It is safe
+// to call more than once.
+func (cf *rpcClientFactory) Close() {
+	cf.connectionsLock.Lock()
+	if cf.closed {
+		cf.connectionsLock.Unlock()
+		return
+	}
+	cf.closed = true
+	connections := cf.connections
+	cf.connections = nil
+	cf.connectionsLock.Unlock()
+
+	for connection := range connections {
+		if err := connection.Close(); err != nil {
+			cf.logger.Warn("Error closing frontend gRPC connection on shutdown", tag.Error(err))
+		}
+	}
+}
+
+func (cf *rpcClientFactory) trackConnection(connection *grpc.ClientConn) *grpc.ClientConn {
+	cf.connectionsLock.Lock()
+	defer cf.connectionsLock.Unlock()
+
+	if cf.closed {
+		if err := connection.Close(); err != nil {
+			cf.logger.Warn("Error closing frontend gRPC connection after shutdown", tag.Error(err))
+		}
+		return connection
+	}
+	if cf.connections == nil {
+		cf.connections = make(map[*grpc.ClientConn]struct{})
+	}
+	cf.connections[connection] = struct{}{}
+	return connection
 }
 
 func (cf *rpcClientFactory) newAdminClient(

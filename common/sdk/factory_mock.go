@@ -41,6 +41,18 @@ func (m *MockClientFactory) EXPECT() *MockClientFactoryMockRecorder {
 	return m.recorder
 }
 
+// Close mocks base method.
+func (m *MockClientFactory) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockClientFactoryMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockClientFactory)(nil).Close))
+}
+
 // GetSystemClient mocks base method.
 func (m *MockClientFactory) GetSystemClient() client.Client {
 	m.ctrl.T.Helper()
