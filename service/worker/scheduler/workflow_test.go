@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -352,7 +353,7 @@ func (s *workflowSuite) TestStart() {
 		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById]))
 		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime]))
 		protoassert.ProtoEqual(s.T(), userMetadata, req.Request.GetUserMetadata())
-		protoassert.ProtoEqual(s.T(), versioningOverride, req.Request.GetVersioningOverride())
+		protorequire.ProtoEqual(s.T(), versioningOverride, req.Request.GetVersioningOverride())
 
 		return nil, nil
 	})
