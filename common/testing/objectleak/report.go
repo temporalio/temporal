@@ -17,72 +17,6 @@ const (
 	retentionClassCount
 )
 
-type retentionStats struct {
-	groups      []objectGroup
-	paths       int
-	addresses   map[uintptr]struct{}
-	groupsByKey map[objectGroupKey]*objectGroup
-}
-
-func newRetentionStats() retentionStats {
-	return retentionStats{
-		addresses:   make(map[uintptr]struct{}),
-		groupsByKey: make(map[objectGroupKey]*objectGroup),
-	}
-}
-
-type objectGroupKey struct {
-	path     string
-	typeName string
-}
-
-type objectGroup struct {
-	path      string
-	typeName  string
-	paths     int
-	addresses map[uintptr]struct{}
-}
-
-func (s *retentionStats) add(obj trackedObject) {
-	s.paths++
-	s.addresses[obj.addr] = struct{}{}
-
-	key := objectGroupKey{
-		path:     obj.path.normalized(),
-		typeName: obj.typeName,
-	}
-	group := s.groupsByKey[key]
-	if group == nil {
-		group = &objectGroup{
-			path:      key.path,
-			typeName:  key.typeName,
-			addresses: make(map[uintptr]struct{}),
-		}
-		s.groupsByKey[key] = group
-	}
-	group.paths++
-	group.addresses[obj.addr] = struct{}{}
-}
-
-func (s *retentionStats) finish() {
-	for _, group := range s.groupsByKey {
-		s.groups = append(s.groups, *group)
-	}
-	s.groupsByKey = nil
-	slices.SortFunc(s.groups, func(a objectGroup, b objectGroup) int {
-		if c := cmp.Compare(b.objectCount(), a.objectCount()); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(b.paths, a.paths); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(a.path, b.path); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.typeName, b.typeName)
-	})
-}
-
 type report struct {
 	retained             [retentionClassCount]retentionStats
 	trackedRoots         int
@@ -222,6 +156,72 @@ func (r report) writeSummary(out *strings.Builder) {
 		len(expected.addresses),
 		len(unexpected.addresses),
 	)
+}
+
+type retentionStats struct {
+	groups      []objectGroup
+	paths       int
+	addresses   map[uintptr]struct{}
+	groupsByKey map[objectGroupKey]*objectGroup
+}
+
+func newRetentionStats() retentionStats {
+	return retentionStats{
+		addresses:   make(map[uintptr]struct{}),
+		groupsByKey: make(map[objectGroupKey]*objectGroup),
+	}
+}
+
+type objectGroupKey struct {
+	path     string
+	typeName string
+}
+
+func (s *retentionStats) add(obj trackedObject) {
+	s.paths++
+	s.addresses[obj.addr] = struct{}{}
+
+	key := objectGroupKey{
+		path:     obj.path.normalized(),
+		typeName: obj.typeName,
+	}
+	group := s.groupsByKey[key]
+	if group == nil {
+		group = &objectGroup{
+			path:      key.path,
+			typeName:  key.typeName,
+			addresses: make(map[uintptr]struct{}),
+		}
+		s.groupsByKey[key] = group
+	}
+	group.paths++
+	group.addresses[obj.addr] = struct{}{}
+}
+
+func (s *retentionStats) finish() {
+	for _, group := range s.groupsByKey {
+		s.groups = append(s.groups, *group)
+	}
+	s.groupsByKey = nil
+	slices.SortFunc(s.groups, func(a objectGroup, b objectGroup) int {
+		if c := cmp.Compare(b.objectCount(), a.objectCount()); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(b.paths, a.paths); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.path, b.path); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.typeName, b.typeName)
+	})
+}
+
+type objectGroup struct {
+	path      string
+	typeName  string
+	paths     int
+	addresses map[uintptr]struct{}
 }
 
 func (g objectGroup) name() string {
