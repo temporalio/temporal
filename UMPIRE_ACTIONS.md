@@ -323,10 +323,12 @@ fires on the attempt, not once started).
     clean without it.
   - **`WorkflowRun` beyond completed** — `failed`/`canceled`/`terminated`/`timed_out`/
     `continued_as_new` transitions, and a `started` once observation lands.
-  - **Namespace name→id robustness.** Resolution is a pre-seeded map (`SetNamespaceID`) with
-    drop-if-unknown — correct for driver-seeded tests, but passive observation of an un-seeded
-    namespace would need stash-and-reconcile (buffer name-only facts, flush when the mapping is
-    learned) or a registry lookup.
+  - **Run identity across CAN / reset / retry** — the single-run `WorkflowRun` correlates by the
+    RunID from the start response, which does not scale to server-minted successor runs. The
+    lineage-graph design (run nodes + CAN/reset/retry edges from observed telemetry, correlated by
+    relationship, not by a pre-known id) and the namespace pre-seed vs. run-lineage distinction are
+    written up in [`UMPIRE_IDENTITY.md`](./UMPIRE_IDENTITY.md); its foundation is emitting
+    run-lifecycle telemetry with lineage attributes.
   - More entities (Activity, WorkflowUpdate).
 - ~~**Footprint reconciliation**~~ **(done)** — an action now declares an expected footprint
   (`Action.Footprint`), and `ReconcileFootprint(plan, observed)` grounds it against the learned
