@@ -122,7 +122,8 @@ func (ni *NamespaceRateLimitInterceptorImpl) InterceptN(
 	handler grpc.UnaryHandler,
 	numToken int,
 ) (any, error) {
-	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
+	ns, ctx := GetCachedNamespaceName(ctx, ni.namespaceRegistry, req)
+	if ns != namespace.EmptyName {
 		method := info.FullMethod
 		if IsLongPollGetWorkflowExecutionHistoryRequest(req) {
 			method = configs.PollWorkflowHistoryAPIName
