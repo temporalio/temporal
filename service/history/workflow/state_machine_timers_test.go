@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
@@ -89,4 +90,43 @@ func TestAddNextStateMachineTimerTask(t *testing.T) {
 	// First timer already scheduled should not generate any tasks.
 	workflow.AddNextStateMachineTimerTask(ms)
 	require.Len(t, scheduledTasks, 1)
+}
+
+// TestAddNextStateMachineTimerTask_PromotesPastEmptyScheduledGroup covers the HSM state-machine
+// timer promotion concern for partial refresh: TrimStateMachineTimers keeps an emptied timer group
+// as a Scheduled placeholder (so a duplicate task isn't generated for the same deadline). When
+// that placeholder becomes the earliest group, AddNextStateMachineTimerTask must still promote and
+// schedule the next real group rather than getting stuck behind the placeholder. The empty-Infos
+// DeleteFunc at the top of AddNextStateMachineTimerTask is what makes this promotion work.
+func TestAddNextStateMachineTimerTask_PromotesPastEmptyScheduledGroup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+
+	now := time.Now().UTC()
+	var scheduledTasks []tasks.Task
+	execInfo := &persistencespb.WorkflowExecutionInfo{
+		StateMachineTimers: []*persistencespb.StateMachineTimerGroup{
+			// Earliest group: emptied by a prior TrimStateMachineTimers but retained as a
+			// Scheduled placeholder (state_machine_timers.go:112-119).
+			{Deadline: timestamppb.New(now.Add(-time.Hour)), Infos: nil, Scheduled: true},
+			// Next group: a real pending timer that has not been scheduled yet.
+			{Deadline: timestamppb.New(now.Add(time.Hour)), Infos: []*persistencespb.StateMachineTaskInfo{{Type: "1"}}, Scheduled: false},
+		},
+	}
+	ms.EXPECT().GetExecutionInfo().Return(execInfo).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("ns-id", "wf-id", "run-id")).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	ms.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(task tasks.Task) {
+		scheduledTasks = append(scheduledTasks, task)
+	})
+
+	workflow.AddNextStateMachineTimerTask(ms)
+
+	// The empty placeholder is dropped and the next real group is promoted and scheduled.
+	require.Len(t, scheduledTasks, 1)
+	task, ok := scheduledTasks[0].(*tasks.StateMachineTimerTask)
+	require.True(t, ok)
+	require.Equal(t, now.Add(time.Hour), task.VisibilityTimestamp)
+	require.Len(t, execInfo.StateMachineTimers, 1)
+	require.True(t, execInfo.StateMachineTimers[0].Scheduled)
 }
