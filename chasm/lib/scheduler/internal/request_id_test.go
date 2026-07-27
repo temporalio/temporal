@@ -22,14 +22,14 @@ func TestGenerateRequestID(t *testing.T) {
 	nominalTime := time.UnixMilli(1_700_000_000_000)
 	actualTime := time.UnixMilli(1_700_000_000_001)
 	scheduleID := strings.Repeat("a", 1000)
-	requestIDUUID := uuid.NewSHA1(uuid.Nil, []byte(fmt.Sprintf(
+	requestIDUUID := uuid.NewSHA1(uuid.Nil, fmt.Appendf(nil,
 		"%q-%q-%d-%d-%d",
 		"nsid",
 		scheduleID,
 		10,
 		nominalTime.UnixMilli(),
 		actualTime.UnixMilli(),
-	)))
+	))
 
 	for _, tc := range []struct {
 		name       string

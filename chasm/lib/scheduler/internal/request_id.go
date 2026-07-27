@@ -30,14 +30,14 @@ func GenerateRequestID(
 	return fmt.Sprintf(
 		"sched-%s-%s",
 		backfillID,
-		uuid.NewSHA1(uuid.Nil, []byte(fmt.Sprintf(
+		uuid.NewSHA1(uuid.Nil, fmt.Appendf(nil,
 			"%q-%q-%d-%d-%d",
 			namespaceID,
 			scheduleID,
 			conflictToken,
 			nominal.UnixMilli(),
 			actual.UnixMilli(),
-		))),
+		)),
 	)
 }
 
