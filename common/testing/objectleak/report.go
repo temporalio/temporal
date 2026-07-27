@@ -155,14 +155,6 @@ func newReport(
 	return report
 }
 
-func forEachRetained(objects []trackedObject, visit func(trackedObject)) {
-	for _, obj := range objects {
-		if !obj.collected.Load() {
-			visit(obj)
-		}
-	}
-}
-
 func (r report) failures() error {
 	var failures []error
 	if len(r.unexpectedObjects) > 0 {
