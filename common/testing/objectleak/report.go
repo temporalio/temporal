@@ -34,7 +34,7 @@ type objectGroup struct {
 
 func newReport(
 	objects []trackedObject,
-	baseline objectBaseline,
+	baseline Baseline,
 	trackedRoots int,
 	expected patterns,
 	pruneTypes patterns,
