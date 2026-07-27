@@ -4,11 +4,14 @@ package tests
 // assert what the product should do. Each one failed when it was written.
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -212,5 +215,50 @@ func (s *activityParityTestSuite) TestParityActivityInput() {
 		task := a.pollForTask(t, activityDriverTimeout)
 		require.NotNil(t, task)
 		require.Equal(t, "Input", testcore.DecodeString(t, task.GetInput()))
+	})
+}
+
+// A dispatch that is polled before the driver looks again is still a dispatch. The drivers sample the
+// activity every activityDriverPollInterval, so a worker taking the task inside that window leaves
+// them reading an attempt already running.
+func (s *activityParityTestSuite) TestDriversAcceptDispatchPolledDuringTheWait() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityShortDispatchDelay}
+	trace := []model.Event{model.Poll, model.FailRetryably}
+
+	// pollInBackground stands in for a worker waiting on the queue when the retry is dispatched.
+	pollInBackground := func(ctx context.Context, tq string) func() {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_, _ = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+				Namespace: env.Namespace().String(),
+				TaskQueue: &taskqueuepb.TaskQueue{Name: tq},
+				Identity:  "repro-worker",
+			})
+		}()
+		time.Sleep(activityDriverPollInterval) //nolint:forbidigo // let the poll reach matching first
+		return func() { <-done }
+	}
+
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		d := newSAADriver(t, env, cfg)
+		a := d.driveTrace(t, trace)
+		wait := pollInBackground(d.ctx, a.taskQueue)
+		rec := &activityDriverErrorRecorder{}
+		a.driveEvent(rec, model.BackoffElapses)
+		wait()
+		require.False(t, rec.failed, "a dispatch taken by a worker during the wait is still a dispatch")
+	})
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		d := newWFADriver(t, env, cfg)
+		a := d.driveTrace(t, trace)
+		wait := pollInBackground(d.ctx, a.taskQueue)
+		rec := &activityDriverErrorRecorder{}
+		a.driveEvent(rec, model.BackoffElapses)
+		wait()
+		require.False(t, rec.failed, "a dispatch taken by a worker during the wait is still a dispatch")
 	})
 }
