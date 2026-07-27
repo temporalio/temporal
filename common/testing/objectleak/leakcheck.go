@@ -5,7 +5,6 @@ import (
 	"iter"
 	"runtime"
 	runtimedebug "runtime/debug"
-	"slices"
 	"sync/atomic"
 	"time"
 )
@@ -28,26 +27,23 @@ type ObjectLeakCheck struct {
 	gcSettleTimeout time.Duration
 }
 
-// Baseline contains the retained objects captured by IgnoreCurrent.
+// Baseline contains the retained objects captured by IgnoreCurrent. Its zero
+// value represents no ignored objects.
 type Baseline struct {
-	objects       []trackedObject
-	collectedByID map[objectIdentity]*atomic.Bool
-}
-
-type objectIdentity struct {
-	addr     uintptr
-	typeName string
+	objects         []trackedObject
+	collectedByAddr map[uintptr]*atomic.Bool
+	settleTimedOut  bool
 }
 
 func (b Baseline) contains(obj trackedObject) bool {
-	collected, ok := b.collectedByID[obj.identity()]
+	collected, ok := b.collectedByAddr[obj.addr]
 	return ok && !collected.Load()
 }
 
 type Option func(*ObjectLeakCheck) error
 
-// WithExpected marks retained objects whose reflected path or type name matches
-// pattern as expected. A trailing '*' matches any suffix.
+// WithExpected marks non-baseline retained objects whose reflected path or type
+// name matches pattern as expected. A trailing '*' matches any suffix.
 func WithExpected(pattern string) Option {
 	return func(t *ObjectLeakCheck) error {
 		t.expected = append(t.expected, newPattern(pattern))
@@ -65,8 +61,10 @@ func WithPruneType(pattern string) Option {
 	}
 }
 
-// WithGCSettleTimeout sets the maximum time [Check] and [IgnoreCurrent] spend
-// forcing GC and waiting for retained-object counts to settle.
+// WithGCSettleTimeout sets the timeout [ObjectLeakCheck.Check] and
+// [ObjectLeakCheck.IgnoreCurrent] use while forcing GC and waiting for
+// retained-object counts to settle. An in-progress GC pass may finish after the
+// timeout. A timeout shorter than the normal minimum wait takes precedence.
 func WithGCSettleTimeout(timeout time.Duration) Option {
 	return func(t *ObjectLeakCheck) error {
 		if timeout <= 0 {
@@ -91,22 +89,24 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 }
 
 // IgnoreCurrent waits for currently tracked objects to settle, returns the
-// retained objects as a baseline, and resets tracked roots.
+// retained objects as a baseline, and resets tracked roots. If settling times
+// out, [ObjectLeakCheck.Check] reports the timeout when passed the returned
+// baseline.
 func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
-	settleGC(t.gcSettleTimeout, func() int {
-		return len(slices.Collect(retainedObjects(t.objects)))
+	settled := settleGC(t.gcSettleTimeout, func() int {
+		return countRetained(t.objects)
 	})
 
 	baseline := Baseline{
-		collectedByID: make(map[objectIdentity]*atomic.Bool),
+		collectedByAddr: make(map[uintptr]*atomic.Bool),
+		settleTimedOut:  !settled,
 	}
 	for obj := range retainedObjects(t.objects) {
-		identity := obj.identity()
-		if canonicalCollected, ok := baseline.collectedByID[identity]; ok {
+		if canonicalCollected, ok := baseline.collectedByAddr[obj.addr]; ok {
 			obj.cleanup.Stop()
 			obj.collected = canonicalCollected
 		} else {
-			baseline.collectedByID[identity] = obj.collected
+			baseline.collectedByAddr[obj.addr] = obj.collected
 		}
 		baseline.objects = append(baseline.objects, obj)
 	}
@@ -125,15 +125,25 @@ func (t *ObjectLeakCheck) Track(root any) {
 
 // Check settles GC, then returns a full retained-object report and an error for
 // retained objects not covered by expected patterns, expected patterns that no
-// longer match any tracked object, or prune rules that did not match during
-// tracking.
+// longer match any tracked object, prune rules that did not match during
+// tracking, GC settling that timed out during Check, or a timeout recorded in
+// the supplied baseline.
 func (t *ObjectLeakCheck) Check(baseline Baseline) (string, error) {
-	settleGC(t.gcSettleTimeout, func() int {
-		return len(slices.Collect(retainedObjects(t.objects))) +
-			len(slices.Collect(retainedObjects(baseline.objects)))
+	settled := settleGC(t.gcSettleTimeout, func() int {
+		return countRetained(t.objects, baseline.objects)
 	})
-	report := newReport(t.objects, baseline, t.roots, t.expected, t.pruneTypes)
+	report := newReport(t.objects, baseline, !settled, t.roots, t.expected, t.pruneTypes)
 	return report.string(), report.failures()
+}
+
+func countRetained(objectSets ...[]trackedObject) int {
+	count := 0
+	for _, objects := range objectSets {
+		for range retainedObjects(objects) {
+			count++
+		}
+	}
+	return count
 }
 
 func retainedObjects(objects []trackedObject) iter.Seq[trackedObject] {
@@ -146,7 +156,7 @@ func retainedObjects(objects []trackedObject) iter.Seq[trackedObject] {
 	}
 }
 
-func settleGC(timeout time.Duration, snapshot func() int) {
+func settleGC(timeout time.Duration, snapshot func() int) bool {
 	start := time.Now()
 	minWaitDeadline := start.Add(checkGCMinWait)
 	deadline := start.Add(timeout)
@@ -180,11 +190,15 @@ func settleGC(timeout time.Duration, snapshot func() int) {
 			}
 		}
 
-		// The minimum wait gives cleanup callbacks several GC cycles to run. The
-		// quiet window then handles normal cleanup latency; the timeout bounds a
-		// genuinely stuck object graph so the test can still report diagnostics.
-		if now.After(settledDeadline) || now.After(deadline) {
-			return
+		// Unless the timeout expires first, the minimum wait gives cleanup
+		// callbacks several GC cycles to run. The quiet window then handles
+		// normal cleanup latency; the timeout bounds the wait.
+		if deadline.Before(settledDeadline) {
+			if now.After(deadline) {
+				return false
+			}
+		} else if now.After(settledDeadline) {
+			return true
 		}
 		time.Sleep(checkGCPause)
 	}

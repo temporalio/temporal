@@ -18,22 +18,27 @@ const (
 )
 
 type report struct {
-	retained             [retentionClassCount]retentionStats
-	trackedRoots         int
-	totalRetainedObjects int
-	unmatchedExpected    []string
-	unmatchedPrunes      []string
+	retained               [retentionClassCount]retentionStats
+	trackedRoots           int
+	totalRetainedObjects   int
+	baselineSettleTimedOut bool
+	checkSettleTimedOut    bool
+	unmatchedExpected      []string
+	unmatchedPrunes        []string
 }
 
 func newReport(
 	objects []trackedObject,
 	baseline Baseline,
+	checkSettleTimedOut bool,
 	trackedRoots int,
 	expected patterns,
 	pruneTypes patterns,
 ) report {
 	r := report{
-		trackedRoots: trackedRoots,
+		trackedRoots:           trackedRoots,
+		baselineSettleTimedOut: baseline.settleTimedOut,
+		checkSettleTimedOut:    checkSettleTimedOut,
 	}
 
 	// Matching mutates pattern.matched for stale-expected pattern detection.
@@ -43,24 +48,21 @@ func newReport(
 	retainedAddresses := make(map[uintptr]struct{})
 
 	// Record each classified retained object and fold equivalent normalized
-	// paths into a single report row.
+	// path and type pairs into a single report row.
 	addRetained := func(obj trackedObject, path string, class retentionClass) {
 		retainedAddresses[obj.addr] = struct{}{}
 		retained[class].add(obj, path)
 	}
 	for obj := range retainedObjects(baseline.objects) {
 		path := obj.path.normalized()
-		// Baseline objects still satisfy expected patterns so those patterns are
-		// not reported as stale.
-		activeExpected.matchObject(path, obj.typeName)
 		addRetained(obj, path, retentionBaseline)
 	}
 	for obj := range retainedObjects(objects) {
-		path := obj.path.normalized()
-		isExpected := activeExpected.matchObject(path, obj.typeName)
 		if baseline.contains(obj) {
 			continue
 		}
+		path := obj.path.normalized()
+		isExpected := activeExpected.matchObject(path, obj.typeName)
 		if isExpected {
 			addRetained(obj, path, retentionExpected)
 		} else {
@@ -69,8 +71,8 @@ func newReport(
 	}
 	r.totalRetainedObjects = len(retainedAddresses)
 
-	// Expected patterns that never matched any tracked object are stale and
-	// should be removed with the fix that made them unnecessary.
+	// Expected patterns that never matched a non-baseline retained object are
+	// stale and should be removed with the fix that made them unnecessary.
 	r.unmatchedExpected = activeExpected.unmatched()
 	r.unmatchedPrunes = pruneTypes.unmatched()
 
@@ -85,6 +87,12 @@ func newReport(
 
 func (r report) failures() error {
 	var failures []error
+	if r.baselineSettleTimedOut {
+		failures = append(failures, errors.New("baseline GC settling timed out"))
+	}
+	if r.checkSettleTimedOut {
+		failures = append(failures, errors.New("check GC settling timed out"))
+	}
 	if r.retained[retentionUnexpected].paths > 0 {
 		failures = append(failures, errors.New("unexpected retained objects"))
 	}
@@ -142,6 +150,12 @@ func (r report) writeSummary(out *strings.Builder) {
 
 	out.WriteString("object leak report\n\n")
 	fmt.Fprintf(out, "tracked root objects: %d\n", r.trackedRoots)
+	if r.baselineSettleTimedOut {
+		out.WriteString("baseline GC settling timed out\n")
+	}
+	if r.checkSettleTimedOut {
+		out.WriteString("check GC settling timed out\n")
+	}
 	fmt.Fprintf(
 		out,
 		"retained paths: %d total, %d baseline, %d expected, %d unexpected\n",
