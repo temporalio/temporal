@@ -43,7 +43,10 @@ type activityConfig struct {
 }
 
 // activityParityDefaultInput is the payload the drivers start activities with.
-var activityParityDefaultInput = payloads.EncodeString("Input")
+var activityParityDefaultInput = payloads.EncodeString(activityParityInput)
+
+// activityParityInput is what both surfaces send, so a worker sees the same input either way.
+const activityParityInput = "Input"
 
 // activityLongTimeout is a timeout long enough not to fire during a test.
 const activityLongTimeout = 24 * time.Hour
@@ -139,6 +142,9 @@ const activityDriverWallClockSettle = 2 * time.Second
 
 // activityDriverPollInterval is the gap between reads when polling for a wall-clock event's effect.
 const activityDriverPollInterval = 100 * time.Millisecond
+
+// activityDriverScheduleTimeout bounds the wait for a workflow to schedule the activity it owns.
+const activityDriverScheduleTimeout = 10 * time.Second
 
 // activityDriverTerminalTimeout bounds the wait for an activity the trace has driven to a terminal status.
 const activityDriverTerminalTimeout = 10 * time.Second

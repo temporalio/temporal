@@ -95,7 +95,7 @@ func wfaSingleActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error 
 			NonRetryableErrorTypes: c.NonRetryableErrorTypes,
 		},
 	})
-	fut := workflow.ExecuteActivity(actCtx, "testWFA")
+	fut := workflow.ExecuteActivity(actCtx, "testWFA", activityParityInput)
 	workflow.Go(ctx, func(gctx workflow.Context) {
 		workflow.GetSignalChannel(gctx, wfaCancelSignal).Receive(gctx, nil)
 		cancelActivity()
@@ -190,6 +190,9 @@ func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 		case pa == nil:
 			t.Errorf("%s: the activity is no longer pending, so its delayed dispatch never happened", e)
 			return
+		case pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
+			t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
+			return
 		case pa.GetNextAttemptScheduleTime() == nil:
 			return
 		case !time.Now().Before(deadline):
@@ -242,7 +245,12 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 		sdkclient.StartWorkflowOptions{ID: wfID, TaskQueue: wfTQ},
 		wfaSingleActivityWorkflow, wfaActivityParams{Cfg: cfg, ActivityTQ: actTQ, ActivityID: actID})
 	require.NoError(t, err)
-	return &wfaHandle{d: d, cfg: cfg, run: run, workflowID: wfID, runID: run.GetRunID(), activityID: actID, activityTQ: actTQ}
+	a := &wfaHandle{d: d, cfg: cfg, run: run, workflowID: wfID, runID: run.GetRunID(), activityID: actID, activityTQ: actTQ}
+	// The workflow schedules the activity, so it does not exist yet when ExecuteWorkflow returns.
+	require.Truef(t, activityDriverPollUntil(time.Now().Add(activityDriverScheduleTimeout),
+		func() bool { return a.pendingActivity(t) != nil }),
+		"the workflow did not schedule its activity within %s", activityDriverScheduleTimeout)
+	return a
 }
 
 // terminalStatus waits for the activity to reach a terminal state and reports it. A workflow activity's

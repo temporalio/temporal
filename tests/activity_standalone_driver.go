@@ -140,6 +140,9 @@ func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 			t.Errorf("%s: the activity ended as %s before its delayed dispatch, so the dispatch never happened",
 				e, info.GetStatus())
 			return
+		case info.GetRunState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
+			t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
+			return
 		case info.GetNextAttemptScheduleTime() == nil:
 			return
 		case !time.Now().Before(deadline):
