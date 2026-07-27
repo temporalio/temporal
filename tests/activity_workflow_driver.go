@@ -5,6 +5,7 @@ package tests
 // wait. The event vocabulary is in chasm/lib/activity/model.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -26,19 +27,6 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-// activityInfo is user-visible activity state projected out of the two different messages that
-// carry it: SAA's ActivityExecutionInfo and WFA's PendingActivityInfo.
-//
-// CurrentRetryInterval is rounded to the second, because WFA derives it by subtracting two stored
-// timestamps while SAA stores it exactly. NextAttemptScheduleTime is reduced to whether it is set
-// to facilitate test assertions.
-type activityInfo struct {
-	RunState                   enumspb.PendingActivityState
-	Attempt                    int32
-	CurrentRetryInterval       time.Duration
-	NextAttemptScheduleTimeSet bool
-}
-
 func wfaActivityInfo(p *workflowpb.PendingActivityInfo) activityInfo {
 	return activityInfo{
 		RunState:                   p.GetState(),
@@ -48,21 +36,19 @@ func wfaActivityInfo(p *workflowpb.PendingActivityInfo) activityInfo {
 	}
 }
 
-// --- driver --------------------------------------------------------------------------------
-
 type wfaDriver struct {
 	env *testcore.TestEnv
 	ctx context.Context
 	cfg activityConfig
 }
 
-// newWFADriver builds a driver with the test-scoped context. cfg.StartDelay is ignored: a
-// workflow activity has no per-activity start delay.
+// newWFADriver builds a driver. cfg.StartDelay is ignored: a workflow activity has no per-activity
+// start delay.
 func newWFADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *wfaDriver {
 	return &wfaDriver{env: env, ctx: testcontext.For(t), cfg: cfg}
 }
 
-// wfaHandle is a handle to one workflow-scheduled activity.
+// wfaHandle is a handle to a workflow-scheduled activity.
 type wfaHandle struct {
 	d          *wfaDriver
 	run        sdkclient.WorkflowRun
@@ -73,21 +59,12 @@ type wfaHandle struct {
 	token      []byte
 }
 
-// The server rejects an activity with neither start-to-close nor schedule-to-close set. The drivers
-// always send start-to-close, defaulted long enough not to fire. The other timeouts are simply
-// absent when unset.
+// wfaActivityParams is what the helper workflow needs to schedule the activity: the activity the
+// test described, and where to put it.
 type wfaActivityParams struct {
-	ActivityTQ             string
-	ActivityID             string
-	StartToClose           time.Duration
-	ScheduleToClose        time.Duration // 0 = unset
-	ScheduleToStart        time.Duration // 0 = unset
-	Heartbeat              time.Duration // 0 = unset
-	RetryInterval          time.Duration // initial retry interval
-	BackoffCoefficient     float64       // 0 means 1.0 (no increase over attempts)
-	MaxInterval            time.Duration // 0 means cap at initial RetryInterval (no increase over attempts)
-	MaxAttempts            int32
-	NonRetryableErrorTypes []string
+	Cfg        activityConfig
+	ActivityTQ string
+	ActivityID string
 }
 
 // wfaCancelSignal makes the helper workflow cancel the activity, which is how a workflow activity is
@@ -99,29 +76,22 @@ const wfaCancelSignal = "cancel"
 // drives it with worker poll RPCs. WaitForCancellation makes the workflow wait for
 // RespondActivityTaskCanceled, so a cancelled activity reaches CANCELED before the workflow closes.
 func wfaSingleActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error {
-	coefficient := p.BackoffCoefficient
-	if coefficient == 0 {
-		coefficient = 1.0
-	}
-	maxInterval := p.MaxInterval
-	if maxInterval == 0 {
-		maxInterval = p.RetryInterval
-	}
+	c := p.Cfg
 	actCtx, cancelActivity := workflow.WithCancel(ctx)
 	actCtx = workflow.WithActivityOptions(actCtx, workflow.ActivityOptions{
 		TaskQueue:              p.ActivityTQ,
 		ActivityID:             p.ActivityID,
-		StartToCloseTimeout:    p.StartToClose,
-		ScheduleToCloseTimeout: p.ScheduleToClose,
-		ScheduleToStartTimeout: p.ScheduleToStart,
-		HeartbeatTimeout:       p.Heartbeat,
+		StartToCloseTimeout:    c.startToClose(),
+		ScheduleToCloseTimeout: c.ScheduleToClose,
+		ScheduleToStartTimeout: c.ScheduleToStart,
+		HeartbeatTimeout:       c.Heartbeat,
 		WaitForCancellation:    true,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:        p.RetryInterval,
-			BackoffCoefficient:     coefficient,
-			MaximumInterval:        maxInterval,
-			MaximumAttempts:        p.MaxAttempts,
-			NonRetryableErrorTypes: p.NonRetryableErrorTypes,
+			InitialInterval:        c.retryInterval(),
+			BackoffCoefficient:     cmp.Or(c.BackoffCoefficient, 1.0),
+			MaximumInterval:        cmp.Or(c.MaxRetryInterval, c.retryInterval()),
+			MaximumAttempts:        c.MaxAttempts,
+			NonRetryableErrorTypes: c.NonRetryableErrorTypes,
 		},
 	})
 	fut := workflow.ExecuteActivity(actCtx, "testWFA")
@@ -133,7 +103,7 @@ func wfaSingleActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error 
 }
 
 // driveTrace starts a workflow, which schedules an activity, and then advances that activity
-// through a sequence of events. Returns a handle to the activity at the reached state.
+// through a sequence of events (a 'trace'). Returns a handle to the activity at the reached state.
 func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
 	validateTrace(t, trace)
 	d.cfg = d.cfg.forTrace(trace)
@@ -238,23 +208,10 @@ func (d *wfaDriver) start(t *testing.T) *wfaHandle {
 	require.NoError(t, w.Start())
 	t.Cleanup(w.Stop)
 
-	c := d.cfg
 	wfID := testcore.RandomizeStr("wfa-run")
 	run, err := d.env.SdkClient().ExecuteWorkflow(d.ctx,
 		sdkclient.StartWorkflowOptions{ID: wfID, TaskQueue: wfTQ},
-		wfaSingleActivityWorkflow, wfaActivityParams{
-			ActivityTQ:             actTQ,
-			ActivityID:             actID,
-			StartToClose:           c.startToClose(),
-			ScheduleToClose:        c.ScheduleToClose,
-			ScheduleToStart:        c.ScheduleToStart,
-			Heartbeat:              c.Heartbeat,
-			RetryInterval:          c.retryInterval(),
-			BackoffCoefficient:     c.BackoffCoefficient,
-			MaxInterval:            c.MaxRetryInterval,
-			MaxAttempts:            c.MaxAttempts,
-			NonRetryableErrorTypes: c.NonRetryableErrorTypes,
-		})
+		wfaSingleActivityWorkflow, wfaActivityParams{Cfg: d.cfg, ActivityTQ: actTQ, ActivityID: actID})
 	require.NoError(t, err)
 	return &wfaHandle{d: d, run: run, workflowID: wfID, runID: run.GetRunID(), activityID: actID, activityTQ: actTQ}
 }
