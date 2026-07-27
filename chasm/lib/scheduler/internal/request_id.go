@@ -7,13 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
-const lowestKnownSchemaRequestIDColumnLimit = 255
-
 // GenerateRequestID generates a deterministic request ID for a buffered action's
 // time. The request ID is deterministic because the jittered actual time (as
 // well as the spec's nominal time) is, in turn, also deterministic.
-// Its total length must not exceed SQLite's request ID VARCHAR size, the
-// smallest known persistence limit.
 //
 // backfillID should be left blank for actions that are being started
 // automatically, based on the schedule spec. It must be set for backfills,
@@ -31,16 +27,17 @@ func GenerateRequestID(
 		backfillID = "auto"
 	}
 
-	// Keep request IDs bounded and deterministic even when schedule IDs are long.
-	scheduleIDUUID := uuid.NewSHA1(uuid.Nil, []byte(scheduleID))
 	return fmt.Sprintf(
-		"sched-%s-%s-%s-%d-%d-%d",
+		"sched-%s-%s",
 		backfillID,
-		namespaceID,
-		scheduleIDUUID,
-		conflictToken,
-		nominal.UnixMilli(),
-		actual.UnixMilli(),
+		uuid.NewSHA1(uuid.Nil, []byte(fmt.Sprintf(
+			"%q-%q-%d-%d-%d",
+			namespaceID,
+			scheduleID,
+			conflictToken,
+			nominal.UnixMilli(),
+			actual.UnixMilli(),
+		))),
 	)
 }
 
