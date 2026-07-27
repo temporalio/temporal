@@ -209,12 +209,6 @@ func (c *ConfiguratorClient) GetValue(key Key) []ConstrainedValue {
 	return c.inner.GetValue(key)
 }
 
-// Has implements Evaluator.
-func (c *ConfiguratorClient) Has(key Key) bool {
-	_, ok := c.snapshot.Load().entries[key]
-	return ok
-}
-
 // Eval implements Evaluator, resolving key against the caller's constraints layered over this
 // process's ambient ones. Returns nil when the key is not expression-configured, or when its
 // value cannot depend on the caller, in which case the Client path applies.

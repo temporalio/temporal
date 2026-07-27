@@ -14,14 +14,12 @@ import (
 //
 // A Client may also implement Evaluator; Collection picks it up automatically.
 type Evaluator interface {
-	// Has reports whether this Evaluator has configuration for key whose value can actually
-	// depend on caller-supplied constraints. It is called on every GetC read, so it must be a
-	// cheap in-memory lookup and must not allocate.
-	Has(key Key) bool
-
 	// Eval resolves key against c, layered over whatever process-scoped constraints the
 	// Evaluator holds. Returns nil when the key is not configured here, in which case the
 	// Client path applies.
+	//
+	// It is called on every GetC read, including for the great majority of settings that are
+	// not expression-configured at all, so returning nil must be cheap and must not allocate.
 	//
 	// The returned pointer must be stable — the same value for the same inputs until the
 	// configuration is reloaded — because Collection caches conversions against it using weak
@@ -79,7 +77,7 @@ func evalConstraints[T any](
 	convert func(value any) (T, error),
 	cm ConstraintsMap,
 ) (value T, ok bool) {
-	if c.evaluator == nil || !c.evaluator.Has(key) {
+	if c.evaluator == nil {
 		return value, false
 	}
 	cvp := c.evaluator.Eval(key, cm)

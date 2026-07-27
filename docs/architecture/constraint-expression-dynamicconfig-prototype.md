@@ -12,8 +12,8 @@ follow:
 
 1. **New dimensions need code.** Rolling a setting out by deployment zone, cluster, host, or
    deploy ring means adding a field to `Constraints`, adding a precedence order to
-   `gendynamicconfig/main.go`, regenerating `setting_gen.go` (1972 lines), and extending
-   `yaml_loader.go`. There is no configuration-only path.
+   `gendynamicconfig/main.go`, regenerating the ~2000 lines of `setting_gen.go`, and
+   extending `yaml_loader.go`. There is no configuration-only path.
 2. **No boolean logic.** A value's constraints are a conjunction of exact matches.
    `env = staging AND (zone = us-west-1 OR zone = us-west-2)` cannot be written. Percentage
    rollout exists only as bespoke side channels (`rollout.go`, `gradual_change.go`).
@@ -27,10 +27,11 @@ release.
 inverts the model: config is a default plus an ordered list of DSL overrides, evaluated
 against an open `map[string]any` of constraints.
 
-It is vendored at `common/dynamicconfig/configurator/` (see the README there for why it
-cannot be a `go.mod` dependency yet) and integrated as a `dynamicconfig.Client`
-(`common/dynamicconfig/configurator_client.go`), which required **no changes to the dynamic
-config core at all**.
+It is vendored at `common/dynamicconfig/configurator/` (see the README there) and integrated
+as a `dynamicconfig.Client` (`common/dynamicconfig/configurator_client.go`), which required no
+changes to the dynamic config core. A second, additive accessor — `GetC` — then lets a caller
+supply its own dimensions; that one does touch `Collection` and the code generator, but
+changes nothing about how the existing `Get` accessors behave.
 
 ### How it fits the `Client` contract
 
@@ -151,11 +152,11 @@ M5 Max:
 | `Get`, today's path | 53.3 | 0 | 0 |
 | `Get`, expression-backed key | 49.8 | 0 | 0 |
 | `Get`, key delegated to the inner client | 54.3 | 0 | 0 |
-| `GetC(nil)`, unconfigured key | 32.6 | 0 | 0 |
-| `GetC(nil)`, ambient-only key | 23.6 | 0 | 0 |
-| `GetC(c)`, per-caller key, 1 caller dimension | 62.5 | 0 | 0 |
-| `GetC(c)`, per-caller key, 5 caller dimensions | 62.1 | 0 | 0 |
-| building one `ConstraintsMap` per request | 75.5 | 336 | 2 |
+| `GetC(nil)`, unconfigured key | 33.1 | 0 | 0 |
+| `GetC(nil)`, ambient-only key | 21.7 | 0 | 0 |
+| `GetC(c)`, per-caller key, 1 caller dimension | 59.3 | 0 | 0 |
+| `GetC(c)`, per-caller key, 5 caller dimensions | 60.8 | 0 | 0 |
+| building one `ConstraintsMap` per request | 72.5 | 336 | 2 |
 
 The `Get` rows are unchanged from before this work, and are not merely close to today's path —
 they *are* today's path, since ambient-only entries are resolved at load and what `Collection`
@@ -169,7 +170,7 @@ layered view (`types.Lookup`) rather than merged into a fresh map. An earlier re
 copied into a pooled map cost 230 ns and 3 allocations for the same work.
 
 The last row is the real per-request cost and the reason to build one `ConstraintsMap` per
-request rather than per lookup: 336 B once, then ~62 ns per setting read. (It benchmarks as
+request rather than per lookup: 336 B once, then ~60 ns per setting read. (It benchmarks as
 free if you let escape analysis keep it on the stack — the benchmark deliberately sinks it to
 a package variable to avoid reporting a number callers will not see.)
 
