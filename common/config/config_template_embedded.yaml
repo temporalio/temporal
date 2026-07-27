@@ -3,8 +3,13 @@ log:
     stdout: true
     level: {{ default "info" (env "LOG_LEVEL") }}
 
+{{- $db := default "cassandra" (env "DB") | lower }}
 persistence:
+    {{- if eq $db "cassandra" }}
+    numHistoryShards: {{ default "12" (env "NUM_HISTORY_SHARDS") }}
+    {{- else }}
     numHistoryShards: {{ default "4" (env "NUM_HISTORY_SHARDS") }}
+    {{- end }}
     defaultStore: default
     {{- $es := default "false" (env "ENABLE_ES") | lower -}}
     {{- if eq $es "true" }}
@@ -13,7 +18,6 @@ persistence:
     visibilityStore: visibility
     {{- end }}
     datastores:
-        {{- $db := default "cassandra" (env "DB") | lower -}}
         {{- if eq $db "cassandra" }}
         default:
             cassandra:
@@ -27,7 +31,8 @@ persistence:
                   {{- end }}
                 {{- end }}
                 port: {{ default "9042" (env "CASSANDRA_PORT") }}
-                maxConns: {{ default "20" (env "CASSANDRA_MAX_CONNS") }}
+                maxConns: {{ default "12" (env "CASSANDRA_MAX_CONNS") }}
+                maxExcessShardConnectionsRate: {{ default "2" (env "CASSANDRA_MAX_EXCESS_SHARD_CONNECTIONS_RATE") }}
                 tls:
                     enabled: {{ default "false" (env "CASSANDRA_TLS_ENABLED") }}
                     caFile: {{ default "" (env "CASSANDRA_CA") }}

@@ -6,7 +6,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-const GlobalDefaultNumTaskQueuePartitions = 4
+const GlobalDefaultNumTaskQueuePartitions = 12
 
 var defaultNumTaskQueuePartitions = []TypedConstrainedValue[int]{
 	// The per-ns worker task queue in all namespaces should only have one partition, since

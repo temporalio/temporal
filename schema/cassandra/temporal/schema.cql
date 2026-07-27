@@ -63,8 +63,8 @@ CREATE TABLE history_node (
   prev_txn_id       bigint, -- point to the previous node: event chaining
   data                blob, -- batch of workflow execution history events as a blob
   data_encoding       text, -- protocol used for history serialization
-  PRIMARY KEY ((tree_id), branch_id, node_id, txn_id )
-) WITH CLUSTERING ORDER BY (branch_id ASC, node_id ASC, txn_id DESC)
+  PRIMARY KEY ((tree_id, branch_id), node_id, txn_id )
+) WITH CLUSTERING ORDER BY (node_id ASC, txn_id DESC)
   AND COMPACTION = {
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
 };
@@ -179,6 +179,15 @@ CREATE TABLE queue (
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
 
+CREATE TABLE queue_message_id_range (
+  queue_type      int,
+  next_message_id bigint,
+  version         bigint,
+  PRIMARY KEY (queue_type)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  };
+
 CREATE TABLE cluster_metadata_info (
   metadata_partition      int,
   cluster_name            text,
@@ -228,6 +237,17 @@ CREATE TABLE queue_messages
     message_payload  blob,
     message_encoding text,
     PRIMARY KEY ((queue_type, queue_name, queue_partition), message_id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    };
+
+CREATE TABLE queue_message_id_ranges
+(
+    queue_type      int,
+    queue_name      text,
+    next_message_id bigint,
+    version         bigint,
+    PRIMARY KEY ((queue_type, queue_name))
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
     };

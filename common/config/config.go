@@ -362,6 +362,8 @@ type (
 		Datacenter string `yaml:"datacenter"`
 		// MaxConns is the max number of connections to this datastore for a single keyspace
 		MaxConns int `yaml:"maxConns"`
+		// MaxExcessShardConnectionsRate limits excess Scylla shard-aware connections per shard
+		MaxExcessShardConnectionsRate *float32 `yaml:"maxExcessShardConnectionsRate"`
 		// ConnectTimeout is a timeout for initial dial to cassandra server (default: 600 milliseconds)
 		ConnectTimeout time.Duration `yaml:"connectTimeout"`
 		// Timeout is a timeout for reads and, unless otherwise specified, writes. If not specified, ConnectTimeout is used.

@@ -158,6 +158,12 @@ func (d *matchingTaskStoreV2) GetTasks(
 	iter := query.WithContext(ctx).PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetTasksResponse{}
+	closeIterator := func() error {
+		if err := iter.Close(); err != nil {
+			return gocql.ConvertError("GetTasks", err)
+		}
+		return nil
+	}
 	task := make(map[string]any)
 	for iter.MapScan(task) {
 		_, ok := task["task_id"]
@@ -167,21 +173,25 @@ func (d *matchingTaskStoreV2) GetTasks(
 
 		rawTask, ok := task["task"]
 		if !ok {
+			_ = closeIterator()
 			return nil, newFieldNotFoundError("task", task)
 		}
 		taskVal, ok := rawTask.([]byte)
 		if !ok {
 			var byteSliceType []byte
+			_ = closeIterator()
 			return nil, newPersistedTypeMismatchError("task", byteSliceType, rawTask, task)
 		}
 
 		rawEncoding, ok := task["task_encoding"]
 		if !ok {
+			_ = closeIterator()
 			return nil, newFieldNotFoundError("task_encoding", task)
 		}
 		encodingVal, ok := rawEncoding.(string)
 		if !ok {
 			var byteSliceType []byte
+			_ = closeIterator()
 			return nil, newPersistedTypeMismatchError("task_encoding", byteSliceType, rawEncoding, task)
 		}
 		response.Tasks = append(response.Tasks, p.NewDataBlob(taskVal, encodingVal))
@@ -192,8 +202,8 @@ func (d *matchingTaskStoreV2) GetTasks(
 		response.NextPageToken = iter.PageState()
 	}
 
-	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("GetTasks", err)
+	if err := closeIterator(); err != nil {
+		return nil, err
 	}
 	return response, nil
 }

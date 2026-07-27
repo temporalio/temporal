@@ -6,7 +6,7 @@ persistence:
   defaultStore: cass-default
   visibilityStore: es-visibility-1
   secondaryVisibilityStore: es-visibility-2
-  numHistoryShards: 4
+  numHistoryShards: 12
   datastores:
     cass-default:
       cassandra:

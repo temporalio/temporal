@@ -4,16 +4,19 @@ log:
     stdout: true
     level: {{ default "info" (env "LOG_LEVEL") }}
 
+{{- $db := env "DB" -}}
+{{- if not (eq $db "cassandra" "mysql8" "postgres12" "postgres12_pgx") -}}
+  {{- fail "Invalid DB value. Supported values are cassandra, mysql8, postgres12, postgres12_pgx" -}}
+{{- end }}
 persistence:
+    {{- if eq $db "cassandra" }}
+    numHistoryShards: {{ default "12" (env "NUM_HISTORY_SHARDS") }}
+    {{- else }}
     numHistoryShards: {{ default "4" (env "NUM_HISTORY_SHARDS") }}
+    {{- end }}
 
     defaultStore: default
     visibilityStore: visibility
-
-    {{- $db := env "DB" -}}
-    {{- if not (eq $db "cassandra" "mysql8" "postgres12" "postgres12_pgx") -}}
-      {{- fail "Invalid DB value. Supported values are cassandra, mysql8, postgres12, postgres12_pgx" -}}
-    {{- end }}
 
     datastores:
         default:
@@ -29,7 +32,8 @@ persistence:
                   {{- end }}
                 {{- end }}
                 port: {{ default "9042" (env "CASSANDRA_PORT") }}
-                maxConns: {{ default "20" (env "CASSANDRA_MAX_CONNS") }}
+                maxConns: {{ default "12" (env "CASSANDRA_MAX_CONNS") }}
+                maxExcessShardConnectionsRate: {{ default "2" (env "CASSANDRA_MAX_EXCESS_SHARD_CONNECTIONS_RATE") }}
                 tls:
                     enabled: {{ default "false" (env "CASSANDRA_TLS_ENABLED") }}
                     caFile: {{ env "CASSANDRA_CA" }}

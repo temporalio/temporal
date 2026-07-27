@@ -21,7 +21,7 @@ const (
 		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? `
 
 	v2templateReadHistoryNodeReverse = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
-		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? ORDER BY branch_id DESC, node_id DESC `
+		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? ORDER BY node_id DESC `
 
 	v2templateReadHistoryNodeMetadata = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
 		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? `
@@ -169,18 +169,23 @@ func (h *HistoryStore) ReadHistoryBranch(
 	query := h.Session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID).WithContext(ctx)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	var pagingToken []byte
-	if len(iter.PageState()) > 0 {
-		pagingToken = iter.PageState()
-	}
 
 	nodes := make([]p.InternalHistoryNode, 0, request.PageSize)
 	message := make(map[string]any)
 	for iter.MapScan(message) {
-		nodes = append(nodes, convertHistoryNode(message))
+		node, err := convertHistoryNode(message)
+		if err != nil {
+			_ = iter.Close()
+			return nil, err
+		}
+		nodes = append(nodes, node)
 		message = make(map[string]any)
 	}
 
+	var pagingToken []byte
+	if len(iter.PageState()) > 0 {
+		pagingToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("ReadHistoryBranch", err)
 	}
@@ -307,11 +312,6 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
-	var pagingToken []byte
-	if len(iter.PageState()) > 0 {
-		pagingToken = iter.PageState()
-	}
-
 	branches := make([]p.InternalHistoryBranchDetail, 0, request.PageSize)
 	treeUUID := ""
 	branchUUID := ""
@@ -333,6 +333,10 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 		encoding = ""
 	}
 
+	var pagingToken []byte
+	if len(iter.PageState()) > 0 {
+		pagingToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("GetAllHistoryTreeBranches", err)
 	}
@@ -369,7 +373,6 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	var iter gocql.Iter
 	for {
 		iter = query.PageSize(pageSize).PageState(pagingToken).Iter()
-		pagingToken = iter.PageState()
 
 		branchUUID := ""
 		var data []byte
@@ -382,6 +385,7 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 			encoding = ""
 		}
 
+		pagingToken = iter.PageState()
 		if err := iter.Close(); err != nil {
 			return nil, gocql.ConvertError("GetHistoryTree", err)
 		}
@@ -402,23 +406,38 @@ func (h *HistoryStore) GetHistoryBranchUtil() p.HistoryBranchUtil {
 
 func convertHistoryNode(
 	message map[string]any,
-) p.InternalHistoryNode {
-	nodeID := message["node_id"].(int64)
-	prevTxnID := message["prev_txn_id"].(int64)
-	txnID := message["txn_id"].(int64)
+) (p.InternalHistoryNode, error) {
+	nodeID, err := getTypedFieldFromRow[int64]("node_id", message)
+	if err != nil {
+		return p.InternalHistoryNode{}, err
+	}
+	prevTxnID, err := getTypedFieldFromRow[int64]("prev_txn_id", message)
+	if err != nil {
+		return p.InternalHistoryNode{}, err
+	}
+	txnID, err := getTypedFieldFromRow[int64]("txn_id", message)
+	if err != nil {
+		return p.InternalHistoryNode{}, err
+	}
 
 	var data []byte
 	var dataEncoding string
 	if _, ok := message["data"]; ok {
-		data = message["data"].([]byte)
-		dataEncoding = message["data_encoding"].(string)
+		data, err = getTypedFieldFromRow[[]byte]("data", message)
+		if err != nil {
+			return p.InternalHistoryNode{}, err
+		}
+		dataEncoding, err = getTypedFieldFromRow[string]("data_encoding", message)
+		if err != nil {
+			return p.InternalHistoryNode{}, err
+		}
 	}
 	return p.InternalHistoryNode{
 		NodeID:            nodeID,
 		PrevTransactionID: prevTxnID,
 		TransactionID:     txnID,
 		Events:            p.NewDataBlob(data, dataEncoding),
-	}
+	}, nil
 }
 
 func convertTimeoutError(err error) error {

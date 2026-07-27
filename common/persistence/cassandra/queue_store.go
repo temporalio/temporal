@@ -3,6 +3,7 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -14,7 +15,7 @@ import (
 )
 
 const (
-	templateEnqueueMessageQuery       = `INSERT INTO queue (queue_type, message_id, message_payload, message_encoding) VALUES(?, ?, ?, ?) IF NOT EXISTS`
+	templateEnqueueMessageQuery       = `INSERT INTO queue (queue_type, message_id, message_payload, message_encoding) VALUES(?, ?, ?, ?)`
 	templateGetLastMessageIDQuery     = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
 	templateGetMessagesQuery          = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
 	templateGetMessagesFromDLQQuery   = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
@@ -22,17 +23,28 @@ const (
 	templateDeleteMessagesQuery       = `DELETE FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
 	templateDeleteMessageQuery        = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
 
-	templateGetQueueMetadataQuery    = `SELECT cluster_ack_level, data, data_encoding, version FROM queue_metadata WHERE queue_type = ?`
-	templateInsertQueueMetadataQuery = `INSERT INTO queue_metadata (queue_type, cluster_ack_level, data, data_encoding, version) VALUES(?, ?, ?, ?, ?) IF NOT EXISTS`
-	templateUpdateQueueMetadataQuery = `UPDATE queue_metadata SET cluster_ack_level = ?, data = ?, data_encoding = ?, version = ? WHERE queue_type = ? IF version = ?`
+	templateGetQueueMetadataQuery                = `SELECT cluster_ack_level, data, data_encoding, version FROM queue_metadata WHERE queue_type = ?`
+	templateInsertQueueMetadataQuery             = `INSERT INTO queue_metadata (queue_type, cluster_ack_level, data, data_encoding, version) VALUES(?, ?, ?, ?, ?) IF NOT EXISTS`
+	templateUpdateQueueMetadataQuery             = `UPDATE queue_metadata SET cluster_ack_level = ?, data = ?, data_encoding = ?, version = ? WHERE queue_type = ? IF version = ?`
+	templateCreateQueueMessageIDRangeQuery       = `INSERT INTO queue_message_id_range (queue_type, next_message_id, version) VALUES (?, ?, ?) IF NOT EXISTS`
+	templateGetQueueMessageIDRangeQuery          = `SELECT next_message_id, version FROM queue_message_id_range WHERE queue_type = ?`
+	templateUpdateQueueMessageIDRangeQuery       = `UPDATE queue_message_id_range SET next_message_id = ?, version = ? WHERE queue_type = ? IF version = ?`
+	queueMessageIDRangeAllocationSize      int64 = 1024
 )
 
 type (
 	QueueStore struct {
-		queueType  persistence.QueueType
-		session    gocql.Session
-		logger     log.Logger
-		serializer serialization.Serializer
+		queueType       persistence.QueueType
+		session         gocql.Session
+		logger          log.Logger
+		serializer      serialization.Serializer
+		messageIDRanges sync.Map
+		queueLocks      sync.Map
+	}
+
+	queueMessageIDRange struct {
+		nextMessageID         int64
+		exclusiveMaxMessageID int64
 	}
 )
 
@@ -63,12 +75,7 @@ func (q *QueueStore) EnqueueMessage(
 	ctx context.Context,
 	blob *commonpb.DataBlob,
 ) error {
-	lastMessageID, err := q.getLastMessageID(ctx, q.queueType)
-	if err != nil {
-		return err
-	}
-
-	_, err = q.tryEnqueue(ctx, q.queueType, lastMessageID+1, blob)
+	_, err := q.enqueueMessage(ctx, q.queueType, blob)
 	return err
 }
 
@@ -77,13 +84,26 @@ func (q *QueueStore) EnqueueMessageToDLQ(
 	blob *commonpb.DataBlob,
 ) (int64, error) {
 	// Use negative queue type as the dlq type
-	lastMessageID, err := q.getLastMessageID(ctx, q.getDLQTypeFromQueueType())
+	return q.enqueueMessage(ctx, q.getDLQTypeFromQueueType(), blob)
+}
+
+func (q *QueueStore) enqueueMessage(
+	ctx context.Context,
+	queueType persistence.QueueType,
+	blob *commonpb.DataBlob,
+) (int64, error) {
+	unlock := q.lockQueue(queueType)
+	defer unlock()
+
+	messageID, err := q.nextMessageID(ctx, queueType)
 	if err != nil {
 		return persistence.EmptyQueueMessageID, err
 	}
-
-	// Use negative queue type as the dlq type
-	return q.tryEnqueue(ctx, q.getDLQTypeFromQueueType(), lastMessageID+1, blob)
+	err = q.tryEnqueue(ctx, queueType, messageID, blob)
+	if err != nil {
+		return persistence.EmptyQueueMessageID, err
+	}
+	return messageID, nil
 }
 
 func (q *QueueStore) tryEnqueue(
@@ -91,19 +111,13 @@ func (q *QueueStore) tryEnqueue(
 	queueType persistence.QueueType,
 	messageID int64,
 	blob *commonpb.DataBlob,
-) (int64, error) {
-	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx)
-	previous := make(map[string]any)
-	applied, err := query.MapScanCAS(previous)
+) error {
+	err := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx).Exec()
 	if err != nil {
-		return persistence.EmptyQueueMessageID, gocql.ConvertError("tryEnqueue", err)
+		return gocql.ConvertError("tryEnqueue", err)
 	}
 
-	if !applied {
-		return persistence.EmptyQueueMessageID, &persistence.ConditionFailedError{Msg: fmt.Sprintf("message ID %v exists in queue", previous["message_id"])}
-	}
-
-	return messageID, nil
+	return nil
 }
 
 func (q *QueueStore) getLastMessageID(
@@ -341,8 +355,110 @@ func (q *QueueStore) Close() {
 	}
 }
 
+func (q *QueueStore) lockQueue(queueType persistence.QueueType) func() {
+	lock, _ := q.queueLocks.LoadOrStore(queueType, &sync.Mutex{})
+	mutex := lock.(*sync.Mutex)
+	mutex.Lock()
+	return mutex.Unlock
+}
+
 func (q *QueueStore) getDLQTypeFromQueueType() persistence.QueueType {
 	return -q.queueType
+}
+
+func (q *QueueStore) nextMessageID(
+	ctx context.Context,
+	queueType persistence.QueueType,
+) (int64, error) {
+	if cachedRange, ok := q.messageIDRanges.Load(queueType); ok {
+		messageIDRange := cachedRange.(queueMessageIDRange)
+		if messageIDRange.nextMessageID < messageIDRange.exclusiveMaxMessageID {
+			messageID := messageIDRange.nextMessageID
+			messageIDRange.nextMessageID++
+			q.messageIDRanges.Store(queueType, messageIDRange)
+			return messageID, nil
+		}
+	}
+
+	messageIDRange, err := q.reserveMessageIDRange(ctx, queueType)
+	if err != nil {
+		return 0, err
+	}
+	messageID := messageIDRange.nextMessageID
+	messageIDRange.nextMessageID++
+	q.messageIDRanges.Store(queueType, messageIDRange)
+	return messageID, nil
+}
+
+func (q *QueueStore) reserveMessageIDRange(
+	ctx context.Context,
+	queueType persistence.QueueType,
+) (queueMessageIDRange, error) {
+	for {
+		nextMessageID, version, ok, err := q.getQueueMessageIDRange(ctx, queueType)
+		if err != nil {
+			return queueMessageIDRange{}, err
+		}
+		if !ok {
+			lastMessageID, err := q.getLastMessageID(ctx, queueType)
+			if err != nil {
+				return queueMessageIDRange{}, err
+			}
+			nextMessageID = lastMessageID + 1
+			nextAllocatedMessageID := nextMessageID + queueMessageIDRangeAllocationSize
+			applied, err := q.session.Query(
+				templateCreateQueueMessageIDRangeQuery,
+				queueType,
+				nextAllocatedMessageID,
+				int64(0),
+			).WithContext(ctx).MapScanCAS(make(map[string]any))
+			if err != nil {
+				return queueMessageIDRange{}, gocql.ConvertError("CreateQueueMessageIDRange", err)
+			}
+			if applied {
+				return queueMessageIDRange{
+					nextMessageID:         nextMessageID,
+					exclusiveMaxMessageID: nextAllocatedMessageID,
+				}, nil
+			}
+			continue
+		}
+
+		nextAllocatedMessageID := nextMessageID + queueMessageIDRangeAllocationSize
+		applied, err := q.session.Query(
+			templateUpdateQueueMessageIDRangeQuery,
+			nextAllocatedMessageID,
+			version+1,
+			queueType,
+			version,
+		).WithContext(ctx).MapScanCAS(make(map[string]any))
+		if err != nil {
+			return queueMessageIDRange{}, gocql.ConvertError("UpdateQueueMessageIDRange", err)
+		}
+		if applied {
+			return queueMessageIDRange{
+				nextMessageID:         nextMessageID,
+				exclusiveMaxMessageID: nextAllocatedMessageID,
+			}, nil
+		}
+	}
+}
+
+func (q *QueueStore) getQueueMessageIDRange(
+	ctx context.Context,
+	queueType persistence.QueueType,
+) (nextMessageID int64, version int64, ok bool, err error) {
+	err = q.session.Query(
+		templateGetQueueMessageIDRangeQuery,
+		queueType,
+	).WithContext(ctx).Scan(&nextMessageID, &version)
+	if err != nil {
+		if gocql.IsNotFoundError(err) {
+			return 0, 0, false, nil
+		}
+		return 0, 0, false, gocql.ConvertError("GetQueueMessageIDRange", err)
+	}
+	return nextMessageID, version, true, nil
 }
 
 func (q *QueueStore) initializeQueueMetadata(

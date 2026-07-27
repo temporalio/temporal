@@ -162,6 +162,19 @@ services:
 	}
 }
 
+func TestLoadEmbeddedCassandraScyllaDefaults(t *testing.T) {
+	t.Setenv("DB", "cassandra")
+	t.Setenv("CASSANDRA_SEEDS", "127.0.0.1")
+
+	cfg, err := Load(WithEmbedded())
+
+	require.NoError(t, err)
+	require.Equal(t, int32(12), cfg.Persistence.NumHistoryShards)
+	cassandraConfig := cfg.Persistence.DataStores[cfg.Persistence.DefaultStore].Cassandra
+	require.Equal(t, 12, cassandraConfig.MaxConns)
+	require.InDelta(t, float32(2), *cassandraConfig.MaxExcessShardConnectionsRate, 0)
+}
+
 func createFile(t *testing.T, dir string, file string, uid, uid2 string) {
 	err := os.WriteFile(path(dir, file), []byte(buildConfig(uid, uid2)), fileMode)
 	require.NoError(t, err)

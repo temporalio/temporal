@@ -540,6 +540,7 @@ func (m *userDataManagerImpl) updateUserData(
 			numTaskQueues, err := m.store.CountTaskQueuesByBuildId(ctx, &persistence.CountTaskQueuesByBuildIdRequest{
 				NamespaceID: m.partition.NamespaceId(),
 				BuildID:     buildId,
+				Limit:       options.TaskQueueLimitPerBuildId,
 			})
 			if err != nil {
 				return nil, false, err

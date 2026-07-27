@@ -47,10 +47,10 @@ const (
 	templateGetHistoryScheduledTasksQuery = `SELECT visibility_ts, task_id, task_data, task_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
-		`and type = ?` +
+		`and type = ? ` +
 		`and namespace_id = ? ` +
-		`and workflow_id = ?` +
-		`and run_id = ?` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
 		`and visibility_ts >= ? ` +
 		`and visibility_ts < ?`
 
@@ -134,10 +134,10 @@ const (
 	templateGetTimerTasksQuery = `SELECT visibility_ts, task_id, timer, timer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
-		`and type = ?` +
+		`and type = ? ` +
 		`and namespace_id = ? ` +
-		`and workflow_id = ?` +
-		`and run_id = ?` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
 		`and visibility_ts >= ? ` +
 		`and visibility_ts < ?`
 

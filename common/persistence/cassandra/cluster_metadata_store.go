@@ -172,17 +172,20 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 ) (*p.GetClusterMembersResponse, error) {
 	var queryString strings.Builder
 	var operands []any
+	needsAllowFiltering := false
 	queryString.WriteString(templateGetClusterMembership)
 	operands = append(operands, constMembershipPartition)
 
 	if len(request.HostIDEquals) != 0 {
 		queryString.WriteString(templateWithHostIDSuffix)
 		operands = append(operands, request.HostIDEquals)
+		needsAllowFiltering = request.RoleEquals == p.All
 	}
 
 	if request.RPCAddressEquals != nil {
 		queryString.WriteString(templateWithRPCAddressSuffix)
 		operands = append(operands, request.RPCAddressEquals)
+		needsAllowFiltering = true
 	}
 
 	if request.RoleEquals != p.All {
@@ -193,15 +196,19 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 	if !request.SessionStartedAfter.IsZero() {
 		queryString.WriteString(templateWithSessionSuffix)
 		operands = append(operands, request.SessionStartedAfter)
+		needsAllowFiltering = true
 	}
 
 	// LastHeartbeat needs to be the last one as it needs AllowFilteringSuffix
 	if request.LastHeartbeatWithin > 0 {
 		queryString.WriteString(templateWithHeartbeatSinceSuffix)
 		operands = append(operands, time.Now().UTC().Add(-request.LastHeartbeatWithin))
+		needsAllowFiltering = true
 	}
 
-	queryString.WriteString(templateAllowFiltering)
+	if needsAllowFiltering {
+		queryString.WriteString(templateAllowFiltering)
+	}
 	query := m.session.Query(queryString.String(), operands...).WithContext(ctx)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()

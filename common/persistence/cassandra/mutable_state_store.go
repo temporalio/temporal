@@ -1060,11 +1060,18 @@ func (d *MutableStateStore) ListConcreteExecutions(
 	iter := query.PageSize(request.PageSize).PageState(request.PageToken).Iter()
 
 	response := &p.InternalListConcreteExecutionsResponse{}
+	closeIterator := func() error {
+		if err := iter.Close(); err != nil {
+			return gocql.ConvertError("ListConcreteExecutions", err)
+		}
+		return nil
+	}
 	result := make(map[string]any)
 	for iter.MapScan(result) {
 		if execution, ok := result["execution"]; ok {
 			executionBytes, ok := execution.([]byte)
 			if !ok {
+				_ = closeIterator()
 				return nil, newPersistedTypeMismatchError("execution", "", executionBytes, result)
 			}
 
@@ -1076,6 +1083,7 @@ func (d *MutableStateStore) ListConcreteExecutions(
 
 			state, err := mutableStateFromRow(result)
 			if err != nil {
+				_ = closeIterator()
 				return nil, err
 			}
 			response.States = append(response.States, state)
@@ -1085,6 +1093,9 @@ func (d *MutableStateStore) ListConcreteExecutions(
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
+	}
+	if err := closeIterator(); err != nil {
+		return nil, err
 	}
 	return response, nil
 }

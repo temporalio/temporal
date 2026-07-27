@@ -3,6 +3,7 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -34,7 +35,8 @@ const (
 	(?           , ?       , ?)`
 	templateDeleteBuildIdTaskQueueMappingQuery = `DELETE FROM task_queue_user_data
 	WHERE namespace_id = ? AND build_id = ? AND task_queue_name = ?`
-	templateCountTaskQueueByBuildIdQuery = `SELECT COUNT(*) FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ?`
+	templateCountTaskQueueByBuildIdQuery        = `SELECT COUNT(*) FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ?`
+	templateLimitedCountTaskQueueByBuildIdQuery = `SELECT task_queue_name FROM task_queue_user_data WHERE namespace_id = ? AND build_id = ? LIMIT ?`
 )
 
 type userDataStore struct {
@@ -172,21 +174,24 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 }
 
 func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.GetTaskQueuesByBuildIdRequest) ([]string, error) {
-	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
-	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
-
 	var taskQueues []string
-	row := make(map[string]any)
+	var pageToken []byte
 
 	for {
+		initialTaskQueueCount := len(taskQueues)
+		query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
+		iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).PageState(pageToken).Iter()
+		row := make(map[string]any)
 		for iter.MapScan(row) {
 			taskQueueRaw, ok := row["task_queue_name"]
 			if !ok {
+				_ = iter.Close()
 				return nil, newFieldNotFoundError("task_queue_name", row)
 			}
 			taskQueue, ok := taskQueueRaw.(string)
 			if !ok {
 				var stringType string
+				_ = iter.Close()
 				return nil, newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row)
 			}
 
@@ -194,20 +199,39 @@ func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.G
 
 			row = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
 		}
-		if len(iter.PageState()) == 0 {
+		nextPageToken := iter.PageState()
+		if err := iter.Close(); err != nil {
+			return nil, gocql.ConvertError("GetTaskQueuesByBuildId", err)
+		}
+		if len(nextPageToken) == 0 ||
+			(slices.Equal(nextPageToken, pageToken) && len(taskQueues) == initialTaskQueueCount) {
 			break
 		}
-	}
-
-	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("GetTaskQueuesByBuildId", err)
+		pageToken = nextPageToken
 	}
 	return taskQueues, nil
 }
 
 func (d *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request *p.CountTaskQueuesByBuildIdRequest) (int, error) {
+	if request.Limit > 0 {
+		query := d.Session.Query(templateLimitedCountTaskQueueByBuildIdQuery, request.NamespaceID, request.BuildID, request.Limit).WithContext(ctx)
+		iter := query.PageSize(request.Limit).Iter()
+		count := 0
+		var taskQueue string
+		for iter.Scan(&taskQueue) {
+			count++
+		}
+		if err := iter.Close(); err != nil {
+			return 0, gocql.ConvertError("CountTaskQueuesByBuildId", err)
+		}
+		return count, nil
+	}
+
 	var count int
 	query := d.Session.Query(templateCountTaskQueueByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
 	err := query.Scan(&count)
-	return count, err
+	if err != nil {
+		return 0, gocql.ConvertError("CountTaskQueuesByBuildId", err)
+	}
+	return count, nil
 }

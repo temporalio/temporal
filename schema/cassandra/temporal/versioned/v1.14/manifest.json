@@ -1,0 +1,6 @@
+{
+  "CurrVersion": "1.14",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Add queue v2 message ID range table",
+  "SchemaUpdateCqlFiles": ["queue_message_id_ranges.cql"]
+}

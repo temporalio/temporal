@@ -127,6 +127,9 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 	if cfg.MaxConns > 0 {
 		cluster.NumConns = cfg.MaxConns
 	}
+	if cfg.MaxExcessShardConnectionsRate != nil {
+		cluster.MaxExcessShardConnectionsRate = *cfg.MaxExcessShardConnectionsRate
+	}
 
 	cluster.ConnectTimeout = 10 * time.Second * debug.TimeoutMultiplier
 	if cfg.ConnectTimeout > 0 {

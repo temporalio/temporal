@@ -57,8 +57,8 @@ CREATE TABLE history_node (
   txn_id            bigint, -- for override the same node_id: bigger txn_id wins
   data                blob, -- Batch of workflow execution history events as a blob
   data_encoding       text, -- Protocol used for history serialization
-  PRIMARY KEY ((tree_id), branch_id, node_id, txn_id )
-) WITH CLUSTERING ORDER BY (branch_id ASC, node_id ASC, txn_id DESC)
+  PRIMARY KEY ((tree_id, branch_id), node_id, txn_id )
+) WITH CLUSTERING ORDER BY (node_id ASC, txn_id DESC)
   AND COMPACTION = {
      'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
 };
@@ -121,6 +121,15 @@ CREATE TABLE queue (
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
 
+CREATE TABLE queue_message_id_range (
+  queue_type      int,
+  next_message_id bigint,
+  version         bigint,
+  PRIMARY KEY (queue_type)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+  };
+
 CREATE TABLE queue_metadata (
   queue_type        int,
   cluster_ack_level map<text, bigint>,
@@ -155,4 +164,3 @@ CREATE TABLE cluster_membership
 
 CREATE INDEX cm_lastheartbeat_idx on cluster_membership (last_heartbeat);
 CREATE INDEX cm_sessionstart_idx on cluster_membership (session_start);
-

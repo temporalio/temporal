@@ -48,20 +48,12 @@ type (
 	}
 	// failingIter is a [gocql.Iter] which fails when iterated.
 	failingIter struct{}
-	// blockingSession is a [gocql.Session] designed for testing concurrent inserts.
-	// See cassandra.ErrQueueMessageIDConflict for more.
+	// blockingSession is a [gocql.Session] designed for testing concurrent updates.
 	blockingSession struct {
 		gocql.Session
 		queryToBlockOn   string
 		queryStarted     chan struct{}
 		queryCanContinue chan struct{}
-	}
-	// enqueueMessageResult contains the result of a call to persistence.QueueV2.EnqueueMessage.
-	enqueueMessageResult struct {
-		// id of the inserted message
-		id int
-		// err if the call failed
-		err error
 	}
 	testQueueParams struct {
 		logger log.Logger
@@ -389,10 +381,6 @@ func testCassandraQueueV2(t *testing.T, cluster *cassandra.TestCluster) {
 }
 
 func testCassandraQueueV2ConcurrentConflicts(t *testing.T, cluster *cassandra.TestCluster) {
-	t.Run("EnqueueMessage", func(t *testing.T) {
-		t.Parallel()
-		testCassandraQueueV2EnqueueErrEnqueueMessageConflict(t, cluster)
-	})
 	t.Run("RangeDeleteMessages", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2ConcurrentRangeDeleteMessages(t, cluster)
@@ -420,9 +408,13 @@ func testCassandraQueueV2QueryErrors(t *testing.T, cluster *cassandra.TestCluste
 		t.Parallel()
 		testCassandraQueueV2ErrEnqueueMessageQuery(t, cluster)
 	})
-	t.Run("EnqueueMessageGetMaxMessageIDQuery", func(t *testing.T) {
+	t.Run("EnqueueMessageGetMessageIDRangeQuery", func(t *testing.T) {
 		t.Parallel()
-		testCassandraQueueV2ErrEnqueueMessageGetMaxMessageIDQuery(t, cluster)
+		testCassandraQueueV2ErrEnqueueMessageGetMessageIDRangeQuery(t, cluster)
+	})
+	t.Run("EnqueueMessageCreateMessageIDRangeQuery", func(t *testing.T) {
+		t.Parallel()
+		testCassandraQueueV2ErrEnqueueMessageCreateMessageIDRangeQuery(t, cluster)
 	})
 	t.Run("ListQueuesGetMaxMessageIDQuery", func(t *testing.T) {
 		t.Parallel()
@@ -482,10 +474,10 @@ func testCassandraQueueV2ErrRangeDeleteMessagesGetMaxMessageIDQuery(t *testing.T
 	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
 }
 
-func testCassandraQueueV2ErrEnqueueMessageGetMaxMessageIDQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrEnqueueMessageGetMessageIDRangeQuery(t *testing.T, cluster *cassandra.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
-		failingQueries: []string{cassandra.TemplateGetMaxMessageIDQuery},
+		failingQueries: []string{cassandra.TemplateGetQueueMessageIDRangeQuery},
 	})
 	ctx := context.Background()
 	queueType := persistence.QueueTypeHistoryNormal
@@ -499,7 +491,27 @@ func testCassandraQueueV2ErrEnqueueMessageGetMaxMessageIDQuery(t *testing.T, clu
 	require.Error(t, err)
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
 	assert.ErrorContains(t, err, assert.AnError.Error())
-	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
+	assert.ErrorContains(t, err, "QueueV2GetMessageIDRange")
+}
+
+func testCassandraQueueV2ErrEnqueueMessageCreateMessageIDRangeQuery(t *testing.T, cluster *cassandra.TestCluster) {
+	q := newQueueV2Store(failingSession{
+		Session:        cluster.GetSession(),
+		failingQueries: []string{cassandra.TemplateCreateQueueMessageIDRangeQuery},
+	})
+	ctx := context.Background()
+	queueType := persistence.QueueTypeHistoryNormal
+	queueName := "test-queue-" + t.Name()
+	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+	})
+	require.NoError(t, err)
+	_, err = persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
+	require.Error(t, err)
+	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
+	assert.ErrorContains(t, err, assert.AnError.Error())
+	assert.ErrorContains(t, err, "QueueV2CreateMessageIDRange")
 }
 
 func testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t *testing.T, cluster *cassandra.TestCluster) {
@@ -549,113 +561,6 @@ func (f *blockingSession) Query(query string, args ...any) gocql.Query {
 	}
 
 	return f.Session.Query(query, args...)
-}
-
-// testCassandraQueueV2EnqueueErrEnqueueMessageConflict tests that when there are concurrent inserts to the queue, only one of
-// them is accepted if they try to enqueue a message with the same ID, and the other clients are given the correct
-// error.
-func testCassandraQueueV2EnqueueErrEnqueueMessageConflict(t *testing.T, cluster *cassandra.TestCluster) {
-	const numConcurrentWrites = 3
-
-	session := &blockingSession{
-		Session:          cluster.GetSession(),
-		queryToBlockOn:   cassandra.TemplateEnqueueMessageQuery,
-		queryStarted:     make(chan struct{}, numConcurrentWrites),
-		queryCanContinue: make(chan struct{}),
-	}
-
-	q := newQueueV2Store(session)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	t.Cleanup(cancel)
-
-	queueType := persistence.QueueTypeHistoryNormal
-	queueName := "test-queue-" + t.Name()
-
-	results := make(chan enqueueMessageResult, numConcurrentWrites)
-
-	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
-		QueueType: queueType,
-		QueueName: queueName,
-	})
-	require.NoError(t, err)
-	for range numConcurrentWrites {
-		go func() {
-			res, err := persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					return
-				case results <- enqueueMessageResult{err: err}:
-				}
-			} else {
-				select {
-				case <-ctx.Done():
-					return
-				case results <- enqueueMessageResult{id: int(res.Metadata.ID)}:
-				}
-			}
-		}()
-	}
-
-	for range numConcurrentWrites {
-		select {
-		case <-ctx.Done():
-			printResults(t, results)
-			t.Fatal("timed out waiting for enqueue to be called")
-		case <-session.queryStarted:
-		}
-	}
-	close(session.queryCanContinue)
-
-	numConflicts := 0
-	writtenMessageIDs := make([]int, 0, 1)
-
-	for range numConcurrentWrites {
-		var res enqueueMessageResult
-		select {
-		case <-ctx.Done():
-			t.Fatal("timed out waiting for enqueue to return")
-		case res = <-results:
-		}
-		if res.err != nil {
-			assert.ErrorIs(t, res.err, cassandra.ErrEnqueueMessageConflict)
-
-			numConflicts++
-		} else {
-			writtenMessageIDs = append(writtenMessageIDs, res.id)
-		}
-	}
-
-	assert.Equal(t, numConcurrentWrites-1, numConflicts,
-		"every query other than the accepted one should have failed")
-	assert.Len(t, writtenMessageIDs, 1,
-		"only one message should have been written")
-
-	messages, err := q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
-		QueueType:     queueType,
-		QueueName:     queueName,
-		PageSize:      numConcurrentWrites,
-		NextPageToken: nil,
-	})
-
-	require.NoError(t, err)
-	require.Len(t, messages.Messages, 1,
-		"there should only be one message in the queue")
-	assert.Equal(t, writtenMessageIDs[0], int(messages.Messages[0].MetaData.ID),
-		"the message in the queue should be the one that Cassandra told us was accepted")
-}
-
-func printResults(t *testing.T, results chan enqueueMessageResult) {
-	for {
-		select {
-		case res := <-results:
-			if res.err != nil {
-				t.Error("got unexpected error:", res.err)
-			}
-		default:
-			return
-		}
-	}
 }
 
 func testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t *testing.T, cluster *cassandra.TestCluster) {
@@ -818,18 +723,20 @@ func testCassandraQueueV2ErrInvalidPayload(t *testing.T, cluster *cassandra.Test
 }
 
 func testCassandraQueueV2ErrGetQueueQuery(t *testing.T, cluster *cassandra.TestCluster) {
-	q := newQueueV2Store(failingSession{
-		Session:        cluster.GetSession(),
-		failingQueries: []string{cassandra.TemplateGetQueueQuery},
-	})
 	ctx := context.Background()
 	queueType := persistence.QueueTypeHistoryNormal
 	queueName := "test-queue-" + t.Name()
-	_, err := q.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
+	setupQueue := newQueueV2Store(cluster.GetSession())
+	_, err := setupQueue.CreateQueue(ctx, &persistence.InternalCreateQueueRequest{
 		QueueType: queueType,
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
+
+	q := newQueueV2Store(failingSession{
+		Session:        cluster.GetSession(),
+		failingQueries: []string{cassandra.TemplateGetQueueQuery},
+	})
 	_, err = q.ReadMessages(ctx, &persistence.InternalReadMessagesRequest{
 		QueueType: queueType,
 		QueueName: queueName,
