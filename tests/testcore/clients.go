@@ -227,7 +227,12 @@ func (c *clients) close() []error {
 		}
 	}
 	c.frontend.conn = nil
+	c.frontend.admin = nil
+	c.frontend.frontend = nil
+	c.frontend.operator = nil
 	c.history.conn = nil
+	c.history.history = nil
+	c.history.scheduler = nil
 	return errs
 }
 

@@ -63,8 +63,16 @@ type (
 		chasmVisibilityMgr chasm.VisibilityManager
 
 		replicationStreamRecorder *ReplicationStreamRecorder
-		historyTaskRecorder       *HistoryTaskRecorder
+		historyTaskRecorder       *historyTaskRecorderRef
 
+		authCallbacks *testAuthCallbacks
+	}
+
+	historyTaskRecorderRef struct {
+		recorder *HistoryTaskRecorder
+	}
+
+	testAuthCallbacks struct {
 		callbackLock sync.RWMutex
 		onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
 		onAuthorize  func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
@@ -128,10 +136,13 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		hostsByProtocolByService:  params.HostsByProtocolByService,
 		workerConfig:              params.WorkerConfig,
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
+		historyTaskRecorder:       &historyTaskRecorderRef{},
+		authCallbacks:             &testAuthCallbacks{},
 	}
 
 	// Base options are independent of which services this test cluster starts.
 	// [Start] adds the per-service config and static host map.
+	authCallbacks := impl.authCallbacks
 	baseServerOptions := []temporal.ServerOption{
 		temporal.WithLogger(impl.logger),
 		temporal.WithNamespaceLogger(impl.logger),
@@ -143,8 +154,8 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 			mockAdminClient: params.MockAdminClient,
 		}),
 		temporal.WithTestHooks(impl.testHooks),
-		temporal.WithAuthorizer(impl),
-		temporal.WithClaimMapper(func(*config.Config) authorization.ClaimMapper { return impl }),
+		temporal.WithAuthorizer(authCallbacks),
+		temporal.WithClaimMapper(func(*config.Config) authorization.ClaimMapper { return authCallbacks }),
 		temporal.WithAudienceGetter(func(*config.Config) authorization.JWTAudienceMapper { return nil }),
 		temporal.WithSearchAttributesMapper(nil),
 		temporal.WithPersistenceServiceResolver(resolver.NewNoopResolver()),
@@ -163,6 +174,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 	}
 	if params.EnableHistoryTaskRecorder {
 		base := temporal.PersistenceFactoryProvider()
+		recorderRef := impl.historyTaskRecorder
 		// Only history gets the recording wrapper; other services keep the production factory.
 		baseServerOptions = append(baseServerOptions, temporal.WithPersistenceFactoryProvider(func(params persistenceClient.NewFactoryParams) persistenceClient.Factory {
 			factory := base(params)
@@ -173,7 +185,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 				Factory: factory,
 				logger:  params.Logger,
 				setRecorder: func(recorder *HistoryTaskRecorder) {
-					impl.historyTaskRecorder = recorder
+					recorderRef.recorder = recorder
 				},
 			}
 		}))
@@ -307,8 +319,11 @@ func (c *temporalImpl) Stop() error {
 	var errs []error
 	if c.server != nil {
 		errs = append(errs, c.server.Stop())
+		c.server = nil
 	}
 	errs = append(errs, c.close()...)
+	c.chasmEngine = nil
+	c.chasmVisibilityMgr = nil
 	return multierr.Combine(errs...)
 }
 
@@ -348,7 +363,10 @@ func (c *temporalImpl) ChasmContext(ctx context.Context) (context.Context, error
 }
 
 func (c *temporalImpl) GetHistoryTaskRecorder() *HistoryTaskRecorder {
-	return c.historyTaskRecorder
+	if c.historyTaskRecorder == nil {
+		return nil
+	}
+	return c.historyTaskRecorder.recorder
 }
 
 func (c *temporalImpl) TLSConfigProvider() *encryption.FixedTLSConfigProvider {
@@ -369,15 +387,19 @@ func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
 }
 
 func (c *temporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
-	c.callbackLock.Lock()
-	c.onGetClaims = fn
-	c.callbackLock.Unlock()
+	c.authCallbacks.SetOnGetClaims(fn)
 }
 
-func (c *temporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
-	c.callbackLock.RLock()
-	onGetClaims := c.onGetClaims
-	c.callbackLock.RUnlock()
+func (a *testAuthCallbacks) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+	a.callbackLock.Lock()
+	a.onGetClaims = fn
+	a.callbackLock.Unlock()
+}
+
+func (a *testAuthCallbacks) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	a.callbackLock.RLock()
+	onGetClaims := a.onGetClaims
+	a.callbackLock.RUnlock()
 	if onGetClaims != nil {
 		return onGetClaims(authInfo)
 	}
@@ -387,23 +409,35 @@ func (c *temporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorizati
 func (c *temporalImpl) SetOnAuthorize(
 	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
 ) {
-	c.callbackLock.Lock()
-	c.onAuthorize = fn
-	c.callbackLock.Unlock()
+	c.authCallbacks.SetOnAuthorize(fn)
 }
 
-func (c *temporalImpl) Authorize(
+func (a *testAuthCallbacks) SetOnAuthorize(
+	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
+) {
+	a.callbackLock.Lock()
+	a.onAuthorize = fn
+	a.callbackLock.Unlock()
+}
+
+func (a *testAuthCallbacks) Authorize(
 	ctx context.Context,
 	caller *authorization.Claims,
 	target *authorization.CallTarget,
 ) (authorization.Result, error) {
-	c.callbackLock.RLock()
-	onAuthorize := c.onAuthorize
-	c.callbackLock.RUnlock()
+	a.callbackLock.RLock()
+	onAuthorize := a.onAuthorize
+	a.callbackLock.RUnlock()
 	if onAuthorize != nil {
 		return onAuthorize(ctx, caller, target)
 	}
 	return authorization.Result{Decision: authorization.DecisionAllow}, nil
+}
+
+func (c *temporalImpl) clearReferences() {
+	// Keep the host allocation itself available to object leak checks while
+	// releasing everything that is no longer usable after shutdown.
+	*c = temporalImpl{}
 }
 
 // copyPersistenceConfig makes a deep copy of persistence config.

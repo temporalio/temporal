@@ -496,6 +496,7 @@ func (tc *TestCluster) TearDownCluster() error {
 			}
 		}
 	}
+	tc.host.clearReferences()
 	return errs
 }
 

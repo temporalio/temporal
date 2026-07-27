@@ -28,14 +28,21 @@ var goleakOpts = []goleak.Option{
 
 var objectLeakOpts = []objectleak.Option{
 	objectleak.WithPruneType("google.golang.org/protobuf/internal/impl.*"),
-	objectleak.WithExpected("FunctionalTestBase"),
-	objectleak.WithExpected("FunctionalTestBase.Logger*"),
-	objectleak.WithExpected("FunctionalTestBase.Suite*"),
-	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
-	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
-	objectleak.WithExpected("FunctionalTestBase.testClusterConfig"),
-	// Closed SDK client internals remain reachable after worker shutdown.
+	// SQLite intentionally keeps one *sql.DB per file DSN for the process lifetime.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase.ShardMgr.persistence.persistence.shardStore.SqlStore.DB.DB.db*"),
+	// The persistence metric emitter shares the closed TestLogger with the stopped server graph.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase.ShardMgr.persistence.metricEmitter.logger*"),
+	// The namespace queue uses the package-level namespaceQueueRetryPolicy from persistence/client/factory.go.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase.NamespaceReplicationQueue.queue.policy"),
+	// Persistence managers use the package-level retryPolicy from persistence/client/factory.go.
+	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase.ShardMgr.policy"),
+	// Client.Close stops transports but retains immutable SDK converters and gRPC buffer pools.
 	objectleak.WithExpected("sdkClient*"),
+}
+
+type clusterResources struct {
+	testCluster *testcore.TestCluster
+	sdkClient   sdkclient.Client
 }
 
 // TestClusterShutdownLeak is a goroutine-leak regression test for the functional
@@ -80,7 +87,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
 	// init, proto registries, ...) are created before we snapshot the baseline.
 	for range warmupIters {
-		buildRunTeardownCluster(t, &leakCheck)
+		buildRunTeardownCluster(t, nil)
 	}
 
 	// Wait for warmup goroutines to drain before snapshotting the baseline.
@@ -124,6 +131,8 @@ func TestClusterShutdownLeak(t *testing.T) {
 // buildRunTeardownCluster creates a dedicated cluster, runs a trivial
 // workflow on it to exercise the full server path, then tears it down.
 func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) {
+	var resources *clusterResources
+
 	// The subtest ensures all env cleanups complete before this returns.
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
@@ -139,8 +148,18 @@ func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck
 		require.NoError(t, err)
 		require.NoError(t, run.Get(context.Background(), nil))
 
-		leakCheck.Track(env)
+		if leakCheck != nil {
+			resources = &clusterResources{
+				testCluster: env.GetTestCluster(),
+				sdkClient:   env.SdkClient(),
+			}
+		}
 	})
+	if resources != nil {
+		// Track the stopped roots after teardown so severed server internals
+		// aren't promoted to independent leak roots.
+		leakCheck.Track(resources)
+	}
 }
 
 func smokeWorkflow(workflow.Context) error { return nil }
