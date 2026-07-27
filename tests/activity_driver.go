@@ -1,7 +1,6 @@
 package tests
 
-// Config shared by the two activity drivers, activity_standalone_driver.go and
-// activity_workflow_driver.go.
+// Config shared by activity_standalone_driver.go and activity_workflow_driver.go.
 
 import (
 	"cmp"

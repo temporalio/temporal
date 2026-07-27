@@ -47,7 +47,7 @@ var (
 	BackoffElapses         = Event{Type: BackoffElapsesType}
 )
 
-// String is a stable label for an event type, for failure reports.
+// String is a label for an event type.
 func (t EventType) String() string {
 	switch t {
 	case PollType:
@@ -73,7 +73,7 @@ func (t EventType) String() string {
 	}
 }
 
-// String names an event and appends the flags that affect its outcome.
+// String is a label for an event; it includes flags that affect its outcome.
 func (e Event) String() string {
 	if e.Type == RespondFailedType {
 		if e.Retryable {
