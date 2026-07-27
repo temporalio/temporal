@@ -69,17 +69,12 @@ func (d *saaDriver) driveTrace(t require.TestingT, trace []model.Event) *saaHand
 func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 	switch {
 	case e.Type == model.PollType:
-		// When a trace includes a poll event, the implication is that the activity should be
-		// dispatchable and that the poll will yield an activity task, so finding no task is a
-		// failure.
 		resp := a.pollForTask(t, activityDriverTimeout)
 		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
 		a.token = resp.GetTaskToken()
 	case isDispatchDelayEvent(e.Type):
-		// A dispatch delay is realized by waiting for the delayed dispatch.
 		a.awaitDispatchDelay(t, e)
 	case isTimerEvent(e.Type):
-		// A timer event is realized by waiting out its configured window.
 		a.awaitTimeout(t, e, time.Now().Add(a.cfg.timerDuration(e)+activityDriverTimerMargin))
 	default:
 		// An RPC
