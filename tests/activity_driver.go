@@ -131,7 +131,7 @@ type activityInfo struct {
 const activityDriverTimeout = 10 * time.Second
 
 // activityDriverTimerMargin is margin added to a timer event's duration when polling for its effect.
-var activityDriverTimerMargin = 2 * timerProcessorMaxShift
+var activityDriverTimerMargin = activityDriverTimeout
 
 // activityDriverPollInterval is the gap between reads when polling for a timer event's effect.
 const activityDriverPollInterval = 100 * time.Millisecond
