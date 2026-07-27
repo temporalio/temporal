@@ -137,8 +137,17 @@ type executeResult struct {
 	// Starts that failed with a non-retryable error can be removed from the buffer.
 	FailedStarts []*schedulespb.BufferedStart
 
+	// Starts that expired after promotion can be removed from the buffer and
+	// counted as missed, unless another execution already recorded their RunId.
+	ExpiredStarts []expiredStart
+
 	CompletedCancels    []*commonpb.WorkflowExecution
 	CompletedTerminates []*commonpb.WorkflowExecution
+}
+
+type expiredStart struct {
+	start         *schedulespb.BufferedStart
+	actionRunning bool
 }
 
 // Append combines two executeResults (no deduplication is done).
@@ -147,6 +156,7 @@ func (e *executeResult) Append(o executeResult) executeResult {
 		CompletedStarts:     append(e.CompletedStarts, o.CompletedStarts...),
 		RetryableStarts:     append(e.RetryableStarts, o.RetryableStarts...),
 		FailedStarts:        append(e.FailedStarts, o.FailedStarts...),
+		ExpiredStarts:       append(e.ExpiredStarts, o.ExpiredStarts...),
 		CompletedCancels:    append(e.CompletedCancels, o.CompletedCancels...),
 		CompletedTerminates: append(e.CompletedTerminates, o.CompletedTerminates...),
 	}
@@ -157,12 +167,17 @@ func (e *executeResult) Append(o executeResult) executeResult {
 // (starts that transitioned from "no RunId" to "has RunId" in this call) and
 // the number of completed results that were dropped because they were previously
 // recorded.
-func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeResult) (newlyStarted, droppedDuplicates int) {
+func (i *Invoker) recordExecuteResult(
+	ctx chasm.MutableContext,
+	result *executeResult,
+) (newlyStarted, droppedDuplicates int, missedCatchupByActionRunning map[bool]int64) {
 	completed := make(map[string]*schedulespb.BufferedStart) // request ID -> BufferedStart with RunId/StartTime
 	failed := make(map[string]bool)                          // request ID -> is present
 	retryable := make(map[string]*schedulespb.BufferedStart) // request ID -> *BufferedStart
+	expired := make(map[string]bool)                         // request ID -> action was running
 	canceled := make(map[string]bool)                        // run ID -> is present
 	terminated := make(map[string]bool)                      // run ID -> is present
+	missedCatchupByActionRunning = make(map[bool]int64)
 
 	for _, start := range result.CompletedStarts {
 		completed[start.RequestId] = start
@@ -172,6 +187,9 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	}
 	for _, start := range result.RetryableStarts {
 		retryable[start.RequestId] = start
+	}
+	for _, expiry := range result.ExpiredStarts {
+		expired[expiry.start.RequestId] = expiry.actionRunning
 	}
 	for _, wf := range result.CompletedCancels {
 		canceled[wf.RunId] = true
@@ -184,11 +202,15 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	removedStarts := 0
 	retriedStarts := 0
 	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		failed := failed[start.RequestId]
-		if failed {
+		remove := failed[start.RequestId]
+		if actionRunning, ok := expired[start.RequestId]; ok && start.GetRunId() == "" {
+			remove = true
+			missedCatchupByActionRunning[actionRunning]++
+		}
+		if remove {
 			removedStarts++
 		}
-		return failed
+		return remove
 	})
 	i.CancelWorkflows = slices.DeleteFunc(i.GetCancelWorkflows(), func(we *commonpb.WorkflowExecution) bool {
 		canceled := canceled[we.RunId]
@@ -233,7 +255,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 			retriedStarts))
 
 	i.addTasks(ctx)
-	return newlyStarted, droppedDuplicates
+	return newlyStarted, droppedDuplicates, missedCatchupByActionRunning
 }
 
 // runningWorkflowID returns the workflow ID associated with the given

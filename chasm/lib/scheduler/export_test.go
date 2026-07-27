@@ -59,10 +59,25 @@ func (i *Invoker) RecordExecuteResult(
 	completed []*schedulespb.BufferedStart,
 	retryable []*schedulespb.BufferedStart,
 ) (newlyStarted, droppedDuplicates int) {
-	return i.recordExecuteResult(ctx, &executeResult{
+	newlyStarted, droppedDuplicates, _ = i.recordExecuteResult(ctx, &executeResult{
 		CompletedStarts: completed,
 		RetryableStarts: retryable,
 	})
+	return newlyStarted, droppedDuplicates
+}
+
+func (i *Invoker) RecordExpiredExecuteResult(
+	ctx chasm.MutableContext,
+	start *schedulespb.BufferedStart,
+	actionRunning bool,
+) map[bool]int64 {
+	_, _, missedCatchupByActionRunning := i.recordExecuteResult(ctx, &executeResult{
+		ExpiredStarts: []expiredStart{{
+			start:         start,
+			actionRunning: actionRunning,
+		}},
+	})
+	return missedCatchupByActionRunning
 }
 
 func (b *BackfillerTaskHandler) AllowedBufferedStarts(

@@ -389,6 +389,49 @@ func TestProcessBufferTask_BackingOffReady(t *testing.T) {
 	})
 }
 
+func TestProcessBufferTask_DropsExpiredRetry(t *testing.T) {
+	env := newTestEnv(t)
+	env.Scheduler.Schedule.State.LimitedActions = true
+	env.Scheduler.Schedule.State.RemainingActions = 2
+	now := env.TimeSource.Now()
+	startTime := timestamppb.New(now.Add(-defaultCatchupWindow * 2))
+
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "expired-retry",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       2,
+			BackoffTime:   timestamppb.New(now.Add(-time.Minute)),
+		}},
+		ExpectedBufferedStarts:      0,
+		ExpectedMissedCatchupWindow: 1,
+	})
+	require.Equal(t, int64(2), env.Scheduler.Schedule.State.RemainingActions)
+}
+
+func TestProcessBufferTask_DoesNotExpireManualRetry(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	startTime := timestamppb.New(now.Add(-defaultCatchupWindow * 2))
+
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			Manual:        true,
+			RequestId:     "manual-retry",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       2,
+			BackoffTime:   timestamppb.New(now.Add(-time.Minute)),
+		}},
+		ExpectedBufferedStarts: 1,
+	})
+}
+
 // A buffered start with an overlap policy to terminate other workflows is processed.
 func TestProcessBufferTask_NeedsTerminate(t *testing.T) {
 	env := newTestEnv(t)
