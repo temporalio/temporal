@@ -320,11 +320,7 @@ func operationErrorToFailure(opErr *nexus.OperationError) (*failurepb.Failure, e
 			return nil, err
 		}
 	}
-	unwrapError := nf.Metadata["unwrap-error"] == "true"
-	if unwrapError && nf.Cause != nil {
-		return commonnexus.NexusFailureToTemporalFailure(*nf.Cause)
-	}
-	return commonnexus.NexusFailureToTemporalFailure(nf)
+	return commonnexus.NexusFailureToTemporalFailure(*nexusrpc.UnwrapFailure(&nf))
 }
 
 func buildCallbackURL(

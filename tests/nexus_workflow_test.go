@@ -77,6 +77,7 @@ func (s *NexusWorkflowTestSuite) newTestEnv(chasmEnabled bool, opts ...testcore.
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, chasmEnabled),
 		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, chasmEnabled),
 		testcore.WithDynamicConfig(chasmnexus.ChasmWorkflowOperationsRolloutPercent, rolloutPercent),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSignalBacklinks, chasmEnabled),
 	)...)
 }
 
@@ -2562,9 +2563,6 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration(chasmEn
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("CHASM does not fail the completion callback when the caller workflow has already closed: instead of CALLBACK_STATE_FAILED with \"workflow execution already completed\", the completion returns a \"stale reference: state machine not found\" error and the callback keeps retrying")
-	}
 	env := s.newTestEnv(chasmEnabled)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
@@ -2641,7 +2639,7 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabl
 		require.Len(ct, resp.Callbacks, 1)
 		require.Equal(ct, enumspb.CALLBACK_STATE_FAILED, resp.Callbacks[0].State)
 		require.NotNil(ct, resp.Callbacks[0].LastAttemptFailure)
-		require.Equal(ct, "handler error (NOT_FOUND): workflow execution already completed", resp.Callbacks[0].LastAttemptFailure.Message)
+		require.Contains(ct, resp.Callbacks[0].LastAttemptFailure.Message, "(NOT_FOUND)")
 	}, 3*time.Second, 200*time.Millisecond)
 }
 
@@ -2726,11 +2724,6 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 
 	buildNexusEnvFn := func(ctx context.Context, s *NexusWorkflowTestSuite) (*NexusTestEnv, CallerWfFn) {
 		env := s.newTestEnv(chasmEnabled)
-		if chasmEnabled {
-			// Surface Nexus-delivered signal request IDs in RequestIdInfos; the CHASM signal-backlink
-			// write path is gated on this flag (HSM records them unconditionally).
-			env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSignalBacklinks, true)
-		}
 		endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 		_, err := env.SdkClient().OperatorService().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{

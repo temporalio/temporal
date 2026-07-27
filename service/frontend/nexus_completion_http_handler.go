@@ -284,10 +284,18 @@ func (h *nexusCompletionHandler) completeOperation(
 		logger.Warn("failed to convert nexus completion token to the other framework", tag.Error(convErr))
 		return err
 	}
+	var fbErr error
 	if isChasm {
-		return h.completeHSMOperation(ctx, converted, successPayload, req, links)
+		fbErr = h.completeHSMOperation(ctx, converted, successPayload, req, links)
+	} else {
+		fbErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
 	}
-	return h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
+	// If the fallback also reports NotFound, the operation is gone in both frameworks.
+	// Return the primary framework's error.
+	if _, fbNotFound := errors.AsType[*serviceerror.NotFound](fbErr); fbNotFound {
+		return err
+	}
+	return fbErr
 }
 
 // isTerminalCompletionError reports whether err means the workflow is already
@@ -368,14 +376,11 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 
 	switch req.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		// Temporal->Temporal calls transmit the real failure as the wrapper OperationError's cause,
-		// marked with the "unwrap-error" metadata. Unwrap it so the caller sees the handler's original
-		// error (message, type, details, and canceled/terminated info) rather than the generic wrapper,
-		// mirroring the HSM path's handleOperationError.
-		nexusFailure := req.Error.OriginalFailure
-		if nexusFailure.Metadata["unwrap-error"] == "true" && nexusFailure.Cause != nil {
-			nexusFailure = nexusFailure.Cause
-		}
+		// Temporal->Temporal calls transmit the real failure as the wrapper OperationError's cause.
+		// Unwrap it so the caller sees the handler's original error (message, type, details, and
+		// canceled/terminated info) rather than the generic wrapper, mirroring the HSM path's
+		// handleOperationError.
+		nexusFailure := nexusrpc.UnwrapFailure(req.Error.OriginalFailure)
 		failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
 		if err != nil {
 			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
