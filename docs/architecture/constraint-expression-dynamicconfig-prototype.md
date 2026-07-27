@@ -211,14 +211,75 @@ The vendored copy is now the source of truth, so these are ours to fix rather th
    reload and never mutating a live one, but worth fixing properly.
 2. **No change notification.** Supplied by the client, reusing Temporal's mtime-poll and
    subscription plumbing.
-3. **`Eval` decoded JSON on every call in the obvious usage.** Avoided by having the library
-   resolve an *index* into a table of values decoded once at load, using Temporal's own YAML
-   conventions and validated against the settings registry.
+3. **Its value handling does not survive contact with Temporal's converters.** See below;
+   this is the one that most shaped the integration.
 4. **Matching took a concrete map.** Changed to a `types.Lookup` interface so that ambient and
    caller constraints can be layered without copying, which is what makes per-read evaluation
    allocation-free. `ReferencedKeys` was added alongside it.
 5. **The module path does not match the repo URL,** and there are no tags, so `go get` cannot
    resolve it at all. Moot now that this copy is authoritative.
+
+### Why values are passed to the library as indexes
+
+The library is generic over the value type — `Configurator[T]` — and decodes config values
+into `T` with `encoding/json` when a key is loaded. Since Temporal has seven value types
+(bool, int, float, string, duration, map, arbitrary structs) and the library instance is
+chosen per type, the obvious integration is one `Configurator[any]` for everything. That
+does not work, for three separate reasons.
+
+**JSON erases the Go types Temporal's converters expect.** `encoding/json` decodes every
+number into a `float64`, and `convertInt` (`collection.go:577`) accepts only the integer
+kinds — there is no `float64` case. So a perfectly ordinary setting:
+
+```yaml
+matching.historyMaxPageSize:
+  defaultValue: 100
+```
+
+comes back as `float64(100)`, `convertInt` reports `value type is not int`, and the setting
+silently falls back to its compiled-in default. That is ~250 int settings, the largest group.
+Durations are worse than that, because they fail *quietly in the other direction*:
+`convertDuration` does accept a float and reads it as seconds, so a mistyped value produces a
+plausible wrong duration rather than an error.
+
+**JSON also bypasses Temporal's own loading conventions.** Values in the dynamic config file
+go through `convertKeyTypeToString`, which fixes up the `map[any]any` that YAML produces for
+nested maps, and through `setting.Validate` against the settings registry, which is what
+turns a type error into a load-time failure instead of a silent default at read time. Handing
+raw JSON to the library skips both.
+
+**And `Eval` returns a value, not a stable pointer.** `Collection` memoises conversions using
+weak pointers into the `ConstrainedValue` the client returned (`collection.go:549`, and the
+contract note at `client.go:26-30`). A bare value has no stable address to key that cache on,
+so every read would re-run the converter. For the 22 typed settings that means a full
+mapstructure decode over a deep copy of the default, on every lookup.
+
+So the library is not asked to carry values at all. It is handed a config whose results are
+the integers `0..N` — index 0 the default, index *i* override *i* in file order:
+
+```go
+libraryCfg := types.Config{DefaultValue: json.RawMessage("0")}
+for i, o := range entry.Overrides {
+    libraryCfg.Overrides = append(libraryCfg.Overrides, types.Override{
+        MatchString: o.MatchString,
+        MatchResult: json.RawMessage(strconv.Itoa(i + 1)),
+    })
+}
+```
+
+Temporal decodes the real values itself, straight from YAML, keeping `int` an `int`, running
+`convertKeyTypeToString`, and validating each one against the registry — all at load. They
+live in a `[]*ConstrainedValue` owned by the snapshot. `Eval` returns an index and the client
+returns `outcomes[idx]`.
+
+The payoff is that all three problems disappear at once: no JSON on the read path, Go types
+preserved so the existing converters and their lenient coercion rules apply unchanged,
+validation at load, and stable pointers so the conversion cache behaves exactly as it does
+for the file based client. It also means one `Configurator[int]` serves every setting
+regardless of its value type, instead of seven instances.
+
+The catch is that this only works because the adapter controls the config fed to `LoadKey`.
+It would not be available to someone using the library directly.
 
 ## Recommendation
 
