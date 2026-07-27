@@ -385,6 +385,7 @@ func ArchiverProviderProvider(
 }
 
 func SdkClientFactoryProvider(
+	lc fx.Lifecycle,
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	metricsHandler metrics.Handler,
@@ -396,13 +397,15 @@ func SdkClientFactoryProvider(
 	if err != nil {
 		return nil, err
 	}
-	return sdk.NewClientFactory(
+	factory := sdk.NewClientFactory(
 		frontendURL,
 		frontendTLSConfig,
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
-	), nil
+	)
+	lc.Append(fx.StopHook(factory.Close))
+	return factory, nil
 }
 
 func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {

@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -211,6 +212,12 @@ func (c *clients) ensureMatching() {
 
 func (c *clients) close() []error {
 	var errs []error
+	if c.matching.client != nil {
+		if s, ok := c.matching.client.(interface{ Stop() }); ok {
+			s.Stop()
+		}
+		c.matching.client = nil
+	}
 	for _, conn := range []*grpc.ClientConn{
 		c.frontend.conn,
 		c.history.conn,
@@ -318,6 +325,7 @@ func (f *clientFactory) NewRemoteAdminClientWithTimeout(rpcAddress string, timeo
 }
 
 func sdkClientFactoryProvider(
+	lc fx.Lifecycle,
 	grpcResolver *membership.GRPCResolver,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -331,11 +339,13 @@ func sdkClientFactoryProvider(
 			panic(err)
 		}
 	}
-	return sdk.NewClientFactory(
+	factory := sdk.NewClientFactory(
 		grpcResolver.MakeURL(primitives.FrontendService),
 		tlsConfig,
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
+	lc.Append(fx.StopHook(factory.Close))
+	return factory
 }

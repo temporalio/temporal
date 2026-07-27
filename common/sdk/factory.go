@@ -31,6 +31,7 @@ type (
 		NewClient(options sdkclient.Options) sdkclient.Client
 		GetSystemClient() sdkclient.Client
 		NewWorker(client sdkclient.Client, taskQueue string, options sdkworker.Options) sdkworker.Worker
+		Close()
 	}
 
 	clientFactory struct {
@@ -42,6 +43,11 @@ type (
 		systemSdkClient sdkclient.Client
 		stickyCacheSize dynamicconfig.IntPropertyFn
 		once            sync.Once
+		closeOnce       sync.Once
+
+		clientsLock    sync.Mutex
+		derivedClients []sdkclient.Client
+		closed         bool
 	}
 )
 
@@ -85,6 +91,16 @@ func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 	if err != nil {
 		f.logger.Fatal("error creating sdk client", tag.Error(err))
 	}
+
+	f.clientsLock.Lock()
+	if f.closed {
+		f.clientsLock.Unlock()
+		client.Close()
+		return client
+	}
+	f.derivedClients = append(f.derivedClients, client)
+	f.clientsLock.Unlock()
+
 	return client
 }
 
@@ -123,6 +139,24 @@ func (f *clientFactory) NewWorker(
 	options sdkworker.Options,
 ) sdkworker.Worker {
 	return sdkworker.New(client, taskQueue, options)
+}
+
+// Close releases the shared SDK client. It is safe to call more than once.
+func (f *clientFactory) Close() {
+	f.closeOnce.Do(func() {
+		f.clientsLock.Lock()
+		derivedClients := f.derivedClients
+		f.derivedClients = nil
+		f.closed = true
+		f.clientsLock.Unlock()
+
+		for _, client := range derivedClients {
+			client.Close()
+		}
+		if f.systemSdkClient != nil {
+			f.systemSdkClient.Close()
+		}
+	})
 }
 
 // Overwrite the 'client-name' and 'client-version' headers on gRPC requests sent using the Go SDK
