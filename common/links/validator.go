@@ -57,6 +57,16 @@ func Validate(links []*commonpb.Link, maxAllowedLinks, maxSize int) error {
 			if t.Activity.GetRunId() == "" {
 				return serviceerror.NewInvalidArgument("activity link must not have an empty run ID field")
 			}
+		case *commonpb.Link_Workflow_:
+			if t.Workflow.GetNamespace() == "" {
+				return serviceerror.NewInvalidArgument("workflow link must not have an empty namespace field")
+			}
+			if t.Workflow.GetWorkflowId() == "" {
+				return serviceerror.NewInvalidArgument("workflow link must not have an empty workflow ID field")
+			}
+			if t.Workflow.GetRunId() == "" {
+				return serviceerror.NewInvalidArgument("workflow link must not have an empty run ID field")
+			}
 		default:
 			return serviceerror.NewInvalidArgument("unsupported link variant")
 		}

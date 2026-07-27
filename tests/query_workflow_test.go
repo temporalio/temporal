@@ -165,7 +165,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 		Namespace:            env.Namespace().String(),
 		Execution:            &commonpb.WorkflowExecution{WorkflowId: wid},
 		Query:                &querypb.WorkflowQuery{QueryType: "test"},
-		QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN, // fail queries after workflow completes for TC
+		QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN, // set here too so the second query below differs only by the workflow being closed
 	})
 	s.NoError(err)
 
