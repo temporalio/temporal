@@ -1,7 +1,8 @@
 package tests
 
 // Driver for workflow-activity (WFA) tests: it drives an activity scheduled by a workflow through a
-// sequence of events (a 'trace'), and observes it via DescribeWorkflowExecution.
+// sequence of events (a 'trace'). Each event is either a frontend RPC, a poll, or a wall-clock
+// wait. The event vocabulary is in chasm/lib/activity/model.
 
 import (
 	"context"
@@ -24,8 +25,6 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 )
-
-// --- the activity info both surfaces expose --------------------------------------------------
 
 // activityInfo is user-visible activity state projected out of the two different messages that
 // carry it: SAA's ActivityExecutionInfo and WFA's PendingActivityInfo.
@@ -63,8 +62,7 @@ func newWFADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *wfaD
 	return &wfaDriver{env: env, ctx: testcontext.For(t), cfg: cfg}
 }
 
-// wfaHandle is a handle to one workflow-scheduled activity: the ids that address it and the workflow
-// that owns it, plus the token last dispatched to it.
+// wfaHandle is a handle to one workflow-scheduled activity.
 type wfaHandle struct {
 	d          *wfaDriver
 	run        sdkclient.WorkflowRun
@@ -75,6 +73,9 @@ type wfaHandle struct {
 	token      []byte
 }
 
+// The server rejects an activity with neither start-to-close nor schedule-to-close set. The drivers
+// always send start-to-close, defaulted long enough not to fire. The other timeouts are simply
+// absent when unset.
 type wfaActivityParams struct {
 	ActivityTQ             string
 	ActivityID             string
@@ -82,9 +83,9 @@ type wfaActivityParams struct {
 	ScheduleToClose        time.Duration // 0 = unset
 	ScheduleToStart        time.Duration // 0 = unset
 	Heartbeat              time.Duration // 0 = unset
-	RetryInterval          time.Duration
-	BackoffCoefficient     float64       // 0 = 1.0 (constant interval)
-	MaxInterval            time.Duration // 0 = RetryInterval (no growth)
+	RetryInterval          time.Duration // initial retry interval
+	BackoffCoefficient     float64       // 0 means 1.0 (no increase over attempts)
+	MaxInterval            time.Duration // 0 means cap at initial RetryInterval (no increase over attempts)
 	MaxAttempts            int32
 	NonRetryableErrorTypes []string
 }
@@ -93,11 +94,11 @@ type wfaActivityParams struct {
 // cancelled rather than by a direct RPC.
 const wfaCancelSignal = "cancel"
 
-// wfaOneActivityWorkflow schedules a single activity with the given options on its own task queue and
-// waits for it to finish. No worker executes the activity — the test drives it with raw worker RPCs.
-// WaitForCancellation makes the workflow wait for RespondActivityTaskCanceled, so a cancelled activity
-// reaches CANCELED before the workflow closes.
-func wfaOneActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error {
+// wfaSingleActivityWorkflow is a workflow that schedules a single activity with the given options
+// on its own task queue and waits for it to finish. No worker executes the activity — the test
+// drives it with worker poll RPCs. WaitForCancellation makes the workflow wait for
+// RespondActivityTaskCanceled, so a cancelled activity reaches CANCELED before the workflow closes.
+func wfaSingleActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error {
 	coefficient := p.BackoffCoefficient
 	if coefficient == 0 {
 		coefficient = 1.0
@@ -110,7 +111,6 @@ func wfaOneActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error {
 	actCtx = workflow.WithActivityOptions(actCtx, workflow.ActivityOptions{
 		TaskQueue:              p.ActivityTQ,
 		ActivityID:             p.ActivityID,
-		DisableEagerExecution:  true, // force the task through matching so the test can poll it
 		StartToCloseTimeout:    p.StartToClose,
 		ScheduleToCloseTimeout: p.ScheduleToClose,
 		ScheduleToStartTimeout: p.ScheduleToStart,
@@ -124,7 +124,7 @@ func wfaOneActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error {
 			NonRetryableErrorTypes: p.NonRetryableErrorTypes,
 		},
 	})
-	fut := workflow.ExecuteActivity(actCtx, "wfaNoop")
+	fut := workflow.ExecuteActivity(actCtx, "testWFA")
 	workflow.Go(ctx, func(gctx workflow.Context) {
 		workflow.GetSignalChannel(gctx, wfaCancelSignal).Receive(gctx, nil)
 		cancelActivity()
@@ -132,8 +132,8 @@ func wfaOneActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error {
 	return fut.Get(ctx, nil)
 }
 
-// driveTrace runs a trace on a fresh workflow-scheduled activity and returns a handle at the reached
-// state. Model-free.
+// driveTrace starts a workflow, which schedules an activity, and then advances that activity
+// through a sequence of events. Returns a handle to the activity at the reached state.
 func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
 	validateTrace(t, trace)
 	d.cfg = d.cfg.forTrace(trace)
@@ -148,8 +148,9 @@ func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
 func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 	switch {
 	case e.Type == model.PollType:
-		// A poll captures the dispatched task token. Every Poll a trace drives is a positive poll — the
-		// activity is meant to be dispatchable — so finding no task is a failure, not a step to skip.
+		// When a trace includes a poll event, the implication is that the activity should be
+		// dispatchable and that the poll will yield an activity task, so finding no task is a
+		// failure.
 		resp := a.pollForTask(t, activityDriverPositivePollTimeout)
 		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverPositivePollTimeout)
 		a.token = resp.GetTaskToken()
@@ -162,18 +163,16 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 }
 
 // awaitWallClock blocks until a wall-clock event's effect shows up in the workflow's view of the
-// activity, and fails if it does not within (window + settle). The effect is a change in the
-// pending-activity projection, or the activity leaving the pending set. WFA has no long-poll Describe,
-// so this polls.
+// activity, and fails if it does not within (window + settle).
 func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
 	if isDispatchDelayEvent(e.Type) {
 		a.awaitDispatchTimePassed(t, e)
 		return
 	}
 	deadline := time.Now().Add(a.d.cfg.window(e) + activityDriverWallClockSettle)
-	before, beforePending := a.pendingSnapshot(t)
+	before, beforePending := a.pendingActivityInfo(t)
 	changed := func() bool {
-		now, nowPending := a.pendingSnapshot(t)
+		now, nowPending := a.pendingActivityInfo(t)
 		return nowPending != beforePending || (nowPending && now != before)
 	}
 	if activityDriverPollUntil(deadline, changed) {
@@ -183,9 +182,8 @@ func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
 		"take effect. Last observed: %+v", e, a.d.cfg.window(e)+activityDriverWallClockSettle, before)
 }
 
-// awaitDispatchTimePassed polls the pending activity until the pending dispatch time has passed, and
-// fails if it has not. The deadline is the server's own NextAttemptScheduleTime; see
-// saaHandle.awaitDispatchTimePassed.
+// awaitDispatchTimePassed polls the activity until the dispatch time has passed, and fails if it
+// has not.
 func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 	next := a.pendingActivity(t).GetNextAttemptScheduleTime()
 	if next == nil {
@@ -195,7 +193,7 @@ func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 	var p activityInfo
 	dispatched := func() bool {
 		var pending bool
-		p, pending = a.pendingSnapshot(t)
+		p, pending = a.pendingActivityInfo(t)
 		return !pending || !p.NextAttemptScheduleTimeSet
 	}
 	if activityDriverPollUntil(deadline, dispatched) {
@@ -206,7 +204,7 @@ func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 }
 
 // pendingActivity is the activity's entry in the workflow's pending set, nil once it is no longer
-// pending. A Describe error is reported rather than treated as absence.
+// pending.
 func (a *wfaHandle) pendingActivity(t require.TestingT) *workflowpb.PendingActivityInfo {
 	resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.d.ctx, a.workflowID, a.runID)
 	require.NoError(t, err)
@@ -218,8 +216,9 @@ func (a *wfaHandle) pendingActivity(t require.TestingT) *workflowpb.PendingActiv
 	return nil
 }
 
-// pendingSnapshot is the activity's info, and whether it is currently pending.
-func (a *wfaHandle) pendingSnapshot(t require.TestingT) (activityInfo, bool) {
+// pendingActivityInfo is the activityInfo if activity is currently a pending activity, and whether
+// it is pending.
+func (a *wfaHandle) pendingActivityInfo(t require.TestingT) (activityInfo, bool) {
 	pa := a.pendingActivity(t)
 	if pa == nil {
 		return activityInfo{}, false
@@ -232,10 +231,10 @@ func (d *wfaDriver) start(t *testing.T) *wfaHandle {
 	actTQ := testcore.RandomizeStr("wfa-act")
 	const actID = "act"
 
-	// A dedicated workflow worker runs the helper workflow. Nothing polls the activity task queue, so the
-	// test is the only consumer of the activity's tasks.
+	// Run a workflow worker for the wrapper workflow, but not an activity worker: the tests poll
+	// for activity tasks.
 	w := sdkworker.New(d.env.SdkClient(), wfTQ, sdkworker.Options{})
-	w.RegisterWorkflow(wfaOneActivityWorkflow)
+	w.RegisterWorkflow(wfaSingleActivityWorkflow)
 	require.NoError(t, w.Start())
 	t.Cleanup(w.Stop)
 
@@ -243,7 +242,7 @@ func (d *wfaDriver) start(t *testing.T) *wfaHandle {
 	wfID := testcore.RandomizeStr("wfa-run")
 	run, err := d.env.SdkClient().ExecuteWorkflow(d.ctx,
 		sdkclient.StartWorkflowOptions{ID: wfID, TaskQueue: wfTQ},
-		wfaOneActivityWorkflow, wfaActivityParams{
+		wfaSingleActivityWorkflow, wfaActivityParams{
 			ActivityTQ:             actTQ,
 			ActivityID:             actID,
 			StartToClose:           c.startToClose(),
@@ -268,8 +267,7 @@ func (a *wfaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
 	}
 	// A canceled activity surfaces as a bare CanceledError, not wrapped in an ActivityError.
-	var canceledErr *temporal.CanceledError
-	if errors.As(err, &canceledErr) {
+	if _, ok := errors.AsType[*temporal.CanceledError](err); ok {
 		return enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
 	}
 	var actErr *temporal.ActivityError
@@ -295,8 +293,7 @@ func (a *wfaHandle) pollForTask(t require.TestingT, timeout time.Duration) *work
 	return resp
 }
 
-// rpc performs the frontend RPC for a non-Poll, non-wall-clock event and returns its error. The operator
-// commands are the same *Execution APIs with WorkflowId set; cancel is the exception, see below.
+// rpc performs the frontend RPC for a non-Poll, non-wall-clock event and returns its error.
 func (a *wfaHandle) rpc(e model.Event) error {
 	fc := a.d.env.FrontendClient()
 	ns := a.d.env.Namespace().String()
@@ -316,9 +313,10 @@ func (a *wfaHandle) rpc(e model.Event) error {
 	}
 }
 
-// activityInfo is the activity's PendingActivityInfo, projected.
+// activityInfo is the activity's PendingActivityInfo, projected down to a schema shared with
+// standalone activity.
 func (a *wfaHandle) activityInfo(t require.TestingT) activityInfo {
-	p, pending := a.pendingSnapshot(t)
+	p, pending := a.pendingActivityInfo(t)
 	require.Truef(t, pending, "activity %q not pending; workflow may have closed", a.activityID)
 	return p
 }
