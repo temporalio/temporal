@@ -65,7 +65,7 @@ func WithPruneType(pattern string) Option {
 	}
 }
 
-// WithGCSettleTimeout sets the maximum time Check and IgnoreCurrent spend
+// WithGCSettleTimeout sets the maximum time [Check] and [IgnoreCurrent] spend
 // forcing GC and waiting for retained-object counts to settle.
 func WithGCSettleTimeout(timeout time.Duration) Option {
 	return func(t *ObjectLeakCheck) error {
