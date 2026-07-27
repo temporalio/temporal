@@ -43,16 +43,13 @@ func newWFADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *wfaD
 
 // wfaHandle is a handle to a workflow-scheduled activity.
 type wfaHandle struct {
+	activityDriverState
 	d          *wfaDriver
-	cfg        activityConfig // d.cfg with the windows this trace needs; see activityConfig.forTrace
 	run        sdkclient.WorkflowRun
 	workflowID string
 	runID      string
 	activityID string
 	taskQueue  string
-	token      []byte
-	// startedAttempt is the attempt number returned by the last successful Poll.
-	startedAttempt int32
 }
 
 // driveTrace starts a workflow, which schedules an activity, and then advances that activity
@@ -66,36 +63,12 @@ func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
 	return a
 }
 
-// driveEvent advances the activity by one event.
 func (a *wfaHandle) driveEvent(t testing.TB, e model.Event) {
-	switch {
-	case e.Type == model.PollType:
-		resp := a.pollForTask(t, activityDriverTimeout)
-		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
-		a.token = resp.GetTaskToken()
-		a.startedAttempt = resp.GetAttempt()
-	case isDispatchDelayEvent(e.Type):
-		a.awaitDispatchDelay(t, e)
-	case isTimerEvent(e.Type):
-		a.awaitTimeout(t, e, time.Now().Add(a.cfg.timerDuration(e)+activityDriverTimerMargin))
-	default:
-		// An RPC
-		require.NoError(t, a.rpc(t, e))
-	}
+	driveActivityEvent(t, a, e)
 }
 
-// awaitTimeout blocks until the activity reports the timeout the event names, and fails if it does
-// not within (window + margin).
 func (a *wfaHandle) awaitTimeout(t testing.TB, e model.Event, deadline time.Time) {
-	want := timeoutType(e)
-	var got activityTimeoutInfo
-	await.Require(a.d.ctx, t, func(t *await.T) {
-		got = a.timeoutInfo(t)
-		fired := got.timeout == want && (got.terminal || got.attempt > a.startedAttempt)
-		t.Require().Truef(fired,
-			"%s: activity reports timeout %s at attempt %d (terminal=%v), want %s after attempt %d",
-			e, got.timeout, got.attempt, got.terminal, want, a.startedAttempt)
-	}, max(0, time.Until(deadline)), activityDriverPollInterval)
+	awaitActivityTimeout(t, a, e, deadline)
 }
 
 // timeoutInfo is the most recent timeout the activity reports. DescribeWorkflowExecution exposes the
@@ -147,7 +120,15 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 		sdkclient.StartWorkflowOptions{ID: wfID, TaskQueue: wfTQ},
 		wfaSingleActivityWorkflow, wfaActivityParams{Cfg: cfg, ActivityTQ: actTQ, ActivityID: actID})
 	require.NoError(t, err)
-	a := &wfaHandle{d: d, cfg: cfg, run: run, workflowID: wfID, runID: run.GetRunID(), activityID: actID, taskQueue: actTQ}
+	a := &wfaHandle{
+		activityDriverState: activityDriverState{ctx: d.ctx, cfg: cfg},
+		d:                   d,
+		run:                 run,
+		workflowID:          wfID,
+		runID:               run.GetRunID(),
+		activityID:          actID,
+		taskQueue:           actTQ,
+	}
 	// The workflow schedules the activity, so it does not exist yet when ExecuteWorkflow returns.
 	await.Require(d.ctx, t, func(t *await.T) {
 		_, activityInProgress := a.activityInfoIfInProgress(t)
@@ -227,7 +208,7 @@ func (a *wfaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 	if err == nil {
 		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
 	}
-	// A canceled activity surfaces as a bare CanceledError, not wrapped in an ActivityError.
+	// A canceled activity is returned as a bare CanceledError, not wrapped in an ActivityError.
 	if _, ok := errors.AsType[*temporal.CanceledError](err); ok {
 		return enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
 	}

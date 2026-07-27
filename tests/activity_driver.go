@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -221,6 +222,61 @@ type activityTimeoutInfo struct {
 	timeout  enumspb.TimeoutType // Timeout type currently reported; unspecified when none is reported.
 	attempt  int32               // Current attempt; advances when a retryable per-attempt timeout fires.
 	terminal bool                // Whether the activity is terminal, as every non-retrying timeout makes it.
+}
+
+// activityDriverState is the state shared by the two drivers.
+type activityDriverState struct {
+	ctx            context.Context
+	cfg            activityConfig
+	token          []byte
+	startedAttempt int32 // attempt number returned by the last successful Poll
+}
+
+// driverState lets an embedded activityDriverState supply its state to drivenActivity.
+func (a *activityDriverState) driverState() *activityDriverState {
+	return a
+}
+
+// drivenActivity is what the shared event driver needs from either implementation.
+type drivenActivity interface {
+	driverState() *activityDriverState
+	pollForTask(require.TestingT, time.Duration) *workflowservice.PollActivityTaskQueueResponse
+	awaitDispatchDelay(testing.TB, model.Event)
+	timeoutInfo(require.TestingT) activityTimeoutInfo
+	rpc(testing.TB, model.Event) error
+}
+
+// driveActivityEvent advances an activity by one event.
+func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event) {
+	state := a.driverState()
+	switch {
+	case e.Type == model.PollType:
+		resp := a.pollForTask(t, activityDriverTimeout)
+		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
+		state.token = resp.GetTaskToken()
+		state.startedAttempt = resp.GetAttempt()
+	case isDispatchDelayEvent(e.Type):
+		a.awaitDispatchDelay(t, e)
+	case isTimerEvent(e.Type):
+		awaitActivityTimeout(t, a, e, time.Now().Add(state.cfg.timerDuration(e)+activityDriverTimerMargin))
+	default:
+		require.NoError(t, a.rpc(t, e))
+	}
+}
+
+// awaitActivityTimeout blocks until the activity reports the timeout the event names, and fails if it
+// does not within (window + margin).
+func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadline time.Time) {
+	state := a.driverState()
+	want := timeoutType(e)
+	var got activityTimeoutInfo
+	await.Require(state.ctx, t, func(t *await.T) {
+		got = a.timeoutInfo(t)
+		fired := got.timeout == want && (got.terminal || got.attempt > state.startedAttempt)
+		t.Require().Truef(fired,
+			"%s: activity reports timeout %s at attempt %d (terminal=%v), want %s after attempt %d",
+			e, got.timeout, got.attempt, got.terminal, want, state.startedAttempt)
+	}, max(0, time.Until(deadline)), activityDriverPollInterval)
 }
 
 // awaitActivityDispatchDelay waits until the server no longer reports a future dispatch deadline.

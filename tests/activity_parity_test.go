@@ -85,7 +85,7 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 func (s *activityParityTestSuite) TestCurrentRetryIntervalAndNextAttemptScheduleTime() {
 	env := newActivityParityEnv(s.T())
 
-	// both drives a trace through both surfaces, asserting each reports expected.
+	// both drives a trace through both implementations, asserting each reports expected.
 	both := func(t *testing.T, cfg activityConfig, trace []model.Event, expected activityInfo) {
 		t.Run("WorkflowActivity", func(t *testing.T) {
 			require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
@@ -189,7 +189,7 @@ func (s *activityParityTestSuite) TestCurrentRetryIntervalAndNextAttemptSchedule
 
 	// Paused after the retry was dispatched: the dispatched code path already nils both fields, and the
 	// pause preserves that. No field of ActivityExecutionInfo or PendingActivityInfo distinguishes this
-	// from PausedBeforeDispatch on either surface, so the two subtests differ in the state they reach,
+	// from PausedBeforeDispatch in either implementation, so the two subtests differ in the state they reach,
 	// not in what they assert.
 	s.Run("PausedAfterDispatch", func(s *activityParityTestSuite) {
 		t := s.T()
@@ -201,7 +201,7 @@ func (s *activityParityTestSuite) TestCurrentRetryIntervalAndNextAttemptSchedule
 	})
 }
 
-// TestCancel drives a running activity through cancellation on both surfaces. RequestCancel uses the
+// TestCancel drives a running activity through cancellation in both implementations. RequestCancel uses the
 // standalone activity RPC for SAA and workflow cancellation for WFA; the worker then acknowledges the
 // request with RespondActivityTaskCanceled.
 func (s *activityParityTestSuite) TestCancel() {
