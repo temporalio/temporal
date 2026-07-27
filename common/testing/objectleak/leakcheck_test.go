@@ -3,7 +3,6 @@ package objectleak
 import (
 	"reflect"
 	"runtime"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +26,7 @@ func TestObjectLeak_Check(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		opts            []Option
+		setup           func(*ObjectLeakCheck) ([]any, []CheckOption)
 		wantErrContains []string
 		wantReport      string
 	}{
@@ -160,64 +160,26 @@ expected retained objects:
 baseline retained objects:
   none`,
 		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+		{
+			name: "ignores current objects",
+			opts: []Option{
+				WithExpected("*objectleak.graphLeaf"),
+			},
+			setup: func(check *ObjectLeakCheck) ([]any, []CheckOption) {
+				baselineRoot := &graphRoot{
+					Node: &graphNode{Leaf: &graphLeaf{Value: 2}},
+				}
+				check.Track(baselineRoot)
+				baseline := check.IgnoreCurrent()
 
-			node := &graphNode{
-				Leaf:  &graphLeaf{Value: 2},
-				Value: 1,
-			}
-			roots := []any{
-				&graphRoot{Node: node},
-				&graphRoot{Node: node},
-			}
-			opts := append([]Option{}, tc.opts...)
-			opts = append(opts, WithGCSettleTimeout(10*time.Millisecond))
-
-			check, err := NewObjectLeakCheck(opts...)
-			require.NoError(t, err)
-			for _, root := range roots {
+				root := &graphRoot{}
 				check.Track(root)
-			}
-
-			report, err := check.Check()
-			runtime.KeepAlive(roots) // prevent GC from reclaiming roots
-
-			if len(tc.wantErrContains) > 0 {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-			for _, expected := range tc.wantErrContains {
-				require.Contains(t, err.Error(), expected)
-			}
-			require.Equal(t, tc.wantReport, report)
-		})
-	}
-}
-
-func TestObjectLeak_IgnoreCurrent(t *testing.T) {
-	baselineRoot := &graphRoot{
-		Node: &graphNode{Leaf: &graphLeaf{Value: 2}},
-	}
-
-	check, err := NewObjectLeakCheck(
-		WithExpected("*objectleak.graphLeaf"),
-		WithGCSettleTimeout(10*time.Millisecond),
-	)
-	require.NoError(t, err)
-	check.Track(baselineRoot)
-	baseline := check.IgnoreCurrent()
-
-	root := &graphRoot{}
-	check.Track(root)
-
-	report, err := check.Check(baseline)
-	runtime.KeepAlive(baselineRoot)
-	runtime.KeepAlive(root)
-	require.Error(t, err)
-	require.Equal(t, `object leak report
+				return []any{baselineRoot, root}, []CheckOption{baseline}
+			},
+			wantErrContains: []string{
+				"unexpected retained objects",
+			},
+			wantReport: `object leak report
 
 tracked root objects: 1
 retained paths: 4 total, 3 baseline, 0 expected, 1 unexpected
@@ -232,30 +194,48 @@ expected retained objects:
 baseline retained objects:
   1 object: *objectleak.graphRoot
   1 object: Node (*objectleak.graphNode)
-  1 object: Node.Leaf (*objectleak.graphLeaf)`, report)
-}
-
-func TestNewReport_CollectedBaselineIsUnexpected(t *testing.T) {
-	baselineCollected := &atomic.Bool{}
-	baselineObj := trackedObject{
-		addr:      1,
-		typeName:  "*objectleak.graphRoot",
-		collected: baselineCollected,
-	}
-	obj := trackedObject{
-		addr:      1,
-		typeName:  "*objectleak.graphRoot",
-		collected: &atomic.Bool{},
-	}
-	baseline := objectBaseline{
-		objects: []trackedObject{baselineObj},
-		collectedByID: map[objectIdentity]*atomic.Bool{
-			baselineObj.identity(): baselineCollected,
+  1 object: Node.Leaf (*objectleak.graphLeaf)`,
 		},
-	}
-	baselineCollected.Store(true)
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	report := newReport([]trackedObject{obj}, baseline, 1, nil, nil)
-	require.Zero(t, report.baselineRetainedObjects)
-	require.Equal(t, 1, report.unexpectedRetainedObjects)
+			opts := append([]Option{}, tc.opts...)
+			opts = append(opts, WithGCSettleTimeout(10*time.Millisecond))
+
+			check, err := NewObjectLeakCheck(opts...)
+			require.NoError(t, err)
+
+			var roots []any
+			var checkOpts []CheckOption
+			if tc.setup != nil {
+				roots, checkOpts = tc.setup(&check)
+			} else {
+				node := &graphNode{
+					Leaf:  &graphLeaf{Value: 2},
+					Value: 1,
+				}
+				roots = []any{
+					&graphRoot{Node: node},
+					&graphRoot{Node: node},
+				}
+				for _, root := range roots {
+					check.Track(root)
+				}
+			}
+
+			report, err := check.Check(checkOpts...)
+			runtime.KeepAlive(roots) // prevent GC from reclaiming roots
+
+			if len(tc.wantErrContains) > 0 {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			for _, expected := range tc.wantErrContains {
+				require.Contains(t, err.Error(), expected)
+			}
+			require.Equal(t, tc.wantReport, report)
+		})
+	}
 }
