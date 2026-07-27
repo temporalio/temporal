@@ -27,8 +27,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// --- the activity under test -----------------------------------------------------------------
-
 // activityConfig is the activity a driver starts. One value configures either surface, so a parity
 // test describes a single activity rather than two that might differ.
 //
