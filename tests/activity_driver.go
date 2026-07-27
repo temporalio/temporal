@@ -161,26 +161,33 @@ func timeoutType(e model.Event) enumspb.TimeoutType {
 	}
 }
 
-// validateTrace rejects a trace the drivers cannot realize. Timeouts run concurrently, from deadlines
-// the server anchors at schedule or attempt-start time, while the driver waits each one out from the
-// moment its event is driven — so a trace can name at most one. Once the first fires, the others are no
-// longer running and the driver would wait for something that never happens.
+// validateTrace rejects a trace the drivers cannot realize. An attempt's timeouts run concurrently,
+// from deadlines the server anchors at schedule or attempt-start time, while the driver waits each one
+// out from the moment its event is driven — so an attempt can be ended by at most one. Once the first
+// fires, the others are no longer running and the driver would wait for something that never happens.
 //
-// Dispatch delays are exempt: each backoff is a fresh window, and awaitDispatchTimePassed takes its
-// deadline from the server rather than from the trace.
+// A Poll starts a new attempt, which arms a fresh set, so the same timeout may appear again after one.
+// Dispatch delays are exempt entirely: each backoff is its own window, and awaitDispatchTimePassed
+// takes its deadline from the server rather than from the trace.
 //
 // A rule of thumb, not a decision procedure. The model decides this per event and per state, and
 // replaces this once it lands here.
 func validateTrace(t require.TestingT, trace []model.Event) {
 	var timeouts []model.Event
 	for _, e := range trace {
-		if isWallClockEvent(e.Type) && !isDispatchDelayEvent(e.Type) {
+		switch {
+		case e.Type == model.PollType:
+			timeouts = nil // a new attempt arms its timeouts afresh
+		case isWallClockEvent(e.Type) && !isDispatchDelayEvent(e.Type):
 			timeouts = append(timeouts, e)
 		}
+		if len(timeouts) > 1 {
+			require.Failf(t, "a trace cannot name two timeouts on one attempt",
+				"they run concurrently, so once the first fires the rest cannot occur. This attempt names %v. "+
+					"Poll again first if the second belongs to a later attempt.", timeouts)
+			return
+		}
 	}
-	require.LessOrEqualf(t, len(timeouts), 1,
-		"a trace can name at most one timeout: they run concurrently, so once the first fires the rest "+
-			"cannot occur. This one names %v", timeouts)
 }
 
 // isWallClockEvent reports whether an event fires on wall-clock time rather than synchronously.
