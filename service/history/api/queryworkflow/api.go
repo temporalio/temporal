@@ -83,17 +83,18 @@ func Invoke(
 		if retError != nil || resp.GetResponse() == nil {
 			return
 		}
-		// Add link to Workflow regardless of query status as long as there isnt an error.
+		// Add link to Workflow regardless of query status. A rejection on the query is not an RPC error,
+		// so it gets the same link that a processed query would get - only the reason differs.
 		reason := "Query processed"
-		if resp.Response.QueryRejected != nil {
+		if resp.GetResponse().GetQueryRejected() != nil {
 			reason = "Query rejected"
 		}
 		resp.Response.Link = &commonpb.Link{
 			Variant: &commonpb.Link_Workflow_{
 				Workflow: &commonpb.Link_Workflow{
-					Namespace:  request.Request.GetNamespace(),
-					WorkflowId: request.Request.Execution.GetWorkflowId(),
-					RunId:      request.Request.Execution.GetRunId(),
+					Namespace:  nsEntry.Name().String(),
+					WorkflowId: workflowKey.WorkflowID,
+					RunId:      workflowKey.RunID,
 					Reason:     reason,
 				},
 			},
