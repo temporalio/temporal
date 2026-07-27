@@ -655,30 +655,19 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		return err
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		CompletionCallbacks:      []*commonpb.Callback{callback},
-		Header:                   requestSpec.Header,
-		Identity:                 scheduler.identity(),
-		Input:                    requestSpec.Input,
-		Memo:                     requestSpec.Memo,
-		Namespace:                scheduler.Namespace,
-		RequestId:                start.RequestId,
-		RetryPolicy:              requestSpec.RetryPolicy,
-		SearchAttributes:         scheduler.startWorkflowSearchAttributes(start.NominalTime.AsTime()),
-		TaskQueue:                requestSpec.TaskQueue,
-		UserMetadata:             requestSpec.UserMetadata,
-		WorkflowExecutionTimeout: requestSpec.WorkflowExecutionTimeout,
-		WorkflowId:               start.WorkflowId,
-		WorkflowIdReusePolicy:    reusePolicy,
-		WorkflowRunTimeout:       requestSpec.WorkflowRunTimeout,
-		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
-		WorkflowType:             requestSpec.WorkflowType,
-		Priority:                 requestSpec.Priority,
-		VersioningOverride:       requestSpec.VersioningOverride,
-		ContinuedFailure:         lastCompletionState.Failure,
+		CompletionCallbacks:   []*commonpb.Callback{callback},
+		Identity:              scheduler.identity(),
+		Namespace:             scheduler.Namespace,
+		RequestId:             start.RequestId,
+		SearchAttributes:      scheduler.startWorkflowSearchAttributes(start.NominalTime.AsTime()),
+		WorkflowId:            start.WorkflowId,
+		WorkflowIdReusePolicy: reusePolicy,
+		ContinuedFailure:      lastCompletionState.Failure,
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
 		},
 	}
+	applyNewWorkflowExecutionInfo(request, requestSpec)
 
 	result, err := h.frontendClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
