@@ -46,6 +46,7 @@ func newSAADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *saaD
 // saaHandle is a handle to an activity instance.
 type saaHandle struct {
 	d          *saaDriver
+	cfg        activityConfig // d.cfg with the windows this trace needs; see activityConfig.forTrace
 	activityID string
 	taskQueue  string
 	runID      string
@@ -56,8 +57,7 @@ type saaHandle struct {
 // 'trace'). Returns a handle to the activity at the reached state.
 func (d *saaDriver) driveTrace(t require.TestingT, trace []model.Event) *saaHandle {
 	validateTrace(t, trace)
-	d.cfg = d.cfg.forTrace(trace)
-	a := d.start(t)
+	a := d.start(t, d.cfg.forTrace(trace))
 	for _, e := range trace {
 		a.driveEvent(t, e)
 	}
@@ -89,7 +89,7 @@ func (a *saaHandle) awaitWallClock(t require.TestingT, e model.Event) {
 		a.awaitDispatchTimePassed(t, e)
 		return
 	}
-	a.awaitStateTransition(t, e, time.Now().Add(a.d.cfg.window(e)+activityDriverWallClockSettle))
+	a.awaitStateTransition(t, e, time.Now().Add(a.cfg.window(e)+activityDriverWallClockSettle))
 }
 
 // awaitStateTransition long-polls DescribeActivityExecution until the transition-history version
@@ -117,7 +117,7 @@ func (a *saaHandle) awaitStateTransition(t require.TestingT, e model.Event, dead
 		}
 	}
 	t.Errorf("%s: the activity did not transition within %s of driving the event, so the event did not take "+
-		"effect. Last observed: %+v", e, a.d.cfg.window(e)+activityDriverWallClockSettle, a.activityInfo(t))
+		"effect. Last observed: %+v", e, a.cfg.window(e)+activityDriverWallClockSettle, a.activityInfo(t))
 }
 
 // awaitDispatchTimePassed polls the activity until the dispatch time has passed, and fails if it
@@ -137,16 +137,15 @@ func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 		"window did not elapse. Last observed: %+v", e, activityDriverWallClockSettle, p)
 }
 
-func (d *saaDriver) start(t require.TestingT) *saaHandle {
+func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	d.numStarted++
 	id := fmt.Sprintf("%s-%d", d.activityIDPrefix, d.numStarted)
-	resp, err := d.env.FrontendClient().StartActivityExecution(d.ctx, d.startRequest(id, id))
+	resp, err := d.env.FrontendClient().StartActivityExecution(d.ctx, d.startRequest(cfg, id, id))
 	require.NoError(t, err)
-	return &saaHandle{d: d, activityID: id, taskQueue: id, runID: resp.RunId}
+	return &saaHandle{d: d, cfg: cfg, activityID: id, taskQueue: id, runID: resp.RunId}
 }
 
-func (d *saaDriver) startRequest(activityID, taskQueue string) *workflowservice.StartActivityExecutionRequest {
-	c := d.cfg
+func (d *saaDriver) startRequest(c activityConfig, activityID, taskQueue string) *workflowservice.StartActivityExecutionRequest {
 	opt := func(v time.Duration) *durationpb.Duration {
 		if v == 0 {
 			return nil
@@ -241,7 +240,7 @@ func (a *saaHandle) rpc(e model.Event) error {
 	switch e.Type {
 	case model.RespondFailedType:
 		_, err := fc.RespondActivityTaskFailed(a.d.ctx, &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.d.cfg.NextRetryDelay),
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
 		})
 		return err
 	case model.PauseType:
