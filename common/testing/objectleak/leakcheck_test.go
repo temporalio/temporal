@@ -26,7 +26,7 @@ func TestObjectLeak_Check(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		opts            []Option
-		setup           func(*ObjectLeakCheck) ([]any, []CheckOption)
+		setup           func(*ObjectLeakCheck) ([]any, Baseline)
 		wantErrContains []string
 		wantReport      string
 	}{
@@ -165,7 +165,7 @@ baseline retained objects:
 			opts: []Option{
 				WithExpected("*objectleak.graphLeaf"),
 			},
-			setup: func(check *ObjectLeakCheck) ([]any, []CheckOption) {
+			setup: func(check *ObjectLeakCheck) ([]any, Baseline) {
 				baselineRoot := &graphRoot{
 					Node: &graphNode{Leaf: &graphLeaf{Value: 2}},
 				}
@@ -174,7 +174,7 @@ baseline retained objects:
 
 				root := &graphRoot{}
 				check.Track(root)
-				return []any{baselineRoot, root}, []CheckOption{baseline}
+				return []any{baselineRoot, root}, baseline
 			},
 			wantErrContains: []string{
 				"unexpected retained objects",
@@ -207,9 +207,9 @@ baseline retained objects:
 			require.NoError(t, err)
 
 			var roots []any
-			var checkOpts []CheckOption
+			var baseline Baseline
 			if tc.setup != nil {
-				roots, checkOpts = tc.setup(&check)
+				roots, baseline = tc.setup(&check)
 			} else {
 				node := &graphNode{
 					Leaf:  &graphLeaf{Value: 2},
@@ -224,7 +224,7 @@ baseline retained objects:
 				}
 			}
 
-			report, err := check.Check(checkOpts...)
+			report, err := check.Check(baseline)
 			runtime.KeepAlive(roots) // prevent GC from reclaiming roots
 
 			if len(tc.wantErrContains) > 0 {
