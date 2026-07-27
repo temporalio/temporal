@@ -46,7 +46,13 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 
 	requests := capture.Metric("nexus_requests")
 	s.Len(requests, 1)
-	s.Equal(map[string]string{"namespace": namespace, "method": "StartNexusOperation", "outcome": "namespace_not_found", "nexus_endpoint": "_unknown_"}, requests[0].Tags)
+	s.Equal(map[string]string{
+		"namespace":      namespace,
+		"method":         "StartNexusOperation",
+		"outcome":        "namespace_not_found",
+		"nexus_endpoint": "_unknown_",
+		"service_name":   "frontend",
+	}, requests[0].Tags)
 	s.Equal(int64(1), requests[0].Value)
 }
 

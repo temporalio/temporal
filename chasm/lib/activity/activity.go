@@ -278,8 +278,8 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 	*historyservice.RecordActivityTaskStartedResponse, error,
 ) {
 	lastAttempt := a.LastAttempt.Get(ctx)
-	// If already started, return existing response if request ID matches to make retry idempotent, else error.
-	if a.StateMachineState() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED && request.GetRequestId() == lastAttempt.GetStartRequestId() {
+	// Return the existing response for a matching retry while the attempt is still in progress.
+	if a.hasAttemptInProgress() && request.GetRequestId() == lastAttempt.GetStartRequestId() {
 		return a.GenerateRecordActivityTaskStartedResponse(ctx, request.GetPollRequest().GetNamespace())
 	}
 	if lastAttempt.GetStamp() != request.GetStamp() {
@@ -1363,6 +1363,15 @@ func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.D
 		return enumspb.RETRY_STATE_TIMEOUT, retryInterval
 	}
 	return enumspb.RETRY_STATE_IN_PROGRESS, retryInterval
+}
+
+// timeoutRetryable reports whether a StartToClose or Heartbeat timeout may be retried under the retry
+// policy.
+func (a *Activity) timeoutRetryable(timeoutType enumspb.TimeoutType) bool {
+	return !slices.Contains(
+		a.GetRetryPolicy().GetNonRetryableErrorTypes(),
+		retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
+	)
 }
 
 // hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time

@@ -657,6 +657,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				handler.logger,
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),
+				nil, // no pagination buffer limiter as it is a transient context
 			),
 			newMutableState,
 		)
