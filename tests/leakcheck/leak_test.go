@@ -24,19 +24,6 @@ import (
 var goleakOpts = []goleak.Option{
 	// By design: sqlite keeps one *sql.DB per file DSN for the process lifetime.
 	goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
-
-	// TODO: worker-service and persistence goroutine leaks.
-	goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
-	goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
-
-	// TODO: SDK worker goroutines not fully stopped on cluster shutdown.
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*baseWorker).runEagerTaskDispatcher"),
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*baseWorker).runTaskDispatcher"),
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*localActivityTunnel).getTask"),
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*sharedNamespaceWorker).run"),
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal/common/backoff.(*ConcurrentRetrier).throttleInternal"),
-	goleak.IgnoreAnyFunction("go.temporal.io/sdk/internal.(*basePoller).doPoll"),
-	goleak.IgnoreAnyFunction("go.temporal.io/sdk/internal.(*basePoller).doPoll.func1"),
 }
 
 var objectLeakOpts = []objectleak.Option{
@@ -47,7 +34,7 @@ var objectLeakOpts = []objectleak.Option{
 	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
 	objectleak.WithExpected("FunctionalTestBase.testClusterConfig"),
-	// TODO: This is not fully garbage collected because of the goroutine leak above. Nothing to be done here.
+	// Closed SDK client internals remain reachable after worker shutdown.
 	objectleak.WithExpected("sdkClient*"),
 }
 
