@@ -1,0 +1,108 @@
+{
+package configurator
+
+import "go.temporal.io/server/common/dynamicconfig/configurator/types"
+
+func toIfaceSlice(v interface{}) []interface{} {
+    if v == nil {
+        return nil
+    }
+    return v.([]interface{})
+}
+}
+
+Input <- _ e:OrExpr _ EOF {
+    return e, nil
+}
+
+// or has the lowest precedence and is left-associative
+OrExpr <- first:AndExpr rest:(_ "or" _ AndExpr)* {
+    exprs := []*Expression{first.(*Expression)}
+    for _, r := range toIfaceSlice(rest) {
+        items := r.([]interface{})
+        exprs = append(exprs, items[3].(*Expression))
+    }
+    if len(exprs) == 1 {
+        return exprs[0], nil
+    }
+    return &Expression{Operator: OpOr, Subexpressions: exprs}, nil
+}
+
+// and has higher precedence than or and is left-associative
+AndExpr <- first:Primary rest:(_ "and" _ Primary)* {
+    exprs := []*Expression{first.(*Expression)}
+    for _, r := range toIfaceSlice(rest) {
+        items := r.([]interface{})
+        exprs = append(exprs, items[3].(*Expression))
+    }
+    if len(exprs) == 1 {
+        return exprs[0], nil
+    }
+    return &Expression{Operator: OpAnd, Subexpressions: exprs}, nil
+}
+
+Primary <- '(' _ e:OrExpr _ ')' {
+    return e, nil
+} / Comparison
+
+Comparison <- key:QuotedString _ op:Op _ val:ComparisonValue {
+    var pv ParsedValue
+    switch v := val.(type) {
+    case string:
+        pv = StringValue(v)
+    case int64:
+        pv = IntegerValue(v)
+    case float64:
+        pv = FloatValue(v)
+    default:
+        return nil, fmt.Errorf("unexpected value type %T", val)
+    }
+    return &Expression{
+        Key:      types.Key(key.(string)),
+        Operator: op.(types.Operator),
+        Value:    pv,
+    }, nil
+}
+
+// ComparisonValue: Float must be tried before Integer to avoid consuming
+// the integer part of a float literal (e.g. "9" from "9.99").
+ComparisonValue <- Float / Integer / QuotedString
+
+// Float matches an unquoted decimal literal, e.g. 9.99
+Float <- [0-9]+ '.' [0-9]+ {
+    f, err := strconv.ParseFloat(string(c.text), 64)
+    if err != nil {
+        return nil, err
+    }
+    return f, nil
+}
+
+// Integer matches an unquoted integer literal, e.g. 100
+Integer <- [0-9]+ {
+    n, err := strconv.ParseInt(string(c.text), 10, 64)
+    if err != nil {
+        return nil, err
+    }
+    return n, nil
+}
+
+// != must be tried before = to avoid partial match
+Op <- "!=" {
+    return OpNotEqual, nil
+} / ">" {
+    return OpGreater, nil
+} / "<" {
+    return OpLess, nil
+} / "=" {
+    return OpEqual, nil
+}
+
+// QuotedString matches a double-quoted string; strips surrounding quotes from the result
+QuotedString <- '"' [^"]* '"' {
+    s := string(c.text)
+    return s[1 : len(s)-1], nil
+}
+
+_ <- [ \t\n\r]*
+
+EOF <- !.
