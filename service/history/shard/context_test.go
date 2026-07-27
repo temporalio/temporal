@@ -999,25 +999,11 @@ func (s *contextSuite) TestEmitShardInfoMetricsLogs_ImmediateBacklogAge() {
 	now := s.timeSource.Now()
 
 	frontier := tasks.NewImmediateKey(100)
-	// Replication is immediate too but must not be read. Its reader state names an enabled cluster so
-	// trimShardInfo keeps it.
 	s.mockShard.shardInfo.QueueStates = map[int32]*persistencespb.QueueState{
 		int32(tasks.CategoryIDTransfer): {
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
 				FireTime: timestamppb.New(tasks.DefaultFireTime),
 				TaskId:   frontier.TaskID,
-			},
-		},
-		int32(tasks.CategoryIDReplication): {
-			ReaderStates: map[int64]*persistencespb.QueueReaderState{
-				ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, s.shardID): {
-					Scopes: []*persistencespb.QueueSliceScope{{
-						Range: &persistencespb.QueueSliceRange{
-							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 50},
-							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 60},
-						},
-					}},
-				},
 			},
 		},
 	}

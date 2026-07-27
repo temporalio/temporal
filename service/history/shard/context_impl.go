@@ -1326,9 +1326,7 @@ func (s *ContextImpl) emitImmediateQueueLagLocked(
 		With(metricsHandler).
 		Record(lag, metrics.TaskCategoryTag(category.Name()))
 
-	// A replication ack level tracks remote cluster progress, not local processing, so its age is not
-	// comparable and has its own metrics.
-	if lag <= 0 || category.ID() == tasks.CategoryIDReplication {
+	if lag <= 0 {
 		return immediateBacklog{}, false
 	}
 	return immediateBacklog{category: category, minKey: *minTaskKey, maxKey: highWatermark}, true
@@ -1380,9 +1378,6 @@ Loop:
 	return immediateBacklogs
 }
 
-// oldestImmediateTaskVisibilityTime reads the oldest task in the range. It goes straight to
-// persistence: an immediate read cannot report lost ownership, and a failed metric must not affect
-// shard health.
 func (s *ContextImpl) oldestImmediateTaskVisibilityTime(
 	category tasks.Category,
 	inclusiveMinKey tasks.Key,

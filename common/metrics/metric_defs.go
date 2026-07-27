@@ -821,7 +821,7 @@ var (
 	)
 	ShardInfoImmediateQueueBacklogAge = NewTimerDef(
 		"shardinfo_immediate_queue_backlog_age",
-		WithDescription("Age of the oldest task at or above the last persisted ack level, for each immediate task category except replication. The time-based counterpart to shardinfo_immediate_queue_lag. The ack level is only persisted per queue checkpoint, so a healthy queue reports up to about one checkpoint interval rather than zero."),
+		WithDescription("Age of the oldest task at or above the last persisted ack level, per immediate task category. The time-based counterpart to shardinfo_immediate_queue_lag. The ack level is only persisted per queue checkpoint, so a healthy queue reports up to about one checkpoint interval rather than zero."),
 	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
