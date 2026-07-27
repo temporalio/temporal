@@ -144,8 +144,10 @@ func (s *activityParityTestSuite) TestParityCurrentRetryIntervalAndNextAttemptSc
 			})
 	})
 
-	// Retry dispatched to Matching but not yet polled: both fields are nil.
-	s.Run("RetryDispatched", func(s *activityParityTestSuite) {
+	// Once the retry's dispatch deadline is due, both fields are nil. This projection does not by
+	// itself prove that the dispatch task reached Matching; the following running-attempt cases prove
+	// that with a Poll.
+	s.Run("RetryDue", func(s *activityParityTestSuite) {
 		t := s.T()
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: activityShortDispatchDelay}, []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses},
 			activityInfo{

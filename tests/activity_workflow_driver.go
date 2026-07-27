@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type wfaDriver struct {
@@ -113,32 +114,19 @@ func (a *wfaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
 	return activityTimeoutMark{closed: true}
 }
 
-// awaitDispatchDelay polls the activity until the delayed dispatch is no longer pending, and
-// fails if it is still pending, or if the activity ended first and so never dispatched at all.
-// See saaHandle.awaitDispatchDelay.
+// awaitDispatchDelay waits for the public dispatch deadline to become due. A following Poll is what
+// proves that the task actually reached Matching.
 func (a *wfaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
-	pa := a.pendingActivity(t)
-	deadline := time.Now().Add(activityDriverTimerMargin)
-	if next := pa.GetNextAttemptScheduleTime(); next != nil {
-		deadline = next.AsTime().Add(activityDriverTimerMargin)
-	}
-	settled := func() bool {
-		pa = a.pendingActivity(t)
-		return pa == nil || pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_STARTED ||
-			pa.GetNextAttemptScheduleTime() == nil
-	}
-	if !activityDriverPollUntil(deadline, settled) {
-		t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
-			"Last observed: %+v", e, activityDriverTimerMargin, wfaActivityInfo(pa))
-		return
-	}
-	switch {
-	case pa == nil:
-		t.Errorf("%s: the activity is no longer pending, so its delayed dispatch never happened", e)
-	case pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
-		t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
-	default: // dispatched
-	}
+	awaitActivityDispatchDelay(t, e, func() (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
+		pa := a.pendingActivity(t)
+		if pa == nil {
+			return false, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, nil, "activity is no longer pending"
+		}
+		return true,
+			pa.GetState(),
+			pa.GetNextAttemptScheduleTime(),
+			wfaActivityInfo(pa)
+	})
 }
 
 func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {

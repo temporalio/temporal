@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type saaDriver struct {
@@ -116,33 +117,16 @@ func (a *saaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
 	}
 }
 
-// awaitDispatchDelay polls the activity until the delayed dispatch is no longer pending, and
-// fails if it is still pending, or if the activity ended first and so never dispatched at all.
+// awaitDispatchDelay waits for the public dispatch deadline to become due. A following Poll is what
+// proves that the task actually reached Matching.
 func (a *saaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
-	info := a.describe(t).GetInfo()
-	deadline := time.Now().Add(activityDriverTimerMargin)
-	if next := info.GetNextAttemptScheduleTime(); next != nil {
-		deadline = next.AsTime().Add(activityDriverTimerMargin)
-	}
-	settled := func() bool {
-		info = a.describe(t).GetInfo()
-		return info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING ||
-			info.GetRunState() == enumspb.PENDING_ACTIVITY_STATE_STARTED ||
-			info.GetNextAttemptScheduleTime() == nil
-	}
-	if !activityDriverPollUntil(deadline, settled) {
-		t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for. "+
-			"Last observed: %+v", e, activityDriverTimerMargin, saaActivityInfo(info))
-		return
-	}
-	switch {
-	case info.GetStatus() != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING:
-		t.Errorf("%s: the activity ended as %s before its delayed dispatch, so the dispatch never happened",
-			e, info.GetStatus())
-	case info.GetRunState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
-		t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
-	default: // dispatched
-	}
+	awaitActivityDispatchDelay(t, e, func() (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
+		info := a.describe(t).GetInfo()
+		return info.GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+			info.GetRunState(),
+			info.GetNextAttemptScheduleTime(),
+			saaActivityInfo(info)
+	})
 }
 
 func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {

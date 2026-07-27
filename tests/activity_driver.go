@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // activityConfig is the activity a driver starts.
@@ -236,5 +237,46 @@ func activityDriverPollUntil(deadline time.Time, cond func() bool) bool {
 			return false
 		}
 		time.Sleep(activityDriverPollInterval) //nolint:forbidigo
+	}
+}
+
+// awaitActivityDispatchDelay waits until the server no longer reports a future dispatch deadline.
+// NextAttemptScheduleTime disappearing establishes only that the dispatch is due, not that its task
+// reached Matching; a subsequent Poll proves that. Started is also success because it proves a racing
+// poller consumed the dispatch. Any other state hides or removes the deadline, so cannot establish
+// this trace event.
+func awaitActivityDispatchDelay(
+	t require.TestingT,
+	e model.Event,
+	observe func() (available bool, state enumspb.PendingActivityState, next *timestamppb.Timestamp, details any),
+) {
+	available, state, next, details := observe()
+	switch {
+	case state == enumspb.PENDING_ACTIVITY_STATE_STARTED:
+		return
+	case !available || state != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
+		t.Errorf("%s: no delayed dispatch can elapse; last observed: %+v", e, details)
+		return
+	case next == nil:
+		return
+	}
+
+	deadline := next.AsTime().Add(activityDriverTimerMargin)
+	settled := activityDriverPollUntil(deadline, func() bool {
+		available, state, next, details = observe()
+		return !available ||
+			state != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED ||
+			next == nil
+	})
+	if !settled {
+		t.Errorf("%s: the dispatch deadline was still pending %s after it was due; last observed: %+v",
+			e, activityDriverTimerMargin, details)
+		return
+	}
+	if !available ||
+		(state != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED &&
+			state != enumspb.PENDING_ACTIVITY_STATE_STARTED) {
+		t.Errorf("%s: the delayed dispatch became unavailable before the driver observed it becoming due; last observed: %+v",
+			e, details)
 	}
 }
