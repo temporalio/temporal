@@ -7,12 +7,6 @@ import (
 	"unsafe"
 )
 
-type objectWalker struct {
-	objects    []trackedObject
-	seen       map[uintptr]struct{}
-	pruneTypes patterns
-}
-
 type trackedObject struct {
 	addr      uintptr
 	path      path
@@ -26,6 +20,12 @@ func (o trackedObject) identity() objectIdentity {
 		addr:     o.addr,
 		typeName: o.typeName,
 	}
+}
+
+type objectWalker struct {
+	objects    []trackedObject
+	seen       map[uintptr]struct{}
+	pruneTypes patterns
 }
 
 func newObjectWalker(pruneTypes patterns) objectWalker {
