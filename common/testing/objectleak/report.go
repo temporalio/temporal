@@ -58,7 +58,7 @@ func newReport(
 	// Matching mutates pattern.matched for stale-expected pattern detection.
 	activeExpected := slices.Clone(expected)
 
-	for class := retentionClass(0); class < retentionClassCount; class++ {
+	for class := range retentionClassCount {
 		report.retained[class] = newRetentionStats()
 	}
 	retainedAddresses := make(map[uintptr]struct{})
@@ -92,7 +92,7 @@ func newReport(
 	report.unmatchedPrunes = pruneTypes.unmatched()
 
 	// Keep report output stable across map iteration order and repeated runs.
-	for class := retentionClass(0); class < retentionClassCount; class++ {
+	for class := range retentionClassCount {
 		report.retained[class].finish()
 	}
 	slices.Sort(report.unmatchedExpected)
