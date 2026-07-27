@@ -7,6 +7,7 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/sdk/v1/user_metadata.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -293,4 +294,7 @@ message ActivityOutcome {
     Successful successful = 1;
     Failed failed = 2;
   }
+
+  // The retry state associated with an unsuccessful activity execution.
+  temporal.api.enums.v1.RetryState retry_state = 3;
 }

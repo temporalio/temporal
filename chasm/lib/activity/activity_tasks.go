@@ -109,6 +109,7 @@ func (h *scheduleToStartTimeoutTaskHandler) Execute(
 
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		retryState:     enumspb.RETRY_STATE_TIMEOUT,
 		metricsHandler: metricsHandler,
 	}
 
@@ -152,8 +153,14 @@ func (h *scheduleToCloseTimeoutTaskHandler) Execute(
 	if err != nil {
 		return err
 	}
+	retryState := enumspb.RETRY_STATE_TIMEOUT
+	if activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		retryState = enumspb.RETRY_STATE_CANCEL_REQUESTED
+	}
+
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		retryState:     retryState,
 		metricsHandler: metricsHandler,
 	}
 
