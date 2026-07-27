@@ -1155,7 +1155,16 @@ func (s *nodeSuite) TestApplyMutation_InvalidatesHydratedMapAncestors() {
 		mutation NodesMutation,
 		expected map[string]string,
 	) {
-		target, err := s.newTestTree(common.CloneProtoMap(persistedNodes))
+		target, err := NewTreeFromDB(
+			common.CloneProtoMap(persistedNodes),
+			s.registry,
+			s.timeSource,
+			s.nodeBackend,
+			s.nodePathEncoder,
+			s.logger,
+			s.metricsHandler,
+			WithSkipPersistenceIfClean(func() bool { return false }),
+		)
 		s.NoError(err)
 		component, err := target.Component(NewContext(context.Background(), target), ComponentRef{})
 		s.NoError(err)
@@ -4621,10 +4630,11 @@ func (s *nodeSuite) TestAndAllChildren_PathIndependence() {
 func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
+	options := []TreeOption{WithSkipPersistenceIfClean(func() bool { return true })}
 	if len(serializedNodes) == 0 {
-		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
+		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler, options...), nil
 	}
-	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler, options...)
 }
 
 func (s *nodeSuite) emptyDataBlob() *commonpb.DataBlob {

@@ -429,6 +429,7 @@ func NewMutableState(
 			chasm.DefaultPathEncoder,
 			logger,
 			shard.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceName)),
+			chasm.WithSkipPersistenceIfClean(s.chasmSkipPersistenceEnabled),
 		)
 	}
 
@@ -588,6 +589,7 @@ func NewMutableStateFromDB(
 			chasm.DefaultPathEncoder,
 			mutableState.logger, // this logger is tagged with execution key.
 			shard.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceEntry.Name().String())),
+			chasm.WithSkipPersistenceIfClean(mutableState.chasmSkipPersistenceEnabled),
 		)
 		if err != nil {
 			return nil, err
@@ -686,6 +688,11 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 func (ms *MutableStateImpl) ChasmEnabled() bool {
 	_, isNoop := ms.chasmTree.(*noopChasmTree)
 	return !isNoop
+}
+
+func (ms *MutableStateImpl) chasmSkipPersistenceEnabled() bool {
+	return ms.config.EnableCHASMSkipPersistence != nil &&
+		ms.config.EnableCHASMSkipPersistence(ms.GetNamespaceEntry().Name().String())
 }
 
 // chasmCallbacksEnabled returns true if CHASM callbacks are enabled for this workflow.

@@ -142,12 +142,13 @@ type (
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
 	nodeBase struct {
-		registry       *Registry
-		timeSource     clock.TimeSource
-		backend        NodeBackend
-		pathEncoder    NodePathEncoder
-		logger         log.Logger
-		metricsHandler metrics.Handler
+		registry                       *Registry
+		timeSource                     clock.TimeSource
+		backend                        NodeBackend
+		pathEncoder                    NodePathEncoder
+		logger                         log.Logger
+		metricsHandler                 metrics.Handler
+		enableSkipPersistenceIfCleanFn func() bool
 
 		// Following fields are changes accumulated in this transaction,
 		// and will get cleaned up after CloseTransaction().
@@ -196,6 +197,13 @@ type (
 	// including the node n itself.
 	NodesSnapshot struct {
 		Nodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
+	}
+
+	// TreeOption configures a CHASM tree.
+	TreeOption func(*treeOptions)
+
+	treeOptions struct {
+		enableSkipPersistenceIfCleanFn func() bool
 	}
 
 	// NodeBackend is a set of methods needed from MutableState.
@@ -253,6 +261,14 @@ type (
 	}
 )
 
+// WithSkipPersistenceIfClean controls whether CloseTransaction omits nodes whose serialized data is unchanged.
+// The function is evaluated for every transaction so callers can provide a dynamic configuration value.
+func WithSkipPersistenceIfClean(enabled func() bool) TreeOption {
+	return func(options *treeOptions) {
+		options.enableSkipPersistenceIfCleanFn = enabled
+	}
+}
+
 // IsEmpty reports whether the mutation contains no node updates or deletions.
 func (m NodesMutation) IsEmpty() bool {
 	return len(m.UpdatedNodes) == 0 && len(m.DeletedNodes) == 0
@@ -269,15 +285,16 @@ func NewTreeFromDB(
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	options ...TreeOption,
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
-		root := NewEmptyTree(registry, timeSource, backend, pathEncoder, logger, metricsHandler)
+		root := NewEmptyTree(registry, timeSource, backend, pathEncoder, logger, metricsHandler, options...)
 		// NewEmptyTree initializes the serializedNode to an empty component node,
 		root.serializedNode.Metadata.GetComponentAttributes().TypeId = WorkflowArchetypeID
 		return root, nil
 	}
 
-	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger, metricsHandler)
+	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger, metricsHandler, options...)
 	for encodedPath, serializedNode := range serializedNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
 		if err != nil {
@@ -300,8 +317,9 @@ func NewEmptyTree(
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	options ...TreeOption,
 ) *Node {
-	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger, metricsHandler)
+	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger, metricsHandler, options...)
 
 	// If serializedNodes is empty, it means that this new tree.
 	// Initialize empty serializedNode.
@@ -322,14 +340,23 @@ func newTreeHelper(
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	options ...TreeOption,
 ) *Node {
+	treeOptions := treeOptions{
+		enableSkipPersistenceIfCleanFn: func() bool { return false },
+	}
+	for _, option := range options {
+		option(&treeOptions)
+	}
+
 	base := &nodeBase{
-		registry:       registry,
-		timeSource:     timeSource,
-		backend:        backend,
-		pathEncoder:    pathEncoder,
-		logger:         logger,
-		metricsHandler: metricsHandler,
+		registry:                       registry,
+		timeSource:                     timeSource,
+		backend:                        backend,
+		pathEncoder:                    pathEncoder,
+		logger:                         logger,
+		metricsHandler:                 metricsHandler,
+		enableSkipPersistenceIfCleanFn: treeOptions.enableSkipPersistenceIfCleanFn,
 
 		mutation: NodesMutation{
 			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
@@ -439,6 +466,9 @@ func (n *Node) markSubtreeDirty() {
 	}
 }
 
+// clearAncestorNodeValues invalidates hydrated component ancestors after tree-structure changes.
+// Replication must always call this for child-only mutations because the source may omit an
+// unchanged parent component when its skip-persistence optimization is enabled.
 func (n *Node) clearAncestorNodeValues(parent *Node) {
 	for node := parent; node != nil; node = node.parent {
 		if node.serializedNode == nil || !node.isComponent() || node.value == nil {
@@ -1933,6 +1963,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 }
 
 func (n *Node) closeTransactionSerializeNodes() error {
+	skipPersistenceIfClean := n.enableSkipPersistenceIfCleanFn()
 	for nodePath, node := range n.andAllChildren() {
 		if node.valueState > valueStateNeedSerialize {
 			return serviceerror.NewInternalf("invalid valueState for serializing: %v", node.valueState)
@@ -1954,7 +1985,8 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		prevVersionedTransition := common.CloneProto(
 			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		)
-		skipIfClean := (node.isComponent() || node.isData() || node.isMap()) &&
+		skipIfClean := skipPersistenceIfClean &&
+			(node.isComponent() || node.isData() || node.isMap()) &&
 			prevVersionedTransition != nil &&
 			!node.hasNewTransactionSideEffects()
 		var prevData *commonpb.DataBlob
