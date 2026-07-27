@@ -87,10 +87,11 @@ func (c *Ctx) Bind(v, id string) {
 	c.bind[v] = id
 }
 
-// bindFresh binds every Fresh effect var of a to id.
+// bindFresh binds every Fresh effect var of a to id — except LinkedFrom refs, which are bound by
+// observation (to a predecessor's successor), not to the realizer's id.
 func bindFresh(rc umpire.RealizeContext, a umpire.Action, id string) {
 	for _, e := range a.Effects {
-		if e.Ref.Fresh {
+		if e.Ref.Fresh && e.Ref.LinkedFrom == "" {
 			rc.Bind(e.Ref.Var, id)
 		}
 	}
@@ -142,6 +143,19 @@ func entityID(e umpire.Entity) string {
 		return x.RunID
 	}
 	return ""
+}
+
+// Successor implements umpire.LineageOracle: the run the given run produced (continue-as-new /
+// reset / retry), found by its observed predecessor link. Lets Drive bind a LinkedFrom ref by
+// observation — the driver never needs the server-minted successor RunID (see UMPIRE_IDENTITY.md).
+func (o Oracle) Successor(t umpire.EntityType, predecessorID string) (string, bool) {
+	nsRoot := umpire.NewEntityID(model.NamespaceType, o.Env.NamespaceID().String())
+	for _, e := range o.Env.GetMonitor().ModelState().QueryEntities(t, 0, &nsRoot) {
+		if r, ok := e.Entity.(*model.WorkflowRun); ok && r.PreviousRunID == predecessorID {
+			return r.RunID, true
+		}
+	}
+	return "", false
 }
 
 // Resolver implements umpire.EffectResolver over the default entity lifecycles.

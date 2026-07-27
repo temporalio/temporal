@@ -8,12 +8,15 @@ mechanism but three, because the ids have three different origins. For the whole
 for the driver read [`UMPIRE_ACTIONS.md`](./UMPIRE_ACTIONS.md); the rejection resolution this
 generalises is in [`UMPIRE_ERR.md`](./UMPIRE_ERR.md).
 
-> **Status: in progress.** The namespace mechanism is implemented. **Phase 1 is done**: the server
-> emits `EventWorkflowExecutionStarted` with lineage attributes (`AttrFirstRunID` /
-> `AttrPreviousRunID`) at every run-creation site — first run, continue-as-new, reset, and
-> retry/cron — and the `WorkflowRun` entity is observed at start (created→started→completed) with
-> its lineage captured. Continue-as-new (chain) and reset (tree) edges are proven end-to-end. The
-> typed run **graph** and the action-model integration (Phases 2–4) are the design below.
+> **Status: implemented (all four phases).** Run identity and lineage come entirely from
+> observation: the server emits run-lifecycle telemetry with lineage at every run-creation site
+> (first / continue-as-new / reset / retry-cron); the Monitor builds a typed run graph
+> (`WorkflowRun` nodes keyed by RunID under `Workflow`, edges labelled continued_as_new / retry /
+> cron / reset, with `continued_as_new` terminals); and the action model drives + reconciles
+> multi-run scenarios with `LinkedFrom` refs bound *by observation* (no driver-side successor
+> RunID). `TestProbeWorkflowContinueAsNewGenerated` proves the whole loop. Namespace stays pre-seed
+> throughout. Remaining follow-ups are enumerated under *Open questions* (reset/retry terminals,
+> failed/canceled/timed-out run states, child-workflow edges).
 
 ## Why
 
@@ -161,17 +164,20 @@ child entities keyed under a parent) is already in place.
      its lineage (covers both retry and cron). Builds green; a dedicated functional test is a
      nice-to-have follow-up (same emit path as cron).
 
-   All three successor topologies (chain / tree / retry) now carry lineage. Known gap: a CaN/reset
-   *predecessor* run currently stays `started` — a `continued_as_new` / `reset` terminal for the
-   closing run is a Phase-2 addition (the run graph's typed *node* states, alongside typed edges).
-2. **Run-graph model.** `WorkflowRun` nodes + lineage edges under `Workflow`; facts populate nodes
-   and links. Fold today's single-run node in as the one-node case; move its correlation from
-   bind-from-response to lineage.
-3. **Relationship refs + bind-on-observation.** `first` / `current` / `successor-of` / `reset-of`
-   refs resolved against the graph; a `Fresh` + `LinkedFrom` effect binds when its linked run is
-   observed.
-4. **CAN / reset / retry actions.** Drive and reconcile multi-run scenarios end-to-end (a workflow
-   that continues-as-new twice then completes; a reset that forks a new run; a retry chain).
+   All four successor topologies (first / chain / tree / retry-cron) carry lineage. **(done)**
+2. **Run-graph model.** **(done)** `WorkflowRun` nodes keyed by RunID under `Workflow`, with a typed
+   edge (`AttrRunInitiator` → `WorkflowRun.Initiator` / `PreviousRunID` / `FirstRunID`) and a
+   `continued_as_new` terminal for the CaN predecessor (`fact.WorkflowRunContinuedAsNew`). The
+   decoder emits several facts per event (`registerSpanFactAs`). `TestProbeWorkflowContinueAsNew`
+   asserts the typed edge and both node states.
+3. **Relationship refs + bind-on-observation.** **(done)** `Ref.LinkedFrom` (generic) + the
+   `LineageOracle` (`Successor(type, predecessorID)`); `Drive`/`awaitState` bind a `LinkedFrom` ref
+   lazily to its predecessor's observed successor, and `bindFresh` skips it. The Temporal `Oracle`
+   resolves it over the run graph.
+4. **CAN / reset / retry actions.** **(done for CaN)** `action.RunContinueAsNew` drives a
+   continue-as-new chain and reconciles *both* runs, the successor bound by observation.
+   `TestProbeWorkflowContinueAsNewGenerated` proves it end-to-end. Reset / retry actions follow the
+   same shape (a `LinkedFrom` ref with the matching initiator) — a small follow-up.
 
 ## Open questions
 

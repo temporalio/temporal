@@ -487,31 +487,64 @@ func (s *UmpireTestSuite) TestProbeWorkflowContinueAsNew() {
 	require.NoError(t, run.Get(env.Context(), nil), "the continue-as-new chain should complete")
 
 	nsRoot := umpire.NewEntityID(model.NamespaceType, env.NamespaceID().String())
-	var runs []*model.WorkflowRun
+	var first, succ *model.WorkflowRun
 	require.Eventually(t, func() bool {
-		runs = nil
+		first, succ = nil, nil
 		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowRunType, 0, &nsRoot) {
-			if r, ok := e.Entity.(*model.WorkflowRun); ok {
-				runs = append(runs, r)
+			r, ok := e.Entity.(*model.WorkflowRun)
+			if !ok {
+				continue
+			}
+			if r.PreviousRunID == "" {
+				first = r
+			} else {
+				succ = r
 			}
 		}
-		return len(runs) == 2
-	}, 15*time.Second, 200*time.Millisecond, "both runs should be modelled")
+		// Wait until both runs are modelled and the predecessor has reached its continue-as-new
+		// terminal (its close fact may arrive just after the successor's start).
+		return first != nil && succ != nil && first.FSM.Current() == model.WorkflowRunContinuedAsNew
+	}, 15*time.Second, 200*time.Millisecond, "both runs modelled, predecessor continued-as-new")
 
-	var first, succ *model.WorkflowRun
-	for _, r := range runs {
-		if r.PreviousRunID == "" {
-			first = r
-		} else {
-			succ = r
-		}
-	}
-	require.NotNil(t, first, "the first run has no predecessor")
-	require.NotNil(t, succ, "the continue-as-new successor has a predecessor")
 	require.Equal(t, first.RunID, succ.PreviousRunID, "the successor's predecessor is the first run")
 	require.Equal(t, first.RunID, succ.FirstRunID, "both runs share the chain root")
 	require.Equal(t, first.RunID, first.FirstRunID, "the first run is its own chain root")
-	t.Logf("[can] first=%s succ=%s (prev=%s root=%s)", first.RunID, succ.RunID, succ.PreviousRunID, succ.FirstRunID)
+	require.Equal(t, "continued_as_new", succ.Initiator, "the edge is typed continued_as_new")
+	require.Equal(t, model.WorkflowRunContinuedAsNew, first.FSM.Current(), "the predecessor reached the continued_as_new terminal")
+	require.Equal(t, model.WorkflowRunCompleted, succ.FSM.Current(), "the successor completed")
+	t.Logf("[can] first=%s (%s) --%s--> succ=%s (%s)", first.RunID, first.FSM.Current(), succ.Initiator, succ.RunID, succ.FSM.Current())
+}
+
+// TestProbeWorkflowContinueAsNewGenerated is the multi-run action-model proof: the generic runtime
+// drives a continue-as-new chain and reconciles *both* runs — the predecessor
+// (created→started→continued_as_new) and its successor (created→started→completed). The successor's
+// ref is bound by observation (the run whose predecessor is the first run), so the driver never
+// supplies the server-minted successor RunID — the race-free identity design end-to-end.
+func (s *UmpireTestSuite) TestProbeWorkflowContinueAsNewGenerated() {
+	t := s.T()
+	env := testcore.NewEnv(t)
+	plan := action.WorkflowContinueAsNewPlan()
+	dctx, cancel := context.WithTimeout(env.Context(), 20*time.Second)
+	defer cancel()
+	rc := action.NewCtx(env, "", action.NewResponsePolicy(), 0)
+	defer rc.Cleanup()
+	oracle := action.Oracle{Env: env}
+
+	require.NoError(t, umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan),
+		"the generic runtime should drive the continue-as-new run graph")
+	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "both runs should ground clean")
+
+	runA, okA := rc.Binding("run")
+	runB, okB := rc.Binding("run2")
+	require.True(t, okA, "the predecessor should be bound (by the realizer)")
+	require.True(t, okB, "the successor should be bound (by observation)")
+	require.NotEqual(t, runA, runB, "predecessor and successor are distinct runs")
+
+	a, b := workflowRun(env, runA), workflowRun(env, runB)
+	require.Equal(t, model.WorkflowRunContinuedAsNew, a.FSM.Current(), "predecessor continued-as-new")
+	require.Equal(t, model.WorkflowRunCompleted, b.FSM.Current(), "successor completed")
+	require.Equal(t, runA, b.PreviousRunID, "the successor is linked to the predecessor")
+	t.Logf("[can-gen] drove %s (%s) --%s--> %s (%s)", runA, a.FSM.Current(), b.Initiator, runB, b.FSM.Current())
 }
 
 // immediateWorkflow completes as soon as it runs — a base run to reset.

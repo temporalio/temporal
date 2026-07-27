@@ -27,6 +27,7 @@ type WorkflowRun struct {
 	RunID         string
 	FirstRunID    string
 	PreviousRunID string
+	Initiator     string // how this run was created (the typed edge from PreviousRunID)
 	FSM           *umpire.Lifecycle
 	StartedAt     time.Time
 	CompletedAt   time.Time
@@ -38,9 +39,10 @@ func NewWorkflowRun() *WorkflowRun {
 	r.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: WorkflowRunCreated,
 		States: umpire.States{
-			WorkflowRunCreated:   {},
-			WorkflowRunStarted:   {},
-			WorkflowRunCompleted: {},
+			WorkflowRunCreated:        {},
+			WorkflowRunStarted:        {},
+			WorkflowRunCompleted:      {},
+			WorkflowRunContinuedAsNew: {},
 		},
 		Transitions: []umpire.Transition{
 			{
@@ -52,6 +54,11 @@ func NewWorkflowRun() *WorkflowRun {
 				Event: WorkflowRunComplete,
 				From:  []string{WorkflowRunStarted},
 				To:    WorkflowRunCompleted,
+			},
+			{
+				Event: WorkflowRunContinueAsNew,
+				From:  []string{WorkflowRunStarted},
+				To:    WorkflowRunContinuedAsNew,
 			},
 		},
 	})
@@ -72,6 +79,7 @@ func (r *WorkflowRun) OnFact(ctx context.Context, _ *umpire.EntityPath, facts it
 			}
 			r.FirstRunID = e.FirstRunID
 			r.PreviousRunID = e.PreviousRunID
+			r.Initiator = e.Initiator
 			if r.FSM.Fire(ctx, WorkflowRunStart) {
 				r.StartedAt = time.Now()
 			}
@@ -85,6 +93,13 @@ func (r *WorkflowRun) OnFact(ctx context.Context, _ *umpire.EntityPath, facts it
 				r.CompletedAt = time.Now()
 			}
 			r.LastSeenAt = time.Now()
+		case *fact.WorkflowRunContinuedAsNew:
+			if r.WorkflowID == "" {
+				r.WorkflowID = e.WorkflowID
+				r.RunID = e.RunID
+			}
+			r.FSM.Fire(ctx, WorkflowRunContinueAsNew)
+			r.LastSeenAt = time.Now()
 		}
 	}
 	return nil
@@ -96,10 +111,12 @@ func (r *WorkflowRun) String() string {
 
 // Lifecycle states and events for WorkflowRun.
 const (
-	WorkflowRunCreated   WorkflowState = "created"
-	WorkflowRunStarted   WorkflowState = "started"
-	WorkflowRunCompleted WorkflowState = "completed"
+	WorkflowRunCreated        WorkflowState = "created"
+	WorkflowRunStarted        WorkflowState = "started"
+	WorkflowRunCompleted      WorkflowState = "completed"
+	WorkflowRunContinuedAsNew WorkflowState = "continued_as_new"
 
-	WorkflowRunStart    WorkflowEvent = "start"
-	WorkflowRunComplete WorkflowEvent = "complete"
+	WorkflowRunStart         WorkflowEvent = "start"
+	WorkflowRunComplete      WorkflowEvent = "complete"
+	WorkflowRunContinueAsNew WorkflowEvent = "continue_as_new"
 )

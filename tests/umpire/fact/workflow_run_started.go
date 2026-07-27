@@ -16,6 +16,7 @@ type WorkflowRunStarted struct {
 	RunID         string
 	FirstRunID    string
 	PreviousRunID string
+	Initiator     string // how this run was created (RunInitiator*); the typed edge from PreviousRunID
 	NamespaceID   string
 	EntityPath    *umpire.EntityPath
 }
@@ -40,6 +41,9 @@ func (e *WorkflowRunStarted) ImportSpanEvent(attrs attribute.Set) bool {
 	}
 	if v, ok := attrs.Value(telemetry.AttrPreviousRunID); ok {
 		e.PreviousRunID = v.AsString()
+	}
+	if v, ok := attrs.Value(telemetry.AttrRunInitiator); ok {
+		e.Initiator = v.AsString()
 	}
 	if v, ok := attrs.Value(telemetry.AttrNamespaceID); ok {
 		e.NamespaceID = v.AsString()

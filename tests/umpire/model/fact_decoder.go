@@ -30,6 +30,8 @@ func NewFactDecoder() *FactDecoder {
 	d.registerSpanFactAs(telemetry.EventWorkflowExecutionCompleted, func() fact.SpanFact { return &fact.WorkflowRunCompleted{} })
 	// A run is also observed at start, with its lineage (first / previous run) for the run graph.
 	d.registerSpanFactAs(telemetry.EventWorkflowExecutionStarted, func() fact.SpanFact { return &fact.WorkflowRunStarted{} })
+	// A run that closes via continue-as-new reaches a continued_as_new terminal (not just started).
+	d.registerSpanFactAs(telemetry.EventWorkflowExecutionContinuedAsNew, func() fact.SpanFact { return &fact.WorkflowRunContinuedAsNew{} })
 
 	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationScheduled{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationAttemptFailed{} })

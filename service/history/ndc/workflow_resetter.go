@@ -267,6 +267,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			telemetry.AttrNamespaceID.String(resetKey.NamespaceID),
 			telemetry.AttrFirstRunID.String(resetMS.GetExecutionInfo().GetFirstExecutionRunId()),
 			telemetry.AttrPreviousRunID.String(baseRunID),
+			telemetry.AttrRunInitiator.String(telemetry.RunInitiatorReset),
 		),
 	)
 

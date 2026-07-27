@@ -81,7 +81,11 @@ func (runWorkflow) Fire(ctx context.Context, rc umpire.RealizeContext, a umpire.
 }
 
 func runRef(fresh bool) umpire.Ref {
-	return umpire.Ref{Type: model.WorkflowRunType, Var: "run", Fresh: fresh}
+	return runVarRef("run", fresh, "")
+}
+
+func runVarRef(varName string, fresh bool, linkedFrom string) umpire.Ref {
+	return umpire.Ref{Type: model.WorkflowRunType, Var: varName, Fresh: fresh, LinkedFrom: linkedFrom}
 }
 
 // RunWorkflow starts a self-completing workflow execution; the run-precise WorkflowRun entity is
@@ -98,6 +102,51 @@ var RunWorkflow = umpire.Action{
 
 // WorkflowRunPlan is the named plan that drives a workflow execution to completed.
 func WorkflowRunPlan() []umpire.Action { return []umpire.Action{RunWorkflow} }
+
+// continueAsNewOnceWorkflow continues-as-new once, then completes — one WorkflowID, two runs.
+func continueAsNewOnceWorkflow(ctx workflow.Context, done bool) error {
+	if done {
+		return nil
+	}
+	return workflow.NewContinueAsNewError(ctx, continueAsNewOnceWorkflow, true)
+}
+
+type runContinueAsNew struct{}
+
+func (runContinueAsNew) Install(umpire.RealizeContext, umpire.Action) error { return nil }
+func (runContinueAsNew) Fire(ctx context.Context, rc umpire.RealizeContext, a umpire.Action) error {
+	c := rc.(*Ctx)
+	wfID := fmt.Sprintf("umpire-action-can-%d", c.Iter)
+	c.Env.SdkWorker().RegisterWorkflow(continueAsNewOnceWorkflow)
+	run, err := c.Env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        wfID,
+		TaskQueue: c.Env.WorkerTaskQueue(),
+	}, continueAsNewOnceWorkflow, false)
+	if err != nil {
+		return err
+	}
+	bindFresh(rc, a, run.GetRunID()) // binds the predecessor "run"; the successor "run2" is bound by observation
+	return nil
+}
+
+// RunContinueAsNew drives a continue-as-new chain and reconciles both runs: the predecessor
+// (created→started→continued_as_new) and its successor (created→started→completed), the latter's
+// ref bound by observation — the driver never supplies the server-minted successor RunID.
+var RunContinueAsNew = umpire.Action{
+	Name: "StartWorkflowExecution(continue-as-new)", Kind: umpire.ClientRPC, Hosting: umpire.Standalone,
+	Effects: []umpire.Effect{
+		{Ref: runVarRef("run", true, ""), Event: model.WorkflowRunStart},
+		{Ref: runVarRef("run", false, ""), Event: model.WorkflowRunContinueAsNew},
+		{Ref: runVarRef("run2", true, "run"), Event: model.WorkflowRunStart},
+		{Ref: runVarRef("run2", false, "run"), Event: model.WorkflowRunComplete},
+	},
+	Entry:   []string{"StartWorkflowExecution"},
+	Realize: runContinueAsNew{},
+}
+
+// WorkflowContinueAsNewPlan drives and reconciles a continue-as-new run graph (predecessor +
+// successor).
+func WorkflowContinueAsNewPlan() []umpire.Action { return []umpire.Action{RunContinueAsNew} }
 
 func wfRef(fresh bool) umpire.Ref {
 	return umpire.Ref{Type: model.WorkflowType, Var: "wf", Fresh: fresh}

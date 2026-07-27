@@ -23,6 +23,9 @@ const (
 	// observer reconstruct the run graph under a WorkflowID (see UMPIRE_IDENTITY.md).
 	AttrFirstRunID    attribute.Key = "workflow.first_run_id"
 	AttrPreviousRunID attribute.Key = "workflow.previous_run_id"
+	// AttrRunInitiator labels how a successor run was created — the typed graph edge from its
+	// predecessor. One of the RunInitiator* values below; empty for a first run.
+	AttrRunInitiator  attribute.Key = "workflow.run_initiator"
 	AttrNamespaceID   attribute.Key = "namespace.id"
 	AttrTaskQueue     attribute.Key = "task.queue"
 	AttrUpdateID      attribute.Key = "update.id"
@@ -64,7 +67,15 @@ const (
 	EventWorkflowUpdateRejected           = "WorkflowUpdateRejected"
 	EventWorkflowExecutionStarted         = "WorkflowExecutionStarted"
 	EventWorkflowExecutionCompleted       = "WorkflowExecutionCompleted"
+	EventWorkflowExecutionContinuedAsNew  = "WorkflowExecutionContinuedAsNew"
 	EventWorkflowTerminated               = "WorkflowTerminated"
+
+	// RunInitiator* are the values of AttrRunInitiator — the typed run-graph edge from a
+	// predecessor to the successor it created.
+	RunInitiatorContinuedAsNew = "continued_as_new"
+	RunInitiatorRetry          = "retry"
+	RunInitiatorCron           = "cron"
+	RunInitiatorReset          = "reset"
 
 	EventNexusOperationScheduled     = "NexusOperationScheduled"
 	EventNexusOperationAttemptFailed = "NexusOperationAttemptFailed" // scheduled -> backing_off

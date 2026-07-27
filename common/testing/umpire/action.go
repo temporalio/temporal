@@ -33,6 +33,11 @@ type Ref struct {
 	Type  EntityType
 	Var   string
 	Fresh bool
+	// LinkedFrom, when set, names the Var of this entity's predecessor. The entity is bound by
+	// *observation* — to whatever the LineageOracle reports as that predecessor's successor
+	// (continue-as-new / reset / retry) — rather than to a driver-supplied id, because a
+	// server-minted successor RunID cannot be known in advance. See UMPIRE_IDENTITY.md.
+	LinkedFrom string
 }
 
 // Pre is a precondition: the entity bound to Ref.Var must currently be in State.
@@ -227,11 +232,21 @@ func proactive(k Kind) bool {
 	}
 }
 
-// awaitState blocks until the entity bound to ref is observed in state, or ctx is done.
+// LineageOracle optionally reports the successor an entity produced (the run created from it via
+// continue-as-new / reset / retry), so Drive can bind a LinkedFrom ref by observation rather than a
+// server-minted id the driver could not know in advance. Implemented Temporal-side over the run
+// graph (see UMPIRE_IDENTITY.md).
+type LineageOracle interface {
+	Successor(t EntityType, predecessorID string) (string, bool)
+}
+
+// awaitState blocks until the entity bound to ref is observed in state, or ctx is done. A ref with
+// LinkedFrom is bound lazily, on observation, to its predecessor's successor.
 func awaitState(ctx context.Context, rc RealizeContext, oracle StateOracle, poll time.Duration, ref Ref, state string) error {
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
+		bindLineage(rc, oracle, ref)
 		if id, ok := rc.Binding(ref.Var); ok {
 			if cur, ok := oracle.Current(ref.Type, id); ok && cur == state {
 				return nil
@@ -242,6 +257,29 @@ func awaitState(ctx context.Context, rc RealizeContext, oracle StateOracle, poll
 			return ctx.Err()
 		case <-ticker.C:
 		}
+	}
+}
+
+// bindLineage binds a not-yet-bound LinkedFrom ref to the successor the LineageOracle reports for
+// its (bound) predecessor — bind-on-observation. A no-op until the predecessor is bound and its
+// successor observed, so it is safe to call every poll tick.
+func bindLineage(rc RealizeContext, oracle StateOracle, ref Ref) {
+	if ref.LinkedFrom == "" {
+		return
+	}
+	if _, ok := rc.Binding(ref.Var); ok {
+		return
+	}
+	lo, ok := oracle.(LineageOracle)
+	if !ok {
+		return
+	}
+	predID, ok := rc.Binding(ref.LinkedFrom)
+	if !ok {
+		return
+	}
+	if succID, ok := lo.Successor(ref.Type, predID); ok {
+		rc.Bind(ref.Var, succID)
 	}
 }
 

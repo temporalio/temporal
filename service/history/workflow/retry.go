@@ -361,7 +361,12 @@ func SetupNewWorkflowForRetryOrCron(
 	}
 
 	// Emit an OTEL span event for the retry/cron successor's start, carrying its lineage (previous
-	// run + chain root), so the umpire observer links it into the run graph. See UMPIRE_IDENTITY.md.
+	// run + chain root) and the typed edge (retry vs cron), so the umpire observer links it into the
+	// run graph. See UMPIRE_IDENTITY.md.
+	runInitiator := telemetry.RunInitiatorRetry
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
+		runInitiator = telemetry.RunInitiatorCron
+	}
 	newKey := newMutableState.GetWorkflowKey()
 	trace.SpanFromContext(ctx).AddEvent(telemetry.EventWorkflowExecutionStarted,
 		trace.WithAttributes(
@@ -370,6 +375,7 @@ func SetupNewWorkflowForRetryOrCron(
 			telemetry.AttrNamespaceID.String(newKey.NamespaceID),
 			telemetry.AttrFirstRunID.String(newMutableState.GetExecutionInfo().GetFirstExecutionRunId()),
 			telemetry.AttrPreviousRunID.String(previousMutableState.GetExecutionState().GetRunId()),
+			telemetry.AttrRunInitiator.String(runInitiator),
 		),
 	)
 	var parentClock *clockspb.VectorClock
