@@ -209,6 +209,24 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun_FastForwardInfo()
 		s.Nil(stateProp.GetFastForwardTargetTime())
 		s.Zero(stateProp.GetInitialSkipCount())
 	})
+
+	s.Run("DisablePropagationPreservedInChainOfRuns", func() {
+		// Chain-of-runs clones the full config, so DisablePropagation is preserved. Contrast with
+		// propagateTimeSkippingToChild, which never carries the flag onto a child config.
+		src := &persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:             true,
+					DisablePropagation:  true,
+					MaxSessionSkipCount: 5,
+				},
+			},
+		}
+		tsc, _ := propagateTimeSkippingToNextRun(src)
+		s.Require().NotNil(tsc)
+		s.True(tsc.GetDisablePropagation())
+		s.Equal(int32(5), tsc.GetMaxSessionSkipCount())
+	})
 }
 
 func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
@@ -254,6 +272,25 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 		s.Equal(int32(0), propagatedState.GetInitialSkipCount())
 	})
 
+	s.Run("fast-forward is never propagated to a child (neither config nor state)", func() {
+		src := newSource() // enabled parent carrying an active, unreached fast-forward
+		tsc, propagatedState := propagateTimeSkippingToChild(src)
+		s.Require().NotNil(tsc)
+		s.Nil(tsc.GetFastForwardConfig(), "child never inherits the fast-forward config")
+		s.Require().NotNil(propagatedState)
+		s.Nil(propagatedState.GetFastForwardTargetTime(),
+			"fast-forward is per-execution; a child never inherits the fast-forward target time")
+	})
+
+	s.Run("propagated child config never carries DisablePropagation", func() {
+		// Config only propagates when !DisablePropagation, so the flag is structurally always
+		// false on a propagated child config -- there is nothing to carry down the tree.
+		src := newSource()
+		tsc, _ := propagateTimeSkippingToChild(src)
+		s.Require().NotNil(tsc)
+		s.False(tsc.GetDisablePropagation())
+	})
+
 	s.Run("child workflow propagation can be turned off", func() {
 		src := newSource()
 		src.TimeSkippingInfo.Config.DisablePropagation = true
@@ -277,14 +314,18 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 		s.Nil(propagatedState.GetFastForwardTargetTime())
 	})
 
-	s.Run("disabled propagation still propagates virtual time", func() {
+	s.Run("disabled parent config propagates a disabled child config, gated only by DisablePropagation", func() {
 		src := newSource()
 		src.TimeSkippingInfo.Config.Enabled = false
 		tsc, propagatedState := propagateTimeSkippingToChild(src)
-		s.Nil(tsc)
+		// enabled is copied through: a disabled-but-propagating parent hands the child a disabled config.
+		s.Require().NotNil(tsc)
+		s.False(tsc.GetEnabled())
+		s.Equal(sessionMaxSkipCount, tsc.GetMaxSessionSkipCount())
+		s.Nil(tsc.GetFastForwardConfig())
 		s.Require().NotNil(propagatedState)
 		s.Equal(time.Hour, propagatedState.GetInitialSkippedDuration().AsDuration(),
-			"virtual time is always propagated, even when config propagation is disabled")
+			"virtual time is always propagated regardless of enabled")
 		s.Nil(propagatedState.GetFastForwardTargetTime())
 		s.Equal(int32(0), propagatedState.GetInitialSkipCount())
 	})
@@ -475,6 +516,23 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Require().True(proto.Equal(nextVT, tsi.GetFastForwardInfoLastUpdateVersionedTransition()))
 	})
 
+	s.Run("InitFromChildPropagation_NoFastForwardConfig_NilFastForwardInfo", func() {
+		// Child propagation strips fast-forward: the config carries no FastForwardConfig and no ff
+		// target is propagated. The invariant (ff config present <=> ff info present) must hold --
+		// with no ff config, FastForwardInfo stays nil.
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		cfg := &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 10}
+		propagation := &commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(time.Hour)}
+
+		s.mutableState.initTimeSkippingInfo(cfg, propagation)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.Nil(tsi.GetConfig().GetFastForwardConfig())
+		s.Nil(tsi.GetFastForwardInfo(), "no ff config -> ff info must be nil (invariant)")
+	})
+
 	s.Run("InitWithPropagation_ForExecutionsWithTSStartedByPropagation", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 
@@ -502,6 +560,35 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Equal(hasSkipped, tsi.GetAccumulatedSkippedDuration().AsDuration())
 		s.Equal(targetTime.UTC(),
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
+	})
+
+	// Invariant 4: propagation may carry an enabled config whose fast-forward target is already due
+	// once the virtual clock (real + accumulated skip) is established at init. Init must disable time
+	// skipping, matching the runtime flip-enabled model.
+	s.Run("InitWithEnabledConfigAndDueFastForwardTarget_DisablesTimeSkipping", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		baseTime := s.mutableState.timeSource.Now()
+		hasSkipped := 2 * time.Hour
+		dueTarget := baseTime.Add(time.Hour) // < virtual now (baseTime + 2h)
+
+		cfg := &commonpb.TimeSkippingConfig{
+			Enabled:           true,
+			FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)},
+		}
+		propagation := &commonpb.TimeSkippingStatePropagation{
+			InitialSkippedDuration: durationpb.New(hasSkipped),
+			FastForwardTargetTime:  timestamppb.New(dueTarget),
+		}
+		s.mutableState.PopTasks()
+		s.mutableState.initTimeSkippingInfo(cfg, propagation)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.False(tsi.GetConfig().GetEnabled(), "a due fast-forward at init disables time skipping")
+		s.Require().NotNil(tsi.GetFastForwardInfo())
+		s.True(tsi.GetFastForwardInfo().GetHasReached())
+		s.Empty(s.mutableState.PopTasks()[tasks.CategoryTimer], "a reached target schedules no timer")
 	})
 
 	s.Run("InitWithInheritedSkipOnly_NoStopReason", func() {
@@ -747,12 +834,17 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForwardDuration)}},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
+		s.mutableState.PopTasks()
 		s.mutableState.applyFastForward(nil)
 		fastForward := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
 		s.Require().NotNil(fastForward)
 		s.False(fastForward.GetHasReached())
 		s.WithinDuration(fastForward.GetTargetTime().AsTime(), baseTime.Add(fastForwardDuration), 1*time.Second)
 		s.True(proto.Equal(nextVT, s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfoLastUpdateVersionedTransition()))
+
+		timers := s.mutableState.PopTasks()[tasks.CategoryTimer]
+		s.Require().Len(timers, 1, "an enabled config with a pending target schedules a fast-forward timer")
+		s.WithinDuration(s.mutableState.ToRealTime(fastForward.GetTargetTime().AsTime()), timers[0].GetVisibilityTime(), 0)
 	})
 
 	s.Run("FastForward_WithFuturePropagatedTargetTime", func() {
@@ -780,6 +872,26 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		s.Equal(s.mutableState.ToRealTime(propagatedTarget), timers[0].GetVisibilityTime())
 	})
 
+	s.Run("FastForward_FuturePropagatedTargetTime_DisabledConfig", func() {
+		fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+		propagatedTarget := fixed.Add(2 * time.Hour)
+		s.mutableState.timeSource = clock.NewEventTimeSource().Update(fixed)
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:           false,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)}},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.PopTasks()
+		s.mutableState.applyFastForward(timestamppb.New(propagatedTarget))
+		fastForward := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
+		s.Require().NotNil(fastForward)
+		s.Equal(propagatedTarget, fastForward.GetTargetTime().AsTime(),
+			"propagated target used directly, not recomputed from ff duration")
+		s.False(fastForward.GetHasReached(), "a future target has not been reached yet")
+		s.Empty(s.mutableState.PopTasks()[tasks.CategoryTimer], "a disabled config schedules no timer")
+	})
+
 	s.Run("FastForward_WithStalePropagatedTargetTime", func() {
 		fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 		staleTarget := fixed.Add(-2 * time.Hour)
@@ -792,10 +904,13 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		}
 		s.mutableState.PopTasks()
 		s.mutableState.applyFastForward(timestamppb.New(staleTarget))
-		fastForward := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
+		tsi := s.mutableState.executionInfo.TimeSkippingInfo
+		fastForward := tsi.GetFastForwardInfo()
 		s.Require().NotNil(fastForward)
 		s.Equal(staleTarget, fastForward.GetTargetTime().AsTime())
 		s.True(fastForward.GetHasReached(), "an already-due propagated target is treated as reached")
+		s.False(tsi.GetConfig().GetEnabled(),
+			"an already-due target completes the fast-forward, so time skipping is disabled")
 		s.Empty(s.mutableState.PopTasks()[tasks.CategoryTimer], "a reached target schedules no timer")
 	})
 

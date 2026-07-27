@@ -4449,12 +4449,12 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			expectInitialSkip: durationpb.New(time.Hour),
 		},
 		{
-			name: "accumulated skip only",
+			name: "disabled parent config still propagates a disabled child config",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
 				AccumulatedSkippedDuration: durationpb.New(15 * time.Minute),
 			},
-			expectNilCfg:      true,
+			expectCfg:         &commonpb.TimeSkippingConfig{Enabled: false},
 			expectInitialSkip: durationpb.New(15 * time.Minute),
 		},
 		{
@@ -4510,8 +4510,9 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 
 			// The snapshot must be a clone — mutating it must not leak back into parent state.
 			if tc.parentTSI.GetConfig() != nil {
+				origEnabled := tc.parentTSI.GetConfig().GetEnabled()
 				gotTSC.Enabled = !gotTSC.GetEnabled()
-				s.True(tc.parentTSI.GetConfig().GetEnabled(),
+				s.Equal(origEnabled, tc.parentTSI.GetConfig().GetEnabled(),
 					"mutation of snapshot leaked into parent's Config")
 			}
 		})

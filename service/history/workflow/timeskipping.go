@@ -54,8 +54,10 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	}
 	// we allow setting config to nil in updating tsc
 	ms.executionInfo.TimeSkippingInfo.Config = config
-	ms.applyFastForward(nil)
+	// restart the skip session before (re)applying fast-forward so the fast-forward's max-skip
+	// gating sees the fresh count.
 	tsi.SessionSkipCount = 0
+	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
 }
 
@@ -73,7 +75,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 	tsc := tsi.GetConfig()
 	ffConfig := tsc.GetFastForwardConfig()
 
-	// invariant: as long as there is a fast-forward config in tsc, ff-info is not nil
+	// no ff
 	if ffConfig == nil {
 		if tsi.FastForwardInfo != nil {
 			ms.setAndStampFastForwardInfo(nil)
@@ -81,6 +83,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		return
 	}
 
+	// ff of different states:
 	var targetTime time.Time
 	var hasReached bool
 	if propagatedTargetTime != nil {
@@ -98,9 +101,14 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		HasReached: hasReached,
 	})
 
-	// protects against cases that time skipping is disabled, and
-	// there is still a pending fast forward
-	if !hasReached && tsc.GetEnabled() {
+	// actions based on ff states: 1) disable time skipping 2) add ff timer task
+	if hasReached {
+		tsc.Enabled = false
+		return
+	}
+
+	// schedule the wake-up timer only while skipping is still enabled
+	if tsc.GetEnabled() {
 		ms.AddTasks(&tasks.TimeSkippingTimerTask{
 			WorkflowKey:         ms.GetWorkflowKey(),
 			VisibilityTimestamp: targetTime,
@@ -183,22 +191,22 @@ func propagateTimeSkippingToNextRun(
 	return newTSC, stateProp
 }
 
-// propagateTimeSkippingToChild snapshots the parent's time skipping into a child workflow. The
-// child shares the parent's virtual clock (its start time is shifted forward by the parent's
-// accumulated skipped duration) but is otherwise a fresh execution:
-//   - FastForward is per-execution and is never propagated to children.
-//   - The child starts a fresh skip session: SessionSkipCount is not propagated (starts at 0).
-//   - It does inherit the parent's per-session budget (MaxSkipPerSession). Children start
-//     internally, bypassing the frontend that populates the default budget, so inheriting the
-//     parent's already-resolved limit avoids a 0 that would disable skipping on the first skip.
+// propagateTimeSkippingToChild snapshots the parent's time skipping into a child workflow, a fresh
+// execution that shares the parent's virtual clock. Three independent rules:
+//  1. Virtual time always propagates: the child's start time is shifted forward by the parent's
+//     accumulated skipped duration. The child starts a fresh skip session (SessionSkipCount 0).
+//  2. Fast-forward is per-execution and is never propagated (neither config nor state).
+//  3. Enabled and MaxSessionSkipCount propagate together, gated by the propagation options: the
+//     parent's DisablePropagation suppresses the config entirely. MaxSessionSkipCount is inherited
+//     because children start internally, bypassing the frontend that populates the default budget,
+//     so inheriting the parent's already-resolved limit avoids a 0 that would disable skipping on
+//     the first skip.
 func propagateTimeSkippingToChild(
 	source *persistencespb.WorkflowExecutionInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
-	tsi := source.GetTimeSkippingInfo()
-	tsc := tsi.GetConfig()
-	util := NewTimeSkippingInfoUtil(tsi)
+	tsc := source.GetTimeSkippingInfo().GetConfig()
+	accum := NewTimeSkippingInfoUtil(source.GetTimeSkippingInfo()).GetAccumulatedSkippedDuration()
 
-	accum := util.GetAccumulatedSkippedDuration()
 	var stateProp *commonpb.TimeSkippingStatePropagation
 	if accum > 0 {
 		stateProp = &commonpb.TimeSkippingStatePropagation{
@@ -207,14 +215,12 @@ func propagateTimeSkippingToChild(
 		}
 	}
 
-	// only propagates state
-	if !util.IsEnabled() || tsc.GetDisablePropagation() {
+	if tsc == nil || tsc.GetDisablePropagation() {
 		return nil, stateProp
 	}
 
-	// propagate both config and state
 	return &commonpb.TimeSkippingConfig{
-		Enabled:             true,
+		Enabled:             tsc.GetEnabled(),
 		MaxSessionSkipCount: tsc.GetMaxSessionSkipCount(),
 	}, stateProp
 }
