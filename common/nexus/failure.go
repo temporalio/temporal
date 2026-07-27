@@ -183,6 +183,26 @@ func TemporalFailureToNexusFailureInPlace(failure *failurepb.Failure) (nexus.Fai
 	}, nil
 }
 
+// EnsureCanceledFailureInfo makes failure surface as a Temporal CanceledError, preserving the
+// message, source, stack trace, encoded attributes, and cause. Call it only for canceled operations:
+// old SDKs and non-Temporal handlers may send a canceled completion whose converted cause is a plain
+// ApplicationFailure, which would otherwise surface as an ApplicationError to the caller.
+func EnsureCanceledFailureInfo(failure *failurepb.Failure) *failurepb.Failure {
+	if failure.GetCanceledFailureInfo() != nil {
+		return failure
+	}
+	return &failurepb.Failure{
+		Message:           failure.GetMessage(),
+		Source:            failure.GetSource(),
+		StackTrace:        failure.GetStackTrace(),
+		EncodedAttributes: failure.GetEncodedAttributes(),
+		FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+			CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+		},
+		Cause: failure.GetCause(),
+	}
+}
+
 // NexusFailureToTemporalFailure converts a Nexus Failure to an API proto Failure.
 // If the failure metadata "type" field is set to the fullname of the temporal API Failure message, the failure is
 // reconstructed using protojson.Unmarshal on the failure details field. Otherwise, the failure is reconstructed
