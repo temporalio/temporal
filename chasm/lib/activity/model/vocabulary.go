@@ -12,6 +12,8 @@ const (
 	// RPC events
 	PollType EventType = iota
 	RespondFailedType
+	RespondCanceledType
+	RequestCancelType
 	PauseType
 
 	// Timer events
@@ -38,6 +40,8 @@ type Event struct {
 var (
 	Poll                   = Event{Type: PollType}
 	FailRetryably          = Event{Type: RespondFailedType, Retryable: true}
+	RespondCanceled        = Event{Type: RespondCanceledType}
+	RequestCancel          = Event{Type: RequestCancelType}
 	Pause                  = Event{Type: PauseType}
 	StartToCloseElapses    = Event{Type: StartToCloseElapsesType}
 	ScheduleToCloseElapses = Event{Type: ScheduleToCloseElapsesType}
@@ -54,6 +58,10 @@ func (t EventType) String() string {
 		return "Poll"
 	case RespondFailedType:
 		return "RespondFailed"
+	case RespondCanceledType:
+		return "RespondCanceled"
+	case RequestCancelType:
+		return "RequestCancel"
 	case PauseType:
 		return "Pause"
 	case ScheduleToStartElapsesType:

@@ -80,7 +80,7 @@ func (a *wfaHandle) driveEvent(t testing.TB, e model.Event) {
 		a.awaitTimeout(t, e, time.Now().Add(a.cfg.timerDuration(e)+activityDriverTimerMargin))
 	default:
 		// An RPC
-		require.NoError(t, a.rpc(e))
+		require.NoError(t, a.rpc(t, e))
 	}
 }
 
@@ -260,8 +260,17 @@ func wfaActivityInfo(p *workflowpb.PendingActivityInfo) activityInfo {
 	}
 }
 
+// waitForCancelRequested waits until the workflow-initiated cancellation reaches the activity.
+func (a *wfaHandle) waitForCancelRequested(t testing.TB) {
+	await.Require(a.d.ctx, t, func(t *await.T) {
+		pendingActivity := a.pendingActivityInfo(t)
+		t.Require().NotNil(pendingActivity, "activity is no longer in progress")
+		t.Require().Equal(enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, pendingActivity.GetState())
+	}, activityDriverTimeout, activityDriverPollInterval)
+}
+
 // rpc performs the frontend RPC for a non-Poll, non-timer event and returns its error.
-func (a *wfaHandle) rpc(e model.Event) error {
+func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 	fc := a.d.env.FrontendClient()
 	ns := a.d.env.Namespace().String()
 	switch e.Type {
@@ -270,6 +279,23 @@ func (a *wfaHandle) rpc(e model.Event) error {
 			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
 		})
 		return err
+	case model.RespondCanceledType:
+		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
+		})
+		return err
+	case model.RequestCancelType:
+		if err := a.d.env.SdkClient().SignalWorkflow(
+			a.d.ctx,
+			a.workflowID,
+			a.runID,
+			wfaCancelSignal,
+			nil,
+		); err != nil {
+			return err
+		}
+		a.waitForCancelRequested(t)
+		return nil
 	case model.PauseType:
 		_, err := fc.PauseActivityExecution(a.d.ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: uuid.NewString(),

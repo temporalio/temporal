@@ -200,3 +200,21 @@ func (s *activityParityTestSuite) TestCurrentRetryIntervalAndNextAttemptSchedule
 			})
 	})
 }
+
+// TestCancel drives a running activity through cancellation on both surfaces. RequestCancel uses the
+// standalone activity RPC for SAA and workflow cancellation for WFA; the worker then acknowledges the
+// request with RespondActivityTaskCanceled.
+func (s *activityParityTestSuite) TestCancel() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, model.RequestCancel, model.RespondCanceled}
+	cfg := activityConfig{MaxAttempts: 1}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+			newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+			newSAADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
+	})
+}
