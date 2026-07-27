@@ -72,23 +72,16 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 		resp := a.pollForTask(t, activityDriverTimeout)
 		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
 		a.token = resp.GetTaskToken()
+	case isDispatchDelayEvent(e.Type):
+		// A dispatch delay is realized by waiting for the delayed dispatch.
+		a.awaitDispatchDelay(t, e)
 	case isTimerEvent(e.Type):
 		// A timer event is realized by waiting out its configured window.
-		a.awaitTimerEvent(t, e)
+		a.awaitTimeout(t, e, time.Now().Add(a.cfg.timerDuration(e)+activityDriverTimerMargin))
 	default:
 		// An RPC
 		require.NoError(t, a.rpc(e))
 	}
-}
-
-// awaitTimerEvent blocks until a timer event's effect shows up in the workflow's view of the
-// activity, and fails if it does not within (window + margin).
-func (a *wfaHandle) awaitTimerEvent(t require.TestingT, e model.Event) {
-	if isDispatchDelayEvent(e.Type) {
-		a.awaitDispatchDelay(t, e)
-		return
-	}
-	a.awaitTimeout(t, e, time.Now().Add(a.cfg.timerDuration(e)+activityDriverTimerMargin))
 }
 
 // awaitTimeout blocks until the activity reports the timeout the event names, and fails if it does
