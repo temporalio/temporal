@@ -84,6 +84,8 @@ func (c activityConfig) forTrace(trace []model.Event) activityConfig {
 			c.StartToClose = cmp.Or(c.StartToClose, activityShortTimeout)
 		case model.HeartbeatElapsesType:
 			c.HeartbeatTimeout = cmp.Or(c.HeartbeatTimeout, activityShortTimeout)
+		case model.StartDelayElapsesType:
+			c.StartDelay = cmp.Or(c.StartDelay, activityShortDispatchDelay)
 		}
 	}
 	return c

@@ -116,11 +116,9 @@ func (a *wfaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
 		return activityTimeoutMark{attemptFailure: timeoutTypeOf(pa.GetLastFailure()), attempt: pa.GetAttempt()}
 	}
 	m := activityTimeoutMark{closed: true}
-	var outcome *temporal.TimeoutError
-	if errors.As(a.run.Get(a.d.ctx, nil), &outcome) {
+	if outcome, ok := errors.AsType[*temporal.TimeoutError](a.run.Get(a.d.ctx, nil)); ok {
 		m.outcome = outcome.TimeoutType()
-		var cause *temporal.TimeoutError
-		if errors.As(outcome.Unwrap(), &cause) {
+		if cause, ok := errors.AsType[*temporal.TimeoutError](outcome.Unwrap()); ok {
 			m.cause = cause.TimeoutType()
 		}
 	}
@@ -252,8 +250,7 @@ func (a *wfaHandle) terminal(t require.TestingT) activityTerminalProjection {
 		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}
 	}
 	// A canceled activity surfaces as a bare CanceledError, not wrapped in an ActivityError.
-	var canceledErr *temporal.CanceledError
-	if errors.As(err, &canceledErr) {
+	if _, ok := errors.AsType[*temporal.CanceledError](err); ok {
 		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED}
 	}
 	var actErr *temporal.ActivityError
@@ -277,10 +274,8 @@ func (a *wfaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 // terminalCause is the failure the terminal outcome chains as its Cause, empty if there is none. The
 // SDK surfaces it via TimeoutError.Unwrap().
 func (a *wfaHandle) terminalCause(_ require.TestingT) failureCause {
-	var toErr *temporal.TimeoutError
-	if errors.As(a.run.Get(a.d.ctx, nil), &toErr) {
-		var appErr *temporal.ApplicationError
-		if errors.As(toErr.Unwrap(), &appErr) {
+	if toErr, ok := errors.AsType[*temporal.TimeoutError](a.run.Get(a.d.ctx, nil)); ok {
+		if appErr, ok := errors.AsType[*temporal.ApplicationError](toErr.Unwrap()); ok {
 			return failureCause{Type: appErr.Type(), Message: appErr.Message()}
 		}
 	}
