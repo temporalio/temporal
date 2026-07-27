@@ -126,16 +126,16 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 		a.token = resp.GetTaskToken()
 	case isTimerEvent(e.Type):
 		// A timer event is realized by waiting out its configured window.
-		a.awaitWallClock(t, e)
+		a.awaitTimerEvent(t, e)
 	default:
 		// An RPC
 		require.NoError(t, a.rpc(e))
 	}
 }
 
-// awaitWallClock blocks until a timer event's effect shows up in the workflow's view of the
+// awaitTimerEvent blocks until a timer event's effect shows up in the workflow's view of the
 // activity, and fails if it does not within (window + settle).
-func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
+func (a *wfaHandle) awaitTimerEvent(t require.TestingT, e model.Event) {
 	if isDispatchDelayEvent(e.Type) {
 		a.awaitDispatchDelay(t, e)
 		return
