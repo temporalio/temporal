@@ -82,6 +82,7 @@ func (c activityConfig) forTrace(trace []model.Event) activityConfig {
 			c.StartToClose = cmp.Or(c.StartToClose, activityShortTimeout)
 		case model.HeartbeatElapsesType:
 			c.HeartbeatTimeout = cmp.Or(c.HeartbeatTimeout, activityShortTimeout)
+		default: // a non-timeout event
 		}
 	}
 	return c
@@ -170,6 +171,7 @@ func validateTrace(t require.TestingT, trace []model.Event) {
 			timeouts = nil // a new attempt arms its timeouts afresh
 		case isTimerEvent(e.Type) && !isDispatchDelayEvent(e.Type):
 			timeouts = append(timeouts, e)
+		default: // an event that neither starts an attempt nor ends one by timeout
 		}
 		if len(timeouts) > 1 {
 			require.Failf(t, "a trace cannot name two timeouts on one attempt",
@@ -231,6 +233,6 @@ func activityDriverPollUntil(deadline time.Time, cond func() bool) bool {
 		if !time.Now().Before(deadline) {
 			return false
 		}
-		time.Sleep(activityDriverPollInterval)
+		time.Sleep(activityDriverPollInterval) //nolint:forbidigo
 	}
 }

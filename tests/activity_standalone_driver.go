@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	apiactivitypb "go.temporal.io/api/activity/v1"
+	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -141,6 +141,7 @@ func (a *saaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
 			e, info.GetStatus())
 	case info.GetRunState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
 		t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
+	default: // dispatched
 	}
 }
 
@@ -231,7 +232,7 @@ func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 	return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 }
 
-func saaActivityInfo(i *apiactivitypb.ActivityExecutionInfo) activityInfo {
+func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
 	return activityInfo{
 		RunState:                   i.GetRunState(),
 		Attempt:                    i.GetAttempt(),
@@ -280,6 +281,7 @@ func (a *saaHandle) pollForTask(t require.TestingT, timeout time.Duration) *work
 				time.Until(deadline).Seconds(), common.MinLongPollTimeout, err)
 			return nil
 		}
+		//nolint:testifylint // t is a require.TestingT, which has only Errorf
 		t.Errorf("saaDriver bug: PollActivityTaskQueue did not complete cleanly (poll timeout must be >= "+
 			"MinLongPollTimeout; only an empty response with a nil error means \"no task\"): %v", err)
 		return nil

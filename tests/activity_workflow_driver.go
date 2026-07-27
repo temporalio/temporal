@@ -137,6 +137,7 @@ func (a *wfaHandle) awaitDispatchDelay(t require.TestingT, e model.Event) {
 		t.Errorf("%s: the activity is no longer pending, so its delayed dispatch never happened", e)
 	case pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_STARTED:
 		t.Errorf("%s: an attempt is running, so no dispatch is pending and none can elapse", e)
+	default: // dispatched
 	}
 }
 
