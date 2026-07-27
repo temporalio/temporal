@@ -2,6 +2,7 @@ package objectleak
 
 import (
 	"errors"
+	"iter"
 	"runtime"
 	runtimedebug "runtime/debug"
 	"sync/atomic"
@@ -98,7 +99,7 @@ func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
 	baseline := Baseline{
 		collectedByID: make(map[objectIdentity]*atomic.Bool),
 	}
-	forEachRetained(t.objects, func(obj trackedObject) {
+	for obj := range retainedObjects(t.objects) {
 		identity := obj.identity()
 		if canonicalCollected, ok := baseline.collectedByID[identity]; ok {
 			obj.cleanup.Stop()
@@ -107,7 +108,7 @@ func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
 			baseline.collectedByID[identity] = obj.collected
 		}
 		baseline.objects = append(baseline.objects, obj)
-	})
+	}
 	t.objects = nil
 	t.roots = 0
 	return baseline
@@ -135,16 +136,18 @@ func (t *ObjectLeakCheck) Check(baseline Baseline) (string, error) {
 
 func retainedCount(objects []trackedObject) int {
 	retained := 0
-	forEachRetained(objects, func(trackedObject) {
+	for range retainedObjects(objects) {
 		retained++
-	})
+	}
 	return retained
 }
 
-func forEachRetained(objects []trackedObject, visit func(trackedObject)) {
-	for _, obj := range objects {
-		if !obj.collected.Load() {
-			visit(obj)
+func retainedObjects(objects []trackedObject) iter.Seq[trackedObject] {
+	return func(yield func(trackedObject) bool) {
+		for _, obj := range objects {
+			if !obj.collected.Load() && !yield(obj) {
+				return
+			}
 		}
 	}
 }
