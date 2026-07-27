@@ -4777,6 +4777,10 @@ func (wh *WorkflowHandler) PatchSchedule(
 		return nil, errRequestNotSet
 	}
 
+	if request.GetPatch() == nil {
+		return nil, errSchedulePatchNotSet
+	}
+
 	if !wh.config.EnableSchedules(request.Namespace) {
 		return nil, errSchedulesNotAllowed
 	}
