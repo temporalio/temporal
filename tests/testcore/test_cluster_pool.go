@@ -1,6 +1,8 @@
 package testcore
 
 import (
+	"encoding/json"
+	"log"
 	"os"
 	"runtime"
 	"strconv"
@@ -32,9 +34,26 @@ func init() {
 		dedicatedSize = n
 	}
 
+	// In CI, recreate clusters after 50 tests to prevent resource accumulation.
+	// Locally, clusters are reused indefinitely for faster iteration.
+	var maxLeases int
+	if os.Getenv("CI") != "" {
+		maxLeases = 50
+	}
+
+	var eventsFile *os.File
+	if path := os.Getenv("TEMPORAL_TEST_CLUSTER_EVENTS_FILE"); path != "" {
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			log.Printf("cluster events disabled: cannot open %q: %v", path, err)
+		}
+		eventsFile = f
+	}
+
 	testClusterRouter = &clusterRouter{
-		shared:    newClusterPool(sharedSize, false, 0),
-		dedicated: newClusterPool(dedicatedSize, true, 0),
+		shared:     newClusterPool(sharedSize, false, maxLeases),
+		dedicated:  newClusterPool(dedicatedSize, true, maxLeases),
+		eventsFile: eventsFile,
 	}
 }
 
@@ -161,6 +180,8 @@ type clusterRouter struct {
 	shared      *clusterPool
 	dedicated   *clusterPool
 	suiteScoped sync.Map
+
+	eventsFile *os.File
 }
 
 // suiteScopedCluster owns one lazily created legacy suite cluster.
@@ -196,14 +217,87 @@ func UseSuiteScopedCluster(t *testing.T) {
 	})
 }
 
-func (p *clusterRouter) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
+// Cluster kinds recorded in creation events.
+const (
+	clusterKindShared      = "shared"
+	clusterKindDedicated   = "dedicated"
+	clusterKindSuiteScoped = "suite-scoped"
+)
+
+// clusterRequest describes what a test needs from the cluster router.
+type clusterRequest struct {
+	kind              string // set by the router: shared, dedicated, or suite-scoped
+	dedicated         bool
+	dedicatedReason   string
+	needWorkerService bool
+	dynamicConfig     map[dynamicconfig.Key]any
+	clusterOpts       []TestClusterOption
+}
+
+// mustBeFresh reports whether the request requires a brand-new cluster that
+// cannot be reused.
+func (r clusterRequest) mustBeFresh() bool {
+	return r.needWorkerService || len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
+}
+
+// needsDedicated reports whether the request must be served by a dedicated
+// cluster rather than the shared pool.
+func (r clusterRequest) needsDedicated() bool {
+	return r.dedicated || r.mustBeFresh()
+}
+
+// reason explains why the cluster was created, for analytics. It falls back to a
+// generic reason when the caller did not provide one.
+func (r clusterRequest) reason() string {
+	switch r.kind {
+	case clusterKindShared:
+		return "shared pool"
+	case clusterKindSuiteScoped:
+		return "suite-scoped"
+	}
+	switch {
+	case r.dedicatedReason != "":
+		return r.dedicatedReason
+	case r.mustBeFresh():
+		return "custom config"
+	default:
+		return "dedicated (pooled)"
+	}
+}
+
+// recordCreation appends one JSON Lines event per test-cluster creation so a CI
+// run can be queried for which suite created how many clusters of each kind, and
+// why. Events fall back to the test log when no events file is configured.
+func (r clusterRequest) recordCreation(t *testing.T) {
+	suite, _, _ := strings.Cut(t.Name(), "/")
+	line, err := json.Marshal(map[string]any{
+		"suite":  suite,
+		"test":   t.Name(),
+		"kind":   r.kind,
+		"reason": r.reason(),
+		"worker": r.needWorkerService,
+	})
+	if err != nil {
+		return
+	}
+
+	if testClusterRouter.eventsFile == nil {
+		log.Printf("CLUSTEREVENT %s", line)
+		return
+	}
+	// O_APPEND makes each write land atomically at EOF and os.File serializes
+	// concurrent writes, so lines from parallel tests don't interleave.
+	_, _ = testClusterRouter.eventsFile.Write(append(line, '\n'))
+}
+
+func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTestBase) {
 	defer func() {
 		if tb != nil {
 			tb.RegisterTest(t)
 		}
 	}()
-	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
-		return p.getDedicated(t, dynamicConfig, clusterOpts)
+	if req.needsDedicated() {
+		return p.getDedicated(t, req)
 	}
 	if cluster := p.getSuiteScoped(t); cluster != nil {
 		return cluster
@@ -213,7 +307,7 @@ func (p *clusterRouter) get(t *testing.T, dedicated bool, dynamicConfig map[dyna
 
 func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
 	return p.shared.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, nil, true, nil)
+		return p.createCluster(t, clusterRequest{kind: clusterKindShared})
 	})
 }
 
@@ -235,17 +329,18 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
 		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
 		// worker for worker-deployment APIs.
-		suiteCluster.cluster = p.createCluster(t, nil, true, []TestClusterOption{withWorkerService(true)})
+		suiteCluster.cluster = p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped, needWorkerService: true})
 	})
 	suiteCluster.cluster.SetT(t)
 	return suiteCluster.cluster
 }
 
-func (p *clusterRouter) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
-	if len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
+func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
+	req.kind = clusterKindDedicated
+	if req.mustBeFresh() {
 		// Custom config or fx options require a fresh cluster (can't reuse).
 		p.dedicated.reserveSlot(t)
-		cluster := p.createCluster(t, dynamicConfig, false, clusterOpts)
+		cluster := p.createCluster(t, req)
 
 		// Register cleanup to tear down the cluster when the test completes.
 		t.Cleanup(func() {
@@ -259,25 +354,26 @@ func (p *clusterRouter) getDedicated(t *testing.T, dynamicConfig map[dynamicconf
 
 	// If no custom config is provided, reuse an existing cluster.
 	return p.dedicated.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, nil, false, nil)
+		return p.createCluster(t, req)
 	})
 }
 
-func (p *clusterRouter) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool, clusterOpts []TestClusterOption) *FunctionalTestBase {
+func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *FunctionalTestBase {
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	// Keep the worker service off unless explicitly enabled via WithWorkerService.
-	opts := []TestClusterOption{withWorkerService(false)}
-	if shared {
+	// The worker service is off unless the request explicitly needs it.
+	opts := []TestClusterOption{withWorkerService(req.needWorkerService)}
+	if req.kind != clusterKindDedicated {
 		opts = append(opts, WithSharedCluster())
 	}
-	if len(dynamicConfig) > 0 {
-		opts = append(opts, WithDynamicConfigOverrides(dynamicConfig))
+	if len(req.dynamicConfig) > 0 {
+		opts = append(opts, WithDynamicConfigOverrides(req.dynamicConfig))
 	}
-	opts = append(opts, clusterOpts...)
+	opts = append(opts, req.clusterOpts...)
 
 	tbase.setupCluster(opts...)
+	req.recordCreation(t)
 
 	return tbase
 }

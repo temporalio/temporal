@@ -24,6 +24,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -75,11 +76,25 @@ func (e *ExecutableVerifyVersionedTransitionTask) QueueID() any {
 	return e.WorkflowKey
 }
 
-func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
+func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	if e.TerminalState() {
 		return nil
 	}
 	e.MarkExecutionStart()
+
+	emitLifecycle := e.Config.EmitReplicationLifecycleEvents()
+	if emitLifecycle {
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
+	}
+
+	// inspectedMS is the mutable-state snapshot examined during verification, captured for the
+	// best-effort "applied" lifecycle event emitted below.
+	var inspectedMS *persistencespb.WorkflowMutableState
+	defer func() {
+		if emitLifecycle {
+			e.emitReplicationVerifyApplied(inspectedMS, retErr)
+		}
+	}()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
@@ -107,6 +122,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	defer cancel()
 
 	ms, err := e.getMutableState(ctx, e.RunID)
+	inspectedMS = ms
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:

@@ -31,7 +31,7 @@ func TestSentinelIdleTask_Validate_Valid(t *testing.T) {
 		ScheduledTime: sentinel.Info.CreateTime.AsTime().Add(scheduler.SentinelIdleTime),
 	}
 
-	isValid, err := executor.Validate(ctx, sentinel, taskAttrs, task)
+	isValid, err := executor.Validate(ctx, sentinel, chasm.TaskInvocation{TaskAttributes: taskAttrs}, task)
 	require.NoError(t, err)
 	require.True(t, isValid)
 }
@@ -46,7 +46,7 @@ func TestSentinelIdleTask_Validate_InvalidAfterClosed(t *testing.T) {
 		ScheduledTime: sentinel.Info.CreateTime.AsTime().Add(scheduler.SentinelIdleTime),
 	}
 
-	isValid, err := executor.Validate(ctx, sentinel, taskAttrs, task)
+	isValid, err := executor.Validate(ctx, sentinel, chasm.TaskInvocation{TaskAttributes: taskAttrs}, task)
 	require.NoError(t, err)
 	require.False(t, isValid)
 }
@@ -62,7 +62,7 @@ func TestSentinelIdleTask_Validate_ExpirationShiftedLater(t *testing.T) {
 		ScheduledTime: sentinel.Info.CreateTime.AsTime(),
 	}
 
-	isValid, err := executor.Validate(ctx, sentinel, taskAttrs, task)
+	isValid, err := executor.Validate(ctx, sentinel, chasm.TaskInvocation{TaskAttributes: taskAttrs}, task)
 	require.NoError(t, err)
 	require.False(t, isValid)
 }

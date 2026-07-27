@@ -1,4 +1,4 @@
-package history
+package workercommands
 
 import (
 	"context"
@@ -26,18 +26,18 @@ import (
 )
 
 const (
-	workerCommandsTaskTimeout    = time.Second * 10 * debug.TimeoutMultiplier
-	workerCommandsMaxTaskAttempt = 3
+	DispatchTimeout = time.Second * 10 * debug.TimeoutMultiplier
+	MaxTaskAttempts = 3
 
 	// Nexus service and operation names for worker commands.
 	// TODO: Replace with workerservicepb.WorkerService.ServiceName and
 	// workerservicepb.WorkerService.ExecuteCommands.Name() once the Nexus service
 	// descriptor is published in go.temporal.io/api.
-	workerCommandsServiceName   = "temporal.api.nexusservices.workerservice.v1.WorkerService"
-	workerCommandsOperationName = "ExecuteCommands"
+	ServiceName   = "temporal.api.nexusservices.workerservice.v1.WorkerService"
+	OperationName = "ExecuteCommands"
 )
 
-// workerCommandsTaskDispatcher dispatches worker commands to workers via Nexus.
+// Dispatcher dispatches worker commands to workers via Nexus.
 //
 // Failure scenarios:
 //   - No worker polling: matching returns RequestTimeout -> *nexus.HandlerError{Type: UpstreamTimeout}.
@@ -51,23 +51,23 @@ const (
 //     *temporal.CanceledError. Permanent — the worker contract requires success for all
 //     defined commands, so this indicates a bug or version incompatibility.
 //
-// Retryable errors are capped at workerCommandsMaxTaskAttempt attempts (in-memory). These
-// commands are best-effort — the activity will eventually time out anyway — so excessive
-// retries waste resources. The counter resets on shard movement, which is acceptable.
-type workerCommandsTaskDispatcher struct {
+// Callers are responsible for enforcing retry limits (see MaxTaskAttempts).
+// These commands are best-effort — the activity will eventually time out anyway —
+// so excessive retries waste resources.
+type Dispatcher struct {
 	matchingClient resource.MatchingClient
 	config         *configs.Config
 	metricsHandler metrics.Handler
 	logger         log.Logger
 }
 
-func newWorkerCommandsTaskDispatcher(
+func NewDispatcher(
 	matchingClient resource.MatchingClient,
 	config *configs.Config,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) *workerCommandsTaskDispatcher {
-	return &workerCommandsTaskDispatcher{
+) *Dispatcher {
+	return &Dispatcher{
 		matchingClient: matchingClient,
 		config:         config,
 		metricsHandler: metricsHandler,
@@ -75,23 +75,11 @@ func newWorkerCommandsTaskDispatcher(
 	}
 }
 
-func (d *workerCommandsTaskDispatcher) execute(
+func (d *Dispatcher) Execute(
 	ctx context.Context,
 	task *tasks.WorkerCommandsTask,
-	attempt int,
 	namespaceName string,
 ) error {
-	if attempt > workerCommandsMaxTaskAttempt {
-		d.logger.Info("Worker commands task exceeded max attempts, dropping",
-			tag.WorkflowID(task.WorkflowID),
-			tag.WorkflowRunID(task.RunID),
-			tag.NewStringTag("control_queue", task.Destination),
-			tag.Attempt(int32(attempt)),
-		)
-		d.recordCommandMetrics(task.Commands, namespaceName, "max_attempts_exceeded")
-		return nil
-	}
-
 	if !d.config.EnableCancelActivityWorkerCommand(namespaceName) {
 		d.logger.Info("Worker commands feature disabled, dropping task",
 			tag.WorkflowNamespace(namespaceName),
@@ -107,13 +95,13 @@ func (d *workerCommandsTaskDispatcher) execute(
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, workerCommandsTaskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, DispatchTimeout)
 	defer cancel()
 
 	return d.dispatchToWorker(ctx, task, namespaceName)
 }
 
-func (d *workerCommandsTaskDispatcher) dispatchToWorker(
+func (d *Dispatcher) dispatchToWorker(
 	ctx context.Context,
 	task *tasks.WorkerCommandsTask,
 	namespaceName string,
@@ -141,8 +129,8 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 		Header: map[string]string{},
 		Variant: &nexuspb.Request_StartOperation{
 			StartOperation: &nexuspb.StartOperationRequest{
-				Service:   workerCommandsServiceName,
-				Operation: workerCommandsOperationName,
+				Service:   ServiceName,
+				Operation: OperationName,
 				Payload:   requestPayload,
 			},
 		},
@@ -170,7 +158,7 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 	return d.handleError(nexusErr, task, namespaceName)
 }
 
-func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask, namespaceName string) error {
+func (d *Dispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask, namespaceName string) error {
 	var handlerErr *nexus.HandlerError
 	if errors.As(nexusErr, &handlerErr) {
 		// Handler-level error (transport, timeout, internal). These are constructed by
@@ -211,18 +199,23 @@ func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.W
 	return nil
 }
 
-func (d *workerCommandsTaskDispatcher) recordCommandMetrics(commands []*workerpb.WorkerCommand, namespaceName string, outcome string) {
+func (d *Dispatcher) recordCommandMetrics(commands []*workerpb.WorkerCommand, namespaceName string, outcome string) {
+	RecordCommandMetrics(commands, d.metricsHandler, namespaceName, outcome)
+}
+
+// RecordCommandMetrics records per-command metrics with the given outcome.
+func RecordCommandMetrics(commands []*workerpb.WorkerCommand, metricsHandler metrics.Handler, namespaceName string, outcome string) {
 	for _, cmd := range commands {
-		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(
+		metrics.WorkerCommandsSent.With(metricsHandler).Record(
 			1,
 			metrics.NamespaceTag(namespaceName),
 			metrics.OutcomeTag(outcome),
-			metrics.StringTag("command_type", workerCommandTypeName(cmd)),
+			metrics.StringTag("command_type", CommandTypeName(cmd)),
 		)
 	}
 }
 
-func workerCommandTypeName(cmd *workerpb.WorkerCommand) string {
+func CommandTypeName(cmd *workerpb.WorkerCommand) string {
 	switch cmd.GetType().(type) {
 	case *workerpb.WorkerCommand_CancelActivity:
 		return "cancel_activity"

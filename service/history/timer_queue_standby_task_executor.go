@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -107,6 +108,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	case *tasks.ChasmTaskPure:
 		err = t.executeChasmPureTimerTask(ctx, task)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
@@ -169,12 +171,13 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		isTaskInTree, _, err := validateChasmSideEffectTask(ctx, ms, task)
+		isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
 		if err != nil {
 			return nil, err
 		}
-		if !isTaskInTree {
-			// Replication has removed the logical task — drop the physical task.
+		if !isTaskInTree || !isValid {
+			// Replication has removed the logical task, or the component reports it
+			// invalid — drop the physical task.
 			return nil, nil
 		}
 
@@ -245,7 +248,9 @@ func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 		ffi := tsi.GetFastForwardInfo()
 
 		// the fast-forward this timer task is associated with is still valid and has not been reached so keep waiting
-		if ffi != nil && ffi.GetSourceEventId() == timerTask.EventID && !ffi.GetHasReached() {
+		if ffi != nil &&
+			transitionhistory.Compare(ffi.GetLastUpdateVersionedTransition(), timerTask.VersionedTransition) == 0 &&
+			!ffi.GetHasReached() {
 			return &struct{}{}, nil
 		}
 		return nil, nil

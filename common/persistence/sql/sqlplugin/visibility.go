@@ -39,7 +39,7 @@ type (
 		CloseTime            *time.Time
 		HistoryLength        *int64
 		HistorySizeBytes     *int64
-		ExecutionDuration    *time.Duration
+		ExecutionDuration    *int64
 		StateTransitionCount *int64
 		Memo                 []byte
 		Encoding             string

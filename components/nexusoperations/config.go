@@ -102,7 +102,8 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 	},
 	[]string{
 		"request-timeout",
-		interceptor.DCRedirectionApiHeaderName,
+		interceptor.DCRedirectionAPIHeaderName,
+		interceptor.DCRedirectionSourceCellHeaderName,
 		interceptor.DCRedirectionContextHeaderName,
 		headers.CallerNameHeaderName,
 		headers.CallerTypeHeaderName,

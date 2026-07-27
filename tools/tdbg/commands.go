@@ -936,6 +936,59 @@ func parseMigrateTarget(c *cli.Context) (adminservice.MigrateScheduleRequest_Sch
 	}
 }
 
+// v1ScheduleVisibilityQuery returns the visibility query selecting running V1 (workflow-backed)
+// schedules.
+func v1ScheduleVisibilityQuery() string {
+	return fmt.Sprintf("TemporalNamespaceDivision = '%s' AND ExecutionStatus = 'Running'", scheduler.NamespaceDivision)
+}
+
+// v2ScheduleVisibilityQuery returns the visibility query selecting running V2 (CHASM) schedules.
+// The explicit TemporalNamespaceDivision filter is required, otherwise the visibility query
+// converter appends "TemporalNamespaceDivision IS NULL" and excludes CHASM executions.
+func v2ScheduleVisibilityQuery() string {
+	return fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
+}
+
+// AdminScheduleStatus reports how many schedules in --namespace are currently V1
+// (workflow-backed) vs V2 (CHASM), using the same default visibility queries as
+// `schedule migrate --from-visibility`.
+func AdminScheduleStatus(c *cli.Context, clientFactory ClientFactory) error {
+	ns, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	wfClient := clientFactory.WorkflowClient(c)
+
+	v1Count, err := countScheduleVisibility(c, wfClient, ns, v1ScheduleVisibilityQuery())
+	if err != nil {
+		return fmt.Errorf("unable to count V1 schedules: %w", err)
+	}
+	v2Count, err := countScheduleVisibility(c, wfClient, ns, v2ScheduleVisibilityQuery())
+	if err != nil {
+		return fmt.Errorf("unable to count V2 schedules: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(c.App.Writer, "Namespace: %s\n", ns)
+	_, _ = fmt.Fprintf(c.App.Writer, "V1 (workflow-backed): %d\n", v1Count)
+	_, _ = fmt.Fprintf(c.App.Writer, "V2 (CHASM):           %d\n", v2Count)
+	_, _ = fmt.Fprintf(c.App.Writer, "Total:                %d\n", v1Count+v2Count)
+	return nil
+}
+
+func countScheduleVisibility(c *cli.Context, wfClient workflowservice.WorkflowServiceClient, ns, query string) (int64, error) {
+	ctx, cancel := newContext(c)
+	defer cancel()
+	resp, err := wfClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: ns,
+		Query:     query,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetCount(), nil
+}
+
 // migrateSingleSchedule migrates one schedule and performs the migration immediately.
 func migrateSingleSchedule(
 	c *cli.Context,
@@ -981,12 +1034,10 @@ func migrateSchedulesFromVisibility(
 	if query == "" {
 		if target == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
 			// Forward migration V1 -> V2: all running V1 (workflow-backed) schedules.
-			query = fmt.Sprintf("TemporalNamespaceDivision = '%s' AND ExecutionStatus = 'Running'", scheduler.NamespaceDivision)
+			query = v1ScheduleVisibilityQuery()
 		} else {
-			// Rollback V2 -> V1: all running V2 (CHASM) schedules. The explicit
-			// TemporalNamespaceDivision filter is required, otherwise the visibility query
-			// converter appends "TemporalNamespaceDivision IS NULL" and excludes CHASM executions.
-			query = fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
+			// Rollback V2 -> V1: all running V2 (CHASM) schedules.
+			query = v2ScheduleVisibilityQuery()
 		}
 	}
 

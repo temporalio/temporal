@@ -73,6 +73,23 @@ func (c *clientImpl) CancelOutstandingWorkerPolls(
 	return client.CancelOutstandingWorkerPolls(ctx, request, opts...)
 }
 
+func (c *clientImpl) CancelOutstandingWorkerPollsPartition(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+
+	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.CancelOutstandingWorkerPollsPartition(ctx, request, opts...)
+}
+
 func (c *clientImpl) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,

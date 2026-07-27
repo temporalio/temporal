@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -80,6 +81,10 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 		return nil
 	}
 	e.MarkExecutionStart()
+
+	if e.Config.EmitReplicationLifecycleEvents() {
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskSyncWorkflowState, int32(e.Attempt()))
+	}
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(

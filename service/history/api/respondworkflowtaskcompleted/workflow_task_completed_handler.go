@@ -350,7 +350,11 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 					return nil, chasmErr
 				}
 				err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
-				handledByCHASM = !errors.Is(err, chasmworkflow.ErrCommandNotSupported)
+				// Fall back to the HSM handler either when the command type is not supported by CHASM (disabled
+				// feature flag) or when the targeted entity is not owned by the CHASM tree (e.g. an operation
+				// scheduled in HSM before the flag was flipped on).
+				handledByCHASM = !errors.Is(err, chasmworkflow.ErrCommandNotSupported) &&
+					!errors.Is(err, chasmworkflow.ErrCommandTargetNotFound)
 			}
 		}
 		if !handledByCHASM {
@@ -589,6 +593,11 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	buildId := handler.mutableState.GetAssignedBuildId()
 	stamp = &commonpb.WorkerVersionStamp{UseVersioning: buildId != "", BuildId: buildId}
 
+	shardClock, err := handler.shard.NewVectorClock()
+	if err != nil {
+		return nil, err
+	}
+
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
 		ai.GetScheduledEventId(),
@@ -598,6 +607,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		nil,
 		nil,
 		handler.workerControlTaskQueue, // Eager: activity runs on the same worker that completed the WFT.
+		shardClock,
 	); err != nil {
 		return nil, err
 	}
@@ -605,11 +615,6 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	runID := handler.mutableState.GetExecutionState().RunId
-
-	shardClock, err := handler.shard.NewVectorClock()
-	if err != nil {
-		return nil, err
-	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
 		namespaceID.String(),
@@ -623,6 +628,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		ai.Version,
 		ai.StartVersion,
 		nil,
+		0,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -724,6 +730,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 					ai.Version,
 					ai.StartVersion,
 					nil,
+					0,
 				))
 				if err != nil {
 					return nil, err
@@ -1184,6 +1191,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
+	}
+
+	// Structural validation for VersioningOverride present on Start Child Workflow
+	if err := worker_versioning.ValidateVersioningOverrideStructure(attr.GetVersioningOverride()); err != nil {
+		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
 	if handler.mutableState.GetAssignedBuildId() == "" {

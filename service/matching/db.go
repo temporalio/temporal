@@ -3,12 +3,14 @@ package matching
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
 	"sync"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -580,7 +582,7 @@ func (db *taskQueueDB) CreateTasks(
 		} else {
 			db.lastChange = time.Now()
 		}
-	} else if _, ok := err.(*persistence.ConditionFailedError); ok {
+	} else if writeDefinitelyFailed(err) {
 		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
 		// In those cases we keep the count incremented, hence it may be an overestimate.
 		for i, update := range updates {
@@ -656,7 +658,7 @@ func (db *taskQueueDB) CreateFairTasks(
 		} else {
 			db.lastChange = time.Now()
 		}
-	} else if _, ok := err.(*persistence.ConditionFailedError); ok {
+	} else if writeDefinitelyFailed(err) {
 		// Tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
 		// In those cases we keep the count incremented, hence it may be an overestimate.
 		// Don't bother restoring MaxReadLevel, it's okay if that's too high.
@@ -665,6 +667,28 @@ func (db *taskQueueDB) CreateFairTasks(
 		}
 	}
 	return newTasks, err
+}
+
+// writeDefinitelyFailed returns whether an error from a CreateTasks call indicates the tasks
+// were definitely not persisted, so that we can safely un-increment ApproximateBacklogCount.
+// We have to be conservative: for most errors (e.g. Unavailable) the write may or may not have
+// reached the database, so we leave the count incremented and accept a possible overestimate.
+// Only errors that reject the write before it reaches the database qualify:
+//   - ConditionFailedError: the range ID LWT failed, so the batch was rejected.
+//   - ResourceExhausted with a persistence rate-limit or concurrent-limit cause: dropped by
+//     the persistence rate limiter (see persistence.ErrPersistence*LimitExceeded).
+func writeDefinitelyFailed(err error) bool {
+	if _, ok := err.(*persistence.ConditionFailedError); ok {
+		return true
+	}
+	if re, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		switch re.Cause { // nolint:exhaustive
+		case enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT:
+			return true
+		}
+	}
+	return false
 }
 
 // GetTasks returns a batch of tasks between the given range

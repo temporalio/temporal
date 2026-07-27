@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -38,7 +37,6 @@ import (
 	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -50,10 +48,10 @@ type (
 	dlqTestEnv struct {
 		*testcore.TestEnv
 
-		dlq              persistence.HistoryTaskQueueManager
-		writer           bytes.Buffer
-		sdkClientFactory sdk.ClientFactory
-		deleteBlockCh    chan any
+		dlq             persistence.HistoryTaskQueueManager
+		writer          bytes.Buffer
+		systemSDKClient sdkclient.Client
+		deleteBlockCh   chan any
 
 		failingWorkflowIDPrefix atomic.Pointer[string]
 	}
@@ -93,15 +91,21 @@ func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {
 				return serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error"))
 			},
 		}),
-		testcore.WithFxOptions(primitives.HistoryService,
-			fx.Populate(&w.dlq),
-		),
-		testcore.WithFxOptions(primitives.FrontendService,
-			fx.Populate(&w.sdkClientFactory),
-		),
 	}
 	w.TestEnv = testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 	w.SdkWorker().RegisterWorkflow(s.myWorkflow)
+
+	var err error
+	w.dlq, err = w.GetTestCluster().TestBase().Factory.NewHistoryTaskQueueManager()
+	s.NoError(err)
+	s.T().Cleanup(w.dlq.Close)
+
+	w.systemSDKClient, err = sdkclient.Dial(sdkclient.Options{
+		HostPort:  w.FrontendGRPCAddress(),
+		Namespace: primitives.SystemLocalNamespace,
+	})
+	s.NoError(err)
+	s.T().Cleanup(w.systemSDKClient.Close)
 
 	w.deleteBlockCh = make(chan any)
 	close(w.deleteBlockCh)
@@ -460,8 +464,7 @@ func (s *DLQSuite) purgeMessages(env *dlqTestEnv, maxMessageIDToDelete int64) st
 	var token adminservice.DLQJobToken
 	s.NoError(proto.Unmarshal(response.GetJobToken(), &token))
 
-	systemSDKClient := env.sdkClientFactory.GetSystemClient()
-	run := systemSDKClient.GetWorkflow(s.Context(), token.WorkflowId, token.RunId)
+	run := env.systemSDKClient.GetWorkflow(s.Context(), token.WorkflowId, token.RunId)
 	s.NoError(run.Get(s.Context(), nil))
 	return tokenString
 }
@@ -473,8 +476,7 @@ func (s *DLQSuite) mergeMessages(env *dlqTestEnv, maxMessageID int64) string {
 	s.NoError(err)
 	var token adminservice.DLQJobToken
 	s.NoError(token.Unmarshal(tokenBytes))
-	systemSDKClient := env.sdkClientFactory.GetSystemClient()
-	run := systemSDKClient.GetWorkflow(s.Context(), token.WorkflowId, token.RunId)
+	run := env.systemSDKClient.GetWorkflow(s.Context(), token.WorkflowId, token.RunId)
 	s.NoError(run.Get(s.Context(), nil))
 	return tokenString
 }

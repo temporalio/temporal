@@ -1395,9 +1395,9 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 	historyLength *int64,
 ) sqlplugin.VisibilityRow {
 	s.version++
-	var executionDuration *time.Duration
+	var executionDuration *int64
 	if closeTime != nil {
-		executionDuration = new(closeTime.Sub(executionTime))
+		executionDuration = new(closeTime.Sub(executionTime).Nanoseconds())
 	}
 	return sqlplugin.VisibilityRow{
 		NamespaceID:       namespaceID.String(),

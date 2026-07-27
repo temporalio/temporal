@@ -255,6 +255,36 @@ message CancelOutstandingWorkerPollsResponse {
   int32 cancelled_count = 1;
 }
 
+// CancelOutstandingWorkerPollsPartitionRequest cancels outstanding polls for the given workers
+// on the specified partitions. Sent by the matching root to each matching host during
+// fan-out.
+message CancelOutstandingWorkerPollsPartitionRequest {
+  message WorkerEntry {
+    // SDK-generated unique identifier for a worker instance. All pollers from the
+    // same worker share this key.
+    string worker_instance_key = 1;
+
+    // Worker identity string (e.g., "pid@hostname"). Poller history predates
+    // worker_instance_key and is keyed by identity, so we need both.
+    string worker_identity = 2;
+  }
+
+  string namespace_id = 1;
+
+  // Used for RPC routing only. Set to any partition on the target host.
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+
+  // Partitions to process on this host.
+  repeated temporal.server.api.taskqueue.v1.TaskQueuePartition partitions = 3;
+
+  // Workers to cancel polls for.
+  repeated WorkerEntry workers = 4;
+}
+
+message CancelOutstandingWorkerPollsPartitionResponse {
+  int32 cancelled_count = 1;
+}
+
 message DescribeTaskQueueRequest {
   string namespace_id = 1;
   temporal.api.workflowservice.v1.DescribeTaskQueueRequest desc_request = 2;

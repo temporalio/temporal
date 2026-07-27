@@ -36,8 +36,9 @@ func scalingGroupUpdatesToWCI(updates map[string]*computepb.ComputeConfigScaling
 		spec := wciiface.ScalingGroupSpec{
 			TaskTypes: sg.GetTaskQueueTypes(),
 			Compute: wciiface.ComputeProviderSpec{
-				ProviderType: wciiface.ComputeProviderType(sg.GetProvider().GetType()),
-				Config:       sg.GetProvider().GetDetails(),
+				ProviderType:  wciiface.ComputeProviderType(sg.GetProvider().GetType()),
+				Config:        sg.GetProvider().GetDetails(),
+				NexusEndpoint: sg.GetProvider().GetNexusEndpoint(),
 			},
 		}
 		if scaler := sg.GetScaler(); scaler != nil {

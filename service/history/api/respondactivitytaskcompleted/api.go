@@ -99,7 +99,8 @@ func Invoke(
 					// TODO (shahab): do we need to do anything with wf redirect in this case or any
 					// other case where an activity starts?
 					nil,
-					"", // workerControlTaskQueue not available for force complete
+					"",  // workerControlTaskQueue not available for force complete
+					nil, // startedClock not needed for force complete
 				)
 				if err != nil {
 					return nil, err

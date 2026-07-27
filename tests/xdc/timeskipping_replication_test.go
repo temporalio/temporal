@@ -273,7 +273,7 @@ func (s *timeSkippingReplicationSuite) TestFastForwardDisablePropagates() {
 //     fires, flipping Enabled=false and setting HasReached=true.
 //  3. State replicates to standby. Standby's own TimeSkippingTimerTask was generated
 //     by the refresh; when it fires, executeTimeSkippingTimerTask runs and observes
-//     SourceEventId-match with HasReached=true → ack branch.
+//     Stamp-match with HasReached=true → ack branch.
 //
 // Convergence on both clusters proves the standby's executor path is wired up,
 // returns no error, and doesn't hang or crash.

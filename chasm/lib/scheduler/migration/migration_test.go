@@ -12,6 +12,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -140,9 +141,84 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	require.Equal(t, []byte("result"), migrationState.LastCompletionResult.Success.Data)
 	require.Equal(t, "last failure", migrationState.LastCompletionResult.Failure.Message)
 
-	// Search attributes and memo
+	// Search attributes and memo: user-defined SAs are preserved as-is.
 	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
 	require.Equal(t, memo.GetFields(), migrationState.Memo)
+}
+
+func TestLegacyToCreateFromMigrationStateRequest_StripsSystemSearchAttributes(t *testing.T) {
+	// V1 scheduler workflows carry TemporalNamespaceDivision ('TemporalScheduler')
+	// and TemporalSchedulePaused in their search attributes. Both are system SAs
+	// that the CHASM framework manages independently, so they must not be stored in
+	// the CHASM entity's custom SA map. Storing them there causes a spurious
+	// warn-level log when the custom SA mapper finds no per-namespace mapping for them.
+	userSA := &commonpb.Payload{Data: []byte(`"my-value"`)}
+
+	tests := []struct {
+		name        string
+		searchAttrs *commonpb.SearchAttributes
+		wantKeys    []string
+		absentKeys  []string
+	}{
+		{
+			name:        "nil search attributes",
+			searchAttrs: nil,
+		},
+		{
+			name:        "empty IndexedFields",
+			searchAttrs: &commonpb.SearchAttributes{},
+		},
+		{
+			name: "only system SAs — all stripped",
+			searchAttrs: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					sadefs.TemporalNamespaceDivision: {Data: []byte(`"TemporalScheduler"`)},
+					sadefs.TemporalSchedulePaused:    {Data: []byte(`false`)},
+				},
+			},
+			absentKeys: []string{sadefs.TemporalNamespaceDivision, sadefs.TemporalSchedulePaused},
+		},
+		{
+			name: "user SA preserved, system SAs stripped",
+			searchAttrs: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					sadefs.TemporalNamespaceDivision: {Data: []byte(`"TemporalScheduler"`)},
+					sadefs.TemporalSchedulePaused:    {Data: []byte(`false`)},
+					"MyCustomAttr":                   userSA,
+				},
+			},
+			wantKeys:   []string{"MyCustomAttr"},
+			absentKeys: []string{sadefs.TemporalNamespaceDivision, sadefs.TemporalSchedulePaused},
+		},
+		{
+			name: "only user SAs — all preserved",
+			searchAttrs: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{"MyCustomAttr": userSA},
+			},
+			wantKeys: []string{"MyCustomAttr"},
+		},
+	}
+
+	now := time.Now().UTC()
+	state := &schedulespb.InternalState{
+		Namespace:   "test-ns",
+		NamespaceId: "test-ns-id",
+		ScheduleId:  "test-sched-id",
+	}
+	info := &schedulepb.ScheduleInfo{}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, tc.searchAttrs, nil, now)
+			got := req.State.SearchAttributes
+			for _, k := range tc.wantKeys {
+				require.Contains(t, got, k)
+			}
+			for _, k := range tc.absentKeys {
+				require.NotContains(t, got, k)
+			}
+		})
+	}
 }
 
 func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {

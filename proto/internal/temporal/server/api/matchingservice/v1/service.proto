@@ -87,6 +87,11 @@ service MatchingService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on the specified partitions.
+  rpc CancelOutstandingWorkerPollsPartition(CancelOutstandingWorkerPollsPartitionRequest) returns (CancelOutstandingWorkerPollsPartitionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   // DescribeTaskQueue returns information about the target task queue, right now this API returns the
   // pollers which polled this task queue in last few minutes.
   rpc DescribeTaskQueue(DescribeTaskQueueRequest) returns (DescribeTaskQueueResponse) {

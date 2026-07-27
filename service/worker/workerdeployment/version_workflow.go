@@ -345,6 +345,12 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		}
 	}
 
+	// When creating a compute provider and version together, there is a race condition between the two coming up. Making sure to have pulled
+	// the latest state from the compute provider if this happens to be the slower one.
+	if err := d.syncVersionDataToComputeStatus(ctx); err != nil {
+		return err
+	}
+
 	// Listen to signals in a different goroutine to make business logic clearer
 	workflow.Go(ctx, d.listenToSignals)
 
@@ -1242,6 +1248,30 @@ func (d *VersionWorkflowRunner) syncVersionStatusAfterDrainageStatusChange(ctx w
 	}
 
 	return d.syncVersionDataToTaskQueues(ctx, versionData)
+}
+
+// syncVersionDataToComputeStatus is a helper that syncs the compute status from WCI to the worker deployment version
+func (d *VersionWorkflowRunner) syncVersionDataToComputeStatus(ctx workflow.Context) error {
+	if workflow.GetVersion(ctx, "sync-compute-validation-status", workflow.DefaultVersion, 0) == workflow.DefaultVersion {
+		return nil
+	}
+
+	state := d.GetVersionState()
+
+	if state.ComputeStatus == nil && state.ComputeConfig != nil {
+		workflow.Go(ctx, func(ctx workflow.Context) {
+			logger := workflow.GetLogger(ctx)
+
+			var result deploymentpb.ComputeStatus
+			resp := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, defaultActivityOptions), d.a.DescribeWorkerControllerInstanceStatus, state.GetVersion())
+			if err := resp.Get(ctx, &result); err != nil {
+				logger.Error("failed to sync compute status", "error", err)
+			} else if result.ProviderValidation != nil {
+				state.ComputeStatus = &result
+			}
+		})
+	}
+	return nil
 }
 
 // syncVersionDataToTaskQueues is a helper that syncs the provided version data to all task queues.

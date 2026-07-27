@@ -247,6 +247,8 @@ func GetOrPollWorkflowMutableState(
 				}
 			case <-longPollCtx.Done():
 				return response, nil
+			case <-shardContext.GetLifecycleContext().Done():
+				return response, nil
 			case <-ctx.Done():
 				// Fallback for when ctx.Deadline() returns false but ctx is still cancelled.
 				// This can happen when gRPC timeout header isn't propagated (e.g., stripped
