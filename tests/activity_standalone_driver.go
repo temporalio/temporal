@@ -230,6 +230,11 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: uuid.NewString(),
 		})
 		return err
+	case model.ResetType:
+		_, err := fc.ResetActivityExecution(a.d.ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused,
+		})
+		return err
 	default:
 		return fmt.Errorf("saaDriver: unhandled event type %v", e.Type)
 	}
