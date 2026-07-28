@@ -24,6 +24,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -136,6 +137,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	err := workflow.RegisterStateMachine(reg)
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
+	err = s.mockShard.ChasmRegistry().Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
+	s.NoError(err)
 
 	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
@@ -1183,7 +1186,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), childWorkflowID, uuid.NewString(), childWorkflowType, nil)
+	childRunID := uuid.NewString()
+	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
 	mutableState.FlushBufferedEvents()
 
 	// clear the cache
@@ -1214,10 +1218,30 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	s.ErrorAs(resp.ExecutionErr, &resourceExhaustedErr)
 
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: childWorkflowID,
+		RunId:      childRunID,
+	}
+	expectedDescribeChildMutableStateRequest := protomock.Eq(&adminservice.DescribeMutableStateRequest{
+		Namespace:       tests.ChildNamespace.String(),
+		Execution:       childExecution,
+		Archetype:       chasm.WorkflowArchetype,
+		SkipForceReload: true,
+	})
+	s.clientBean.EXPECT().GetRemoteAdminClient(
+		tests.GlobalChildNamespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: childWorkflowID}),
+	).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.WorkflowNotReady{})
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), expectedDescribeChildMutableStateRequest).Return(nil, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.WorkflowNotReady{})
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), expectedDescribeChildMutableStateRequest).Return(nil, &serviceerror.NotFound{})
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
 
 	randomErr := errors.New("some random error")
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, randomErr)
