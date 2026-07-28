@@ -256,7 +256,7 @@ func (prev *junitReport) missingRerunFailures(curr *junitReport) []string {
 func (j *junitReport) collectTestCaseFailures() []string {
 	var failures []string
 	for _, suite := range j.Suites {
-		if suite.Failures == 0 || preservesFailureType(suite.Name) {
+		if suite.Failures == 0 {
 			continue
 		}
 		for _, tc := range suite.Testcases {
