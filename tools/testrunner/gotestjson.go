@@ -346,13 +346,7 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 			}
 			// Incomplete tests from a runner abort have run/pause output but no terminal result.
 			if test.Result == gtr.Unknown {
-				hasDescendant := slices.ContainsFunc(tests, func(other gtr.Test) bool {
-					return strings.HasPrefix(other.Name, test.Name+"/")
-				})
-				// Alerts distinguish an interrupted parent from parser-only parent nodes.
-				if !hasDescendant ||
-					packageHasAlerts ||
-					len(parseAlerts(strings.Join(test.Output, "\n"))) > 0 {
+				if unknownTestIsIncomplete(test, tests, packageHasAlerts) {
 					incompleteTests = append(incompleteTests, test)
 				}
 				continue
@@ -378,6 +372,16 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		)
 	}
 	return junitReport, nil
+}
+
+func unknownTestIsIncomplete(test gtr.Test, tests []gtr.Test, packageHasAlerts bool) bool {
+	hasDescendant := slices.ContainsFunc(tests, func(other gtr.Test) bool {
+		return strings.HasPrefix(other.Name, test.Name+"/")
+	})
+	// Alerts distinguish an interrupted parent from parser-only parent nodes.
+	return !hasDescendant ||
+		packageHasAlerts ||
+		len(parseAlerts(strings.Join(test.Output, "\n"))) > 0
 }
 
 func (o *goTestJSONOutput) packageNameForTests(tests []gtr.Test) string {
