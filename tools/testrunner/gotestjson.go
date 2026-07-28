@@ -114,7 +114,9 @@ func (o *goTestJSONOutput) writeEventOutput(event goTestEvent) {
 func (o *goTestJSONOutput) recordEvent(event goTestEvent) {
 	o.recordTime(event.Time)
 	switch event.Action {
-	case "bench", "fail", "pass", "skip":
+	case "bench":
+		o.flushTestOutput(goTestID{packageName: event.Package, testName: event.Test})
+	case "fail", "pass", "skip":
 		o.recordTerminalEvent(event)
 	case "start":
 		if event.Test == "" && event.Package != "" {

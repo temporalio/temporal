@@ -38,6 +38,26 @@ DONE 1 tests, 1 failure in 2.000s
 	require.Equal(t, expected, stdout.String())
 }
 
+func TestGoTestJSONOutput_BenchmarkOutput(t *testing.T) {
+	input := `{"Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"BenchmarkExample"}
+{"Action":"output","Package":"example.com/tests","Test":"BenchmarkExample","Output":"benchmark log\n"}
+{"Action":"bench","Package":"example.com/tests","Test":"BenchmarkExample","Output":"BenchmarkExample-12  1  100 ns/op\n"}
+{"Action":"pass","Package":"example.com/tests","Elapsed":0.1}
+`
+	expected := `benchmark log
+BenchmarkExample-12  1  100 ns/op
+
+DONE 0 tests in 0.100s
+`
+
+	output := newGoTestJSONOutput()
+	output.stdout = &bytes.Buffer{}
+	_, err := output.Write([]byte(input))
+	require.NoError(t, err)
+	require.Equal(t, expected, output.String())
+}
+
 func TestGoTestJSONOutput_AbortedPackage(t *testing.T) {
 	input := `{"Time":"2026-07-28T00:00:00Z","Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
