@@ -280,7 +280,7 @@ func (o *goTestJSONOutput) writeIncompleteTestAlerts(test goTestID, output *stri
 	if len(alerts) == 0 {
 		return
 	}
-	fmt.Fprintf(o.stdout, "=== RUN   %s\n", test.testName)
+	_, _ = fmt.Fprintf(o.stdout, "=== RUN   %s\n", test.testName)
 	for _, alert := range alerts {
 		_, _ = fmt.Fprintln(o.stdout, strings.TrimRight(alert.Details, "\n"))
 	}
