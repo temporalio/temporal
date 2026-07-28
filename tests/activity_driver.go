@@ -207,12 +207,12 @@ func isDispatchDelayEvent(et model.EventType) bool {
 }
 
 func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Failure {
-	info := &failurepb.ApplicationFailureInfo{Type: "drive", NonRetryable: !retryable}
+	info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !retryable}
 	if nextRetryDelay > 0 {
 		info.NextRetryDelay = durationpb.New(nextRetryDelay)
 	}
 	return &failurepb.Failure{
-		Message:     "drive",
+		Message:     "test failure",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: info},
 	}
 }

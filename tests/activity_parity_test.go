@@ -91,18 +91,6 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 // can expose the real failure.
 func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 	env := newActivityParityEnv(s.T())
-	type causeProjection struct {
-		Type    string
-		Message string
-	}
-	type terminalProjection struct {
-		Status enumspb.ActivityExecutionStatus
-		Cause  causeProjection
-	}
-	expected := terminalProjection{
-		Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-		Cause:  causeProjection{Type: "drive", Message: "drive"},
-	}
 
 	assertCausePreserved := func(
 		t *testing.T,
@@ -114,25 +102,18 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 			activity := newWFADriver(t, env, cfg).driveTrace(t, trace)
 			timeout, ok := errors.AsType[*temporal.TimeoutError](activity.run.Get(activity.d.ctx, nil))
 			require.True(t, ok)
-			application, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap())
+			appErr, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap())
 			require.True(t, ok)
-			actual := terminalProjection{
-				Status: activity.terminalStatus(t),
-				Cause:  causeProjection{Type: application.Type(), Message: application.Message()},
-			}
-			require.Equal(t, expected, actual, message)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalStatus(t), message)
+			require.Equal(t, "TestFailure", appErr.Type(), message)
+			require.Equal(t, "test failure", appErr.Message(), message)
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
 			activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
 			cause := activity.describe(t).GetOutcome().GetFailure().GetCause()
-			actual := terminalProjection{
-				Status: activity.terminalStatus(t),
-				Cause: causeProjection{
-					Type:    cause.GetApplicationFailureInfo().GetType(),
-					Message: cause.GetMessage(),
-				},
-			}
-			require.Equal(t, expected, actual, message)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalStatus(t), message)
+			require.Equal(t, "TestFailure", cause.GetApplicationFailureInfo().GetType(), message)
+			require.Equal(t, "test failure", cause.GetMessage(), message)
 		})
 	}
 
