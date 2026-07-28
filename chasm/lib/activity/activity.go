@@ -1846,6 +1846,7 @@ func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.Callb
 				LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
 				LastAttemptFailure:      cb.LastAttemptFailure,
 				NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
+				Outcome:                 cb.Outcome(ctx),
 			},
 		})
 	}

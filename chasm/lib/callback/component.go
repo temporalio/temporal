@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
@@ -14,6 +15,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -148,6 +150,32 @@ func (c *Callback) saveResult(
 		return nil, queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("unrecognized callback result %v", input.result),
 		)
+	}
+}
+
+// Outcome returns the callback's outcome, or nil if the Callback isn't in a terminal state.
+func (c *Callback) Outcome(ctx chasm.Context) *callbackpb.CallbackOutcome {
+	switch c.Status {
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return &callbackpb.CallbackOutcome{
+			Value: &callbackpb.CallbackOutcome_Success{
+				Success: &emptypb.Empty{},
+			},
+		}
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		failure, ok := c.TerminalFailure.TryGet(ctx)
+		if !ok {
+			// TerminalFailure will not be present on Callbacks which failed before the field was added
+			// to the CHASM component. So fallback to including the LastAttemptedFailure.
+			failure = c.LastAttemptFailure
+		}
+		return &callbackpb.CallbackOutcome{
+			Value: &callbackpb.CallbackOutcome_Failure{
+				Failure: failure,
+			},
+		}
+	default:
+		return nil
 	}
 }
 

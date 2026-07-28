@@ -7,7 +7,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -17,6 +20,8 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -1382,4 +1387,201 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 
 	require.Error(t, err)
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
+}
+
+func TestBuildCallbackInfos(t *testing.T) {
+	registrationTime := timestamppb.New(time.Now().UTC())
+	terminalFailure := &failurepb.Failure{Message: "terminal failure"}
+	lastAttemptFailure := &failurepb.Failure{Message: "last attempt"}
+
+	newCallback := func(status callbackspb.CallbackStatus) *callback.Callback {
+		cb := callback.NewCallback(
+			"request-id",
+			registrationTime,
+			&callbackspb.CallbackState{},
+			&callbackspb.Callback{
+				Variant: &callbackspb.Callback_Nexus_{
+					Nexus: &callbackspb.Callback_Nexus{Url: "http://address:8888/callback"},
+				},
+			},
+		)
+		cb.SetStateMachineState(status)
+		return cb
+	}
+
+	t.Run("no callbacks", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		a := &Activity{}
+
+		infos, err := a.buildCallbackInfos(ctx)
+		require.NoError(t, err)
+		require.Empty(t, infos)
+	})
+
+	t.Run("unspecified status is rejected", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		cb := newCallback(callbackspb.CALLBACK_STATUS_UNSPECIFIED)
+		a := &Activity{
+			Callbacks: chasm.Map[string, *callback.Callback]{
+				"cb": chasm.NewComponentField(ctx, cb),
+			},
+		}
+
+		_, err := a.buildCallbackInfos(ctx)
+		require.Error(t, err)
+	})
+
+	// Each case builds a single callback and asserts on the outcome of its CallbackInfo.
+	cases := []struct {
+		name          string
+		status        callbackspb.CallbackStatus
+		initCallback  func(chasm.MutableContext, *callback.Callback)
+		expectedState enumspb.CallbackState
+		assertOutcome func(*testing.T, *callbackpb.CallbackOutcome)
+	}{
+		{
+			name:          "standby has no outcome",
+			status:        callbackspb.CALLBACK_STATUS_STANDBY,
+			expectedState: enumspb.CALLBACK_STATE_STANDBY,
+			assertOutcome: func(t *testing.T, outcome *callbackpb.CallbackOutcome) {
+				require.Nil(t, outcome)
+			},
+		},
+		{
+			name:          "scheduled has no outcome",
+			status:        callbackspb.CALLBACK_STATUS_SCHEDULED,
+			expectedState: enumspb.CALLBACK_STATE_SCHEDULED,
+			assertOutcome: func(t *testing.T, outcome *callbackpb.CallbackOutcome) {
+				require.Nil(t, outcome)
+			},
+		},
+		{
+			name:   "backing off has no outcome",
+			status: callbackspb.CALLBACK_STATUS_BACKING_OFF,
+			initCallback: func(_ chasm.MutableContext, cb *callback.Callback) {
+				cb.LastAttemptFailure = lastAttemptFailure
+			},
+			expectedState: enumspb.CALLBACK_STATE_BACKING_OFF,
+			assertOutcome: func(t *testing.T, outcome *callbackpb.CallbackOutcome) {
+				require.Nil(t, outcome)
+			},
+		},
+		{
+			name:          "succeeded reports a success outcome",
+			status:        callbackspb.CALLBACK_STATUS_SUCCEEDED,
+			expectedState: enumspb.CALLBACK_STATE_SUCCEEDED,
+			assertOutcome: func(t *testing.T, outcome *callbackpb.CallbackOutcome) {
+				require.NotNil(t, outcome)
+				require.NotNil(t, outcome.GetSuccess())
+				require.Nil(t, outcome.GetFailure())
+			},
+		},
+		{
+			name:   "failed reports the terminal failure",
+			status: callbackspb.CALLBACK_STATUS_FAILED,
+			initCallback: func(ctx chasm.MutableContext, cb *callback.Callback) {
+				cb.LastAttemptFailure = lastAttemptFailure
+				cb.TerminalFailure = chasm.NewDataField(ctx, terminalFailure)
+			},
+			expectedState: enumspb.CALLBACK_STATE_FAILED,
+			assertOutcome: func(t *testing.T, outcome *callbackpb.CallbackOutcome) {
+				require.NotNil(t, outcome)
+				require.Nil(t, outcome.GetSuccess())
+				require.Equal(t, terminalFailure, outcome.GetFailure())
+			},
+		},
+		{
+			name:   "failed falls back to the last attempt failure",
+			status: callbackspb.CALLBACK_STATUS_FAILED,
+			initCallback: func(_ chasm.MutableContext, cb *callback.Callback) {
+				// Mimics a callback persisted before TerminalFailure was introduced.
+				cb.LastAttemptFailure = lastAttemptFailure
+			},
+			expectedState: enumspb.CALLBACK_STATE_FAILED,
+			assertOutcome: func(t *testing.T, outcome *callbackpb.CallbackOutcome) {
+				require.NotNil(t, outcome)
+				require.Nil(t, outcome.GetSuccess())
+				require.Equal(t, lastAttemptFailure, outcome.GetFailure())
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			cb := newCallback(tc.status)
+			if tc.initCallback != nil {
+				tc.initCallback(ctx, cb)
+			}
+			a := &Activity{
+				Callbacks: chasm.Map[string, *callback.Callback]{
+					"cb": chasm.NewComponentField(ctx, cb),
+				},
+			}
+
+			infos, err := a.buildCallbackInfos(ctx)
+			require.NoError(t, err)
+			require.Len(t, infos, 1)
+
+			info := infos[0].GetInfo()
+			require.NotNil(t, info)
+			require.Equal(t, tc.expectedState, info.GetState())
+			require.Equal(t, registrationTime, info.GetRegistrationTime())
+			require.IsType(
+				t,
+				&apiactivitypb.CallbackInfo_Trigger_ActivityClosed{},
+				infos[0].GetTrigger().GetVariant(),
+			)
+			tc.assertOutcome(t, info.GetOutcome())
+		})
+	}
+}
+
+// TestBuildCallbackInfosMultipleCallbacks confirms each callback gets its own outcome, rather than
+// one being applied to all of them.
+func TestBuildCallbackInfosMultipleCallbacks(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+
+	newCallback := func(status callbackspb.CallbackStatus) *callback.Callback {
+		cb := callback.NewCallback(
+			"request-id",
+			timestamppb.New(time.Now().UTC()),
+			&callbackspb.CallbackState{},
+			&callbackspb.Callback{
+				Variant: &callbackspb.Callback_Nexus_{
+					Nexus: &callbackspb.Callback_Nexus{Url: "http://address:8888/callback"},
+				},
+			},
+		)
+		cb.SetStateMachineState(status)
+		return cb
+	}
+
+	succeeded := newCallback(callbackspb.CALLBACK_STATUS_SUCCEEDED)
+	failed := newCallback(callbackspb.CALLBACK_STATUS_FAILED)
+	failed.TerminalFailure = chasm.NewDataField(ctx, &failurepb.Failure{Message: "boom"})
+	pending := newCallback(callbackspb.CALLBACK_STATUS_SCHEDULED)
+
+	a := &Activity{
+		Callbacks: chasm.Map[string, *callback.Callback]{
+			"succeeded": chasm.NewComponentField(ctx, succeeded),
+			"failed":    chasm.NewComponentField(ctx, failed),
+			"pending":   chasm.NewComponentField(ctx, pending),
+		},
+	}
+
+	infos, err := a.buildCallbackInfos(ctx)
+	require.NoError(t, err)
+	require.Len(t, infos, 3)
+
+	// buildCallbackInfos iterates a map, so index by state rather than position.
+	outcomes := make(map[enumspb.CallbackState]*callbackpb.CallbackOutcome, len(infos))
+	for _, info := range infos {
+		state := info.GetInfo().GetState()
+		outcomes[state] = info.GetInfo().GetOutcome()
+	}
+
+	require.NotNil(t, outcomes[enumspb.CALLBACK_STATE_SUCCEEDED].GetSuccess())
+	require.Equal(t, "boom", outcomes[enumspb.CALLBACK_STATE_FAILED].GetFailure().GetMessage())
+	require.Nil(t, outcomes[enumspb.CALLBACK_STATE_SCHEDULED])
 }
