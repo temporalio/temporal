@@ -1311,8 +1311,6 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	}
 }
 
-// emitImmediateQueueLagLocked records an immediate queue's lag, reporting a backlog when its age
-// still has to be read.
 func (s *ContextImpl) emitImmediateQueueLagLocked(
 	category tasks.Category,
 	queueState *persistencespb.QueueState,
@@ -1345,8 +1343,6 @@ func (s *ContextImpl) emitImmediateQueueLagLocked(
 	}, true
 }
 
-// emitQueueLagMetrics records the per-category queue lag, returning the backlogs to read afterwards
-// so that read stays off the shard lock.
 func (s *ContextImpl) emitQueueLagMetrics(metricsHandler metrics.Handler) []immediateBacklogRange {
 	var immediateBacklogs []immediateBacklogRange
 
