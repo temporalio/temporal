@@ -6,6 +6,9 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jstemmer/go-junit-report/v2/gtr"
 	"github.com/jstemmer/go-junit-report/v2/junit"
@@ -13,19 +16,44 @@ import (
 )
 
 type goTestEvent struct {
-	Output string `json:"Output"`
+	Time    time.Time `json:"Time"`
+	Action  string    `json:"Action"`
+	Package string    `json:"Package"`
+	Test    string    `json:"Test"`
+	Elapsed float64   `json:"Elapsed"`
+	Output  string    `json:"Output"`
+}
+
+type goTestID struct {
+	packageName string
+	testName    string
 }
 
 type goTestJSONOutput struct {
-	line   strings.Builder
-	input  strings.Builder
-	output strings.Builder
-	stdout io.Writer
+	line            strings.Builder
+	input           strings.Builder
+	output          strings.Builder
+	testOutputs     map[goTestID]*strings.Builder
+	testOutputOrder []goTestID
+	packages        map[string]struct{}
+	failedPackages  map[string]bool
+	tests           int
+	skipped         int
+	failures        int
+	errors          int
+	elapsed         float64
+	startTime       time.Time
+	endTime         time.Time
+	summaryWritten  bool
+	stdout          io.Writer
 }
 
 func newGoTestJSONOutput() *goTestJSONOutput {
 	return &goTestJSONOutput{
-		stdout: os.Stdout,
+		testOutputs:    make(map[goTestID]*strings.Builder),
+		packages:       make(map[string]struct{}),
+		failedPackages: make(map[string]bool),
+		stdout:         os.Stdout,
 	}
 }
 
@@ -45,6 +73,10 @@ func (o *goTestJSONOutput) String() string {
 		o.writeLine(o.line.String())
 		o.line.Reset()
 	}
+	for _, test := range o.testOutputOrder {
+		o.flushTestOutput(test)
+	}
+	o.writeSummary()
 	return o.output.String()
 }
 
@@ -59,9 +91,125 @@ func (o *goTestJSONOutput) writeLine(line string) {
 	o.input.WriteString(line)
 	o.input.WriteByte('\n')
 	if event.Output != "" {
-		_, _ = fmt.Fprint(o.stdout, event.Output)
-		o.output.WriteString(event.Output)
+		o.writeEventOutput(event)
 	}
+	o.recordEvent(event)
+}
+
+func (o *goTestJSONOutput) writeEventOutput(event goTestEvent) {
+	if event.Test == "" {
+		o.writeOutput(event.Output)
+		return
+	}
+	test := goTestID{packageName: event.Package, testName: event.Test}
+	testOutput, ok := o.testOutputs[test]
+	if !ok {
+		testOutput = &strings.Builder{}
+		o.testOutputs[test] = testOutput
+		o.testOutputOrder = append(o.testOutputOrder, test)
+	}
+	testOutput.WriteString(event.Output)
+}
+
+func (o *goTestJSONOutput) recordEvent(event goTestEvent) {
+	o.recordTime(event.Time)
+	switch event.Action {
+	case "bench", "fail", "pass", "skip":
+		o.recordTerminalEvent(event)
+	case "start":
+		if event.Test == "" && event.Package != "" {
+			o.packages[event.Package] = struct{}{}
+		}
+	case "build-output":
+		r, _ := utf8.DecodeRuneInString(event.Output)
+		if !strings.HasPrefix(event.Output, "# ") && !unicode.IsSpace(r) {
+			o.errors++
+		}
+	default:
+	}
+}
+
+func (o *goTestJSONOutput) recordTime(eventTime time.Time) {
+	if eventTime.IsZero() {
+		return
+	}
+	if o.startTime.IsZero() || eventTime.Before(o.startTime) {
+		o.startTime = eventTime
+	}
+	if o.endTime.IsZero() || eventTime.After(o.endTime) {
+		o.endTime = eventTime
+	}
+}
+
+func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
+	if event.Test == "" {
+		if event.Package != "" {
+			o.packages[event.Package] = struct{}{}
+			o.elapsed = max(o.elapsed, event.Elapsed)
+			if event.Action == "fail" && !o.failedPackages[event.Package] {
+				o.failures++
+			}
+		}
+		return
+	}
+
+	o.flushTestOutput(goTestID{packageName: event.Package, testName: event.Test})
+	o.tests++
+	switch event.Action {
+	case "fail":
+		o.failures++
+		o.failedPackages[event.Package] = true
+	case "skip":
+		o.skipped++
+	default:
+	}
+}
+
+func (o *goTestJSONOutput) writeSummary() {
+	if o.summaryWritten || len(o.packages) == 0 {
+		return
+	}
+
+	var summary strings.Builder
+	fmt.Fprintf(&summary, "\nDONE %d tests", o.tests)
+	if o.skipped > 0 {
+		fmt.Fprintf(&summary, ", %d skipped", o.skipped)
+	}
+	if o.failures > 0 {
+		failure := "failure"
+		if o.failures > 1 {
+			failure += "s"
+		}
+		fmt.Fprintf(&summary, ", %d %s", o.failures, failure)
+	}
+	if o.errors > 0 {
+		buildError := "error"
+		if o.errors > 1 {
+			buildError += "s"
+		}
+		fmt.Fprintf(&summary, ", %d %s", o.errors, buildError)
+	}
+	elapsed := o.elapsed
+	if !o.startTime.IsZero() && !o.endTime.IsZero() {
+		elapsed = o.endTime.Sub(o.startTime).Seconds()
+	}
+	fmt.Fprintf(&summary, " in %.3fs\n", elapsed)
+	o.writeOutput(summary.String())
+	o.summaryWritten = true
+}
+
+func (o *goTestJSONOutput) flushTestOutput(test goTestID) {
+	testOutput, ok := o.testOutputs[test]
+	if !ok {
+		return
+	}
+	o.writeOutput(testOutput.String())
+	delete(o.testOutputs, test)
+}
+
+func (o *goTestJSONOutput) writeOutput(output string) {
+	_, _ = fmt.Fprint(o.stdout, output)
+	o.output.WriteString(output)
 }
 
 func (o *goTestJSONOutput) decodeLine(line string, event *goTestEvent) error {
