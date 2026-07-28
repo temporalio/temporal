@@ -73,6 +73,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Sentence structure in comments should be simple. Prefer several plain statements over one sentence built from subordinate clauses, parentheticals, or stacked qualifications.
 - A comment should typically not refer to counterfactuals, or to discussions or decision processes that occurred when the code was written.
 - A comment should typically not explain how upstream callers use the code.
+- In a code review, give the concrete replacement text as a code suggestion. If the clearer and shorter fix is to restructure the code rather than reword the comment, suggest that code instead.
 
 ## 8. API and Proto Design
 
