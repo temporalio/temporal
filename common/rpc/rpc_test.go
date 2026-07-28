@@ -62,7 +62,7 @@ func TestRPCFactoryClose_DoesNotFailOnConnClosedByOwner(t *testing.T) {
 	t.Parallel()
 
 	f := newTestFactory()
-	// Warn never fails a test on its own, so count the matches instead.
+	// Warn never fails a test on its own, so assert on the expectation.
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 	warned := logger.Expect(testlogger.Warn, "Failed to close gRPC connection")
 	f.logger = logger

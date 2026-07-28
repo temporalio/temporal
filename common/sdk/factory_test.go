@@ -22,16 +22,16 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-func newFactory(hostPort string) *clientFactory {
+func newFactory(hostPort string, logger log.Logger) *clientFactory {
 	return NewClientFactory(hostPort, nil, metrics.NoopMetricsHandler,
-		log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(0))
+		logger, dynamicconfig.GetIntPropertyFn(0))
 }
 
 // newSeededFactory injects the system client instead of dialing one: both
 // sdkclient.Dial and NewClientFromExisting need the SDK's concrete client, which
 // a mock cannot stand in for.
 func newSeededFactory(system sdkclient.Client) *clientFactory {
-	f := newFactory("membership://frontend")
+	f := newFactory("membership://frontend", log.NewNoopLogger())
 	f.once.Do(func() {})
 	f.systemSdkClient = system
 	return f
@@ -56,8 +56,10 @@ func newDialedFactory(t *testing.T) *clientFactory {
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 
-	f := newFactory(listener.Addr().String())
-	f.logger = testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	// A noop logger's Fatal does nothing, so a failed dial would otherwise be
+	// silent. Passed to the constructor so the SDK's own logger is covered too.
+	f := newFactory(listener.Addr().String(),
+		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
 	t.Cleanup(f.Close)
 	return f
 }
@@ -164,14 +166,7 @@ func TestNewClient_DoesNotRaceClose(t *testing.T) {
 	require.NotNil(t, f.GetSystemClient())
 
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		f.NewClient(sdkclient.Options{Namespace: "ns"})
-	}()
-	go func() {
-		defer wg.Done()
-		f.Close()
-	}()
+	wg.Go(func() { f.NewClient(sdkclient.Options{Namespace: "ns"}) })
+	wg.Go(f.Close)
 	wg.Wait()
 }
