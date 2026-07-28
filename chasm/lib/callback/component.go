@@ -32,12 +32,9 @@ type Callback struct {
 
 	// Persisted internal state
 	*callbackspb.CallbackState
-	// The callback's terminal failure reason as applicable. This is to support surfacing external
-	// failure reasons (e.g. timeouts, cancellation) which might not match the LastAttemptFailure.
-	//
-	// NOTE: Currently CHASM Callbacks do not support cancellation, termination, or failure due to
-	// too many failed delivery attempts. So until those capabilities are added, this will only ever
-	// match LastAttemptFailure in practice.
+	// The failure that terminated the callback. May differ from LastAttemptFailure when the callback
+	// fails for a reason other than a delivery attempt, such as a timeout. No such reasons exist
+	// yet, so today it always matches LastAttemptFailure when the callback is in a terminal state.
 	TerminalFailure chasm.Field[*failurepb.Failure]
 
 	// Interface to retrieve Nexus operation completion data
@@ -166,7 +163,7 @@ func (c *Callback) Outcome(ctx chasm.Context) *callbackpb.CallbackOutcome {
 		failure, ok := c.TerminalFailure.TryGet(ctx)
 		if !ok {
 			// TerminalFailure will not be present on Callbacks which failed before the field was added
-			// to the CHASM component. So fallback to including the LastAttemptedFailure.
+			// to the CHASM component. So fallback to including the LastAttemptFailure.
 			failure = c.LastAttemptFailure
 		}
 		return &callbackpb.CallbackOutcome{

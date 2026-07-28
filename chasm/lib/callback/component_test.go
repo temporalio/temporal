@@ -1,15 +1,14 @@
 package callback
 
 import (
-	"errors"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/require"
+	callbackpb "go.temporal.io/api/callback/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestOutcome(t *testing.T) {
@@ -19,30 +18,21 @@ func TestOutcome(t *testing.T) {
 	cases := []struct {
 		name   string
 		status callbackspb.CallbackStatus
-		// Set the Callback's state before the assert function is called.
+		// Set the Callback's state before Outcome is called.
 		initCallback func(*chasm.MockMutableContext, *Callback)
-		assert       func(*testing.T, *Callback, chasm.Context)
+		expected     *callbackpb.CallbackOutcome
 	}{
 		{
 			name:   "unspecified is non-terminal",
 			status: callbackspb.CALLBACK_STATUS_UNSPECIFIED,
-			assert: func(t *testing.T, cb *Callback, ctx chasm.Context) {
-				require.Nil(t, cb.Outcome(ctx))
-			},
 		},
 		{
 			name:   "standby is non-terminal",
 			status: callbackspb.CALLBACK_STATUS_STANDBY,
-			assert: func(t *testing.T, cb *Callback, ctx chasm.Context) {
-				require.Nil(t, cb.Outcome(ctx))
-			},
 		},
 		{
 			name:   "scheduled is non-terminal",
 			status: callbackspb.CALLBACK_STATUS_SCHEDULED,
-			assert: func(t *testing.T, cb *Callback, ctx chasm.Context) {
-				require.Nil(t, cb.Outcome(ctx))
-			},
 		},
 		{
 			name:   "backing off is non-terminal, even with a last attempt failure",
@@ -50,18 +40,12 @@ func TestOutcome(t *testing.T) {
 			initCallback: func(_ *chasm.MockMutableContext, cb *Callback) {
 				cb.LastAttemptFailure = lastAttemptFailure
 			},
-			assert: func(t *testing.T, cb *Callback, ctx chasm.Context) {
-				require.Nil(t, cb.Outcome(ctx))
-			},
 		},
 		{
 			name:   "succeeded",
 			status: callbackspb.CALLBACK_STATUS_SUCCEEDED,
-			assert: func(t *testing.T, cb *Callback, ctx chasm.Context) {
-				outcome := cb.Outcome(ctx)
-				require.NotNil(t, outcome)
-				require.NotNil(t, outcome.GetSuccess())
-				require.Nil(t, outcome.GetFailure())
+			expected: &callbackpb.CallbackOutcome{
+				Value: &callbackpb.CallbackOutcome_Success{Success: &emptypb.Empty{}},
 			},
 		},
 		{
@@ -71,11 +55,8 @@ func TestOutcome(t *testing.T) {
 				cb.LastAttemptFailure = lastAttemptFailure
 				cb.TerminalFailure = chasm.NewDataField(mctx, terminalFailure)
 			},
-			assert: func(t *testing.T, cb *Callback, ctx chasm.Context) {
-				outcome := cb.Outcome(ctx)
-				require.NotNil(t, outcome)
-				require.Nil(t, outcome.GetSuccess())
-				require.Equal(t, terminalFailure, outcome.GetFailure())
+			expected: &callbackpb.CallbackOutcome{
+				Value: &callbackpb.CallbackOutcome_Failure{Failure: terminalFailure},
 			},
 		},
 		{
@@ -85,11 +66,8 @@ func TestOutcome(t *testing.T) {
 				// Mimics a callback persisted before TerminalFailure was introduced.
 				cb.LastAttemptFailure = lastAttemptFailure
 			},
-			assert: func(t *testing.T, cb *Callback, ctx chasm.Context) {
-				outcome := cb.Outcome(ctx)
-				require.NotNil(t, outcome)
-				require.Nil(t, outcome.GetSuccess())
-				require.Equal(t, lastAttemptFailure, outcome.GetFailure())
+			expected: &callbackpb.CallbackOutcome{
+				Value: &callbackpb.CallbackOutcome_Failure{Failure: lastAttemptFailure},
 			},
 		},
 	}
@@ -102,73 +80,7 @@ func TestOutcome(t *testing.T) {
 			if tc.initCallback != nil {
 				tc.initCallback(mctx, cb)
 			}
-			tc.assert(t, cb, mctx)
+			protorequire.ProtoEqual(t, tc.expected, cb.Outcome(mctx))
 		})
 	}
-}
-
-// TestOutcomeAfterTransitions verifies Outcome against state produced by the actual transitions,
-// rather than hand-built component state.
-func TestOutcomeAfterTransitions(t *testing.T) {
-	testTime := time.Now().UTC()
-	errFailedDelivery := errors.New("failed to deliver callback")
-
-	newScheduledCallback := func() *Callback {
-		cb := &Callback{
-			CallbackState: &callbackspb.CallbackState{
-				Callback: &callbackspb.Callback{
-					Variant: &callbackspb.Callback_Nexus_{
-						Nexus: &callbackspb.Callback_Nexus{
-							Url: "http://address:8888/path/to/callback",
-						},
-					},
-				},
-			},
-		}
-		cb.SetStateMachineState(callbackspb.CALLBACK_STATUS_SCHEDULED)
-		return cb
-	}
-
-	t.Run("succeeded", func(t *testing.T) {
-		mctx := &chasm.MockMutableContext{}
-		cb := newScheduledCallback()
-		require.Nil(t, cb.Outcome(mctx))
-
-		require.NoError(t, TransitionSucceeded.Apply(cb, mctx, EventSucceeded{Time: testTime}))
-
-		outcome := cb.Outcome(mctx)
-		require.NotNil(t, outcome)
-		require.NotNil(t, outcome.GetSuccess())
-	})
-
-	t.Run("failed", func(t *testing.T) {
-		mctx := &chasm.MockMutableContext{}
-		cb := newScheduledCallback()
-		require.Nil(t, cb.Outcome(mctx))
-
-		require.NoError(t, TransitionFailed.Apply(cb, mctx, EventFailed{
-			Time: testTime,
-			Err:  errFailedDelivery,
-		}))
-
-		outcome := cb.Outcome(mctx)
-		require.NotNil(t, outcome)
-		require.Nil(t, outcome.GetSuccess())
-		require.Equal(t, errFailedDelivery.Error(), outcome.GetFailure().GetMessage())
-		require.True(t, outcome.GetFailure().GetApplicationFailureInfo().GetNonRetryable())
-	})
-
-	t.Run("attempt failed is not terminal", func(t *testing.T) {
-		mctx := &chasm.MockMutableContext{}
-		cb := newScheduledCallback()
-
-		require.NoError(t, TransitionAttemptFailed.Apply(cb, mctx, EventAttemptFailed{
-			Time:        testTime,
-			Err:         errFailedDelivery,
-			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
-		}))
-
-		require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.StateMachineState())
-		require.Nil(t, cb.Outcome(mctx))
-	})
 }

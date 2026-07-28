@@ -273,12 +273,12 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				&callbackspb.InvocationTask{Attempt: 0},
 			)
 
-			// Verify outcome by reading component state directly.
+			// Verify outcome by reading component state directly. Assertions run inside the read
+			// function because reading a chasm.Field requires a chasm.Context.
 			_, err = chasm.ReadComponent(
 				engineCtx,
 				callbackRef,
 				func(c *Callback, chasmCtx chasm.Context, _ struct{}) (struct{}, error) {
-					// Run the testcase.
 					tc.assertOutcome(t, chasmCtx, c, executeErr)
 					return struct{}{}, nil
 				},
