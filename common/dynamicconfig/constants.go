@@ -130,11 +130,6 @@ for signal / start / signal with start API if namespace is not active`,
 		false,
 		`ForceNamespaceSelectedAPIAutoForwarding forces selective (whitelist) API forwarding for the namespace when true, overriding all-apis-forwarding policy for that namespace`,
 	)
-	EnableNamespaceHandoverWait = NewNamespaceBoolSetting(
-		"system.enableNamespaceHandoverWait",
-		false,
-		`EnableNamespaceHandoverWait whether waiting for namespace replication state update before serve the request`,
-	)
 	TransactionSizeLimit = NewGlobalIntSetting(
 		"system.transactionSizeLimit",
 		primitives.DefaultTransactionSizeLimit,
