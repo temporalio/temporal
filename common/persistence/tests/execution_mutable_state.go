@@ -1073,7 +1073,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_ClosedWorkflow_IsNonCurrent() {
 	s.AssertHEEqualWithDB(currentBranchToken, currentEvents)
 }
 
-// The BrandNewCurrent modes re-establish a missing current execution record (e.g. on a passive
+// The CreateCurrent modes re-establish a missing current execution record (e.g. on a passive
 // cluster where the current run was deleted) by inserting a fresh current record while
 // updating/resolving the run — the update-path analogue of CreateWorkflowModeBrandNew. It points the
 // current record at the new run if one is carried, otherwise the updated/reset run, and fails if a
@@ -1109,9 +1109,9 @@ func (s *ExecutionMutableStateSuite) assertCurrentRunID(expectedRunID string) {
 	s.Equal(expectedRunID, resp.RunID)
 }
 
-func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrent() {
+func (s *ExecutionMutableStateSuite) TestUpdateCreateCurrent() {
 	// A closed run exists with no current execution record (the current record was deleted).
-	// BrandNewCurrent re-inserts the current record pointing at the updated run.
+	// CreateCurrent re-inserts the current record pointing at the updated run.
 	branchToken, snapshot, events := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
@@ -1135,7 +1135,7 @@ func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrent() {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.UpdateWorkflowModeBrandNewCurrent,
+		Mode:    p.UpdateWorkflowModeCreateCurrent,
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
 
@@ -1152,8 +1152,8 @@ func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrent() {
 	s.AssertHEEqualWithDB(branchToken, events)
 }
 
-func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrentWithNew() {
-	// A base run exists with no current execution record; a continue-as-new arrives. BrandNewCurrent
+func (s *ExecutionMutableStateSuite) TestUpdateCreateCurrentWithNew() {
+	// A base run exists with no current execution record; a continue-as-new arrives. CreateCurrent
 	// updates the base run and inserts the current record pointing at the new run, atomically.
 	branchToken, snapshot, events := s.CreateWorkflow(
 		rand.Int63(),
@@ -1194,7 +1194,7 @@ func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrentWithNew() {
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.UpdateWorkflowModeBrandNewCurrent,
+		Mode:    p.UpdateWorkflowModeCreateCurrent,
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
 
@@ -1214,8 +1214,8 @@ func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrentWithNew() {
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
 }
 
-func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrentCurrentConflict() {
-	// A current execution record already exists; BrandNewCurrent must fail with a current-condition
+func (s *ExecutionMutableStateSuite) TestUpdateCreateCurrentConflict() {
+	// A current execution record already exists; CreateCurrent must fail with a current-condition
 	// error (not overwrite it, and not a retryable Unavailable).
 	branchToken, snapshot, events := s.CreateWorkflow(
 		rand.Int63(),
@@ -1239,7 +1239,7 @@ func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrentCurrentConflict() 
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.UpdateWorkflowModeBrandNewCurrent,
+		Mode:    p.UpdateWorkflowModeCreateCurrent,
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
 
@@ -1256,164 +1256,6 @@ func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrentCurrentConflict() 
 	s.assertCurrentRunID(s.RunID)
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, snapshot)
 	s.AssertHEEqualWithDB(branchToken, events)
-}
-
-func (s *ExecutionMutableStateSuite) TestConflictResolveBrandNewCurrent() {
-	// Rebuilt run with no current execution record: conflict-resolve BrandNewCurrent re-inserts the
-	// current record pointing at the reset run.
-	branchToken, snapshot, events := s.CreateWorkflow(
-		rand.Int63(),
-		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		rand.Int63(),
-	)
-	s.deleteCurrentAndAssertMissing(s.RunID)
-
-	resetSnapshot, resetEvents := RandomSnapshot(
-		s.T(),
-		s.NamespaceID,
-		s.WorkflowID,
-		s.RunID,
-		snapshot.NextEventID,
-		rand.Int63(),
-		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		snapshot.DBRecordVersion+1,
-		branchToken,
-	)
-	_, err := s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
-		ShardID: s.ShardID,
-		RangeID: s.RangeID,
-		Mode:    p.ConflictResolveWorkflowModeBrandNewCurrent,
-
-		ArchetypeID: chasm.WorkflowArchetypeID,
-
-		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   resetEvents,
-
-		NewWorkflowSnapshot: nil,
-		NewWorkflowEvents:   nil,
-
-		CurrentWorkflowMutation: nil,
-		CurrentWorkflowEvents:   nil,
-	})
-	s.NoError(err)
-
-	s.assertCurrentRunID(s.RunID)
-	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, resetSnapshot)
-	s.AssertHEEqualWithDB(branchToken, events, resetEvents)
-}
-
-func (s *ExecutionMutableStateSuite) TestConflictResolveBrandNewCurrentWithNew() {
-	// Rebuilt run with no current execution record + a new run: conflict-resolve BrandNewCurrent
-	// resolves the base run and inserts the current record pointing at the new run, atomically.
-	branchToken, snapshot, events := s.CreateWorkflow(
-		rand.Int63(),
-		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		rand.Int63(),
-	)
-	s.deleteCurrentAndAssertMissing(s.RunID)
-
-	resetSnapshot, resetEvents := RandomSnapshot(
-		s.T(),
-		s.NamespaceID,
-		s.WorkflowID,
-		s.RunID,
-		snapshot.NextEventID,
-		rand.Int63(),
-		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-		snapshot.DBRecordVersion+1,
-		branchToken,
-	)
-
-	newRunID := uuid.New().String()
-	newBranchToken := RandomBranchToken(s.NamespaceID, s.WorkflowID, newRunID, s.HistoryBranchUtil)
-	newSnapshot, newEvents := RandomSnapshot(
-		s.T(),
-		s.NamespaceID,
-		s.WorkflowID,
-		newRunID,
-		common.FirstEventID,
-		rand.Int63(),
-		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		rand.Int63(),
-		newBranchToken,
-	)
-
-	_, err := s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
-		ShardID: s.ShardID,
-		RangeID: s.RangeID,
-		Mode:    p.ConflictResolveWorkflowModeBrandNewCurrent,
-
-		ArchetypeID: chasm.WorkflowArchetypeID,
-
-		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   resetEvents,
-
-		NewWorkflowSnapshot: newSnapshot,
-		NewWorkflowEvents:   newEvents,
-
-		CurrentWorkflowMutation: nil,
-		CurrentWorkflowEvents:   nil,
-	})
-	s.NoError(err)
-
-	s.assertCurrentRunID(newRunID)
-	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, resetSnapshot)
-	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
-	s.AssertHEEqualWithDB(branchToken, events, resetEvents)
-	s.AssertHEEqualWithDB(newBranchToken, newEvents)
-}
-
-func (s *ExecutionMutableStateSuite) TestConflictResolveBrandNewCurrentCurrentConflict() {
-	// A current execution record already exists; conflict-resolve BrandNewCurrent must fail with a
-	// current-condition error rather than overwrite it.
-	branchToken, snapshot, _ := s.CreateWorkflow(
-		rand.Int63(),
-		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		rand.Int63(),
-	)
-
-	resetSnapshot, resetEvents := RandomSnapshot(
-		s.T(),
-		s.NamespaceID,
-		s.WorkflowID,
-		s.RunID,
-		snapshot.NextEventID,
-		rand.Int63(),
-		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		snapshot.DBRecordVersion+1,
-		branchToken,
-	)
-	_, err := s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
-		ShardID: s.ShardID,
-		RangeID: s.RangeID,
-		Mode:    p.ConflictResolveWorkflowModeBrandNewCurrent,
-
-		ArchetypeID: chasm.WorkflowArchetypeID,
-
-		ResetWorkflowSnapshot: *resetSnapshot,
-		ResetWorkflowEvents:   resetEvents,
-
-		NewWorkflowSnapshot: nil,
-		NewWorkflowEvents:   nil,
-
-		CurrentWorkflowMutation: nil,
-		CurrentWorkflowEvents:   nil,
-	})
-	var conditionErr *p.CurrentWorkflowConditionFailedError
-	s.ErrorAs(err, &conditionErr)
-
-	// The current record still points at the original run and the reset run's mutable state was not
-	// committed. (A rejected conflict-resolve may still append its history nodes, which is unrelated
-	// to the current-conflict check, so history is not asserted here.)
-	s.assertCurrentRunID(s.RunID)
-	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, snapshot)
 }
 
 func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {

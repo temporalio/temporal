@@ -427,7 +427,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			return err
 		}
 
-	case p.UpdateWorkflowModeBrandNewCurrent:
+	case p.UpdateWorkflowModeCreateCurrent:
 		// insert a brand-new current record, failing if one already exists (the current record was
 		// deleted and must be re-established); point it at the new run if one is carried, otherwise the
 		// updated run itself
@@ -439,7 +439,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			return m.extractCurrentWorkflowConflictError(
 				currentRow,
 				fmt.Sprintf(
-					"UpdateWorkflowExecution: BrandNewCurrent requires no current record. workflow ID: %v, current run ID: %v",
+					"UpdateWorkflowExecution: CreateCurrent requires no current record. workflow ID: %v, current run ID: %v",
 					workflowID,
 					currentRow.RunID.String(),
 				),
@@ -465,7 +465,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.DataEncoding = newWorkflow.ExecutionStateBlob.EncodingType.String()
 
 			if !bytes.Equal(namespaceID, row.NamespaceID) {
-				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
+				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot create the new run in a different namespace")
 			}
 		} else {
 			row.CreateRequestID = updateWorkflow.ExecutionState.CreateRequestId
@@ -593,50 +593,6 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 		}
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, prevRunID, m.serializer); err != nil {
 			return err
-		}
-
-	case p.ConflictResolveWorkflowModeBrandNewCurrent:
-		// insert a brand-new current record, failing if one already exists (the current record was
-		// deleted and must be re-established); point it at the new run if carried, otherwise the reset
-		// workflow
-		existingCurrentRow, err := lockCurrentExecutionIfExists(ctx, tx, shardID, namespaceID, workflowID, request.ArchetypeID)
-		if err != nil {
-			return err
-		}
-		if existingCurrentRow != nil {
-			return m.extractCurrentWorkflowConflictError(
-				existingCurrentRow,
-				fmt.Sprintf(
-					"ConflictResolveWorkflowExecution: BrandNewCurrent requires no current record. workflow ID: %v, current run ID: %v",
-					workflowID,
-					existingCurrentRow.RunID.String(),
-				),
-			)
-		}
-		executionState := resetWorkflow.ExecutionState
-		executionStateBlob := resetWorkflow.ExecutionStateBlob
-		lastWriteVersion := resetWorkflow.LastWriteVersion
-		if newWorkflow != nil {
-			executionState = newWorkflow.ExecutionState
-			executionStateBlob = newWorkflow.ExecutionStateBlob
-			lastWriteVersion = newWorkflow.LastWriteVersion
-		}
-		row := sqlplugin.CurrentExecutionsRow{
-			ShardID:          shardID,
-			NamespaceID:      namespaceID,
-			WorkflowID:       workflowID,
-			RunID:            primitives.MustParseUUID(executionState.RunId),
-			ArchetypeID:      request.ArchetypeID,
-			CreateRequestID:  executionState.CreateRequestId,
-			State:            executionState.State,
-			Status:           executionState.Status,
-			LastWriteVersion: lastWriteVersion,
-			StartTime:        getStartTimeFromState(executionState),
-			Data:             executionStateBlob.Data,
-			DataEncoding:     executionStateBlob.EncodingType.String(),
-		}
-		if _, err := tx.InsertIntoCurrentExecutions(ctx, &row); err != nil {
-			return serviceerror.NewUnavailablef("ConflictResolveWorkflowExecution: failed to insert into current_executions table. Error: %v", err)
 		}
 
 	default:
