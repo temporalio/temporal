@@ -82,7 +82,6 @@ func (s *NexusWorkflowTestSuite) newTestEnv(chasmEnabled bool, opts ...testcore.
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool) {
-
 	env := s.newTestEnv(chasmEnabled)
 	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())

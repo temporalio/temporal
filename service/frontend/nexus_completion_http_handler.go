@@ -284,18 +284,18 @@ func (h *nexusCompletionHandler) completeOperation(
 		logger.Warn("failed to convert nexus completion token to the other framework", tag.Error(convErr))
 		return err
 	}
-	var fbErr error
+	var fallbackErr error
 	if isChasm {
-		fbErr = h.completeHSMOperation(ctx, converted, successPayload, req, links)
+		fallbackErr = h.completeHSMOperation(ctx, converted, successPayload, req, links)
 	} else {
-		fbErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
+		fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
 	}
 	// If the fallback also reports NotFound, the operation is gone in both frameworks.
-	// Return the primary framework's error.
-	if _, fbNotFound := errors.AsType[*serviceerror.NotFound](fbErr); fbNotFound {
+	// Return the error from the initial attempt.
+	if _, fbNotFound := errors.AsType[*serviceerror.NotFound](fallbackErr); fbNotFound {
 		return err
 	}
-	return fbErr
+	return fallbackErr
 }
 
 // isTerminalCompletionError reports whether err means the workflow is already
@@ -378,8 +378,7 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		// Temporal->Temporal calls transmit the real failure as the wrapper OperationError's cause.
 		// Unwrap it so the caller sees the handler's original error (message, type, details, and
-		// canceled/terminated info) rather than the generic wrapper, mirroring the HSM path's
-		// handleOperationError.
+		// canceled/terminated info) rather than the generic wrapper.
 		nexusFailure := nexusrpc.UnwrapFailure(req.Error.OriginalFailure)
 		failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
 		if err != nil {
