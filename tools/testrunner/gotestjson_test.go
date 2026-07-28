@@ -271,11 +271,8 @@ DONE 0 tests, 1 failure in 1.000s
 										Type:    string(failureTypeAborted),
 										Data: "package example.com/tests exited before 1 tests produced terminal results\n\n" +
 											"Recent package output:\n" +
-											"=== RUN   TestIncomplete\n" +
 											"unfinished\n" +
-											"=== PAUSE TestIncomplete\n" +
-											"fatal LoadSchema: gocql: no response received from cassandra within timeout period\n" +
-											"FAIL\texample.com/tests\t1.000s\n",
+											"fatal LoadSchema: gocql: no response received from cassandra within timeout period\n",
 									},
 								},
 							},

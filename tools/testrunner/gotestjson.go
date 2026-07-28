@@ -1,7 +1,6 @@
 package testrunner
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,9 +14,6 @@ import (
 	"github.com/jstemmer/go-junit-report/v2/junit"
 	"github.com/jstemmer/go-junit-report/v2/parser/gotest"
 )
-
-// packageOutputTailMaxBytes bounds the per-package output kept for abort details.
-const packageOutputTailMaxBytes = 64 * 1024
 
 type goTestEvent struct {
 	Time    time.Time `json:"Time"`
@@ -34,8 +30,8 @@ type goTestID struct {
 }
 
 type packageAbort struct {
-	packageName     string
-	incompleteTests int
+	packageName string
+	details     string
 }
 
 type goTestJSONOutput struct {
@@ -44,7 +40,6 @@ type goTestJSONOutput struct {
 	output          strings.Builder
 	testOutputs     map[goTestID]*strings.Builder
 	testOutputOrder []goTestID
-	packageOutputs  map[string]*bytes.Buffer
 	packages        map[string]struct{}
 	failedPackages  map[string]bool
 	packageFailures map[string]bool
@@ -62,7 +57,6 @@ type goTestJSONOutput struct {
 func newGoTestJSONOutput() *goTestJSONOutput {
 	return &goTestJSONOutput{
 		testOutputs:     make(map[goTestID]*strings.Builder),
-		packageOutputs:  make(map[string]*bytes.Buffer),
 		packages:        make(map[string]struct{}),
 		failedPackages:  make(map[string]bool),
 		packageFailures: make(map[string]bool),
@@ -110,7 +104,6 @@ func (o *goTestJSONOutput) writeLine(line string) {
 }
 
 func (o *goTestJSONOutput) writeEventOutput(event goTestEvent) {
-	o.recordPackageOutput(event.Package, event.Output)
 	if event.Test == "" {
 		o.writeOutput(event.Output)
 		return
@@ -123,21 +116,6 @@ func (o *goTestJSONOutput) writeEventOutput(event goTestEvent) {
 		o.testOutputOrder = append(o.testOutputOrder, test)
 	}
 	testOutput.WriteString(event.Output)
-}
-
-func (o *goTestJSONOutput) recordPackageOutput(packageName string, output string) {
-	if packageName == "" {
-		return
-	}
-	packageOutput, ok := o.packageOutputs[packageName]
-	if !ok {
-		packageOutput = &bytes.Buffer{}
-		o.packageOutputs[packageName] = packageOutput
-	}
-	packageOutput.WriteString(output)
-	if packageOutput.Len() > packageOutputTailMaxBytes {
-		packageOutput.Next(packageOutput.Len() - packageOutputTailMaxBytes)
-	}
 }
 
 func (o *goTestJSONOutput) recordEvent(event goTestEvent) {
@@ -265,7 +243,7 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 	var abortedPackages []packageAbort
 	for i := range report.Packages {
 		pkg := &report.Packages[i]
-		incompleteTests := 0
+		var incompleteTests []gtr.Test
 		tests := pkg.Tests
 		pkg.Tests = tests[:0]
 		for _, test := range tests {
@@ -273,13 +251,13 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 			if test.Result != gtr.Unknown {
 				pkg.Tests = append(pkg.Tests, test)
 			} else if o.packageFailures[pkg.Name] {
-				incompleteTests++
+				incompleteTests = append(incompleteTests, test)
 			}
 		}
-		if incompleteTests > 0 {
+		if len(incompleteTests) > 0 {
 			abortedPackages = append(abortedPackages, packageAbort{
-				packageName:     pkg.Name,
-				incompleteTests: incompleteTests,
+				packageName: pkg.Name,
+				details:     packageAbortDetails(pkg.Name, pkg.Output, incompleteTests),
 			})
 		}
 	}
@@ -288,20 +266,35 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		junitReport.appendSyntheticFailure(
 			fmt.Sprintf("testrunner.PackageAborted: %s", abortedPackage.packageName),
 			failureTypeAborted,
-			o.packageAbortDetails(abortedPackage.packageName, abortedPackage.incompleteTests),
+			abortedPackage.details,
 		)
 	}
 	return junitReport, nil
 }
 
-func (o *goTestJSONOutput) packageAbortDetails(packageName string, incompleteTests int) string {
+// packageAbortDetails summarizes a package that exited before its incomplete
+// tests produced terminal results. The parser has already stripped framing and
+// passed-test chatter, so the output here is limited to the incomplete tests'
+// own lines and the package-level output (e.g. a fatal infra error).
+func packageAbortDetails(packageName string, packageOutput []string, incompleteTests []gtr.Test) string {
 	details := fmt.Sprintf(
 		"package %s exited before %d tests produced terminal results",
 		packageName,
-		incompleteTests,
+		len(incompleteTests),
 	)
-	if packageOutput := o.packageOutputs[packageName]; packageOutput != nil && packageOutput.Len() > 0 {
-		details += "\n\nRecent package output:\n" + packageOutput.String()
+	var recent strings.Builder
+	for _, test := range incompleteTests {
+		for _, line := range test.Output {
+			recent.WriteString(line)
+			recent.WriteByte('\n')
+		}
 	}
-	return sanitizeXML(details)
+	for _, line := range packageOutput {
+		recent.WriteString(line)
+		recent.WriteByte('\n')
+	}
+	if recent.Len() > 0 {
+		details += "\n\nRecent package output:\n" + recent.String()
+	}
+	return truncateAlertDetails(sanitizeXML(details))
 }
