@@ -25,11 +25,10 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, []string{
-			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			// max-attempts has been stripped
-			// --gotestsum-path and -- have been stripped
+			// --gotestsum-path, --junitfile, and -- have been stripped
 			"-coverprofile=test.cover.out",
 			"baz",
 		}, args)

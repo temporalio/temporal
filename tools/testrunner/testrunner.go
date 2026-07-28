@@ -58,7 +58,7 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	cmd.Stdin = os.Stdin
 
 	err := cmd.Run()
-	stdout := output.String() + stderr.String()
+	stdout := output.finish() + stderr.String()
 	report, reportErr := output.junitReport()
 	if reportErr != nil {
 		err = errors.Join(err, reportErr)
@@ -84,10 +84,7 @@ func (a *attempt) goTestArgs(args []string) []string {
 	if !hasJSON {
 		args = append([]string{"-json"}, args...)
 	}
-	return slices.DeleteFunc(args, func(arg string) bool {
-		// --junitfile is consumed by the runner; go test does not understand it.
-		return strings.HasPrefix(arg, junitReportFlag)
-	})
+	return args
 }
 
 type runner struct {
@@ -168,6 +165,7 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 			r.coverProfilePath = strings.Split(arg, "=")[1]
 		} else if strings.HasPrefix(arg, junitReportFlag) {
 			r.junitOutputPath = strings.Split(arg, "=")[1]
+			continue
 		}
 
 		sanitizedArgs = append(sanitizedArgs, arg)
@@ -383,9 +381,9 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		// attempt but before the next one completes).
 		r.writeCurrentReport()
 
-		// A package abort (e.g. the runner killed mid-run by an infra failure)
-		// leaves tests without terminal results, so we can't narrow the rerun to
-		// specific failures. Retry the whole attempt with the same args instead.
+		// A package abort can leave both incomplete tests and tests that never
+		// started, so the observed test names are not enough to safely narrow
+		// the rerun. This also applies when a test panic caused the abort.
 		if currentAttempt.junitReport.hasFailureType(failureTypeAborted) {
 			if a < r.maxAttempts {
 				log.Print("test package aborted, retrying with previous attempt's args")

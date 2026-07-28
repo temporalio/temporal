@@ -10,12 +10,13 @@ import (
 
 func TestGoTestJSONOutput_Output(t *testing.T) {
 	testCases := []struct {
-		name     string
-		input    string
-		expected string
+		name           string
+		input          string
+		expectedOutput string
+		expectedStdout string
 	}{
 		{
-			name: "shows failing tests and hides passing tests",
+			name: "shows failing tests and hides passing tests from stdout",
 			input: `{"Time":"2026-07-28T00:00:00Z","Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestFail"}
 {"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"=== RUN   TestFail\n"}
@@ -30,7 +31,17 @@ func TestGoTestJSONOutput_Output(t *testing.T) {
 {"Action":"output","Package":"example.com/tests","Output":"FAIL\n"}
 {"Time":"2026-07-28T00:00:02Z","Action":"fail","Package":"example.com/tests","Elapsed":2}
 `,
-			expected: `=== RUN   TestFail
+			expectedOutput: `=== RUN   TestPass
+    pass log
+--- PASS: TestPass (0.00s)
+=== RUN   TestFail
+    foo_test.go:10: boom
+--- FAIL: TestFail (0.00s)
+FAIL
+
+DONE 2 tests, 1 failure in 2.000s
+`,
+			expectedStdout: `=== RUN   TestFail
     foo_test.go:10: boom
 --- FAIL: TestFail (0.00s)
 FAIL
@@ -46,14 +57,14 @@ DONE 2 tests, 1 failure in 2.000s
 {"Action":"bench","Package":"example.com/tests","Test":"BenchmarkExample","Output":"BenchmarkExample-12  1  100 ns/op\n"}
 {"Action":"pass","Package":"example.com/tests","Elapsed":0.1}
 `,
-			expected: `benchmark log
+			expectedOutput: `benchmark log
 BenchmarkExample-12  1  100 ns/op
 
 DONE 0 tests in 0.100s
 `,
 		},
 		{
-			name: "drops skipped output",
+			name: "hides skipped output from stdout",
 			input: `{"Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestSkip"}
 {"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"=== RUN   TestSkip\n"}
@@ -62,7 +73,13 @@ DONE 0 tests in 0.100s
 {"Action":"skip","Package":"example.com/tests","Test":"TestSkip"}
 {"Action":"pass","Package":"example.com/tests","Elapsed":0.1}
 `,
-			expected: `
+			expectedOutput: `=== RUN   TestSkip
+    skip_test.go:5: not now
+--- SKIP: TestSkip (0.00s)
+
+DONE 1 tests, 1 skipped in 0.100s
+`,
+			expectedStdout: `
 DONE 1 tests, 1 skipped in 0.100s
 `,
 		},
@@ -75,10 +92,38 @@ DONE 1 tests, 1 skipped in 0.100s
 			output.stdout = &stdout
 			_, err := output.Write([]byte(tc.input))
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, output.String())
-			require.Equal(t, tc.expected, stdout.String())
+			require.Equal(t, tc.expectedOutput, output.finish())
+			expectedStdout := tc.expectedStdout
+			if expectedStdout == "" {
+				expectedStdout = tc.expectedOutput
+			}
+			require.Equal(t, expectedStdout, stdout.String())
 		})
 	}
+}
+
+func TestGoTestJSONOutput_RetainsHiddenOutputForAlertParsing(t *testing.T) {
+	input := `{"Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"TestPass"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"==================\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"WARNING: DATA RACE\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"test.TestPass()\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"==================\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"--- PASS: TestPass (0.00s)\n"}
+{"Action":"pass","Package":"example.com/tests","Test":"TestPass"}
+{"Action":"fail","Package":"example.com/tests","Elapsed":0.1}
+`
+
+	output := newGoTestJSONOutput()
+	var stdout bytes.Buffer
+	output.stdout = &stdout
+	_, err := output.Write([]byte(input))
+	require.NoError(t, err)
+
+	alerts := parseAlerts(output.finish())
+	require.Len(t, alerts, 1)
+	require.Equal(t, failureTypeDataRace, alerts[0].Type)
+	require.NotContains(t, stdout.String(), "WARNING: DATA RACE")
 }
 
 func TestGoTestJSONOutput_ChunkedWrites(t *testing.T) {
@@ -99,7 +144,7 @@ func TestGoTestJSONOutput_ChunkedWrites(t *testing.T) {
 
 DONE 1 tests, 1 failure in 0.100s
 `
-	require.Equal(t, expected, output.String())
+	require.Equal(t, expected, output.finish())
 	require.Equal(t, expected, stdout.String())
 }
 
@@ -135,7 +180,7 @@ DONE 2 tests, 2 failures in 3.000s
 	output.stdout = &bytes.Buffer{}
 	_, err := output.Write([]byte(input))
 	require.NoError(t, err)
-	require.Equal(t, expected, output.String())
+	require.Equal(t, expected, output.finish())
 }
 
 func TestGoTestJSONOutput_Done(t *testing.T) {
@@ -215,7 +260,7 @@ DONE 0 tests, 1 failure, 2 errors in 0.100s
 			output.stdout = &bytes.Buffer{}
 			_, err := output.Write([]byte(tc.input))
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, output.String())
+			require.Equal(t, tc.expected, output.finish())
 		})
 	}
 }
@@ -362,7 +407,7 @@ DONE 1 tests, 2 failures, 1 error in 0.010s
 			output.stdout = &bytes.Buffer{}
 			_, err := output.Write([]byte(tc.input))
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedOutput, output.String())
+			require.Equal(t, tc.expectedOutput, output.finish())
 
 			report, err := output.junitReport()
 			require.NoError(t, err)

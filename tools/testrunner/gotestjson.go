@@ -35,32 +35,32 @@ type packageAbort struct {
 }
 
 type goTestJSONOutput struct {
-	line            strings.Builder
-	input           strings.Builder
-	output          strings.Builder
-	testOutputs     map[goTestID]*strings.Builder
-	testOutputOrder []goTestID
-	packages        map[string]struct{}
-	failedPackages  map[string]bool
-	packageFailures map[string]bool
-	tests           int
-	skipped         int
-	failures        int
-	errors          int
-	elapsed         float64
-	startTime       time.Time
-	endTime         time.Time
-	summaryWritten  bool
-	stdout          io.Writer
+	line                    strings.Builder
+	input                   strings.Builder
+	output                  strings.Builder
+	testOutputs             map[goTestID]*strings.Builder
+	testOutputOrder         []goTestID
+	packages                map[string]struct{}
+	packagesWithFailedTests map[string]struct{}
+	failedPackages          map[string]struct{}
+	tests                   int
+	skipped                 int
+	failures                int
+	errors                  int
+	elapsed                 float64
+	startTime               time.Time
+	endTime                 time.Time
+	summaryWritten          bool
+	stdout                  io.Writer
 }
 
 func newGoTestJSONOutput() *goTestJSONOutput {
 	return &goTestJSONOutput{
-		testOutputs:     make(map[goTestID]*strings.Builder),
-		packages:        make(map[string]struct{}),
-		failedPackages:  make(map[string]bool),
-		packageFailures: make(map[string]bool),
-		stdout:          os.Stdout,
+		testOutputs:             make(map[goTestID]*strings.Builder),
+		packages:                make(map[string]struct{}),
+		packagesWithFailedTests: make(map[string]struct{}),
+		failedPackages:          make(map[string]struct{}),
+		stdout:                  os.Stdout,
 	}
 }
 
@@ -75,7 +75,7 @@ func (o *goTestJSONOutput) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (o *goTestJSONOutput) String() string {
+func (o *goTestJSONOutput) finish() string {
 	if o.line.Len() > 0 {
 		o.writeLine(o.line.String())
 		o.line.Reset()
@@ -156,8 +156,8 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 			o.packages[event.Package] = struct{}{}
 			o.elapsed = max(o.elapsed, event.Elapsed)
 			if event.Action == "fail" {
-				o.packageFailures[event.Package] = true
-				if !o.failedPackages[event.Package] {
+				o.failedPackages[event.Package] = struct{}{}
+				if _, ok := o.packagesWithFailedTests[event.Package]; !ok {
 					o.failures++
 				}
 			}
@@ -165,8 +165,8 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 		return
 	}
 
-	// Only failing tests are shown; passing and skipped test output is dropped
-	// entirely, since their pass/skip framing and body add no signal.
+	// Only failing tests are shown; passing and skipped test output is hidden
+	// from the live console, since their framing and body add no signal there.
 	o.flushTestOutput(
 		goTestID{packageName: event.Package, testName: event.Test},
 		event.Action == "fail",
@@ -175,7 +175,7 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 	switch event.Action {
 	case "fail":
 		o.failures++
-		o.failedPackages[event.Package] = true
+		o.packagesWithFailedTests[event.Package] = struct{}{}
 	case "skip":
 		o.skipped++
 	default:
@@ -220,11 +220,11 @@ func (o *goTestJSONOutput) flushTestOutput(test goTestID, show bool) {
 	if !ok {
 		return
 	}
-	// A hidden test contributes nothing: if we don't show it, we drop its
-	// buffered output entirely instead of keeping it in the report.
+	output := testOutput.String()
 	if show {
-		o.writeOutput(testOutput.String())
+		_, _ = fmt.Fprint(o.stdout, output)
 	}
+	o.output.WriteString(output)
 	delete(o.testOutputs, test)
 }
 
@@ -252,7 +252,7 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 			// Incomplete tests from a runner abort have run/pause output but no terminal result.
 			if test.Result != gtr.Unknown {
 				pkg.Tests = append(pkg.Tests, test)
-			} else if o.packageFailures[pkg.Name] {
+			} else if _, ok := o.failedPackages[pkg.Name]; ok {
 				incompleteTests = append(incompleteTests, test)
 			}
 		}
