@@ -9,10 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -239,4 +241,166 @@ func matchRunID(runID string) gomock.Matcher {
 		ref, ok := x.(chasm.ComponentRef)
 		return ok && ref.RunID == runID
 	})
+}
+
+// TestActivityMutationHandlers_MarkActivityIDInContextMetadata verifies that the activity mutation
+// RPCs mark the targeted activity ID on the context, so that mutable state can resolve it to the
+// activity's type and task queue during closeTransaction and the request is attributed to the
+// activity rather than to its workflow. Requests that target activities by type (or match all
+// pending activities) can fan out to several activities and are deliberately left unmarked.
+func TestActivityMutationHandlers_MarkActivityIDInContextMetadata(t *testing.T) {
+	t.Parallel()
+
+	const (
+		namespaceID = "test-namespace-id"
+		workflowID  = "test-workflow-id"
+		activityID  = "test-activity-id"
+	)
+	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
+
+	testCases := []struct {
+		name   string
+		invoke func(context.Context, *Handler) error
+		want   []string
+	}{
+		{
+			name: "PauseActivity by ID",
+			invoke: func(ctx context.Context, h *Handler) error {
+				_, err := h.PauseActivity(ctx, &historyservice.PauseActivityRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.PauseActivityRequest{
+						Execution: execution,
+						Activity:  &workflowservice.PauseActivityRequest_Id{Id: activityID},
+					},
+				})
+				return err
+			},
+			want: []string{activityID},
+		},
+		{
+			name: "PauseActivity by type",
+			invoke: func(ctx context.Context, h *Handler) error {
+				_, err := h.PauseActivity(ctx, &historyservice.PauseActivityRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.PauseActivityRequest{
+						Execution: execution,
+						Activity:  &workflowservice.PauseActivityRequest_Type{Type: "test-activity-type"},
+					},
+				})
+				return err
+			},
+			want: nil,
+		},
+		{
+			name: "UnpauseActivity by ID",
+			invoke: func(ctx context.Context, h *Handler) error {
+				_, err := h.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.UnpauseActivityRequest{
+						Execution: execution,
+						Activity:  &workflowservice.UnpauseActivityRequest_Id{Id: activityID},
+					},
+				})
+				return err
+			},
+			want: []string{activityID},
+		},
+		{
+			name: "UnpauseActivity unpause all",
+			invoke: func(ctx context.Context, h *Handler) error {
+				_, err := h.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.UnpauseActivityRequest{
+						Execution: execution,
+						Activity:  &workflowservice.UnpauseActivityRequest_UnpauseAll{UnpauseAll: true},
+					},
+				})
+				return err
+			},
+			want: nil,
+		},
+		{
+			name: "ResetActivity by ID",
+			invoke: func(ctx context.Context, h *Handler) error {
+				_, err := h.ResetActivity(ctx, &historyservice.ResetActivityRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.ResetActivityRequest{
+						Execution: execution,
+						Activity:  &workflowservice.ResetActivityRequest_Id{Id: activityID},
+					},
+				})
+				return err
+			},
+			want: []string{activityID},
+		},
+		{
+			name: "ResetActivity match all",
+			invoke: func(ctx context.Context, h *Handler) error {
+				_, err := h.ResetActivity(ctx, &historyservice.ResetActivityRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.ResetActivityRequest{
+						Execution: execution,
+						Activity:  &workflowservice.ResetActivityRequest_MatchAll{MatchAll: true},
+					},
+				})
+				return err
+			},
+			want: nil,
+		},
+		{
+			name: "UpdateActivityOptions by ID",
+			invoke: func(ctx context.Context, h *Handler) error {
+				_, err := h.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+					NamespaceId: namespaceID,
+					UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+						Execution: execution,
+						Activity:  &workflowservice.UpdateActivityOptionsRequest_Id{Id: activityID},
+					},
+				})
+				return err
+			},
+			want: []string{activityID},
+		},
+		{
+			name: "UpdateActivityOptions match all",
+			invoke: func(ctx context.Context, h *Handler) error {
+				_, err := h.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+					NamespaceId: namespaceID,
+					UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+						Execution: execution,
+						Activity:  &workflowservice.UpdateActivityOptionsRequest_MatchAll{MatchAll: true},
+					},
+				})
+				return err
+			},
+			want: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			controller := shard.NewMockController(ctrl)
+
+			// Marking happens before the shard lookup, so the mark is observable even though the
+			// lookup fails and the request never reaches the engine.
+			shardLookupErr := errors.New("shard lookup failed")
+			controller.EXPECT().
+				GetShardByNamespaceWorkflow(namespace.ID(namespaceID), workflowID).
+				Return(nil, shardLookupErr)
+
+			h := &Handler{
+				logger:          log.NewNoopLogger(),
+				throttledLogger: log.NewThrottledLogger(log.NewNoopLogger(), func() float64 { return 1 }),
+				metricsHandler:  metrics.NoopMetricsHandler,
+				controller:      controller,
+			}
+
+			ctx := contextutil.WithMetadataContext(context.Background())
+			err := tc.invoke(ctx, h)
+			require.ErrorIs(t, err, shardLookupErr)
+			require.ElementsMatch(t, tc.want, contextutil.ContextMetadataGetMarkedActivityIDs(ctx))
+		})
+	}
 }

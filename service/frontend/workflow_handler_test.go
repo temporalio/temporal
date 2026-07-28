@@ -5084,6 +5084,19 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 		s.Equal(errRequestNotSet, err)
 	})
 
+	s.Run("nil patch should return error", func() {
+		request := &workflowservice.PatchScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Patch:      nil,
+		}
+
+		resp, err := wh.PatchSchedule(ctx, request)
+		s.Nil(resp)
+		var invalidArgErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgErr)
+	})
+
 	s.Run("schedules disabled should return error", func() {
 		disabledConfig := s.newConfig()
 		disabledConfig.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(false)
