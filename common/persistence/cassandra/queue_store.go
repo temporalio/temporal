@@ -15,13 +15,14 @@ import (
 )
 
 const (
-	templateEnqueueMessageQuery       = `INSERT INTO queue (queue_type, message_id, message_payload, message_encoding) VALUES(?, ?, ?, ?)`
-	templateGetLastMessageIDQuery     = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
-	templateGetMessagesQuery          = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
-	templateGetMessagesFromDLQQuery   = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
-	templateDeleteMessagesBeforeQuery = `DELETE FROM queue WHERE queue_type = ? and message_id < ?`
-	templateDeleteMessagesQuery       = `DELETE FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
-	templateDeleteMessageQuery        = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
+	templateEnqueueMessageQuery           = `INSERT INTO queue (queue_type, message_id, message_payload, message_encoding) VALUES(?, ?, ?, ?) IF NOT EXISTS`
+	templateEnqueueMessageWithoutCASQuery = `INSERT INTO queue (queue_type, message_id, message_payload, message_encoding) VALUES(?, ?, ?, ?)`
+	templateGetLastMessageIDQuery         = `SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1`
+	templateGetMessagesQuery              = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and message_id > ? LIMIT ?`
+	templateGetMessagesFromDLQQuery       = `SELECT message_id, message_payload, message_encoding FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
+	templateDeleteMessagesBeforeQuery     = `DELETE FROM queue WHERE queue_type = ? and message_id < ?`
+	templateDeleteMessagesQuery           = `DELETE FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
+	templateDeleteMessageQuery            = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
 
 	templateGetQueueMetadataQuery                = `SELECT cluster_ack_level, data, data_encoding, version FROM queue_metadata WHERE queue_type = ?`
 	templateInsertQueueMetadataQuery             = `INSERT INTO queue_metadata (queue_type, cluster_ack_level, data, data_encoding, version) VALUES(?, ?, ?, ?, ?) IF NOT EXISTS`
@@ -34,12 +35,13 @@ const (
 
 type (
 	QueueStore struct {
-		queueType       persistence.QueueType
-		session         gocql.Session
-		logger          log.Logger
-		serializer      serialization.Serializer
-		messageIDRanges sync.Map
-		queueLocks      sync.Map
+		queueType        persistence.QueueType
+		session          gocql.Session
+		logger           log.Logger
+		serializer       serialization.Serializer
+		messageIDRanges  sync.Map
+		queueLocks       sync.Map
+		disableInsertCAS bool
 	}
 
 	queueMessageIDRange struct {
@@ -52,12 +54,14 @@ func NewQueueStore(
 	queueType persistence.QueueType,
 	session gocql.Session,
 	logger log.Logger,
+	disableInsertCAS ...bool,
 ) (persistence.Queue, error) {
 	return &QueueStore{
-		queueType:  queueType,
-		session:    session,
-		logger:     logger,
-		serializer: serialization.NewSerializer(),
+		queueType:        queueType,
+		session:          session,
+		logger:           logger,
+		serializer:       serialization.NewSerializer(),
+		disableInsertCAS: len(disableInsertCAS) > 0 && disableInsertCAS[0],
 	}, nil
 }
 
@@ -112,9 +116,20 @@ func (q *QueueStore) tryEnqueue(
 	messageID int64,
 	blob *commonpb.DataBlob,
 ) error {
-	err := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx).Exec()
+	if q.disableInsertCAS {
+		err := q.session.Query(templateEnqueueMessageWithoutCASQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx).Exec()
+		if err != nil {
+			return gocql.ConvertError("tryEnqueue", err)
+		}
+		return nil
+	}
+
+	applied, err := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("tryEnqueue", err)
+	}
+	if !applied {
+		return ErrEnqueueMessageConflict
 	}
 
 	return nil

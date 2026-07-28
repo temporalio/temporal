@@ -376,6 +376,9 @@ type (
 		Consistency *CassandraStoreConsistency `yaml:"consistency"`
 		// DisableInitialHostLookup instructs the gocql client to connect only using the supplied hosts
 		DisableInitialHostLookup bool `yaml:"disableInitialHostLookup"`
+		// DisableQueueMessageInsertCAS disables conditional queue message inserts. Enable only after every writer has
+		// upgraded to the range-based message ID allocator.
+		DisableQueueMessageInsertCAS bool `yaml:"disableQueueMessageInsertCAS"`
 		// AddressTranslator translates Cassandra IP addresses, used for cases when IP addresses gocql driver returns are not accessible from the server
 		AddressTranslator *CassandraAddressTranslator `yaml:"addressTranslator"`
 	}

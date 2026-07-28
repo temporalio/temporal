@@ -104,13 +104,13 @@ func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
 
 // NewQueue returns a new queue backed by cassandra
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
-	return NewQueueStore(queueType, f.session, f.logger)
+	return NewQueueStore(queueType, f.session, f.logger, f.cfg.DisableQueueMessageInsertCAS)
 }
 
 // NewQueueV2 returns a new data-access object for queues and messages stored in Cassandra. It will never return an
 // error.
 func (f *Factory) NewQueueV2() (p.QueueV2, error) {
-	return NewQueueV2Store(f.session, f.logger), nil
+	return NewQueueV2Store(f.session, f.logger, f.cfg.DisableQueueMessageInsertCAS), nil
 }
 
 // NewNexusEndpointStore returns a new NexusEndpointStore

@@ -341,9 +341,14 @@ func TestScheduledTaskQueriesHaveSeparatedPredicates(t *testing.T) {
 	require.NotContains(t, templateGetTimerTasksQuery, "?and")
 }
 
-func TestQueueMessageInsertsUseRegularWrites(t *testing.T) {
-	require.NotContains(t, templateEnqueueMessageQuery, "IF")
-	require.NotContains(t, TemplateEnqueueMessageQuery, "IF")
+func TestQueueMessageInsertsUseConditionalWrites(t *testing.T) {
+	require.Contains(t, templateEnqueueMessageQuery, "IF NOT EXISTS")
+	require.Contains(t, TemplateEnqueueMessageQuery, "IF NOT EXISTS")
+}
+
+func TestQueueMessageInsertsSupportRegularWrites(t *testing.T) {
+	require.NotContains(t, templateEnqueueMessageWithoutCASQuery, "IF")
+	require.NotContains(t, TemplateEnqueueMessageWithoutCASQuery, "IF")
 }
 
 func TestHistoryNodeSchemaPartitionsByTreeAndBranch(t *testing.T) {
@@ -944,7 +949,9 @@ func TestQueueEnqueueCachesMessageIDRange(t *testing.T) {
 				}
 			case templateEnqueueMessageQuery:
 				return &recordingQuery{
-					execFn: func() error { return nil },
+					mapScanCASFn: func(map[string]any) (bool, error) {
+						return true, nil
+					},
 				}
 			default:
 				t.Fatalf("unexpected query: %s", stmt)
@@ -1018,7 +1025,9 @@ func TestQueueEnqueueMessageIDRangeConflictRefreshesRange(t *testing.T) {
 				}
 			case templateEnqueueMessageQuery:
 				return &recordingQuery{
-					execFn: func() error { return nil },
+					mapScanCASFn: func(map[string]any) (bool, error) {
+						return true, nil
+					},
 				}
 			default:
 				t.Fatalf("unexpected query: %s", stmt)
@@ -1084,7 +1093,9 @@ func TestQueueEnqueueReservesNewRangeAfterCachedRangeExhausted(t *testing.T) {
 			case templateEnqueueMessageQuery:
 				insertCalls++
 				return &recordingQuery{
-					execFn: func() error { return nil },
+					mapScanCASFn: func(map[string]any) (bool, error) {
+						return true, nil
+					},
 				}
 			default:
 				t.Fatalf("unexpected query: %s", stmt)
@@ -1121,6 +1132,88 @@ func TestQueueEnqueueReservesNewRangeAfterCachedRangeExhausted(t *testing.T) {
 	require.Equal(t, queueMessageIDRangeAllocationSize, session.queries[3].args[1])
 }
 
+func TestQueueEnqueueMessageIDConflictReturnsError(t *testing.T) {
+	session := &recordingSession{
+		t: t,
+		queryFn: func(stmt string, args ...any) cgocql.Query {
+			switch stmt {
+			case templateEnqueueMessageQuery:
+				require.Equal(t, []any{
+					p.NamespaceReplicationQueueType,
+					int64(42),
+					[]byte("message"),
+					enumspb.ENCODING_TYPE_PROTO3.String(),
+				}, args)
+				return &recordingQuery{
+					mapScanCASFn: func(map[string]any) (bool, error) {
+						return false, nil
+					},
+				}
+			default:
+				t.Fatalf("unexpected query: %s", stmt)
+				return nil
+			}
+		},
+	}
+	store, err := NewQueueStore(p.NamespaceReplicationQueueType, session, log.NewNoopLogger())
+	require.NoError(t, err)
+	cassandraStore := store.(*QueueStore)
+	cassandraStore.messageIDRanges.Store(p.NamespaceReplicationQueueType, queueMessageIDRange{
+		nextMessageID:         42,
+		exclusiveMaxMessageID: 43,
+	})
+
+	err = store.EnqueueMessage(t.Context(), &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         []byte("message"),
+	})
+	require.ErrorIs(t, err, ErrEnqueueMessageConflict)
+	require.Equal(t, []string{
+		templateEnqueueMessageQuery,
+	}, recordedStatements(session.queries))
+}
+
+func TestQueueEnqueueCanDisableInsertCAS(t *testing.T) {
+	session := &recordingSession{
+		t: t,
+		queryFn: func(stmt string, args ...any) cgocql.Query {
+			switch stmt {
+			case templateEnqueueMessageWithoutCASQuery:
+				require.Equal(t, []any{
+					p.NamespaceReplicationQueueType,
+					int64(42),
+					[]byte("message"),
+					enumspb.ENCODING_TYPE_PROTO3.String(),
+				}, args)
+				return &recordingQuery{
+					execFn: func() error {
+						return nil
+					},
+				}
+			default:
+				t.Fatalf("unexpected query: %s", stmt)
+				return nil
+			}
+		},
+	}
+	store, err := NewQueueStore(p.NamespaceReplicationQueueType, session, log.NewNoopLogger(), true)
+	require.NoError(t, err)
+	cassandraStore := store.(*QueueStore)
+	cassandraStore.messageIDRanges.Store(p.NamespaceReplicationQueueType, queueMessageIDRange{
+		nextMessageID:         42,
+		exclusiveMaxMessageID: 43,
+	})
+
+	err = store.EnqueueMessage(t.Context(), &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         []byte("message"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		templateEnqueueMessageWithoutCASQuery,
+	}, recordedStatements(session.queries))
+}
+
 func TestQueueV2EnqueueCachesKnownQueue(t *testing.T) {
 	queueBytes, err := (&persistencespb.Queue{
 		Partitions: map[int32]*persistencespb.QueuePartition{
@@ -1136,7 +1229,7 @@ func TestQueueV2EnqueueCachesKnownQueue(t *testing.T) {
 	}
 	session.queryFn = func(stmt string, args ...any) cgocql.Query {
 		switch stmt {
-		case TemplateCreateQueueQuery, TemplateCreateQueueMessageIDRangeQuery:
+		case TemplateCreateQueueQuery, TemplateCreateQueueMessageIDRangeQuery, TemplateEnqueueMessageQuery:
 			return &recordingQuery{
 				mapScanCASFn: func(map[string]any) (bool, error) {
 					return true, nil
@@ -1150,8 +1243,6 @@ func TestQueueV2EnqueueCachesKnownQueue(t *testing.T) {
 					return gocql.ErrNotFound
 				},
 			}
-		case TemplateEnqueueMessageQuery:
-			return &recordingQuery{}
 		default:
 			t.Fatalf("unexpected query: %s", stmt)
 		}
@@ -1223,7 +1314,11 @@ func TestQueueV2EnqueueCachesMessageIDRange(t *testing.T) {
 		case TemplateEnqueueMessageQuery:
 			insertCalls++
 			require.Equal(t, int64(insertCalls-1), args[3])
-			return &recordingQuery{}
+			return &recordingQuery{
+				mapScanCASFn: func(map[string]any) (bool, error) {
+					return true, nil
+				},
+			}
 		default:
 			t.Fatalf("unexpected query: %s", stmt)
 		}
@@ -1307,7 +1402,11 @@ func TestQueueV2EnqueueSeedsMissingMessageIDRangeFromExistingMessages(t *testing
 			}
 		case TemplateEnqueueMessageQuery:
 			require.Equal(t, maxMessageID+1, args[3])
-			return &recordingQuery{}
+			return &recordingQuery{
+				mapScanCASFn: func(map[string]any) (bool, error) {
+					return true, nil
+				},
+			}
 		default:
 			t.Fatalf("unexpected query: %s", stmt)
 		}
@@ -1401,7 +1500,11 @@ func TestQueueV2EnqueueMessageIDRangeConflictRefreshesRange(t *testing.T) {
 		case TemplateEnqueueMessageQuery:
 			insertCalls++
 			require.Equal(t, int64(queueV2MessageIDRangeAllocationSize+insertCalls-1), args[3])
-			return &recordingQuery{}
+			return &recordingQuery{
+				mapScanCASFn: func(map[string]any) (bool, error) {
+					return true, nil
+				},
+			}
 		default:
 			t.Fatalf("unexpected query: %s", stmt)
 		}
@@ -1481,7 +1584,11 @@ func TestQueueV2EnqueueReservesNewRangeAfterCachedRangeExhausted(t *testing.T) {
 			}
 		case TemplateEnqueueMessageQuery:
 			insertCalls++
-			return &recordingQuery{}
+			return &recordingQuery{
+				mapScanCASFn: func(map[string]any) (bool, error) {
+					return true, nil
+				},
+			}
 		default:
 			t.Fatalf("unexpected query: %s", stmt)
 		}
@@ -1532,6 +1639,130 @@ func TestQueueV2EnqueueReservesNewRangeAfterCachedRangeExhausted(t *testing.T) {
 	require.Equal(t, int64(queueV2MessageIDRangeAllocationSize), session.queries[3].args[3])
 }
 
+func TestQueueV2EnqueueMessageIDConflictReturnsError(t *testing.T) {
+	queueType := p.QueueTypeHistoryNormal
+	queueName := "test-queue"
+	session := &recordingSession{
+		t: t,
+	}
+	session.queryFn = func(stmt string, args ...any) cgocql.Query {
+		switch stmt {
+		case TemplateGetQueueQuery:
+			t.Fatal("enqueue should use seeded queue metadata cache")
+		case TemplateEnqueueMessageQuery:
+			require.Equal(t, []any{
+				queueType,
+				queueName,
+				0,
+				int64(42),
+				[]byte("message"),
+				enumspb.ENCODING_TYPE_PROTO3.String(),
+			}, args)
+			return &recordingQuery{
+				mapScanCASFn: func(map[string]any) (bool, error) {
+					return false, nil
+				},
+			}
+		default:
+			t.Fatalf("unexpected query: %s", stmt)
+		}
+		return nil
+	}
+
+	store := NewQueueV2Store(session, log.NewNoopLogger())
+	cassandraStore := store.(*queueV2Store)
+	key := queueV2Key{queueType: queueType, queueName: queueName}
+	cassandraStore.knownQueues.Store(key, &Queue{
+		Metadata: &persistencespb.Queue{
+			Partitions: map[int32]*persistencespb.QueuePartition{
+				0: {
+					MinMessageId: p.FirstQueueMessageID,
+				},
+			},
+		},
+		Version: int64(1),
+	})
+	cassandraStore.messageIDRanges.Store(key, queueV2MessageIDRange{
+		nextMessageID:         42,
+		exclusiveMaxMessageID: 43,
+	})
+
+	_, err := store.EnqueueMessage(t.Context(), &p.InternalEnqueueMessageRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+		Blob: &commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			Data:         []byte("message"),
+		},
+	})
+	require.ErrorIs(t, err, ErrEnqueueMessageConflict)
+	require.Equal(t, []string{
+		TemplateEnqueueMessageQuery,
+	}, recordedStatements(session.queries))
+}
+
+func TestQueueV2EnqueueCanDisableInsertCAS(t *testing.T) {
+	queueType := p.QueueTypeHistoryNormal
+	queueName := "test-queue"
+	session := &recordingSession{
+		t: t,
+	}
+	session.queryFn = func(stmt string, args ...any) cgocql.Query {
+		switch stmt {
+		case TemplateGetQueueQuery:
+			t.Fatal("enqueue should use seeded queue metadata cache")
+		case TemplateEnqueueMessageWithoutCASQuery:
+			require.Equal(t, []any{
+				queueType,
+				queueName,
+				0,
+				int64(42),
+				[]byte("message"),
+				enumspb.ENCODING_TYPE_PROTO3.String(),
+			}, args)
+			return &recordingQuery{
+				execFn: func() error {
+					return nil
+				},
+			}
+		default:
+			t.Fatalf("unexpected query: %s", stmt)
+		}
+		return nil
+	}
+
+	store := NewQueueV2Store(session, log.NewNoopLogger(), true)
+	cassandraStore := store.(*queueV2Store)
+	key := queueV2Key{queueType: queueType, queueName: queueName}
+	cassandraStore.knownQueues.Store(key, &Queue{
+		Metadata: &persistencespb.Queue{
+			Partitions: map[int32]*persistencespb.QueuePartition{
+				0: {
+					MinMessageId: p.FirstQueueMessageID,
+				},
+			},
+		},
+		Version: int64(1),
+	})
+	cassandraStore.messageIDRanges.Store(key, queueV2MessageIDRange{
+		nextMessageID:         42,
+		exclusiveMaxMessageID: 43,
+	})
+
+	_, err := store.EnqueueMessage(t.Context(), &p.InternalEnqueueMessageRequest{
+		QueueType: queueType,
+		QueueName: queueName,
+		Blob: &commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			Data:         []byte("message"),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		TemplateEnqueueMessageWithoutCASQuery,
+	}, recordedStatements(session.queries))
+}
+
 func TestQueueV2ConcurrentEnqueueSerializesLocalWriters(t *testing.T) {
 	session := &recordingSession{
 		t: t,
@@ -1577,12 +1808,12 @@ func TestQueueV2ConcurrentEnqueueSerializesLocalWriters(t *testing.T) {
 			insertCalls++
 			require.Equal(t, int64(insertCalls-1), args[3])
 			return &recordingQuery{
-				execFn: func() error {
+				mapScanCASFn: func(map[string]any) (bool, error) {
 					if insertCalls == 1 {
 						close(insertStarted)
 						<-releaseInsert
 					}
-					return nil
+					return true, nil
 				},
 			}
 		default:

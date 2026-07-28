@@ -20,11 +20,12 @@ type (
 	// queue_messages tables that implement the QueueV2 interface. The schema is located at:
 	//	schema/cassandra/temporal/versioned/v1.9/queues.cql
 	queueV2Store struct {
-		session         gocql.Session
-		logger          log.Logger
-		knownQueues     sync.Map
-		messageIDRanges sync.Map
-		queueLocks      sync.Map
+		session          gocql.Session
+		logger           log.Logger
+		knownQueues      sync.Map
+		messageIDRanges  sync.Map
+		queueLocks       sync.Map
+		disableInsertCAS bool
 	}
 
 	Queue struct {
@@ -44,7 +45,8 @@ type (
 )
 
 const (
-	TemplateEnqueueMessageQuery            = `INSERT INTO queue_messages (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES (?, ?, ?, ?, ?, ?)`
+	TemplateEnqueueMessageQuery            = `INSERT INTO queue_messages (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES (?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+	TemplateEnqueueMessageWithoutCASQuery  = `INSERT INTO queue_messages (queue_type, queue_name, queue_partition, message_id, message_payload, message_encoding) VALUES (?, ?, ?, ?, ?, ?)`
 	TemplateGetMessagesQuery               = `SELECT message_id, message_payload, message_encoding FROM queue_messages WHERE queue_type = ? AND queue_name = ? AND queue_partition = ? AND message_id >= ? ORDER BY message_id ASC LIMIT ?`
 	TemplateGetMaxMessageIDQuery           = `SELECT message_id FROM queue_messages WHERE queue_type = ? AND queue_name = ? AND queue_partition = ? ORDER BY message_id DESC LIMIT 1`
 	TemplateCreateQueueQuery               = `INSERT INTO queues (queue_type, queue_name, metadata_payload, metadata_encoding, version) VALUES (?, ?, ?, ?, ?) IF NOT EXISTS`
@@ -95,10 +97,11 @@ var (
 	}
 )
 
-func NewQueueV2Store(session gocql.Session, logger log.Logger) persistence.QueueV2 {
+func NewQueueV2Store(session gocql.Session, logger log.Logger, disableInsertCAS ...bool) persistence.QueueV2 {
 	return &queueV2Store{
-		session: session,
-		logger:  logger,
+		session:          session,
+		logger:           logger,
+		disableInsertCAS: len(disableInsertCAS) > 0 && disableInsertCAS[0],
 	}
 }
 
@@ -352,7 +355,23 @@ func (s *queueV2Store) tryInsert(
 	blob *commonpb.DataBlob,
 	messageID int64,
 ) error {
-	err := s.session.Query(
+	if s.disableInsertCAS {
+		err := s.session.Query(
+			TemplateEnqueueMessageWithoutCASQuery,
+			queueType,
+			queueName,
+			0,
+			messageID,
+			blob.Data,
+			blob.EncodingType.String(),
+		).WithContext(ctx).Exec()
+		if err != nil {
+			return gocql.ConvertError("QueueV2EnqueueMessage", err)
+		}
+		return nil
+	}
+
+	applied, err := s.session.Query(
 		TemplateEnqueueMessageQuery,
 		queueType,
 		queueName,
@@ -360,9 +379,12 @@ func (s *queueV2Store) tryInsert(
 		messageID,
 		blob.Data,
 		blob.EncodingType.String(),
-	).WithContext(ctx).Exec()
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("QueueV2EnqueueMessage", err)
+	}
+	if !applied {
+		return ErrEnqueueMessageConflict
 	}
 
 	return nil
