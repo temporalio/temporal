@@ -3052,6 +3052,13 @@ Requires service restart to take effect.`,
 		true,
 		"Use real chasm tree implementation instead of the noop one",
 	)
+	EnableCHASMSkipPersistence = NewNamespaceBoolSetting(
+		"history.enableCHASMSkipPersistence",
+		false,
+		`EnableCHASMSkipPersistence controls whether CHASM CloseTransaction omits nodes whose serialized data is unchanged.
+This optimization should only be enabled after every cluster that may receive CHASM replication supports invalidating
+hydrated ancestor components when applying child-node mutations.`,
+	)
 
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
 		"history.chasmMaxInMemoryPureTasks",
