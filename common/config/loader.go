@@ -217,8 +217,10 @@ func (opts *loadOptions) loadLegacy(config any) error {
 func readConfigFile(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return nil, fmt.Errorf("permission denied reading config file %s: %w", path, err)
+		}
 		return nil, fmt.Errorf("could not read config file: %s. error: %w", path, err)
-
 	}
 	return data, nil
 }
