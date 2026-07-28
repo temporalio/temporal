@@ -10,37 +10,32 @@ import (
 
 func TestGoTestJSONOutput_Output(t *testing.T) {
 	testCases := []struct {
-		name           string
-		input          string
-		expectedOutput string
-		expectedStdout string // by default, expectedStdout is the same as expectedOutput
+		name     string
+		input    string
+		expected string
 	}{
 		{
-			name: "buffers test output",
+			name: "shows failing tests and hides passing tests",
 			input: `{"Time":"2026-07-28T00:00:00Z","Action":"start","Package":"example.com/tests"}
-{"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
-{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"A1\n"}
+{"Action":"run","Package":"example.com/tests","Test":"TestFail"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"=== RUN   TestFail\n"}
 {"Action":"run","Package":"example.com/tests","Test":"TestPass"}
-{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"B1\n"}
-{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"A2\n"}
-{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"B2\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"=== RUN   TestPass\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"    foo_test.go:10: boom\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"    pass log\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"--- PASS: TestPass (0.00s)\n"}
 {"Action":"pass","Package":"example.com/tests","Test":"TestPass"}
-{"Action":"output","Package":"example.com/tests","Output":"package output\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"--- FAIL: TestFail (0.00s)\n"}
+{"Action":"fail","Package":"example.com/tests","Test":"TestFail"}
+{"Action":"output","Package":"example.com/tests","Output":"FAIL\n"}
 {"Time":"2026-07-28T00:00:02Z","Action":"fail","Package":"example.com/tests","Elapsed":2}
 `,
-			expectedOutput: `B1
-B2
-package output
-A1
-A2
+			expected: `=== RUN   TestFail
+    foo_test.go:10: boom
+--- FAIL: TestFail (0.00s)
+FAIL
 
-DONE 1 tests, 1 failure in 2.000s
-`,
-			expectedStdout: `package output
-A1
-A2
-
-DONE 1 tests, 1 failure in 2.000s
+DONE 2 tests, 1 failure in 2.000s
 `,
 		},
 		{
@@ -51,29 +46,23 @@ DONE 1 tests, 1 failure in 2.000s
 {"Action":"bench","Package":"example.com/tests","Test":"BenchmarkExample","Output":"BenchmarkExample-12  1  100 ns/op\n"}
 {"Action":"pass","Package":"example.com/tests","Elapsed":0.1}
 `,
-			expectedOutput: `benchmark log
+			expected: `benchmark log
 BenchmarkExample-12  1  100 ns/op
 
 DONE 0 tests in 0.100s
 `,
 		},
 		{
-			name: "hides skipped output",
+			name: "drops skipped output",
 			input: `{"Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestSkip"}
 {"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"=== RUN   TestSkip\n"}
-{"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"skip reason\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"    skip_test.go:5: not now\n"}
 {"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"--- SKIP: TestSkip (0.00s)\n"}
 {"Action":"skip","Package":"example.com/tests","Test":"TestSkip"}
 {"Action":"pass","Package":"example.com/tests","Elapsed":0.1}
 `,
-			expectedOutput: `=== RUN   TestSkip
-skip reason
---- SKIP: TestSkip (0.00s)
-
-DONE 1 tests, 1 skipped in 0.100s
-`,
-			expectedStdout: `
+			expected: `
 DONE 1 tests, 1 skipped in 0.100s
 `,
 		},
@@ -86,12 +75,8 @@ DONE 1 tests, 1 skipped in 0.100s
 			output.stdout = &stdout
 			_, err := output.Write([]byte(tc.input))
 			require.NoError(t, err)
-			require.Equal(t, tc.expectedOutput, output.String())
-			expectedStdout := tc.expectedStdout
-			if expectedStdout == "" {
-				expectedStdout = tc.expectedOutput
-			}
-			require.Equal(t, expectedStdout, stdout.String())
+			require.Equal(t, tc.expected, output.String())
+			require.Equal(t, tc.expected, stdout.String())
 		})
 	}
 }
@@ -104,39 +89,46 @@ func TestGoTestJSONOutput_ChunkedWrites(t *testing.T) {
 	_, err := output.Write([]byte(`{"Action":"start","Package":"example.`))
 	require.NoError(t, err)
 	_, err = output.Write([]byte(`com/tests"}
-{"Action":"run","Package":"example.com/tests","Test":"TestPass"}
-{"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"chunked\n"}
-{"Action":"pass","Package":"example.com/tests","Test":"TestPass"}
-{"Action":"pass","Package":"example.com/tests","Elapsed":0.1}`))
+{"Action":"run","Package":"example.com/tests","Test":"TestFail"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"chunked\n"}
+{"Action":"fail","Package":"example.com/tests","Test":"TestFail"}
+{"Action":"fail","Package":"example.com/tests","Elapsed":0.1}`))
 	require.NoError(t, err)
 
 	expected := `chunked
 
-DONE 1 tests in 0.100s
+DONE 1 tests, 1 failure in 0.100s
 `
 	require.Equal(t, expected, output.String())
-	// The passing test's output is hidden from the live console.
-	require.Equal(t, "\nDONE 1 tests in 0.100s\n", stdout.String())
+	require.Equal(t, expected, stdout.String())
 }
 
 func TestGoTestJSONOutput_MultiplePackages(t *testing.T) {
 	input := `{"Time":"2026-07-28T00:00:00Z","Action":"start","Package":"example.com/one"}
 {"Time":"2026-07-28T00:00:00.5Z","Action":"start","Package":"example.com/two"}
 {"Action":"run","Package":"example.com/one","Test":"TestOne"}
-{"Action":"output","Package":"example.com/one","Test":"TestOne","Output":"one-1\n"}
+{"Action":"output","Package":"example.com/one","Test":"TestOne","Output":"=== RUN   TestOne\n"}
+{"Action":"output","Package":"example.com/one","Test":"TestOne","Output":"    one_test.go:1: one-1\n"}
 {"Action":"run","Package":"example.com/two","Test":"TestTwo"}
-{"Action":"output","Package":"example.com/two","Test":"TestTwo","Output":"two-1\n"}
-{"Action":"output","Package":"example.com/one","Test":"TestOne","Output":"one-2\n"}
-{"Time":"2026-07-28T00:00:01.5Z","Action":"pass","Package":"example.com/two","Test":"TestTwo"}
-{"Time":"2026-07-28T00:00:01.75Z","Action":"pass","Package":"example.com/two","Elapsed":1.25}
-{"Time":"2026-07-28T00:00:02Z","Action":"pass","Package":"example.com/one","Test":"TestOne"}
-{"Time":"2026-07-28T00:00:03Z","Action":"pass","Package":"example.com/one","Elapsed":3}
+{"Action":"output","Package":"example.com/two","Test":"TestTwo","Output":"=== RUN   TestTwo\n"}
+{"Action":"output","Package":"example.com/two","Test":"TestTwo","Output":"    two_test.go:1: two-1\n"}
+{"Action":"output","Package":"example.com/one","Test":"TestOne","Output":"    one_test.go:2: one-2\n"}
+{"Action":"output","Package":"example.com/two","Test":"TestTwo","Output":"--- FAIL: TestTwo (1.00s)\n"}
+{"Time":"2026-07-28T00:00:01.5Z","Action":"fail","Package":"example.com/two","Test":"TestTwo"}
+{"Time":"2026-07-28T00:00:01.75Z","Action":"fail","Package":"example.com/two","Elapsed":1.25}
+{"Action":"output","Package":"example.com/one","Test":"TestOne","Output":"--- FAIL: TestOne (2.00s)\n"}
+{"Time":"2026-07-28T00:00:02Z","Action":"fail","Package":"example.com/one","Test":"TestOne"}
+{"Time":"2026-07-28T00:00:03Z","Action":"fail","Package":"example.com/one","Elapsed":3}
 `
-	expected := `two-1
-one-1
-one-2
+	expected := `=== RUN   TestTwo
+    two_test.go:1: two-1
+--- FAIL: TestTwo (1.00s)
+=== RUN   TestOne
+    one_test.go:1: one-1
+    one_test.go:2: one-2
+--- FAIL: TestOne (2.00s)
 
-DONE 2 tests in 3.000s
+DONE 2 tests, 2 failures in 3.000s
 `
 
 	output := newGoTestJSONOutput()
@@ -278,8 +270,8 @@ DONE 0 tests, 1 failure in 1.000s
 										Type:    string(failureTypeAborted),
 										Data: "package example.com/tests exited before 1 tests produced terminal results\n\n" +
 											"Recent package output:\n" +
-											"unfinished\n" +
-											"fatal LoadSchema: gocql: no response received from cassandra within timeout period\n",
+											"fatal LoadSchema: gocql: no response received from cassandra within timeout period\n" +
+											"unfinished\n",
 									},
 								},
 							},

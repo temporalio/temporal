@@ -165,8 +165,8 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 		return
 	}
 
-	// Only failing tests stream to the live console; passing and skipped test
-	// output stays in the buffered report but is hidden from the CI logs.
+	// Only failing tests are shown; passing and skipped test output is dropped
+	// entirely, since their pass/skip framing and body add no signal.
 	o.flushTestOutput(
 		goTestID{packageName: event.Package, testName: event.Test},
 		event.Action == "fail",
@@ -215,16 +215,16 @@ func (o *goTestJSONOutput) writeSummary() {
 	o.summaryWritten = true
 }
 
-func (o *goTestJSONOutput) flushTestOutput(test goTestID, live bool) {
+func (o *goTestJSONOutput) flushTestOutput(test goTestID, show bool) {
 	testOutput, ok := o.testOutputs[test]
 	if !ok {
 		return
 	}
-	output := testOutput.String()
-	if live {
-		_, _ = fmt.Fprint(o.stdout, output)
+	// A hidden test contributes nothing: if we don't show it, we drop its
+	// buffered output entirely instead of keeping it in the report.
+	if show {
+		o.writeOutput(testOutput.String())
 	}
-	o.output.WriteString(output)
 	delete(o.testOutputs, test)
 }
 
@@ -285,15 +285,17 @@ func packageAbortDetails(packageName string, packageOutput []string, incompleteT
 		len(incompleteTests),
 	)
 	var recent strings.Builder
+	// Package-level output holds the actual abort reason (fatal error, panic),
+	// so emit it first; the incomplete tests' own logs follow as context.
+	for _, line := range packageOutput {
+		recent.WriteString(line)
+		recent.WriteByte('\n')
+	}
 	for _, test := range incompleteTests {
 		for _, line := range test.Output {
 			recent.WriteString(line)
 			recent.WriteByte('\n')
 		}
-	}
-	for _, line := range packageOutput {
-		recent.WriteString(line)
-		recent.WriteByte('\n')
 	}
 	if recent.Len() > 0 {
 		details += "\n\nRecent package output:\n" + recent.String()
