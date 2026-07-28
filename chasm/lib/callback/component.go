@@ -7,6 +7,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -29,6 +30,13 @@ type Callback struct {
 
 	// Persisted internal state
 	*callbackspb.CallbackState
+	// The callback's terminal failure reason as applicable. This is to support surfacing external
+	// failure reasons (e.g. timeouts, cancellation) which might not match the LastAttemptFailure.
+	//
+	// NOTE: Currently CHASM Callbacks do not support cancellation, termination, or failure due to
+	// too many failed delivery attempts. So until those capabilities are added, this will only ever
+	// match LastAttemptFailure in practice.
+	TerminalFailure chasm.Field[*failurepb.Failure]
 
 	// Interface to retrieve Nexus operation completion data
 	CompletionSource chasm.ParentPtr[CompletionSource]

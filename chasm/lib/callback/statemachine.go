@@ -94,7 +94,8 @@ var TransitionFailed = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_FAILED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventFailed) error {
 		cb.recordAttempt(event.Time)
-		cb.LastAttemptFailure = &failurepb.Failure{
+
+		failure := &failurepb.Failure{
 			Message: event.Err.Error(),
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
@@ -102,6 +103,8 @@ var TransitionFailed = chasm.NewTransition(
 				},
 			},
 		}
+		cb.LastAttemptFailure = failure
+		cb.TerminalFailure = chasm.NewDataField(ctx, failure)
 		return nil
 	},
 )
