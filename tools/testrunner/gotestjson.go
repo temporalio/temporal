@@ -40,6 +40,7 @@ type goTestJSONOutput struct {
 	output                  strings.Builder
 	testOutputs             map[goTestID]*strings.Builder
 	testOutputOrder         []goTestID
+	terminalResults         map[goTestID]gtr.Result
 	failedTests             map[goTestID]struct{}
 	failedTestDetails       map[goTestID]string
 	packages                map[string]struct{}
@@ -58,6 +59,7 @@ type goTestJSONOutput struct {
 func newGoTestJSONOutput() *goTestJSONOutput {
 	return &goTestJSONOutput{
 		testOutputs:             make(map[goTestID]*strings.Builder),
+		terminalResults:         make(map[goTestID]gtr.Result),
 		failedTests:             make(map[goTestID]struct{}),
 		failedTestDetails:       make(map[goTestID]string),
 		packages:                make(map[string]struct{}),
@@ -173,6 +175,14 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 
 	test := goTestID{packageName: event.Package, testName: event.Test}
 	show := event.Action == "fail"
+	switch event.Action {
+	case "fail":
+		o.terminalResults[test] = gtr.Fail
+	case "skip":
+		o.terminalResults[test] = gtr.Skip
+	default:
+		o.terminalResults[test] = gtr.Pass
+	}
 	if show {
 		if testOutput := o.testOutputs[test]; testOutput != nil {
 			if details := parseFailureDetails(testOutput.String()); details != noFailureDetails {
@@ -325,12 +335,16 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		tests := pkg.Tests
 		pkg.Tests = tests[:0]
 		for _, test := range tests {
+			testID := goTestID{
+				packageName: pkg.Name,
+				testName:    test.Name,
+			}
+			if result, ok := o.terminalResults[testID]; ok {
+				test.Result = result
+			}
 			// Incomplete tests from a runner abort have run/pause output but no terminal result.
 			if test.Result != gtr.Unknown {
-				if details, ok := o.failedTestDetails[goTestID{
-					packageName: pkg.Name,
-					testName:    test.Name,
-				}]; ok {
+				if details, ok := o.failedTestDetails[testID]; ok {
 					test.Output = strings.Split(details, "\n")
 				}
 				pkg.Tests = append(pkg.Tests, test)

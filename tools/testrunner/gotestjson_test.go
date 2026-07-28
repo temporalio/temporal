@@ -674,6 +674,81 @@ DONE 2 tests, 1 failure in 0.010s
 				},
 			},
 		},
+		{
+			name: "terminal actions resolve parser-unknown parents",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"TestPassParent"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPassParent","Output":"=== RUN   TestPassParent\n"}
+{"Action":"run","Package":"example.com/tests","Test":"TestPassParent/Child"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPassParent/Child","Output":"=== RUN   TestPassParent/Child\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestPassParent/Child","Output":"--- PASS: TestPassParent/Child (0.01s)\n"}
+{"Action":"pass","Package":"example.com/tests","Test":"TestPassParent/Child","Elapsed":0.01}
+{"Action":"pass","Package":"example.com/tests","Test":"TestPassParent","Elapsed":0.01}
+{"Action":"run","Package":"example.com/tests","Test":"TestFailParent"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFailParent","Output":"=== RUN   TestFailParent\n"}
+{"Action":"run","Package":"example.com/tests","Test":"TestFailParent/Child"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFailParent/Child","Output":"=== RUN   TestFailParent/Child\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFailParent/Child","Output":"--- PASS: TestFailParent/Child (0.01s)\n"}
+{"Action":"pass","Package":"example.com/tests","Test":"TestFailParent/Child","Elapsed":0.01}
+{"Action":"output","Package":"example.com/tests","Test":"TestFailParent","Output":"    parent_test.go:20: cleanup failed\n"}
+{"Action":"fail","Package":"example.com/tests","Test":"TestFailParent","Elapsed":0.01}
+{"Action":"output","Package":"example.com/tests","Output":"FAIL\texample.com/tests\t0.010s\n"}
+{"Action":"fail","Package":"example.com/tests","Elapsed":0.01}
+`,
+			expectedOutput: `=== RUN   TestPassParent/Child
+--- PASS: TestPassParent/Child (0.01s)
+=== RUN   TestPassParent
+=== RUN   TestFailParent/Child
+--- PASS: TestFailParent/Child (0.01s)
+=== RUN   TestFailParent
+    parent_test.go:20: cleanup failed
+FAIL	example.com/tests	0.010s
+
+DONE 4 tests, 1 failure in 0.010s
+`,
+			expectedReport: &junitReport{
+				Testsuites: junit.Testsuites{
+					Tests:    4,
+					Failures: 1,
+					Suites: []junit.Testsuite{
+						{
+							Name:     "example.com/tests",
+							Tests:    4,
+							Failures: 1,
+							ID:       0,
+							Time:     "0.010",
+							Testcases: []junit.Testcase{
+								{
+									Name:      "TestPassParent",
+									Classname: "example.com/tests",
+									Time:      "0.000",
+								},
+								{
+									Name:      "TestPassParent/Child",
+									Classname: "example.com/tests",
+									Time:      "0.010",
+								},
+								{
+									Name:      "TestFailParent",
+									Classname: "example.com/tests",
+									Time:      "0.000",
+									Failure: &junit.Result{
+										Message: "Failed",
+										Data:    "    parent_test.go:20: cleanup failed",
+									},
+								},
+								{
+									Name:      "TestFailParent/Child",
+									Classname: "example.com/tests",
+									Time:      "0.010",
+								},
+							},
+							SystemOut: &junit.Output{Data: "    parent_test.go:20: cleanup failed"},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
