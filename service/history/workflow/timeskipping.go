@@ -160,15 +160,11 @@ func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationp
 // in the chain of runs(continue-as-new, retry, cron). The config is propagated regardless of whether time
 // skipping is actively running, so reading APIs can always retrieve the latest effective configuration from the current run.
 func propagateTimeSkippingToNextRun(
-	source *persistencespb.WorkflowExecutionInfo,
+	tsi *persistencespb.TimeSkippingInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
-
-	tsi := source.GetTimeSkippingInfo()
 	if tsi == nil {
 		return nil, nil
 	}
-
-	// if there is tsi, propagate everything thru the chain of runs
 	util := NewTimeSkippingInfoUtil(tsi)
 	var newTSC *commonpb.TimeSkippingConfig
 	if tsi.Config != nil {
@@ -188,10 +184,13 @@ func propagateTimeSkippingToNextRun(
 //  2. Config: everything propagates except the fast-forward config, and the whole config can be
 //     suppressed by DisablePropagation.
 func propagateTimeSkippingToOtherExecution(
-	source *persistencespb.WorkflowExecutionInfo,
+	tsi *persistencespb.TimeSkippingInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
-	tsc := source.GetTimeSkippingInfo().GetConfig()
-	accum := NewTimeSkippingInfoUtil(source.GetTimeSkippingInfo()).GetAccumulatedSkippedDuration()
+	if tsi == nil {
+		return nil, nil
+	}
+	tsc := tsi.GetConfig()
+	accum := NewTimeSkippingInfoUtil(tsi).GetAccumulatedSkippedDuration()
 
 	var stateProp *commonpb.TimeSkippingStatePropagation
 	if accum > 0 {

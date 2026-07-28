@@ -303,7 +303,7 @@ func SetupNewWorkflowForRetryOrCron(
 		VersioningOverride:       pinnedOverride,
 	}
 
-	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo)
+	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo.GetTimeSkippingInfo())
 	createRequest.TimeSkippingConfig = tsc
 
 	attempt := int32(1)
