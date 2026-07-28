@@ -239,13 +239,13 @@ func (j *junitReport) hasFailureType(kind failureType) bool {
 
 // missingRerunFailures returns prior-attempt failures that curr failed to
 // re-run. Aborted attempts retry with the same args, so coverage isn't expected.
-func (prev *junitReport) missingRerunFailures(curr *junitReport) []string {
-	if prev.hasFailureType(failureTypeAborted) || curr.hasFailureType(failureTypeAborted) {
+func (j *junitReport) missingRerunFailures(curr *junitReport) []string {
+	if j.hasFailureType(failureTypeAborted) || curr.hasFailureType(failureTypeAborted) {
 		return nil
 	}
 	currCases := curr.collectTestCases()
 	var missing []string
-	for _, f := range prev.collectTestCaseFailures() {
+	for _, f := range j.collectTestCaseFailures() {
 		if _, ok := currCases[f]; !ok {
 			missing = append(missing, f)
 		}
