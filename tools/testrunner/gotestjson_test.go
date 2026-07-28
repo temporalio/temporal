@@ -84,6 +84,51 @@ DONE 1 tests, 1 skipped in 0.100s
 `,
 		},
 		{
+			name: "hides framing-only incomplete tests from stdout",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== RUN   TestIncomplete\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== PAUSE TestIncomplete\n"}
+{"Action":"pause","Package":"example.com/tests","Test":"TestIncomplete"}
+{"Action":"output","Package":"example.com/tests","Output":"fatal package error\n"}
+{"Action":"fail","Package":"example.com/tests","Elapsed":0.1}
+`,
+			expectedOutput: `fatal package error
+=== RUN   TestIncomplete
+=== PAUSE TestIncomplete
+
+DONE 0 tests, 1 failure in 0.100s
+`,
+			expectedStdout: `fatal package error
+
+DONE 0 tests, 1 failure in 0.100s
+`,
+		},
+		{
+			name: "shows incomplete test diagnostics on stdout",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== RUN   TestIncomplete\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"    test.go:10: setup failed\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== PAUSE TestIncomplete\n"}
+{"Action":"pause","Package":"example.com/tests","Test":"TestIncomplete"}
+{"Action":"output","Package":"example.com/tests","Output":"fatal package error\n"}
+{"Action":"fail","Package":"example.com/tests","Elapsed":0.1}
+`,
+			expectedOutput: `fatal package error
+=== RUN   TestIncomplete
+    test.go:10: setup failed
+=== PAUSE TestIncomplete
+
+DONE 0 tests, 1 failure in 0.100s
+`,
+			expectedStdout: `fatal package error
+=== RUN   TestIncomplete
+    test.go:10: setup failed
+=== PAUSE TestIncomplete
+
+DONE 0 tests, 1 failure in 0.100s
+`,
+		},
+		{
 			name: "hides framing-only failed ancestors from stdout",
 			input: `{"Action":"start","Package":"example.com/tests"}
 {"Action":"output","Package":"example.com/tests","Test":"TestSuite/TestParent/child","Output":"=== RUN   TestSuite/TestParent/child\n"}

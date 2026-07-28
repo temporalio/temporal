@@ -83,7 +83,9 @@ func (o *goTestJSONOutput) finish() string {
 		o.line.Reset()
 	}
 	for _, test := range o.testOutputOrder {
-		o.flushTestOutput(test, true)
+		// A package abort leaves scheduler framing buffered for every unfinished
+		// test. Only surface buffers that contain diagnostic output.
+		o.flushTestOutput(test, hasGoTestDiagnosticOutput(o.testOutputs[test]))
 	}
 	o.writeSummary()
 	return o.output.String()
