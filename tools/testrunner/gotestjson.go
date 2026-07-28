@@ -333,6 +333,7 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		}
 		var incompleteTests []gtr.Test
 		tests := pkg.Tests
+		parentTests := testParentNames(tests)
 		pkg.Tests = tests[:0]
 		for _, test := range tests {
 			testID := goTestID{
@@ -343,14 +344,16 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 				test.Result = result
 			}
 			// Incomplete tests from a runner abort have run/pause output but no terminal result.
-			if test.Result != gtr.Unknown {
-				if details, ok := o.failedTestDetails[testID]; ok {
-					test.Output = strings.Split(details, "\n")
+			if test.Result == gtr.Unknown {
+				if _, isParent := parentTests[test.Name]; !isParent {
+					incompleteTests = append(incompleteTests, test)
 				}
-				pkg.Tests = append(pkg.Tests, test)
-			} else {
-				incompleteTests = append(incompleteTests, test)
+				continue
 			}
+			if details, ok := o.failedTestDetails[testID]; ok {
+				test.Output = strings.Split(details, "\n")
+			}
+			pkg.Tests = append(pkg.Tests, test)
 		}
 		if len(incompleteTests) > 0 {
 			abortedPackages = append(abortedPackages, packageAbort{
@@ -368,6 +371,22 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		)
 	}
 	return junitReport, nil
+}
+
+func testParentNames(tests []gtr.Test) map[string]struct{} {
+	parents := make(map[string]struct{})
+	for _, test := range tests {
+		name := test.Name
+		for {
+			separator := strings.LastIndexByte(name, '/')
+			if separator < 0 {
+				break
+			}
+			name = name[:separator]
+			parents[name] = struct{}{}
+		}
+	}
+	return parents
 }
 
 func (o *goTestJSONOutput) packageNameForTests(tests []gtr.Test) string {

@@ -675,6 +675,46 @@ DONE 2 tests, 1 failure in 0.010s
 			},
 		},
 		{
+			name: "unknown parent with completed child",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"TestParent"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"=== RUN   TestParent\n"}
+{"Action":"run","Package":"example.com/tests","Test":"TestParent/Child"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent/Child","Output":"=== RUN   TestParent/Child\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent/Child","Output":"--- PASS: TestParent/Child (0.01s)\n"}
+{"Action":"pass","Package":"example.com/tests","Test":"TestParent/Child","Elapsed":0.01}
+{"Action":"output","Package":"example.com/tests","Output":"ok  \texample.com/tests\t0.010s\n"}
+{"Action":"pass","Package":"example.com/tests","Elapsed":0.01}
+`,
+			expectedOutput: `=== RUN   TestParent/Child
+--- PASS: TestParent/Child (0.01s)
+ok  	example.com/tests	0.010s
+=== RUN   TestParent
+
+DONE 1 tests in 0.010s
+`,
+			expectedReport: &junitReport{
+				Testsuites: junit.Testsuites{
+					Tests: 1,
+					Suites: []junit.Testsuite{
+						{
+							Name:  "example.com/tests",
+							Tests: 1,
+							ID:    0,
+							Time:  "0.010",
+							Testcases: []junit.Testcase{
+								{
+									Name:      "TestParent/Child",
+									Classname: "example.com/tests",
+									Time:      "0.010",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "terminal actions resolve parser-unknown parents",
 			input: `{"Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestPassParent"}
