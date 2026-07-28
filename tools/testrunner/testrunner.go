@@ -383,11 +383,13 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		// started, so the observed test names are not enough to safely narrow
 		// the rerun. This also applies when a test panic caused the abort.
 		if aborts := currentAttempt.junitReport.failureDetails(failureTypeAborted); len(aborts) > 0 {
+			log.Print("test package aborted; reporting incomplete test results")
 			for _, details := range aborts {
 				log.Printf("%s: %s", failureTypeAborted, details)
 			}
+			log.Print("finished reporting incomplete test results")
 			if a < r.maxAttempts {
-				log.Print("test package aborted, retrying with previous attempt's args")
+				log.Print("retrying with previous attempt's args")
 			}
 			continue
 		}
