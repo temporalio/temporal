@@ -71,6 +71,7 @@ type Config struct {
 	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerUpdateID               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMSkipPersistence            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSignalBacklinks            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowUpdateCallbacks         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -496,6 +497,7 @@ func NewConfig(
 		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
 		MaxCallbacksPerUpdateID:               dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
 		EnableChasm:                           dynamicconfig.EnableChasm.Get(dc),
+		EnableCHASMSkipPersistence:            dynamicconfig.EnableCHASMSkipPersistence.Get(dc),
 		ChasmMaxInMemoryPureTasks:             dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
 
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
