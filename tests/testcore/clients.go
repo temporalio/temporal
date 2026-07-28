@@ -230,7 +230,7 @@ func (c *clients) close() []error {
 		s.Stop()
 	}
 	if c.matching.rpcFactory != nil {
-		errs = append(errs, c.matching.rpcFactory.Close())
+		c.matching.rpcFactory.Close()
 		c.matching.rpcFactory = nil
 	}
 	c.matching.client = nil

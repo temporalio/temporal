@@ -33,9 +33,9 @@ var objectLeakOpts = []objectleak.Option{
 	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
 	objectleak.WithExpected("FunctionalTestBase.testClusterConfig"),
-	// By design: reached through the test's SDK client are process-wide SDK
-	// singletons (the default data and failure converters, and the shared sticky
-	// workflow cache), which live for the lifetime of the process.
+	// By design: the test's SDK client reaches process-wide SDK singletons (the
+	// default data and failure converters, and the shared sticky workflow cache)
+	// that live for the lifetime of the process.
 	objectleak.WithExpected("sdkClient*"),
 }
 

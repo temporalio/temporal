@@ -404,7 +404,8 @@ func SdkClientFactoryProvider(
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
-	// Deterministically release the shared system SDK client on shutdown.
+	// Registered here rather than by the consumers so it runs after them: fx
+	// stops in reverse construction order, and this factory is built first.
 	lc.Append(fx.StopHook(factory.Close))
 	return factory, nil
 }
@@ -467,7 +468,8 @@ func RPCFactoryProvider(
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
 	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
-	// Deterministically release the gRPC connections dialed by this factory.
+	// Runs after the services that use these connections: fx stops in reverse
+	// construction order, and this factory is built first.
 	lc.Append(fx.StopHook(factory.Close))
 	return factory, nil
 }

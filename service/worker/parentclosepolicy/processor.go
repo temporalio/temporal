@@ -83,11 +83,9 @@ func (s *Processor) Start() error {
 	return nil
 }
 
-// Stop stops the worker started by Start.
 func (s *Processor) Stop() {
 	if s.worker != nil {
 		s.worker.Stop()
-		s.worker = nil
 	}
 }
 

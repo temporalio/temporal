@@ -106,6 +106,7 @@ type (
 		context         scannerContext
 		wg              sync.WaitGroup
 		lifecycleCancel context.CancelFunc
+		workers         []worker.Worker
 	}
 )
 
@@ -209,10 +210,11 @@ func (s *Scanner) Start() error {
 		work.RegisterWorkflowWithOptions(build_ids.BuildIdScavangerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavangerWorkflowName})
 		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavangerActivityName})
 
-		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
+		// TODO: Nothing is listening for fatal errors from these workers.
 		if err := work.Start(); err != nil {
 			return err
 		}
+		s.workers = append(s.workers, work)
 	}
 
 	siOpts := s.context.cfg.ScheduleInvariantsScannerOptions()
@@ -236,10 +238,11 @@ func (s *Scanner) Start() error {
 			work.RegisterWorkflowWithOptions(scheduleinvariants.OverdueNextActionTimeWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeWorkflowName})
 			work.RegisterActivityWithOptions(scheduleActivities.ScanOverdueNextActionTime, activity.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeActivityName})
 
-			// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
+			// TODO: Nothing is listening for fatal errors from these workers.
 			if err := work.Start(); err != nil {
 				return err
 			}
+			s.workers = append(s.workers, work)
 		}
 
 		if siOpts.StuckOpenEnabled {
@@ -253,6 +256,7 @@ func (s *Scanner) Start() error {
 			if err := work.Start(); err != nil {
 				return err
 			}
+			s.workers = append(s.workers, work)
 		}
 
 		if siOpts.UnknownStateEnabled {
@@ -266,6 +270,7 @@ func (s *Scanner) Start() error {
 			if err := work.Start(); err != nil {
 				return err
 			}
+			s.workers = append(s.workers, work)
 		}
 	}
 
@@ -280,10 +285,11 @@ func (s *Scanner) Start() error {
 		work.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
 		work.RegisterActivityWithOptions(ExecutionsScavengerActivity, activity.RegisterOptions{Name: executionsScavengerActivityName})
 
-		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
+		// TODO: Nothing is listening for fatal errors from these workers.
 		if err := work.Start(); err != nil {
 			return err
 		}
+		s.workers = append(s.workers, work)
 	}
 
 	return nil
@@ -292,6 +298,10 @@ func (s *Scanner) Start() error {
 func (s *Scanner) Stop() {
 	s.lifecycleCancel()
 	s.wg.Wait()
+	for _, w := range s.workers {
+		w.Stop()
+	}
+	s.workers = nil
 }
 
 // startWorkflowWithRetry starts a scanner workflow, retrying until it succeeds or the

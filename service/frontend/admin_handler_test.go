@@ -2331,18 +2331,6 @@ func (s *adminHandlerSuite) TestAddSearchAttributes() {
 		Namespace: s.namespace.String(),
 	}
 
-	s.Run("client factory error", func() {
-		s.mockClientFactory.EXPECT().
-			NewLocalOperatorClientWithTimeout(gomock.Any()).
-			Return(nil, errors.New("factory failure"))
-
-		resp, err := s.handler.AddSearchAttributes(ctx, request)
-		s.Error(err)
-		s.Nil(resp)
-		var unavailable *serviceerror.Unavailable
-		s.ErrorAs(err, &unavailable)
-	})
-
 	s.Run("success", func() {
 		s.mockClientFactory.EXPECT().
 			NewLocalOperatorClientWithTimeout(gomock.Any()).
@@ -2359,7 +2347,22 @@ func (s *adminHandlerSuite) TestAddSearchAttributes() {
 		s.NotNil(resp)
 	})
 
+	s.Run("client factory error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(nil, errors.New("factory failure"))
+
+		resp, err := s.handler.AddSearchAttributes(ctx, request)
+		s.Error(err)
+		s.Nil(resp)
+		var unavailable *serviceerror.Unavailable
+		s.ErrorAs(err, &unavailable)
+	})
+
 	s.Run("operator client error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(mockOperatorClient, nil)
 		mockOperatorClient.EXPECT().
 			AddSearchAttributes(ctx, gomock.Any()).
 			Return(nil, serviceerror.NewInvalidArgument("invalid"))
@@ -2380,18 +2383,6 @@ func (s *adminHandlerSuite) TestRemoveSearchAttributes() {
 		Namespace:        s.namespace.String(),
 	}
 
-	s.Run("client factory error", func() {
-		s.mockClientFactory.EXPECT().
-			NewLocalOperatorClientWithTimeout(gomock.Any()).
-			Return(nil, errors.New("factory failure"))
-
-		resp, err := s.handler.RemoveSearchAttributes(ctx, request)
-		s.Error(err)
-		s.Nil(resp)
-		var unavailable *serviceerror.Unavailable
-		s.ErrorAs(err, &unavailable)
-	})
-
 	s.Run("success", func() {
 		s.mockClientFactory.EXPECT().
 			NewLocalOperatorClientWithTimeout(gomock.Any()).
@@ -2408,7 +2399,22 @@ func (s *adminHandlerSuite) TestRemoveSearchAttributes() {
 		s.NotNil(resp)
 	})
 
+	s.Run("client factory error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(nil, errors.New("factory failure"))
+
+		resp, err := s.handler.RemoveSearchAttributes(ctx, request)
+		s.Error(err)
+		s.Nil(resp)
+		var unavailable *serviceerror.Unavailable
+		s.ErrorAs(err, &unavailable)
+	})
+
 	s.Run("operator client error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(mockOperatorClient, nil)
 		mockOperatorClient.EXPECT().
 			RemoveSearchAttributes(ctx, gomock.Any()).
 			Return(nil, serviceerror.NewNotFound("not found"))
@@ -2427,18 +2433,6 @@ func (s *adminHandlerSuite) TestGetSearchAttributes() {
 	request := &adminservice.GetSearchAttributesRequest{
 		Namespace: s.namespace.String(),
 	}
-
-	s.Run("client factory error", func() {
-		s.mockClientFactory.EXPECT().
-			NewLocalOperatorClientWithTimeout(gomock.Any()).
-			Return(nil, errors.New("factory failure"))
-
-		resp, err := s.handler.GetSearchAttributes(ctx, request)
-		s.Error(err)
-		s.Nil(resp)
-		var unavailable *serviceerror.Unavailable
-		s.ErrorAs(err, &unavailable)
-	})
 
 	s.Run("success", func() {
 		customAttrs := map[string]enumspb.IndexedValueType{
@@ -2470,7 +2464,22 @@ func (s *adminHandlerSuite) TestGetSearchAttributes() {
 		s.Equal(storageSchema, resp.GetMapping())
 	})
 
+	s.Run("client factory error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(nil, errors.New("factory failure"))
+
+		resp, err := s.handler.GetSearchAttributes(ctx, request)
+		s.Error(err)
+		s.Nil(resp)
+		var unavailable *serviceerror.Unavailable
+		s.ErrorAs(err, &unavailable)
+	})
+
 	s.Run("operator client error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(mockOperatorClient, nil)
 		mockOperatorClient.EXPECT().
 			ListSearchAttributes(ctx, gomock.Any()).
 			Return(nil, serviceerror.NewUnavailable("unavailable"))
