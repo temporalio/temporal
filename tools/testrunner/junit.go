@@ -306,11 +306,6 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 	combined.Name = reports[0].Name
 
 	for i, report := range reports {
-		combined.Tests += report.Tests
-		combined.Errors += report.Errors
-		combined.Failures += report.Failures
-		combined.Skipped += report.Skipped
-		combined.Disabled += report.Disabled
 		combined.Time += report.Time
 
 		// If the report is for a retry ...
@@ -334,6 +329,10 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			newSuite := suite // shallow copy
 			newSuite.Name += suffix
 			newSuite.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
+			newSuite.Tests = 0
+			newSuite.Errors = 0
+			newSuite.Failures = 0
+			newSuite.Skipped = 0
 
 			// Sort test cases by name.
 			slices.SortFunc(suite.Testcases, func(a, b junit.Testcase) int {
@@ -359,7 +358,10 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 				// Use testCase.Name+"/" to avoid matching iteration suffixes like #01.
 				isParent := j != len(suite.Testcases)-1 &&
 					strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name+"/")
-				if isParent && !hasFailureDetails {
+				hasResult := testCase.Failure != nil || testCase.Error != nil
+				if isParent &&
+					!hasFailureDetails &&
+					(!hasResult || hasFailedDescendant(suite.Testcases, j)) {
 					// Discard parent test cases that only propagate a descendant result.
 					continue
 				}
@@ -375,9 +377,9 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 					}
 				}
 				testCase.Name += suffix
-				newSuite.Testcases = append(newSuite.Testcases, testCase)
+				newSuite.AddTestcase(testCase)
 			}
-			combined.Suites = append(combined.Suites, newSuite)
+			combined.AddSuite(newSuite)
 		}
 	}
 
@@ -385,6 +387,19 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		Testsuites:    combined,
 		reportingErrs: reportingErrs,
 	}, nil
+}
+
+func hasFailedDescendant(testcases []junit.Testcase, parent int) bool {
+	prefix := testcases[parent].Name + "/"
+	for _, testcase := range testcases[parent+1:] {
+		if !strings.HasPrefix(testcase.Name, prefix) {
+			break
+		}
+		if testcase.Failure != nil || testcase.Error != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func preservesFailureType(suiteName string) bool {

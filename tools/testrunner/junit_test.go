@@ -107,7 +107,10 @@ func TestMergeReports_SingleReport(t *testing.T) {
 
 	suites := report.Suites
 	require.Len(t, suites, 1)
-	require.Equal(t, 2, report.Failures)
+	require.Equal(t, 1, report.Failures)
+	require.Equal(t, len(suites[0].Testcases), report.Tests)
+	require.Equal(t, len(suites[0].Testcases), suites[0].Tests)
+	require.Equal(t, 1, suites[0].Failures)
 
 	testNames := collectTestNames(suites)
 	require.Len(t, testNames, 5)
@@ -143,7 +146,8 @@ func TestMergeReports_MultipleReports(t *testing.T) {
 
 	suites := report.Suites
 	require.Len(t, suites, 2)
-	require.Equal(t, 4, report.Failures)
+	require.Equal(t, 2, report.Failures)
+	require.Equal(t, 6, report.Tests)
 	require.Equal(t, "go.temporal.io/server/tests", suites[0].Name)
 	require.Equal(t, "go.temporal.io/server/tests (retry 1) (final)", suites[1].Name)
 
@@ -183,7 +187,8 @@ func TestMergeReports_IterationSuffixPreserved(t *testing.T) {
 func TestMergeReports_PreservesParentWithFailureDetails(t *testing.T) {
 	j := &junitReport{Testsuites: junit.Testsuites{
 		Suites: []junit.Testsuite{{
-			Name: "suite",
+			Name:     "suite",
+			Disabled: 2,
 			Testcases: []junit.Testcase{
 				{
 					Name: "TestPropagated",
@@ -204,6 +209,19 @@ func TestMergeReports_PreservesParentWithFailureDetails(t *testing.T) {
 					},
 				},
 				{Name: "TestTimedOut/Child"},
+				{
+					Name:    "TestParentOnlyFailure",
+					Failure: &junit.Result{},
+				},
+				{Name: "TestParentOnlyFailure/Child"},
+				{
+					Name:  "TestError",
+					Error: &junit.Result{},
+				},
+				{
+					Name:    "TestSkipped",
+					Skipped: &junit.Result{},
+				},
 			},
 		}},
 	}}
@@ -216,6 +234,25 @@ func TestMergeReports_PreservesParentWithFailureDetails(t *testing.T) {
 	require.Contains(t, testNames, "TestPropagated/Child")
 	require.Contains(t, testNames, "TestTimedOut")
 	require.Contains(t, testNames, "TestTimedOut/Child")
+	require.Contains(t, testNames, "TestParentOnlyFailure")
+	require.Contains(t, testNames, "TestParentOnlyFailure/Child")
+	require.Contains(t, testNames, "TestError")
+	require.Contains(t, testNames, "TestSkipped")
+	require.Equal(t, 3, report.Failures)
+	require.Equal(t, 1, report.Errors)
+	require.Equal(t, 1, report.Skipped)
+	require.Equal(t, 2, report.Disabled)
+	require.Equal(t, 7, report.Tests)
+	require.Equal(t, 3, report.Suites[0].Failures)
+	require.Equal(t, 1, report.Suites[0].Errors)
+	require.Equal(t, 1, report.Suites[0].Skipped)
+	require.Equal(t, 2, report.Suites[0].Disabled)
+	require.Equal(t, 7, report.Suites[0].Tests)
+	require.Equal(t, []string{
+		"TestParentOnlyFailure",
+		"TestPropagated/Child",
+		"TestTimedOut",
+	}, report.collectTestCaseFailures())
 
 	var timeoutFailure *junit.Result
 	for _, tc := range report.Suites[0].Testcases {

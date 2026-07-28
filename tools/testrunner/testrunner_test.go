@@ -159,7 +159,7 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	result := &junitReport{path: out.Name()}
 	require.NoError(t, result.read())
-	require.Equal(t, 2, result.Failures)
+	require.Equal(t, 1, result.Failures)
 	require.Len(t, result.Suites, 1)
 
 	// Simulate attempt 2 also completing. The intermediate write should now
@@ -173,7 +173,7 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	result2 := &junitReport{path: out.Name()}
 	require.NoError(t, result2.read())
-	require.Equal(t, 4, result2.Failures) // 2 from attempt 1 + 2 from attempt 2
+	require.Equal(t, 2, result2.Failures) // 1 from attempt 1 + 1 from attempt 2
 	require.Len(t, result2.Suites, 2)
 }
 

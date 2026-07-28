@@ -866,3 +866,47 @@ DONE 4 tests, 1 failure in 0.010s
 		})
 	}
 }
+
+func TestPackageAbortLogSummary(t *testing.T) {
+	testCases := []struct {
+		name     string
+		details  string
+		expected string
+	}{
+		{
+			name: "fatal",
+			details: "package example.com/tests aborted; 707 test nodes had no final result, and others may not have started\n\n" +
+				"Tests without final results:\n" +
+				"- TestOne\n" +
+				"- TestTwo\n" +
+				"  Details:\n" +
+				"    2026-07-28T20:12:54.860Z\tfatal\tloadSchemaVersion\t{\"error\":\"cassandra unavailable\"}",
+			expected: "likely cause: 2026-07-28T20:12:54.860Z\tfatal\tloadSchemaVersion\t{\"error\":\"cassandra unavailable\"}\n" +
+				"package example.com/tests aborted; 707 test nodes had no final result, and others may not have started",
+		},
+		{
+			name: "panic",
+			details: "package example.com/tests aborted; 1 test node had no final result, and others may not have started\n\n" +
+				"Tests without final results:\n" +
+				"- TestOne\n" +
+				"  Details:\n" +
+				"    panic: setup failed",
+			expected: "likely cause: panic: setup failed\n" +
+				"package example.com/tests aborted; 1 test node had no final result, and others may not have started",
+		},
+		{
+			name: "no cause",
+			details: "package example.com/tests aborted; 2 test nodes had no final result, and others may not have started\n\n" +
+				"Tests without final results:\n" +
+				"- TestOne\n" +
+				"- TestTwo",
+			expected: "package example.com/tests aborted; 2 test nodes had no final result, and others may not have started",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, packageAbortLogSummary(tc.details))
+		})
+	}
+}

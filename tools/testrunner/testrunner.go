@@ -385,7 +385,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		if aborts := currentAttempt.junitReport.failureDetails(failureTypeAborted); len(aborts) > 0 {
 			log.Print("test package aborted; reporting incomplete test results")
 			for _, details := range aborts {
-				log.Printf("%s: %s", failureTypeAborted, details)
+				log.Printf("%s: %s", failureTypeAborted, packageAbortLogSummary(details))
 			}
 			log.Print("finished reporting incomplete test results")
 			if a < r.maxAttempts {
