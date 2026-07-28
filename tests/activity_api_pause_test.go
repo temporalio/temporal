@@ -961,10 +961,17 @@ func TestActivityApiPause_AttributesToActivityInContextMetadata(t *testing.T) {
 
 	activityStartedCn := make(chan struct{}, 1)
 	releaseActivityCn := make(chan struct{})
-	activityFunction := func() (string, error) {
+	// Block on the activity's own context rather than a suite helper: the helper calls FailNow on
+	// timeout, which is only safe on the test goroutine, and the test's own timeout below already
+	// reports a hang.
+	activityFunction := func(activityCtx context.Context) (string, error) {
 		activityStartedCn <- struct{}{}
-		s.WaitForChannel(releaseActivityCn)
-		return "done!", nil
+		select {
+		case <-releaseActivityCn:
+			return "done!", nil
+		case <-activityCtx.Done():
+			return "", activityCtx.Err()
+		}
 	}
 	workflowFn := func(wfCtx workflow.Context) error {
 		var ret string
