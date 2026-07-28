@@ -145,6 +145,25 @@ var (
 	}
 )
 
+type busyWorkflowWithWorkflowIDError struct {
+	workflowID string
+}
+
+func NewResourceExhaustedBusyWorkflow(workflowID string) error {
+	if workflowID == "" {
+		return ErrResourceExhaustedBusyWorkflow
+	}
+	return &busyWorkflowWithWorkflowIDError{workflowID: workflowID}
+}
+
+func (e *busyWorkflowWithWorkflowIDError) Error() string {
+	return fmt.Sprintf("Workflow is busy. WorkflowId: %s.", e.workflowID)
+}
+
+func (e *busyWorkflowWithWorkflowIDError) Unwrap() error {
+	return ErrResourceExhaustedBusyWorkflow
+}
+
 // StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that
 // state reload solves this issue but otherwise it is unexpected and considered terminal.
 type staleStateError struct {
