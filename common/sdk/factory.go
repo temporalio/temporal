@@ -43,22 +43,18 @@ type (
 		stickyCacheSize dynamicconfig.IntPropertyFn
 		once            sync.Once
 
-		// clientsLock guards derivedClients, which holds the clients handed out
-		// by NewClient that are still open. They share the system client's gRPC
-		// connection, and the SDK only closes that connection once every client
-		// derived from it has been closed, so the factory has to be able to
-		// release the ones its callers left open.
+		// Clients from NewClient share the system client's ref-counted gRPC
+		// connection, which the SDK closes only once every one of them is closed,
+		// so the factory tracks those still open.
 		clientsLock    sync.Mutex
 		derivedClients map[*trackedClient]struct{}
 		closed         bool
 	}
 
-	// trackedClient removes itself from the factory when closed, so that a
-	// client closed by its owner is not closed again by the factory.
+	// trackedClient lets the factory release a client its caller left open.
 	trackedClient struct {
 		sdkclient.Client
-		factory   *clientFactory
-		closeOnce sync.Once
+		factory *clientFactory
 	}
 )
 
@@ -74,13 +70,13 @@ func NewClientFactory(
 	stickyCacheSize dynamicconfig.IntPropertyFn,
 ) *clientFactory {
 	return &clientFactory{
-		derivedClients:  make(map[*trackedClient]struct{}),
 		hostPort:        hostPort,
 		tlsConfig:       tlsConfig,
 		metricsHandler:  NewMetricsHandler(metricsHandler),
 		logger:          logger,
 		sdklogger:       log.NewSdkLogger(logger),
 		stickyCacheSize: stickyCacheSize,
+		derivedClients:  make(map[*trackedClient]struct{}),
 	}
 }
 
@@ -100,23 +96,23 @@ func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 	system := f.GetSystemClient()
 
-	// Held across creation: NewClientFromExisting adds a reference to the shared
-	// connection, and Close releases the references it can see, so the two must
-	// not interleave.
+	// NewClientFromExisting takes a reference to the shared connection, so it
+	// must not interleave with Close releasing those references.
 	f.clientsLock.Lock()
 	defer f.clientsLock.Unlock()
-
-	if f.closed {
-		// Nothing would release a client created now. Hand back the system client
-		// so callers keep a usable value; it is already closed, so calls on it
-		// fail rather than silently succeeding against a dead factory.
-		return system
-	}
 
 	// this shouldn't fail if the first client was created successfully
 	client, err := sdkclient.NewClientFromExisting(system, f.options(options))
 	if err != nil {
 		f.logger.Fatal("error creating sdk client", tag.Error(err))
+	}
+
+	if f.closed {
+		// Nothing would release a tracked client now, so release the reference
+		// here. The caller still gets a client for the namespace it asked for,
+		// whose calls fail, rather than the system client the factory owns.
+		client.Close()
+		return client
 	}
 
 	tracked := &trackedClient{Client: client, factory: f}
@@ -125,32 +121,47 @@ func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 }
 
 func (c *trackedClient) Close() {
-	c.closeOnce.Do(func() {
-		c.factory.clientsLock.Lock()
-		delete(c.factory.derivedClients, c)
-		c.factory.clientsLock.Unlock()
+	// Removing c from the factory carries the right to close it, so the factory
+	// and the caller never close the same client concurrently. The SDK's own
+	// guard against repeated Close is only safe sequentially.
+	if c.factory.release(c) {
 		c.Client.Close()
-	})
+	}
+}
+
+func (f *clientFactory) release(c *trackedClient) bool {
+	f.clientsLock.Lock()
+	defer f.clientsLock.Unlock()
+
+	_, held := f.derivedClients[c]
+	delete(f.derivedClients, c)
+	return held
 }
 
 func (f *clientFactory) GetSystemClient() sdkclient.Client {
 	f.once.Do(func() {
+		options := f.options(sdkclient.Options{Namespace: primitives.SystemLocalNamespace})
+
+		if f.isClosed() {
+			// The frontend this would dial is already going away. A lazy client
+			// needs no connection, so its calls fail instead of the retry below
+			// exhausting and aborting the process partway through shutdown.
+			sdkClient, err := sdkclient.NewLazyClient(options)
+			if err != nil {
+				f.logger.Warn("error creating sdk client after shutdown", tag.Error(err))
+				return
+			}
+			f.setSystemClient(sdkClient)
+			return
+		}
+
 		err := backoff.ThrottleRetry(func() error {
-			sdkClient, err := sdkclient.Dial(f.options(sdkclient.Options{
-				Namespace: primitives.SystemLocalNamespace,
-			}))
+			sdkClient, err := sdkclient.Dial(options)
 			if err != nil {
 				f.logger.Warn("error creating sdk client", tag.Error(err))
 				return err
 			}
-			f.clientsLock.Lock()
-			f.systemSdkClient = sdkClient
-			closed := f.closed
-			f.clientsLock.Unlock()
-			if closed {
-				// Close ran while this dial was in flight and could not see it.
-				sdkClient.Close()
-			}
+			f.setSystemClient(sdkClient)
 			return nil
 		}, common.CreateSdkClientFactoryRetryPolicy(), func(err error) bool {
 			// note err is wrapped by sdk
@@ -169,12 +180,32 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 	return f.systemSdkClient
 }
 
+func (f *clientFactory) isClosed() bool {
+	f.clientsLock.Lock()
+	defer f.clientsLock.Unlock()
+
+	return f.closed
+}
+
+// setSystemClient publishes the shared client, closing it if the factory shut
+// down while it was being dialed, since Close could not have seen it.
+func (f *clientFactory) setSystemClient(client sdkclient.Client) {
+	f.clientsLock.Lock()
+	f.systemSdkClient = client
+	closed := f.closed
+	f.clientsLock.Unlock()
+
+	if closed {
+		client.Close()
+	}
+}
+
 func (f *clientFactory) NewWorker(
 	client sdkclient.Client,
 	taskQueue string,
 	options sdkworker.Options,
 ) sdkworker.Worker {
-	// The SDK requires the client it was given by client.Dial, not a wrapper.
+	// sdkworker.New type-asserts the SDK's concrete client, so unwrap.
 	if tracked, ok := client.(*trackedClient); ok {
 		client = tracked.Client
 	}
@@ -186,20 +217,20 @@ func (f *clientFactory) NewWorker(
 // more than once.
 func (f *clientFactory) Close() {
 	f.clientsLock.Lock()
+	first := !f.closed
 	f.closed = true
 	system := f.systemSdkClient
-	derived := make([]*trackedClient, 0, len(f.derivedClients))
-	for client := range f.derivedClients {
-		derived = append(derived, client)
-	}
+	derived := f.derivedClients
+	f.derivedClients = nil
 	f.clientsLock.Unlock()
 
 	// Release the references callers left open before the system client, so the
 	// SDK's reference count reaches zero and the shared connection is closed.
-	for _, client := range derived {
-		client.Close()
+	for client := range derived {
+		client.Client.Close()
 	}
-	if system != nil {
+	// systemSdkClient stays set so GetSystemClient never returns nil.
+	if first && system != nil {
 		system.Close()
 	}
 }

@@ -58,8 +58,7 @@ type RPCFactory struct {
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient func() (*common.FrontendHTTPClient, error)
 	// A OnceValue wrapper for createLocalFrontendGRPCConnection. The local
-	// frontend target is fixed, so one connection serves every caller; dialing
-	// per call leaked a connection on every request that needed one.
+	// frontend target is fixed, so one connection serves every caller.
 	localFrontendConn func() *grpc.ClientConn
 
 	// Connections dialed here are retained so Close can release them, otherwise
@@ -112,6 +111,7 @@ func NewFactory(
 		authHeaderName:           authHeaderName,
 		requireRemoteClusterAuth: requireRemoteClusterAuth,
 		monitor:                  monitor,
+		conns:                    make(map[*grpc.ClientConn]struct{}),
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
@@ -272,7 +272,8 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 }
 
 // CreateLocalFrontendGRPCConnection returns the shared connection for internal
-// frontend calls, dialing it on first use.
+// frontend calls, dialing it on first use. Callers must not close it; the
+// factory owns it and every local frontend client shares it.
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 	return d.localFrontendConn()
 }
@@ -318,32 +319,26 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 	return connection
 }
 
-// trackConn retains conn so Close can release it. A connection dialed after
-// Close is closed immediately, since nothing would release it otherwise.
-//
-// Connection owners (the history pool and the matching client cache) close
-// their own connections when a host leaves the ring, so tracking also drops
-// the ones already shut down. Otherwise every host that ever left would stay
-// reachable from the factory for the lifetime of the process.
+// trackConn retains conn so Close can release it.
 func (d *RPCFactory) trackConn(conn *grpc.ClientConn) {
 	d.connsLock.Lock()
-	closed := d.closed
-	if !closed {
-		if d.conns == nil {
-			d.conns = make(map[*grpc.ClientConn]struct{})
-		}
-		for tracked := range d.conns {
-			if tracked.GetState() == connectivity.Shutdown {
-				delete(d.conns, tracked)
-			}
-		}
-		d.conns[conn] = struct{}{}
-	}
-	d.connsLock.Unlock()
-
-	if closed {
+	if d.closed {
+		d.connsLock.Unlock()
+		// Nothing else would release a connection dialed after Close.
 		d.closeConn(conn)
+		return
 	}
+	defer d.connsLock.Unlock()
+
+	// The history pool and matching cache close their own connections when a
+	// host leaves the ring; without this every host that ever left would stay
+	// reachable from the factory for the lifetime of the process.
+	for tracked := range d.conns {
+		if tracked.GetState() == connectivity.Shutdown {
+			delete(d.conns, tracked)
+		}
+	}
+	d.conns[conn] = struct{}{}
 }
 
 // Close releases every gRPC connection still held by this factory. It is safe
@@ -363,7 +358,7 @@ func (d *RPCFactory) Close() {
 func (d *RPCFactory) closeConn(conn *grpc.ClientConn) {
 	// Canceled means the connection was already closed by its owner.
 	if err := conn.Close(); err != nil && status.Code(err) != codes.Canceled {
-		d.logger.Debug("Failed to close gRPC connection", tag.Error(err))
+		d.logger.Warn("Failed to close gRPC connection", tag.Error(err))
 	}
 }
 

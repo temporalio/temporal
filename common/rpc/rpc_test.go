@@ -6,17 +6,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/testlogger"
 	"google.golang.org/grpc/connectivity"
 )
 
-// newTestFactory builds a factory with just the fields dial and Close need.
 // gRPC connections are lazy, so nothing has to be listening on the target.
 func newTestFactory() *RPCFactory {
-	return &RPCFactory{
-		logger:         log.NewNoopLogger(),
-		metricsHandler: metrics.NoopMetricsHandler,
-	}
+	return NewFactory(nil, "tester", log.NewNoopLogger(), metrics.NoopMetricsHandler,
+		nil, localFrontendTarget, "", 0, nil, nil, nil, nil, nil)
 }
+
+const localFrontendTarget = "127.0.0.1:9999"
 
 func TestRPCFactoryClose_ShutsDownDialedConns(t *testing.T) {
 	t.Parallel()
@@ -58,10 +58,12 @@ func TestRPCFactoryClose_ConnDialedAfterCloseIsClosed(t *testing.T) {
 	require.Equal(t, connectivity.Shutdown, conn.GetState())
 }
 
-func TestRPCFactoryClose_ToleratesConnClosedByOwner(t *testing.T) {
+func TestRPCFactoryClose_DoesNotFailOnConnClosedByOwner(t *testing.T) {
 	t.Parallel()
 
+	// The logger fails the test if Close reports the expected Canceled error.
 	f := newTestFactory()
+	f.logger = testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 	conn := f.dial("127.0.0.1:1234", nil)
 	require.NotNil(t, conn)
 	require.NoError(t, conn.Close())
@@ -78,6 +80,8 @@ func TestRPCFactoryDial_DropsConnsAlreadyShutDown(t *testing.T) {
 	t.Parallel()
 
 	f := newTestFactory()
+	defer f.Close()
+
 	evicted := f.dial("127.0.0.1:1234", nil)
 	require.NotNil(t, evicted)
 	require.NoError(t, evicted.Close())
@@ -85,8 +89,38 @@ func TestRPCFactoryDial_DropsConnsAlreadyShutDown(t *testing.T) {
 	replacement := f.dial("127.0.0.1:5678", nil)
 	require.NotNil(t, replacement)
 
+	// Look the keys up directly: handing a live *grpc.ClientConn to a testify
+	// equality helper makes it walk gRPC's mutable internals and races with the
+	// connection's own goroutines.
 	f.connsLock.Lock()
-	defer f.connsLock.Unlock()
-	require.NotContains(t, f.conns, evicted)
-	require.Contains(t, f.conns, replacement)
+	_, evictedTracked := f.conns[evicted]
+	_, replacementTracked := f.conns[replacement]
+	tracked := f.conns
+	f.connsLock.Unlock()
+
+	require.False(t, evictedTracked, "a connection closed by its owner should be swept")
+	require.True(t, replacementTracked)
+	require.Len(t, tracked, 1)
+}
+
+// The local frontend target is fixed, so every caller shares one connection.
+// Dialing per call is what leaked a connection on every request that needed one.
+func TestCreateLocalFrontendGRPCConnection_ReusesOneConn(t *testing.T) {
+	t.Parallel()
+
+	f := newTestFactory()
+	defer f.Close()
+
+	first := f.CreateLocalFrontendGRPCConnection()
+	second := f.CreateLocalFrontendGRPCConnection()
+	require.NotNil(t, first)
+	require.Same(t, first, second)
+
+	f.connsLock.Lock()
+	conns := len(f.conns)
+	f.connsLock.Unlock()
+	require.Equal(t, 1, conns)
+
+	f.Close()
+	require.Equal(t, connectivity.Shutdown, first.GetState())
 }

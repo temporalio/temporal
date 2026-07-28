@@ -233,7 +233,6 @@ func (c *clients) close() []error {
 		c.matching.rpcFactory.Close()
 		c.matching.rpcFactory = nil
 	}
-	c.matching.client = nil
 
 	return errs
 }

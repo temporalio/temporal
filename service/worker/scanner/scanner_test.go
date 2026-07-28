@@ -300,8 +300,6 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().Start()
-	// Shutting the scanner down must stop the worker, otherwise its pollers
-	// outlive the scanner.
 	worker.EXPECT().Stop().Times(1)
 	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
 	var wg sync.WaitGroup
