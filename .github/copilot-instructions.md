@@ -70,6 +70,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - If the benefit of a comment can be achieved by improving variable/function names then suggest that.
 - A comment must not give unnecessary or verbose explanation.
 - A comment must not use language that is metaphorical or alien to the codebase.
+- Sentence structure in comments should be simple, usually without any subordinate clause.
 - A comment should typically not refer to counterfactuals, or to discussions or decision processes that occurred when the code was written.
 - A comment should typically not explain how upstream callers use the code.
 
