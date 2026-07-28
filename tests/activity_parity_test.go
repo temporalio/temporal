@@ -85,6 +85,76 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 	})
 }
 
+// A terminal timeout must chain the application failure that drove its retries as its Cause, so an SDK
+// can expose the real failure.
+func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
+	env := newActivityParityEnv(s.T())
+	type terminalProjection struct {
+		Status enumspb.ActivityExecutionStatus
+		Cause  failureCause
+	}
+	expected := terminalProjection{
+		Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+		Cause:  failureCause{Type: "drive", Message: "drive"},
+	}
+
+	assertCausePreserved := func(
+		t *testing.T,
+		cfg activityConfig,
+		trace []model.Event,
+	) {
+		const message = "the terminal timeout must chain the underlying application failure as its Cause"
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			activity := newWFADriver(t, env, cfg).driveTrace(t, trace)
+			actual := terminalProjection{
+				Status: activity.terminalStatus(t),
+				Cause:  activity.terminalCause(t),
+			}
+			require.Equal(t, expected, actual, message)
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
+			actual := terminalProjection{
+				Status: activity.terminalStatus(t),
+				Cause:  activity.terminalCause(t),
+			}
+			require.Equal(t, expected, actual, message)
+		})
+	}
+
+	s.Run("StartToClose", func(s *activityParityTestSuite) {
+		assertCausePreserved(s.T(), activityConfig{MaxAttempts: 2},
+			[]model.Event{
+				model.Poll,
+				model.FailRetryably,
+				model.BackoffElapses,
+				model.Poll,
+				model.StartToCloseElapses,
+			},
+		)
+	})
+	s.Run("Heartbeat", func(s *activityParityTestSuite) {
+		assertCausePreserved(s.T(), activityConfig{MaxAttempts: 2},
+			[]model.Event{
+				model.Poll,
+				model.FailRetryably,
+				model.BackoffElapses,
+				model.Poll,
+				model.HeartbeatElapses,
+			},
+		)
+	})
+	s.Run("ScheduleToClose", func(s *activityParityTestSuite) {
+		assertCausePreserved(s.T(), activityConfig{},
+			[]model.Event{
+				model.Poll,
+				model.FailRetryably,
+				model.ScheduleToCloseElapses,
+			},
+		)
+	})
+}
+
 // current_retry_interval and next_attempt_schedule_time are reported while a retry is backing off
 // (before it is dispatched to Matching), and for next_attempt_schedule_time also during start delay
 // (SAA only). Once the attempt is dispatched, or while the activity is paused, both are nil.

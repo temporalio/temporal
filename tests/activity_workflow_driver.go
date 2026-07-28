@@ -224,6 +224,17 @@ func (a *wfaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 	return enumspb.ACTIVITY_EXECUTION_STATUS_FAILED
 }
 
+// terminalCause is the application failure the terminal timeout chains as its Cause, empty if there
+// is none. The SDK exposes it via TimeoutError.Unwrap.
+func (a *wfaHandle) terminalCause(_ require.TestingT) failureCause {
+	if timeout, ok := errors.AsType[*temporal.TimeoutError](a.run.Get(a.d.ctx, nil)); ok {
+		if application, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap()); ok {
+			return failureCause{Type: application.Type(), Message: application.Message()}
+		}
+	}
+	return failureCause{}
+}
+
 // activityInfoIfInProgress returns the shared activity projection and whether the activity still has
 // a nonterminal execution.
 func (a *wfaHandle) activityInfoIfInProgress(t require.TestingT) (activityInfo, bool) {

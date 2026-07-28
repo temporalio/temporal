@@ -196,6 +196,14 @@ func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 	return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 }
 
+// terminalCause is the application failure the terminal outcome chains as its Cause, empty if there
+// is none.
+func (a *saaHandle) terminalCause(t require.TestingT) failureCause {
+	a.terminalStatus(t)
+	cause := a.describe(t).GetOutcome().GetFailure().GetCause()
+	return failureCause{Type: cause.GetApplicationFailureInfo().GetType(), Message: cause.GetMessage()}
+}
+
 func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
 	return activityInfo{
 		RunState:                   i.GetRunState(),

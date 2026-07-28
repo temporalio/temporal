@@ -129,6 +129,12 @@ type activityInfo struct {
 	NextAttemptScheduleTimeSet bool
 }
 
+// failureCause is the Type and Message of the failure a terminal outcome chains as its Cause.
+type failureCause struct {
+	Type    string
+	Message string
+}
+
 // activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
 // poll for, schedule the activity a workflow owns, close an activity the trace has finished with. A
 // wait for a configured window is bounded by that window plus activityDriverTimerMargin instead.

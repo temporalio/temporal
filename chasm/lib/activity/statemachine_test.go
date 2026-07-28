@@ -528,6 +528,135 @@ func TestTransitionTimedout(t *testing.T) {
 	}
 }
 
+// A terminal timeout must chain the failure that drove the retries as its Cause, so an SDK can expose
+// the real failure rather than only the timeout that happened to close the activity.
+func TestTransitionTimedOutChainsPriorAttemptFailure(t *testing.T) {
+	testCases := []struct {
+		name                string
+		timeoutType         enumspb.TimeoutType
+		retryState          enumspb.RetryState
+		expectedTimeoutType enumspb.TimeoutType
+	}{
+		{
+			name:                "schedule to close",
+			timeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			retryState:          enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		},
+		{
+			name:                "start to close",
+			timeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			retryState:          enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		},
+		{
+			name:                "heartbeat",
+			timeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			retryState:          enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		},
+		{
+			name:                "start to close with no time left for another attempt",
+			timeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			retryState:          enumspb.RETRY_STATE_TIMEOUT,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		},
+		{
+			name:                "heartbeat with no time left for another attempt",
+			timeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			retryState:          enumspb.RETRY_STATE_TIMEOUT,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			priorFailure := &failurepb.Failure{
+				Message: "the failure that drove the retries",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "AppFailure"},
+				},
+			}
+			attemptState := &activitypb.ActivityAttemptState{
+				Count:       3,
+				StartedTime: timestamppb.New(defaultTime),
+				LastFailureDetails: &activitypb.ActivityAttemptState_LastFailureDetails{
+					Failure: priorFailure,
+					Time:    timestamppb.New(defaultTime),
+				},
+			}
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+					RetryPolicy:            defaultRetryPolicy,
+					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				},
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+
+			require.NoError(t, TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
+				timeoutType:    tc.timeoutType,
+				retryState:     tc.retryState,
+				metricsHandler: metrics.NoopMetricsHandler,
+				fromStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			}))
+
+			terminal := activity.terminalFailure(ctx)
+			require.Equal(t, tc.expectedTimeoutType, terminal.GetTimeoutFailureInfo().GetTimeoutType())
+			protorequire.ProtoEqual(t, priorFailure, terminal.GetCause())
+		})
+	}
+}
+
+// A timeout that is retried must not chain the previous attempt's failure. Each attempt replaces the
+// last one; chaining here would add another level per attempt and grow the stored failure without
+// bound. Only the terminal timeout chains.
+func TestTransitionRescheduledDoesNotChainPriorAttemptFailure(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{
+		Count:       1,
+		StartedTime: timestamppb.New(defaultTime),
+		LastFailureDetails: &activitypb.ActivityAttemptState_LastFailureDetails{
+			Failure: &failurepb.Failure{
+				Message: "the failure that drove the retries",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "AppFailure"},
+				},
+			},
+			Time: timestamppb.New(defaultTime),
+		},
+	}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:            &commonpb.ActivityType{Name: "test-activity-type"},
+			RetryPolicy:             defaultRetryPolicy,
+			ScheduleToCloseTimeout:  durationpb.New(defaultScheduleToCloseTimeout),
+			StartToCloseTimeout:     durationpb.New(defaultStartToCloseTimeout),
+			Status:                  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			TaskQueue:               &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			FirstAttemptStartedTime: timestamppb.New(defaultTime),
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+
+	require.NoError(t, TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
+		retryInterval: time.Second,
+		failure:       createStartToCloseTimeoutFailure(),
+		timeoutType:   enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+	}))
+
+	recorded := attemptState.GetLastFailureDetails().GetFailure()
+	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, recorded.GetTimeoutFailureInfo().GetTimeoutType())
+	require.Nil(t, recorded.GetCause())
+}
+
 func TestTransitionCompleted(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
