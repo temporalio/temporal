@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.6",
+  "MinCompatibleVersion": "0.1",
+  "Description": "fix root workflow info columns",
+  "SchemaUpdateCqlFiles": [
+    "fix_root_workflow_info.sql"
+  ]
+}

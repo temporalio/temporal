@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.3",
+  "MinCompatibleVersion": "1.0",
+  "Description": "schema update for kafka deprecation",
+  "SchemaUpdateCqlFiles": [
+    "visibility_tasks.sql"
+  ]
+}
