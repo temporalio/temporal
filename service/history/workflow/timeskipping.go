@@ -276,10 +276,6 @@ func (t *timeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 		return
 	}
 	ffTargetTime := ff.GetTargetTime().AsTime()
-
-	// in edgy-case protection
-	// todo: we may invalidate the whole transition if there is no skip duration in this transition
-	// and rely on ts-ff timer task to maintain ffino.HasReached
 	if !ffTargetTime.After(t.CurrentTime) {
 		t.TargetTime = time.Time{}
 		t.DisabledAfterFastForward = true
@@ -346,8 +342,9 @@ func (util *TimeSkippingInfoUtil) GetFastForwardTargetTime() *timestamppb.Timest
 }
 
 // IsEnabled reports whether time skipping is still running for this execution. Prefer this over
-// reading the config's Enabled flag directly: it is the canonical, nil-safe check callers should
-// use to decide whether time skipping is active.
+// reading the config's Enabled flag directly.
+// The `enabled` field is disabled internally in three places:
+// 1) initTimeSkippingInfo and updateTimeSkippingInfo, 2) runtime time-skipping transition, 3) fast-forward timer task.
 func (util *TimeSkippingInfoUtil) IsEnabled() bool {
 	if util == nil || util.tsi == nil {
 		return false
