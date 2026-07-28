@@ -40,6 +40,7 @@ type goTestJSONOutput struct {
 	output                  strings.Builder
 	testOutputs             map[goTestID]*strings.Builder
 	testOutputOrder         []goTestID
+	failedTests             map[goTestID]struct{}
 	packages                map[string]struct{}
 	packagesWithFailedTests map[string]struct{}
 	failedPackages          map[string]struct{}
@@ -57,6 +58,7 @@ type goTestJSONOutput struct {
 func newGoTestJSONOutput() *goTestJSONOutput {
 	return &goTestJSONOutput{
 		testOutputs:             make(map[goTestID]*strings.Builder),
+		failedTests:             make(map[goTestID]struct{}),
 		packages:                make(map[string]struct{}),
 		packagesWithFailedTests: make(map[string]struct{}),
 		failedPackages:          make(map[string]struct{}),
@@ -165,21 +167,53 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 		return
 	}
 
+	test := goTestID{packageName: event.Package, testName: event.Test}
+	show := event.Action == "fail"
+	if show && o.hasFailedDescendant(test) && !hasGoTestDiagnosticOutput(o.testOutputs[test]) {
+		show = false
+	}
 	// Only failing tests are shown; passing and skipped test output is hidden
 	// from the live console, since their framing and body add no signal there.
-	o.flushTestOutput(
-		goTestID{packageName: event.Package, testName: event.Test},
-		event.Action == "fail",
-	)
+	o.flushTestOutput(test, show)
 	o.tests++
 	switch event.Action {
 	case "fail":
+		o.failedTests[test] = struct{}{}
 		o.failures++
 		o.packagesWithFailedTests[event.Package] = struct{}{}
 	case "skip":
 		o.skipped++
 	default:
 	}
+}
+
+func (o *goTestJSONOutput) hasFailedDescendant(test goTestID) bool {
+	prefix := test.testName + "/"
+	for failedTest := range o.failedTests {
+		if failedTest.packageName == test.packageName && strings.HasPrefix(failedTest.testName, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGoTestDiagnosticOutput(output *strings.Builder) bool {
+	if output == nil {
+		return false
+	}
+	for line := range strings.SplitSeq(output.String(), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" ||
+			strings.HasPrefix(line, "=== RUN   ") ||
+			strings.HasPrefix(line, "=== PAUSE ") ||
+			strings.HasPrefix(line, "=== CONT  ") ||
+			strings.HasPrefix(line, "=== NAME  ") ||
+			strings.HasPrefix(line, "--- FAIL: ") {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func (o *goTestJSONOutput) writeSummary() {

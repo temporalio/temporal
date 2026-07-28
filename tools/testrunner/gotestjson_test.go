@@ -83,6 +83,65 @@ DONE 1 tests, 1 skipped in 0.100s
 DONE 1 tests, 1 skipped in 0.100s
 `,
 		},
+		{
+			name: "hides framing-only failed ancestors from stdout",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite/TestParent/child","Output":"=== RUN   TestSuite/TestParent/child\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite/TestParent/child","Output":"    child_test.go:10: boom\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite/TestParent/child","Output":"--- FAIL: TestSuite/TestParent/child (0.01s)\n"}
+{"Action":"fail","Package":"example.com/tests","Test":"TestSuite/TestParent/child"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite/TestParent","Output":"=== RUN   TestSuite/TestParent\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite/TestParent","Output":"=== PAUSE TestSuite/TestParent\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite/TestParent","Output":"=== CONT  TestSuite/TestParent\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite/TestParent","Output":"--- FAIL: TestSuite/TestParent (0.00s)\n"}
+{"Action":"fail","Package":"example.com/tests","Test":"TestSuite/TestParent"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite","Output":"=== RUN   TestSuite\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite","Output":"=== PAUSE TestSuite\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite","Output":"=== CONT  TestSuite\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSuite","Output":"--- FAIL: TestSuite (0.00s)\n"}
+{"Action":"fail","Package":"example.com/tests","Test":"TestSuite"}
+{"Action":"fail","Package":"example.com/tests","Elapsed":0.01}
+`,
+			expectedOutput: `=== RUN   TestSuite/TestParent/child
+    child_test.go:10: boom
+--- FAIL: TestSuite/TestParent/child (0.01s)
+=== RUN   TestSuite/TestParent
+=== PAUSE TestSuite/TestParent
+=== CONT  TestSuite/TestParent
+--- FAIL: TestSuite/TestParent (0.00s)
+=== RUN   TestSuite
+=== PAUSE TestSuite
+=== CONT  TestSuite
+--- FAIL: TestSuite (0.00s)
+
+DONE 3 tests, 3 failures in 0.010s
+`,
+			expectedStdout: `=== RUN   TestSuite/TestParent/child
+    child_test.go:10: boom
+--- FAIL: TestSuite/TestParent/child (0.01s)
+
+DONE 3 tests, 3 failures in 0.010s
+`,
+		},
+		{
+			name: "shows failed ancestor diagnostics on stdout",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent/child","Output":"--- FAIL: TestParent/child (0.01s)\n"}
+{"Action":"fail","Package":"example.com/tests","Test":"TestParent/child"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"=== RUN   TestParent\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"    parent_test.go:20: cleanup failed\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"--- FAIL: TestParent (0.01s)\n"}
+{"Action":"fail","Package":"example.com/tests","Test":"TestParent"}
+{"Action":"fail","Package":"example.com/tests","Elapsed":0.01}
+`,
+			expectedOutput: `--- FAIL: TestParent/child (0.01s)
+=== RUN   TestParent
+    parent_test.go:20: cleanup failed
+--- FAIL: TestParent (0.01s)
+
+DONE 2 tests, 2 failures in 0.010s
+`,
+		},
 	}
 
 	for _, tc := range testCases {
