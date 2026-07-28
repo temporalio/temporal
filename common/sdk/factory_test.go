@@ -4,6 +4,7 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	sdkclient "go.temporal.io/sdk/client"
@@ -162,11 +163,38 @@ func TestNewWorker_AcceptsDerivedClient(t *testing.T) {
 func TestNewClient_DoesNotRaceClose(t *testing.T) {
 	t.Parallel()
 
-	f := newDialedFactory(t)
-	require.NotNil(t, f.GetSystemClient())
+	// Repeated because the two accesses only overlap in a narrow window.
+	for range 20 {
+		f := newDialedFactory(t)
+		require.NotNil(t, f.GetSystemClient())
 
-	var wg sync.WaitGroup
-	wg.Go(func() { f.NewClient(sdkclient.Options{Namespace: "ns"}) })
-	wg.Go(f.Close)
-	wg.Wait()
+		var wg sync.WaitGroup
+		wg.Go(func() { f.NewClient(sdkclient.Options{Namespace: "ns"}) })
+		wg.Go(f.Close)
+		wg.Wait()
+	}
+}
+
+// A closed factory must not dial: the retry policy would chase a frontend that is
+// gone for a minute and then Fatal, aborting the process midway through shutdown.
+func TestGetSystemClient_AfterCloseDoesNotDial(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	deadAddr := listener.Addr().String()
+	require.NoError(t, listener.Close())
+
+	f := newFactory(deadAddr, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	f.Close()
+
+	got := make(chan sdkclient.Client, 1)
+	go func() { got <- f.GetSystemClient() }()
+
+	select {
+	case client := <-got:
+		require.NotNil(t, client)
+	case <-time.After(10 * time.Second):
+		t.Fatal("GetSystemClient on a closed factory must not dial")
+	}
 }
