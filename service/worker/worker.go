@@ -79,9 +79,6 @@ func (wm *workerManager) Start() {
 			// use default worker
 			wc.RegisterActivities(defaultWorker)
 		} else {
-			// TODO: This is to prevent issues during upgrade/downgrade. Remove in 1.24 release.
-			wc.RegisterActivities(defaultWorker)
-
 			// this worker component requires a dedicated worker for activities
 			activityWorkerOptions.Options.DisableWorkflowWorker = true
 			activityWorkerOptions.Options.Identity = "temporal-system@" + wm.hostInfo.Identity()
