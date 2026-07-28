@@ -3,6 +3,7 @@ package tests
 // SAA <-> WFA parity tests
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -89,13 +91,17 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 // can expose the real failure.
 func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 	env := newActivityParityEnv(s.T())
+	type causeProjection struct {
+		Type    string
+		Message string
+	}
 	type terminalProjection struct {
 		Status enumspb.ActivityExecutionStatus
-		Cause  failureCause
+		Cause  causeProjection
 	}
 	expected := terminalProjection{
 		Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-		Cause:  failureCause{Type: "drive", Message: "drive"},
+		Cause:  causeProjection{Type: "drive", Message: "drive"},
 	}
 
 	assertCausePreserved := func(
@@ -106,17 +112,25 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 		const message = "the terminal timeout must chain the underlying application failure as its Cause"
 		t.Run("WorkflowActivity", func(t *testing.T) {
 			activity := newWFADriver(t, env, cfg).driveTrace(t, trace)
+			timeout, ok := errors.AsType[*temporal.TimeoutError](activity.run.Get(activity.d.ctx, nil))
+			require.True(t, ok)
+			application, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap())
+			require.True(t, ok)
 			actual := terminalProjection{
 				Status: activity.terminalStatus(t),
-				Cause:  activity.terminalCause(t),
+				Cause:  causeProjection{Type: application.Type(), Message: application.Message()},
 			}
 			require.Equal(t, expected, actual, message)
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
 			activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
+			cause := activity.describe(t).GetOutcome().GetFailure().GetCause()
 			actual := terminalProjection{
 				Status: activity.terminalStatus(t),
-				Cause:  activity.terminalCause(t),
+				Cause: causeProjection{
+					Type:    cause.GetApplicationFailureInfo().GetType(),
+					Message: cause.GetMessage(),
+				},
 			}
 			require.Equal(t, expected, actual, message)
 		})
@@ -170,10 +184,18 @@ func (s *activityParityTestSuite) TestRetriedTimeoutDoesNotChainPriorFailure() {
 				timeout,
 			}
 			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-				s.Require().Empty(newWFADriver(s.T(), env, cfg).driveTrace(s.T(), trace).lastFailureCause(s.T()))
+				t := s.T()
+				activity := newWFADriver(t, env, cfg).driveTrace(t, trace)
+				lastFailure := activity.pendingActivityInfo(t).GetLastFailure()
+				s.Require().NotNil(lastFailure)
+				s.Require().Nil(lastFailure.GetCause())
 			})
 			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-				s.Require().Empty(newSAADriver(s.T(), env, cfg).driveTrace(s.T(), trace).lastFailureCause(s.T()))
+				t := s.T()
+				activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
+				lastFailure := activity.describe(t).GetInfo().GetLastFailure()
+				s.Require().NotNil(lastFailure)
+				s.Require().Nil(lastFailure.GetCause())
 			})
 		})
 	}

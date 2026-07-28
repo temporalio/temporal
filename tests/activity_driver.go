@@ -129,17 +129,6 @@ type activityInfo struct {
 	NextAttemptScheduleTimeSet bool
 }
 
-// failureCause is the Type and Message of a failure's Cause.
-type failureCause struct {
-	Type    string
-	Message string
-}
-
-func causeOf(failure *failurepb.Failure) failureCause {
-	cause := failure.GetCause()
-	return failureCause{Type: cause.GetApplicationFailureInfo().GetType(), Message: cause.GetMessage()}
-}
-
 // activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
 // poll for, schedule the activity a workflow owns, close an activity the trace has finished with. A
 // wait for a configured window is bounded by that window plus activityDriverTimerMargin instead.

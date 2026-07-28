@@ -528,6 +528,8 @@ func TestTransitionTimedout(t *testing.T) {
 	}
 }
 
+// When a per-attempt timeout leaves too little time for another retry, the terminal ScheduleToClose
+// failure must retain the prior attempt's failure even though the per-attempt failure is recorded first.
 func TestTransitionTimedOutRetryWindowExhaustedChainsPriorFailure(t *testing.T) {
 	for _, timeoutType := range []enumspb.TimeoutType{
 		enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
