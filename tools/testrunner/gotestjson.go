@@ -390,10 +390,36 @@ func packageAbortDetails(packageName string, incompleteTests []gtr.Test) string 
 	if len(incompleteTests) == 1 {
 		testNodes = "test node"
 	}
-	return sanitizeXML(fmt.Sprintf(
+	var details strings.Builder
+	fmt.Fprintf(
+		&details,
 		"package %s aborted; %d %s had no final result, and others may not have started",
 		packageName,
 		len(incompleteTests),
 		testNodes,
-	))
+	)
+	details.WriteString("\n\nTests without final results:")
+	for _, test := range incompleteTests {
+		fmt.Fprintf(&details, "\n- %s", test.Name)
+		if failureDetails := incompleteTestFailureDetails(test.Output); failureDetails != "" {
+			details.WriteString("\n  Details:\n    ")
+			details.WriteString(strings.ReplaceAll(failureDetails, "\n", "\n    "))
+		}
+	}
+	return sanitizeXML(details.String())
+}
+
+func incompleteTestFailureDetails(output []string) string {
+	data := strings.Join(output, "\n")
+	if alerts := parseAlerts(data); len(alerts) > 0 {
+		details := make([]string, 0, len(alerts))
+		for _, alert := range alerts {
+			details = append(details, strings.TrimSpace(alert.Details))
+		}
+		return strings.Join(details, "\n\n")
+	}
+	if details := parseFailureDetails(data); details != noFailureDetails {
+		return details
+	}
+	return ""
 }

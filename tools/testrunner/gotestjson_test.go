@@ -441,7 +441,9 @@ DONE 0 tests, 1 failure in 1.000s
 									Failure: &junit.Result{
 										Message: string(failureTypeAborted),
 										Type:    string(failureTypeAborted),
-										Data:    "package example.com/tests aborted; 1 test node had no final result, and others may not have started",
+										Data: "package example.com/tests aborted; 1 test node had no final result, and others may not have started\n\n" +
+											"Tests without final results:\n" +
+											"- TestIncomplete",
 									},
 								},
 							},
@@ -455,10 +457,20 @@ DONE 0 tests, 1 failure in 1.000s
 			input: `{"Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
 {"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== RUN   TestIncomplete\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"    context.go:132:\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"        Error Trace:\tcontext.go:132\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"        Error:      \ttest exceeded timeout\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"        Test:       \tTestIncomplete\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"        Messages:   \ttimeout: 1m30s\n"}
 {"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== PAUSE TestIncomplete\n"}
 {"Action":"pause","Package":"example.com/tests","Test":"TestIncomplete"}
 `,
 			expectedOutput: `=== RUN   TestIncomplete
+    context.go:132:
+        Error Trace:	context.go:132
+        Error:      	test exceeded timeout
+        Test:       	TestIncomplete
+        Messages:   	timeout: 1m30s
 === PAUSE TestIncomplete
 
 DONE 0 tests in 0.000s
@@ -483,7 +495,15 @@ DONE 0 tests in 0.000s
 									Failure: &junit.Result{
 										Message: string(failureTypeAborted),
 										Type:    string(failureTypeAborted),
-										Data:    "package example.com/tests aborted; 1 test node had no final result, and others may not have started",
+										Data: "package example.com/tests aborted; 1 test node had no final result, and others may not have started\n\n" +
+											"Tests without final results:\n" +
+											"- TestIncomplete\n" +
+											"  Details:\n" +
+											"        context.go:132:\n" +
+											"            Error Trace:\tcontext.go:132\n" +
+											"            Error:      \ttest exceeded timeout\n" +
+											"            Test:       \tTestIncomplete\n" +
+											"            Messages:   \ttimeout: 1m30s",
 									},
 								},
 							},
@@ -578,7 +598,9 @@ DONE 1 tests, 2 failures, 1 error in 0.010s
 									Failure: &junit.Result{
 										Message: string(failureTypeAborted),
 										Type:    string(failureTypeAborted),
-										Data:    "package example.com/tests aborted; 1 test node had no final result, and others may not have started",
+										Data: "package example.com/tests aborted; 1 test node had no final result, and others may not have started\n\n" +
+											"Tests without final results:\n" +
+											"- TestIncomplete",
 									},
 								},
 							},
