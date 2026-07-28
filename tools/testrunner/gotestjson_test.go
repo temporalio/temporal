@@ -117,7 +117,8 @@ goroutine 1 [running]:
 
 DONE 0 tests, 1 failure in 0.100s
 `,
-			expectedStdout: `panic: setup failed
+			expectedStdout: `=== RUN   TestIncomplete
+panic: setup failed
 goroutine 1 [running]:
 
 DONE 0 tests, 1 failure in 0.100s

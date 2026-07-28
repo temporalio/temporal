@@ -87,7 +87,7 @@ func (o *goTestJSONOutput) finish() string {
 		// test. Surface high-priority alerts without presenting ordinary output
 		// from unfinished tests as live failures, and preserve the full buffers
 		// for reports.
-		o.writeIncompleteTestAlerts(o.testOutputs[test])
+		o.writeIncompleteTestAlerts(test, o.testOutputs[test])
 		o.flushTestOutput(test, false)
 	}
 	o.writeSummary()
@@ -272,11 +272,16 @@ func (o *goTestJSONOutput) writeOutput(output string) {
 	o.output.WriteString(output)
 }
 
-func (o *goTestJSONOutput) writeIncompleteTestAlerts(output *strings.Builder) {
+func (o *goTestJSONOutput) writeIncompleteTestAlerts(test goTestID, output *strings.Builder) {
 	if output == nil {
 		return
 	}
-	for _, alert := range parseAlerts(output.String()) {
+	alerts := parseAlerts(output.String())
+	if len(alerts) == 0 {
+		return
+	}
+	fmt.Fprintf(o.stdout, "=== RUN   %s\n", test.testName)
+	for _, alert := range alerts {
 		_, _ = fmt.Fprintln(o.stdout, strings.TrimRight(alert.Details, "\n"))
 	}
 }
