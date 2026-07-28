@@ -129,7 +129,7 @@ polling.
 
 ## Outbound Task Queue
 
-The outbound task queue is a task queue that is internal to the history service. Similarly to the the [transfer task
+The outbound task queue is a task queue that is internal to the history service. Similarly to the [transfer task
 queue](./history-service.md#transfer-task-queue), the outbound queue is a sharded "immediate" queue. The difference
 between the transfer queue and the outbound queue is that outbound tasks target external destinations, meaning that
 tasks are allowed to make long running (typically up to 10 seconds) external requests. The outbound queue groups tasks
