@@ -23,6 +23,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	apinexus "go.temporal.io/api/temporalnexus"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -515,7 +516,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 			},
 		},
 	}
-	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := apinexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -688,7 +689,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartsStandaloneActivityBidir
 			}
 
 			// Surface the SAA's Activity link back to the Nexus caller as a handler link.
-			nexus.AddHandlerLinks(handlerCtx, commonnexus.ConvertLinkActivityToNexusLink(activityLink))
+			nexus.AddHandlerLinks(handlerCtx, apinexus.ConvertLinkActivityToNexusLink(activityLink))
 			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
 		},
 	}
@@ -958,7 +959,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 			},
 		},
 	}
-	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := apinexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(
@@ -982,7 +983,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 				return link.Type == string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName())
 			})
 			s.NotEqual(-1, workflowEventLinkIdx)
-			workflowEventLink, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[workflowEventLinkIdx])
+			workflowEventLink, err := apinexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[workflowEventLinkIdx])
 			s.NoError(err)
 			protorequire.ProtoEqual(s.T(), &commonpb.Link_WorkflowEvent{
 				Namespace:  env.Namespace().String(),
@@ -1008,7 +1009,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 					return link.Type == string((&commonpb.Link_NexusOperation{}).ProtoReflect().Descriptor().FullName())
 				})
 				s.NotEqual(-1, nexusOperationLinkIdx)
-				expectedNexusOperationLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+				expectedNexusOperationLink := apinexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
 					Namespace:   env.Namespace().String(),
 					OperationId: run.GetID(),
 					RunId:       run.GetRunID(),

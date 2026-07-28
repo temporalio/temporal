@@ -14,6 +14,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	apinexus "go.temporal.io/api/temporalnexus"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -73,7 +74,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 			},
 		},
 	}
-	callerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(callerLink)
+	callerNexusLink := apinexus.ConvertLinkWorkflowEventToNexusLink(callerLink)
 
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  "handler-ns",
@@ -86,7 +87,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 			},
 		},
 	}
-	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := apinexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 	asyncSuccessEndpoint := testcore.RandomizeStr("test-endpoint")
 
 	operationErrorOutcome := "operation_error"

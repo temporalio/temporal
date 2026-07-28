@@ -9,12 +9,12 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/temporalnexus"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -246,7 +246,7 @@ func (w *Workflow) NexusOperationInvocationData(
 	execKey := ctx.ExecutionKey()
 	nsEntry := ctx.NamespaceEntry()
 
-	nexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+	nexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 		Namespace:  nsEntry.Name().String(),
 		WorkflowId: execKey.BusinessID,
 		RunId:      execKey.RunID,

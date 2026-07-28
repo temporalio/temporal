@@ -13,6 +13,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/temporalnexus"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -304,7 +305,7 @@ func (o *Operation) loadStartArgs(
 		}
 	}
 	invocationData.NexusLinks = append(invocationData.NexusLinks,
-		commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+		temporalnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
 			Namespace:   ctx.NamespaceEntry().Name().String(),
 			OperationId: ctx.ExecutionKey().BusinessID,
 			RunId:       ctx.ExecutionKey().RunID,

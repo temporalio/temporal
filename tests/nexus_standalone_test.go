@@ -18,6 +18,7 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	apinexus "go.temporal.io/api/temporalnexus"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
@@ -437,7 +438,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 				pollerErrCh <- err
 				return
 			}
-			expectedLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+			expectedLink := apinexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
 				Namespace:   env.Namespace().String(),
 				OperationId: "test-op",
 				RunId:       startResp.RunId,
@@ -467,7 +468,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 								SyncSuccess: &nexuspb.StartOperationResponse_Sync{
 									Payload: expectedResult,
 									Links: commonnexus.ConvertLinksToProto([]nexus.Link{
-										commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
+										apinexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
 									}),
 								},
 							},
@@ -1853,7 +1854,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		})
 		s.NoError(err)
 
-		expectedLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+		expectedLink := apinexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
@@ -1874,7 +1875,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 							AsyncSuccess: &nexuspb.StartOperationResponse_Async{
 								OperationToken: "test-operation-token",
 								Links: commonnexus.ConvertLinksToProto([]nexus.Link{
-									commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
+									apinexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
 								}),
 							},
 						},
@@ -2180,7 +2181,7 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransition
 			},
 		},
 	}
-	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := apinexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	type callbackInfo struct {
 		token string
