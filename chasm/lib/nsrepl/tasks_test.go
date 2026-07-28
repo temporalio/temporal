@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
@@ -160,7 +161,9 @@ func newNsreplTestEnv(t *testing.T) *nsreplTestEnv {
 		logger:          logger,
 	}
 	peerHandler := &applyPeerTaskHandler{
-		clientBean:     clientBean,
+		// Exercise the real default transport (admin RPC) over the mocked client
+		// bean, so the handler + default applier are covered together.
+		peerApplier:    newAdminClientPeerApplier(clientBean),
 		metricsHandler: metrics.NoopMetricsHandler,
 		logger:         logger,
 	}
@@ -401,4 +404,96 @@ func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 	require.Equal(t, nsreplpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome(), "retriable failure keeps peer pending")
 	require.Equal(t, int32(1), peer.GetAttemptCount())
 	require.Equal(t, nsreplpb.COMPONENT_STATUS_RUNNING, c.GetStatus(), "component not complete while a peer is still retrying")
+}
+
+// -----------------------------------------------------------------------------
+// PeerApplier transport seam.
+// -----------------------------------------------------------------------------
+
+// TestAdminClientPeerApplier_Apply covers the default (admin RPC) transport in
+// isolation: outcome mapping and error propagation for the handler to classify.
+func TestAdminClientPeerApplier_Apply(t *testing.T) {
+	detail := testDetail()
+	newApplier := func(t *testing.T) (*serverclient.MockBean, *adminservicemock.MockAdminServiceClient, PeerApplier) {
+		ctrl := gomock.NewController(t)
+		bean := serverclient.NewMockBean(ctrl)
+		admin := adminservicemock.NewMockAdminServiceClient(ctrl)
+		return bean, admin, newAdminClientPeerApplier(bean)
+	}
+
+	t.Run("applied outcome", func(t *testing.T) {
+		bean, admin, applier := newApplier(t)
+		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
+		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
+			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil)
+		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		require.NoError(t, err)
+		require.Equal(t, PeerApplyResultApplied, res)
+	})
+	t.Run("created maps to applied", func(t *testing.T) {
+		bean, admin, applier := newApplier(t)
+		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
+		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
+			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED}, nil)
+		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_CREATE, detail)
+		require.NoError(t, err)
+		require.Equal(t, PeerApplyResultApplied, res)
+	})
+	t.Run("no-op-stale outcome", func(t *testing.T) {
+		bean, admin, applier := newApplier(t)
+		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
+		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
+			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE}, nil)
+		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		require.NoError(t, err)
+		require.Equal(t, PeerApplyResultNoOpStale, res)
+	})
+	t.Run("rpc error propagates", func(t *testing.T) {
+		bean, admin, applier := newApplier(t)
+		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
+		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("down"))
+		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		require.Error(t, err)
+	})
+	t.Run("dial error propagates", func(t *testing.T) {
+		bean, _, applier := newApplier(t)
+		bean.EXPECT().GetRemoteAdminClient("cellB").Return(nil, serviceerror.NewUnavailable("no route"))
+		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		require.Error(t, err)
+	})
+}
+
+// mockPeerApplier is a stand-in transport used to prove the handler delegates the
+// peer write to the injected PeerApplier — the seam a deployment overrides.
+type mockPeerApplier struct {
+	result PeerApplyResult
+	err    error
+	cells  []string
+}
+
+func (m *mockPeerApplier) Apply(_ context.Context, targetCell string, _ enumsspb.NamespaceOperation, _ *persistencespb.NamespaceDetail) (PeerApplyResult, error) {
+	m.cells = append(m.cells, targetCell)
+	return m.result, m.err
+}
+
+// TestApplyPeerTask_Execute_UsesInjectedApplier proves the transport is pluggable:
+// a custom PeerApplier's result flows through the handler's unchanged policy
+// (outcome recording + completion), with no admin RPC involved.
+func TestApplyPeerTask_Execute_UsesInjectedApplier(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	ref := env.startCommitted("cellB")
+
+	applier := &mockPeerApplier{result: PeerApplyResultNoOpStale}
+	handler := &applyPeerTaskHandler{
+		peerApplier:    applier,
+		metricsHandler: metrics.NoopMetricsHandler,
+		logger:         log.NewTestLogger(),
+	}
+
+	require.NoError(t, handler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &nsreplpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 0}))
+
+	require.Equal(t, []string{"cellB"}, applier.cells, "handler must delegate the peer transport to the injected applier")
+	c := env.read(ref)
+	require.Equal(t, nsreplpb.PEER_APPLY_OUTCOME_NO_OP_STALE, c.GetPeerApply()["cellB"].GetOutcome())
+	require.Equal(t, nsreplpb.COMPONENT_STATUS_COMPLETED, c.GetStatus())
 }

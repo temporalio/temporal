@@ -5,16 +5,13 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nsreplpb "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1"
-	serverclient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/fx"
 )
@@ -245,7 +242,7 @@ func classifyLocalErr(err error) string {
 type applyPeerTaskHandlerOptions struct {
 	fx.In
 
-	ClientBean     serverclient.Bean
+	PeerApplier    PeerApplier
 	MetricsHandler metrics.Handler
 	Logger         log.Logger
 }
@@ -253,7 +250,11 @@ type applyPeerTaskHandlerOptions struct {
 type applyPeerTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*nsreplpb.ApplyPeerTask]
 
-	clientBean serverclient.Bean
+	// peerApplier is the pluggable transport that delivers a mutation to a peer
+	// cell. The default OSS impl uses the ApplyNamespaceMutation admin RPC; this
+	// handler owns the surrounding policy (retry, error classification, per-peer
+	// state, completion) independent of which transport is injected.
+	peerApplier PeerApplier
 	// TODO(nsrepl): emit metrics for the peer apply path. Suggested shape:
 	//   - nsrepl_apply_attempts_total{target_cell, source_cell, outcome}    counter
 	//   - nsrepl_apply_failures_total{target_cell, source_cell}             counter
@@ -269,7 +270,7 @@ type applyPeerTaskHandler struct {
 
 func newApplyPeerTaskHandler(opts applyPeerTaskHandlerOptions) *applyPeerTaskHandler {
 	return &applyPeerTaskHandler{
-		clientBean:     opts.ClientBean,
+		peerApplier:    opts.PeerApplier,
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
 	}
@@ -332,27 +333,17 @@ func (h *applyPeerTaskHandler) Execute(
 		return fmt.Errorf("read component: %w", readErr)
 	}
 
-	// Dial the target cell.
-	adminClient, dialErr := h.clientBean.GetRemoteAdminClient(task.GetTargetCell())
-	if dialErr != nil {
-		return h.recordPeerOutcome(ctx, ref, task, nsreplpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE, dialErr)
+	// Deliver the mutation to the peer via the pluggable transport. Any error
+	// (dial failure or apply failure) is classified here into retriable vs
+	// terminal, so the retry/gating policy stays in this package regardless of
+	// which transport the deployment injected.
+	result, applyErr := h.peerApplier.Apply(ctx, task.GetTargetCell(), loaded.Operation, loaded.Detail)
+	if applyErr != nil {
+		return h.recordPeerOutcome(ctx, ref, task, classifyPeerErr(applyErr), applyErr)
 	}
 
-	// Invoke ApplyNamespaceMutation. The request reuses the existing
-	// NamespaceTaskAttributes wire shape so the receiver-side apply-if-higher
-	// logic can be reused unchanged.
-	req := &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask: nsreplication.NamespaceDetailToTaskAttributes(loaded.Operation, loaded.Detail),
-	}
-	resp, rpcErr := adminClient.ApplyNamespaceMutation(ctx, req)
-	if rpcErr != nil {
-		outcome := classifyPeerErr(rpcErr)
-		return h.recordPeerOutcome(ctx, ref, task, outcome, rpcErr)
-	}
-
-	// Map the admin RPC's outcome to the component's per-peer outcome enum.
 	outcome := nsreplpb.PEER_APPLY_OUTCOME_APPLIED
-	if resp.GetOutcome() == adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE {
+	if result == PeerApplyResultNoOpStale {
 		outcome = nsreplpb.PEER_APPLY_OUTCOME_NO_OP_STALE
 	}
 	return h.recordPeerOutcome(ctx, ref, task, outcome, nil)
