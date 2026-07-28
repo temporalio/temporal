@@ -715,6 +715,64 @@ DONE 1 tests in 0.010s
 			},
 		},
 		{
+			name: "unknown parent with abort alert",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"TestParent"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"=== RUN   TestParent\n"}
+{"Action":"run","Package":"example.com/tests","Test":"TestParent/Child"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent/Child","Output":"=== RUN   TestParent/Child\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent/Child","Output":"--- PASS: TestParent/Child (0.01s)\n"}
+{"Action":"pass","Package":"example.com/tests","Test":"TestParent/Child","Elapsed":0.01}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"panic: setup failed\n"}
+`,
+			expectedOutput: `=== RUN   TestParent/Child
+--- PASS: TestParent/Child (0.01s)
+=== RUN   TestParent
+panic: setup failed
+
+DONE 1 tests in 0.000s
+`,
+			expectedReport: &junitReport{
+				Testsuites: junit.Testsuites{
+					Tests:    2,
+					Failures: 1,
+					Suites: []junit.Testsuite{
+						{
+							Name:  "example.com/tests",
+							Tests: 1,
+							ID:    0,
+							Time:  "0.010",
+							Testcases: []junit.Testcase{
+								{
+									Name:      "TestParent/Child",
+									Classname: "example.com/tests",
+									Time:      "0.010",
+								},
+							},
+							SystemOut: &junit.Output{Data: "panic: setup failed"},
+						},
+						{
+							Name:     testrunnerSuiteName,
+							Tests:    1,
+							Failures: 1,
+							Testcases: []junit.Testcase{
+								{
+									Name: "testrunner.PackageAborted: example.com/tests",
+									Failure: &junit.Result{
+										Message: string(failureTypeAborted),
+										Type:    string(failureTypeAborted),
+										Data: "package example.com/tests aborted; 1 test node had no final result, and others may not have started\n\n" +
+											"Tests without final results:\n" +
+											"- TestParent",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "terminal actions resolve parser-unknown parents",
 			input: `{"Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestPassParent"}

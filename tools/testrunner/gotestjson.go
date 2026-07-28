@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -333,7 +334,7 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		}
 		var incompleteTests []gtr.Test
 		tests := pkg.Tests
-		parentTests := testParentNames(tests)
+		packageHasAlerts := len(parseAlerts(strings.Join(pkg.Output, "\n"))) > 0
 		pkg.Tests = tests[:0]
 		for _, test := range tests {
 			testID := goTestID{
@@ -345,7 +346,13 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 			}
 			// Incomplete tests from a runner abort have run/pause output but no terminal result.
 			if test.Result == gtr.Unknown {
-				if _, isParent := parentTests[test.Name]; !isParent {
+				hasDescendant := slices.ContainsFunc(tests, func(other gtr.Test) bool {
+					return strings.HasPrefix(other.Name, test.Name+"/")
+				})
+				// Alerts distinguish an interrupted parent from parser-only parent nodes.
+				if !hasDescendant ||
+					packageHasAlerts ||
+					len(parseAlerts(strings.Join(test.Output, "\n"))) > 0 {
 					incompleteTests = append(incompleteTests, test)
 				}
 				continue
@@ -371,22 +378,6 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		)
 	}
 	return junitReport, nil
-}
-
-func testParentNames(tests []gtr.Test) map[string]struct{} {
-	parents := make(map[string]struct{})
-	for _, test := range tests {
-		name := test.Name
-		for {
-			separator := strings.LastIndexByte(name, '/')
-			if separator < 0 {
-				break
-			}
-			name = name[:separator]
-			parents[name] = struct{}{}
-		}
-	}
-	return parents
 }
 
 func (o *goTestJSONOutput) packageNameForTests(tests []gtr.Test) string {
