@@ -28,7 +28,8 @@ type (
 		visibilityManager manager.VisibilityManager
 		historyClient     historyservice.HistoryServiceClient
 
-		deleteActivityRPS dynamicconfig.TypedSubscribable[int]
+		deleteActivityRPS       dynamicconfig.TypedSubscribable[int]
+		useChasmDeleteExecution dynamicconfig.BoolPropertyFn
 
 		metricsHandler metrics.Handler
 		logger         log.Logger
@@ -67,15 +68,17 @@ func NewActivities(
 	visibilityManager manager.VisibilityManager,
 	historyClient historyservice.HistoryServiceClient,
 	deleteActivityRPS dynamicconfig.TypedSubscribable[int],
+	useChasmDeleteExecution dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{
-		visibilityManager: visibilityManager,
-		historyClient:     historyClient,
-		deleteActivityRPS: deleteActivityRPS,
-		metricsHandler:    metricsHandler,
-		logger:            logger,
+		visibilityManager:       visibilityManager,
+		historyClient:           historyClient,
+		deleteActivityRPS:       deleteActivityRPS,
+		useChasmDeleteExecution: useChasmDeleteExecution,
+		metricsHandler:          metricsHandler,
+		logger:                  logger,
 	}
 }
 
@@ -195,17 +198,18 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 				NamespaceId:       params.NamespaceID.String(),
 				WorkflowExecution: execution.Execution,
 			})
+		} else if a.useChasmDeleteExecution() {
+			_, err = a.historyClient.DeleteExecution(ctx, &historyservice.DeleteExecutionRequest{
+				NamespaceId: params.NamespaceID.String(),
+				Execution:   execution.Execution,
+				ArchetypeId: archetypeID,
+				Reason:      "Namespace delete",
+			})
 		} else {
-			// NOTE: ForceDeleteWorkflowExecution is NOT design as a API to be consumed programmatically,
-			// and only performs best effort deletion on execution histories.
-			// It works for CHASM now as CHASM executions don't have any history events, so as long as this API,
-			// returns nil error, it means we have successfully deleted the mutable state and visibility records.
 			_, err = a.historyClient.ForceDeleteWorkflowExecution(ctx, &historyservice.ForceDeleteWorkflowExecutionRequest{
 				NamespaceId: params.NamespaceID.String(),
-				ArchetypeId: archetypeID,
+				ArchetypeId: uint32(archetypeID),
 				Request: &adminservice.DeleteWorkflowExecutionRequest{
-					// Namespace and Archetype fields are not required since we are calling history
-					// service directly.
 					Execution: execution.Execution,
 				},
 			})
@@ -257,8 +261,10 @@ func (a *Activities) deleteWorkflowExecutionFromVisibility(
 
 	logger.Info("Deleting workflow execution from visibility.")
 	_, err := a.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
-		NamespaceId: nsID.String(),
-		Execution:   execution.GetExecution(),
+		NamespaceId:       nsID.String(),
+		Execution:         execution.GetExecution(),
+		WorkflowStartTime: execution.StartTime,
+		WorkflowCloseTime: execution.CloseTime,
 	})
 	switch err.(type) {
 	case nil:

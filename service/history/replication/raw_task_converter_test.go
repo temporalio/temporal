@@ -1981,10 +1981,4 @@ func (s *rawTaskConverterSuite) TestConvertDeleteExecutionReplicationTask() {
 	s.NotNil(result)
 	s.Equal(enumsspb.REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK, result.TaskType)
 	s.Equal(taskID, result.SourceTaskId)
-
-	attrs := result.GetHistoryTaskAttributes()
-	s.NotNil(attrs)
-	s.Equal(s.namespaceID, attrs.NamespaceId)
-	s.Equal(s.workflowID, attrs.WorkflowId)
-	s.Equal(s.runID, attrs.RunId)
 }

@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -40,15 +43,15 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	defer m.Stop()
 
 	// No entries initially
-	list := m.filterWorkers("ns1", alwaysTrue)
+	list := m.filterWorkers("ns1", true /* includeSystemWorkers */, alwaysTrue)
 	assert.Empty(t, list, "expected empty list before updates")
 
 	// Add some heartbeats
 	hb1 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerA", Status: enumspb.WORKER_STATUS_RUNNING}
 	hb2 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "workerB", Status: enumspb.WORKER_STATUS_RUNNING}
-	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb1, hb2})
+	m.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb1, hb2})
 
-	list = m.filterWorkers("ns1", alwaysTrue)
+	list = m.filterWorkers("ns1", true /* includeSystemWorkers */, alwaysTrue)
 	// Order is not guaranteed; check contents by keys
 	keys := []string{list[0].WorkerInstanceKey, list[1].WorkerInstanceKey}
 	assert.Contains(t, keys, "workerA")
@@ -59,7 +62,7 @@ func TestUpdateAndListNamespace(t *testing.T) {
 
 	// Check capacity utilization metric
 	utilizationMetrics := snapshot["worker_registry_capacity_utilization"]
-	assert.Equal(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
+	require.Len(t, utilizationMetrics, 1, "should have capacity utilization metric")
 	lastUtilization := utilizationMetrics[0]
 	assert.Equal(t, float64(2)/float64(10), lastUtilization.Value, "should record correct capacity utilization")
 
@@ -91,19 +94,19 @@ func TestShutdownStatusRemovesWorker(t *testing.T) {
 	// Add two running workers
 	hb1 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_RUNNING}
 	hb2 := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker2", Status: enumspb.WORKER_STATUS_RUNNING}
-	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb1, hb2})
+	m.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb1, hb2})
 
 	// Verify both workers are registered
-	list := m.filterWorkers("ns1", alwaysTrue)
+	list := m.filterWorkers("ns1", true /* includeSystemWorkers */, alwaysTrue)
 	assert.Len(t, list, 2, "both workers should be registered")
 	assert.Equal(t, int64(2), m.total.Load(), "total should be 2")
 
 	// Worker1 sends shutdown status
 	hbShutdown := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "worker1", Status: enumspb.WORKER_STATUS_SHUTDOWN}
-	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hbShutdown})
+	m.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hbShutdown})
 
 	// Verify only worker1 is removed, worker2 remains
-	list = m.filterWorkers("ns1", alwaysTrue)
+	list = m.filterWorkers("ns1", true /* includeSystemWorkers */, alwaysTrue)
 	assert.Len(t, list, 1, "only one worker should remain")
 	assert.Equal(t, "worker2", list[0].WorkerInstanceKey, "worker2 should remain")
 	assert.Equal(t, int64(1), m.total.Load(), "total should be 1 after shutdown")
@@ -138,10 +141,10 @@ func TestShutdownStatusForNonExistentWorker(t *testing.T) {
 
 	// Send shutdown for non-existent worker - should be a no-op
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "unknown", Status: enumspb.WORKER_STATUS_SHUTDOWN}
-	m.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{hb})
+	m.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 
 	// Verify nothing happened
-	list := m.filterWorkers("ns1", alwaysTrue)
+	list := m.filterWorkers("ns1", true /* includeSystemWorkers */, alwaysTrue)
 	assert.Empty(t, list, "no workers should exist")
 	assert.Zero(t, m.total.Load(), "total should remain 0")
 }
@@ -164,7 +167,7 @@ func TestListNamespacePredicate(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		key := fmt.Sprintf("key%d", i)
 		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}
-		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+		m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 	}
 
 	// Table-driven tests for predicates
@@ -180,10 +183,93 @@ func TestListNamespacePredicate(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			list := m.filterWorkers("ns", tc.pred)
+			list := m.filterWorkers("ns", true /* includeSystemWorkers */, tc.pred)
 			assert.Len(t, list, tc.wantCount)
 		})
 	}
+}
+
+func TestFilterWorkersExcludesSystemWorkers(t *testing.T) {
+	m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
+	defer m.Stop()
+
+	m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "user-1", TaskQueue: "my-queue"},
+		{WorkerInstanceKey: "user-2", TaskQueue: "my-queue"},
+		{WorkerInstanceKey: "sys-1", TaskQueue: "temporal-sys-per-ns-tq"},
+	})
+
+	t.Run("includeSystemWorkers=true returns all", func(t *testing.T) {
+		list := m.filterWorkers("ns", true /* includeSystemWorkers */, alwaysTrue)
+		require.Len(t, list, 3)
+	})
+
+	t.Run("includeSystemWorkers=false excludes system workers", func(t *testing.T) {
+		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
+		require.Len(t, list, 2)
+		for _, w := range list {
+			require.NotEqual(t, "sys-1", w.WorkerInstanceKey)
+		}
+	})
+}
+
+func TestIsSystemWorker(t *testing.T) {
+	t.Run("principal with type temporal marks as system worker", func(t *testing.T) {
+		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
+		defer m.Stop()
+
+		principal := &commonpb.Principal{Type: authorization.InternalPrincipalType, Name: authorization.InternalPrincipalName}
+		m.upsertHeartbeats("ns", "ns_name", principal, []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "sys-worker", TaskQueue: "any-queue"},
+		})
+
+		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
+		require.Empty(t, list, "worker with temporal principal should be excluded")
+
+		list = m.filterWorkers("ns", true /* includeSystemWorkers */, alwaysTrue)
+		require.Len(t, list, 1)
+	})
+
+	t.Run("principal with type temporal but non-internal name is still system worker", func(t *testing.T) {
+		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
+		defer m.Stop()
+
+		principal := &commonpb.Principal{Type: authorization.InternalPrincipalType, Name: "other"}
+		m.upsertHeartbeats("ns", "ns_name", principal, []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "worker", TaskQueue: "any-queue"},
+		})
+
+		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
+		require.Empty(t, list, "worker with temporal principal type should be excluded regardless of name")
+	})
+
+	t.Run("principal with non-temporal type is not system worker", func(t *testing.T) {
+		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
+		defer m.Stop()
+
+		principal := &commonpb.Principal{Type: "user", Name: "alice"}
+		m.upsertHeartbeats("ns", "ns_name", principal, []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "user-worker", TaskQueue: "temporal-sys-per-ns-tq"},
+		})
+
+		// Even though task queue has system prefix, principal says it's a user
+		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
+		require.Len(t, list, 1, "worker with user principal should not be excluded")
+	})
+
+	t.Run("nil principal falls back to task queue prefix", func(t *testing.T) {
+		m := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
+		defer m.Stop()
+
+		m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "sys-worker", TaskQueue: "temporal-sys-per-ns-tq"},
+			{WorkerInstanceKey: "user-worker", TaskQueue: "my-queue"},
+		})
+
+		list := m.filterWorkers("ns", false /* includeSystemWorkers */, alwaysTrue)
+		require.Len(t, list, 1)
+		require.Equal(t, "user-worker", list[0].WorkerInstanceKey)
+	})
 }
 
 func TestEvictByTTL(t *testing.T) {
@@ -206,17 +292,17 @@ func TestEvictByTTL(t *testing.T) {
 	defer m.Stop()
 
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "oldWorker"}
-	m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+	m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 
 	// Manually move beyond TTL
 	b := m.getBucket("ns")
-	e := b.namespaces["ns"][hb.WorkerInstanceKey]
+	e := b.namespaces["ns"].workers[hb.WorkerInstanceKey]
 	e.lastSeen = time.Now().Add(-2 * time.Second)
 
 	// Perform eviction
 	m.evictByTTL()
 
-	list := m.filterWorkers("ns", alwaysTrue)
+	list := m.filterWorkers("ns", true /* includeSystemWorkers */, alwaysTrue)
 	assert.Empty(t, list, "entry should be evicted by TTL")
 	assert.Zero(t, m.total.Load(), "total counter should be decremented")
 
@@ -254,14 +340,14 @@ func TestEvictByCapacity(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		key := fmt.Sprintf("cap%d", i)
 		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
-		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+		m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 	}
 
 	// All entries have lastSeen.Before(now) when MinEvictAge=0, so eligible
 	m.evictByCapacity()
 
 	// Ensure we evicted down to maxItems
-	remaining := m.filterWorkers("ns", alwaysTrue)
+	remaining := m.filterWorkers("ns", true /* includeSystemWorkers */, alwaysTrue)
 	assert.Len(t, remaining, int(maxItems), "should evict down to maxItems")
 	assert.LessOrEqual(t, m.total.Load(), int64(maxItems), "total counter should not exceed maxItems")
 
@@ -312,7 +398,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		key := fmt.Sprintf("worker%d", i)
 		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
-		m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+		m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 	}
 
 	// Verify we're over capacity
@@ -323,7 +409,7 @@ func TestEvictByCapacityWithMinAgeProtection(t *testing.T) {
 	m.evictByCapacity()
 
 	// All entries should still be there (protected by minEvictAge)
-	workers := m.filterWorkers("ns", alwaysTrue)
+	workers := m.filterWorkers("ns", true /* includeSystemWorkers */, alwaysTrue)
 	assert.Len(t, workers, 3, "all entries should be protected by minEvictAge")
 	assert.Equal(t, int64(3), m.total.Load(), "should still exceed maxItems due to protection")
 
@@ -364,7 +450,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		for i := 1; i <= 3; i++ {
 			key := fmt.Sprintf("worker%d", i)
 			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
-			m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+			m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 		}
 
 		// Virtual time advance - instant with synctest!
@@ -374,7 +460,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		m.evictByCapacity()
 
 		// Should have evicted down to maxItems
-		workers := m.filterWorkers("ns", alwaysTrue)
+		workers := m.filterWorkers("ns", true /* includeSystemWorkers */, alwaysTrue)
 		assert.LessOrEqual(t, len(workers), int(maxItems), "should evict down to maxItems")
 		assert.LessOrEqual(t, m.total.Load(), int64(maxItems), "total should be within limits")
 
@@ -414,20 +500,20 @@ func TestMultipleNamespaces(t *testing.T) {
 		{WorkerInstanceKey: "ns1-worker2", TaskQueue: "queue1"},
 		{WorkerInstanceKey: "ns1-worker3", TaskQueue: "queue2"},
 	}
-	m.upsertHeartbeats("namespace1", ns1Workers)
+	m.upsertHeartbeats("namespace1", "namespace1_name", nil /* principal */, ns1Workers)
 
 	// Add 2 workers to namespace2
 	ns2Workers := []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "ns2-worker1", TaskQueue: "queue3"},
 		{WorkerInstanceKey: "ns2-worker2", TaskQueue: "queue3"},
 	}
-	m.upsertHeartbeats("namespace2", ns2Workers)
+	m.upsertHeartbeats("namespace2", "namespace2_name", nil /* principal */, ns2Workers)
 
 	// Verify functional behavior first
-	ns1List := m.filterWorkers("namespace1", alwaysTrue)
+	ns1List := m.filterWorkers("namespace1", true /* includeSystemWorkers */, alwaysTrue)
 	assert.Len(t, ns1List, 3, "namespace1 should have 3 workers")
 
-	ns2List := m.filterWorkers("namespace2", alwaysTrue)
+	ns2List := m.filterWorkers("namespace2", true /* includeSystemWorkers */, alwaysTrue)
 	assert.Len(t, ns2List, 2, "namespace2 should have 2 workers")
 
 	assert.Equal(t, int64(5), m.total.Load(), "total should be 5 workers across namespaces")
@@ -451,6 +537,45 @@ func TestMultipleNamespaces(t *testing.T) {
 		totalNew += m.Value.(int64)
 	}
 	assert.Equal(t, int64(5), totalNew, "should record 5 total new workers across namespaces")
+}
+
+func TestRecordWorkerCountMetric(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
+		TTL:              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:         dynamicconfig.GetIntPropertyFn(100),
+		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:   captureHandler,
+		MetricsConfig:    WorkerMetricsConfig{},
+	})
+
+	m.upsertHeartbeats("ns1", "ns1_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "w1"},
+		{WorkerInstanceKey: "w2"},
+		{WorkerInstanceKey: "w3"},
+	})
+	m.upsertHeartbeats("ns2", "ns2_name", nil /* principal */, []*workerpb.WorkerHeartbeat{
+		{WorkerInstanceKey: "w4"},
+	})
+
+	m.recordWorkerCountMetric()
+
+	snapshot := capture.Snapshot()
+	workerCounts := snapshot["worker_registry_worker_count"]
+	require.Len(t, workerCounts, 2, "should have one metric per namespace")
+
+	countByNs := make(map[string]float64)
+	for _, mc := range workerCounts {
+		countByNs[mc.Tags["namespace"]] = mc.Value.(float64)
+	}
+	// Verify metric uses namespace name, not ID
+	require.InDelta(t, 3, countByNs["ns1_name"], 0)
+	require.InDelta(t, 1, countByNs["ns2_name"], 0)
 }
 
 func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
@@ -479,7 +604,7 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 		for i := 1; i <= 3; i++ {
 			key := fmt.Sprintf("worker%d", i)
 			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
-			m.upsertHeartbeats("ns", []*workerpb.WorkerHeartbeat{hb})
+			m.upsertHeartbeats("ns", "ns_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 		}
 
 		// Verify initial state
@@ -523,7 +648,7 @@ func BenchmarkUpdate(b *testing.B) {
 	hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: "benchWorker"}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m.upsertHeartbeats("benchNs", []*workerpb.WorkerHeartbeat{hb})
+		m.upsertHeartbeats("benchNs", "benchNs_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 	}
 }
 
@@ -544,11 +669,11 @@ func BenchmarkListNamespace(b *testing.B) {
 	for i := range 1000 {
 		key := fmt.Sprintf("worker%d", i)
 		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
-		m.upsertHeartbeats("benchNs", []*workerpb.WorkerHeartbeat{hb})
+		m.upsertHeartbeats("benchNs", "benchNs_name", nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = m.filterWorkers("benchNs", alwaysTrue)
+		_ = m.filterWorkers("benchNs", true /* includeSystemWorkers */, alwaysTrue)
 	}
 }
 
@@ -579,7 +704,7 @@ func BenchmarkRandomUpdate(b *testing.B) {
 		for i := range totalHeartbeats {
 			key := fmt.Sprintf("%s-worker%d", ns, i)
 			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}
-			m.upsertHeartbeats(ns, []*workerpb.WorkerHeartbeat{hb})
+			m.upsertHeartbeats(ns, namespace.Name(ns+"_name"), nil /* principal */, []*workerpb.WorkerHeartbeat{hb})
 			pairs = append(pairs, pair{ns: ns, hb: hb})
 		}
 	}
@@ -588,7 +713,7 @@ func BenchmarkRandomUpdate(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p := pairs[r.Intn(len(pairs))]
-		m.upsertHeartbeats(p.ns, []*workerpb.WorkerHeartbeat{p.hb})
+		m.upsertHeartbeats(p.ns, namespace.Name(p.ns+"_name"), nil /* principal */, []*workerpb.WorkerHeartbeat{p.hb})
 	}
 }
 
@@ -637,7 +762,7 @@ func TestActivitySlotsMetric(t *testing.T) {
 
 	testNamespace := tv.NamespaceID()
 	testNamespaceName := namespace.Name(testNamespace + "_name")
-	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
+	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, nil /* principal */, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
 
 	// Verify activity slots metrics
 	snapshot := capture.Snapshot()
@@ -714,7 +839,7 @@ func TestPluginMetricsExported(t *testing.T) {
 
 	testNamespace := tv.NamespaceID()
 	testNamespaceName := namespace.Name(testNamespace + "_name")
-	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
+	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, nil /* principal */, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
 
 	// Verify plugin metrics - should have exactly 3 recordings despite plugin-a being in both workers
 	snapshot := capture.Snapshot()
@@ -776,7 +901,7 @@ func TestPluginMetricsDisabled(t *testing.T) {
 	// Upsert heartbeats for test namespace
 	testNamespace := tv.NamespaceID()
 	testNamespaceName := namespace.Name(testNamespace + "_name")
-	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1})
+	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, nil /* principal */, []*workerpb.WorkerHeartbeat{worker1})
 
 	// Verify no plugin metrics are recorded when disabled
 	snapshot := capture.Snapshot()

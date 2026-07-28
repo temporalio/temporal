@@ -1,12 +1,13 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
 
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	schedulescommon "go.temporal.io/server/common/schedules"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -18,6 +19,8 @@ type Backfiller struct {
 	*schedulerpb.BackfillerState
 
 	Scheduler chasm.ParentPtr[*Scheduler]
+
+	EventLog chasm.Field[*EventLog]
 }
 
 type BackfillRequestType int
@@ -33,7 +36,7 @@ func addBackfiller(
 	ctx chasm.MutableContext,
 	scheduler *Scheduler,
 ) *Backfiller {
-	id := schedulescommon.GenerateBackfillerID()
+	id := schedulerinternal.GenerateBackfillerID()
 	backfiller := newBackfillerWithState(ctx, &schedulerpb.BackfillerState{
 		BackfillId:        id,
 		LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
@@ -43,6 +46,7 @@ func addBackfiller(
 		scheduler.Backfillers = make(chasm.Map[string, *Backfiller])
 	}
 	scheduler.Backfillers[id] = chasm.NewComponentField(ctx, backfiller)
+	scheduler.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("added backfiller: %s", id))
 
 	return backfiller
 }
@@ -50,6 +54,7 @@ func addBackfiller(
 func newBackfillerWithState(ctx chasm.MutableContext, state *schedulerpb.BackfillerState) *Backfiller {
 	backfiller := &Backfiller{
 		BackfillerState: state,
+		EventLog:        chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	backfiller.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
 	return backfiller
@@ -57,6 +62,8 @@ func newBackfillerWithState(ctx chasm.MutableContext, state *schedulerpb.Backfil
 
 // scheduleTask schedules a BackfillerTask at the given time.
 func (b *Backfiller) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	b.getOrCreateEventLog(ctx).LogEvent(ctx,
+		fmt.Sprintf("scheduled backfillerTask for %s", scheduledTime.Format(time.RFC3339)))
 	ctx.AddTask(b, chasm.TaskAttributes{
 		ScheduledTime: scheduledTime,
 	}, &schedulerpb.BackfillerTask{})

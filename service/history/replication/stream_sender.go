@@ -559,7 +559,7 @@ Loop:
 			}()
 			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
 			if err != nil {
-				return err
+				return s.recordRetry(item, attempt, fmt.Errorf("convert: %w", err))
 			}
 			if task == nil {
 				return nil
@@ -590,9 +590,12 @@ Loop:
 					0,
 					"",
 				)); err != nil {
-					return err
+					return s.recordRetry(item, attempt, fmt.Errorf("rate_limit: %w", err))
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
+			}
+			if s.config.EmitReplicationLifecycleEvents() {
+				s.emitReplicationSent(task, item)
 			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -604,7 +607,7 @@ Loop:
 					},
 				},
 			}); err != nil {
-				return err
+				return s.recordRetry(item, attempt, fmt.Errorf("send: %w", err))
 			}
 			skipCount = 0
 			metrics.ReplicationTasksSend.With(s.metrics).Record(
@@ -730,4 +733,19 @@ func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
 	default:
 		return nil
 	}
+}
+
+func (s *StreamSenderImpl) recordRetry(
+	item tasks.Task,
+	attempt int64,
+	err error,
+) error {
+	s.shardContext.GetThrottledLogger().Warn("Replication task send retry",
+		tag.TaskID(item.GetTaskID()),
+		tag.WorkflowNamespaceID(item.GetNamespaceID()),
+		tag.WorkflowID(item.GetWorkflowID()),
+		tag.Counter(int(attempt)),
+		tag.Error(err),
+	)
+	return err
 }

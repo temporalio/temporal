@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -578,9 +577,6 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		if err != nil {
 			return nil, err
 		}
-		if saName == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
-		}
 		return value, nil
 	case sqlparser.BoolVal:
 		// no-op: no validation needed
@@ -718,10 +714,8 @@ func (c *QueryConverter[ExprT]) validateValueType(
 }
 
 func IsGroupByFieldAllowed(fieldName string) bool {
-	for _, allowedField := range groupByFieldAllowlist {
-		if fieldName == allowedField {
-			return true
-		}
+	if slices.Contains(groupByFieldAllowlist, fieldName) {
+		return true
 	}
 	for _, allowedPrefix := range groupByFieldPrefixAllowlist {
 		if strings.HasPrefix(fieldName, allowedPrefix) {

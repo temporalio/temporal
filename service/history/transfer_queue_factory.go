@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -32,7 +33,8 @@ type (
 		HistoryRawClient       resource.HistoryRawClient
 		MatchingRawClient      resource.MatchingRawClient
 		VisibilityManager      manager.VisibilityManager
-		VersionMembershipCache worker_versioning.VersionMembershipCache
+		VersionMembershipCache worker_versioning.VersionMembershipAndReactivationStatusCache
+		TestHooks              testhooks.TestHooks
 	}
 
 	transferQueueFactory struct {
@@ -126,6 +128,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.VisibilityManager,
 		f.ChasmEngine,
 		f.VersionMembershipCache,
+		f.TestHooks,
 	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
@@ -196,11 +199,13 @@ func (f *transferQueueFactory) CreateQueue(
 			MaxReaderCount:                      f.Config.TransferQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
+			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},
 		logger,
 		metricsHandler,
 		factory,
+		nil, // taskPostProcessor
 	)
 }

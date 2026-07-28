@@ -67,7 +67,7 @@ var (
 
 	templateGetWorkflowExecution_v8 = fmt.Sprintf(
 		`SELECT %s FROM executions_visibility
-		WHERE namespace_id = :namespace_id AND run_id = :run_id`,
+		WHERE namespace_id = ? AND run_id = ?`,
 		strings.Join(sqlplugin.DbFields, ", "),
 	)
 )
@@ -197,15 +197,15 @@ func (mdb *db) DeleteFromVisibility(
 			retError = fmt.Errorf("transaction rollback failed: %w", retError)
 		}
 	}()
-	_, err = mdb.NamedExecContext(ctx, templateDeleteCustomSearchAttributes, filter)
+	_, err = tx.NamedExecContext(ctx, templateDeleteCustomSearchAttributes, filter)
 	if err != nil {
 		return nil, fmt.Errorf("unable to delete custom search attributes: %w", err)
 	}
-	result, err = mdb.NamedExecContext(ctx, templateDeleteWorkflowExecution_v8, filter)
+	result, err = tx.NamedExecContext(ctx, templateDeleteWorkflowExecution_v8, filter)
 	if err != nil {
 		return nil, fmt.Errorf("unable to delete workflow execution: %w", err)
 	}
-	_, err = mdb.NamedExecContext(ctx, templateDeleteChasmSearchAttributes, filter)
+	_, err = tx.NamedExecContext(ctx, templateDeleteChasmSearchAttributes, filter)
 	if err != nil {
 		return nil, fmt.Errorf("unable to delete chasm search attributes: %w", err)
 	}
@@ -249,16 +249,16 @@ func (mdb *db) GetFromVisibility(
 	filter sqlplugin.VisibilityGetFilter,
 ) (*sqlplugin.VisibilityRow, error) {
 	var row sqlplugin.VisibilityRow
-	stmt, err := mdb.PrepareNamedContext(ctx, templateGetWorkflowExecution_v8)
-	if err != nil {
+	if err := mdb.GetContext(
+		ctx,
+		&row,
+		templateGetWorkflowExecution_v8,
+		filter.NamespaceID,
+		filter.RunID,
+	); err != nil {
 		return nil, err
 	}
-	err = stmt.GetContext(ctx, &row, filter)
-	if err != nil {
-		return nil, err
-	}
-	err = mdb.processRowFromDB(&row)
-	if err != nil {
+	if err := mdb.processRowFromDB(&row); err != nil {
 		return nil, err
 	}
 	return &row, nil

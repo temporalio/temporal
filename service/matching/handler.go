@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -72,6 +74,7 @@ type (
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
 		TaskHookFactories             []hooks.TaskHookFactory `group:"TaskHookFactories"`
+		PartitionScalerFactory        PartitionScalerFactory
 	}
 )
 
@@ -115,6 +118,7 @@ func NewHandler(
 			params.RateLimiter,
 			params.Serializer,
 			params.TaskHookFactories,
+			params.PartitionScalerFactory,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,
@@ -151,6 +155,20 @@ func (h *Handler) opMetricsHandler(
 		partition,
 		h.config.BreakdownMetricsByTaskQueue(nsName.String(), partition.TaskQueue().Name(), partition.TaskType()),
 		h.config.BreakdownMetricsByPartition(nsName.String(), partition.TaskQueue().Name(), partition.TaskType()),
+	)
+}
+
+// recordNexusTaskRequest emits the nexus_task_requests metric with namespace,
+// operation, client_name, and is_internal tags.
+func (h *Handler) recordNexusTaskRequest(ctx context.Context, namespaceID string, taskQueueKind enumspb.TaskQueueKind, operation string) {
+	nsName := h.namespaceName(namespace.ID(namespaceID))
+	clientName, _ := headers.GetClientNameAndVersion(ctx)
+	isInternal := primitives.IsInternalTaskQueueKind(taskQueueKind)
+	metrics.NexusTaskRequests.With(h.metricsHandler).Record(1,
+		metrics.NamespaceTag(nsName.String()),
+		metrics.OperationTag(operation),
+		metrics.ClientNameTag(clientName),
+		metrics.IsInternalTag(isInternal),
 	)
 }
 
@@ -310,6 +328,13 @@ func (h *Handler) CancelOutstandingWorkerPolls(ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest) (_ *matchingservice.CancelOutstandingWorkerPollsResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.CancelOutstandingWorkerPolls(ctx, request)
+}
+
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
+func (h *Handler) CancelOutstandingWorkerPollsPartition(ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest) (_ *matchingservice.CancelOutstandingWorkerPollsPartitionResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CancelOutstandingWorkerPollsPartition(ctx, request)
 }
 
 // DescribeTaskQueue returns information about the target task queue, right now this API returns the
@@ -506,6 +531,11 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
+	// Only record on the initial handler call (ForwardedSource == ""), not on
+	// the forwarded call to the root partition, to avoid double-counting.
+	if request.GetForwardedSource() == "" {
+		h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), request.GetRequest().GetTaskQueue().GetKind(), "PollNexusTaskQueue")
+	}
 
 	if request.GetForwardedSource() != "" {
 		h.reportForwardedPerTaskQueueCounter(opMetrics, namespace.ID(request.GetNamespaceId()))
@@ -529,6 +559,7 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskCompletedScope,
 	)
+	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), request.GetTaskQueue().GetKind(), "RespondNexusTaskCompleted")
 
 	return h.engine.RespondNexusTaskCompleted(ctx, request, opMetrics)
 }
@@ -541,6 +572,7 @@ func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchings
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 		metrics.MatchingRespondNexusTaskFailedScope,
 	)
+	h.recordNexusTaskRequest(ctx, request.GetNamespaceId(), request.GetTaskQueue().GetKind(), "RespondNexusTaskFailed")
 
 	return h.engine.RespondNexusTaskFailed(ctx, request, opMetrics)
 }
@@ -567,25 +599,29 @@ func (h *Handler) ListNexusEndpoints(ctx context.Context, request *matchingservi
 
 // RecordWorkerHeartbeat receive heartbeat request from the worker.
 func (h *Handler) RecordWorkerHeartbeat(
-	_ context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
-) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
+	ctx context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
+) (_ *matchingservice.RecordWorkerHeartbeatResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	nsID := namespace.ID(request.GetNamespaceId())
 	nsName := h.namespaceName(nsID)
+	principal := headers.GetPrincipal(ctx)
 
-	h.workersRegistry.RecordWorkerHeartbeats(nsID, nsName, request.GetHeartbeartRequest().GetWorkerHeartbeat())
+	h.workersRegistry.RecordWorkerHeartbeats(nsID, nsName, principal, request.GetHeartbeartRequest().GetWorkerHeartbeat())
 	return &matchingservice.RecordWorkerHeartbeatResponse{}, nil
 }
 
 // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
 func (h *Handler) ListWorkers(
 	_ context.Context, request *matchingservice.ListWorkersRequest,
-) (*matchingservice.ListWorkersResponse, error) {
+) (_ *matchingservice.ListWorkersResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	nsID := namespace.ID(request.GetNamespaceId())
 	listRequest := request.GetListRequest()
 	resp, err := h.workersRegistry.ListWorkers(nsID, workers.ListWorkersParams{
-		Query:         listRequest.GetQuery(),
-		PageSize:      int(listRequest.GetPageSize()),
-		NextPageToken: listRequest.GetNextPageToken(),
+		Query:                listRequest.GetQuery(),
+		PageSize:             int(listRequest.GetPageSize()),
+		NextPageToken:        listRequest.GetNextPageToken(),
+		IncludeSystemWorkers: listRequest.GetIncludeSystemWorkers(),
 	})
 	if err != nil {
 		return nil, err
@@ -625,9 +661,25 @@ func workerHeartbeatToListInfo(hb *workerpb.WorkerHeartbeat) *workerpb.WorkerLis
 	}
 }
 
+func (h *Handler) CountWorkers(
+	_ context.Context, request *matchingservice.CountWorkersRequest,
+) (_ *matchingservice.CountWorkersResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	nsID := namespace.ID(request.GetNamespaceId())
+	countRequest := request.GetCountRequest()
+	count, err := h.workersRegistry.CountWorkers(nsID, countRequest.GetQuery(), countRequest.GetIncludeSystemWorkers())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.CountWorkersResponse{
+		Count: count,
+	}, nil
+}
+
 func (h *Handler) UpdateFairnessState(
 	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
-) (*matchingservice.UpdateFairnessStateResponse, error) {
+) (_ *matchingservice.UpdateFairnessStateResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.UpdateFairnessState(ctx, request)
 }
 
@@ -651,13 +703,15 @@ func (h *Handler) reportForwardedPerTaskQueueCounter(opMetrics metrics.Handler, 
 
 func (h *Handler) UpdateTaskQueueConfig(
 	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
-) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+) (_ *matchingservice.UpdateTaskQueueConfigResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.UpdateTaskQueueConfig(ctx, request)
 }
 
 func (h *Handler) DescribeWorker(
 	_ context.Context, request *matchingservice.DescribeWorkerRequest,
-) (*matchingservice.DescribeWorkerResponse, error) {
+) (_ *matchingservice.DescribeWorkerResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	nsID := namespace.ID(request.GetNamespaceId())
 	hb, err := h.workersRegistry.DescribeWorker(
 		nsID, request.Request.GetWorkerInstanceKey())

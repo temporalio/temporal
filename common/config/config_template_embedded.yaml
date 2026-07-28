@@ -144,6 +144,37 @@ persistence:
                     keyFile: {{ default "" (env "SQL_CERT_KEY") }}
                     enableHostVerification: {{ default "false" (env "SQL_HOST_VERIFICATION") }}
                     serverName: {{ default "" (env "SQL_HOST_NAME") }}
+        {{- else if eq $db "sqlite" }}
+        default:
+            sql:
+                pluginName: "{{ $db }}"
+                databaseName: "{{ default "temporal" (env "DBNAME") }}"
+                connectAddr: "localhost"
+                connectProtocol: "tcp"
+                connectAttributes:
+                    mode: "{{ default "rwc" (env "SQLITE_MODE") }}"
+                    cache: "{{ default "private" (env "SQLITE_CACHE") }}"
+                    setup: "{{ default "true" (env "SQLITE_SETUP") }}"
+                    journal_mode: "{{ default "wal" (env "SQLITE_JOURNAL_MODE") }}"
+                    synchronous: "{{ default "2" (env "SQLITE_SYNCHRONOUS") }}"
+                    busy_timeout: "{{ default "10000" (env "SQLITE_BUSY_TIMEOUT") }}"
+                maxConns: {{ default "1" (env "SQL_MAX_CONNS") }}
+                maxIdleConns: {{ default "1" (env "SQL_MAX_IDLE_CONNS") }}
+        visibility:
+            sql:
+                pluginName: "{{ $db }}"
+                databaseName: "{{ default "temporal_visibility" (env "VISIBILITY_DBNAME") }}"
+                connectAddr: "localhost"
+                connectProtocol: "tcp"
+                connectAttributes:
+                    mode: "{{ default "rwc" (env "SQLITE_MODE") }}"
+                    cache: "{{ default "private" (env "SQLITE_CACHE") }}"
+                    setup: "{{ default "true" (env "SQLITE_SETUP") }}"
+                    journal_mode: "{{ default "wal" (env "SQLITE_JOURNAL_MODE") }}"
+                    synchronous: "{{ default "2" (env "SQLITE_SYNCHRONOUS") }}"
+                    busy_timeout: "{{ default "10000" (env "SQLITE_BUSY_TIMEOUT") }}"
+                maxConns: {{ default "1" (env "SQL_VIS_MAX_CONNS") }}
+                maxIdleConns: {{ default "1" (env "SQL_VIS_MAX_IDLE_CONNS") }}
         {{- end }}
         {{- if eq $es "true" }}
         es-visibility:
@@ -272,6 +303,7 @@ global:
 {{- $temporalGrpcPort := default "7233" (env "FRONTEND_GRPC_PORT") }}
 {{- $temporalHTTPPort := default "7243" (env "FRONTEND_HTTP_PORT") }}
 {{- $temporalInternalHTTPPort := default "7246" (env "INTERNAL_FRONTEND_HTTP_PORT") }}
+{{- $temporalClusterAddress := default (default "127.0.0.1" (env "BIND_ON_IP")) (env "TEMPORAL_BROADCAST_ADDRESS") }}
 services:
     frontend:
         rpc:
@@ -317,8 +349,8 @@ clusterMetadata:
             enabled: true
             initialFailoverVersion: 1
             rpcName: "frontend"
-            rpcAddress: {{ (print "127.0.0.1:" $temporalGrpcPort) }}
-            httpAddress: {{ (print "127.0.0.1:" $temporalHTTPPort) }}
+            rpcAddress: {{ default (print $temporalClusterAddress ":" $temporalGrpcPort) (env "CLUSTER_RPC_ADDRESS") }}
+            httpAddress: {{ default (print $temporalClusterAddress ":" $temporalHTTPPort) (env "CLUSTER_HTTP_ADDRESS") }}
 
 dcRedirectionPolicy:
     policy: "noop"

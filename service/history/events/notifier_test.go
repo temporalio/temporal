@@ -83,7 +83,7 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	timerChan := time.NewTimer(time.Second * 2).C
 
 	subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
-	s.Nil(err)
+	s.NoError(err)
 
 	go func() {
 		<-timerChan
@@ -94,7 +94,7 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	s.Equal(historyEvent, msg)
 
 	err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
@@ -127,7 +127,7 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 
 	watchFunc := func() {
 		subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
-		s.Nil(err)
+		s.NoError(err)
 
 		timeourChan := time.NewTimer(time.Second * 10).C
 
@@ -138,7 +138,7 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 			s.Fail("subscribe to new events timeout")
 		}
 		err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
-		s.Nil(err)
+		s.NoError(err)
 		waitGroup.Done()
 	}
 

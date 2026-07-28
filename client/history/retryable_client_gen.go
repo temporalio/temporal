@@ -116,6 +116,21 @@ func (c *retryableClient) DeleteDLQTasks(
 	return resp, err
 }
 
+func (c *retryableClient) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteExecutionResponse, error) {
+	var resp *historyservice.DeleteExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,

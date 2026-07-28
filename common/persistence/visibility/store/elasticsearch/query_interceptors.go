@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
@@ -129,10 +128,6 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...any
 		value, err = parseSystemSearchAttributeValues(name, value)
 		if err != nil {
 			return nil, err
-		}
-
-		if name == sadefs.ScheduleID && fieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
 		value, err = vi.validateValueType(name, value, fieldType)

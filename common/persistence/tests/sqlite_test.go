@@ -53,7 +53,7 @@ func NewSQLiteFileConfig() *config.SQL {
 		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
-		DatabaseName:      "test_" + persistencetests.GenerateRandomDBName(3),
+		DatabaseName:      persistencetests.GenerateRandomDBName(),
 		ConnectAttributes: map[string]string{"cache": "private"},
 	}
 }
@@ -78,6 +78,10 @@ func LoadSchema(t *testing.T, db sqlplugin.AdminDB, schemaFile string) {
 	statements, err := persistence.LoadAndSplitQuery([]string{schemaFile})
 	if err != nil {
 		t.Fatalf("Unable to load schema: %s", err)
+	}
+
+	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
+		statements = rewriter.RewriteSchemaStatements(statements)
 	}
 
 	for _, stmt := range statements {
@@ -556,7 +560,7 @@ func TestSQLiteHistoryV2PersistenceSuite(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -564,7 +568,7 @@ func TestSQLiteMetadataPersistenceSuiteV2(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -572,7 +576,7 @@ func TestSQLiteClusterMetadataPersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -580,7 +584,7 @@ func TestSQLiteQueuePersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -588,7 +592,7 @@ func TestSQLiteFileHistoryV2PersistenceSuite(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -596,7 +600,7 @@ func TestSQLiteFileMetadataPersistenceSuiteV2(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -604,7 +608,7 @@ func TestSQLiteFileClusterMetadataPersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -612,7 +616,7 @@ func TestSQLiteFileQueuePersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 

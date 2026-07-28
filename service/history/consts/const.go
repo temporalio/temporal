@@ -137,6 +137,12 @@ var (
 
 	// ErrResetRedirectLimitReached indicates a possible long chain (or a loop) of resets that cannot be handled.
 	ErrResetRedirectLimitReached = serviceerror.NewInternal("The chain of resets is too long to iterate.")
+	// ErrBusinessIDRateLimitExceeded is returned when the per-(namespace, businessID, archetype) start rate limit is exceeded.
+	ErrBusinessIDRateLimitExceeded = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "business ID reuse rate limit exceeded",
+	}
 )
 
 // StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that

@@ -37,10 +37,10 @@ func (s *streamErrorSuite) TearDownTest() {
 }
 
 func (s *streamErrorSuite) TestErrorConversion() {
-	s.Equal(nil, errorConvert(nil))
+	s.NoError(errorConvert(nil))
 	s.Equal(io.EOF, errorConvert(io.EOF))
 
-	s.IsType(nil, errorConvert(status.Error(codes.OK, "")))
+	s.NoError(errorConvert(status.Error(codes.OK, "")))
 	s.IsType(&serviceerror.DeadlineExceeded{}, errorConvert(status.Error(codes.DeadlineExceeded, "")))
 	s.IsType(&serviceerror.Canceled{}, errorConvert(status.Error(codes.Canceled, "")))
 	s.IsType(&serviceerror.InvalidArgument{}, errorConvert(status.Error(codes.InvalidArgument, "")))

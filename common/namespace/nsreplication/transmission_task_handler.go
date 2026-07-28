@@ -109,9 +109,7 @@ func (r *replicator) HandleTransmissionTask(
 		},
 	}
 
-	// Only replicate on Create operation, and only if state is Normal
-	if namespaceOperation == enumsspb.NAMESPACE_OPERATION_CREATE &&
-		replicationConfig.State == enumspb.REPLICATION_STATE_NORMAL {
+	if replicationConfig.State == enumspb.REPLICATION_STATE_NORMAL {
 		task.NamespaceTaskAttributes.ReplicationConfig.State = replicationConfig.State
 	}
 

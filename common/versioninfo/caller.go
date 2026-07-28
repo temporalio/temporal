@@ -48,7 +48,7 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 		return nil, err
 	}
 	if resp.StatusCode != 200 {
-		return nil, errors.New(fmt.Sprintf("bad response code %v", resp.StatusCode))
+		return nil, fmt.Errorf("bad response code %v", resp.StatusCode)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -91,6 +91,6 @@ func (c Caller) getUrl(r *VersionCheckRequest) *url.URL {
 	var u url.URL
 	u.Scheme = c.Scheme
 	u.Host = c.Host
-	u.Path = fmt.Sprintf("check")
+	u.Path = "check"
 	return &u
 }

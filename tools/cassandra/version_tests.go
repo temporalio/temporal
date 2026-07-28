@@ -34,7 +34,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	cqlFile := path.Join(root, "schema/cassandra/temporal/schema.cql")
 
 	defer s.createKeyspace(keyspace)()
-	s.Nil(RunTool([]string{
+	s.NoError(RunTool([]string{
 		"./tool", "-k", keyspace, "-q", "setup-schema", "-f", cqlFile, "-version", "10.0", "-o",
 	}))
 

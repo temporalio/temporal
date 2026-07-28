@@ -81,6 +81,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetSignalInput(),
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
+			signalWithStartRequest.GetRequestId(),
 			signalWithStartRequest.GetLinks(),
 		); err != nil {
 			return nil, err
@@ -113,6 +114,7 @@ func NewWorkflowWithSignal(
 			nil,
 			false,
 			nil,
+			-1, // sentinel: eager-exec path didn't consult matching, has no routing revision
 		)
 		if err != nil {
 			// Unable to add WorkflowTaskStarted event to history
@@ -145,6 +147,7 @@ func NewWorkflowLeaseAndContext(
 			shardCtx.GetLogger(),
 			shardCtx.GetThrottledLogger(),
 			shardCtx.GetMetricsHandler(),
+			nil, // no pagination buffer limiter as it is a transient context
 		),
 		wcache.NoopReleaseFn,
 		ms,

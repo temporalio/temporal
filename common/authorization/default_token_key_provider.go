@@ -4,8 +4,12 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -15,7 +19,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.uber.org/multierr"
 )
 
 // Default token key provider
@@ -138,17 +141,16 @@ func (a *defaultTokenKeyProvider) updateKeysFromURI(
 	ecKeys map[string]*ecdsa.PublicKey,
 ) (err error) {
 
-	resp, err := http.Get(uri)
+	resp, err := a.openURI(uri)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		err = multierr.Combine(err, resp.Body.Close())
+		err = errors.Join(err, resp.Close())
 	}()
 
 	jwks := jose.JSONWebKeySet{}
-	err = json.NewDecoder(resp.Body).Decode(&jwks)
-	if err != nil {
+	if err := json.NewDecoder(resp).Decode(&jwks); err != nil {
 		return err
 	}
 
@@ -163,6 +165,25 @@ func (a *defaultTokenKeyProvider) updateKeysFromURI(
 		}
 	}
 	return nil
+}
+
+// openURI returns a ReadCloser for the given URI. Supports http://, https://, and file:// schemes.
+func (a *defaultTokenKeyProvider) openURI(uri string) (io.ReadCloser, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme == "file" {
+		if u.Host != "" && u.Host != "localhost" {
+			return nil, fmt.Errorf("file URI with remote host is not supported: %s", uri)
+		}
+		return os.Open(u.Path)
+	}
+	resp, err := http.Get(uri)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
 }
 
 func (a *defaultTokenKeyProvider) HmacKey(alg string, kid string) ([]byte, error) {

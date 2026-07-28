@@ -42,10 +42,10 @@ func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, 
 		if err != nil {
 			return nil, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.TaskStoreName]; ok && len(storeConfig.Methods) > 0 {
+		if generator, ok := d.storeFaultInjector(config.TaskStoreName); ok {
 			d.taskStore = newFaultInjectionTaskStore(
 				baseStore,
-				newStoreFaultGenerator(&storeConfig),
+				generator,
 			)
 		} else {
 			d.taskStore = baseStore
@@ -60,10 +60,10 @@ func (d *FaultInjectionDataStoreFactory) NewFairTaskStore() (persistence.TaskSto
 		if err != nil {
 			return nil, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.TaskStoreName]; ok && len(storeConfig.Methods) > 0 {
+		if generator, ok := d.storeFaultInjector(config.TaskStoreName); ok {
 			d.fairTaskStore = newFaultInjectionTaskStore(
 				baseStore,
-				newStoreFaultGenerator(&storeConfig),
+				generator,
 			)
 		} else {
 			d.fairTaskStore = baseStore
@@ -78,10 +78,10 @@ func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore
 		if err != nil {
 			return nil, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.ShardStoreName]; ok && len(storeConfig.Methods) > 0 {
+		if generator, ok := d.storeFaultInjector(config.ShardStoreName); ok {
 			d.shardStore = newFaultInjectionShardStore(
 				baseStore,
-				newStoreFaultGenerator(&storeConfig),
+				generator,
 			)
 		} else {
 			d.shardStore = baseStore
@@ -95,10 +95,10 @@ func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.Metadat
 		if err != nil {
 			return nil, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.MetadataStoreName]; ok && len(storeConfig.Methods) > 0 {
+		if generator, ok := d.storeFaultInjector(config.MetadataStoreName); ok {
 			d.metadataStore = newFaultInjectionMetadataStore(
 				baseStore,
-				newStoreFaultGenerator(&storeConfig),
+				generator,
 			)
 		} else {
 			d.metadataStore = baseStore
@@ -113,10 +113,10 @@ func (d *FaultInjectionDataStoreFactory) NewExecutionStore() (persistence.Execut
 		if err != nil {
 			return nil, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.ExecutionStoreName]; ok && len(storeConfig.Methods) > 0 {
+		if generator, ok := d.storeFaultInjector(config.ExecutionStoreName); ok {
 			d.executionStore = newFaultInjectionExecutionStore(
 				baseStore,
-				newStoreFaultGenerator(&storeConfig),
+				generator,
 			)
 		} else {
 			d.executionStore = baseStore
@@ -131,10 +131,10 @@ func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueTyp
 		if err != nil {
 			return baseQueue, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.QueueName]; ok && len(storeConfig.Methods) > 0 {
+		if generator, ok := d.storeFaultInjector(config.QueueName); ok {
 			d.queue = newFaultInjectionQueue(
 				baseQueue,
-				newStoreFaultGenerator(&storeConfig),
+				generator,
 			)
 		} else {
 			d.queue = baseQueue
@@ -149,10 +149,10 @@ func (d *FaultInjectionDataStoreFactory) NewQueueV2() (persistence.QueueV2, erro
 		if err != nil {
 			return baseQueue, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.QueueV2Name]; ok && len(storeConfig.Methods) > 0 {
+		if generator, ok := d.storeFaultInjector(config.QueueV2Name); ok {
 			d.queueV2 = newFaultInjectionQueueV2(
 				baseQueue,
-				newStoreFaultGenerator(&storeConfig),
+				generator,
 			)
 		} else {
 			d.queueV2 = baseQueue
@@ -167,10 +167,10 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 		if err != nil {
 			return nil, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.ClusterMDStoreName]; ok && len(storeConfig.Methods) > 0 {
+		if generator, ok := d.storeFaultInjector(config.ClusterMDStoreName); ok {
 			d.clusterMDStore = newFaultInjectionClusterMetadataStore(
 				baseStore,
-				newStoreFaultGenerator(&storeConfig),
+				generator,
 			)
 		} else {
 			d.clusterMDStore = baseStore
@@ -185,14 +185,22 @@ func (d *FaultInjectionDataStoreFactory) NewNexusEndpointStore() (persistence.Ne
 		if err != nil {
 			return nil, err
 		}
-		if storeConfig, ok := d.fiConfig.Targets.DataStores[config.NexusEndpointStoreName]; ok && len(storeConfig.Methods) > 0 {
+		if generator, ok := d.storeFaultInjector(config.NexusEndpointStoreName); ok {
 			d.nexusEndpointStore = newFaultInjectionNexusEndpointStore(
 				baseStore,
-				newStoreFaultGenerator(&storeConfig),
+				generator,
 			)
 		} else {
 			d.nexusEndpointStore = baseStore
 		}
 	}
 	return d.nexusEndpointStore, nil
+}
+
+func (d *FaultInjectionDataStoreFactory) storeFaultInjector(storeName config.DataStoreName) (faultGenerator, bool) {
+	storeConfig, ok := d.fiConfig.Targets.DataStores[storeName]
+	if !ok {
+		storeConfig = config.FaultInjectionDataStoreConfig{}
+	}
+	return newStoreFaultInjector(storeName, &storeConfig, d.fiConfig.Injector)
 }

@@ -36,6 +36,12 @@ message SchedulerState {
   // Set when a migration to workflow-backed scheduler (V1) is pending.
   // Unpause operations are blocked while this is set.
   WorkflowMigrationState workflow_migration = 11;
+
+  // The time at which the idle timer is scheduled to fire and close this
+  // schedule. Set when the schedule goes idle; cleared when it has work again.
+  // Surfaced as the ScheduleIdleCloseTime search attribute for stuck-schedule
+  // detection.
+  google.protobuf.Timestamp idle_close_time = 12;
 }
 
 // WorkflowMigrationState tracks the state of an in-progress V2-to-V1 migration.
@@ -119,4 +125,16 @@ message SchedulerMigrationState {
   // Visibility data.
   map<string, temporal.api.common.v1.Payload> search_attributes = 6;
   map<string, temporal.api.common.v1.Payload> memo = 7;
+}
+
+// EventLog keeps a bounded record of state changes, including automation
+// decisions, in lieu of a workflow event history. Entries are meant for
+// human consumption, and aren't used for any scheduler computation.
+message EventLog {
+  repeated Event events = 1;
+}
+
+message Event {
+  google.protobuf.Timestamp time = 1;
+  string message = 2;
 }

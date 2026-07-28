@@ -34,13 +34,11 @@ variable "TAG_LATEST" {
   default = false
 }
 
-# IMPORTANT: When updating ALPINE_TAG, also update the default value in:
-# - docker/targets/admin-tools.Dockerfile
-# - docker/targets/server.Dockerfile
+# ALPINE_TAG is the single source of truth for the Alpine base image version.
 # NOTE: We use just the tag without a digest pin because digest-pinned manifest lists
 # cause platform resolution issues in multi-arch buildx builds (InvalidBaseImagePlatform warnings).
 variable "ALPINE_TAG" {
-  default = "3.23.3"
+  default = "3.23.4"
 }
 
 target "admin-tools" {

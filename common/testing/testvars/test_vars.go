@@ -62,6 +62,10 @@ func getOrCreate[T any](tv *TestVars, key string, initialValGen func(key string)
 	return valNSetter(v.(T), n.(int))
 }
 
+func (tv *TestVars) Sub(name string) *TestVars {
+	return newFromName(tv.testName + "/" + name)
+}
+
 func (tv *TestVars) stringNSetter(v string, n int) string {
 	return fmt.Sprintf("%s_%d", v, n)
 }
@@ -388,6 +392,15 @@ func (tv *TestVars) ClientIdentity() string {
 
 func (tv *TestVars) WorkerIdentity() string {
 	return getOrCreate(tv, "worker_identity", tv.uniqueString, tv.stringNSetter)
+}
+
+func (tv *TestVars) WorkerInstanceKey() string {
+	return getOrCreate(tv, "worker_instance_key", tv.uniqueString, tv.stringNSetter)
+}
+
+// ControlQueueName returns the Nexus task queue name used to deliver control tasks to this worker.
+func (tv *TestVars) ControlQueueName(ns string) string {
+	return fmt.Sprintf("/temporal-sys/worker-commands/%s/%s", ns, tv.WorkerInstanceKey())
 }
 
 func (tv *TestVars) TimerID() string {

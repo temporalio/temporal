@@ -136,7 +136,10 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 		searchSource.SearchAfter(p.SearchAfter...)
 	}
 
-	return c.esClient.Search(p.Index).SearchSource(searchSource).Do(ctx)
+	return c.esClient.Search(p.Index).
+		AllowPartialSearchResults(false).
+		SearchSource(searchSource).
+		Do(ctx)
 }
 
 func (c *clientImpl) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
@@ -155,7 +158,10 @@ func (c *clientImpl) CountGroupBy(
 		Size(0).
 		TrackTotalHits(false).
 		Aggregation(aggName, agg)
-	return c.esClient.Search(index).SearchSource(searchSource).Do(ctx)
+	return c.esClient.Search(index).
+		AllowPartialSearchResults(false).
+		SearchSource(searchSource).
+		Do(ctx)
 }
 
 func (c *clientImpl) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {

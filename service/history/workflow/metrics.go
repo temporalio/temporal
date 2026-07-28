@@ -1,10 +1,12 @@
 package workflow
 
 import (
+	"strconv"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -34,13 +36,20 @@ func emitWorkflowHistoryStats(
 
 func emitMutableStateStatus(
 	metricsHandler metrics.Handler,
+	chasmRegistry *chasm.Registry,
+	archetypeID chasm.ArchetypeID,
 	stats *persistence.MutableStateStatistics,
 ) {
 	if stats == nil {
 		return
 	}
 
-	batchHandler := metricsHandler.StartBatch("mutable_state_status")
+	mutableStateMetricsHandler := metricsHandler
+	if archetypeTag, ok := getArchetypeMetricTag(chasmRegistry, archetypeID); ok {
+		mutableStateMetricsHandler = mutableStateMetricsHandler.WithTags(archetypeTag)
+	}
+
+	batchHandler := mutableStateMetricsHandler.StartBatch("mutable_state_status")
 	defer batchHandler.Close()
 	metrics.MutableStateSize.With(batchHandler).Record(int64(stats.TotalSize))
 	metrics.ExecutionInfoSize.With(batchHandler).Record(int64(stats.ExecutionInfoSize))
@@ -68,13 +77,30 @@ func emitMutableStateStatus(
 	metrics.ChasmTotalSize.With(batchHandler).Record(int64(stats.ChasmTotalSize))
 
 	if stats.HistoryStatistics != nil {
-		metrics.HistorySize.With(batchHandler).Record(int64(stats.HistoryStatistics.SizeDiff))
-		metrics.HistoryCount.With(batchHandler).Record(int64(stats.HistoryStatistics.CountDiff))
+		metrics.HistorySize.With(metricsHandler).Record(int64(stats.HistoryStatistics.SizeDiff))
+		metrics.HistoryCount.With(metricsHandler).Record(int64(stats.HistoryStatistics.CountDiff))
 	}
 
 	for category, taskCount := range stats.TaskCountByCategory {
 		metrics.TaskCount.With(batchHandler).Record(int64(taskCount), metrics.TaskCategoryTag(category))
 	}
+}
+
+func getArchetypeMetricTag(
+	chasmRegistry *chasm.Registry,
+	archetypeID chasm.ArchetypeID,
+) (metrics.Tag, bool) {
+	switch archetypeID {
+	case chasm.UnspecifiedArchetypeID:
+		return metrics.ArchetypeTag(""), true
+	case chasm.WorkflowArchetypeID:
+		return metrics.ArchetypeTag(chasm.WorkflowComponentName), true
+	}
+
+	if name, ok := chasmRegistry.ArchetypeDisplayName(archetypeID); ok {
+		return metrics.ArchetypeTag(name), true
+	}
+	return metrics.ArchetypeTag(strconv.FormatUint(uint64(archetypeID), 10)), true
 }
 
 func emitWorkflowCompletionStats(

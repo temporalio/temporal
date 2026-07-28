@@ -72,7 +72,7 @@ func (s *SQLConnTestSuite) TestParseCQLFile() {
 // TestSQLConn test
 func (s *SQLConnTestSuite) TestSQLConn() {
 	conn, err := newTestConn(s.DBName, s.host, s.port, s.pluginName)
-	s.Nil(err)
+	s.NoError(err)
 	s.RunCreateTest(conn)
 	s.RunUpdateTest(conn)
 	s.RunDropTest(conn)

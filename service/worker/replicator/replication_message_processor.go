@@ -31,6 +31,12 @@ const (
 	taskProcessorErrorRetryWait               = time.Second
 	taskProcessorErrorRetryBackoffCoefficient = 1
 	taskProcessorErrorRetryMaxAttampts        = 5
+
+	// Namespace replication tasks (failover, register, update) are gated on the
+	// cluster-global namespace metadata CAS, which can churn under contention.
+	// Allow more attempts than other task types so a brief CAS burst or storage
+	// wobble doesn't drop them into the DLQ.
+	namespaceTaskRetryMaxAttempts = 30
 )
 
 func newReplicationMessageProcessor(
@@ -47,9 +53,25 @@ func newReplicationMessageProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	namespaceRegistry namespace.Registry,
 ) *replicationMessageProcessor {
-	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
+	defaultRetryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
 		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
 		WithMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
+
+	namespaceTaskRetryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
+		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
+		WithMaximumAttempts(namespaceTaskRetryMaxAttempts)
+
+	// Namespace tasks get more retry attempts because they're gated on the
+	// cluster-global namespace metadata CAS; other task types stay on the
+	// shorter default to keep the single-threaded loop responsive.
+	retryPolicyForTask := func(task *replicationspb.ReplicationTask) backoff.RetryPolicy {
+		switch task.TaskType {
+		case enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK:
+			return namespaceTaskRetryPolicy
+		default:
+			return defaultRetryPolicy
+		}
+	}
 
 	return &replicationMessageProcessor{
 		hostInfo:                  hostInfo,
@@ -62,7 +84,7 @@ func newReplicationMessageProcessor(
 		namespaceTaskExecutor:     namespaceTaskExecutor,
 		customTaskHandler:         customTaskHandler,
 		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceReplicationTaskScope)),
-		retryPolicy:               retryPolicy,
+		retryPolicyForTask:        retryPolicyForTask,
 		lastProcessedMessageID:    -1,
 		lastRetrievedMessageID:    -1,
 		done:                      make(chan struct{}),
@@ -84,7 +106,7 @@ type (
 		namespaceTaskExecutor     nsreplication.TaskExecutor
 		customTaskHandler         func(ctx context.Context, task *replicationspb.ReplicationTask) error
 		metricsHandler            metrics.Handler
-		retryPolicy               backoff.RetryPolicy
+		retryPolicyForTask        func(*replicationspb.ReplicationTask) backoff.RetryPolicy
 		lastProcessedMessageID    int64
 		lastRetrievedMessageID    int64
 		done                      chan struct{}
@@ -155,9 +177,10 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 	taskCtx := headers.SetCallerInfo(context.TODO(), headers.SystemPreemptableCallerInfo)
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
+		policy := p.retryPolicyForTask(task)
 		err := backoff.ThrottleRetry(func() error {
 			return p.handleReplicationTask(taskCtx, task)
-		}, p.retryPolicy, isTransientRetryableError)
+		}, policy, isTransientRetryableError)
 
 		if err != nil {
 			metrics.ReplicatorFailures.With(p.metricsHandler).Record(1)
@@ -166,7 +189,7 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 			dlqErr := backoff.ThrottleRetry(func() error {
 
 				return p.putNamespaceReplicationTaskToDLQ(taskCtx, task)
-			}, p.retryPolicy, isTransientRetryableError)
+			}, policy, isTransientRetryableError)
 			if dlqErr != nil {
 				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
 				metrics.ReplicatorDLQFailures.With(p.metricsHandler).Record(1)

@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"maps"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -9,8 +10,9 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
-	schedulescommon "go.temporal.io/server/common/schedules"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -81,6 +83,7 @@ func LegacyToCreateFromMigrationStateRequest(
 
 	recentActionsBufferedStarts := convertRecentActionsToBufferedStarts(
 		info.RecentActions,
+		info.RunningWorkflows,
 		state.NamespaceId,
 		state.ScheduleId,
 		state.ConflictToken,
@@ -106,10 +109,24 @@ func LegacyToCreateFromMigrationStateRequest(
 			InvokerState:         invokerState,
 			Backfillers:          backfillers,
 			LastCompletionResult: lastCompletion,
-			SearchAttributes:     searchAttributes.GetIndexedFields(),
+			SearchAttributes:     customSearchAttributesForMigration(searchAttributes),
 			Memo:                 memo.GetFields(),
 		},
 	}
+}
+
+// customSearchAttributesForMigration returns only the user-defined search attributes
+// from a V1 scheduler workflow, stripping any reserved/system SAs.
+func customSearchAttributesForMigration(sa *commonpb.SearchAttributes) map[string]*commonpb.Payload {
+	fields := sa.GetIndexedFields()
+	if len(fields) == 0 {
+		return nil
+	}
+	out := maps.Clone(fields)
+	maps.DeleteFunc(out, func(k string, _ *commonpb.Payload) bool {
+		return sadefs.IsReserved(k)
+	})
+	return out
 }
 
 // CHASMToLegacyStartScheduleArgs converts CHASM scheduler state to V1 StartScheduleArgs.
@@ -199,7 +216,7 @@ func convertBufferedStartsLegacyToCHASM(
 		v2Start := common.CloneProto(v1Start)
 
 		if v2Start.RequestId == "" {
-			v2Start.RequestId = schedulescommon.GenerateRequestID(
+			v2Start.RequestId = schedulerinternal.GenerateRequestID(
 				namespaceID,
 				scheduleID,
 				conflictToken,
@@ -210,7 +227,7 @@ func convertBufferedStartsLegacyToCHASM(
 		}
 
 		if v2Start.WorkflowId == "" {
-			v2Start.WorkflowId = schedulescommon.GenerateWorkflowID(
+			v2Start.WorkflowId = schedulerinternal.GenerateWorkflowID(
 				baseWorkflowID,
 				v1Start.GetNominalTime().AsTime(),
 			)
@@ -248,11 +265,14 @@ func convertRunningWorkflowsToBufferedStarts(
 			RunId:       wf.RunId,
 			// RequestId will be used with AttachRequestID to register Nexus
 			// callbacks for tracking workflow completion after migration.
-			RequestId: schedulescommon.GenerateRequestID(
+			// Include the RunId in the tag to ensure each running workflow
+			// gets a unique RequestId (important for ALLOW_ALL overlap
+			// policy where multiple workflows may be running concurrently).
+			RequestId: schedulerinternal.GenerateRequestID(
 				namespaceID,
 				scheduleID,
 				conflictToken,
-				"migrated-running",
+				"migrated-running-"+wf.RunId,
 				migrationTime,
 				migrationTime,
 			),
@@ -270,8 +290,15 @@ func convertRunningWorkflowsToBufferedStarts(
 // convertRecentActionsToBufferedStarts converts V1's RecentActions list to V2's
 // BufferedStarts format. In V2, completed actions are represented as BufferedStarts with
 // RunId, StartTime, and Completed fields all populated.
+//
+// runningWorkflows is the set of currently running workflow executions (from
+// info.RunningWorkflows). These are excluded because they are already converted
+// separately by convertRunningWorkflowsToBufferedStarts. In V1, recordAction
+// adds the same workflow to both RecentActions and RunningWorkflows, so without
+// this filter the same execution would appear twice in the CHASM BufferedStarts.
 func convertRecentActionsToBufferedStarts(
 	recentActions []*schedulepb.ScheduleActionResult,
+	runningWorkflows []*commonpb.WorkflowExecution,
 	namespaceID, scheduleID string,
 	conflictToken int64,
 	migrationTime time.Time,
@@ -280,9 +307,22 @@ func convertRecentActionsToBufferedStarts(
 		return nil
 	}
 
+	// Build a set of running workflow run IDs to exclude from recent actions,
+	// since those are already converted by convertRunningWorkflowsToBufferedStarts.
+	runningRunIDs := make(map[string]struct{}, len(runningWorkflows))
+	for _, wf := range runningWorkflows {
+		runningRunIDs[wf.GetRunId()] = struct{}{}
+	}
+
 	bufferedStarts := make([]*schedulespb.BufferedStart, 0, len(recentActions))
 	for _, action := range recentActions {
 		if action.StartWorkflowResult == nil {
+			continue
+		}
+
+		// Skip actions for workflows that are still running — those are handled
+		// by convertRunningWorkflowsToBufferedStarts.
+		if _, ok := runningRunIDs[action.StartWorkflowResult.GetRunId()]; ok {
 			continue
 		}
 
@@ -292,7 +332,7 @@ func convertRecentActionsToBufferedStarts(
 			StartTime:   action.ActualTime,
 			WorkflowId:  action.StartWorkflowResult.WorkflowId,
 			RunId:       action.StartWorkflowResult.RunId,
-			RequestId: schedulescommon.GenerateRequestID(
+			RequestId: schedulerinternal.GenerateRequestID(
 				namespaceID,
 				scheduleID,
 				conflictToken,
@@ -319,7 +359,7 @@ func convertBackfillsLegacyToCHASM(
 
 	backfillers := make(map[string]*schedulerpb.BackfillerState, len(legacyBackfills))
 	for _, v1Backfill := range legacyBackfills {
-		backfillID := schedulescommon.GenerateBackfillerID()
+		backfillID := schedulerinternal.GenerateBackfillerID()
 
 		backfillers[backfillID] = &schedulerpb.BackfillerState{
 			Request: &schedulerpb.BackfillerState_BackfillRequest{

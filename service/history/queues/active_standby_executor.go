@@ -62,7 +62,7 @@ func (e *activeStandbyExecutor) isActiveTask(
 		return true
 	}
 
-	if !entry.ActiveInCluster(e.currentClusterName) {
+	if entry.ActiveClusterName(namespace.RoutingKey{ID: executable.GetWorkflowID()}) != e.currentClusterName {
 		e.logger.Debug("Process task as standby.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
 		return false
 	}

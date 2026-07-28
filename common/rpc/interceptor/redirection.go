@@ -24,9 +24,10 @@ import (
 // Note the nexusoperations component references these headers and adds them to a list of disallowed headers for users to set.
 // If any other headers are added for internal use, they should be added to the disallowed headers list.
 const (
-	DCRedirectionContextHeaderName = "xdc-redirection"
-	DCRedirectionApiHeaderName     = "xdc-redirection-api"
-	dcRedirectionMetricsPrefix     = "DCRedirection"
+	DCRedirectionContextHeaderName    = "xdc-redirection"
+	DCRedirectionAPIHeaderName        = "xdc-redirection-api"
+	DCRedirectionSourceCellHeaderName = "xdc-redirection-source-cell"
+	dcRedirectionMetricsPrefix        = "DCRedirection"
 )
 
 var (
@@ -110,6 +111,10 @@ var (
 		"PauseActivity":                  func() any { return &workflowservice.PauseActivityResponse{} },
 		"UnpauseActivity":                func() any { return &workflowservice.UnpauseActivityResponse{} },
 		"ResetActivity":                  func() any { return &workflowservice.ResetActivityResponse{} },
+		"UpdateActivityExecutionOptions": func() any { return &workflowservice.UpdateActivityExecutionOptionsResponse{} },
+		"PauseActivityExecution":         func() any { return &workflowservice.PauseActivityExecutionResponse{} },
+		"UnpauseActivityExecution":       func() any { return &workflowservice.UnpauseActivityExecutionResponse{} },
+		"ResetActivityExecution":         func() any { return &workflowservice.ResetActivityExecutionResponse{} },
 		"UpdateWorkflowExecutionOptions": func() any { return &workflowservice.UpdateWorkflowExecutionOptionsResponse{} },
 
 		"DescribeDeployment":                           func() any { return &workflowservice.DescribeDeploymentResponse{} },        // [cleanup-wv-pre-release]
@@ -138,6 +143,7 @@ var (
 		"TriggerWorkflowRule":   func() any { return &workflowservice.TriggerWorkflowRuleResponse{} },
 		"RecordWorkerHeartbeat": func() any { return &workflowservice.RecordWorkerHeartbeatResponse{} },
 		"ListWorkers":           func() any { return &workflowservice.ListWorkersResponse{} },
+		"CountWorkers":          func() any { return &workflowservice.CountWorkersResponse{} },
 		"DescribeWorker":        func() any { return &workflowservice.DescribeWorkerResponse{} },
 		"UpdateTaskQueueConfig": func() any { return &workflowservice.UpdateTaskQueueConfigResponse{} },
 		"FetchWorkerConfig":     func() any { return &workflowservice.FetchWorkerConfigResponse{} },
@@ -151,6 +157,15 @@ var (
 		"RequestCancelActivityExecution": func() any { return &workflowservice.RequestCancelActivityExecutionResponse{} },
 		"TerminateActivityExecution":     func() any { return &workflowservice.TerminateActivityExecutionResponse{} },
 		"DeleteActivityExecution":        func() any { return &workflowservice.DeleteActivityExecutionResponse{} },
+
+		"CountNexusOperationExecutions":        func() any { return &workflowservice.CountNexusOperationExecutionsResponse{} },
+		"DeleteNexusOperationExecution":        func() any { return &workflowservice.DeleteNexusOperationExecutionResponse{} },
+		"DescribeNexusOperationExecution":      func() any { return &workflowservice.DescribeNexusOperationExecutionResponse{} },
+		"ListNexusOperationExecutions":         func() any { return &workflowservice.ListNexusOperationExecutionsResponse{} },
+		"PollNexusOperationExecution":          func() any { return &workflowservice.PollNexusOperationExecutionResponse{} },
+		"RequestCancelNexusOperationExecution": func() any { return &workflowservice.RequestCancelNexusOperationExecutionResponse{} },
+		"StartNexusOperationExecution":         func() any { return &workflowservice.StartNexusOperationExecutionResponse{} },
+		"TerminateNexusOperationExecution":     func() any { return &workflowservice.TerminateNexusOperationExecutionResponse{} },
 	}
 )
 
@@ -166,6 +181,10 @@ type (
 		clientBean         client.Bean
 		metricsHandler     metrics.Handler
 		timeSource         clock.TimeSource
+		// redirectResponsesByFullMethod registers embedder methods (keyed by full gRPC method, so
+		// they don't collide with the bareredirectResponsesByFullMethod-name maps) as globally-redirectable, each mapped to its
+		// response constructor. Nil by default, preserving the WorkflowService-only behavior.
+		redirectResponsesByFullMethod map[string]responseConstructorFn
 	}
 )
 
@@ -200,6 +219,19 @@ func NewRedirection(
 	}
 }
 
+// WithRedirectResponses returns a copy of the interceptor that treats the given fullMethod ->
+// response-constructor entries as globally-redirectable APIs, keyed by full gRPC method so they
+// don't collide with the bare-method-name maps. The registered requests must expose their
+// namespace (via NamespaceNameGetter/NamespaceIDGetter) so it can be resolved for redirection.
+func (i *Redirection) WithRedirectResponses(responses map[string]func() any) *Redirection {
+	clone := *i
+	clone.redirectResponsesByFullMethod = make(map[string]responseConstructorFn, len(responses))
+	for fullMethod, ctor := range responses {
+		clone.redirectResponsesByFullMethod[fullMethod] = ctor
+	}
+	return &clone
+}
+
 var _ grpc.UnaryServerInterceptor = (*Redirection)(nil).Intercept
 
 func (i *Redirection) Intercept(
@@ -209,6 +241,19 @@ func (i *Redirection) Intercept(
 	handler grpc.UnaryHandler,
 ) (_ any, retError error) {
 	defer log.CapturePanic(i.logger, &retError)
+	if raFn, ok := i.redirectResponsesByFullMethod[info.FullMethod]; ok {
+		if !i.RedirectionAllowed(ctx) {
+			return handler(ctx, req)
+		}
+		// Resolve the namespace exactly like the WorkflowService global path below; the registered
+		// request must expose it via NamespaceNameGetter/NamespaceIDGetter. Fails closed (returns
+		// the error) rather than running a global-namespace request on a possibly non-owning cell.
+		namespaceName, err := GetNamespaceName(i.namespaceCache, req)
+		if err != nil {
+			return nil, err
+		}
+		return i.handleRedirectAPIInvocation(ctx, req, info, handler, api.MethodName(info.FullMethod), raFn, namespaceName)
+	}
 
 	if !strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
 		return handler(ctx, req)
@@ -276,7 +321,8 @@ func (i *Redirection) handleRedirectAPIInvocation(
 				return err
 			}
 			resp = respCtorFn()
-			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionApiHeaderName, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionAPIHeaderName, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionSourceCellHeaderName, i.currentClusterName)
 			err = remoteClient.Invoke(ctx, info.FullMethod, req, resp)
 			if err != nil {
 				return err

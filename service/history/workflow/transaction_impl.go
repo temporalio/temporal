@@ -20,7 +20,7 @@ import (
 
 type (
 	completionMetric struct {
-		initialized      bool
+		shouldRecord     bool
 		isWorkflow       bool
 		taskQueue        string
 		namespaceState   string
@@ -392,6 +392,7 @@ func createWorkflowExecution(
 		emitMutationMetrics(
 			shardContext,
 			namespaceEntry,
+			request.ArchetypeID,
 			&resp.NewMutableStateStats,
 		)
 		emitCompletionMetrics(
@@ -400,6 +401,7 @@ func createWorkflowExecution(
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), &mutableStateFailoverVersion),
 				&request.NewWorkflowSnapshot,
+				request.NewWorkflowEvents,
 				isWorkflow,
 			),
 		)
@@ -436,6 +438,7 @@ func conflictResolveWorkflowExecution(
 		emitMutationMetrics(
 			shardContext,
 			namespaceEntry,
+			request.ArchetypeID,
 			&resp.ResetMutableStateStats,
 			resp.NewMutableStateStats,
 			resp.CurrentMutableStateStats,
@@ -446,16 +449,19 @@ func conflictResolveWorkflowExecution(
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), &resetWorkflowFailoverVersion),
 				&request.ResetWorkflowSnapshot,
+				request.ResetWorkflowEvents,
 				isWorkflow,
 			),
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
 				request.NewWorkflowSnapshot,
+				request.NewWorkflowEvents,
 				isWorkflow,
 			),
 			mutationToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), currentWorkflowFailoverVersion),
 				request.CurrentWorkflowMutation,
+				request.CurrentWorkflowEvents,
 				isWorkflow,
 			),
 		)
@@ -494,6 +500,7 @@ func getWorkflowExecution(
 		emitGetMetrics(
 			shardContext,
 			namespaceEntry,
+			request.ArchetypeID,
 			&resp.MutableStateStats,
 		)
 	}
@@ -528,33 +535,27 @@ func updateWorkflowExecution(
 		emitMutationMetrics(
 			shardContext,
 			namespaceEntry,
+			request.ArchetypeID,
 			&resp.UpdateMutableStateStats,
 			resp.NewMutableStateStats,
 		)
 
-		// To avoid double emission, we only want to emit completion metrics if workflow is not closed.
-		// This is done by checking the UpdateMode, which has three modes:
-		// 1. UpdateCurrent: Workflow must be the current run and thus must be running before this update.
-		// 2. IgnoreCurrent: We don't know if workflow is current or not, this only happens when it's already closed.
-		// 3. BypassCurrent: Workflow must NOT be the current run, this only happens for zombie workflows,
-		// 		which by definition is not closed yet.
-		// See updateWorkflowMode() method in context.go for more details.
-		if request.Mode != persistence.UpdateWorkflowModeIgnoreCurrent {
-			emitCompletionMetrics(
-				shardContext,
-				namespaceEntry,
-				mutationToCompletionMetric(
-					namespaceState(shardContext.GetClusterMetadata(), &updateWorkflowFailoverVersion),
-					&request.UpdateWorkflowMutation,
-					isWorkflow,
-				),
-				snapshotToCompletionMetric(
-					namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
-					request.NewWorkflowSnapshot,
-					isWorkflow,
-				),
-			)
-		}
+		emitCompletionMetrics(
+			shardContext,
+			namespaceEntry,
+			mutationToCompletionMetric(
+				namespaceState(shardContext.GetClusterMetadata(), &updateWorkflowFailoverVersion),
+				&request.UpdateWorkflowMutation,
+				request.UpdateWorkflowEvents,
+				isWorkflow,
+			),
+			snapshotToCompletionMetric(
+				namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
+				request.NewWorkflowSnapshot,
+				request.NewWorkflowEvents,
+				isWorkflow,
+			),
+		)
 	}
 
 	return resp, nil
@@ -699,13 +700,17 @@ func NotifyNewHistoryMutationEvent(
 func emitMutationMetrics(
 	shardContext historyi.ShardContext,
 	namespace *namespace.Namespace,
+	archetypeID chasm.ArchetypeID,
 	stats ...*persistence.MutableStateStatistics,
 ) {
 	metricsHandler := shardContext.GetMetricsHandler()
+	chasmRegistry := shardContext.ChasmRegistry()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsHandler.WithTags(metrics.OperationTag(metrics.SessionStatsScope), metrics.NamespaceTag(namespaceName.String())),
+			chasmRegistry,
+			archetypeID,
 			stat,
 		)
 	}
@@ -714,29 +719,45 @@ func emitMutationMetrics(
 func emitGetMetrics(
 	shardContext historyi.ShardContext,
 	namespace *namespace.Namespace,
+	archetypeID chasm.ArchetypeID,
 	stats ...*persistence.MutableStateStatistics,
 ) {
 	metricsHandler := shardContext.GetMetricsHandler()
+	chasmRegistry := shardContext.ChasmRegistry()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope), metrics.NamespaceTag(namespaceName.String())),
+			chasmRegistry,
+			archetypeID,
 			stat,
 		)
 	}
 }
 
+// wroteEvents reports whether the run wrote any history events in this transaction.
+func wroteEvents(eventsSeq []*persistence.WorkflowEvents) bool {
+	for _, batch := range eventsSeq {
+		if len(batch.Events) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func snapshotToCompletionMetric(
 	namespaceState string,
 	workflowSnapshot *persistence.WorkflowSnapshot,
+	eventsSeq []*persistence.WorkflowEvents,
 	isWorkflow bool,
 ) completionMetric {
 	if workflowSnapshot == nil {
-		return completionMetric{initialized: false}
+		return completionMetric{shouldRecord: false}
 	}
 
 	return completionMetric{
-		initialized:      true,
+		// Record a completion only when the run wrote events (closed) in this transaction.
+		shouldRecord:     wroteEvents(eventsSeq),
 		isWorkflow:       isWorkflow,
 		taskQueue:        workflowSnapshot.ExecutionInfo.TaskQueue,
 		namespaceState:   namespaceState,
@@ -750,14 +771,15 @@ func snapshotToCompletionMetric(
 func mutationToCompletionMetric(
 	namespaceState string,
 	workflowMutation *persistence.WorkflowMutation,
+	eventsSeq []*persistence.WorkflowEvents,
 	isWorkflow bool,
 ) completionMetric {
 	if workflowMutation == nil {
-		return completionMetric{initialized: false}
+		return completionMetric{shouldRecord: false}
 	}
 
 	return completionMetric{
-		initialized:      true,
+		shouldRecord:     wroteEvents(eventsSeq),
 		isWorkflow:       isWorkflow,
 		taskQueue:        workflowMutation.ExecutionInfo.TaskQueue,
 		namespaceState:   namespaceState,
@@ -777,7 +799,7 @@ func emitCompletionMetrics(
 	namespaceName := namespace.Name()
 
 	for _, completionMetric := range completionMetrics {
-		if !completionMetric.initialized {
+		if !completionMetric.shouldRecord {
 			continue
 		}
 

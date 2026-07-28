@@ -28,7 +28,8 @@ type (
 	}
 
 	DescribePayloadStoreResponse struct {
-		State *testspb.TestPayloadStore
+		State                *testspb.TestPayloadStore
+		ApproximateStateSize int
 	}
 
 	ClosePayloadStoreRequest struct {
@@ -114,7 +115,7 @@ func DescribePayloadStoreHandler(
 	ctx context.Context,
 	request DescribePayloadStoreRequest,
 ) (DescribePayloadStoreResponse, error) {
-	state, err := chasm.ReadComponent(
+	return chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*PayloadStore](
 			chasm.ExecutionKey{
@@ -125,12 +126,6 @@ func DescribePayloadStoreHandler(
 		(*PayloadStore).Describe,
 		request,
 	)
-	if err != nil {
-		return DescribePayloadStoreResponse{}, err
-	}
-	return DescribePayloadStoreResponse{
-		State: state,
-	}, nil
 }
 
 func ClosePayloadStoreHandler(

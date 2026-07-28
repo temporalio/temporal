@@ -2,8 +2,10 @@ package workerdeployment
 
 import (
 	computepb "go.temporal.io/api/compute/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func computeConfigScalingGroupsToWCISpec(scalingGroups map[string]*computepb.ComputeConfigScalingGroup) *wciiface.WorkerControllerInstanceSpec {
@@ -34,8 +36,9 @@ func scalingGroupUpdatesToWCI(updates map[string]*computepb.ComputeConfigScaling
 		spec := wciiface.ScalingGroupSpec{
 			TaskTypes: sg.GetTaskQueueTypes(),
 			Compute: wciiface.ComputeProviderSpec{
-				ProviderType: wciiface.ComputeProviderType(sg.GetProvider().GetType()),
-				Config:       sg.GetProvider().GetDetails(),
+				ProviderType:  wciiface.ComputeProviderType(sg.GetProvider().GetType()),
+				Config:        sg.GetProvider().GetDetails(),
+				NexusEndpoint: sg.GetProvider().GetNexusEndpoint(),
 			},
 		}
 		if scaler := sg.GetScaler(); scaler != nil {
@@ -76,6 +79,22 @@ func wciSpecToComputeConfig(spec *wciiface.WorkerControllerInstanceSpec) *comput
 	return &computepb.ComputeConfig{ScalingGroups: groups}
 }
 
+func wciSpecToComputeConfigSummary(spec *wciiface.WorkerControllerInstanceSpec) *computepb.ComputeConfigSummary {
+	if spec == nil || len(spec.ScalingGroupSpecs) == 0 {
+		return nil
+	}
+	groups := make(map[string]*computepb.ComputeConfigScalingGroupSummary, len(spec.ScalingGroupSpecs))
+	names := workflow.DeterministicKeys(spec.ScalingGroupSpecs)
+	for _, name := range names {
+		sg := spec.ScalingGroupSpecs[name]
+		groups[name] = &computepb.ComputeConfigScalingGroupSummary{
+			TaskQueueTypes: sg.TaskTypes,
+			ProviderType:   string(sg.Compute.ProviderType),
+		}
+	}
+	return &computepb.ComputeConfigSummary{ScalingGroups: groups}
+}
+
 func scalingGroupsToUpsertUpdates(scalingGroups map[string]*computepb.ComputeConfigScalingGroup) map[string]*computepb.ComputeConfigScalingGroupUpdate {
 	updates := make(map[string]*computepb.ComputeConfigScalingGroupUpdate, len(scalingGroups))
 	names := workflow.DeterministicKeys(scalingGroups)
@@ -86,4 +105,19 @@ func scalingGroupsToUpsertUpdates(scalingGroups map[string]*computepb.ComputeCon
 		}
 	}
 	return updates
+}
+
+// wciValidationStatusToComputeStatus converts a WCI ValidationStatus to the public ComputeStatus proto.
+// A successful validation results in an empty error_message; a failed validation sets the error_message.
+func wciValidationStatusToComputeStatus(vs *wciiface.ValidationStatus) *deploymentpb.ComputeStatus {
+	if vs == nil {
+		return nil
+	}
+	pv := &deploymentpb.ComputeStatus_ProviderValidationStatus{
+		LastCheckTime: timestamppb.New(vs.LastValidationTime),
+	}
+	if vs.Status == wciiface.ValidationResultFailed {
+		pv.ErrorMessage = vs.ErrMessage
+	}
+	return &deploymentpb.ComputeStatus{ProviderValidation: pv}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -78,7 +79,7 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 			writer := replication.NewDLQWriterAdapter(
-				queues.NewDLQWriter(queueWriter, metricsHandler, log.NewTestLogger(), namespaceRegistry),
+				queues.NewDLQWriter(queueWriter, metricsHandler, log.NewTestLogger(), namespaceRegistry, chasm.NewRegistry(log.NewTestLogger())),
 				taskSerializer,
 				"test-current-cluster",
 			)
@@ -112,10 +113,14 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				snapshot := capture.Snapshot()
 				recordings := snapshot[metrics.DLQWrites.Name()]
 				assert.Len(t, recordings, 1)
-				assert.Len(t, recordings[0].Tags, 2)
+				require.Len(t, recordings[0].Tags, 6)
 				assert.Equal(t, "replication", recordings[0].Tags[metrics.TaskCategoryTagName])
 				namespaceStateTag := metrics.NamespaceStateTag(metrics.PassiveNamespaceStateTagValue)
 				assert.Equal(t, metrics.PassiveNamespaceStateTagValue, recordings[0].Tags[namespaceStateTag.Key])
+				require.Equal(t, metrics.NamespaceUnknownTag().Value, recordings[0].Tags[metrics.NamespaceUnknownTag().Key])
+				require.NotEmpty(t, recordings[0].Tags[metrics.TaskTypeTagName])
+				require.NotEmpty(t, recordings[0].Tags[metrics.OperationTagName])
+				require.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
 			}
 		})
 	}

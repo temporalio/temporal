@@ -2,6 +2,7 @@ package updateworkflowoptions
 
 import (
 	"context"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Invoke(
@@ -27,8 +29,7 @@ func Invoke(
 	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	req := request.GetUpdateRequest()
@@ -40,6 +41,8 @@ func Invoke(
 
 	// Store versioning override to send reactivation signal after successful persistence
 	var versioningOverrideForReactivation *workflowpb.VersioningOverride
+	var shouldSkipReactivation bool
+	var revisionNumber int64
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -79,11 +82,10 @@ func Invoke(
 			}
 
 			// Validate versioning override, if any.
-			err = worker_versioning.ValidateVersioningOverride(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionMembershipCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			shouldSkipReactivation, revisionNumber, err = worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
 			if err != nil {
 				return nil, err
 			}
-
 			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
@@ -98,6 +100,8 @@ func Invoke(
 					CreateWorkflowTask: false,
 				}, nil
 			}
+
+			ret.UpdateTime = timestamppb.New(mutableState.Now())
 
 			// Store versioning override to send reactivation signal after successful persistence
 			versioningOverrideForReactivation = mergedOpts.GetVersioningOverride()
@@ -118,9 +122,19 @@ func Invoke(
 
 	// Notify version workflow if we're pinning to a potentially drained version.
 	// This is done after successful persistence to avoid signaling if the update fails.
-	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignalCache, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals())
+	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 
 	return ret, nil
+}
+
+// OptionsToReapply is used to track options that need to be reapplied on every update,
+// whose changes cannot be detected simply by options equality check.
+type OptionsToReapply struct {
+	timeSkippingConfigHasChanged bool
+}
+
+func (u OptionsToReapply) hasChanges() bool {
+	return u.timeSkippingConfigHasChanged
 }
 
 // MergeAndApply merges the requested options mentioned in the field mask with the current options in the mutable state
@@ -132,7 +146,7 @@ func MergeAndApply(
 	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
-	mergedOpts, err := mergeWorkflowExecutionOptions(
+	mergedOpts, optionsToReapply, err := mergeWorkflowExecutionOptions(
 		getOptionsFromMutableState(ms),
 		opts,
 		updateMask,
@@ -141,17 +155,16 @@ func MergeAndApply(
 		return nil, false, serviceerror.NewInvalidArgumentf("error applying update_options: %v", err)
 	}
 
-	// If there is no mutable state change at all, return with no new history event and Noop=true
-	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms))
+	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms)) || optionsToReapply.hasChanges()
 	if !hasChanges {
 		return mergedOpts, false, nil
 	}
 
-	unsetOverride := false
-	if mergedOpts.GetVersioningOverride() == nil {
-		unsetOverride = true
-	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority())
+	unsetOverride := mergedOpts.GetVersioningOverride() == nil
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(
+		mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority(),
+		mergedOpts.GetTimeSkippingConfig(),
+		optionsToReapply.timeSkippingConfigHasChanged, nil)
 	if err != nil {
 		return nil, hasChanges, err
 	}
@@ -172,35 +185,53 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 			opts.Priority = cloned
 		}
 	}
+	if tsInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); tsInfo != nil {
+		if cloned, ok := proto.Clone(tsInfo.GetConfig()).(*commonpb.TimeSkippingConfig); ok {
+			opts.TimeSkippingConfig = cloned
+		}
+	}
 	return opts
 }
 
-// mergeWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct
+// mergeWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct and returns
+// the merged opts and the options to reapply
 func mergeWorkflowExecutionOptions(
 	mergeInto, mergeFrom *workflowpb.WorkflowExecutionOptions,
 	updateMask *fieldmaskpb.FieldMask,
-) (*workflowpb.WorkflowExecutionOptions, error) {
+) (*workflowpb.WorkflowExecutionOptions, OptionsToReapply, error) {
 	_, err := fieldmaskpb.New(mergeInto, updateMask.GetPaths()...)
 	if err != nil { // errors if any paths are not valid for the struct we are merging into
-		return nil, err
+		return nil, OptionsToReapply{}, err
 	}
 	updateFields := util.ParseFieldMask(updateMask)
+
 	if _, ok := updateFields["versioningOverride"]; ok {
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
 	if _, ok := updateFields["versioningOverride.deployment"]; ok {
 		if _, ok := updateFields["versioningOverride.behavior"]; !ok {
-			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+			return nil, OptionsToReapply{}, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
 	if _, ok := updateFields["versioningOverride.behavior"]; ok {
 		if _, ok := updateFields["versioningOverride.deployment"]; !ok {
-			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+			return nil, OptionsToReapply{}, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
+	// Keep the deprecated behavior/deployment pair above for compatibility, but require v0.32
+	// oneof overrides to be replaced atomically instead of pretending nested masks are partial updates.
+	for key := range updateFields {
+		if strings.HasPrefix(key, "versioningOverride.") &&
+			key != "versioningOverride.deployment" &&
+			key != "versioningOverride.behavior" {
+			return nil, OptionsToReapply{}, serviceerror.NewInvalidArgument(
+				"versioning_override doesn't support partial updates")
+		}
 	}
 
 	// ==== Priority
@@ -230,5 +261,32 @@ func mergeWorkflowExecutionOptions(
 		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
 	}
 
-	return mergeInto, nil
+	// ==== Time Skipping Config
+	// - fast forward need reapplication so equality check is not enough;
+	// - We only support validating and updating the TSC as a whole;
+	var originalTSC *commonpb.TimeSkippingConfig
+	if tsc := mergeInto.GetTimeSkippingConfig(); tsc != nil {
+		if cloned, ok := proto.Clone(tsc).(*commonpb.TimeSkippingConfig); ok {
+			originalTSC = cloned
+		}
+	}
+
+	var fastForwardSet bool
+	if _, ok := updateFields["timeSkippingConfig"]; ok {
+		mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
+		if mergeFrom.GetTimeSkippingConfig().GetFastForward() != nil {
+			fastForwardSet = true
+		}
+	}
+
+	for key := range updateFields {
+		if strings.HasPrefix(key, "timeSkippingConfig.") {
+			return nil, OptionsToReapply{}, serviceerror.NewInvalidArgument(
+				"time_skipping_config doesn't support partial update")
+		}
+	}
+
+	var optionsToReapply OptionsToReapply
+	optionsToReapply.timeSkippingConfigHasChanged = fastForwardSet || (!proto.Equal(mergeInto.GetTimeSkippingConfig(), originalTSC))
+	return mergeInto, optionsToReapply, nil
 }

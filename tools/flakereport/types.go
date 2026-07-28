@@ -32,6 +32,7 @@ type TestReport struct {
 	TotalRuns    int       // Total number of times this test ran (including successes)
 	GitHubURLs   []string  // Up to max_links failure URLs
 	LastFailure  time.Time // Timestamp of the most recent failure
+	TrendPoints  []int     // Per-day points across the report window
 }
 
 // SuiteReport represents aggregated flake data for a test suite
@@ -67,26 +68,44 @@ type FailedTestRecord struct {
 	FailureType string `json:"failure_type"`
 }
 
-// WorkflowRun represents a GitHub Actions workflow run
-type WorkflowRun struct {
-	ID         int64     `json:"id"`
-	Number     int       `json:"run_number"`
-	CreatedAt  time.Time `json:"created_at"`
-	Status     string    `json:"status"`
-	Conclusion string    `json:"conclusion"`
-	HeadBranch string    `json:"head_branch"`
+// CommitObservation holds aggregated pass/fail data for a single (test, commit) pair.
+type CommitObservation struct {
+	CommitSHA     string
+	CommitIdx     int     // chronological index (0 = oldest)
+	Prior         float64 // prior weight (1.0 = uniform; adjusted by heuristics)
+	HeuristicNote string  // reason for prior adjustment, if any
+	Passes        int
+	Fails         int
 }
 
-// WorkflowArtifact represents a downloadable artifact
-type WorkflowArtifact struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	Expired   bool      `json:"expired"`
+// BisectResult is one candidate culprit commit with its posterior probability.
+type BisectResult struct {
+	CommitSHA     string
+	CommitIdx     int
+	Probability   float64 // posterior P(this commit introduced the flakiness)
+	PassesBefore  int
+	FailsBefore   int
+	PassesAfter   int
+	FailsAfter    int
+	CommitTitle   string
+	CommitAuthor  string
+	CommitDate    string // formatted date of the commit, e.g. "2024-01-15"
+	HeuristicNote string // e.g. "only touches .github/ — deprioritized"
 }
 
-// ArtifactsResponse represents the GitHub API response for artifacts
-type ArtifactsResponse struct {
-	TotalCount int                `json:"total_count"`
-	Artifacts  []WorkflowArtifact `json:"artifacts"`
+// TestBisectReport is the full bisect output for a single test.
+type TestBisectReport struct {
+	TestName    string
+	TopSuspects []BisectResult // sorted by Probability descending
+	TotalObs    int            // total observations (pass + fail) used
+	Skipped     bool           // true if below signal or confidence threshold
+}
+
+// BisectConfig holds configuration for a bisect analysis run.
+type BisectConfig struct {
+	Repo           string
+	TopN           int // max tests to analyze; 0 = all qualifying tests
+	MinFailures    int
+	MinRuns        int
+	MinProbability float64 // only report tests whose top suspect exceeds this (0–1); 0 = report all
 }

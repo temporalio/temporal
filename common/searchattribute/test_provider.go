@@ -7,12 +7,17 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
 	TestProvider struct {
 		es bool
+	}
+
+	testMapperProvider struct {
+		mapper Mapper
 	}
 
 	TestMapper struct {
@@ -23,6 +28,7 @@ type (
 
 var _ Provider = (*TestProvider)(nil)
 var _ Mapper = (*TestMapper)(nil)
+var _ MapperProvider = (*testMapperProvider)(nil)
 
 var (
 	esCustomSearchAttributes = map[string]enumspb.IndexedValueType{
@@ -59,6 +65,10 @@ func TestNameTypeMap() NameTypeMap {
 func TestEsNameTypeMap() NameTypeMap {
 	csa := maps.Clone(esCustomSearchAttributes)
 	return NewNameTypeMap(csa)
+}
+
+func TestSearchAttributesToRegister() map[string]enumspb.IndexedValueType {
+	return maps.Clone(esCustomSearchAttributes)
 }
 
 func TestEsNameTypeMapWithScheduleID() NameTypeMap {
@@ -113,33 +123,37 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		// This error must be always ignored.
 		return "", serviceerror.NewInvalidArgument("unmapped alias")
 	}
-	if namespace == "error-namespace" {
+	switch namespace {
+	case "error-namespace":
 		return "", serviceerror.NewInvalidArgument(
 			fmt.Sprintf("Namespace %s has no mapping defined for search attribute %s", namespace, alias),
 		)
-	} else if namespace == "test-namespace" || namespace == t.Namespace {
+	case "test-namespace", t.Namespace:
 		if alias == "pass-through" {
 			return alias, nil
 		}
 		if t.WithCustomScheduleID && alias == sadefs.ScheduleID {
 			return TestScheduleIDFieldName, nil
 		}
-		if strings.HasPrefix(alias, "AliasFor") {
-			return strings.TrimPrefix(alias, "AliasFor"), nil
-		} else if strings.HasPrefix(alias, "AliasWithHyphenFor-") {
-			return strings.TrimPrefix(alias, "AliasWithHyphenFor-"), nil
+		if after, ok := strings.CutPrefix(alias, "AliasFor"); ok {
+			return after, nil
+		} else if after, ok := strings.CutPrefix(alias, "AliasWithHyphenFor-"); ok {
+			return after, nil
 		}
 		return "", serviceerror.NewInvalidArgument("mapper error")
 	}
 	return "", serviceerror.NewInvalidArgument("unknown namespace")
 }
 
-func NewNoopMapper() Mapper {
-	return &noopMapper{}
+func NewTestMapperProvider(customMapper Mapper) MapperProvider {
+	if customMapper == nil {
+		customMapper = &NoopMapper{}
+	}
+	return &testMapperProvider{mapper: customMapper}
 }
 
-func NewTestMapperProvider(customMapper Mapper) MapperProvider {
-	return NewMapperProvider(customMapper, nil, NewTestProvider(), false)
+func (p *testMapperProvider) GetMapper(namespace.Name) (Mapper, error) {
+	return p.mapper, nil
 }
 
 func NewNameTypeMapStub(attributes map[string]enumspb.IndexedValueType) NameTypeMap {

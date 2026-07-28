@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -119,28 +118,28 @@ func (s *ackManagerSuite) TestNotifyNewTasks_NotInitialized() {
 		&tasks.HistoryReplicationTask{TaskID: 123},
 	})
 
-	s.Equal(*s.replicationAckManager.maxTaskID, int64(456))
+	s.Equal(int64(456), *s.replicationAckManager.maxTaskID)
 }
 
 func (s *ackManagerSuite) TestNotifyNewTasks_Initialized() {
-	s.replicationAckManager.maxTaskID = util.Ptr(int64(123))
+	s.replicationAckManager.maxTaskID = new(int64(123))
 
 	s.replicationAckManager.NotifyNewTasks([]tasks.Task{
 		&tasks.HistoryReplicationTask{TaskID: 100},
 	})
-	s.Equal(*s.replicationAckManager.maxTaskID, int64(123))
+	s.Equal(int64(123), *s.replicationAckManager.maxTaskID)
 
 	s.replicationAckManager.NotifyNewTasks([]tasks.Task{
 		&tasks.HistoryReplicationTask{TaskID: 234},
 	})
-	s.Equal(*s.replicationAckManager.maxTaskID, int64(234))
+	s.Equal(int64(234), *s.replicationAckManager.maxTaskID)
 }
 
 func (s *ackManagerSuite) TestTaskIDRange_NotInitialized() {
 	s.replicationAckManager.sanityCheckTime = time.Time{}
 	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID
 	expectMinTaskID := expectMaxTaskID - 100
-	s.replicationAckManager.maxTaskID = util.Ptr(expectMinTaskID - 100)
+	s.replicationAckManager.maxTaskID = new(expectMinTaskID - 100)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
@@ -155,7 +154,7 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestReplicationTaskI
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
 	expectMinTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 100
 	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 50
-	s.replicationAckManager.maxTaskID = util.Ptr(expectMaxTaskID)
+	s.replicationAckManager.maxTaskID = new(expectMaxTaskID)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
@@ -185,7 +184,7 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestTransferTaskID()
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
 	expectMinTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID - 100
 	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID
-	s.replicationAckManager.maxTaskID = util.Ptr(s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 50)
+	s.replicationAckManager.maxTaskID = new(s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 50)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
@@ -314,7 +313,7 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 
 	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID)
 	s.NoError(err)
-	s.Equal(1, len(replicationTasks))
+	s.Len(replicationTasks, 1)
 	s.Equal(tasksResponse.Tasks[0].GetTaskID(), lastTaskID)
 }
 

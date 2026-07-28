@@ -147,6 +147,12 @@ message VersionLocalState {
   // Covers changes through: CreateWorkerDeploymentVersion, UpdateWorkerDeploymentVersionComputeConfig,
   // UpdateWorkerDeploymentVersionMetadata.
   string last_modifier_identity = 17;
+
+  // Cached compute config summary, kept in sync with the WCI on each compute config update.
+  temporal.api.compute.v1.ComputeConfigSummary compute_config = 18;
+
+  // Cached compute status, updated when WCI signals this version workflow.
+  temporal.api.deployment.v1.ComputeStatus compute_status = 19;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -226,6 +232,13 @@ message WorkerDeploymentVersionSummary {
   // Request ID used to create this version. Used for idempotency.
   // Not synced from the version workflow; only set by the deployment workflow.
   string create_request_id = 12;
+
+  // Compute config summary for this version. Synced from the version workflow on each compute config update.
+  // Also set by the deployment workflow at version creation time if a compute config was provided.
+  temporal.api.compute.v1.ComputeConfigSummary compute_config = 13;
+
+  // Compute status for this version. Synced from the version workflow when WCI signals a status change.
+  temporal.api.deployment.v1.ComputeStatus compute_status = 14;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -337,6 +350,7 @@ message StartWorkerDeploymentVersionRequest {
   string build_id = 2;
   string request_id = 3;
   string identity = 4;
+  temporal.api.compute.v1.ComputeConfigSummary compute_config = 5;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -603,4 +617,11 @@ message ForceCANVersionSignalArgs {
   // If provided, this state will be used instead of the current state
   // when performing continue-as-new.
   VersionLocalState override_state = 1;
+}
+
+// Signal input for demoting a version workflow (fire-and-forget from deployment workflow).
+// Carries the full routing config so the version workflow can determine its new status
+// and propagate to task queues.
+message DemoteVersionSignalArgs {
+  temporal.api.deployment.v1.RoutingConfig routing_config = 1;
 }

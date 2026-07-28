@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -696,10 +697,8 @@ func (q failingQuery) WithContext(context.Context) gocql.Query {
 }
 
 func (f failingSession) Query(query string, args ...any) gocql.Query {
-	for _, q := range f.failingQueries {
-		if q == query {
-			return failingQuery{}
-		}
+	if slices.Contains(f.failingQueries, query) {
+		return failingQuery{}
 	}
 	return f.Session.Query(query, args...)
 }
@@ -990,7 +989,6 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 
 			// Start both RangeDeleteMessages call
 			for _, q := range qs {
-				q := q
 				go func() {
 					err := deleteMessages(ctx, q.QueueV2, queueType, queueName, q.maxIDToDelete)
 					q.deleteErrs <- err

@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -205,6 +206,10 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			}
 			tc.configure(&tc)
 
+			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
+				dynamicconfig.GetIntPropertyFn(4000),
+			)
+
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
 			rateLimitInterceptor := RateLimitInterceptorProvider(&Config{
 				RPS: func() int {
@@ -225,7 +230,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				interceptor.ServiceErrorInterceptor,
+				serviceErrorInterceptor.Intercept,
 				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
@@ -569,6 +574,10 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 
 			config := getTestConfig(tc)
 
+			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
+				dynamicconfig.GetIntPropertyFn(4000),
+			)
+
 			// Create a rate limit interceptor.
 			rateLimitInterceptor := NamespaceRateLimitInterceptorProvider(
 				primitives.FrontendService,
@@ -582,7 +591,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				interceptor.ServiceErrorInterceptor,
+				serviceErrorInterceptor.Intercept,
 				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
@@ -764,13 +773,17 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 				},
 			}
 
+			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
+				dynamicconfig.GetIntPropertyFn(4000),
+			)
+
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
 			rateLimitInterceptor := RateLimitInterceptorProvider(config, serviceResolver, metricsHandler, log.NewTestLogger())
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				interceptor.ServiceErrorInterceptor,
+				serviceErrorInterceptor.Intercept,
 				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))

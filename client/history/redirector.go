@@ -18,6 +18,8 @@ type (
 	Redirector[C any] interface {
 		Execute(ctx context.Context, shardID int32, op ClientOperation[C]) error
 		clientForShardID(int32) (C, error)
+		// Close releases the underlying connection pool.
+		Close()
 	}
 	ClientOperation[C any] func(ctx context.Context, client C) error
 
@@ -43,6 +45,10 @@ func NewBasicRedirector[C any](
 		connections:            connections,
 		historyServiceResolver: historyServiceResolver,
 	}
+}
+
+func (r *BasicRedirector[C]) Close() {
+	r.connections.Close()
 }
 
 func (r *BasicRedirector[C]) clientForShardID(shardID int32) (C, error) {

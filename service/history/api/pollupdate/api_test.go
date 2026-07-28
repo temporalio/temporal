@@ -58,6 +58,10 @@ type (
 func (mockUpdateEventStore) OnAfterCommit(f func(context.Context))   { f(context.TODO()) }
 func (mockUpdateEventStore) OnAfterRollback(f func(context.Context)) {}
 func (mockUpdateEventStore) CanAddEvent() bool                       { return true }
+func (mockUpdateEventStore) RejectWorkflowExecutionUpdate(string, *failurepb.Failure) error {
+	return nil
+}
+func (mockUpdateEventStore) HasRequestID(string) bool { return false }
 
 func (m mockWFConsistencyChecker) GetWorkflowLease(
 	ctx context.Context,

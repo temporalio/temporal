@@ -8,12 +8,15 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/stats"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -37,6 +40,7 @@ type (
 	HealthSignalAggregator interface {
 		Record(latency time.Duration, err error)
 		AverageLatency() float64
+		LatencyQuantile(quantile float64) float64
 		ErrorRatio() float64
 	}
 
@@ -44,10 +48,12 @@ type (
 	healthSignalAggregatorImpl struct {
 		status int32
 
-		aggregatorEnabled dynamicconfig.BoolPropertyFn
+		aggregatorEnabled  dynamicconfig.BoolPropertyFn
+		percentilesEnabled dynamicconfig.BoolPropertyFn
 
-		latencyAverage aggregate.MovingWindowAverage
-		errorRatio     aggregate.MovingWindowAverage
+		latencyAverage      aggregate.MovingWindowAverage
+		latencyDistribution stats.TimeWindowedStats
+		errorRatio          aggregate.MovingWindowAverage
 
 		logger log.Logger
 	}
@@ -131,11 +137,7 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 		return resp, err
 	}
 
-	if IsLongPollGetWorkflowExecutionHistoryRequest(req) {
-		return resp, err
-	}
-
-	if IsLongPollDescribeActivityExecutionRequest(req) {
+	if specialCaseAPIIsPolling(req) {
 		return resp, err
 	}
 
@@ -144,20 +146,59 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 	return resp, err
 }
 
+// specialCaseAPIIsPolling checks if an API is a long-polling API and should be excluded from health signals.
+// Note that this interceptor may run in multiple Temporal services, so it needs to handle every version of
+// each special request type. (for example, historyservice GetWorkflowExecutionHistory vs. workflowservice)
+func specialCaseAPIIsPolling(req any) bool {
+	switch request := req.(type) {
+	// history
+	case *historyservice.GetWorkflowExecutionHistoryRequest:
+		inner := request.GetRequest()
+		return inner != nil && inner.GetWaitNewEvent()
+
+	// frontend
+	case *workflowservice.GetWorkflowExecutionHistoryRequest:
+		return request.GetWaitNewEvent()
+	case *workflowservice.DescribeActivityExecutionRequest:
+		return len(request.GetLongPollToken()) > 0
+	default:
+		return false
+	}
+}
+
 // NewHealthSignalAggregator creates a new instance of HealthSignalAggregatorImpl
 func NewHealthSignalAggregator(
 	logger log.Logger,
 	aggregatorEnabled dynamicconfig.BoolPropertyFn,
+	percentilesEnabled dynamicconfig.BoolPropertyFn,
 	windowSize time.Duration,
 	maxBufferSize int,
+	latencyWindowSize time.Duration,
+	latencyWindowCount int,
 ) *healthSignalAggregatorImpl {
-	ret := &healthSignalAggregatorImpl{
-		logger:            logger,
-		aggregatorEnabled: aggregatorEnabled,
-		latencyAverage:    aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		errorRatio:        aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+	latencyDistribution, err := stats.NewWindowedTDigest(stats.WindowConfig{
+		WindowSize:  latencyWindowSize,
+		WindowCount: latencyWindowCount,
+	})
+	if err != nil {
+		logger.Error("failed to create latency distribution helper, falling back to default config", tag.Error(err))
+		latencyDistribution, err = stats.NewWindowedTDigest(stats.WindowConfig{
+			WindowSize:  5 * time.Second,
+			WindowCount: 10,
+		})
+		if err != nil {
+			logger.Error("failed to create fallback latency distribution helper", tag.Error(err))
+		}
 	}
-	return ret
+
+	return &healthSignalAggregatorImpl{
+		logger:              logger,
+		aggregatorEnabled:   aggregatorEnabled,
+		percentilesEnabled:  percentilesEnabled,
+		latencyAverage:      aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+		latencyDistribution: latencyDistribution,
+		errorRatio:          aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+	}
 }
 
 func (s *healthSignalAggregatorImpl) Record(latency time.Duration, err error) {
@@ -166,6 +207,9 @@ func (s *healthSignalAggregatorImpl) Record(latency time.Duration, err error) {
 		return
 	}
 	s.latencyAverage.Record(latency.Milliseconds())
+	if s.percentilesEnabled() && s.latencyDistribution != nil {
+		s.latencyDistribution.RecordToLatestWindow(float64(latency.Milliseconds()))
+	}
 
 	if isUnhealthyError(err) {
 		s.errorRatio.Record(1)
@@ -176,15 +220,29 @@ func (s *healthSignalAggregatorImpl) Record(latency time.Duration, err error) {
 
 func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 	if !s.aggregatorEnabled() {
-		s.logger.Debug("health signal aggregator is disabled")
+		s.logger.Debug("health signal average aggregator is disabled")
+		return 0
 	}
 	return s.latencyAverage.Average()
+}
+
+func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) float64 {
+	if !s.percentilesEnabled() {
+		s.logger.Debug("health signal percentile aggregator is disabled")
+		return 0
+	}
+	if s.latencyDistribution == nil {
+		return 0
+	}
+
+	return s.latencyDistribution.Quantile(quantile)
 }
 
 func (s *healthSignalAggregatorImpl) ErrorRatio() float64 {
 	if !s.aggregatorEnabled() {
 		s.logger.Debug("health signal aggregator is disabled")
 	}
+
 	return s.errorRatio.Average()
 }
 

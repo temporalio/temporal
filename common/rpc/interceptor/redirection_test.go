@@ -169,6 +169,10 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"PauseActivity":                                {},
 		"UnpauseActivity":                              {},
 		"ResetActivity":                                {},
+		"UpdateActivityExecutionOptions":               {},
+		"PauseActivityExecution":                       {},
+		"UnpauseActivityExecution":                     {},
+		"ResetActivityExecution":                       {},
 		"UpdateWorkflowExecutionOptions":               {},
 		"DescribeDeployment":                           {},
 		"ListDeployments":                              {},
@@ -195,6 +199,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"TriggerWorkflowRule":                          {},
 		"RecordWorkerHeartbeat":                        {},
 		"ListWorkers":                                  {},
+		"CountWorkers":                                 {},
 		"DescribeWorker":                               {},
 		"UpdateTaskQueueConfig":                        {},
 		"FetchWorkerConfig":                            {},
@@ -208,12 +213,21 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"RequestCancelActivityExecution": {},
 		"TerminateActivityExecution":     {},
 		"DeleteActivityExecution":        {},
+
+		"CountNexusOperationExecutions":        {},
+		"DeleteNexusOperationExecution":        {},
+		"DescribeNexusOperationExecution":      {},
+		"ListNexusOperationExecutions":         {},
+		"PollNexusOperationExecution":          {},
+		"RequestCancelNexusOperationExecution": {},
+		"StartNexusOperationExecution":         {},
+		"TerminateNexusOperationExecution":     {},
 	}, apis)
 }
 
 func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
+	t := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
 	expectedAPIs := make(map[string]any, t.NumMethod())
 	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
 		expectedAPIs[m.Name] = m.Type.Out(0)

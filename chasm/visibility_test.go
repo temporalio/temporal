@@ -139,7 +139,7 @@ func (s *visibilitySuite) TestNewVisibilityWithData_FilterNilSearchAttributes() 
 		"nilKey1": nil,
 		"nilKey2": nil,
 	}
-	// Memo with 1 valid and 2 nil values - nil values should NOT be filtered out
+	// Memo with 1 valid and 2 nil values - nil values should be filtered out
 	customMemo := map[string]*commonpb.Payload{
 		stringKey: s.mustEncode(stringVal),
 		"nilKey1": nil,
@@ -149,8 +149,8 @@ func (s *visibilitySuite) TestNewVisibilityWithData_FilterNilSearchAttributes() 
 	// SA should have only 1 field (nil values filtered out)
 	s.Len(visibility.SA.Get(s.mockContext).IndexedFields, 1)
 	s.NotNil(visibility.SA.Get(s.mockContext).IndexedFields[stringKey])
-	// Memo should have all 3 fields (nil values NOT filtered)
-	s.Len(visibility.Memo.Get(s.mockContext).Fields, 3)
+	// Memo should have only 1 field (nil values filtered out)
+	s.Len(visibility.Memo.Get(s.mockContext).Fields, 1)
 	s.NotNil(visibility.Memo.Get(s.mockContext).Fields[stringKey])
 }
 
@@ -314,8 +314,9 @@ func (s *visibilitySuite) TestReplaceCustomMemo() {
 	s.visibility.ReplaceCustomMemo(
 		s.mockMutableContext,
 		map[string]*commonpb.Payload{
-			floatKey: s.mustEncode(floatVal),
-			byteKey:  s.mustEncode(byteVal),
+			floatKey:  s.mustEncode(floatVal),
+			byteKey:   s.mustEncode(byteVal),
+			stringKey: nil, // nil value must be filtered out
 		},
 	)
 	s.Len(s.mockMutableContext.Tasks, 2)

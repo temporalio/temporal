@@ -28,6 +28,8 @@ const (
 	targetCluster           = "target_cluster"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
+	pollResultTagName       = "poll_result"
+	pollerScaleDecisionTag  = "decision"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -45,7 +47,7 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
-	taskExpireStage                                = "task_expire_stage"
+	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
 	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
@@ -60,6 +62,8 @@ const (
 	toUnversioned                                  = "to_unversioned"
 	queryTypeTag                                   = "query_type"
 	namespaceAllValue                              = "all"
+	clientName                                     = "client_name"
+	isInternal                                     = "is_internal"
 	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
@@ -67,6 +71,7 @@ const (
 	falseValue                                     = "false"
 	trueValue                                      = "true"
 	errorPrefix                                    = "*"
+	ScalerShadowModeTagName                        = "scaler_shadow_mode"
 
 	queryTypeStackTrace       = "__stack_trace"
 	queryTypeOpenSessions     = "__open_sessions"
@@ -313,6 +318,41 @@ func ForwardedTag(forwarded bool) Tag {
 	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
 }
 
+func PollResultTag(result string) Tag {
+	return Tag{Key: pollResultTagName, Value: result}
+}
+
+const (
+	TaskAddResultSyncMatch        = "sync_match"
+	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
+	TaskAddResultBacklog          = "backlog"
+	TaskAddResultThrottled        = "throttled"
+	TaskAddResultFailure          = "failure"
+)
+
+func TaskAddResultTag(result string) Tag {
+	return Tag{Key: taskAddResult, Value: result}
+}
+
+const (
+	PollerScaleDecisionUp   = "scale_up"
+	PollerScaleDecisionDown = "scale_down"
+	PollerScaleDecisionHold = "hold"
+)
+
+const (
+	PollerScaleReasonIdle        ReasonString = "idle"
+	PollerScaleReasonBacklog     ReasonString = "backlog"
+	PollerScaleReasonTaskRate    ReasonString = "task_rate"
+	PollerScaleReasonRateLimited ReasonString = "rate_limited"
+)
+
+// PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
+// down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
+func PollerScaleDecisionTag(decision string) Tag {
+	return Tag{Key: pollerScaleDecisionTag, Value: decision}
+}
+
 func MatchingTaskPriorityTag(value int32) Tag {
 	priStr := ""
 	if value != 0 {
@@ -546,9 +586,17 @@ func ToUnversionedTag(version string) Tag {
 	return Tag{Key: toUnversioned, Value: falseValue}
 }
 
-var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
-var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
-var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
+// ClientNameTag returns a new client_name tag for the SDK client name.
+func ClientNameTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: clientName, Value: value}
+}
+
+func IsInternalTag(internal bool) Tag {
+	return Tag{Key: isInternal, Value: strconv.FormatBool(internal)}
+}
 
 func PersistenceDBKindTag(kind string) Tag {
 	return Tag{Key: PersistenceDBKindTagName, Value: kind}
@@ -556,4 +604,16 @@ func PersistenceDBKindTag(kind string) Tag {
 
 func HeaderCallsiteTag(kind string) Tag {
 	return Tag{Key: headerCallsiteTagName, Value: kind}
+}
+
+func TimeoutTypeTag(timeoutType string) Tag {
+	return Tag{Key: timeoutTypeTagName, Value: timeoutType}
+}
+
+func ScalerShadowModeTag(enabled bool) Tag {
+	v := falseValue
+	if enabled {
+		v = trueValue
+	}
+	return Tag{Key: ScalerShadowModeTagName, Value: v}
 }
