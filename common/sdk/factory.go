@@ -148,26 +148,25 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 	f.once.Do(func() {
 		options := f.options(sdkclient.Options{Namespace: primitives.SystemLocalNamespace})
 
-		if f.isClosed() {
-			// The frontend this would reach is already going away. A lazy client
-			// skips the capability fetch, so it fails fast instead of the retry
-			// below exhausting and aborting the process partway through shutdown.
-			sdkClient, err := sdkclient.NewLazyClient(options)
-			if err != nil {
-				f.logger.Fatal("error creating sdk client", tag.Error(err))
-			}
-			f.setSystemClient(sdkClient)
-			return
-		}
-
+		var sdkClient sdkclient.Client
 		err := backoff.ThrottleRetry(func() error {
-			sdkClient, err := sdkclient.Dial(options)
-			if err != nil {
-				f.logger.Warn("error creating sdk client", tag.Error(err))
+			// Checked on every attempt because the retry below cannot be
+			// cancelled: a Close landing mid-dial would otherwise keep reaching
+			// for a frontend that is going away until the policy expires, and
+			// then abort the process partway through shutdown. A lazy client
+			// skips the capability fetch, so it fails fast instead.
+			if f.isClosed() {
+				var err error
+				sdkClient, err = sdkclient.NewLazyClient(options)
 				return err
 			}
-			f.setSystemClient(sdkClient)
-			return nil
+
+			var err error
+			sdkClient, err = sdkclient.Dial(options)
+			if err != nil {
+				f.logger.Warn("error creating sdk client", tag.Error(err))
+			}
+			return err
 		}, common.CreateSdkClientFactoryRetryPolicy(), func(err error) bool {
 			// note err is wrapped by sdk
 			var unavail *serviceerror.Unavailable
@@ -176,6 +175,7 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 		if err != nil {
 			f.logger.Fatal("error creating sdk client", tag.Error(err))
 		}
+		f.setSystemClient(sdkClient)
 
 		if size := f.stickyCacheSize(); size > 0 {
 			f.logger.Info("setting sticky workflow cache size", tag.Int("size", size))

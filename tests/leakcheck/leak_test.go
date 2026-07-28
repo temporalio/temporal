@@ -131,6 +131,10 @@ func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck
 			testcore.WithDedicatedCluster(),
 			testcore.WithWorkerService("leak regression test"))
 
+		// Touch the matching client so its connection cache is built, and so its
+		// teardown is exercised rather than skipped.
+		require.NotNil(t, env.MatchingClient())
+
 		env.SdkWorker().RegisterWorkflow(smokeWorkflow)
 		run, err := env.SdkClient().ExecuteWorkflow(
 			context.Background(),

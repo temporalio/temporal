@@ -18,6 +18,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
@@ -516,6 +517,11 @@ func (e *TestEnv) SdkWorker() sdkworker.Worker {
 		})
 	})
 	return e.sdkWorker
+}
+
+// MatchingClient returns the cluster's matching client.
+func (e *TestEnv) MatchingClient() matchingservice.MatchingServiceClient {
+	return e.cluster.MatchingClient()
 }
 
 // WorkerTaskQueue returns the task queue name used by the SDK Worker.

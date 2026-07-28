@@ -45,6 +45,7 @@ func TestRPCFactoryClose_Idempotent(t *testing.T) {
 	f.Close()
 
 	require.Equal(t, connectivity.Shutdown, conn.GetState())
+	require.Nil(t, f.conns, "Close must release the tracked connections")
 }
 
 func TestRPCFactoryClose_ConnDialedAfterCloseIsClosed(t *testing.T) {
