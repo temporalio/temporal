@@ -37,22 +37,32 @@ func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
 		status      activitypb.ActivityExecutionStatus
 		retryPolicy *commonpb.RetryPolicy
 		expected    enumspb.RetryState
+		finalStatus activitypb.ActivityExecutionStatus
 	}{
 		{
-			name:     "retry policy not set",
-			status:   activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			expected: enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+			name:        "retry policy not set",
+			status:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			expected:    enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		},
 		{
-			name:     "retry policy not set takes precedence over cancellation",
-			status:   activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-			expected: enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+			name:        "retry policy not set takes precedence over cancellation",
+			status:      activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			expected:    enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		},
 		{
 			name:        "cancellation requested",
 			status:      activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 			retryPolicy: defaultRetryPolicy,
 			expected:    enumspb.RETRY_STATE_CANCEL_REQUESTED,
+			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		},
+		{
+			name:        "reset requested takes precedence over retry policy not set",
+			status:      activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			expected:    enumspb.RETRY_STATE_IN_PROGRESS,
+			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		},
 	}
 
@@ -79,6 +89,7 @@ func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, retryState)
+			require.Equal(t, tc.finalStatus, activity.GetStatus())
 		})
 	}
 }

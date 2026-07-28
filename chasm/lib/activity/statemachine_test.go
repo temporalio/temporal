@@ -388,6 +388,7 @@ func TestTransitionTimedout(t *testing.T) {
 		name             string
 		startStatus      activitypb.ActivityExecutionStatus
 		timeoutType      enumspb.TimeoutType
+		retryState       enumspb.RetryState
 		attemptCount     int32
 		heartbeatDetails *commonpb.Payloads
 	}{
@@ -395,18 +396,21 @@ func TestTransitionTimedout(t *testing.T) {
 			name:         "schedule to start timeout, never started",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			retryState:   enumspb.RETRY_STATE_TIMEOUT,
 			attemptCount: 1,
 		},
 		{
 			name:         "schedule to close timeout from scheduled, never started",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			retryState:   enumspb.RETRY_STATE_TIMEOUT,
 			attemptCount: 1,
 		},
 		{
 			name:             "schedule to close timeout from started status with heartbeat details",
 			startStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:      enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			retryState:       enumspb.RETRY_STATE_TIMEOUT,
 			attemptCount:     4,
 			heartbeatDetails: payloads.EncodeString("schedule-to-close-heartbeat"),
 		},
@@ -414,6 +418,7 @@ func TestTransitionTimedout(t *testing.T) {
 			name:             "start to close timeout with heartbeat details",
 			startStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:      enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			retryState:       enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			attemptCount:     5,
 			heartbeatDetails: payloads.EncodeString("start-to-close-heartbeat"),
 		},
@@ -421,6 +426,7 @@ func TestTransitionTimedout(t *testing.T) {
 			name:             "heartbeat timeout with heartbeat details",
 			startStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:      enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			retryState:       enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			attemptCount:     2,
 			heartbeatDetails: payloads.EncodeString("heartbeat-details"),
 		},
@@ -428,18 +434,21 @@ func TestTransitionTimedout(t *testing.T) {
 			name:         "heartbeat timeout without heartbeat details",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			retryState:   enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			attemptCount: 2,
 		},
 		{
 			name:         "schedule to close timeout from started status",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			retryState:   enumspb.RETRY_STATE_TIMEOUT,
 			attemptCount: 4,
 		},
 		{
 			name:         "start to close timeout",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			retryState:   enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			attemptCount: 5,
 		},
 	}
@@ -486,14 +495,9 @@ func TestTransitionTimedout(t *testing.T) {
 			counterTaskTimeout.EXPECT().Record(int64(1), timeoutTag).Times(1)
 			metricsHandler.EXPECT().Counter(metrics.ActivityTaskTimeout.Name()).Return(counterTaskTimeout)
 
-			retryState := enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
-			if tc.timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START ||
-				tc.timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE {
-				retryState = enumspb.RETRY_STATE_TIMEOUT
-			}
 			event := timeoutEvent{
 				timeoutType:    tc.timeoutType,
-				retryState:     retryState,
+				retryState:     tc.retryState,
 				metricsHandler: metricsHandler,
 			}
 
@@ -533,8 +537,8 @@ func TestTransitionTimedout(t *testing.T) {
 				t.Fatalf("unexpected timeout type: %v", tc.timeoutType)
 			}
 
-			require.Equal(t, retryState, outcome.GetRetryState())
-			require.Equal(t, retryState, activity.outcome(ctx).GetRetryState())
+			require.Equal(t, tc.retryState, outcome.GetRetryState())
+			require.Equal(t, tc.retryState, activity.outcome(ctx).GetRetryState())
 			require.Empty(t, ctx.Tasks)
 		})
 	}

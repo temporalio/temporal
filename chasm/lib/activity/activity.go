@@ -1373,7 +1373,8 @@ func (a *Activity) tryReschedule(
 	overridingRetryInterval time.Duration,
 	failure *failurepb.Failure,
 ) (enumspb.RetryState, error) {
-	if a.GetRetryPolicy() == nil {
+	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
+	if !resetRequested && a.GetRetryPolicy() == nil {
 		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
 	}
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
@@ -1383,7 +1384,6 @@ func (a *Activity) tryReschedule(
 	if !failureRetryable {
 		retryState = enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
-	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
 	// A pending reset request is always honored, regardless of retryability or the should retry result.
 	if !resetRequested && retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 		return retryState, nil
