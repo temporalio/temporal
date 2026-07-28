@@ -346,13 +346,12 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 				// Parse failure details from Failure.Data, if present. Synthetic
 				// suites (testrunner, ALERTS) already carry curated details, so
 				// leave their Data untouched.
-				hasFailureDetails := preservesFailureType(suite.Name) &&
-					testCase.Failure != nil &&
-					testCase.Failure.Data != ""
-				if !preservesFailureType(suite.Name) && testCase.Failure != nil && testCase.Failure.Data != "" {
-					if details := parseFailureDetails(testCase.Failure.Data); details != noFailureDetails {
+				hasFailureDetails := testCase.Failure != nil && testCase.Failure.Data != ""
+				if hasFailureDetails && !preservesFailureType(suite.Name) {
+					details := parseFailureDetails(testCase.Failure.Data)
+					hasFailureDetails = details != noFailureDetails
+					if hasFailureDetails {
 						testCase.Failure.Data = details
-						hasFailureDetails = true
 					}
 				}
 

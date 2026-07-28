@@ -47,8 +47,7 @@ type attempt struct {
 
 func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	args = a.goTestArgs(args)
-	log.Printf("starting test attempt #%d: %v %v",
-		a.number, "go test", strings.Join(args, " "))
+	log.Printf("starting test attempt #%d: go test %v", a.number, strings.Join(args, " "))
 
 	cmd := exec.CommandContext(ctx, "go", append([]string{"test"}, args...)...)
 	output := newGoTestJSONOutput()
@@ -61,10 +60,9 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	stdout := output.finish() + stderr.String()
 	report, reportErr := output.junitReport()
 	if reportErr != nil {
-		err = errors.Join(err, reportErr)
-	} else {
-		a.junitReport = report
+		return stdout, fmt.Errorf("failed to build junit report from go test output: %w", reportErr)
 	}
+	a.junitReport = report
 	return stdout, err
 }
 

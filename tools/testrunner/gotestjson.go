@@ -44,7 +44,6 @@ type goTestJSONOutput struct {
 	failedTestDetails       map[goTestID]string
 	packages                map[string]struct{}
 	packagesWithFailedTests map[string]struct{}
-	failedPackages          map[string]struct{}
 	tests                   int
 	skipped                 int
 	failures                int
@@ -63,7 +62,6 @@ func newGoTestJSONOutput() *goTestJSONOutput {
 		failedTestDetails:       make(map[goTestID]string),
 		packages:                make(map[string]struct{}),
 		packagesWithFailedTests: make(map[string]struct{}),
-		failedPackages:          make(map[string]struct{}),
 		stdout:                  os.Stdout,
 	}
 }
@@ -165,7 +163,6 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 			o.packages[event.Package] = struct{}{}
 			o.elapsed = max(o.elapsed, event.Elapsed)
 			if event.Action == "fail" {
-				o.failedPackages[event.Package] = struct{}{}
 				if _, ok := o.packagesWithFailedTests[event.Package]; !ok {
 					o.failures++
 				}
@@ -321,6 +318,9 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 	var abortedPackages []packageAbort
 	for i := range report.Packages {
 		pkg := &report.Packages[i]
+		if pkg.Name == "" {
+			pkg.Name = o.packageNameForTests(pkg.Tests)
+		}
 		var incompleteTests []gtr.Test
 		tests := pkg.Tests
 		pkg.Tests = tests[:0]
@@ -334,7 +334,7 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 					test.Output = strings.Split(details, "\n")
 				}
 				pkg.Tests = append(pkg.Tests, test)
-			} else if _, ok := o.failedPackages[pkg.Name]; ok {
+			} else {
 				incompleteTests = append(incompleteTests, test)
 			}
 		}
@@ -354,6 +354,33 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		)
 	}
 	return junitReport, nil
+}
+
+func (o *goTestJSONOutput) packageNameForTests(tests []gtr.Test) string {
+	var candidates map[string]struct{}
+	for _, test := range tests {
+		testCandidates := make(map[string]struct{})
+		for _, id := range o.testOutputOrder {
+			if id.testName == test.Name {
+				testCandidates[id.packageName] = struct{}{}
+			}
+		}
+		if candidates == nil {
+			candidates = testCandidates
+			continue
+		}
+		for packageName := range candidates {
+			if _, ok := testCandidates[packageName]; !ok {
+				delete(candidates, packageName)
+			}
+		}
+	}
+	if len(candidates) == 1 {
+		for packageName := range candidates {
+			return packageName
+		}
+	}
+	return ""
 }
 
 // packageAbortDetails summarizes a package that exited before its incomplete

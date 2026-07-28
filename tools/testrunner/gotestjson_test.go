@@ -451,9 +451,54 @@ DONE 0 tests, 1 failure in 1.000s
 			},
 		},
 		{
+			name: "hard-killed package",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== RUN   TestIncomplete\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== PAUSE TestIncomplete\n"}
+{"Action":"pause","Package":"example.com/tests","Test":"TestIncomplete"}
+`,
+			expectedOutput: `=== RUN   TestIncomplete
+=== PAUSE TestIncomplete
+
+DONE 0 tests in 0.000s
+`,
+			expectedReport: &junitReport{
+				Testsuites: junit.Testsuites{
+					Tests:    1,
+					Failures: 1,
+					Suites: []junit.Testsuite{
+						{
+							Name: "example.com/tests",
+							ID:   0,
+							Time: "0.000",
+						},
+						{
+							Name:     testrunnerSuiteName,
+							Tests:    1,
+							Failures: 1,
+							Testcases: []junit.Testcase{
+								{
+									Name: "testrunner.PackageAborted: example.com/tests",
+									Failure: &junit.Result{
+										Message: string(failureTypeAborted),
+										Type:    string(failureTypeAborted),
+										Data:    "package example.com/tests aborted; 1 test node had no final result, and others may not have started",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name: "completed tests and build failure",
-			input: `{"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== RUN   TestIncomplete\n"}
 {"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"incomplete\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== PAUSE TestIncomplete\n"}
 {"Action":"pause","Package":"example.com/tests","Test":"TestIncomplete"}
 {"Action":"run","Package":"example.com/tests","Test":"TestFail"}
 {"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"=== RUN   TestFail\n"}
@@ -474,15 +519,17 @@ DONE 0 tests, 1 failure in 1.000s
 # example.com/broken [example.com/broken.test]
 broken.go:1: compile error
 FAIL	example.com/broken [build failed]
+=== RUN   TestIncomplete
 incomplete
+=== PAUSE TestIncomplete
 
 DONE 1 tests, 2 failures, 1 error in 0.010s
 `,
 			expectedReport: &junitReport{
 				Testsuites: junit.Testsuites{
-					Tests:    2,
+					Tests:    3,
 					Errors:   1,
-					Failures: 1,
+					Failures: 2,
 					Suites: []junit.Testsuite{
 						{
 							Name:   "example.com/broken",
@@ -503,6 +550,7 @@ DONE 1 tests, 2 failures, 1 error in 0.010s
 							},
 						},
 						{
+							Name:     "example.com/tests",
 							Tests:    1,
 							Failures: 1,
 							ID:       1,
@@ -510,15 +558,30 @@ DONE 1 tests, 2 failures, 1 error in 0.010s
 							Testcases: []junit.Testcase{
 								{
 									Name:      "TestFail",
-									Classname: "",
+									Classname: "example.com/tests",
 									Time:      "0.010",
 									Failure: &junit.Result{
 										Message: "Failed",
-										Data:    "    test.go:1: failed",
+										Data: "    test.go:1: failed\n" +
+											"--- FAIL: TestFail (0.01s)",
 									},
 								},
 							},
-							SystemOut: &junit.Output{Data: "incomplete"},
+						},
+						{
+							Name:     testrunnerSuiteName,
+							Tests:    1,
+							Failures: 1,
+							Testcases: []junit.Testcase{
+								{
+									Name: "testrunner.PackageAborted: example.com/tests",
+									Failure: &junit.Result{
+										Message: string(failureTypeAborted),
+										Type:    string(failureTypeAborted),
+										Data:    "package example.com/tests aborted; 1 test node had no final result, and others may not have started",
+									},
+								},
+							},
 						},
 					},
 				},
