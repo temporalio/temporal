@@ -200,8 +200,11 @@ func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 // is none.
 func (a *saaHandle) terminalCause(t require.TestingT) failureCause {
 	a.terminalStatus(t)
-	cause := a.describe(t).GetOutcome().GetFailure().GetCause()
-	return failureCause{Type: cause.GetApplicationFailureInfo().GetType(), Message: cause.GetMessage()}
+	return causeOf(a.describe(t).GetOutcome().GetFailure())
+}
+
+func (a *saaHandle) lastFailureCause(t require.TestingT) failureCause {
+	return causeOf(a.describe(t).GetInfo().GetLastFailure())
 }
 
 func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {

@@ -235,6 +235,12 @@ func (a *wfaHandle) terminalCause(_ require.TestingT) failureCause {
 	return failureCause{}
 }
 
+func (a *wfaHandle) lastFailureCause(t require.TestingT) failureCause {
+	pendingActivity := a.pendingActivityInfo(t)
+	require.NotNil(t, pendingActivity)
+	return causeOf(pendingActivity.GetLastFailure())
+}
+
 // activityInfoIfInProgress returns the shared activity projection and whether the activity still has
 // a nonterminal execution.
 func (a *wfaHandle) activityInfoIfInProgress(t require.TestingT) (activityInfo, bool) {

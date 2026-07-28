@@ -155,6 +155,30 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 	})
 }
 
+// A retried timeout replaces the prior attempt's failure instead of chaining it, keeping the stored
+// failure bounded across retries.
+func (s *activityParityTestSuite) TestRetriedTimeoutDoesNotChainPriorFailure() {
+	env := newActivityParityEnv(s.T())
+	for _, timeout := range []model.Event{model.StartToCloseElapses, model.HeartbeatElapses} {
+		s.Run(timeout.Type.String(), func(s *activityParityTestSuite) {
+			cfg := activityConfig{MaxAttempts: 3}
+			trace := []model.Event{
+				model.Poll,
+				model.FailRetryably,
+				model.BackoffElapses,
+				model.Poll,
+				timeout,
+			}
+			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+				s.Require().Empty(newWFADriver(s.T(), env, cfg).driveTrace(s.T(), trace).lastFailureCause(s.T()))
+			})
+			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+				s.Require().Empty(newSAADriver(s.T(), env, cfg).driveTrace(s.T(), trace).lastFailureCause(s.T()))
+			})
+		})
+	}
+}
+
 // current_retry_interval and next_attempt_schedule_time are reported while a retry is backing off
 // (before it is dispatched to Matching), and for next_attempt_schedule_time also during start delay
 // (SAA only). Once the attempt is dispatched, or while the activity is paused, both are nil.

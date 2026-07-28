@@ -129,10 +129,15 @@ type activityInfo struct {
 	NextAttemptScheduleTimeSet bool
 }
 
-// failureCause is the Type and Message of the failure a terminal outcome chains as its Cause.
+// failureCause is the Type and Message of a failure's Cause.
 type failureCause struct {
 	Type    string
 	Message string
+}
+
+func causeOf(failure *failurepb.Failure) failureCause {
+	cause := failure.GetCause()
+	return failureCause{Type: cause.GetApplicationFailureInfo().GetType(), Message: cause.GetMessage()}
 }
 
 // activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
