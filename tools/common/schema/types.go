@@ -61,6 +61,11 @@ const (
 	CLIOptUser = "user"
 	// CLIOptPassword is the cli option for password
 	CLIOptPassword = "password"
+	// CLIOptPasswordFile is the cli option for reading the password from a
+	// file path. Useful for defense-in-depth: a value passed via --password
+	// or $SQL_PASSWORD is visible in the host's process table; a file path
+	// is not. See #10028.
+	CLIOptPasswordFile = "password-file"
 	// CLIOptAuthenticator is the cli option for allowed authenticator settings
 	CLIOptAllowedAuthenticators = "allowed-authenticators"
 	// CLIOptTimeout is the cli option for timeout
@@ -112,6 +117,8 @@ const (
 	CLIFlagUser = CLIOptUser + ", u"
 	// CLIFlagPassword is the cli flag for password
 	CLIFlagPassword = CLIOptPassword + ", pw"
+	// CLIFlagPasswordFile is the cli flag for password-file (alias: pwf)
+	CLIFlagPasswordFile = CLIOptPasswordFile + ", pwf"
 	// CLIFlagAllowedAuthenticators is the cli flag for allowed authenticators
 	CLIFlagAllowedAuthenticators = CLIOptAllowedAuthenticators + ", aa"
 	// CLIFlagTimeout is the cli flag for timeout
