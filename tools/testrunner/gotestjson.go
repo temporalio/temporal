@@ -293,7 +293,7 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		if len(incompleteTests) > 0 {
 			abortedPackages = append(abortedPackages, packageAbort{
 				packageName: pkg.Name,
-				details:     packageAbortDetails(pkg.Name, pkg.Output, incompleteTests),
+				details:     packageAbortDetails(pkg.Name, incompleteTests),
 			})
 		}
 	}
@@ -309,30 +309,11 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 }
 
 // packageAbortDetails summarizes a package that exited before its incomplete
-// tests produced terminal results. The parser has already stripped framing and
-// passed-test chatter, so the output here is limited to the incomplete tests'
-// own lines and the package-level output (e.g. a fatal infra error).
-func packageAbortDetails(packageName string, packageOutput []string, incompleteTests []gtr.Test) string {
-	details := fmt.Sprintf(
-		"package %s exited before %d tests produced terminal results",
+// tests produced terminal results.
+func packageAbortDetails(packageName string, incompleteTests []gtr.Test) string {
+	return sanitizeXML(fmt.Sprintf(
+		"package %s exited with %d started test nodes lacking terminal results; additional tests may not have started",
 		packageName,
 		len(incompleteTests),
-	)
-	var recent strings.Builder
-	// Package-level output holds the actual abort reason (fatal error, panic),
-	// so emit it first; the incomplete tests' own logs follow as context.
-	for _, line := range packageOutput {
-		recent.WriteString(line)
-		recent.WriteByte('\n')
-	}
-	for _, test := range incompleteTests {
-		for _, line := range test.Output {
-			recent.WriteString(line)
-			recent.WriteByte('\n')
-		}
-	}
-	if recent.Len() > 0 {
-		details += "\n\nRecent package output:\n" + recent.String()
-	}
-	return truncateAlertDetails(sanitizeXML(details))
+	))
 }

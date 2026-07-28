@@ -372,10 +372,7 @@ DONE 0 tests, 1 failure in 1.000s
 									Failure: &junit.Result{
 										Message: string(failureTypeAborted),
 										Type:    string(failureTypeAborted),
-										Data: "package example.com/tests exited before 1 tests produced terminal results\n\n" +
-											"Recent package output:\n" +
-											"fatal LoadSchema: gocql: no response received from cassandra within timeout period\n" +
-											"unfinished\n",
+										Data:    "package example.com/tests exited with 1 started test nodes lacking terminal results; additional tests may not have started",
 									},
 								},
 							},
