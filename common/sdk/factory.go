@@ -150,18 +150,18 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 
 		var sdkClient sdkclient.Client
 		err := backoff.ThrottleRetry(func() error {
-			// Checked on every attempt because the retry below cannot be
-			// cancelled: a Close landing mid-dial would otherwise keep reaching
-			// for a frontend that is going away until the policy expires, and
-			// then abort the process partway through shutdown. A lazy client
-			// skips the capability fetch, so it fails fast instead.
+			var err error
+
+			// Checked on every attempt because this retry cannot be cancelled: a
+			// Close landing mid-dial would otherwise keep reaching for a frontend
+			// that is going away until the policy expires, and then abort the
+			// process partway through shutdown. A lazy client skips the
+			// capability fetch, so it fails fast instead.
 			if f.isClosed() {
-				var err error
 				sdkClient, err = sdkclient.NewLazyClient(options)
 				return err
 			}
 
-			var err error
 			sdkClient, err = sdkclient.Dial(options)
 			if err != nil {
 				f.logger.Warn("error creating sdk client", tag.Error(err))

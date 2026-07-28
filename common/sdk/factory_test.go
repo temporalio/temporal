@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/goleak"
@@ -21,6 +22,16 @@ import (
 
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
+}
+
+// deadAddress returns an address nothing is listening on.
+func deadAddress(t *testing.T) string {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	require.NoError(t, listener.Close())
+	return listener.Addr().String()
 }
 
 func newFactory(hostPort string, logger log.Logger) *clientFactory {
@@ -183,12 +194,7 @@ func TestNewClient_DoesNotRaceClose(t *testing.T) {
 func TestGetSystemClient_AfterCloseDoesNotDial(t *testing.T) {
 	t.Parallel()
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	deadAddr := listener.Addr().String()
-	require.NoError(t, listener.Close())
-
-	f := newFactory(deadAddr, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	f := newFactory(deadAddress(t), testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
 	f.Close()
 
 	got := make(chan sdkclient.Client, 1)
@@ -199,5 +205,31 @@ func TestGetSystemClient_AfterCloseDoesNotDial(t *testing.T) {
 		require.NotNil(t, client)
 	case <-time.After(10 * time.Second):
 		t.Fatal("GetSystemClient on a closed factory must not dial")
+	}
+}
+
+// The retry around the dial cannot be cancelled, so the shutdown check has to run
+// on every attempt: a Close landing after the first attempt must still stop the
+// factory reaching for a frontend that is going away.
+func TestGetSystemClient_CloseDuringDialStopsRetrying(t *testing.T) {
+	t.Parallel()
+
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	dialFailed := logger.Expect(testlogger.Warn, "error creating sdk client")
+	f := newFactory(deadAddress(t), logger)
+
+	got := make(chan sdkclient.Client, 1)
+	go func() { got <- f.GetSystemClient() }()
+
+	// Only close once an attempt has already failed, so the check under test is
+	// the one inside the retry rather than the one before it.
+	await.RequireTrue(t, dialFailed.Matched, 10*time.Second, 10*time.Millisecond)
+	f.Close()
+
+	select {
+	case client := <-got:
+		require.NotNil(t, client)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close during a dial must stop the factory retrying")
 	}
 }
