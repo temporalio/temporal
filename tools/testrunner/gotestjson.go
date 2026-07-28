@@ -84,8 +84,11 @@ func (o *goTestJSONOutput) finish() string {
 	}
 	for _, test := range o.testOutputOrder {
 		// A package abort leaves scheduler framing buffered for every unfinished
-		// test. Only surface buffers that contain diagnostic output.
-		o.flushTestOutput(test, hasGoTestDiagnosticOutput(o.testOutputs[test]))
+		// test. Surface high-priority alerts without presenting ordinary output
+		// from unfinished tests as live failures, and preserve the full buffers
+		// for reports.
+		o.writeIncompleteTestAlerts(o.testOutputs[test])
+		o.flushTestOutput(test, false)
 	}
 	o.writeSummary()
 	return o.output.String()
@@ -267,6 +270,15 @@ func (o *goTestJSONOutput) flushTestOutput(test goTestID, show bool) {
 func (o *goTestJSONOutput) writeOutput(output string) {
 	_, _ = fmt.Fprint(o.stdout, output)
 	o.output.WriteString(output)
+}
+
+func (o *goTestJSONOutput) writeIncompleteTestAlerts(output *strings.Builder) {
+	if output == nil {
+		return
+	}
+	for _, alert := range parseAlerts(output.String()) {
+		_, _ = fmt.Fprintln(o.stdout, strings.TrimRight(alert.Details, "\n"))
+	}
 }
 
 func (o *goTestJSONOutput) decodeLine(line string, event *goTestEvent) error {

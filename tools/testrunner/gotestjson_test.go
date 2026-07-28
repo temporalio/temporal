@@ -104,7 +104,27 @@ DONE 0 tests, 1 failure in 0.100s
 `,
 		},
 		{
-			name: "shows incomplete test diagnostics on stdout",
+			name: "shows incomplete test alerts on stdout",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== RUN   TestIncomplete\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"panic: setup failed\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"goroutine 1 [running]:\n"}
+{"Action":"fail","Package":"example.com/tests","Elapsed":0.1}
+`,
+			expectedOutput: `=== RUN   TestIncomplete
+panic: setup failed
+goroutine 1 [running]:
+
+DONE 0 tests, 1 failure in 0.100s
+`,
+			expectedStdout: `panic: setup failed
+goroutine 1 [running]:
+
+DONE 0 tests, 1 failure in 0.100s
+`,
+		},
+		{
+			name: "hides incomplete test diagnostics from stdout",
 			input: `{"Action":"start","Package":"example.com/tests"}
 {"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== RUN   TestIncomplete\n"}
 {"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"    test.go:10: setup failed\n"}
@@ -121,9 +141,6 @@ DONE 0 tests, 1 failure in 0.100s
 DONE 0 tests, 1 failure in 0.100s
 `,
 			expectedStdout: `fatal package error
-=== RUN   TestIncomplete
-    test.go:10: setup failed
-=== PAUSE TestIncomplete
 
 DONE 0 tests, 1 failure in 0.100s
 `,
