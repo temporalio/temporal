@@ -645,8 +645,16 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		}
 	}
 
+	// When the workflow id is reused verbatim across actions (keep_original_workflow_id,
+	// with no timestamp appended), REJECT_DUPLICATE would reject every action after the
+	// first one, since a closed run with that id always exists. Those schedules fall back
+	// to ALLOW_DUPLICATE and rely on RequestId for start deduplication instead.
+	//
+	// The check compares against the action's base workflow id rather than re-deriving
+	// the policy, so it stays correct for starts that were buffered before a schedule
+	// update flipped keep_original_workflow_id.
 	reusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
-	if start.Manual {
+	if start.Manual || start.WorkflowId == scheduler.WorkflowID() {
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 

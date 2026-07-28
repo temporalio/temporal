@@ -115,6 +115,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
 
+	// Whether started workflows get the nominal timestamp appended to their workflow ID.
+	// Constant for the whole range: both inputs are fixed per invocation.
+	appendTimestamp := legacyscheduler.AppendsTimestamp(
+		overlapPolicy,
+		scheduler.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId(),
+	)
+
 	// lastAction is used to set the high water mark for future ProcessTimeRange
 	// invocations. The code below will set a "last action" even when none is taken,
 	// simply to indicate that processing can permanently skip that period of time
@@ -179,7 +186,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
-			WorkflowId:    schedulerinternal.GenerateWorkflowID(workflowID, next.Nominal),
+			WorkflowId:    schedulerinternal.GenerateWorkflowID(workflowID, next.Nominal, appendTimestamp),
 		})
 
 		if limit != nil {

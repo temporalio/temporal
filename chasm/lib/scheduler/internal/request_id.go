@@ -43,7 +43,14 @@ func GenerateRequestID(
 
 // GenerateWorkflowID generates a deterministic workflow ID for a buffered
 // action by combining the base workflow ID with the truncated nominal time.
-func GenerateWorkflowID(baseWorkflowID string, nominalTime time.Time) string {
+//
+// When appendTimestamp is false (the schedule set keep_original_workflow_id and the
+// action's overlap policy permits it), the base workflow ID is used verbatim, so every
+// action of the schedule reuses the same workflow ID.
+func GenerateWorkflowID(baseWorkflowID string, nominalTime time.Time, appendTimestamp bool) string {
+	if !appendTimestamp {
+		return baseWorkflowID
+	}
 	nominalTimeSec := nominalTime.Truncate(time.Second)
 	return fmt.Sprintf("%s-%s", baseWorkflowID, nominalTimeSec.UTC().Format(time.RFC3339))
 }

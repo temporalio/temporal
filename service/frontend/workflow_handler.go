@@ -3847,7 +3847,11 @@ func (wh *WorkflowHandler) CreateSchedule(
 		return nil, err
 	}
 
-	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
+	if err = wh.validateStartWorkflowArgsForSchedule(
+		namespaceName,
+		request.GetSchedule().GetAction().GetStartWorkflow(),
+		request.GetSchedule().GetPolicies(),
+	); err != nil {
 		return nil, err
 	}
 
@@ -3920,12 +3924,20 @@ func isSchedulerErrorLegacyRoutable(err error) bool {
 func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	namespaceName namespace.Name,
 	startWorkflow *workflowpb.NewWorkflowExecutionInfo,
+	policies *schedulepb.SchedulePolicies,
 ) error {
 	if startWorkflow == nil {
 		return nil
 	}
 
-	if err := wh.validator.ValidateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
+	// Validate the workflow id at the length it will actually be started with: the
+	// scheduler appends a timestamp unless the schedule opted out via
+	// keep_original_workflow_id.
+	workflowIDForValidation := startWorkflow.WorkflowId
+	if scheduler.AppendsTimestamp(policies.GetOverlapPolicy(), policies.GetKeepOriginalWorkflowId()) {
+		workflowIDForValidation += scheduler.AppendedTimestampForValidation
+	}
+	if err := wh.validator.ValidateWorkflowID(workflowIDForValidation); err != nil {
 		return err
 	}
 
@@ -4640,6 +4652,7 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	if err := wh.validateStartWorkflowArgsForSchedule(
 		namespaceName,
 		request.GetSchedule().GetAction().GetStartWorkflow(),
+		request.GetSchedule().GetPolicies(),
 	); err != nil {
 		return nil, err
 	}
