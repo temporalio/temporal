@@ -177,7 +177,11 @@ func TestExecuteTask_Basic(t *testing.T) {
 }
 
 func TestExecuteTask_ForwardsVersioningOverride(t *testing.T) {
+	// The CHASM invoker builds its own frontend request from persisted schedule
+	// state, so exercise that boundary independently from the V1 scheduler.
 	env := newInvokerExecuteTestEnv(t)
+	// A pinned target makes a dropped VersioningOverride distinguishable from the
+	// normal task-queue routing behavior.
 	versioningOverride := &workflowpb.VersioningOverride{
 		Override: &workflowpb.VersioningOverride_Pinned{
 			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -192,6 +196,7 @@ func TestExecuteTask_ForwardsVersioningOverride(t *testing.T) {
 	env.Scheduler.GetSchedule().GetAction().GetStartWorkflow().VersioningOverride = versioningOverride
 	startTime := timestamppb.New(env.TimeSource.Now())
 
+	// Capture the frontend request emitted when the invoker dispatches the buffered start.
 	env.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
@@ -199,6 +204,7 @@ func TestExecuteTask_ForwardsVersioningOverride(t *testing.T) {
 			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
 		})
 
+	// A ready buffered start drives the invoker through its normal dispatch path.
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts: []*schedulespb.BufferedStart{{
 			NominalTime:   startTime,

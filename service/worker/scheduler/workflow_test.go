@@ -314,7 +314,8 @@ func (s *workflowSuite) runAcrossContinue(
 }
 
 func (s *workflowSuite) TestStart() {
-	// written using low-level mocks so we can test all fields in the start request
+	// Use the activity boundary to verify that schedule action fields survive V1's
+	// manual StartWorkflowExecutionRequest construction.
 
 	userMetadata := &sdkpb.UserMetadata{
 		Summary: &commonpb.Payload{
@@ -328,6 +329,8 @@ func (s *workflowSuite) TestStart() {
 	}
 	action := s.defaultAction("myid")
 	action.Action.(*schedulepb.ScheduleAction_StartWorkflow).StartWorkflow.UserMetadata = userMetadata
+	// A pinned target makes a dropped VersioningOverride distinguishable from the
+	// normal task-queue routing behavior.
 	versioningOverride := &workflowpb.VersioningOverride{
 		Override: &workflowpb.VersioningOverride_Pinned{
 			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
@@ -341,6 +344,7 @@ func (s *workflowSuite) TestStart() {
 	}
 	action.GetStartWorkflow().VersioningOverride = versioningOverride
 
+	// The local activity receives the exact start request emitted by the scheduler.
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Nil(req.Request.LastCompletionResult)
@@ -353,11 +357,13 @@ func (s *workflowSuite) TestStart() {
 		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById]))
 		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime]))
 		protoassert.ProtoEqual(s.T(), userMetadata, req.Request.GetUserMetadata())
+		// Verify the override crosses the scheduler-to-frontend request boundary.
 		protorequire.ProtoEqual(s.T(), versioningOverride, req.Request.GetVersioningOverride())
 
 		return nil, nil
 	})
 
+	// Run enough workflow iterations to generate and dispatch one scheduled action.
 	s.run(&schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{{
