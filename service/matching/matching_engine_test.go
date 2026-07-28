@@ -6563,7 +6563,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 	t.Run("repeated calls are idempotent", func(t *testing.T) {
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
 		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
