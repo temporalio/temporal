@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -11,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/telemetry"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
@@ -29,16 +32,25 @@ func httpCallerProviderProvider(
 	rpcFactory common.RPCFactory,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
+	propagator propagation.TextMapPropagator,
 ) (HTTPCallerProvider, error) {
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
-	defaultClient := &http.Client{}
+	defaultClient := &http.Client{
+		Transport: telemetry.NewHTTPClientTransport(nil, tracerProvider, propagator),
+	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
-	m := collection.NewOnceMap(func(queuescommon.NamespaceIDAndDestination) HTTPCaller {
+	m := collection.NewOnceMap(func(key queuescommon.NamespaceIDAndDestination) HTTPCaller {
+		namespaceName := key.NamespaceID
+		if ns, err := namespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID)); err == nil {
+			namespaceName = ns.String()
+		}
 		return func(r *http.Request) (*http.Response, error) {
+			telemetry.MarkNexusHTTPRequest(r, namespaceName, "")
 			return routeRequest(r,
 				clusterMetadata,
 				namespaceRegistry,
