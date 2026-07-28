@@ -531,18 +531,27 @@ func TestTransitionTimedout(t *testing.T) {
 // When a per-attempt timeout leaves too little time for another retry, the terminal ScheduleToClose
 // failure must retain the prior attempt's failure even though the per-attempt failure is recorded first.
 func TestTransitionTimedOutRetryWindowExhaustedChainsPriorFailure(t *testing.T) {
+	// StartToClose and Heartbeat are the per-attempt timeouts that can request another retry.
+	// They share this terminal path when the retry cannot fit inside ScheduleToClose.
 	for _, timeoutType := range []enumspb.TimeoutType{
 		enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		enumspb.TIMEOUT_TYPE_HEARTBEAT,
 	} {
 		t.Run(timeoutType.String(), func(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
+
+			// This application failure ended the preceding attempt and caused the current attempt
+			// to be scheduled. It is the useful underlying failure that the caller must receive.
 			priorFailure := &failurepb.Failure{
 				Message: "prior failure",
 				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "AppFailure"},
 				},
 			}
+
+			// Model the current attempt as started, with the preceding attempt's failure still in
+			// LastFailureDetails. TransitionTimedOut must read that failure before recording the
+			// current attempt's timeout in the same field.
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
 					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
@@ -563,6 +572,9 @@ func TestTransitionTimedOutRetryWindowExhaustedChainsPriorFailure(t *testing.T) 
 				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 			}
 
+			// RETRY_STATE_TIMEOUT means the per-attempt timeout fired, but its next retry would
+			// start after the ScheduleToClose deadline. The transition therefore first records the
+			// per-attempt timeout, then closes the activity with a ScheduleToClose failure.
 			require.NoError(t, TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
 				timeoutType:    timeoutType,
 				retryState:     enumspb.RETRY_STATE_TIMEOUT,
@@ -570,6 +582,8 @@ func TestTransitionTimedOutRetryWindowExhaustedChainsPriorFailure(t *testing.T) 
 				fromStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			}))
 
+			// The caller sees ScheduleToClose as the terminal timeout, with the application failure
+			// from the preceding attempt—not the newly recorded per-attempt timeout—as its cause.
 			terminal := activity.terminalFailure(ctx)
 			require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, terminal.GetTimeoutFailureInfo().GetTimeoutType())
 			protorequire.ProtoEqual(t, priorFailure, terminal.GetCause())
