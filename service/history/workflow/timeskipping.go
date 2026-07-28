@@ -158,8 +158,7 @@ func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationp
 
 // propagateTimeSkippingToNextRun propagates both the time-skipping config and state to the next run
 // in the chain of runs(continue-as-new, retry, cron). The config is propagated regardless of whether time
-// skipping is actively running or what config.enabled is set to, so the latest run always reflects
-// the configuration most recently set by the customer.
+// skipping is actively running, so reading APIs can always retrieve the latest effective configuration from the current run.
 func propagateTimeSkippingToNextRun(
 	source *persistencespb.WorkflowExecutionInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
@@ -168,40 +167,27 @@ func propagateTimeSkippingToNextRun(
 	if tsi == nil {
 		return nil, nil
 	}
-	util := NewTimeSkippingInfoUtil(tsi)
 
+	// if there is tsi, propagate everything thru the chain of runs
+	util := NewTimeSkippingInfoUtil(tsi)
 	var newTSC *commonpb.TimeSkippingConfig
 	if tsi.Config != nil {
 		newTSC = common.CloneProto(tsi.GetConfig())
 	}
-
-	// state propagation (virtual time, fast forward, skip count)
 	stateProp := &commonpb.TimeSkippingStatePropagation{
-		InitialSkipCount: tsi.GetSessionSkipCount(),
-	}
-	if accum := util.GetAccumulatedSkippedDuration(); accum > 0 {
-		stateProp.InitialSkippedDuration = durationpb.New(accum)
-	}
-	// Propagate the fast-forward target regardless of whether it has been reached, so a poller on
-	// the next run can still observe a completed fast-forward. The receiving run reconstructs the
-	// completion status from the target via applyFastForward.
-	if ffTarget := util.GetFastForwardTargetTime(); ffTarget != nil {
-		stateProp.FastForwardTargetTime = ffTarget
+		InitialSkipCount:       tsi.GetSessionSkipCount(),
+		InitialSkippedDuration: durationpb.New(util.GetAccumulatedSkippedDuration()),
+		FastForwardTargetTime:  util.GetFastForwardTargetTime(),
 	}
 	return newTSC, stateProp
 }
 
-// propagateTimeSkippingToChild snapshots the parent's time skipping into a child workflow, a fresh
-// execution that shares the parent's virtual clock. Three independent rules:
-//  1. Virtual time always propagates: the child's start time is shifted forward by the parent's
-//     accumulated skipped duration. The child starts a fresh skip session (SessionSkipCount 0).
-//  2. Fast-forward is per-execution and is never propagated (neither config nor state).
-//  3. Enabled and MaxSessionSkipCount propagate together, gated by the propagation options: the
-//     parent's DisablePropagation suppresses the config entirely. MaxSessionSkipCount is inherited
-//     because children start internally, bypassing the frontend that populates the default budget,
-//     so inheriting the parent's already-resolved limit avoids a 0 that would disable skipping on
-//     the first skip.
-func propagateTimeSkippingToChild(
+// propagateTimeSkippingToOtherExecution snapshots the current execution's time skipping into another
+// execution (e.g. a child workflow), which shares the current execution's virtual clock. Two rules:
+//  1. State: nothing propagates except virtual time.
+//  2. Config: everything propagates except the fast-forward config, and the whole config can be
+//     suppressed by DisablePropagation.
+func propagateTimeSkippingToOtherExecution(
 	source *persistencespb.WorkflowExecutionInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
 	tsc := source.GetTimeSkippingInfo().GetConfig()
@@ -219,10 +205,10 @@ func propagateTimeSkippingToChild(
 		return nil, stateProp
 	}
 
-	return &commonpb.TimeSkippingConfig{
-		Enabled:             tsc.GetEnabled(),
-		MaxSessionSkipCount: tsc.GetMaxSessionSkipCount(),
-	}, stateProp
+	// Propagate the whole config except the per-execution fast-forward.
+	newTSC := common.CloneProto(tsc)
+	newTSC.FastForwardConfig = nil
+	return newTSC, stateProp
 }
 
 // =============================================================================
