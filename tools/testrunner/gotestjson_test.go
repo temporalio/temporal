@@ -8,8 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGoTestJSONOutput_BuffersTestOutput(t *testing.T) {
-	input := `{"Time":"2026-07-28T00:00:00Z","Action":"start","Package":"example.com/tests"}
+func TestGoTestJSONOutput_Output(t *testing.T) {
+	testCases := []struct {
+		name           string
+		input          string
+		expectedOutput string
+		expectedStdout string // by default, expectedStdout is the same as expectedOutput
+	}{
+		{
+			name: "buffers test output",
+			input: `{"Time":"2026-07-28T00:00:00Z","Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
 {"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"A1\n"}
 {"Action":"run","Package":"example.com/tests","Test":"TestPass"}
@@ -19,88 +27,67 @@ func TestGoTestJSONOutput_BuffersTestOutput(t *testing.T) {
 {"Action":"pass","Package":"example.com/tests","Test":"TestPass"}
 {"Action":"output","Package":"example.com/tests","Output":"package output\n"}
 {"Time":"2026-07-28T00:00:02Z","Action":"fail","Package":"example.com/tests","Elapsed":2}
-`
-	expected := `B1
+`,
+			expectedOutput: `B1
 B2
 package output
 A1
 A2
 
 DONE 1 tests, 1 failure in 2.000s
-`
-
-	output := newGoTestJSONOutput()
-	var stdout bytes.Buffer
-	output.stdout = &stdout
-	_, err := output.Write([]byte(input))
-	require.NoError(t, err)
-	require.Equal(t, expected, output.String())
-	require.Equal(t, expected, stdout.String())
-}
-
-func TestGoTestJSONOutput_BenchmarkOutput(t *testing.T) {
-	input := `{"Action":"start","Package":"example.com/tests"}
+`,
+		},
+		{
+			name: "benchmark output",
+			input: `{"Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"BenchmarkExample"}
 {"Action":"output","Package":"example.com/tests","Test":"BenchmarkExample","Output":"benchmark log\n"}
 {"Action":"bench","Package":"example.com/tests","Test":"BenchmarkExample","Output":"BenchmarkExample-12  1  100 ns/op\n"}
 {"Action":"pass","Package":"example.com/tests","Elapsed":0.1}
-`
-	expected := `benchmark log
+`,
+			expectedOutput: `benchmark log
 BenchmarkExample-12  1  100 ns/op
 
 DONE 0 tests in 0.100s
-`
-
-	output := newGoTestJSONOutput()
-	output.stdout = &bytes.Buffer{}
-	_, err := output.Write([]byte(input))
-	require.NoError(t, err)
-	require.Equal(t, expected, output.String())
-}
-
-func TestGoTestJSONOutput_HidesSkippedOutput(t *testing.T) {
-	input := `{"Action":"start","Package":"example.com/tests"}
+`,
+		},
+		{
+			name: "hides skipped output",
+			input: `{"Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestSkip"}
 {"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"=== RUN   TestSkip\n"}
 {"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"skip reason\n"}
 {"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"--- SKIP: TestSkip (0.00s)\n"}
 {"Action":"skip","Package":"example.com/tests","Test":"TestSkip"}
 {"Action":"pass","Package":"example.com/tests","Elapsed":0.1}
-`
-	expectedDebug := `=== RUN   TestSkip
+`,
+			expectedOutput: `=== RUN   TestSkip
 skip reason
 --- SKIP: TestSkip (0.00s)
 
 DONE 1 tests, 1 skipped in 0.100s
-`
-	expectedLiveOutput := `
+`,
+			expectedStdout: `
 DONE 1 tests, 1 skipped in 0.100s
-`
+`,
+		},
+	}
 
-	output := newGoTestJSONOutput()
-	var stdout bytes.Buffer
-	output.stdout = &stdout
-	_, err := output.Write([]byte(input))
-	require.NoError(t, err)
-	require.Equal(t, expectedDebug, output.String())
-	require.Equal(t, expectedLiveOutput, stdout.String())
-}
-
-func TestGoTestJSONOutput_AbortedPackage(t *testing.T) {
-	input := `{"Time":"2026-07-28T00:00:00Z","Action":"start","Package":"example.com/tests"}
-{"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
-{"Time":"2026-07-28T00:00:01Z","Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"unfinished\n"}
-`
-	expected := `unfinished
-
-DONE 0 tests in 1.000s
-`
-
-	output := newGoTestJSONOutput()
-	output.stdout = &bytes.Buffer{}
-	_, err := output.Write([]byte(input))
-	require.NoError(t, err)
-	require.Equal(t, expected, output.String())
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := newGoTestJSONOutput()
+			var stdout bytes.Buffer
+			output.stdout = &stdout
+			_, err := output.Write([]byte(tc.input))
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedOutput, output.String())
+			expectedStdout := tc.expectedStdout
+			if expectedStdout == "" {
+				expectedStdout = tc.expectedOutput
+			}
+			require.Equal(t, expectedStdout, stdout.String())
+		})
+	}
 }
 
 func TestGoTestJSONOutput_ChunkedWrites(t *testing.T) {
@@ -235,7 +222,71 @@ DONE 0 tests, 1 failure, 2 errors in 0.100s
 }
 
 func TestGoTestJSONOutput_GeneratesReport(t *testing.T) {
-	input := `{"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
+	testCases := []struct {
+		name           string
+		input          string
+		expectedOutput string
+		expectedReport *junitReport
+	}{
+		{
+			name: "aborted package",
+			input: `{"Time":"2026-07-28T00:00:00Z","Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== RUN   TestIncomplete\n"}
+{"Time":"2026-07-28T00:00:01Z","Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"unfinished\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"=== PAUSE TestIncomplete\n"}
+{"Action":"pause","Package":"example.com/tests","Test":"TestIncomplete"}
+{"Action":"output","Package":"example.com/tests","Output":"fatal LoadSchema: gocql: no response received from cassandra within timeout period\n"}
+{"Action":"output","Package":"example.com/tests","Output":"FAIL\texample.com/tests\t1.000s\n"}
+{"Time":"2026-07-28T00:00:01Z","Action":"fail","Package":"example.com/tests","Elapsed":1}
+`,
+			expectedOutput: `fatal LoadSchema: gocql: no response received from cassandra within timeout period
+FAIL	example.com/tests	1.000s
+=== RUN   TestIncomplete
+unfinished
+=== PAUSE TestIncomplete
+
+DONE 0 tests, 1 failure in 1.000s
+`,
+			expectedReport: &junitReport{
+				Testsuites: junit.Testsuites{
+					Tests:    1,
+					Failures: 1,
+					Suites: []junit.Testsuite{
+						{
+							Name:      "example.com/tests",
+							ID:        0,
+							Time:      "1.000",
+							SystemOut: &junit.Output{Data: "fatal LoadSchema: gocql: no response received from cassandra within timeout period"},
+						},
+						{
+							Name:     testrunnerSuiteName,
+							Tests:    1,
+							Failures: 1,
+							Testcases: []junit.Testcase{
+								{
+									Name: "testrunner.PackageAborted: example.com/tests",
+									Failure: &junit.Result{
+										Message: string(failureTypeAborted),
+										Type:    string(failureTypeAborted),
+										Data: "package example.com/tests exited before 1 tests produced terminal results\n\n" +
+											"Recent package output:\n" +
+											"=== RUN   TestIncomplete\n" +
+											"unfinished\n" +
+											"=== PAUSE TestIncomplete\n" +
+											"fatal LoadSchema: gocql: no response received from cassandra within timeout period\n" +
+											"FAIL\texample.com/tests\t1.000s\n",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "completed tests and build failure",
+			input: `{"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
 {"Action":"output","Package":"example.com/tests","Test":"TestIncomplete","Output":"incomplete\n"}
 {"Action":"pause","Package":"example.com/tests","Test":"TestIncomplete"}
 {"Action":"run","Package":"example.com/tests","Test":"TestFail"}
@@ -250,62 +301,79 @@ func TestGoTestJSONOutput_GeneratesReport(t *testing.T) {
 {"Action":"start","Package":"example.com/broken"}
 {"Action":"output","Package":"example.com/broken","Output":"FAIL\texample.com/broken [build failed]\n"}
 {"Action":"fail","Package":"example.com/broken","FailedBuild":"example.com/broken [example.com/broken.test]"}
-`
-	expected := &junitReport{
-		Testsuites: junit.Testsuites{
-			Tests:    2,
-			Errors:   1,
-			Failures: 1,
-			Suites: []junit.Testsuite{
-				{
-					Name:   "example.com/broken",
-					Tests:  1,
-					Errors: 1,
-					ID:     0,
-					Time:   "0.000",
-					Testcases: []junit.Testcase{
-						{
-							Name:      "[build failed]",
-							Classname: "example.com/broken",
-							Time:      "0.000",
-							Error: &junit.Result{
-								Message: "Build error",
-								Data:    "broken.go:1: compile error",
-							},
-						},
-					},
-				},
-				{
-					Tests:    1,
+`,
+			expectedOutput: `=== RUN   TestFail
+    test.go:1: failed
+--- FAIL: TestFail (0.01s)
+# example.com/broken [example.com/broken.test]
+broken.go:1: compile error
+FAIL	example.com/broken [build failed]
+incomplete
+
+DONE 1 tests, 2 failures, 1 error in 0.010s
+`,
+			expectedReport: &junitReport{
+				Testsuites: junit.Testsuites{
+					Tests:    2,
+					Errors:   1,
 					Failures: 1,
-					ID:       1,
-					Time:     "0.010",
-					Testcases: []junit.Testcase{
+					Suites: []junit.Testsuite{
 						{
-							Name:      "TestFail",
-							Classname: "",
-							Time:      "0.010",
-							Failure: &junit.Result{
-								Message: "Failed",
-								Data:    "    test.go:1: failed",
+							Name:   "example.com/broken",
+							Tests:  1,
+							Errors: 1,
+							ID:     0,
+							Time:   "0.000",
+							Testcases: []junit.Testcase{
+								{
+									Name:      "[build failed]",
+									Classname: "example.com/broken",
+									Time:      "0.000",
+									Error: &junit.Result{
+										Message: "Build error",
+										Data:    "broken.go:1: compile error",
+									},
+								},
 							},
 						},
+						{
+							Tests:    1,
+							Failures: 1,
+							ID:       1,
+							Time:     "0.010",
+							Testcases: []junit.Testcase{
+								{
+									Name:      "TestFail",
+									Classname: "",
+									Time:      "0.010",
+									Failure: &junit.Result{
+										Message: "Failed",
+										Data:    "    test.go:1: failed",
+									},
+								},
+							},
+							SystemOut: &junit.Output{Data: "incomplete"},
+						},
 					},
-					SystemOut: &junit.Output{Data: "incomplete"},
 				},
 			},
 		},
 	}
 
-	output := newGoTestJSONOutput()
-	output.stdout = &bytes.Buffer{}
-	_, err := output.Write([]byte(input))
-	require.NoError(t, err)
-	report, err := output.junitReport()
-	require.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := newGoTestJSONOutput()
+			output.stdout = &bytes.Buffer{}
+			_, err := output.Write([]byte(tc.input))
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedOutput, output.String())
 
-	for i := range report.Suites {
-		report.Suites[i].Timestamp = ""
+			report, err := output.junitReport()
+			require.NoError(t, err)
+			for i := range report.Suites {
+				report.Suites[i].Timestamp = ""
+			}
+			require.Equal(t, tc.expectedReport, report)
+		})
 	}
-	require.Equal(t, expected, report)
 }

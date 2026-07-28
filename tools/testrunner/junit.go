@@ -25,6 +25,7 @@ type failureType string
 const (
 	// failureTypeFailed marks a failed assertion.
 	failureTypeFailed   failureType = "Failed"
+	failureTypeAborted  failureType = "ABORTED"
 	failureTypeTimeout  failureType = "TIMEOUT"
 	failureTypeCrash    failureType = "CRASH"
 	failureTypeDataRace failureType = "DATA RACE"
@@ -225,10 +226,37 @@ func (j *junitReport) collectTestCases() map[string]struct{} {
 	return cases
 }
 
+func (j *junitReport) hasFailureType(kind failureType) bool {
+	for _, suite := range j.Suites {
+		for _, tc := range suite.Testcases {
+			if tc.Failure != nil && tc.Failure.Type == string(kind) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// missingRerunFailures returns prior-attempt failures that curr failed to
+// re-run. Aborted attempts retry with the same args, so coverage isn't expected.
+func (prev *junitReport) missingRerunFailures(curr *junitReport) []string {
+	if prev.hasFailureType(failureTypeAborted) || curr.hasFailureType(failureTypeAborted) {
+		return nil
+	}
+	currCases := curr.collectTestCases()
+	var missing []string
+	for _, f := range prev.collectTestCaseFailures() {
+		if _, ok := currCases[f]; !ok {
+			missing = append(missing, f)
+		}
+	}
+	return missing
+}
+
 func (j *junitReport) collectTestCaseFailures() []string {
 	var failures []string
 	for _, suite := range j.Suites {
-		if suite.Failures == 0 {
+		if suite.Failures == 0 || preservesFailureType(suite.Name) {
 			continue
 		}
 		for _, tc := range suite.Testcases {
@@ -280,16 +308,7 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			if i == len(reports)-1 {
 				suffix += " (final)"
 			}
-			prevFailures := reports[i-1].collectTestCaseFailures()
-			currCases := report.collectTestCases()
-
-			var missing []string
-			for _, f := range prevFailures {
-				if _, ok := currCases[f]; !ok {
-					missing = append(missing, f)
-				}
-			}
-			if len(missing) > 0 {
+			if missing := reports[i-1].missingRerunFailures(report); len(missing) > 0 {
 				reportingErrs = append(reportingErrs, fmt.Errorf(
 					"expected rerun of all failures from previous attempt, missing: %v", missing))
 			}

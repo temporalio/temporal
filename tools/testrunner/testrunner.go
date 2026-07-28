@@ -383,6 +383,16 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		// attempt but before the next one completes).
 		r.writeCurrentReport()
 
+		// A package abort (e.g. the runner killed mid-run by an infra failure)
+		// leaves tests without terminal results, so we can't narrow the rerun to
+		// specific failures. Retry the whole attempt with the same args instead.
+		if currentAttempt.junitReport.hasFailureType(failureTypeAborted) {
+			if a < r.maxAttempts {
+				log.Print("test package aborted, retrying with previous attempt's args")
+			}
+			continue
+		}
+
 		// If the run completely successfull, no need to retry.
 		if currentAttempt.exitErr == nil {
 			break

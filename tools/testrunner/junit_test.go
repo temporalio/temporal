@@ -216,6 +216,27 @@ func TestMergeReports_PreservesTestrunnerFailureType(t *testing.T) {
 	require.Equal(t, string(failureTypeTimeout), merged.Suites[0].Testcases[0].Failure.Type)
 }
 
+func TestCollectTestCaseFailures_ExcludesSyntheticFailures(t *testing.T) {
+	report := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
+	report.appendSyntheticFailure("testrunner.PackageAborted", failureTypeAborted, "package aborted")
+
+	require.Equal(
+		t,
+		[]string{"TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument"},
+		report.collectTestCaseFailures(),
+	)
+}
+
+func TestMergeReports_SkipsRerunCoverageForAbortedAttempts(t *testing.T) {
+	aborted := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
+	aborted.appendSyntheticFailure("testrunner.PackageAborted", failureTypeAborted, "package aborted")
+	completed := mustReadReportFixture(t, "testdata/junit-empty.xml")
+
+	merged, err := mergeReports([]*junitReport{aborted, completed})
+	require.NoError(t, err)
+	require.Empty(t, merged.reportingErrs)
+}
+
 func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 
