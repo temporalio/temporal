@@ -168,10 +168,10 @@ func (a *saaHandle) activityInfo(t require.TestingT) activityInfo {
 	return saaActivityInfo(a.describe(t).GetInfo())
 }
 
-// terminalStatus waits for the activity to reach a terminal state and reports it.
+// terminalOutcome waits for the activity to reach a terminal state and reports it.
 // PollActivityExecution resolves once the activity is no longer running. An empty response means the
 // server's long-poll window expired, so resubmit.
-func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
+func (a *saaHandle) terminalOutcome(t require.TestingT) activityTerminalOutcome {
 	deadline := time.Now().Add(activityDriverTimeout)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithDeadline(a.d.ctx, deadline)
@@ -188,12 +188,21 @@ func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 			break // the deadline cancelled the long poll
 		}
 		if resp.GetRunId() != "" {
-			return a.describe(t).GetInfo().GetStatus()
+			describeResponse := a.describe(t)
+			return activityTerminalOutcome{
+				status:     describeResponse.GetInfo().GetStatus(),
+				retryState: describeResponse.GetOutcome().GetRetryState(),
+			}
 		}
 	}
-	t.Errorf("the activity did not reach a terminal status within %s of the trace finishing. Last observed: %+v",
-		activityDriverTimeout, a.activityInfo(t))
-	return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
+	require.FailNow(
+		t,
+		"activity did not reach a terminal status",
+		"within %s of the trace finishing; last observed: %+v",
+		activityDriverTimeout,
+		a.activityInfo(t),
+	)
+	return activityTerminalOutcome{}
 }
 
 func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {

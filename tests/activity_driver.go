@@ -137,6 +137,13 @@ type activityInfo struct {
 	LastHeartbeatDetails       []byte
 }
 
+// activityTerminalOutcome is user-visible terminal activity state projected from SAA's
+// ActivityExecutionOutcome and WFA's workflow result.
+type activityTerminalOutcome struct {
+	status     enumspb.ActivityExecutionStatus
+	retryState enumspb.RetryState
+}
+
 // activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
 // poll for, schedule the activity a workflow owns, close an activity the trace has finished with. A
 // wait for a configured window is bounded by that window plus activityDriverTimerMargin instead.
@@ -276,14 +283,22 @@ func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event) {
 // does not within (window + margin).
 func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadline time.Time) {
 	state := a.driverState()
-	want := timeoutType(e)
-	var got activityTimeoutInfo
+	eventTimeoutType := timeoutType(e)
+	var reported activityTimeoutInfo
 	await.Require(state.ctx, t, func(t *await.T) {
-		got = a.timeoutInfo(t)
-		fired := got.timeout == want && (got.terminal || got.attempt > state.startedAttempt)
-		t.Require().Truef(fired,
-			"%s: activity reports timeout %s at attempt %d (terminal=%v), want %s after attempt %d",
-			e, got.timeout, got.attempt, got.terminal, want, state.startedAttempt)
+		reported = a.timeoutInfo(t)
+		// A terminal attempt timeout is reported as schedule-to-close when there is not enough
+		// time remaining to schedule another attempt.
+		attemptTimeoutReportedAsScheduleToClose := reported.terminal &&
+			reported.timeout == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE &&
+			(eventTimeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+				eventTimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT)
+		timeoutEventObserved := reported.timeout == eventTimeoutType ||
+			attemptTimeoutReportedAsScheduleToClose
+		attemptEnded := reported.terminal || reported.attempt > state.startedAttempt
+		t.Require().Truef(timeoutEventObserved && attemptEnded,
+			"%s: activity reports timeout %s at attempt %d (terminal=%v) after timeout event %s on attempt %d",
+			e, reported.timeout, reported.attempt, reported.terminal, eventTimeoutType, state.startedAttempt)
 	}, max(0, time.Until(deadline)), activityDriverPollInterval)
 }
 
