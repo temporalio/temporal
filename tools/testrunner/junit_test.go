@@ -180,6 +180,54 @@ func TestMergeReports_IterationSuffixPreserved(t *testing.T) {
 	require.Equal(t, 2, report.Failures)
 }
 
+func TestMergeReports_PreservesParentWithFailureDetails(t *testing.T) {
+	j := &junitReport{Testsuites: junit.Testsuites{
+		Suites: []junit.Testsuite{{
+			Name: "suite",
+			Testcases: []junit.Testcase{
+				{
+					Name: "TestPropagated",
+					Failure: &junit.Result{
+						Data: "=== RUN   TestPropagated\n--- FAIL: TestPropagated (0.01s)\n",
+					},
+				},
+				{
+					Name: "TestPropagated/Child",
+					Failure: &junit.Result{
+						Data: "    child_test.go:10: assertion failed\n--- FAIL: TestPropagated/Child (0.01s)\n",
+					},
+				},
+				{
+					Name: "TestTimedOut",
+					Failure: &junit.Result{
+						Data: "=== RUN   TestTimedOut\n    context.go:130: test exceeded timeout of 1m30s\n--- FAIL: TestTimedOut (0.01s)\n",
+					},
+				},
+				{Name: "TestTimedOut/Child"},
+			},
+		}},
+	}}
+
+	report, err := mergeReports([]*junitReport{j})
+	require.NoError(t, err)
+
+	testNames := collectTestNames(report.Suites)
+	require.NotContains(t, testNames, "TestPropagated")
+	require.Contains(t, testNames, "TestPropagated/Child")
+	require.Contains(t, testNames, "TestTimedOut")
+	require.Contains(t, testNames, "TestTimedOut/Child")
+
+	var timeoutFailure *junit.Result
+	for _, tc := range report.Suites[0].Testcases {
+		if tc.Name == "TestTimedOut" {
+			timeoutFailure = tc.Failure
+			break
+		}
+	}
+	require.NotNil(t, timeoutFailure)
+	require.Contains(t, timeoutFailure.Data, "test exceeded timeout of 1m30s")
+}
+
 func TestMergeReports_MissingRerun(t *testing.T) {
 	j1 := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
 	j2 := mustReadReportFixture(t, "testdata/junit-empty.xml")

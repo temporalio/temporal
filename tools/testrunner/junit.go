@@ -343,20 +343,26 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			// Collect test cases.
 			for j := range len(suite.Testcases) {
 				testCase := suite.Testcases[j]
-				// Check if this is a parent test case (ie prefix of next subtest).
-				// Use testCase.Name+"/" to avoid matching iteration suffixes like #01.
-				if j != len(suite.Testcases)-1 && strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name+"/") {
-					// Discard test case parents since they provide no value.
-					continue
-				}
-
 				// Parse failure details from Failure.Data, if present. Synthetic
 				// suites (testrunner, ALERTS) already carry curated details, so
 				// leave their Data untouched.
+				hasFailureDetails := preservesFailureType(suite.Name) &&
+					testCase.Failure != nil &&
+					testCase.Failure.Data != ""
 				if !preservesFailureType(suite.Name) && testCase.Failure != nil && testCase.Failure.Data != "" {
 					if details := parseFailureDetails(testCase.Failure.Data); details != noFailureDetails {
 						testCase.Failure.Data = details
+						hasFailureDetails = true
 					}
+				}
+
+				// Check if this is a parent test case (ie prefix of next subtest).
+				// Use testCase.Name+"/" to avoid matching iteration suffixes like #01.
+				isParent := j != len(suite.Testcases)-1 &&
+					strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name+"/")
+				if isParent && !hasFailureDetails {
+					// Discard parent test cases that only propagate a descendant result.
+					continue
 				}
 
 				// Failure.Type carries the canonical kind in merged JUnit.
