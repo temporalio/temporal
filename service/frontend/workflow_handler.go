@@ -3847,11 +3847,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 		return nil, err
 	}
 
-	if err = wh.validateStartWorkflowArgsForSchedule(
-		namespaceName,
-		request.GetSchedule().GetAction().GetStartWorkflow(),
-		request.GetSchedule().GetPolicies(),
-	); err != nil {
+	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
 	}
 
@@ -3924,20 +3920,17 @@ func isSchedulerErrorLegacyRoutable(err error) bool {
 func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	namespaceName namespace.Name,
 	startWorkflow *workflowpb.NewWorkflowExecutionInfo,
-	policies *schedulepb.SchedulePolicies,
 ) error {
 	if startWorkflow == nil {
 		return nil
 	}
 
-	// Validate the workflow id at the length it will actually be started with: the
-	// scheduler appends a timestamp unless the schedule opted out via
-	// keep_original_workflow_id.
-	workflowIDForValidation := startWorkflow.WorkflowId
-	if scheduler.AppendsTimestamp(policies.GetOverlapPolicy(), policies.GetKeepOriginalWorkflowId()) {
-		workflowIDForValidation += scheduler.AppendedTimestampForValidation
-	}
-	if err := wh.validator.ValidateWorkflowID(workflowIDForValidation); err != nil {
+	// Always validate with room for the appended timestamp, even when the schedule set
+	// keep_original_workflow_id. The overlap policy can be overridden per-action, and an
+	// ALLOW_ALL trigger or backfill appends the timestamp regardless of that policy; since
+	// PatchSchedule doesn't revalidate the resulting id, accepting a base id that only
+	// fits without the suffix would defer the failure to StartWorkflowExecution.
+	if err := wh.validator.ValidateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
 		return err
 	}
 
@@ -4652,7 +4645,6 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	if err := wh.validateStartWorkflowArgsForSchedule(
 		namespaceName,
 		request.GetSchedule().GetAction().GetStartWorkflow(),
-		request.GetSchedule().GetPolicies(),
 	); err != nil {
 		return nil, err
 	}

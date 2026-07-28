@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -53,6 +54,16 @@ func GenerateWorkflowID(baseWorkflowID string, nominalTime time.Time, appendTime
 	}
 	nominalTimeSec := nominalTime.Truncate(time.Second)
 	return fmt.Sprintf("%s-%s", baseWorkflowID, nominalTimeSec.UTC().Format(time.RFC3339))
+}
+
+// WorkflowIDHasTimestamp reports whether workflowID was generated with nominalTime
+// appended to it, i.e. whether GenerateWorkflowID was called with appendTimestamp set.
+//
+// This is derived purely from the buffered start's own captured state, so it stays
+// correct when the schedule's action workflow ID or keep_original_workflow_id policy
+// changes after the start was buffered.
+func WorkflowIDHasTimestamp(workflowID string, nominalTime time.Time) bool {
+	return strings.HasSuffix(workflowID, "-"+nominalTime.Truncate(time.Second).UTC().Format(time.RFC3339))
 }
 
 // GenerateBackfillerID generates a unique ID for a Backfiller component.
