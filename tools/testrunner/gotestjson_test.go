@@ -36,6 +36,12 @@ A2
 
 DONE 1 tests, 1 failure in 2.000s
 `,
+			expectedStdout: `package output
+A1
+A2
+
+DONE 1 tests, 1 failure in 2.000s
+`,
 		},
 		{
 			name: "benchmark output",
@@ -109,7 +115,8 @@ func TestGoTestJSONOutput_ChunkedWrites(t *testing.T) {
 DONE 1 tests in 0.100s
 `
 	require.Equal(t, expected, output.String())
-	require.Equal(t, expected, stdout.String())
+	// The passing test's output is hidden from the live console.
+	require.Equal(t, "\nDONE 1 tests in 0.100s\n", stdout.String())
 }
 
 func TestGoTestJSONOutput_MultiplePackages(t *testing.T) {

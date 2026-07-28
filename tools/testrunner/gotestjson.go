@@ -165,9 +165,11 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 		return
 	}
 
+	// Only failing tests stream to the live console; passing and skipped test
+	// output stays in the buffered report but is hidden from the CI logs.
 	o.flushTestOutput(
 		goTestID{packageName: event.Package, testName: event.Test},
-		event.Action != "skip",
+		event.Action == "fail",
 	)
 	o.tests++
 	switch event.Action {
