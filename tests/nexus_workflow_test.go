@@ -652,9 +652,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartsStandaloneActivityBidir
 			input *nexus.LazyValue,
 			options nexus.StartOperationOptions,
 		) (nexus.HandlerStartOperationResult[any], error) {
-			// Build the NexusOperation back-link the SAA should record as its caller.
-			// In chasm mode the caller workflow's identifiers are surfaced to the handler
-			// via options.Links; we mirror them here using the closed-over run.
+			// Build the NexusOperation back-link the SAA should record as its caller,
+			// derived from the closed-over caller workflow run.
 			nexusOpBackLink := &commonpb.Link{
 				Variant: &commonpb.Link_NexusOperation_{
 					NexusOperation: &commonpb.Link_NexusOperation{
@@ -971,18 +970,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 				s.Equal(testClusterInfo.GetClusterId(), options.CallbackHeader.Get("source"))
 			}
 
-			expectedLinkCount := 1
-			if chasmEnabled {
-				expectedLinkCount = 2
-			}
-			s.Len(options.Links, expectedLinkCount)
+			s.Len(options.Links, 1)
 
 			// Verify workflow event link is present
-			workflowEventLinkIdx := slices.IndexFunc(options.Links, func(link nexus.Link) bool {
-				return link.Type == string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName())
-			})
-			s.NotEqual(-1, workflowEventLinkIdx)
-			workflowEventLink, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[workflowEventLinkIdx])
+			workflowEventLink, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[0])
 			s.NoError(err)
 			protorequire.ProtoEqual(s.T(), &commonpb.Link_WorkflowEvent{
 				Namespace:  env.Namespace().String(),
@@ -1001,21 +992,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 					},
 				},
 			}, workflowEventLink)
-
-			// Verify nexus operation link is present
-			if chasmEnabled {
-				nexusOperationLinkIdx := slices.IndexFunc(options.Links, func(link nexus.Link) bool {
-					return link.Type == string((&commonpb.Link_NexusOperation{}).ProtoReflect().Descriptor().FullName())
-				})
-				s.NotEqual(-1, nexusOperationLinkIdx)
-				expectedNexusOperationLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
-					Namespace:   env.Namespace().String(),
-					OperationId: run.GetID(),
-					RunId:       run.GetRunID(),
-				})
-				s.Equal(expectedNexusOperationLink.URL.String(), options.Links[nexusOperationLinkIdx].URL.String())
-				s.Equal(expectedNexusOperationLink.Type, options.Links[nexusOperationLinkIdx].Type)
-			}
 
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackURL = options.CallbackURL

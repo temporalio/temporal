@@ -6,10 +6,10 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	schedulescommon "go.temporal.io/server/common/schedules"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -179,7 +179,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
-			WorkflowId:    schedulescommon.GenerateWorkflowID(workflowID, next.Nominal),
+			WorkflowId:    schedulerinternal.GenerateWorkflowID(workflowID, next.Nominal),
 		})
 
 		if limit != nil {
