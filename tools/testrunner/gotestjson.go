@@ -261,10 +261,24 @@ func (o *goTestJSONOutput) flushTestOutput(test goTestID, show bool) {
 	}
 	output := testOutput.String()
 	if show {
-		_, _ = fmt.Fprint(o.stdout, output)
+		_, _ = fmt.Fprint(o.stdout, goTestLiveOutput(output))
 	}
 	o.output.WriteString(output)
 	delete(o.testOutputs, test)
+}
+
+func goTestLiveOutput(output string) string {
+	var live strings.Builder
+	for line := range strings.Lines(output) {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "=== PAUSE ") ||
+			strings.HasPrefix(trimmed, "=== CONT  ") ||
+			strings.HasPrefix(trimmed, "=== NAME  ") {
+			continue
+		}
+		live.WriteString(line)
+	}
+	return live.String()
 }
 
 func (o *goTestJSONOutput) writeOutput(output string) {

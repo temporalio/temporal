@@ -22,6 +22,9 @@ func TestGoTestJSONOutput_Output(t *testing.T) {
 {"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"=== RUN   TestFail\n"}
 {"Action":"run","Package":"example.com/tests","Test":"TestPass"}
 {"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"=== RUN   TestPass\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"=== PAUSE TestFail\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"=== CONT  TestFail\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"=== NAME  TestFail\n"}
 {"Action":"output","Package":"example.com/tests","Test":"TestFail","Output":"    foo_test.go:10: boom\n"}
 {"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"    pass log\n"}
 {"Action":"output","Package":"example.com/tests","Test":"TestPass","Output":"--- PASS: TestPass (0.00s)\n"}
@@ -35,6 +38,9 @@ func TestGoTestJSONOutput_Output(t *testing.T) {
     pass log
 --- PASS: TestPass (0.00s)
 === RUN   TestFail
+=== PAUSE TestFail
+=== CONT  TestFail
+=== NAME  TestFail
     foo_test.go:10: boom
 --- FAIL: TestFail (0.00s)
 FAIL
