@@ -40,6 +40,7 @@ type Event struct {
 var (
 	Poll                   = Event{Type: PollType}
 	FailRetryably          = Event{Type: RespondFailedType, Retryable: true}
+	FailNonRetryably       = Event{Type: RespondFailedType}
 	RespondCanceled        = Event{Type: RespondCanceledType}
 	RequestCancel          = Event{Type: RequestCancelType}
 	Pause                  = Event{Type: PauseType}
