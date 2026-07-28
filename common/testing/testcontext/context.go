@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/debug"
 	"google.golang.org/grpc/metadata"
 )
@@ -126,10 +127,10 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 		testContexts.Lock()
 		delete(testContexts.byTest, tb)
 		testContexts.Unlock()
-		if err == context.DeadlineExceeded {
-			tb.Errorf("test exceeded timeout of %v", st.timeout)
-		}
 		st.release()
+		if err == context.DeadlineExceeded {
+			require.Failf(tb, "test exceeded timeout", "timeout: %v", st.timeout)
+		}
 	})
 	return st
 }

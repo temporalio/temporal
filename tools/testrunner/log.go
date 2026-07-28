@@ -355,22 +355,22 @@ func normalizedFailureLines(data string) []string {
 
 func findLastAssertionFailureBlock(lines []string) (string, bool) {
 	var failLine string
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
+	for i, rawLine := range slices.Backward(lines) {
+		line := strings.TrimSpace(rawLine)
 		if failLine == "" && strings.HasPrefix(line, goTestFailLinePrefix) {
 			// Keep the final Go test failure line because it carries the test duration.
 			failLine = line
 			continue
 		}
-		if !strings.Contains(lines[i], "Error Trace:") {
+		if !strings.Contains(rawLine, "Error Trace:") {
 			continue
 		}
 
 		// Include the nearest preceding line when present. For testify this is
 		// the file header; for await failures this is the attempt marker.
 		start := i
-		for prev := i - 1; prev >= 0; prev-- {
-			if strings.TrimSpace(lines[prev]) != "" {
+		for prev, prevLine := range slices.Backward(lines[:i]) {
+			if strings.TrimSpace(prevLine) != "" {
 				start = prev
 				break
 			}
@@ -404,8 +404,8 @@ func endOfAssertionBlock(lines []string, start int) int {
 }
 
 func findLastTestOutputFailureBlock(lines []string) (start, end int, ok bool) {
-	for start := len(lines) - 1; start >= 0; start-- {
-		if !isTestOutputLine(lines[start]) {
+	for start, line := range slices.Backward(lines) {
+		if !isTestOutputLine(line) {
 			continue
 		}
 		end := start + 1

@@ -524,6 +524,71 @@ DONE 1 tests, 2 failures, 1 error in 0.010s
 				},
 			},
 		},
+		{
+			name: "buffered parent failure details",
+			input: `{"Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"TestParent"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"=== RUN   TestParent\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"=== PAUSE TestParent\n"}
+{"Action":"pause","Package":"example.com/tests","Test":"TestParent"}
+{"Action":"run","Package":"example.com/tests","Test":"TestParent/Child"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent/Child","Output":"=== RUN   TestParent/Child\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent/Child","Output":"--- PASS: TestParent/Child (0.01s)\n"}
+{"Action":"pass","Package":"example.com/tests","Test":"TestParent/Child","Elapsed":0.01}
+{"Action":"cont","Package":"example.com/tests","Test":"TestParent"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"=== CONT  TestParent\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"    test_env.go:647: Running TestParent in test shard 1/3\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"    context.go:130: test exceeded timeout of 1m30s\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestParent","Output":"--- FAIL: TestParent (0.01s)\n"}
+{"Action":"fail","Package":"example.com/tests","Test":"TestParent","Elapsed":0.01}
+{"Action":"output","Package":"example.com/tests","Output":"FAIL\texample.com/tests\t0.010s\n"}
+{"Action":"fail","Package":"example.com/tests","Elapsed":0.01}
+`,
+			expectedOutput: `=== RUN   TestParent/Child
+--- PASS: TestParent/Child (0.01s)
+=== RUN   TestParent
+=== PAUSE TestParent
+=== CONT  TestParent
+    test_env.go:647: Running TestParent in test shard 1/3
+    context.go:130: test exceeded timeout of 1m30s
+--- FAIL: TestParent (0.01s)
+FAIL	example.com/tests	0.010s
+
+DONE 2 tests, 1 failure in 0.010s
+`,
+			expectedReport: &junitReport{
+				Testsuites: junit.Testsuites{
+					Tests:    2,
+					Failures: 1,
+					Suites: []junit.Testsuite{
+						{
+							Name:     "example.com/tests",
+							Tests:    2,
+							Failures: 1,
+							ID:       0,
+							Time:     "0.010",
+							Testcases: []junit.Testcase{
+								{
+									Name:      "TestParent",
+									Classname: "example.com/tests",
+									Time:      "0.010",
+									Failure: &junit.Result{
+										Message: "Failed",
+										Data: "    context.go:130: test exceeded timeout of 1m30s\n" +
+											"--- FAIL: TestParent (0.01s)",
+									},
+								},
+								{
+									Name:      "TestParent/Child",
+									Classname: "example.com/tests",
+									Time:      "0.010",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {

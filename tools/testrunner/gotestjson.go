@@ -41,6 +41,7 @@ type goTestJSONOutput struct {
 	testOutputs             map[goTestID]*strings.Builder
 	testOutputOrder         []goTestID
 	failedTests             map[goTestID]struct{}
+	failedTestDetails       map[goTestID]string
 	packages                map[string]struct{}
 	packagesWithFailedTests map[string]struct{}
 	failedPackages          map[string]struct{}
@@ -59,6 +60,7 @@ func newGoTestJSONOutput() *goTestJSONOutput {
 	return &goTestJSONOutput{
 		testOutputs:             make(map[goTestID]*strings.Builder),
 		failedTests:             make(map[goTestID]struct{}),
+		failedTestDetails:       make(map[goTestID]string),
 		packages:                make(map[string]struct{}),
 		packagesWithFailedTests: make(map[string]struct{}),
 		failedPackages:          make(map[string]struct{}),
@@ -174,6 +176,13 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 
 	test := goTestID{packageName: event.Package, testName: event.Test}
 	show := event.Action == "fail"
+	if show {
+		if testOutput := o.testOutputs[test]; testOutput != nil {
+			if details := parseFailureDetails(testOutput.String()); details != noFailureDetails {
+				o.failedTestDetails[test] = details
+			}
+		}
+	}
 	if show && o.hasFailedDescendant(test) && !hasGoTestDiagnosticOutput(o.testOutputs[test]) {
 		show = false
 	}
@@ -318,6 +327,12 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		for _, test := range tests {
 			// Incomplete tests from a runner abort have run/pause output but no terminal result.
 			if test.Result != gtr.Unknown {
+				if details, ok := o.failedTestDetails[goTestID{
+					packageName: pkg.Name,
+					testName:    test.Name,
+				}]; ok {
+					test.Output = strings.Split(details, "\n")
+				}
 				pkg.Tests = append(pkg.Tests, test)
 			} else if _, ok := o.failedPackages[pkg.Name]; ok {
 				incompleteTests = append(incompleteTests, test)
