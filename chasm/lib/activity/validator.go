@@ -242,10 +242,8 @@ func validateAndNormalizeIDPolicy(req *workflowservice.StartActivityExecutionReq
 }
 
 // validateOnConflictOptions validates the on_conflict_options of a start request:
-//   - attach_completion_callbacks requires attach_request_id. A completion callback is recorded
-//     against the request ID (see addCompletionCallbacks, which keys the callback by request ID).
-//   - attach_request_id requires at least one completion callback or link, since attaching a
-//     request ID is only meaningful alongside something to attach.
+//   - attach_request_id is not supported until CHASM can persist request IDs on running executions.
+//   - attach_completion_callbacks requires attach_request_id.
 //
 // attach_links is independent and may be set on its own.
 func validateOnConflictOptions(req *workflowservice.StartActivityExecutionRequest) error {
@@ -253,15 +251,14 @@ func validateOnConflictOptions(req *workflowservice.StartActivityExecutionReques
 	if onConflictOptions == nil {
 		return nil
 	}
+	if onConflictOptions.GetAttachRequestId() {
+		// TODO: Remove this once CHASM supports atomic request ID updates.
+		return serviceerror.NewInvalidArgument(
+			"on_conflict_options: attach_request_id is not currently supported for standalone activities")
+	}
 	if onConflictOptions.GetAttachCompletionCallbacks() && !onConflictOptions.GetAttachRequestId() {
 		return serviceerror.NewInvalidArgument(
 			"on_conflict_options: attach_completion_callbacks requires attach_request_id to be set")
-	}
-	if onConflictOptions.GetAttachRequestId() &&
-		len(req.GetCompletionCallbacks()) == 0 &&
-		len(req.GetLinks()) == 0 {
-		return serviceerror.NewInvalidArgument(
-			"on_conflict_options: attach_request_id requires at least one completion callback or link")
 	}
 	return nil
 }

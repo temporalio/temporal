@@ -856,7 +856,10 @@ func TestValidateOnConflictOptions(t *testing.T) {
 				AttachCompletionCallbacks: true,
 			},
 		}
-		require.NoError(t, validateOnConflictOptions(req))
+		err := validateOnConflictOptions(req)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "attach_request_id is not currently supported for standalone activities")
 	})
 
 	t.Run("AttachLinksOnly", func(t *testing.T) {
@@ -868,7 +871,6 @@ func TestValidateOnConflictOptions(t *testing.T) {
 	})
 
 	t.Run("AttachRequestIdWithLink", func(t *testing.T) {
-		// A request ID alongside a link is valid (request ID has something to attach to).
 		req := &workflowservice.StartActivityExecutionRequest{
 			Links: []*commonpb.Link{{}},
 			OnConflictOptions: &commonpb.OnConflictOptions{
@@ -876,7 +878,10 @@ func TestValidateOnConflictOptions(t *testing.T) {
 				AttachLinks:     true,
 			},
 		}
-		require.NoError(t, validateOnConflictOptions(req))
+		err := validateOnConflictOptions(req)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "attach_request_id is not currently supported for standalone activities")
 	})
 
 	t.Run("AttachCallbacksWithoutRequestId", func(t *testing.T) {
@@ -897,7 +902,7 @@ func TestValidateOnConflictOptions(t *testing.T) {
 		err := validateOnConflictOptions(req)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
-		require.Contains(t, invalidArgErr.Message, "attach_request_id requires at least one completion callback or link")
+		require.Contains(t, invalidArgErr.Message, "attach_request_id is not currently supported for standalone activities")
 	})
 
 	t.Run("AttachRequestIdAndCallbacksWithoutCallbackProvided", func(t *testing.T) {
@@ -910,7 +915,7 @@ func TestValidateOnConflictOptions(t *testing.T) {
 		err := validateOnConflictOptions(req)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
-		require.Contains(t, invalidArgErr.Message, "attach_request_id requires at least one completion callback or link")
+		require.Contains(t, invalidArgErr.Message, "attach_request_id is not currently supported for standalone activities")
 	})
 }
 

@@ -122,6 +122,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	// Apply on_conflict_options to an existing activity.
 	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
+	// TODO: Atomically attach request ID, callbacks, and links once CHASM supports request ID updates.
 	cbs := frontendReq.GetCompletionCallbacks()
 	links := frontendReq.GetLinks()
 	onConflict := frontendReq.GetOnConflictOptions()

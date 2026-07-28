@@ -275,6 +275,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		})
 
 		t.Run("OnConflictOptions", func(t *testing.T) {
+			t.Skip("TODO: Re-enable once CHASM supports atomic request ID updates")
 			env.OverrideDynamicConfig(
 				callback.AllowedAddresses,
 				[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
