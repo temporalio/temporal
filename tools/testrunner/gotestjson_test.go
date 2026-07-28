@@ -372,7 +372,7 @@ DONE 0 tests, 1 failure in 1.000s
 									Failure: &junit.Result{
 										Message: string(failureTypeAborted),
 										Type:    string(failureTypeAborted),
-										Data:    "package example.com/tests exited with 1 started test nodes lacking terminal results; additional tests may not have started",
+										Data:    "package example.com/tests aborted; 1 test node had no final result, and others may not have started",
 									},
 								},
 							},

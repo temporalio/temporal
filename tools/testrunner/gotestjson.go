@@ -311,9 +311,14 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 // packageAbortDetails summarizes a package that exited before its incomplete
 // tests produced terminal results.
 func packageAbortDetails(packageName string, incompleteTests []gtr.Test) string {
+	testNodes := "test nodes"
+	if len(incompleteTests) == 1 {
+		testNodes = "test node"
+	}
 	return sanitizeXML(fmt.Sprintf(
-		"package %s exited with %d started test nodes lacking terminal results; additional tests may not have started",
+		"package %s aborted; %d %s had no final result, and others may not have started",
 		packageName,
 		len(incompleteTests),
+		testNodes,
 	))
 }
