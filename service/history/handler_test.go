@@ -400,7 +400,7 @@ func TestActivityMutationHandlers_MarkActivityIDInContextMetadata(t *testing.T) 
 			ctx := contextutil.WithMetadataContext(context.Background())
 			err := tc.invoke(ctx, h)
 			require.ErrorIs(t, err, shardLookupErr)
-			assert.ElementsMatch(t, tc.want, contextutil.ContextMetadataGetMarkedActivityIDs(ctx))
+			require.ElementsMatch(t, tc.want, contextutil.ContextMetadataGetMarkedActivityIDs(ctx))
 		})
 	}
 }

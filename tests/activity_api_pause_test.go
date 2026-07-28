@@ -1009,6 +1009,8 @@ func TestActivityApiPause_AttributesToActivityInContextMetadata(t *testing.T) {
 		case strings.HasPrefix(key, "activity-task-queue-"):
 			require.Empty(t, gotActivityTaskQueue, "expected metadata for exactly one activity, got %v", entries)
 			gotActivityTaskQueue = value
+		default:
+			// Not activity-scoped (e.g. the workflow's own type and task queue).
 		}
 	}
 	require.Equal(t, activityType, gotActivityType, "trailer entries: %v", entries)
