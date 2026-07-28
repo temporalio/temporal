@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -110,6 +111,12 @@ type (
 		chasmRegistry              *chasm.Registry
 		schedulerClient            schedulerpb.SchedulerServiceClient
 
+		// localOperatorClient is created on first use and reused afterwards:
+		// dialing per request would leak a gRPC connection on every call. Only a
+		// successfully created client is cached, so a failure stays retryable.
+		localOperatorClientLock   sync.Mutex
+		localOperatorClientCached operatorservice.OperatorServiceClient
+
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
 		taskCategoryRegistry tasks.TaskCategoryRegistry
@@ -171,7 +178,7 @@ func NewAdminHandler(
 		args.Logger,
 	)
 
-	return &AdminHandler{
+	handler := &AdminHandler{
 		logger:                     args.Logger,
 		status:                     common.DaemonStatusInitialized,
 		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
@@ -201,6 +208,22 @@ func NewAdminHandler(
 		chasmRegistry:              args.ChasmRegistry,
 		schedulerClient:            args.SchedulerClient,
 	}
+	return handler
+}
+
+func (adh *AdminHandler) localOperatorClient() (operatorservice.OperatorServiceClient, error) {
+	adh.localOperatorClientLock.Lock()
+	defer adh.localOperatorClientLock.Unlock()
+
+	if adh.localOperatorClientCached != nil {
+		return adh.localOperatorClientCached, nil
+	}
+	client, err := adh.clientFactory.NewLocalOperatorClientWithTimeout(operator.DefaultTimeout)
+	if err != nil {
+		return nil, err
+	}
+	adh.localOperatorClientCached = client
+	return client, nil
 }
 
 // Start starts the handler
@@ -254,7 +277,7 @@ func (adh *AdminHandler) AddSearchAttributes(
 ) (_ *adminservice.AddSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	operatorClient, err := adh.clientFactory.NewLocalOperatorClientWithTimeout(operator.DefaultTimeout)
+	operatorClient, err := adh.localOperatorClient()
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(errUnableToCreateOperatorClientMessage, err)
 	}
@@ -276,7 +299,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(
 ) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	operatorClient, err := adh.clientFactory.NewLocalOperatorClientWithTimeout(operator.DefaultTimeout)
+	operatorClient, err := adh.localOperatorClient()
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(errUnableToCreateOperatorClientMessage, err)
 	}
@@ -297,7 +320,7 @@ func (adh *AdminHandler) GetSearchAttributes(
 ) (_ *adminservice.GetSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	operatorClient, err := adh.clientFactory.NewLocalOperatorClientWithTimeout(operator.DefaultTimeout)
+	operatorClient, err := adh.localOperatorClient()
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(errUnableToCreateOperatorClientMessage, err)
 	}

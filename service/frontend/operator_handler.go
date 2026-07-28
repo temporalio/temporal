@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -63,6 +64,12 @@ type (
 		clientFactory          svc.Factory
 		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
+
+		// localFrontendClient is created on first use and reused afterwards:
+		// dialing per request would leak a gRPC connection on every call. Only a
+		// successfully created client is cached, so a failure stays retryable.
+		localFrontendClientLock   sync.Mutex
+		localFrontendClientCached workflowservice.WorkflowServiceClient
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -111,6 +118,24 @@ func NewOperatorHandlerImpl(
 	}
 
 	return handler
+}
+
+func (h *OperatorHandlerImpl) localFrontendClient() (workflowservice.WorkflowServiceClient, error) {
+	h.localFrontendClientLock.Lock()
+	defer h.localFrontendClientLock.Unlock()
+
+	if h.localFrontendClientCached != nil {
+		return h.localFrontendClientCached, nil
+	}
+	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
+		frontend.DefaultTimeout,
+		frontend.DefaultLongPollTimeout,
+	)
+	if err != nil {
+		return nil, err
+	}
+	h.localFrontendClientCached = client
+	return client, nil
 }
 
 // Start starts the handler
@@ -250,10 +275,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
-	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
-		frontend.DefaultTimeout,
-		frontend.DefaultLongPollTimeout,
-	)
+	client, err := h.localFrontendClient()
 	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
@@ -420,10 +442,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
-	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
-		frontend.DefaultTimeout,
-		frontend.DefaultLongPollTimeout,
-	)
+	client, err := h.localFrontendClient()
 	if err != nil {
 		return serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}
@@ -507,10 +526,7 @@ func (h *OperatorHandlerImpl) listSearchAttributesSQL(
 	request *operatorservice.ListSearchAttributesRequest,
 	searchAttributes searchattribute.NameTypeMap,
 ) (*operatorservice.ListSearchAttributesResponse, error) {
-	_, client, err := h.clientFactory.NewLocalFrontendClientWithTimeout(
-		frontend.DefaultTimeout,
-		frontend.DefaultLongPollTimeout,
-	)
+	client, err := h.localFrontendClient()
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef(errUnableToCreateFrontendClientMessage, err)
 	}

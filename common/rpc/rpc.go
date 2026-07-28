@@ -57,6 +57,13 @@ type RPCFactory struct {
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient func() (*common.FrontendHTTPClient, error)
 
+	// connsLock guards conns and closed. Connections dialed by this factory are
+	// retained so they can be released together on shutdown; without this the
+	// per-connection gRPC goroutines outlive the factory.
+	connsLock sync.Mutex
+	conns     []*grpc.ClientConn
+	closed    bool
+
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
 	EnableInternodeClientKeepalive bool
@@ -296,8 +303,44 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 		return nil
 	}
+	d.trackConn(connection)
 
 	return connection
+}
+
+// trackConn retains conn so Close can release it. A connection dialed after
+// Close is closed immediately: the factory's owner is already shutting down and
+// nothing would release it otherwise.
+func (d *RPCFactory) trackConn(conn *grpc.ClientConn) {
+	d.connsLock.Lock()
+	if d.closed {
+		d.connsLock.Unlock()
+		if err := conn.Close(); err != nil {
+			d.logger.Debug("Failed to close gRPC connection dialed after shutdown", tag.Error(err))
+		}
+		return
+	}
+	d.conns = append(d.conns, conn)
+	d.connsLock.Unlock()
+}
+
+// Close releases every gRPC connection dialed by this factory. Callers that
+// close a connection themselves are unaffected; closing one twice is harmless.
+// It is safe to call more than once.
+func (d *RPCFactory) Close() error {
+	d.connsLock.Lock()
+	conns := d.conns
+	d.conns = nil
+	d.closed = true
+	d.connsLock.Unlock()
+
+	for _, conn := range conns {
+		// Canceled means the connection was already closed by its caller.
+		if err := conn.Close(); err != nil && status.Code(err) != codes.Canceled {
+			d.logger.Debug("Failed to close gRPC connection", tag.Error(err))
+		}
+	}
+	return nil
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {

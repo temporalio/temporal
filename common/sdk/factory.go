@@ -42,6 +42,23 @@ type (
 		systemSdkClient sdkclient.Client
 		stickyCacheSize dynamicconfig.IntPropertyFn
 		once            sync.Once
+
+		// clientsLock guards derivedClients, which holds the clients handed out
+		// by NewClient that are still open. They share the system client's gRPC
+		// connection, and the SDK only closes that connection once every client
+		// derived from it has been closed, so the factory has to be able to
+		// release the ones its callers left open.
+		clientsLock    sync.Mutex
+		derivedClients map[*trackedClient]struct{}
+		closed         bool
+	}
+
+	// trackedClient removes itself from the factory when closed, so that a
+	// client closed by its owner is not closed again by the factory.
+	trackedClient struct {
+		sdkclient.Client
+		factory   *clientFactory
+		closeOnce sync.Once
 	}
 )
 
@@ -85,7 +102,29 @@ func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 	if err != nil {
 		f.logger.Fatal("error creating sdk client", tag.Error(err))
 	}
-	return client
+
+	tracked := &trackedClient{Client: client, factory: f}
+	f.clientsLock.Lock()
+	if f.closed {
+		f.clientsLock.Unlock()
+		tracked.Close()
+		return tracked
+	}
+	if f.derivedClients == nil {
+		f.derivedClients = make(map[*trackedClient]struct{})
+	}
+	f.derivedClients[tracked] = struct{}{}
+	f.clientsLock.Unlock()
+	return tracked
+}
+
+func (c *trackedClient) Close() {
+	c.closeOnce.Do(func() {
+		c.factory.clientsLock.Lock()
+		delete(c.factory.derivedClients, c)
+		c.factory.clientsLock.Unlock()
+		c.Client.Close()
+	})
 }
 
 func (f *clientFactory) GetSystemClient() sdkclient.Client {
@@ -122,7 +161,35 @@ func (f *clientFactory) NewWorker(
 	taskQueue string,
 	options sdkworker.Options,
 ) sdkworker.Worker {
+	// The SDK requires the client it was given by client.Dial, not a wrapper.
+	if tracked, ok := client.(*trackedClient); ok {
+		client = tracked.Client
+	}
 	return sdkworker.New(client, taskQueue, options)
+}
+
+// Close releases the shared system SDK client and the gRPC connection backing
+// it, along with the clients derived from it by NewClient.
+func (f *clientFactory) Close() {
+	// Claiming the once prevents a client from being dialed after shutdown.
+	f.once.Do(func() {})
+
+	f.clientsLock.Lock()
+	f.closed = true
+	derived := make([]*trackedClient, 0, len(f.derivedClients))
+	for client := range f.derivedClients {
+		derived = append(derived, client)
+	}
+	f.clientsLock.Unlock()
+
+	// Release the references callers left open before the system client, so the
+	// SDK's reference count reaches zero and the shared connection is closed.
+	for _, client := range derived {
+		client.Close()
+	}
+	if f.systemSdkClient != nil {
+		f.systemSdkClient.Close()
+	}
 }
 
 // Overwrite the 'client-name' and 'client-version' headers on gRPC requests sent using the Go SDK
