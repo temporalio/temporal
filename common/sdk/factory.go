@@ -95,24 +95,30 @@ func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 
 func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 	system := f.GetSystemClient()
+	clientOptions := f.options(options)
 
 	// NewClientFromExisting takes a reference to the shared connection, so it
 	// must not interleave with Close releasing those references.
 	f.clientsLock.Lock()
 	defer f.clientsLock.Unlock()
 
-	// this shouldn't fail if the first client was created successfully
-	client, err := sdkclient.NewClientFromExisting(system, f.options(options))
-	if err != nil {
-		f.logger.Fatal("error creating sdk client", tag.Error(err))
-	}
-
 	if f.closed {
-		// Nothing would release a tracked client now, so release the reference
-		// here. The caller still gets a client for the namespace it asked for,
-		// whose calls fail, rather than the system client the factory owns.
+		// Deriving from the system client would fetch capabilities over its now
+		// closed connection. A lazy client skips that fetch, so the caller still
+		// gets one for the namespace it asked for, and it is released here since
+		// nothing else would.
+		client, err := sdkclient.NewLazyClient(clientOptions)
+		if err != nil {
+			f.logger.Fatal("error creating sdk client", tag.Error(err))
+		}
 		client.Close()
 		return client
+	}
+
+	// this shouldn't fail if the first client was created successfully
+	client, err := sdkclient.NewClientFromExisting(system, clientOptions)
+	if err != nil {
+		f.logger.Fatal("error creating sdk client", tag.Error(err))
 	}
 
 	tracked := &trackedClient{Client: client, factory: f}
@@ -143,13 +149,12 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 		options := f.options(sdkclient.Options{Namespace: primitives.SystemLocalNamespace})
 
 		if f.isClosed() {
-			// The frontend this would dial is already going away. A lazy client
-			// needs no connection, so its calls fail instead of the retry below
-			// exhausting and aborting the process partway through shutdown.
+			// The frontend this would reach is already going away. A lazy client
+			// skips the capability fetch, so it fails fast instead of the retry
+			// below exhausting and aborting the process partway through shutdown.
 			sdkClient, err := sdkclient.NewLazyClient(options)
 			if err != nil {
-				f.logger.Warn("error creating sdk client after shutdown", tag.Error(err))
-				return
+				f.logger.Fatal("error creating sdk client", tag.Error(err))
 			}
 			f.setSystemClient(sdkClient)
 			return
@@ -217,21 +222,23 @@ func (f *clientFactory) NewWorker(
 // more than once.
 func (f *clientFactory) Close() {
 	f.clientsLock.Lock()
-	first := !f.closed
+	defer f.clientsLock.Unlock()
+
+	alreadyClosed := f.closed
 	f.closed = true
-	system := f.systemSdkClient
-	derived := f.derivedClients
-	f.derivedClients = nil
-	f.clientsLock.Unlock()
 
 	// Release the references callers left open before the system client, so the
 	// SDK's reference count reaches zero and the shared connection is closed.
-	for client := range derived {
+	for client := range f.derivedClients {
 		client.Client.Close()
 	}
-	// systemSdkClient stays set so GetSystemClient never returns nil.
-	if first && system != nil {
-		system.Close()
+	clear(f.derivedClients)
+
+	// Only the first call may close the system client: the SDK's guard against
+	// repeated Close is a plain write, so closing twice would race. The field
+	// stays set so GetSystemClient never returns nil.
+	if !alreadyClosed && f.systemSdkClient != nil {
+		f.systemSdkClient.Close()
 	}
 }
 

@@ -44,19 +44,21 @@ func newTestProcessor(t *testing.T) (*Processor, *mocksdk.MockWorker) {
 	return processor, worker
 }
 
-// The processor keeps no other reference to its worker, so without Stop the
-// worker's pollers run until the process exits.
 func TestProcessorStop_StopsWorker(t *testing.T) {
+	t.Parallel()
+
 	processor, worker := newTestProcessor(t)
 	worker.EXPECT().Start().Return(nil)
-	worker.EXPECT().Stop().Times(1)
+	worker.EXPECT().Stop()
 
 	require.NoError(t, processor.Start())
 	processor.Stop()
 }
 
 func TestProcessorStop_WithoutStart(t *testing.T) {
+	t.Parallel()
+
 	processor, _ := newTestProcessor(t)
 
-	processor.Stop() // must not panic when Start never ran
+	require.NotPanics(t, processor.Stop)
 }

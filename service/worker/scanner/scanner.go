@@ -295,7 +295,6 @@ func (s *Scanner) Stop() {
 	}
 }
 
-// startWorker retains work so Stop can shut it down.
 // TODO: Nothing is listening for fatal errors from these workers.
 func (s *Scanner) startWorker(work worker.Worker) error {
 	if err := work.Start(); err != nil {

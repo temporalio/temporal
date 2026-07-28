@@ -10,13 +10,13 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
+const localFrontendTarget = "127.0.0.1:9999"
+
 // gRPC connections are lazy, so nothing has to be listening on the target.
 func newTestFactory() *RPCFactory {
 	return NewFactory(nil, "tester", log.NewNoopLogger(), metrics.NoopMetricsHandler,
 		nil, localFrontendTarget, "", 0, nil, nil, nil, nil, nil)
 }
-
-const localFrontendTarget = "127.0.0.1:9999"
 
 func TestRPCFactoryClose_ShutsDownDialedConns(t *testing.T) {
 	t.Parallel()
@@ -61,9 +61,12 @@ func TestRPCFactoryClose_ConnDialedAfterCloseIsClosed(t *testing.T) {
 func TestRPCFactoryClose_DoesNotFailOnConnClosedByOwner(t *testing.T) {
 	t.Parallel()
 
-	// The logger fails the test if Close reports the expected Canceled error.
 	f := newTestFactory()
-	f.logger = testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	// Warn never fails a test on its own, so count the matches instead.
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	warned := logger.Expect(testlogger.Warn, "Failed to close gRPC connection")
+	f.logger = logger
+
 	conn := f.dial("127.0.0.1:1234", nil)
 	require.NotNil(t, conn)
 	require.NoError(t, conn.Close())
@@ -71,6 +74,8 @@ func TestRPCFactoryClose_DoesNotFailOnConnClosedByOwner(t *testing.T) {
 	f.Close()
 
 	require.Equal(t, connectivity.Shutdown, conn.GetState())
+	require.Zero(t, warned.MatchCount(),
+		"closing a connection its owner already closed must not warn")
 }
 
 // Connections closed by their owner must not stay reachable from the factory,
@@ -105,7 +110,7 @@ func TestRPCFactoryDial_DropsConnsAlreadyShutDown(t *testing.T) {
 
 // The local frontend target is fixed, so every caller shares one connection.
 // Dialing per call is what leaked a connection on every request that needed one.
-func TestCreateLocalFrontendGRPCConnection_ReusesOneConn(t *testing.T) {
+func TestRPCFactoryLocalFrontendConn_Reused(t *testing.T) {
 	t.Parallel()
 
 	f := newTestFactory()

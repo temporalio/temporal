@@ -1,82 +1,145 @@
 package sdk
 
 import (
+	"net"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/mocks"
+	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/mocksdk"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 )
 
-// newFactoryWithSystemClient returns a factory whose system client is already
-// set, so no dial happens: sdkclient.Dial and NewClientFromExisting both require
-// the SDK's concrete client, which a mock cannot stand in for.
-func newFactoryWithSystemClient(system *mocks.Client) *clientFactory {
-	f := NewClientFactory("membership://frontend", nil, metrics.NoopMetricsHandler,
+func newFactory(hostPort string) *clientFactory {
+	return NewClientFactory(hostPort, nil, metrics.NoopMetricsHandler,
 		log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(0))
+}
+
+// newSeededFactory injects the system client instead of dialing one: both
+// sdkclient.Dial and NewClientFromExisting need the SDK's concrete client, which
+// a mock cannot stand in for.
+func newSeededFactory(system sdkclient.Client) *clientFactory {
+	f := newFactory("membership://frontend")
 	f.once.Do(func() {})
 	f.systemSdkClient = system
 	return f
 }
 
-func (f *clientFactory) trackForTest(client *mocks.Client) *trackedClient {
+func track(f *clientFactory, client sdkclient.Client) *trackedClient {
 	tracked := &trackedClient{Client: client, factory: f}
 	f.derivedClients[tracked] = struct{}{}
 	return tracked
 }
 
-// Clients from NewClient share the system client's connection, and the SDK only
-// closes it once every one of them is closed. Releasing the clients callers left
-// open, before the system client, is what lets that reference count reach zero.
-func TestClientFactoryClose_ReleasesDerivedClientsBeforeSystem(t *testing.T) {
-	system := &mocks.Client{}
-	derived := &mocks.Client{}
-	f := newFactoryWithSystemClient(system)
-	f.trackForTest(derived)
+// newDialedFactory points a factory at a real listener so NewClient can build
+// clients through the SDK. An empty gRPC server is enough, because Dial tolerates
+// an Unimplemented GetSystemInfo.
+func newDialedFactory(t *testing.T) *clientFactory {
+	t.Helper()
 
-	derivedClosed := false
-	derived.On("Close").Once().Run(func(mock.Arguments) { derivedClosed = true })
-	system.On("Close").Once().Run(func(mock.Arguments) {
-		require.True(t, derivedClosed, "derived clients must be released first")
-	})
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	server := grpc.NewServer()
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+
+	return newFactory(listener.Addr().String())
+}
+
+// The SDK closes the connection shared by these clients only once every one of
+// them is closed, so the ones callers left open have to be released first.
+func TestClientFactoryClose_ReleasesDerivedClientsBeforeSystem(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	system := mocksdk.NewMockClient(ctrl)
+	derived := mocksdk.NewMockClient(ctrl)
+	f := newSeededFactory(system)
+	track(f, derived)
+
+	derivedClose := derived.EXPECT().Close()
+	system.EXPECT().Close().After(derivedClose)
 
 	f.Close()
 
-	derived.AssertExpectations(t)
-	system.AssertExpectations(t)
 	require.Empty(t, f.derivedClients)
 }
 
 func TestClientFactoryClose_Idempotent(t *testing.T) {
-	system := &mocks.Client{}
-	f := newFactoryWithSystemClient(system)
-	system.On("Close").Once()
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	system := mocksdk.NewMockClient(ctrl)
+	f := newSeededFactory(system)
+	system.EXPECT().Close()
 
 	f.Close()
 	f.Close()
-
-	system.AssertExpectations(t)
 }
 
-// A client its owner already closed must not be closed again by the factory: the
-// SDK's guard against repeated Close is only safe sequentially.
+// The SDK's guard against repeated Close is a plain write, so the factory and the
+// caller must never both close the same client.
 func TestClientFactoryClose_SkipsClientClosedByOwner(t *testing.T) {
-	system := &mocks.Client{}
-	derived := &mocks.Client{}
-	f := newFactoryWithSystemClient(system)
-	tracked := f.trackForTest(derived)
+	t.Parallel()
 
-	derived.On("Close").Once()
-	system.On("Close").Once()
+	ctrl := gomock.NewController(t)
+	system := mocksdk.NewMockClient(ctrl)
+	derived := mocksdk.NewMockClient(ctrl)
+	f := newSeededFactory(system)
+	tracked := track(f, derived)
+
+	derived.EXPECT().Close()
+	system.EXPECT().Close()
 
 	tracked.Close()
 	require.Empty(t, f.derivedClients)
-	tracked.Close() // second close by the owner must be a no-op
+	tracked.Close()
+	f.Close()
+}
+
+func TestNewClient_TracksDerivedClient(t *testing.T) {
+	t.Parallel()
+
+	f := newDialedFactory(t)
+	client := f.NewClient(sdkclient.Options{Namespace: "ns"})
+
+	require.IsType(t, &trackedClient{}, client)
+	require.Len(t, f.derivedClients, 1)
+
+	client.Close()
+	require.Empty(t, f.derivedClients, "closing must release the factory's reference")
+}
+
+// Deriving from the closed system client would fetch capabilities over its
+// connection and fail, so the closed factory must not reach for it.
+func TestNewClient_AfterCloseIsNotTracked(t *testing.T) {
+	t.Parallel()
+
+	f := newDialedFactory(t)
 	f.Close()
 
-	derived.AssertExpectations(t)
-	system.AssertExpectations(t)
+	client := f.NewClient(sdkclient.Options{Namespace: "ns"})
+
+	require.NotNil(t, client)
+	require.NotSame(t, f.GetSystemClient(), client, "must not hand out the shared client")
+	require.Empty(t, f.derivedClients)
+}
+
+// sdkworker.New panics unless it gets the SDK's concrete client, so NewWorker has
+// to unwrap what NewClient returned.
+func TestNewWorker_AcceptsDerivedClient(t *testing.T) {
+	t.Parallel()
+
+	f := newDialedFactory(t)
+	client := f.NewClient(sdkclient.Options{Namespace: "ns"})
+
+	require.NotPanics(t, func() {
+		require.NotNil(t, f.NewWorker(client, "task-queue", sdkworker.Options{}))
+	})
 }

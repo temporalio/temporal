@@ -404,8 +404,6 @@ func SdkClientFactoryProvider(
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
-	// The factory is constructed before its dependents and fx runs stop hooks in
-	// reverse, so this runs after everything that uses it has stopped.
 	lc.Append(fx.StopHook(factory.Close))
 	return factory, nil
 }
@@ -468,8 +466,6 @@ func RPCFactoryProvider(
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
 	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
-	// The factory is constructed before its dependents and fx runs stop hooks in
-	// reverse, so this runs after everything that uses it has stopped.
 	lc.Append(fx.StopHook(factory.Close))
 	return factory, nil
 }
