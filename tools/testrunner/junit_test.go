@@ -226,6 +226,20 @@ func TestMergeReports_SkipsRerunCoverageForAbortedAttempts(t *testing.T) {
 	require.Empty(t, merged.reportingErrs)
 }
 
+func TestFailureDetails(t *testing.T) {
+	report := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
+	report.appendSyntheticFailure(
+		"testrunner.PackageAborted",
+		failureTypeAborted,
+		"package example.com/tests aborted; 3 test nodes had no final result, and others may not have started",
+	)
+
+	require.Equal(t, []string{
+		"package example.com/tests aborted; 3 test nodes had no final result, and others may not have started",
+	}, report.failureDetails(failureTypeAborted))
+	require.Empty(t, report.failureDetails(failureTypePanic))
+}
+
 func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 

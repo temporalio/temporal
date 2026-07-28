@@ -384,7 +384,10 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		// A package abort can leave both incomplete tests and tests that never
 		// started, so the observed test names are not enough to safely narrow
 		// the rerun. This also applies when a test panic caused the abort.
-		if currentAttempt.junitReport.hasFailureType(failureTypeAborted) {
+		if aborts := currentAttempt.junitReport.failureDetails(failureTypeAborted); len(aborts) > 0 {
+			for _, details := range aborts {
+				log.Printf("%s: %s", failureTypeAborted, details)
+			}
 			if a < r.maxAttempts {
 				log.Print("test package aborted, retrying with previous attempt's args")
 			}

@@ -237,6 +237,18 @@ func (j *junitReport) hasFailureType(kind failureType) bool {
 	return false
 }
 
+func (j *junitReport) failureDetails(kind failureType) []string {
+	var details []string
+	for _, suite := range j.Suites {
+		for _, tc := range suite.Testcases {
+			if tc.Failure != nil && tc.Failure.Type == string(kind) {
+				details = append(details, tc.Failure.Data)
+			}
+		}
+	}
+	return details
+}
+
 // missingRerunFailures returns prior-attempt failures that curr failed to
 // re-run. Aborted attempts retry with the same args, so coverage isn't expected.
 func (j *junitReport) missingRerunFailures(curr *junitReport) []string {
