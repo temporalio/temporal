@@ -319,7 +319,6 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 	return connection
 }
 
-// trackConn retains conn so Close can release it.
 func (d *RPCFactory) trackConn(conn *grpc.ClientConn) {
 	d.connsLock.Lock()
 	if d.closed {

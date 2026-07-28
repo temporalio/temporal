@@ -126,7 +126,7 @@ func TestCall_NonOKResponse(t *testing.T) {
 // Must not run in parallel: goleak.Find observes the whole process.
 func TestCall_NonOKResponseClosesBody(t *testing.T) {
 	caller := newTestCaller(t, func(w http.ResponseWriter, _ *http.Request) {
-		// Any unread body pins the connection; an empty one is drained for us.
+		// A non-empty body is required: an unread one is what pins the connection.
 		http.Error(w, "error details", http.StatusInternalServerError)
 	})
 

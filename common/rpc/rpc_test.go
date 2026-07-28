@@ -74,7 +74,7 @@ func TestRPCFactoryClose_DoesNotFailOnConnClosedByOwner(t *testing.T) {
 	f.Close()
 
 	require.Equal(t, connectivity.Shutdown, conn.GetState())
-	require.Zero(t, warned.MatchCount(),
+	require.False(t, warned.Matched(),
 		"closing a connection its owner already closed must not warn")
 }
 
@@ -109,7 +109,6 @@ func TestRPCFactoryDial_DropsConnsAlreadyShutDown(t *testing.T) {
 }
 
 // The local frontend target is fixed, so every caller shares one connection.
-// Dialing per call is what leaked a connection on every request that needed one.
 func TestRPCFactoryLocalFrontendConn_Reused(t *testing.T) {
 	t.Parallel()
 

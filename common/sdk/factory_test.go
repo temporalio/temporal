@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,9 +12,15 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/testlogger"
+	"go.uber.org/goleak"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func newFactory(hostPort string) *clientFactory {
 	return NewClientFactory(hostPort, nil, metrics.NoopMetricsHandler,
@@ -49,7 +56,10 @@ func newDialedFactory(t *testing.T) *clientFactory {
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 
-	return newFactory(listener.Addr().String())
+	f := newFactory(listener.Addr().String())
+	f.logger = testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	t.Cleanup(f.Close)
+	return f
 }
 
 // The SDK closes the connection shared by these clients only once every one of
@@ -63,8 +73,7 @@ func TestClientFactoryClose_ReleasesDerivedClientsBeforeSystem(t *testing.T) {
 	f := newSeededFactory(system)
 	track(f, derived)
 
-	derivedClose := derived.EXPECT().Close()
-	system.EXPECT().Close().After(derivedClose)
+	gomock.InOrder(derived.EXPECT().Close(), system.EXPECT().Close())
 
 	f.Close()
 
@@ -138,8 +147,31 @@ func TestNewWorker_AcceptsDerivedClient(t *testing.T) {
 
 	f := newDialedFactory(t)
 	client := f.NewClient(sdkclient.Options{Namespace: "ns"})
+	require.IsType(t, &trackedClient{}, client)
 
 	require.NotPanics(t, func() {
 		require.NotNil(t, f.NewWorker(client, "task-queue", sdkworker.Options{}))
 	})
+}
+
+// NewClient holds clientsLock across NewClientFromExisting because the SDK reads
+// the shared reference count there while Close writes it. Releasing the lock
+// before deriving makes -race report those two accesses.
+func TestNewClient_DoesNotRaceClose(t *testing.T) {
+	t.Parallel()
+
+	f := newDialedFactory(t)
+	require.NotNil(t, f.GetSystemClient())
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		f.NewClient(sdkclient.Options{Namespace: "ns"})
+	}()
+	go func() {
+		defer wg.Done()
+		f.Close()
+	}()
+	wg.Wait()
 }
