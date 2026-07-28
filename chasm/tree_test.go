@@ -1155,7 +1155,16 @@ func (s *nodeSuite) TestApplyMutation_InvalidatesHydratedMapAncestors() {
 		mutation NodesMutation,
 		expected map[string]string,
 	) {
-		target, err := s.newTestTree(common.CloneProtoMap(persistedNodes))
+		s.nodeBackend.HandleChasmSkipPersistenceEnabled = func() bool { return false }
+		target, err := NewTreeFromDB(
+			common.CloneProtoMap(persistedNodes),
+			s.registry,
+			s.timeSource,
+			s.nodeBackend,
+			s.nodePathEncoder,
+			s.logger,
+			s.metricsHandler,
+		)
 		s.NoError(err)
 		component, err := target.Component(NewContext(context.Background(), target), ComponentRef{})
 		s.NoError(err)
@@ -4621,6 +4630,7 @@ func (s *nodeSuite) TestAndAllChildren_PathIndependence() {
 func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
+	s.nodeBackend.HandleChasmSkipPersistenceEnabled = func() bool { return true }
 	if len(serializedNodes) == 0 {
 		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
 	}
