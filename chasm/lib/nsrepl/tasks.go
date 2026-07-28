@@ -147,15 +147,27 @@ func (h *applyLocalTaskHandler) Execute(
 	}
 	newVersion := meta.NotificationVersion
 
-	// Commit transition: record success and schedule peer fan-out.
+	// Commit transition: record success and schedule peer fan-out. When there are
+	// no peers (single-cluster global namespace) allPeersTerminal() is already true,
+	// so complete the component in the same update. This is a separate transition
+	// because the framework rewrites the component status to each transition's
+	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
+	// COMPLETED set inside it would be clobbered — the same reason peer completion
+	// needs its own transition.
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
-			return nil, TransitionLocalCommitted.Apply(c, mctx, EventLocalCommitted{
+			if err := TransitionLocalCommitted.Apply(c, mctx, EventLocalCommitted{
 				Time:       mctx.Now(c),
 				NewVersion: newVersion,
-			})
+			}); err != nil {
+				return nil, err
+			}
+			if c.allPeersTerminal() {
+				return nil, TransitionAllPeersTerminal.Apply(c, mctx, EventAllPeersTerminal{})
+			}
+			return nil, nil
 		},
 		nil,
 	)

@@ -259,6 +259,7 @@ func (d *namespaceHandler) RegisterNamespace(
 			nsreplpb.NAMESPACE_OPERATION_CREATE,
 			detail,
 			0,
+			nil, // no previous cluster list on create
 		); err != nil {
 			return nil, err
 		}
@@ -430,6 +431,11 @@ func (d *namespaceHandler) UpdateNamespace(
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
+	// Capture the cluster list as it exists before this update mutates it below.
+	// A shrink (cluster removed) reassigns replicationConfig.Clusters; the CHASM
+	// peer fan-out unions this previous list with the new one so a removed cluster
+	// still receives the final mutation (see peerCellsFromClusters).
+	previousClusters := append([]string(nil), replicationConfig.GetClusters()...)
 	failoverHistory := getResponse.Namespace.ReplicationConfig.FailoverHistory
 	configVersion := getResponse.Namespace.ConfigVersion
 	failoverVersion := getResponse.Namespace.FailoverVersion
@@ -659,6 +665,7 @@ func (d *namespaceHandler) UpdateNamespace(
 				nsreplpb.NAMESPACE_OPERATION_UPDATE,
 				detail,
 				notificationVersion,
+				previousClusters,
 			); err != nil {
 				return nil, err
 			}
@@ -1285,14 +1292,21 @@ func (d *namespaceHandler) invokeCHASMNamespaceMutation(
 	operation nsreplpb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
+	previousClusters []string,
 ) error {
 	currentCluster := d.clusterMetadata.GetCurrentClusterName()
-	var peerCells []string
-	for _, c := range detail.GetReplicationConfig().GetClusters() {
-		if c != currentCluster {
-			peerCells = append(peerCells, c)
-		}
-	}
+	// Fan out to every cluster involved in the mutation — the union of the new
+	// cluster list and the previous one — minus the current (origin) cell.
+	// Including the previous list lets a cluster being *removed* from the
+	// namespace still receive this final mutation (carrying the shrunk cluster
+	// list) so it learns it is no longer a participant. Computing peers from the
+	// new list alone would strand a removed cluster with a stale membership
+	// record — a regression from the legacy queue's broadcast fan-out.
+	peerCells := peerCellsFromClusters(
+		currentCluster,
+		detail.GetReplicationConfig().GetClusters(),
+		previousClusters,
+	)
 
 	mutation := &nsreplpb.NamespaceMutation{
 		Operation:       operation,
@@ -1306,4 +1320,31 @@ func (d *namespaceHandler) invokeCHASMNamespaceMutation(
 	}
 	_, err := d.chasmNsReplClient.TriggerNamespaceMutation(ctx, req)
 	return err
+}
+
+// peerCellsFromClusters returns the peer cells a namespace mutation must fan out
+// to: the union of the new and previous cluster lists, excluding the current
+// (origin) cell. Order is stable — new clusters first, then any that were only
+// in the previous list (i.e. just removed). The previous list is included so a
+// cluster being removed from the namespace still receives the final mutation and
+// learns it is no longer a participant, matching the legacy queue's broadcast
+// fan-out. previousClusters may be nil (e.g. on create).
+func peerCellsFromClusters(currentCluster string, newClusters, previousClusters []string) []string {
+	seen := make(map[string]struct{}, len(newClusters)+len(previousClusters))
+	var peerCells []string
+	add := func(clusters []string) {
+		for _, c := range clusters {
+			if c == currentCluster {
+				continue
+			}
+			if _, ok := seen[c]; ok {
+				continue
+			}
+			seen[c] = struct{}{}
+			peerCells = append(peerCells, c)
+		}
+	}
+	add(newClusters)
+	add(previousClusters)
+	return peerCells
 }

@@ -46,10 +46,13 @@ var TransitionLocalCommitted = chasm.NewTransition(
 				Attempt:    0,
 			})
 		}
-		// If there are zero peers (single-cluster global namespace), the component is done.
-		if len(c.GetMutation().GetPeerCells()) == 0 {
-			c.SetStateMachineState(nsreplpb.COMPONENT_STATUS_COMPLETED)
-		}
+		// NOTE: completion — including the zero-peer case (single-cluster global
+		// namespace, nothing to fan out to) — is applied by the caller via
+		// TransitionAllPeersTerminal, not here. Setting COMPLETED inside this
+		// transition would be overwritten: the framework rewrites the component
+		// status to this transition's destination (RUNNING) after Apply returns
+		// (see Transition.Apply in statemachine.go), the same reason peer
+		// completion needs its own transition.
 		return nil
 	},
 )
