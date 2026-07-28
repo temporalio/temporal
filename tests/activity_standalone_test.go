@@ -3434,6 +3434,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 
 	require.NotNil(t, describeResp3.GetOutcome().GetFailure())
 	protorequire.ProtoEqual(t, failure, describeResp3.GetOutcome().GetFailure())
+	// The attempt timed out, but no retry followed because MaximumAttempts was reached.
 	require.Equal(t, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, describeResp3.GetOutcome().GetRetryState())
 	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected StartToCloseTimeout but is %s", describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
