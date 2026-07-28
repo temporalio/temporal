@@ -62,6 +62,7 @@ func TestPostInfo(t *testing.T) {
 			t.Fatalf("Failed to write response %s", err)
 		}
 	}))
+	defer ts.Close()
 	u, err := url.Parse(ts.URL)
 	if err != nil {
 		t.Fatalf("Request failed: %s", err)

@@ -157,8 +157,8 @@ func TestNewWorker_AcceptsDerivedClient(t *testing.T) {
 }
 
 // NewClient holds clientsLock across NewClientFromExisting because the SDK reads
-// the shared reference count there while Close writes it. Releasing the lock
-// before deriving makes -race report those two accesses.
+// the shared reference count there while Close writes it. Dropping the lock makes
+// -race report those two accesses; merely narrowing it only sometimes does.
 func TestNewClient_DoesNotRaceClose(t *testing.T) {
 	t.Parallel()
 
