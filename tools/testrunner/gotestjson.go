@@ -74,7 +74,7 @@ func (o *goTestJSONOutput) String() string {
 		o.line.Reset()
 	}
 	for _, test := range o.testOutputOrder {
-		o.flushTestOutput(test)
+		o.flushTestOutput(test, true)
 	}
 	o.writeSummary()
 	return o.output.String()
@@ -115,7 +115,7 @@ func (o *goTestJSONOutput) recordEvent(event goTestEvent) {
 	o.recordTime(event.Time)
 	switch event.Action {
 	case "bench":
-		o.flushTestOutput(goTestID{packageName: event.Package, testName: event.Test})
+		o.flushTestOutput(goTestID{packageName: event.Package, testName: event.Test}, true)
 	case "fail", "pass", "skip":
 		o.recordTerminalEvent(event)
 	case "start":
@@ -155,7 +155,10 @@ func (o *goTestJSONOutput) recordTerminalEvent(event goTestEvent) {
 		return
 	}
 
-	o.flushTestOutput(goTestID{packageName: event.Package, testName: event.Test})
+	o.flushTestOutput(
+		goTestID{packageName: event.Package, testName: event.Test},
+		event.Action != "skip",
+	)
 	o.tests++
 	switch event.Action {
 	case "fail":
@@ -200,12 +203,16 @@ func (o *goTestJSONOutput) writeSummary() {
 	o.summaryWritten = true
 }
 
-func (o *goTestJSONOutput) flushTestOutput(test goTestID) {
+func (o *goTestJSONOutput) flushTestOutput(test goTestID, live bool) {
 	testOutput, ok := o.testOutputs[test]
 	if !ok {
 		return
 	}
-	o.writeOutput(testOutput.String())
+	output := testOutput.String()
+	if live {
+		_, _ = fmt.Fprint(o.stdout, output)
+	}
+	o.output.WriteString(output)
 	delete(o.testOutputs, test)
 }
 

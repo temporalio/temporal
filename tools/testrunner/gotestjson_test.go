@@ -58,6 +58,34 @@ DONE 0 tests in 0.100s
 	require.Equal(t, expected, output.String())
 }
 
+func TestGoTestJSONOutput_HidesSkippedOutput(t *testing.T) {
+	input := `{"Action":"start","Package":"example.com/tests"}
+{"Action":"run","Package":"example.com/tests","Test":"TestSkip"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"=== RUN   TestSkip\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"skip reason\n"}
+{"Action":"output","Package":"example.com/tests","Test":"TestSkip","Output":"--- SKIP: TestSkip (0.00s)\n"}
+{"Action":"skip","Package":"example.com/tests","Test":"TestSkip"}
+{"Action":"pass","Package":"example.com/tests","Elapsed":0.1}
+`
+	expectedDebug := `=== RUN   TestSkip
+skip reason
+--- SKIP: TestSkip (0.00s)
+
+DONE 1 tests, 1 skipped in 0.100s
+`
+	expectedLiveOutput := `
+DONE 1 tests, 1 skipped in 0.100s
+`
+
+	output := newGoTestJSONOutput()
+	var stdout bytes.Buffer
+	output.stdout = &stdout
+	_, err := output.Write([]byte(input))
+	require.NoError(t, err)
+	require.Equal(t, expectedDebug, output.String())
+	require.Equal(t, expectedLiveOutput, stdout.String())
+}
+
 func TestGoTestJSONOutput_AbortedPackage(t *testing.T) {
 	input := `{"Time":"2026-07-28T00:00:00Z","Action":"start","Package":"example.com/tests"}
 {"Action":"run","Package":"example.com/tests","Test":"TestIncomplete"}
