@@ -113,6 +113,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 	case *tasks.DeleteExecutionVisibilityTask:
 		err = t.processDeleteExecution(ctx, task)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.processChasmTask(ctx, task)
 	default:
 		err = errUnknownVisibilityTask
@@ -430,13 +431,19 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
-	var chasmTaskQueue string
+	// chasmMapper holds the archetype's search attribute registration, including which system
+	// search attributes it overrides.
+	var chasmMapper *chasm.VisibilitySearchAttributesMapper
+	if rc, ok := t.shardContext.ChasmRegistry().ComponentByID(tree.ArchetypeID()); ok {
+		chasmMapper = rc.SearchAttributesMapper()
+	}
+
+	// systemOverrides holds component-provided values for registered system search attribute overrides.
+	systemOverrides := make(map[string]chasm.VisibilityValue)
 	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
-			if chasmSA.Field == sadefs.TaskQueue {
-				if strVal, ok := chasmSA.Value.Value().(string); ok {
-					chasmTaskQueue = strVal
-				}
+			if chasmMapper.IsSystemOverride(chasmSA.Field) {
+				systemOverrides[chasmSA.Field] = chasmSA.Value
 				continue
 			}
 			searchAttributes[chasmSA.Field] = chasmSA.Value.MustEncode()
@@ -478,10 +485,10 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		chasm.SearchAttributeTemporalNamespaceDivision.Value(strconv.FormatUint(uint64(tree.ArchetypeID()), 10)),
 	)
 
-	// Override TaskQueue if provided by CHASM search attributes.
-	if chasmTaskQueue != "" {
-		requestBase.TaskQueue = chasmTaskQueue
-	}
+	// Apply overrides for system search attributes (e.g. TaskQueue, ExecutionTime) that are not
+	// CHASM system search attributes. The request base initializes these system columns from
+	// mutable state; a component may override them with its own value emitted from SearchAttributes().
+	applyChasmOverriddenSystemFields(requestBase, systemOverrides)
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)
@@ -550,6 +557,61 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 			RunId:      executionInfo.RootRunId,
 		},
 	}
+}
+
+// applyChasmOverriddenSystemFields applies component-provided system search attribute overrides
+// onto the visibility request base. Supported fields must match sadefs.IsChasmOverridableSystem
+// (enforced at registration and by TestChasmOverriddenSystemFieldsWriteBridgeCoversOverridableFields).
+func applyChasmOverriddenSystemFields(
+	requestBase *manager.VisibilityRequestBase,
+	overrides map[string]chasm.VisibilityValue,
+) {
+	for field, value := range overrides {
+		switch v := value.Value().(type) {
+		case string:
+			applyChasmOverriddenStringField(requestBase, field, v)
+		case time.Time:
+			applyChasmOverriddenTimeField(requestBase, field, v)
+		default:
+		}
+	}
+}
+
+func applyChasmOverriddenStringField(requestBase *manager.VisibilityRequestBase, field, value string) {
+	switch field {
+	case sadefs.WorkflowType:
+		requestBase.WorkflowTypeName = value
+	case sadefs.TaskQueue:
+		requestBase.TaskQueue = value
+	case sadefs.ParentWorkflowID:
+		requestBase.ParentExecution = ensureExecution(requestBase.ParentExecution)
+		requestBase.ParentExecution.WorkflowId = value
+	case sadefs.ParentRunID:
+		requestBase.ParentExecution = ensureExecution(requestBase.ParentExecution)
+		requestBase.ParentExecution.RunId = value
+	case sadefs.RootWorkflowID:
+		requestBase.RootExecution = ensureExecution(requestBase.RootExecution)
+		requestBase.RootExecution.WorkflowId = value
+	case sadefs.RootRunID:
+		requestBase.RootExecution = ensureExecution(requestBase.RootExecution)
+		requestBase.RootExecution.RunId = value
+	default:
+	}
+}
+
+func applyChasmOverriddenTimeField(requestBase *manager.VisibilityRequestBase, field string, value time.Time) {
+	switch field {
+	case sadefs.ExecutionTime:
+		requestBase.ExecutionTime = value
+	default:
+	}
+}
+
+func ensureExecution(execution *commonpb.WorkflowExecution) *commonpb.WorkflowExecution {
+	if execution == nil {
+		return &commonpb.WorkflowExecution{}
+	}
+	return execution
 }
 
 func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(

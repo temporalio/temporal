@@ -14,19 +14,21 @@ import (
 	reflect "reflect"
 	time "time"
 
+	log "go.opentelemetry.io/otel/log"
 	common "go.temporal.io/api/common/v1"
 	adminservice "go.temporal.io/server/api/adminservice/v1"
 	clock "go.temporal.io/server/api/clock/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
+	workflow "go.temporal.io/server/chasm/lib/workflow"
 	archiver "go.temporal.io/server/common/archiver"
 	clock0 "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
 	finalizer "go.temporal.io/server/common/finalizer"
 	locks "go.temporal.io/server/common/locks"
-	log "go.temporal.io/server/common/log"
+	log0 "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence0 "go.temporal.io/server/common/persistence"
@@ -148,6 +150,20 @@ func (m *MockShardContext) ChasmRegistry() *chasm.Registry {
 func (mr *MockShardContextMockRecorder) ChasmRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmRegistry", reflect.TypeOf((*MockShardContext)(nil).ChasmRegistry))
+}
+
+// ChasmWorkflowRegistry mocks base method.
+func (m *MockShardContext) ChasmWorkflowRegistry() *workflow.Registry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmWorkflowRegistry")
+	ret0, _ := ret[0].(*workflow.Registry)
+	return ret0
+}
+
+// ChasmWorkflowRegistry indicates an expected call of ChasmWorkflowRegistry.
+func (mr *MockShardContextMockRecorder) ChasmWorkflowRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmWorkflowRegistry", reflect.TypeOf((*MockShardContext)(nil).ChasmWorkflowRegistry))
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
@@ -369,6 +385,20 @@ func (mr *MockShardContextMockRecorder) GetEngine(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEngine", reflect.TypeOf((*MockShardContext)(nil).GetEngine), ctx)
 }
 
+// GetEventLogger mocks base method.
+func (m *MockShardContext) GetEventLogger() log.Logger {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventLogger")
+	ret0, _ := ret[0].(log.Logger)
+	return ret0
+}
+
+// GetEventLogger indicates an expected call of GetEventLogger.
+func (mr *MockShardContextMockRecorder) GetEventLogger() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventLogger", reflect.TypeOf((*MockShardContext)(nil).GetEventLogger))
+}
+
 // GetEventsCache mocks base method.
 func (m *MockShardContext) GetEventsCache() events.Cache {
 	m.ctrl.T.Helper()
@@ -455,10 +485,10 @@ func (mr *MockShardContextMockRecorder) GetLifecycleContext() *gomock.Call {
 }
 
 // GetLogger mocks base method.
-func (m *MockShardContext) GetLogger() log.Logger {
+func (m *MockShardContext) GetLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 
@@ -655,10 +685,10 @@ func (mr *MockShardContextMockRecorder) GetShardID() *gomock.Call {
 }
 
 // GetThrottledLogger mocks base method.
-func (m *MockShardContext) GetThrottledLogger() log.Logger {
+func (m *MockShardContext) GetThrottledLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetThrottledLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 
@@ -969,6 +999,20 @@ func (mr *MockControllableContextMockRecorder) ChasmRegistry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmRegistry", reflect.TypeOf((*MockControllableContext)(nil).ChasmRegistry))
 }
 
+// ChasmWorkflowRegistry mocks base method.
+func (m *MockControllableContext) ChasmWorkflowRegistry() *workflow.Registry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmWorkflowRegistry")
+	ret0, _ := ret[0].(*workflow.Registry)
+	return ret0
+}
+
+// ChasmWorkflowRegistry indicates an expected call of ChasmWorkflowRegistry.
+func (mr *MockControllableContextMockRecorder) ChasmWorkflowRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmWorkflowRegistry", reflect.TypeOf((*MockControllableContext)(nil).ChasmWorkflowRegistry))
+}
+
 // ConflictResolveWorkflowExecution mocks base method.
 func (m *MockControllableContext) ConflictResolveWorkflowExecution(ctx context.Context, request *persistence0.ConflictResolveWorkflowExecutionRequest) (*persistence0.ConflictResolveWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1200,6 +1244,20 @@ func (mr *MockControllableContextMockRecorder) GetEngine(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEngine", reflect.TypeOf((*MockControllableContext)(nil).GetEngine), ctx)
 }
 
+// GetEventLogger mocks base method.
+func (m *MockControllableContext) GetEventLogger() log.Logger {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventLogger")
+	ret0, _ := ret[0].(log.Logger)
+	return ret0
+}
+
+// GetEventLogger indicates an expected call of GetEventLogger.
+func (mr *MockControllableContextMockRecorder) GetEventLogger() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventLogger", reflect.TypeOf((*MockControllableContext)(nil).GetEventLogger))
+}
+
 // GetEventsCache mocks base method.
 func (m *MockControllableContext) GetEventsCache() events.Cache {
 	m.ctrl.T.Helper()
@@ -1286,10 +1344,10 @@ func (mr *MockControllableContextMockRecorder) GetLifecycleContext() *gomock.Cal
 }
 
 // GetLogger mocks base method.
-func (m *MockControllableContext) GetLogger() log.Logger {
+func (m *MockControllableContext) GetLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 
@@ -1500,10 +1558,10 @@ func (mr *MockControllableContextMockRecorder) GetShardID() *gomock.Call {
 }
 
 // GetThrottledLogger mocks base method.
-func (m *MockControllableContext) GetThrottledLogger() log.Logger {
+func (m *MockControllableContext) GetThrottledLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetThrottledLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 

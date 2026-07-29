@@ -296,19 +296,24 @@ func (o *Operation) loadStartArgs(
 		if err != nil {
 			return startArgs{}, err
 		}
+		// Workflow-backed operation: the store already appends a caller link (a workflow_event
+		// link pointing at the NexusOperationScheduled event); no further action here.
 	} else {
+		// Standalone operation: there is no workflow caller, so add a nexus_operation self-link
+		// as the caller link for the completion callback.
 		requestData := o.RequestData.Get(ctx)
 		invocationData = InvocationData{
 			Input:  requestData.GetInput(),
 			Header: requestData.GetNexusHeader(),
+			NexusLinks: []nexus.Link{
+				commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+					Namespace:   ctx.NamespaceEntry().Name().String(),
+					OperationId: ctx.ExecutionKey().BusinessID,
+					RunId:       ctx.ExecutionKey().RunID,
+				}),
+			},
 		}
 	}
-	invocationData.NexusLinks = append(invocationData.NexusLinks,
-		commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
-			Namespace:   ctx.NamespaceEntry().Name().String(),
-			OperationId: ctx.ExecutionKey().BusinessID,
-			RunId:       ctx.ExecutionKey().RunID,
-		}))
 
 	serializedRef, err := ctx.Ref(o)
 	if err != nil {

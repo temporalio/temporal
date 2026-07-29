@@ -272,13 +272,21 @@ func ClientFactoryProvider(
 }
 
 func ClientBeanProvider(
+	lc fx.Lifecycle,
 	clientFactory client.Factory,
 	clusterMetadata cluster.Metadata,
 ) (client.Bean, error) {
-	return client.NewClientBean(
+	bean, err := client.NewClientBean(
 		clientFactory,
 		clusterMetadata,
 	)
+	if err != nil {
+		return nil, err
+	}
+	// Deterministically release the bean's clients (daemon goroutines and
+	// cached gRPC connections) on shutdown.
+	lc.Append(fx.StopHook(bean.Close))
+	return bean, nil
 }
 
 func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {

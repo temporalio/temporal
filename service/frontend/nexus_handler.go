@@ -592,7 +592,8 @@ func (h *nexusHandler) forwardStartOperation(
 	options nexus.StartOperationOptions,
 	oc *operationContext,
 ) (nexus.HandlerStartOperationResult[any], error) {
-	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionSourceCellHeaderName] = h.clusterMetadata.GetCurrentClusterName()
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {
@@ -722,7 +723,8 @@ func (h *nexusHandler) forwardCancelOperation(
 	options nexus.CancelOperationOptions,
 	oc *operationContext,
 ) error {
-	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionSourceCellHeaderName] = h.clusterMetadata.GetCurrentClusterName()
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {

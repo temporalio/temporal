@@ -373,7 +373,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 
 	tq := env.WorkerTaskQueue()
 	id := "test-query-non-sticky-multi-page"
-	ctx, cancel := context.WithTimeout(env.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	queryWorker := worker.New(env.SdkClient(), tq, worker.Options{})
@@ -444,7 +444,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	env := testcore.NewEnv(s.T())
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, "workflow")

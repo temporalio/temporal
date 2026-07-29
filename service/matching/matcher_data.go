@@ -207,6 +207,8 @@ type matcherData struct {
 	timeSource       clock.TimeSource
 	canForward       bool
 	rateLimitManager *rateLimitManager
+	// onRateLimited is called when a dispatch is blocked by the rate limiter.
+	onRateLimited func()
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
 
@@ -223,13 +225,16 @@ type matcherData struct {
 	stopped bool // if true, reject new tasks
 }
 
-func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager) matcherData {
+// newMatcherData creates a new matcherData. onRateLimited is called each time a dispatch
+// is blocked by the rate limiter (whole-queue or per-key).
+func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager, onRateLimited func()) matcherData {
 	return matcherData{
 		config:           config,
 		logger:           logger,
 		timeSource:       timeSource,
 		canForward:       canForward,
 		rateLimitManager: rateLimitManager,
+		onRateLimited:    onRateLimited,
 		tasks:            newTaskBTree(),
 	}
 }
@@ -525,6 +530,7 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 		if task == nil || poller == nil {
 			if minDelay > 0 {
 				d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, minDelay)
+				d.onRateLimited()
 				return true
 			}
 			// no more current matches, stop rate limit timer if was running

@@ -68,31 +68,6 @@ type FailedTestRecord struct {
 	FailureType string `json:"failure_type"`
 }
 
-// WorkflowRun represents a GitHub Actions workflow run
-type WorkflowRun struct {
-	ID         int64     `json:"id"`
-	Number     int       `json:"run_number"`
-	CreatedAt  time.Time `json:"created_at"`
-	Status     string    `json:"status"`
-	Conclusion string    `json:"conclusion"`
-	HeadBranch string    `json:"head_branch"`
-	HeadSHA    string    `json:"head_sha"`
-}
-
-// WorkflowArtifact represents a downloadable artifact
-type WorkflowArtifact struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	Expired   bool      `json:"expired"`
-}
-
-// ArtifactsResponse represents the GitHub API response for artifacts
-type ArtifactsResponse struct {
-	TotalCount int                `json:"total_count"`
-	Artifacts  []WorkflowArtifact `json:"artifacts"`
-}
-
 // CommitObservation holds aggregated pass/fail data for a single (test, commit) pair.
 type CommitObservation struct {
 	CommitSHA     string
@@ -124,16 +99,6 @@ type TestBisectReport struct {
 	TopSuspects []BisectResult // sorted by Probability descending
 	TotalObs    int            // total observations (pass + fail) used
 	Skipped     bool           // true if below signal or confidence threshold
-}
-
-// CommitMeta holds changed-file info fetched from the GitHub API.
-// GET /repos/{owner}/{repo}/commits/{sha}
-type CommitMeta struct {
-	SHA         string
-	Title       string
-	Author      string
-	CommittedAt time.Time
-	Files       []string // relative paths of changed files
 }
 
 // BisectConfig holds configuration for a bisect analysis run.

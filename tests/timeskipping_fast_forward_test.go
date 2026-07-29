@@ -38,7 +38,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) getMutableState(env *testcore.T
 		workflowID,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(testcore.NewContext(), &persistence.GetWorkflowExecutionRequest{
+	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: env.NamespaceID().String(),
 		WorkflowID:  workflowID,
@@ -78,7 +78,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	const (
 		fastForward = 30 * time.Minute
@@ -213,7 +213,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	const (
 		fastForward = 30 * time.Minute
@@ -340,7 +340,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	const (
 		fastForward = 30 * time.Minute
@@ -393,7 +393,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeout() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	const (
 		runTimeout  = 5 * time.Minute
@@ -441,4 +441,96 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	s.GreaterOrEqual(transitionIdx, 0, "expected a time-skipping transition event")
 	s.GreaterOrEqual(timedOutIdx, 0, "expected the workflow to time out")
 	s.Less(transitionIdx, timedOutIdx, "the time-skipping transition must be recorded before the timeout")
+}
+
+func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTimerFiredDuringStartedWorkflowTask() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	const (
+		fastForward = time.Minute
+		timer1Dur   = 45 * time.Second
+	)
+
+	cfg := &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(fastForward)}
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(90 * time.Second),
+		TimeSkippingConfig:  cfg,
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// WT1: start timer1. Close-tx skips to timer1; timer1 fires; WT2 is scheduled.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("t1", timer1Dur)},
+		}, nil
+	})
+	s.NoError(err)
+
+	// WT2: poll (marks it STARTED), then hold it open until the fast-forward disable fires, so the
+	// transition is emitted while this workflow task is in flight. The eventual complete response is
+	// expected to be rejected (UnhandledCommand) because the buffered transition invalidated the WT.
+	_, _ = env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{}).
+		HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.AwaitTruef(func() bool {
+				ms := s.getMutableState(env, tv.WorkflowID(), runID)
+				return ms.State.ExecutionInfo.GetTimeSkippingInfo().GetFastForwardInfo().GetHasReached()
+			}, 75*time.Second, 200*time.Millisecond, "fast-forward disable did not fire while the workflow task was started")
+
+			// The disable transition mutates state synchronously in the close-transaction,
+			// even though its history event is still buffered while this WT is in flight:
+			// time skipping is already disabled here, before the event is flushed to history.
+			ms := s.getMutableState(env, tv.WorkflowID(), runID)
+			s.False(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled(),
+				"time skipping must be disabled in mutable state once the fast-forward timer fired")
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{completeWorkflowCmd()},
+			}, nil
+		}, taskpoller.WithTimeout(90*time.Second))
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+
+	// A fast-forward disable transition (DisabledAfterFastForward) must be present.
+	sawDisableTransition := false
+	for _, e := range s.findTransitionedEvents(hist) {
+		if e.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward() {
+			sawDisableTransition = true
+		}
+	}
+	s.True(sawDisableTransition, "expected a fast-forward disable transition")
+
+	// No transition may sit inside an open WorkflowTaskStarted->Completed/Failed/TimedOut window.
+	insideStartedWT := false
+	for _, e := range hist {
+		switch e.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
+			insideStartedWT = true
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+			enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+			enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+			insideStartedWT = false
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
+			s.False(insideStartedWT,
+				"time-skipping transition (event %d) must not be wedged inside an open workflow-task window",
+				e.GetEventId())
+		default:
+			// other event types are irrelevant to this ordering check
+		}
+	}
+
+	// Event IDs must be strictly increasing across the whole history.
+	for i := 1; i < len(hist); i++ {
+		s.Greater(hist[i].GetEventId(), hist[i-1].GetEventId(),
+			"event IDs must be strictly increasing: event %d follows event %d",
+			hist[i].GetEventId(), hist[i-1].GetEventId())
+	}
 }
