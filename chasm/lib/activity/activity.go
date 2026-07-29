@@ -913,6 +913,10 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
+	if a.isTerminal() {
+		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+	}
+
 	// Reject a second cancellation request with a different request ID.
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		return nil, serviceerror.NewFailedPrecondition(

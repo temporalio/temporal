@@ -256,7 +256,7 @@ func (s *standaloneActivityTestSuite) TestRunQualifiedMutationRetry() {
 		},
 	}
 
-	// TODO: Add Reset and UpdateOptions once their APIs support request IDs.
+	// TODO: Add Reset, UpdateOptions, and Unpause once their APIs support request IDs.
 	// Close run 1, start a replacement with the same activity ID, then verify a retry pinned to run 1 leaves run 2 untouched.
 	for _, tc := range testCases {
 		s.Run(tc.name, func(s *standaloneActivityTestSuite) {
