@@ -102,6 +102,9 @@ func (s *SignalAggregator) Stop() {
 }
 
 func (s *SignalAggregator) settingsChanged(newSettings Settings) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	return s.latencyByGroup == nil || !reflect.DeepEqual(newSettings, s.lastSettings)
 }
 
