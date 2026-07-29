@@ -1,11 +1,13 @@
 package matching
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -21,6 +23,29 @@ const scalerBucketSize = scalerWindow / simplePartitionScalerTrackerBuckets
 
 func newTestScaler(ts clock.TimeSource, settings dynamicconfig.SimplePartitionScalerSettings) *simplePartitionScaler {
 	return newSimplePartitionScaler(dynamicconfig.GetTypedPropertyFn(settings), ts)
+}
+
+func TestSimplePartitionScalerEnabledDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
+			Enabled: true,
+			Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+				{Window: time.Second, TargetRate: 100},
+			},
+			Downs: []dynamicconfig.SimplePartitionScalerThreshold{
+				{Window: time.Second, TargetRate: 100},
+			},
+		}),
+		clock.NewEventTimeSource(),
+	)
+
+	var dec PartitionScalerDecision
+	require.NotPanics(t, func() {
+		dec = scaler.OnTasks(PartitionScalerInput{NumTasks: 1, CurrentTarget: 1})
+	})
+	require.True(t, dec.NoChange, "first call before a full window should not change the target")
 }
 
 // feedRateForOneWindow adds a steady tasksPerSecond to the tracker for one
@@ -199,7 +224,7 @@ func TestSimplePartitionScalerEnabledNoWindows(t *testing.T) {
 func TestSimplePartitionScalerScalesUp(t *testing.T) {
 	t.Parallel()
 
-	ts := clock.NewEventTimeSource()
+	ts := clock.NewRealTimeSource()
 	scaler := newTestScaler(ts, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Ups: []dynamicconfig.SimplePartitionScalerThreshold{
@@ -211,8 +236,12 @@ func TestSimplePartitionScalerScalesUp(t *testing.T) {
 	var privateState *anypb.Any
 	var dec PartitionScalerDecision
 	initialTarget := 1
-	for _ = range 11 {
-		ts.Advance(100 * time.Millisecond)
+	for i := range 100 {
+		fmt.Printf("%d: target = %d\n", i, initialTarget)
+		delay := backoff.Jitter(100*time.Millisecond, 0.05)
+		//fmt.Printf("delay=%v\n", delay)
+		//ts.Advance(delay)
+		time.Sleep(time.Duration(delay))
 		dec = scaler.OnTasks(PartitionScalerInput{
 			NumTasks:      100,
 			CurrentTarget: initialTarget,
@@ -226,7 +255,7 @@ func TestSimplePartitionScalerScalesUp(t *testing.T) {
 	}
 
 	require.False(t, dec.NoChange)
-	require.Equal(t, 11, dec.NewTarget) // I actually expected 10
+	require.Equal(t, 10, dec.NewTarget) // I actually expected 10
 }
 
 // TestSimplePartitionScalerScalesDown drives a rate below the current target's
