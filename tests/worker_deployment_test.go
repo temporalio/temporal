@@ -335,7 +335,7 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	}()
 
 	// ensure the version is created in deployment
-	// nolint:forbidigo - this is a legacy EventuallyWithT as present in many of these tests, I'm not adding it I'm just changing the namespace field
+	//nolint:forbidigo // this is a legacy EventuallyWithT as present in many of these tests, I'm not adding it I'm just changing the namespace field
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		res, _ := env.FrontendClient().DescribeWorkerDeployment(ctx,
