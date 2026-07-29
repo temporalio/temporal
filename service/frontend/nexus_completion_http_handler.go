@@ -387,7 +387,7 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 		}
 		// A canceled completion must carry CanceledFailureInfo so that it is recorded as canceled instead of failed.
 		if req.State == nexus.OperationStateCanceled {
-			failure = commonnexus.EnsureCanceledFailureInfo(failure)
+			failure = commonnexus.CoerceToCanceledFailure(failure)
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Failure{
 			Failure: failure,

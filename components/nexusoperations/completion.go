@@ -88,7 +88,7 @@ func handleOperationError(
 
 		return FailedEventDefinition{}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
-		originalCause = commonnexus.EnsureCanceledFailureInfo(originalCause)
+		originalCause = commonnexus.CoerceToCanceledFailure(originalCause)
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive

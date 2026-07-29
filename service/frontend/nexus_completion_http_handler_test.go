@@ -202,9 +202,8 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 	}
 }
 
-// TestCompleteChasmOperation_CanceledBareFailure guards that bare canceled failures are
-// normalized before the CHASM completion request reaches history; otherwise the operation is
-// recorded as failed instead of canceled.
+// TestCompleteChasmOperation_CanceledBareFailure guards bare canceled failures
+// on the CHASM async completion path.
 func TestCompleteChasmOperation_CanceledBareFailure(t *testing.T) {
 	t.Parallel()
 
@@ -227,5 +226,5 @@ func TestCompleteChasmOperation_CanceledBareFailure(t *testing.T) {
 	}
 	require.NoError(t, h.completeChasmOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, req, nil))
 	require.NotNil(t, captured.GetFailure().GetCanceledFailureInfo(),
-		"canceled completion must carry CanceledFailureInfo")
+		"bare canceled failures must carry CanceledFailureInfo")
 }

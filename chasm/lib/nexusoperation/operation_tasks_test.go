@@ -585,15 +585,11 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 	}
 }
 
-// TestNewInvocationResult_CanceledBareFailure guards the sync completion path's
-// commonnexus.EnsureCanceledFailureInfo call site. A canceled operation whose failure body carries no
-// recognized Temporal type metadata converts to a non-canceled failure; newInvocationResult must still
-// surface it as a CanceledFailure so the operation is recorded canceled rather than failed.
+// TestNewInvocationResult_CanceledBareFailure guards sync canceled completions whose
+// unwrapped cause is a bare Nexus failure.
 func TestNewInvocationResult_CanceledBareFailure(t *testing.T) {
 	t.Parallel()
 
-	// Mirror the wire shape the client reconstructs for an older/non-Temporal server: an
-	// OperationError wrapping a bare failure cause, with the wrapper marked for unwrapping.
 	opErr := &nexus.OperationError{
 		State:   nexus.OperationStateCanceled,
 		Message: "operation canceled from handler",
@@ -607,7 +603,7 @@ func TestNewInvocationResult_CanceledBareFailure(t *testing.T) {
 	cancel, ok := result.(invocationResultCancel)
 	require.True(t, ok, "canceled operation error must produce a cancel result")
 	require.NotNil(t, cancel.failure.GetCanceledFailureInfo(),
-		"a canceled completion with a bare (non-Temporal) failure body must surface as CanceledFailure")
+		"bare canceled failures must surface as CanceledFailure")
 	require.Equal(t, "cause", cancel.failure.GetMessage())
 }
 
