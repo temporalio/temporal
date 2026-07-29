@@ -48,6 +48,7 @@ type priTaskMatcher struct {
 
 type waitingPoller struct {
 	waitableMatchResult
+	prev, next        *waitingPoller // intrusive links for pollerList; nil when not queued
 	startTime         time.Time
 	forwardCtx        context.Context   // non-nil iff poll can be forwarded
 	pollMetadata      *pollMetadata     // non-nil iff poll can be forwarded

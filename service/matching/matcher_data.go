@@ -1,7 +1,6 @@
 package matching
 
 import (
-	"container/heap"
 	"context"
 	"sync"
 	"time"
@@ -62,58 +61,65 @@ const (
 // Currently we only use 1 token at a time.
 const maxTokens = 1
 
-type pollerPQ struct {
-	heap []*waitingPoller
+// pollerList is an intrusive doubly-linked list of waiting pollers. Pollers are matched
+// by walking from the head, so the list is kept in the order we want to match them:
+// FIFO (insertion order), except that task forwarders/validators are kept after all
+// local pollers so a task is matched to a local poller in preference to a forwarder.
+//
+// It's intrusive (next/prev live in waitingPoller) so there's no per-poller allocation
+// and removal is O(1) given the poller. There are only ever a handful of forwarders, so
+// keeping them grouped at the tail on insert is cheap.
+type pollerList struct {
+	head, tail *waitingPoller
+	count      int
 }
 
-// implements heap.Interface
-func (p *pollerPQ) Len() int {
-	return len(p.heap)
+func (p *pollerList) Len() int {
+	return p.count
 }
 
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Less(i int, j int) bool {
-	a, b := p.heap[i], p.heap[j]
-	// task forwarders/validators have lower priority than local polls
-	aIsForwarder := a.taskForwarderType != notTaskForwarder
-	bIsForwarder := b.taskForwarderType != notTaskForwarder
-	if !aIsForwarder && bIsForwarder {
-		return true
-	} else if aIsForwarder && !bIsForwarder {
-		return false
+func (p *pollerList) Add(poller *waitingPoller) {
+	poller.matchHeapIndex = 0 // non-negative: signals "in queue"
+
+	// Insert after the last local poller: at the tail for a forwarder, or just before
+	// the forwarders (which stay grouped at the tail) for a local poller.
+	at := p.tail
+	if poller.taskForwarderType == notTaskForwarder {
+		for at != nil && at.taskForwarderType != notTaskForwarder {
+			at = at.prev
+		}
 	}
-	return a.startTime.Before(b.startTime)
+
+	next := p.head
+	if at != nil {
+		next = at.next
+		at.next = poller
+	} else {
+		p.head = poller
+	}
+	poller.prev, poller.next = at, next
+	if next != nil {
+		next.prev = poller
+	} else {
+		p.tail = poller
+	}
+	p.count++
 }
 
-func (p *pollerPQ) Add(poller *waitingPoller) {
-	heap.Push(p, poller)
-}
-
-func (p *pollerPQ) Remove(poller *waitingPoller) {
-	heap.Remove(p, poller.matchHeapIndex)
-}
-
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Swap(i int, j int) {
-	p.heap[i], p.heap[j] = p.heap[j], p.heap[i]
-	p.heap[i].matchHeapIndex = i
-	p.heap[j].matchHeapIndex = j
-}
-
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Push(x any) {
-	poller := x.(*waitingPoller) // nolint:revive
-	poller.matchHeapIndex = len(p.heap)
-	p.heap = append(p.heap, poller)
-}
-
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Pop() any {
-	last := len(p.heap) - 1
-	poller := p.heap[last]
-	p.heap = p.heap[:last]
+func (p *pollerList) Remove(poller *waitingPoller) {
+	if poller.prev != nil {
+		poller.prev.next = poller.next
+	} else {
+		p.head = poller.next
+	}
+	if poller.next != nil {
+		poller.next.prev = poller.prev
+	} else {
+		p.tail = poller.prev
+	}
+	poller.prev, poller.next = nil, nil
 	poller.matchHeapIndex = invalidHeapIndex
-	return poller
+	p.count--
 }
 
 // taskBTree is a priority-ordered collection of tasks backed by a B-tree.
@@ -217,7 +223,7 @@ type matcherData struct {
 
 	// waiting pollers and tasks
 	// invariant: all pollers and tasks in these data structures have matchResult == nil
-	pollers pollerPQ
+	pollers pollerList
 	tasks   taskBTree
 
 	lastPoller time.Time // most recent poll start time
@@ -439,7 +445,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 		}
 
 		var matched *waitingPoller
-		for _, poller := range d.pollers.heap {
+		for poller := d.pollers.head; poller != nil; poller = poller.next {
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
 				// query-only poll only matches with query (but can match poll forwarder)
@@ -603,7 +609,7 @@ func (d *matcherData) TimeSinceLastPoll() time.Duration {
 func (d *matcherData) HasWaitingPoller() bool {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	for _, p := range d.pollers.heap {
+	for p := d.pollers.head; p != nil; p = p.next {
 		if p.taskForwarderType == notTaskForwarder {
 			return true
 		}
@@ -617,7 +623,7 @@ type waitableMatchResult struct {
 	// these fields are under matcherData.lock even though they're embedded in other structs
 	matchCond      sync.Cond
 	matchResult    *matchResult
-	matchHeapIndex int // current heap index for easy removal
+	matchHeapIndex int // non-negative while queued (in pollerList or taskBTree), invalidHeapIndex otherwise
 }
 
 func (w *waitableMatchResult) initMatch(d *matcherData) {
