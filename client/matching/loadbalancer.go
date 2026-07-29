@@ -96,23 +96,24 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		partitionCount = max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
 	}
 
-	// Backlog-aware add-task load balancing:
-	// If the server provided a backlog cap and per-partition counts covering all write partitions, bias
-	// new tasks toward partitions whose backlog is further below the cap (weighted random by gap to cap).
-	// Falls back to uniform when backlog data or cap is unavailable, or when every partition is at cap.
-	if backlogCap := number.DecodeCompact8(pc.BacklogCap); backlogCap > 0 &&
-		partitionCount > 0 && len(pc.BacklogCount) >= partitionCount {
-		if p, ok := pickWritePartitionByGap(pc.BacklogCount, partitionCount, backlogCap); ok {
-			return taskQueue.NormalPartition(p)
-		}
-	}
-
-	return taskQueue.NormalPartition(rand.Intn(partitionCount))
+	return taskQueue.NormalPartition(pickWritePartitionByGap(
+		pc.BacklogCount,
+		partitionCount,
+		number.DecodeCompact8(pc.BacklogCap),
+	))
 }
 
 // pickWritePartitionByGap picks a partition with probability proportional to how far its backlog
-// is below backlogCap. Returns ok=false when every partition is at or above the cap.
-func pickWritePartitionByGap(counts []number.Compact8, partitionCount int, backlogCap int64) (int, bool) {
+// is below backlogCap. Falls back to uniform random if any of these are true:
+//   - every partition is at or above the backlogCap
+//   - backlogCap is 0
+//   - when backlog data is not available for all write partitions
+func pickWritePartitionByGap(counts []number.Compact8, partitionCount int, backlogCap int64) int {
+	if backlogCap == 0 ||
+		len(counts) < partitionCount {
+		return rand.Intn(partitionCount)
+	}
+
 	var total int64
 	for i := range partitionCount {
 		if gap := backlogCap - number.DecodeCompact8(counts[i]); gap > 0 {
@@ -120,7 +121,7 @@ func pickWritePartitionByGap(counts []number.Compact8, partitionCount int, backl
 		}
 	}
 	if total <= 0 { // all partitions are at or above cap
-		return 0, false
+		return rand.Intn(partitionCount)
 	}
 	r := rand.Int63n(total)
 	for i := range partitionCount {
@@ -129,11 +130,11 @@ func pickWritePartitionByGap(counts []number.Compact8, partitionCount int, backl
 			continue
 		}
 		if r < gap { // more likely to be true the bigger this partition's gap is
-			return i, true
+			return i
 		}
 		r -= gap
 	}
-	return partitionCount - 1, true // unreachable in practice; guard against compact8 rounding
+	return partitionCount - 1 // unreachable in practice; guard against compact8 rounding
 }
 
 // PickReadPartition picks a partition for poller to poll task from, and keeps load balanced between partitions.
