@@ -857,14 +857,10 @@ func (d *ClientImpl) SetCurrentVersion(
 
 	var outcome *updatepb.Outcome
 	if allowNoPollers {
-		if versionObj.GetBuildId() == "" {
-			return nil, serviceerror.NewInvalidArgument("Build ID cannot be empty when AllowNoPollers is set to true")
-		}
-
-		err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
-		if err != nil {
+		if err = validateParamsForAllowNoPollers(versionObj, d.maxIDLengthLimit()); err != nil {
 			return nil, err
 		}
+
 		// we want to start the Worker Deployment workflow if it hasn't been started by a poller
 		outcome, err = d.updateWithStartWorkerDeployment(
 			ctx,
@@ -979,12 +975,7 @@ func (d *ClientImpl) SetRampingVersion(
 
 	var outcome *updatepb.Outcome
 	if allowNoPollers {
-		if versionObj.GetBuildId() == "" {
-			return nil, serviceerror.NewInvalidArgument("Build ID cannot be empty when AllowNoPollers is set to true")
-		}
-
-		err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
-		if err != nil {
+		if err = validateParamsForAllowNoPollers(versionObj, d.maxIDLengthLimit()); err != nil {
 			return nil, err
 		}
 
