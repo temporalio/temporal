@@ -56,6 +56,11 @@ type RPCFactory struct {
 	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient func() (*common.FrontendHTTPClient, error)
+	// A OnceValue wrapper for createLocalFrontendGRPCConnection. The connection is
+	// shared: grpc.ClientConn is safe for concurrent use and multiplexes requests,
+	// and callers never close it, so dialing per call only leaks connections and
+	// their background goroutines.
+	localFrontendGRPCConn func() *grpc.ClientConn
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -104,6 +109,7 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
+	f.localFrontendGRPCConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
 	return f
 }
 
@@ -259,8 +265,14 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	return d.dial(rpcAddress, tlsClientConfig, append(additionalDialOptions, keepAliveOption)...)
 }
 
-// CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
+// CreateLocalFrontendGRPCConnection returns the shared connection for internal
+// frontend calls, dialing it on first use.
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+	return d.localFrontendGRPCConn()
+}
+
+// createLocalFrontendGRPCConnection creates connection for internal frontend calls
+func (d *RPCFactory) createLocalFrontendGRPCConnection() *grpc.ClientConn {
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
 
 	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
