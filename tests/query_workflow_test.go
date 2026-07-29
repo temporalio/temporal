@@ -239,9 +239,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	var queryResultStr string
 	var queryDuration time.Duration
 	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		startTime := time.Now()
 		queryResult, err := env.SdkClient().QueryWorkflow(ctx, id, "", "test")
@@ -250,7 +248,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 		if err == nil {
 			getErr = queryResult.Get(&queryResultStr)
 		}
-	}()
+	})
 
 	// delay 2s to start worker, this will block query for 2s
 	time.Sleep(time.Second * 2) //nolint:forbidigo
@@ -375,7 +373,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 
 	tq := env.WorkerTaskQueue()
 	id := "test-query-non-sticky-multi-page"
-	ctx, cancel := context.WithTimeout(env.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	queryWorker := worker.New(env.SdkClient(), tq, worker.Options{})
@@ -446,7 +444,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	env := testcore.NewEnv(s.T())
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, "workflow")

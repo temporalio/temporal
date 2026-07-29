@@ -17,7 +17,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -32,10 +31,11 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/frontend/configs"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -136,19 +136,13 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
-	// Determine the target namespace, workflow, and run ID from the completion token.
-	targetNamespaceID := completion.GetNamespaceId()
-	targetBusinessID := completion.GetWorkflowId()
-	targetRunID := completion.GetRunId()
-	if len(completion.GetComponentRef()) > 0 {
-		ref := &persistencespb.ChasmComponentRef{}
-		if err := proto.Unmarshal(completion.GetComponentRef(), ref); err != nil {
-			h.Logger.Error("failed to unmarshal CHASM component ref", tag.Error(err))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
-		}
-		targetNamespaceID = ref.GetNamespaceId()
-		targetBusinessID = ref.GetBusinessId()
-		targetRunID = ref.GetRunId()
+	// Determine the target namespace, workflow, and run ID from the completion token. The CHASM
+	// ComponentRef is canonical when present; otherwise the top-level HSM fields are used. Shared
+	// with the system-callback router via commonnexus.CompletionTarget so the two can't drift.
+	targetNamespaceID, targetBusinessID, targetRunID, err := commonnexus.CompletionTarget(completion)
+	if err != nil {
+		h.Logger.Error("failed to unmarshal CHASM component ref", tag.Error(err))
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
 	ns, err := h.NamespaceRegistry.GetNamespaceByID(namespace.ID(targetNamespaceID))
@@ -216,30 +210,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
 
-	var links []*commonpb.Link
-	for _, nexusLink := range r.Links {
-		switch nexusLink.Type {
-		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-			link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
-			if err != nil {
-				// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
-				// so ignoring the error for now; we will revisit how to handle these errors later.
-				h.Logger.Warn(
-					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
-					tag.Error(err),
-				)
-				continue
-			}
-			links = append(links, &commonpb.Link{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: link,
-				},
-			})
-		default:
-			// If the link data type is unsupported, just ignore it for now.
-			h.Logger.Warn(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
-		}
-	}
+	links := commonnexus.ConvertNexusLinksToProtoLinks(r.Links, h.Logger)
 
 	var successPayload *commonpb.Payload
 	switch r.State { // nolint:exhaustive
@@ -262,11 +233,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 
-	if len(completion.GetComponentRef()) > 0 {
-		err = h.completeChasmOperation(ctx, logger, completion, successPayload, r, links)
-	} else {
-		err = h.completeHSMOperation(ctx, completion, successPayload, r, links)
-	}
+	err = h.completeOperation(ctx, logger, completion, successPayload, r, links, h.Config.EnableChasm(ns.Name().String()))
 	if err == nil {
 		return nil
 	}
@@ -280,6 +247,75 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 	return commonnexus.ConvertGRPCError(err, false)
+}
+
+// completeOperation dispatches the completion to the framework named by its
+// token. If that framework no longer has the operation, the token is converted
+// to the other framework and retried once.
+func (h *nexusCompletionHandler) completeOperation(
+	ctx context.Context,
+	logger log.Logger,
+	completion *tokenspb.NexusOperationCompletion,
+	successPayload *commonpb.Payload,
+	req *nexusrpc.CompletionRequest,
+	links []*commonpb.Link,
+	chasmEnabled bool,
+) error {
+	isChasm := len(completion.GetComponentRef()) > 0
+	var err error
+	if isChasm {
+		err = h.completeChasmOperation(ctx, logger, completion, successPayload, req, links)
+	} else {
+		err = h.completeHSMOperation(ctx, completion, successPayload, req, links)
+	}
+	if _, notFound := errors.AsType[*serviceerror.NotFound](err); !notFound || completion.GetRequestId() == "" {
+		return err
+	}
+	// If the workflow itself is gone, the operation cannot exist in either framework.
+	if isTerminalCompletionError(err) {
+		return err
+	}
+	// Only try HSM -> CHASM when this namespace can have CHASM workflow state.
+	if !isChasm && !chasmEnabled {
+		return err
+	}
+	converted, convErr := convertCompletionToOtherFramework(completion)
+	if convErr != nil {
+		logger.Warn("failed to convert nexus completion token to the other framework", tag.Error(convErr))
+		return err
+	}
+	var fallbackErr error
+	if isChasm {
+		fallbackErr = h.completeHSMOperation(ctx, converted, successPayload, req, links)
+	} else {
+		fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
+	}
+	// If the fallback also reports NotFound, the operation is gone in both frameworks.
+	// Return the error from the initial attempt.
+	if _, fbNotFound := errors.AsType[*serviceerror.NotFound](fallbackErr); fbNotFound {
+		return err
+	}
+	return fallbackErr
+}
+
+// isTerminalCompletionError reports whether err means the workflow is already
+// completed or does not exist. These arrive as NotFound errors from history.
+func isTerminalCompletionError(err error) bool {
+	var nfe *serviceerror.NotFound
+	if !errors.As(err, &nfe) {
+		return false
+	}
+	msg := nfe.Error()
+	return msg == consts.ErrWorkflowCompleted.Error() || msg == consts.ErrWorkflowExecutionNotFound.Error()
+}
+
+// convertCompletionToOtherFramework converts a workflow Nexus completion token
+// between HSM and CHASM forms.
+func convertCompletionToOtherFramework(completion *tokenspb.NexusOperationCompletion) (*tokenspb.NexusOperationCompletion, error) {
+	if len(completion.GetComponentRef()) > 0 {
+		return nexusworkflowref.CHASMRefToHSMRef(completion)
+	}
+	return nexusworkflowref.HSMRefToCHASMRef(completion)
 }
 
 func (h *nexusCompletionHandler) completeHSMOperation(
@@ -340,7 +376,11 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 
 	switch req.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		failure, err := commonnexus.NexusFailureToTemporalFailure(*req.Error.OriginalFailure)
+		// Temporal->Temporal calls transmit the real failure as the wrapper OperationError's cause.
+		// Unwrap it so the caller sees the handler's original error (message, type, details, and
+		// canceled/terminated info) rather than the generic wrapper.
+		nexusFailure := nexusrpc.UnwrapFailure(req.Error.OriginalFailure)
+		failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
 		if err != nil {
 			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
@@ -412,7 +452,8 @@ func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
 	}
 
-	rCtx.originalHeaders.Set(interceptor.DCRedirectionApiHeaderName, "true")
+	rCtx.originalHeaders.Set(interceptor.DCRedirectionAPIHeaderName, "true")
+	rCtx.originalHeaders.Set(interceptor.DCRedirectionSourceCellHeaderName, h.ClusterMetadata.GetCurrentClusterName())
 	cc := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		HTTPCaller: (&forwardingHTTPHeaderWrapper{
 			client:                 client,

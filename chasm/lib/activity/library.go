@@ -62,6 +62,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				TypeSearchAttribute,
 				StatusSearchAttribute,
 				chasm.SearchAttributeTaskQueue,
+				chasm.SearchAttributeExecutionTime,
 			),
 			chasm.WithBusinessIDAlias("ActivityId"),
 			chasm.WithContextValues(map[any]any{
@@ -71,6 +72,14 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				},
 			}),
 		),
+	}
+}
+
+// NewNilLibrary creates a Library with all nil handlers. Useful for
+// registration-only contexts like tdbg where no task execution is needed.
+func NewNilLibrary() chasm.Library {
+	return &library{
+		componentOnlyLibrary: *newComponentOnlyLibrary(nil, nil),
 	}
 }
 

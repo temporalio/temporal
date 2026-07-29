@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -18,8 +16,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -28,24 +25,18 @@ var (
 )
 
 type UpdateWorkflowSdkSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*UpdateWorkflowSdkSuite]
 }
 
 func TestUpdateWorkflowSdkSuite(t *testing.T) {
-	t.Parallel()
-	s := new(UpdateWorkflowSdkSuite)
-	suite.Run(t, s)
+	parallelsuite.Run(t, &UpdateWorkflowSdkSuite{})
 }
 
 func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAdmitted() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	tv := testvars.New(s.T()).
-		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(s.Namespace())
+	env := testcore.NewEnv(s.T())
 
 	workflowFn := func(ctx workflow.Context) error {
-		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
+		s.NoError(workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, arg string) error {
 			s.NoError(workflow.Await(ctx, func() bool { return false }))
 			return unreachableErr
 		}))
@@ -54,18 +45,18 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAdmitted() {
 	}
 
 	// Start workflow and wait until update is admitted, without starting the worker
-	run := s.startWorkflow(ctx, tv, workflowFn)
-	s.updateWorkflowWaitAdmitted(ctx, tv, "update-arg")
+	run := s.startWorkflow(env, workflowFn)
+	s.updateWorkflowWaitAdmitted(env, "update-arg")
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
-	s.NoError(s.SdkClient().TerminateWorkflow(ctx, tv.WorkflowID(), run.GetRunID(), "reason"))
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), env.Tv().WorkflowID(), run.GetRunID(), "reason"))
 
-	_, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+	_, err := s.pollUpdate(env, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
 
-	hist := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
+	hist := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
 	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled`, hist)
@@ -78,14 +69,10 @@ WorkflowExecutionTerminated // This can be EventID=3 if WF is terminated before 
 // server times out the WF after the update has been accepted but before it has been completed. It checks
 // that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
 func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	tv := testvars.New(s.T()).
-		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(s.Namespace())
+	env := testcore.NewEnv(s.T())
 
 	workflowFn := func(ctx workflow.Context) error {
-		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
+		s.NoError(workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, arg string) error {
 			s.NoError(workflow.Await(ctx, func() bool { return false }))
 			return unreachableErr
 		}))
@@ -93,11 +80,11 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
 		return unreachableErr
 	}
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
-	wfRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:                       tv.WorkflowID(),
-		TaskQueue:                tv.TaskQueue().Name,
+	wfRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:                       env.Tv().WorkflowID(),
+		TaskQueue:                env.WorkerTaskQueue(),
 		WorkflowExecutionTimeout: time.Second,
 	}, workflowFn)
 	s.NoError(err)
@@ -108,23 +95,23 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(tv.NamespaceName().String(), tv.WorkflowExecution()),
+		env.GetHistoryFunc(env.Namespace().String(), env.Tv().WorkflowExecution()),
 		1*time.Second, 200*time.Millisecond)
 
-	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
+	updateHandle, err := s.updateWorkflowWaitAccepted(env, "my-update-arg")
 	s.NoError(err)
 
-	err = updateHandle.Get(ctx, nil)
+	err = updateHandle.Get(s.Context(), nil)
 	var appErr *temporal.ApplicationError
 	s.ErrorAs(err, &appErr)
 	s.Contains("Workflow Update failed because the Workflow completed before the Update completed.", appErr.Message())
 
-	pollFailure, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	pollFailure, pollErr := s.pollUpdate(env, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 	s.NoError(pollErr)
 	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
 
 	var wee *temporal.WorkflowExecutionError
-	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
+	s.ErrorAs(wfRun.Get(s.Context(), nil), &wee)
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -135,21 +122,17 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWorkflowAfterUpdateAccepted() {
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted
   8 WorkflowExecutionUpdateAccepted
-  9 WorkflowExecutionTimedOut`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
+  9 WorkflowExecutionTimedOut`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
 }
 
 // TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted executes an update, and while WF awaits
 // server terminates the WF after the update has been accepted but before it has been completed. It checks
 // that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
 func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAccepted() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	tv := testvars.New(s.T()).
-		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace().String()))
+	env := testcore.NewEnv(s.T())
 
 	workflowFn := func(ctx workflow.Context) error {
-		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
+		s.NoError(workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, arg string) error {
 			s.NoError(workflow.Await(ctx, func() bool { return false }))
 			return unreachableErr
 		}))
@@ -157,8 +140,8 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAccepted() {
 		return unreachableErr
 	}
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
-	wfRun := s.startWorkflow(ctx, tv, workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	wfRun := s.startWorkflow(env, workflowFn)
 
 	// Wait for the first WFT to complete.
 	s.WaitForHistoryEvents(`
@@ -166,36 +149,36 @@ func (s *UpdateWorkflowSdkSuite) TestTerminateWorkflowAfterUpdateAccepted() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(tv.NamespaceName().String(), tv.WorkflowExecution()),
+		env.GetHistoryFunc(env.Namespace().String(), env.Tv().WorkflowExecution()),
 		1*time.Second, 200*time.Millisecond)
 
-	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
+	updateHandle, err := s.updateWorkflowWaitAccepted(env, "my-update-arg")
 	s.NoError(err)
 
-	s.NoError(s.SdkClient().TerminateWorkflow(ctx, tv.WorkflowID(), wfRun.GetRunID(), "reason"))
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), env.Tv().WorkflowID(), wfRun.GetRunID(), "reason"))
 
-	err = updateHandle.Get(ctx, nil)
+	err = updateHandle.Get(s.Context(), nil)
 	var appErr *temporal.ApplicationError
 	s.ErrorAs(err, &appErr)
 	s.Contains("Workflow Update failed because the Workflow completed before the Update completed.", appErr.Message())
 
-	pollFailure, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	pollFailure, pollErr := s.pollUpdate(env, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 	s.NoError(pollErr)
 	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
 
 	var wee *temporal.WorkflowExecutionError
-	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
+	s.ErrorAs(wfRun.Get(s.Context(), nil), &wee)
 
 	s.EqualHistoryEvents(`
-	1 WorkflowExecutionStarted
-	2 WorkflowTaskScheduled
-	3 WorkflowTaskStarted
-	4 WorkflowTaskCompleted
-	5 WorkflowTaskScheduled
-	6 WorkflowTaskStarted
-	7 WorkflowTaskCompleted
-	8 WorkflowExecutionUpdateAccepted
-	9 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 WorkflowExecutionUpdateAccepted
+  9 WorkflowExecutionTerminated`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
 }
 
 func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
@@ -208,20 +191,15 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
 		starts 2nd run, Update is delivered to it, and processed by registered handler.
 	*/
 
-	tv := testvars.New(s.T()).
-		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace().String()))
-
-	rootCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
+	env := testcore.NewEnv(s.T())
 
 	sendUpdateActivityFn := func(ctx context.Context) error {
-		s.updateWorkflowWaitAdmitted(rootCtx, tv, "update-arg")
+		s.updateWorkflowWaitAdmitted(env, "update-arg")
 		return nil
 	}
 
 	workflowFn2 := func(ctx workflow.Context) error {
-		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
+		s.NoError(workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
 			return workflow.GetInfo(ctx).WorkflowExecution.RunID, nil
 		}))
 
@@ -238,15 +216,15 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
 		return workflow.NewContinueAsNewError(ctx, workflowFn2)
 	}
 
-	s.SdkWorker().RegisterWorkflow(workflowFn1)
-	s.SdkWorker().RegisterWorkflow(workflowFn2)
-	s.SdkWorker().RegisterActivity(sendUpdateActivityFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn1)
+	env.SdkWorker().RegisterWorkflow(workflowFn2)
+	env.SdkWorker().RegisterActivity(sendUpdateActivityFn)
 
 	var firstRun sdkclient.WorkflowRun
-	firstRun = s.startWorkflow(rootCtx, tv, workflowFn1)
+	firstRun = s.startWorkflow(env, workflowFn1)
 	var secondRunID string
 	s.Eventually(func() bool {
-		resp, err := s.pollUpdate(rootCtx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+		resp, err := s.pollUpdate(env, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 		if err != nil {
 			var notFoundErr *serviceerror.NotFound
 			var resourceExhaustedErr *serviceerror.ResourceExhausted
@@ -268,9 +246,9 @@ func (s *UpdateWorkflowSdkSuite) TestContinueAsNewAfterUpdateAdmitted() {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 MarkerRecorded
-  6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace().String(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+  6 WorkflowExecutionContinuedAsNew`, env.GetHistory(env.Namespace().String(), env.Tv().WithRunID(firstRun.GetRunID()).WorkflowExecution()))
 
-	hist2 := s.GetHistory(s.Namespace().String(), tv.WithRunID(secondRunID).WorkflowExecution())
+	hist2 := env.GetHistory(env.Namespace().String(), env.Tv().WithRunID(secondRunID).WorkflowExecution())
 	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -295,42 +273,43 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWithRetryAfterUpdateAdmitted() {
 		and catch up the second run.
 	*/
 
-	tv := testvars.New(s.T()).
-		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace().String()))
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
+	env := testcore.NewEnv(s.T())
 
 	workflowFn := func(ctx workflow.Context) error {
-		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
+		s.NoError(workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
 			return workflow.GetInfo(ctx).WorkflowExecution.RunID, nil
 		}))
 		s.NoError(workflow.Await(ctx, func() bool { return false }))
 		return unreachableErr
 	}
 
-	firstRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:                 tv.WorkflowID(),
-		TaskQueue:          tv.TaskQueue().Name,
+	// Start the worker polling the task queue, but without workflowFn registered yet, so
+	// the first run's WFTs fail until the run times out (workflowFn is registered below).
+	env.SdkWorker()
+
+	firstRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:                 env.Tv().WorkflowID(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 1 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts: 2,
 		},
 	}, workflowFn)
 	s.NoError(err)
-	s.updateWorkflowWaitAdmitted(ctx, tv, tv.Any().String())
+	s.updateWorkflowWaitAdmitted(env, "update-arg")
 
-	err = firstRun.GetWithOptions(ctx, nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
-	var canErr *workflow.ContinueAsNewError
-	s.ErrorAs(err, &canErr)
+	// With DisableFollowingRuns the modern SDK surfaces the run timeout (the run is retried
+	// into a new run, which the assertions below verify).
+	err = firstRun.GetWithOptions(s.Context(), nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
+	var timeoutErr *temporal.TimeoutError
+	s.ErrorAs(err, &timeoutErr)
 
 	// "start" worker for workflowFn.
-	s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	var secondRunID string
 	s.Eventually(func() bool {
-		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+		resp, err := s.pollUpdate(env, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 		if err != nil {
 			var notFoundErr *serviceerror.NotFound
 			// If a poll beats internal update retries, it will get NotFound error for a few attempts.
@@ -350,29 +329,29 @@ func (s *UpdateWorkflowSdkSuite) TestTimeoutWithRetryAfterUpdateAdmitted() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionTimedOut`, s.GetHistory(s.Namespace().String(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+  5 WorkflowExecutionTimedOut`, env.GetHistory(env.Namespace().String(), env.Tv().WithRunID(firstRun.GetRunID()).WorkflowExecution()))
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionUpdateAccepted
-  6 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace().String(), tv.WithRunID(secondRunID).WorkflowExecution()))
+  6 WorkflowExecutionUpdateCompleted`, env.GetHistory(env.Namespace().String(), env.Tv().WithRunID(secondRunID).WorkflowExecution()))
 }
 
-func (s *UpdateWorkflowSdkSuite) startWorkflow(ctx context.Context, tv *testvars.TestVars, workflowFn any) sdkclient.WorkflowRun {
-	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        tv.WorkflowID(),
-		TaskQueue: tv.TaskQueue().Name,
+func (s *UpdateWorkflowSdkSuite) startWorkflow(env *testcore.TestEnv, workflowFn any) sdkclient.WorkflowRun {
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:        env.Tv().WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
 	s.NoError(err)
 	return run
 }
 
-func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAdmitted(ctx context.Context, tv *testvars.TestVars, arg string) {
-	go func() { _, _ = s.updateWorkflowWaitAccepted(ctx, tv, arg) }()
+func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAdmitted(env *testcore.TestEnv, arg string) {
+	go func() { _, _ = s.updateWorkflowWaitAccepted(env, arg) }()
 	s.Eventually(func() bool {
-		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED})
+		resp, err := s.pollUpdate(env, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED})
 		if err == nil {
 			s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.Stage)
 			return true
@@ -380,25 +359,24 @@ func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAdmitted(ctx context.Context,
 		var notFoundErr *serviceerror.NotFound
 		s.ErrorAs(err, &notFoundErr) // poll beat send in race
 		return false
-	}, 5*time.Second, 100*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID())
+	}, 5*time.Second, 100*time.Millisecond, "update %s did not reach Admitted stage", env.Tv().UpdateID())
 }
 
-func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAccepted(ctx context.Context, tv *testvars.TestVars, arg string) (sdkclient.WorkflowUpdateHandle, error) {
-	return s.SdkClient().UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
-		UpdateID:     tv.UpdateID(),
-		WorkflowID:   tv.WorkflowID(),
-		RunID:        tv.RunID(),
-		UpdateName:   tv.HandlerName(),
+func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAccepted(env *testcore.TestEnv, arg string) (sdkclient.WorkflowUpdateHandle, error) {
+	return env.SdkClient().UpdateWorkflow(s.Context(), sdkclient.UpdateWorkflowOptions{
+		UpdateID:     env.Tv().UpdateID(),
+		WorkflowID:   env.Tv().WorkflowID(),
+		UpdateName:   env.Tv().HandlerName(),
 		Args:         []any{arg},
 		WaitForStage: sdkclient.WorkflowUpdateStageAccepted,
 	})
 }
 
-func (s *UpdateWorkflowSdkSuite) pollUpdate(ctx context.Context, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
-	return s.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
-		Namespace:  tv.NamespaceName().String(),
-		UpdateRef:  tv.UpdateRef(),
-		Identity:   tv.ClientIdentity(),
+func (s *UpdateWorkflowSdkSuite) pollUpdate(env *testcore.TestEnv, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
+	return env.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(s.Context(), &workflowservice.PollWorkflowExecutionUpdateRequest{
+		Namespace:  env.Namespace().String(),
+		UpdateRef:  env.Tv().UpdateRef(),
+		Identity:   env.Tv().ClientIdentity(),
 		WaitPolicy: waitPolicy,
 	})
 }
@@ -410,21 +388,18 @@ func (s *UpdateWorkflowSdkSuite) pollUpdate(ctx context.Context, tv *testvars.Te
 //
 // The workflow should end up with exactly 2 update callbacks (from requestID1 and requestID2).
 func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
-	s.OverrideDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true)
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-
-	taskQueue := testcore.RandomizeStr(s.T().Name())
-	updateID := "dedup-callbacks-test"
-	requestID1 := uuid.NewString()
-	requestID2 := uuid.NewString()
+	requestID1 := env.Tv().RequestID()
+	requestID2 := env.Tv().Sub("request-2").RequestID()
 
 	// Workflow where the update handler blocks until signaled.
 	wf := func(ctx workflow.Context, input string) (string, error) {
-		if err := workflow.SetUpdateHandler(ctx, "update", func(ctx workflow.Context, input string) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, input string) (string, error) {
 			signalCh := workflow.GetSignalChannel(ctx, "complete-update")
 			signalCh.Receive(ctx, nil)
 			return "updated: " + input, nil
@@ -436,25 +411,25 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 		return "done: " + input, nil
 	}
 
-	w := worker.New(s.SdkClient(), taskQueue, worker.Options{})
+	w := worker.New(env.SdkClient(), env.WorkerTaskQueue(), worker.Options{})
 	w.RegisterWorkflow(wf)
 	s.NoError(w.Start())
 	s.T().Cleanup(w.Stop)
 
-	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        testcore.RandomizeStr("wf"),
-		TaskQueue: taskQueue,
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:        env.Tv().WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}, wf, "input")
 	s.NoError(err)
 
 	makeRequest := func(reqID string) *workflowservice.UpdateWorkflowExecutionRequest {
 		return &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace:         s.Namespace().String(),
+			Namespace:         env.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 			WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
 			Request: &updatepb.Request{
-				Meta:      &updatepb.Meta{UpdateId: updateID},
-				Input:     &updatepb.Input{Name: "update", Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}}},
+				Meta:      &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
+				Input:     &updatepb.Input{Name: env.Tv().HandlerName(), Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}}},
 				RequestId: reqID,
 				CompletionCallbacks: []*commonpb.Callback{{
 					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:9999/callback"}},
@@ -464,21 +439,21 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 	}
 
 	// First request: triggers the update, waits for acceptance (update blocks in handler).
-	_, err = s.FrontendClient().UpdateWorkflowExecution(ctx, makeRequest(requestID1))
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID1))
 	s.NoError(err)
 
 	// Second request: same requestID → should be deduped by AttachCallbacks (no new callback).
-	_, err = s.FrontendClient().UpdateWorkflowExecution(ctx, makeRequest(requestID1))
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID1))
 	s.NoError(err)
 
 	// Third request: different requestID → should create a new callback via AttachCallbacks.
-	_, err = s.FrontendClient().UpdateWorkflowExecution(ctx, makeRequest(requestID2))
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID2))
 	s.NoError(err)
 
 	// Verify exactly 2 update callbacks: one from requestID1 (first request),
 	// one from requestID2 (third request). The second request was deduped.
-	descResp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 	})
 	s.NoError(err)
@@ -491,6 +466,6 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 	s.Equal(2, updateCallbackCount, "expected 2 callbacks: requestID1 (original) + requestID2 (new), with duplicate requestID1 deduped")
 
 	// Clean up.
-	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "complete-update", nil))
-	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "complete-update", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "stop", nil))
 }

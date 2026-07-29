@@ -15,6 +15,7 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // register plugins
 	sqltests "go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/temporal/environment"
 )
 
 type PostgreSQLSuite struct {
@@ -167,7 +168,9 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueUserDataSuite() {
 
 func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuite() {
 	s := &VisibilityPersistenceSuite{
-		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption()),
+		TestBase: persistencetests.NewTestBaseWithSQL(
+			persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+		),
 	}
 	suite.Run(p.T(), s)
 }
@@ -176,29 +179,37 @@ func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuite() {
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryV2PersistenceSuite() {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase = persistencetests.NewTestBaseWithSQL(
+		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+	)
+	s.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLMetadataPersistenceSuiteV2() {
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase = persistencetests.NewTestBaseWithSQL(
+		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+	)
+	s.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLClusterMetadataPersistence() {
 	s := new(persistencetests.ClusterMetadataManagerSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase = persistencetests.NewTestBaseWithSQL(
+		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+	)
+	s.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLQueuePersistence() {
 	s := new(persistencetests.QueuePersistenceSuite)
-	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.TestBase = persistencetests.NewTestBaseWithSQL(
+		persistencetests.GetPostgreSQLTestClusterOption(p.pluginName, p.connectAttrs),
+	)
+	s.Setup(nil)
 	suite.Run(p.T(), s)
 }
 
@@ -670,6 +681,38 @@ func (p *PostgreSQLSuite) TestPostgreSQLClosedConnectionError() {
 
 	s := newConnectionSuite(p.T(), testData.Factory)
 	suite.Run(p.T(), s)
+}
+
+func (p *PostgreSQLSuite) TestPostgreSQLTestClusterDropsDatabaseWithOpenConnection() {
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
+	SetupPostgreSQLDatabase(p.T(), cfg)
+
+	db, err := sql.NewSQLAdminDB(
+		sqlplugin.DbKindUnknown,
+		cfg,
+		resolver.NewNoopResolver(),
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	p.Require().NoError(err)
+	p.T().Cleanup(func() {
+		p.Require().NoError(db.Close())
+		TearDownPostgreSQLDatabase(p.T(), cfg)
+	})
+
+	testCluster := sql.NewTestCluster(
+		cfg.PluginName,
+		cfg.DatabaseName,
+		cfg.User,
+		cfg.Password,
+		environment.GetPostgreSQLAddress(),
+		environment.GetPostgreSQLPort(),
+		cfg.ConnectAttributes,
+		"",
+		nil,
+		log.NewTestLogger(),
+	)
+	testCluster.DropDatabase()
 }
 
 func (p *PostgreSQLSuite) TestPGQueueV2() {

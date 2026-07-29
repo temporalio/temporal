@@ -191,6 +191,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 					BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(c.BuildIdScavengerEnabled),
 					ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(c.ExecutionsScannerEnabled),
 					TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(c.TaskQueueScannerEnabled),
+					ScheduleInvariantsScannerOptions:       dynamicconfig.GetTypedPropertyFn(dynamicconfig.DefaultScheduleInvariantsScannerParams),
 					Persistence: &config.Persistence{
 						DefaultStore: c.DefaultStore,
 						DataStores: map[string]config.DataStore{
@@ -271,6 +272,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 			ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(false),
 			TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
 			BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
+			ScheduleInvariantsScannerOptions:       dynamicconfig.GetTypedPropertyFn(dynamicconfig.DefaultScheduleInvariantsScannerParams),
 			Persistence: &config.Persistence{
 				DefaultStore: config.StoreTypeNoSQL,
 				DataStores: map[string]config.DataStore{

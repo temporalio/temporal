@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,11 +21,12 @@ func parseGoMod(t *testing.T, content string) *modfile.File {
 }
 
 func makeGoMod(deps map[string]string) string {
-	s := "module test\n\ngo 1.21\n\nrequire (\n"
+	var s strings.Builder
+	s.WriteString("module test\n\ngo 1.21\n\nrequire (\n")
 	for mod, ver := range deps {
-		s += fmt.Sprintf("\t%s %s\n", mod, ver)
+		s.WriteString(fmt.Sprintf("\t%s %s\n", mod, ver))
 	}
-	return s + ")\n"
+	return s.String() + ")\n"
 }
 
 func TestFindRequiredModuleVersion(t *testing.T) {

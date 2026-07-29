@@ -3,7 +3,6 @@ package deleteexecutions
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -23,7 +22,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -238,8 +236,8 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
-	require.True(t, stderrors.As(err, &appErr))
-	require.Equal(t, appErr.Error(), "specific_error_from_activity (type: Unavailable, retryable: true)")
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "specific_error_from_activity (type: Unavailable, retryable: true)", appErr.Error())
 }
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) {
@@ -379,7 +377,10 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 				Execution: execution1,
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID1), 10)),
+						sadefs.TemporalNamespaceDivision: sadefs.MustEncodeValue(
+							strconv.FormatUint(uint64(archetypeID1), 10),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				},
 			},
@@ -388,7 +389,10 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 				Execution: execution2,
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID2), 10)),
+						sadefs.TemporalNamespaceDivision: sadefs.MustEncodeValue(
+							strconv.FormatUint(uint64(archetypeID2), 10),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				},
 			},
@@ -582,8 +586,8 @@ func Test_DeleteExecutionsWorkflow_QueryStats(t *testing.T) {
 		require.NoError(t, err)
 		testSuite.GetLogger().Info("Current stats.", "pageNumber", pageNumber, "DeleteExecutionsStats", string(desJson))
 
-		require.Equal(t, 10*(pageNumber-1), des.DeleteExecutionsResult.ErrorCount)
-		require.Equal(t, 220*(pageNumber-1), des.DeleteExecutionsResult.SuccessCount)
+		require.Equal(t, 10*(pageNumber-1), des.ErrorCount)
+		require.Equal(t, 220*(pageNumber-1), des.SuccessCount)
 		require.Equal(t, (10+220)*4, des.TotalExecutionsCount)
 		require.Equal(t, (10+220)*(4-(pageNumber-1)), des.RemainingExecutionsCount)
 		require.Equal(t, (10+220)/5, des.AverageRPS) // 5 seconds for every activity run.

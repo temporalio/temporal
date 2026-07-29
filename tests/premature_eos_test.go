@@ -80,7 +80,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	s.NoError(err)
 
 	// Send an update to create a speculative WFT (event 8 in memory, scheduled but not polled).
-	ctx, cancel := context.WithCancel(testcore.NewContext())
+	ctx, cancel := context.WithCancel(s.Context())
 	defer cancel()
 	updateCh := sendUpdate(ctx, env, tv)
 	defer func() { go func() { <-updateCh }() }()
@@ -111,7 +111,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	// the next page. The continuation token encodes NextEventId=8 and PersistenceToken
 	// pointing to the next DB batch — this is the "stale token" that exercises the bug.
 	histPage1, err := env.FrontendClient().GetWorkflowExecutionHistory(
-		testcore.NewContext(),
+		s.Context(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:       env.Namespace().String(),
 			Execution:       wfExecution,
@@ -131,7 +131,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	//   8: WorkflowTaskScheduled  (normal WFT scheduled to handle the pending update)
 	//   9: WorkflowExecutionSignaled  (flushed immediately: HasStartedWorkflowTask=false)
 	// After this transaction, freshNextEventId=10.
-	_, signalErr := env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
+	_, signalErr := env.FrontendClient().SignalWorkflowExecution(s.Context(),
 		&workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
 			WorkflowExecution: wfExecution,
@@ -143,7 +143,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	allEvents := make([]*historypb.HistoryEvent, len(firstPageEvents))
 	copy(allEvents, firstPageEvents)
 	for nextPageToken := staleNextPageToken; nextPageToken != nil; {
-		histResp, histErr := env.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(),
+		histResp, histErr := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace:       env.Namespace().String(),
 				Execution:       wfExecution,

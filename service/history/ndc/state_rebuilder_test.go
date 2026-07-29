@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
@@ -348,7 +347,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		util.Ptr(version),
+		new(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
 		requestID,
@@ -481,7 +480,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		util.Ptr(version),
+		new(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
 		currentMutableState,

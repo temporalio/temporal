@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/enums"
+	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/retrypolicy"
@@ -122,55 +123,6 @@ func (v *RequestValidator) ValidateWorkflowIDReusePolicy(
 	return nil
 }
 
-func (v *RequestValidator) ValidateLinks(
-	ns string,
-	links []*commonpb.Link,
-) error {
-	maxAllowedLinks := v.config.maxLinksPerRequest(ns)
-	if len(links) > maxAllowedLinks {
-		return serviceerror.NewInvalidArgumentf("cannot attach more than %d links per request, got %d", maxAllowedLinks, len(links))
-	}
-
-	maxSize := v.config.linkMaxSize(ns)
-	for _, l := range links {
-		if l.Size() > maxSize {
-			return serviceerror.NewInvalidArgumentf("link exceeds allowed size of %d, got %d", maxSize, l.Size())
-		}
-		switch t := l.Variant.(type) {
-		case *commonpb.Link_WorkflowEvent_:
-			if t.WorkflowEvent.GetNamespace() == "" {
-				return serviceerror.NewInvalidArgument("workflow event link must not have an empty namespace field")
-			}
-			if t.WorkflowEvent.GetWorkflowId() == "" {
-				return serviceerror.NewInvalidArgument("workflow event link must not have an empty workflow ID field")
-			}
-			if t.WorkflowEvent.GetRunId() == "" {
-				return serviceerror.NewInvalidArgument("workflow event link must not have an empty run ID field")
-			}
-			if t.WorkflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED && t.WorkflowEvent.GetEventRef().GetEventId() != 0 {
-				return serviceerror.NewInvalidArgument("workflow event link ref cannot have an unspecified event type and a non-zero event ID")
-			}
-		case *commonpb.Link_BatchJob_:
-			if t.BatchJob.GetJobId() == "" {
-				return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
-			}
-		case *commonpb.Link_NexusOperation_:
-			if t.NexusOperation.GetNamespace() == "" {
-				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty namespace field")
-			}
-			if t.NexusOperation.GetOperationId() == "" {
-				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty operation ID field")
-			}
-			if t.NexusOperation.GetRunId() == "" {
-				return serviceerror.NewInvalidArgument("nexus operation link must not have an empty run ID field")
-			}
-		default:
-			return serviceerror.NewInvalidArgument("unsupported link variant")
-		}
-	}
-	return nil
-}
-
 func (v *RequestValidator) UnaliasedSearchAttributesFrom(
 	attributes *commonpb.SearchAttributes,
 	namespaceName string,
@@ -265,5 +217,5 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 		return err
 	}
 
-	return v.ValidateLinks(request.GetNamespace(), request.GetLinks())
+	return commonlinks.Validate(request.GetLinks(), v.config.maxLinksPerRequest(request.GetNamespace()), v.config.linkMaxSize(request.GetNamespace()))
 }

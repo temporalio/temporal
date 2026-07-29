@@ -453,9 +453,9 @@ func (r *StreamReceiverImpl) getTaskSchedulerPriority(priority enumsspb.TaskPrio
 func (r *StreamReceiverImpl) getTaskScheduler(priority enumsspb.TaskPriority) (ctasks.Scheduler[TrackableExecutableTask], error) {
 	switch priority {
 	case enumsspb.TASK_PRIORITY_HIGH:
-		return r.ProcessToolBox.HighPriorityTaskScheduler, nil
+		return r.HighPriorityTaskScheduler, nil
 	case enumsspb.TASK_PRIORITY_LOW:
-		return r.ProcessToolBox.LowPriorityTaskScheduler, nil
+		return r.LowPriorityTaskScheduler, nil
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("Unknown task scheduler priority: %v", priority)
 	}

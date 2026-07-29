@@ -62,6 +62,10 @@ func getOrCreate[T any](tv *TestVars, key string, initialValGen func(key string)
 	return valNSetter(v.(T), n.(int))
 }
 
+func (tv *TestVars) Sub(name string) *TestVars {
+	return newFromName(tv.testName + "/" + name)
+}
+
 func (tv *TestVars) stringNSetter(v string, n int) string {
 	return fmt.Sprintf("%s_%d", v, n)
 }

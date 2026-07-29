@@ -7,10 +7,10 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	schedulescommon "go.temporal.io/server/common/schedules"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -44,16 +44,30 @@ func NewBackfillerTaskHandler(opts BackfillerTaskHandlerOptions) *BackfillerTask
 	}
 }
 
+// BackfillerTask invalidation reasons. Limited cardinality for ReasonTag.
+const (
+	backfillerInvalidatedStaleHWM metrics.ReasonString = "stale_hwm"
+)
+
 func (b *BackfillerTaskHandler) Validate(
 	ctx chasm.Context,
 	backfiller *Backfiller,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(
-		backfiller.GetLastProcessedTime(),
-		attrs.ScheduledTime,
-	)
+	if backfiller.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
+	valid, err := validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
+	if err != nil {
+		return false, err
+	}
+	if !valid {
+		newTaggedMetricsHandler(b.metricsHandler, backfiller.Scheduler.Get(ctx)).
+			Counter(metrics.ScheduleBackfillerTask.Name()).
+			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleHWM))
+	}
+	return valid, nil
 }
 
 func (b *BackfillerTaskHandler) Execute(
@@ -66,8 +80,12 @@ func (b *BackfillerTaskHandler) Execute(
 
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
+	metricsHandler := newTaggedMetricsHandler(b.metricsHandler, scheduler)
+	metricsHandler.Counter(metrics.ScheduleBackfillerTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 
 	invoker := scheduler.Invoker.Get(ctx)
+
+	backfiller.getOrCreateEventLog(ctx).LogEvent(ctx, "backfillerTask executed")
 
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.
@@ -110,6 +128,11 @@ func (b *BackfillerTaskHandler) Execute(
 		logger.Debug("backfill complete, deleting Backfiller",
 			tag.String("backfill-id", backfiller.GetBackfillId()))
 		delete(scheduler.Backfillers, backfiller.GetBackfillId())
+		metricsHandler.Counter(metrics.ScheduleBackfillerCompleted.Name()).Record(1)
+
+		// Revive the Generator so it can re-evaluate idle/close eligibility now
+		// that this backfiller is gone.
+		scheduler.Generator.Get(ctx).Generate(ctx)
 		return nil
 	}
 
@@ -196,7 +219,7 @@ func (b *BackfillerTaskHandler) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
-	workflowID := schedulescommon.GenerateWorkflowID(scheduler.WorkflowID(), now)
+	workflowID := schedulerinternal.GenerateWorkflowID(scheduler.WorkflowID(), now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
@@ -232,10 +255,18 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 		}
 	}
 
-	// Prevents a division by 0.
-	backfillerCount = max(1, backfillerCount)
+	return backfillerBufferCapacity(
+		len(invoker.GetBufferedStarts()),
+		recentActionCount,
+		tweakables.MaxBufferSize,
+		tweakables.GeneratorBufferReserveSize,
+		backfillerCount,
+	), nil
+}
 
-	// Give half the available buffer to backfillers, distributed evenly, minus
-	// Generator reserve space.
-	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-len(invoker.GetBufferedStarts())-tweakables.GeneratorBufferReserveSize), nil
+func backfillerBufferCapacity(bufferedCount, retainedActionCount, maxBufferSize, generatorReserve, backfillerCount int) int {
+	backfillerCount = max(1, backfillerCount)
+	pending := max(0, bufferedCount-retainedActionCount)
+	available := max(0, (maxBufferSize/2)-pending-generatorReserve)
+	return available / backfillerCount
 }

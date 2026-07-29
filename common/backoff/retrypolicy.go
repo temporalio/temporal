@@ -177,17 +177,44 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 
 func (p *ExponentialRetryPolicy) addJitter(nextInterval float64) float64 {
 	// add jitter to avoid global synchronization
-	jitterPortion := int(0.2 * nextInterval)
-	// Prevent overflow
-	if jitterPortion < 1 {
-		jitterPortion = 1
-	}
+	jitterPortion := max(
+		// Prevent overflow
+		int(0.2*nextInterval), 1)
 	nextInterval = nextInterval*0.8 + float64(getJitterRand().Intn(jitterPortion))
 	return nextInterval
 }
 
 func (r *disabledRetryPolicyImpl) ComputeNextDelay(_ time.Duration, _ int, _ error) time.Duration {
 	return done
+}
+
+var _ RetryPolicy = (*ConditionalRetryPolicy)(nil)
+
+// ConditionalRetryPolicy chooses between two underlying retry policies based on
+// a predicate evaluated against the error from the last attempt. The numAttempts
+// counter is shared across both branches, so a sequence that mixes error types
+// can hit the more conservative branch's cap on a later attempt.
+type ConditionalRetryPolicy struct {
+	predicate func(err error) bool
+	whenTrue  RetryPolicy
+	whenFalse RetryPolicy
+}
+
+// NewConditionalRetryPolicy returns a policy that delegates to whenTrue when
+// predicate(err) is true, and whenFalse otherwise.
+func NewConditionalRetryPolicy(predicate func(err error) bool, whenTrue, whenFalse RetryPolicy) *ConditionalRetryPolicy {
+	return &ConditionalRetryPolicy{
+		predicate: predicate,
+		whenTrue:  whenTrue,
+		whenFalse: whenFalse,
+	}
+}
+
+func (p *ConditionalRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int, err error) time.Duration {
+	if p.predicate(err) {
+		return p.whenTrue.ComputeNextDelay(elapsedTime, numAttempts, err)
+	}
+	return p.whenFalse.ComputeNextDelay(elapsedTime, numAttempts, err)
 }
 
 // Reset will set the Retrier into initial state

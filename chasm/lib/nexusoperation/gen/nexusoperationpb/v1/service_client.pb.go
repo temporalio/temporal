@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -28,6 +29,7 @@ type NexusOperationServiceLayeredClient struct {
 
 // NewNexusOperationServiceLayeredClient initializes a new NexusOperationServiceLayeredClient.
 func NewNexusOperationServiceLayeredClient(
+	lc fx.Lifecycle,
 	dc *dynamicconfig.Collection,
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
@@ -39,7 +41,7 @@ func NewNexusOperationServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	connections := history.NewConnectionPool(resolver, rpcFactory, NewNexusOperationServiceClient)
+	connections := history.NewConnectionPool(resolver, rpcFactory, NewNexusOperationServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 	var redirector history.Redirector[NexusOperationServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(
@@ -51,12 +53,17 @@ func NewNexusOperationServiceLayeredClient(
 	} else {
 		redirector = history.NewBasicRedirector(connections, resolver)
 	}
-	return &NexusOperationServiceLayeredClient{
+	client := &NexusOperationServiceLayeredClient{
 		metricsHandler: metricsHandler,
 		redirector:     redirector,
 		numShards:      config.NumHistoryShards,
-		retryPolicy:    common.CreateHistoryClientRetryPolicy(),
-	}, nil
+		retryPolicy:    common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
+	}
+	lc.Append(fx.StopHook(client.Stop))
+	return client, nil
+}
+func (c *NexusOperationServiceLayeredClient) Stop() {
+	c.redirector.Close()
 }
 func (c *NexusOperationServiceLayeredClient) callStartNexusOperationNoRetry(
 	ctx context.Context,

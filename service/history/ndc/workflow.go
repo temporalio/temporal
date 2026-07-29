@@ -281,19 +281,12 @@ func (r *WorkflowImpl) terminateMutableState(
 		})
 	}
 
-	eventBatchFirstEventID := r.GetMutableState().GetNextEventID()
-	wtFailedEvent, err := r.failWorkflowTask()
-	if err != nil {
+	if _, err := r.failWorkflowTask(); err != nil {
 		return err
 	}
 
-	if wtFailedEvent != nil {
-		eventBatchFirstEventID = wtFailedEvent.GetEventId()
-	}
-
 	// do not persist the change right now, Workflow requires transaction
-	_, err = r.mutableState.AddWorkflowExecutionTerminatedEvent(
-		eventBatchFirstEventID,
+	_, err := r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		common.FailureReasonWorkflowTerminationDueToVersionConflict,
 		payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
 		consts.IdentityHistoryService,

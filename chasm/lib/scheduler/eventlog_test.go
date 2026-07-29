@@ -9,12 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const (
-	testEventLogMaxEntries    = 30
-	testEventLogMaxMessageLen = 1000
+var (
+	testEventLogMaxEntries    = scheduler.DefaultTweakables.EventLogMaxEntries
+	testEventLogMaxMessageLen = scheduler.DefaultTweakables.EventLogMaxMessageLen
 )
 
 func TestEventLog_Accumulates(t *testing.T) {
@@ -24,7 +26,7 @@ func TestEventLog_Accumulates(t *testing.T) {
 
 	messages := []string{"first", "second", "third"}
 	for _, m := range messages {
-		eventLog.LogEvent(ctx, m, testEventLogMaxEntries, testEventLogMaxMessageLen)
+		eventLog.LogEvent(ctx, m)
 	}
 
 	require.Len(t, eventLog.Events, len(messages))
@@ -40,7 +42,7 @@ func TestEventLog_TruncatesLongMessages(t *testing.T) {
 	eventLog.Events = nil
 
 	long := strings.Repeat("x", testEventLogMaxMessageLen+50)
-	eventLog.LogEvent(ctx, long, testEventLogMaxEntries, testEventLogMaxMessageLen)
+	eventLog.LogEvent(ctx, long)
 
 	require.Len(t, eventLog.Events, 1)
 	require.Len(t, eventLog.Events[0].Message, testEventLogMaxMessageLen)
@@ -55,7 +57,7 @@ func TestEventLog_DropsEarliestWhenFull(t *testing.T) {
 	const overflow = 5
 	total := testEventLogMaxEntries + overflow
 	for i := range total {
-		eventLog.LogEvent(ctx, fmt.Sprintf("event-%d", i), testEventLogMaxEntries, testEventLogMaxMessageLen)
+		eventLog.LogEvent(ctx, fmt.Sprintf("event-%d", i))
 	}
 
 	require.Len(t, eventLog.Events, testEventLogMaxEntries)
@@ -63,6 +65,24 @@ func TestEventLog_DropsEarliestWhenFull(t *testing.T) {
 	// window starts at event-`overflow` and ends at the most recent event.
 	require.Equal(t, fmt.Sprintf("event-%d", overflow), eventLog.Events[0].Message)
 	require.Equal(t, fmt.Sprintf("event-%d", total-1), eventLog.Events[len(eventLog.Events)-1].Message)
+}
+
+// TestEventLog_NoConfigFallsBackToDefaults checks that LogEvent applies the
+// default retention limits instead of panicking when no config is reachable via
+// the context, as in tdbg's registration-only setup.
+func TestEventLog_NoConfigFallsBackToDefaults(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	eventLog := scheduler.NewEventLog(ctx)
+
+	require.NotPanics(t, func() {
+		eventLog.LogEvent(ctx, "logged without a registered config")
+	})
+	require.Len(t, eventLog.Events, 1)
+
+	long := strings.Repeat("x", scheduler.DefaultTweakables.EventLogMaxMessageLen+50)
+	eventLog.LogEvent(ctx, long)
+	require.Len(t, eventLog.Events, 2)
+	require.Len(t, eventLog.Events[1].Message, scheduler.DefaultTweakables.EventLogMaxMessageLen)
 }
 
 func TestEventLog_EachComponentHasOwn(t *testing.T) {
@@ -86,7 +106,7 @@ func TestEventLog_EachComponentHasOwn(t *testing.T) {
 	sched.Generator.Get(ctx).EventLog.Get(ctx).Events = nil
 	backfiller.EventLog.Get(ctx).Events = nil
 
-	sched.EventLog.Get(ctx).LogEvent(ctx, "scheduler-event", testEventLogMaxEntries, testEventLogMaxMessageLen)
+	sched.EventLog.Get(ctx).LogEvent(ctx, "scheduler-event")
 	require.Len(t, sched.EventLog.Get(ctx).Events, 1)
 	require.Empty(t, sched.Generator.Get(ctx).EventLog.Get(ctx).Events)
 	require.Empty(t, backfiller.EventLog.Get(ctx).Events)

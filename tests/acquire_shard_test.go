@@ -71,7 +71,7 @@ func (r *logRecorder) record(msg string, tags ...tag.Tag) {
 		tags: tags,
 	}:
 	default:
-		r.Logger.Warn("failed to deliver log message to listener: " + msg)
+		r.Warn("failed to deliver log message to listener: " + msg)
 	}
 }
 

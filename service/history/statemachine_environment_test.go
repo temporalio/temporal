@@ -254,7 +254,6 @@ func TestValidateStateMachineRef(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := newStateMachineEnvTestContext(t, tc.enableTransitionHistory)
@@ -276,7 +275,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			tc.mutateNode(node)
 			tc.mutateRef(&ref)
 
-			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), chasm.WorkflowArchetypeID, log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), chasm.WorkflowArchetypeID, log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler, nil)
 			if tc.clearTransitionHistory {
 				mutableState.GetExecutionInfo().TransitionHistory = nil
 			}

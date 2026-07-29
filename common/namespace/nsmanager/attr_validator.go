@@ -1,6 +1,8 @@
 package nsmanager
 
 import (
+	"slices"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -73,13 +75,7 @@ func (d *Validator) ValidateNamespaceReplicationConfigForGlobalNamespace(
 		}
 	}
 
-	activeClusterInClusters := false
-	for _, clusterName := range clusters {
-		if clusterName == activeCluster {
-			activeClusterInClusters = true
-			break
-		}
-	}
+	activeClusterInClusters := slices.Contains(clusters, activeCluster)
 	if !activeClusterInClusters {
 		return errActiveClusterNotInClusters
 	}

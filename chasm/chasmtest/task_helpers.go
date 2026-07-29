@@ -40,7 +40,7 @@ func ExecutePureTask[C chasm.Component, T any](
 				return fmt.Errorf("component type mismatch: got %T", c)
 			}
 			var valid bool
-			valid, err = handler.Validate(mutableCtx, typedC, attrs, task)
+			valid, err = handler.Validate(mutableCtx, typedC, chasm.TaskInvocation{TaskAttributes: attrs}, task)
 			if err != nil {
 				return err
 			}
@@ -92,7 +92,7 @@ func ExecuteSideEffectTask[C chasm.Component, T any](
 			if !ok {
 				return fmt.Errorf("component type mismatch: got %T", c)
 			}
-			valid, err = handler.Validate(chasmCtx, typedC, attrs, task)
+			valid, err = handler.Validate(chasmCtx, typedC, chasm.TaskInvocation{TaskAttributes: attrs}, task)
 			return err
 		},
 	); err != nil {

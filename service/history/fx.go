@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
 	hsmnexusoperations "go.temporal.io/server/components/nexusoperations"
@@ -66,6 +68,7 @@ var Module = fx.Options(
 	cache.Module,
 	archival.Module,
 	ChasmEngineModule,
+	chasmtests.Module,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(ServiceErrorInterceptorProvider),
@@ -99,6 +102,20 @@ var Module = fx.Options(
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(func(
+		chasmEngine chasm.Engine,
+		chasmVisibilityManager chasm.VisibilityManager,
+		chasmRegistry *chasm.Registry,
+		testHooks testhooks.TestHooks,
+	) {
+		if hook, ok := testhooks.Get(
+			testHooks,
+			testhooks.HistoryChasmRuntimeProvider,
+			testhooks.GlobalScope,
+		); ok {
+			hook(chasmEngine, chasmVisibilityManager, chasmRegistry)
+		}
+	}),
 
 	callbacks.Module,
 	hsmnexusoperations.Module,
@@ -125,17 +142,12 @@ func ServiceResolverProvider(
 	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
-func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
-	// Build and store the Nexus handler
-	nexusHandler, err := buildNexusHandler(args.ChasmRegistry)
-	if err != nil {
-		return nil, err
-	}
-
+func HandlerProvider(args NewHandlerArgs, lc fx.Lifecycle) (*Handler, error) {
 	handler := &Handler{
-		status:          common.DaemonStatusInitialized,
-		config:          args.Config,
-		tokenSerializer: tasktoken.NewSerializer(),
+		status:                 common.DaemonStatusInitialized,
+		config:                 args.Config,
+		nexusCompletionHandler: args.NexusCompletionHandler,
+		tokenSerializer:        tasktoken.NewSerializer(),
 		deepHealthCheckHandler: deepHealthCheckHandler{
 			healthServer:            args.HealthServer,
 			metricsHandler:          args.MetricsHandler,
@@ -166,13 +178,37 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 		chasmEngine:                  args.ChasmEngine,
 		chasmRegistry:                args.ChasmRegistry,
+		testHooks:                    args.TestHooks,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
 		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
-		nexusHandler:                     nexusHandler,
 	}
+
+	// Build the Nexus handler in OnStart rather than here so that it runs after all
+	// fx.Invoke functions have completed. If we built it eagerly, the dependency chain
+	//
+	//   activity.HistoryModule (fx.Invoke)
+	//     → *library → *handler → historyservice.HistoryServiceServer
+	//       → HistoryServiceServerProvider → HandlerProvider (this function)
+	//
+	// would force HandlerProvider to run before modules like chasmtests.Module have had
+	// a chance to register their nexus services via their own fx.Invoke calls. As a
+	// result, buildNexusHandler would snapshot an empty registry and h.nexusHandler
+	// would remain nil, causing all StartNexusOperation calls to the system endpoint to
+	// return "no nexus services registered". OnStart hooks run after ALL invokes are
+	// done, so the registry is fully populated by the time we call buildNexusHandler.
+	lc.Append(fx.Hook{
+		OnStart: func(_ context.Context) error {
+			h, err := buildNexusHandler(args.ChasmRegistry)
+			if err != nil {
+				return err
+			}
+			handler.nexusHandler = h
+			return nil
+		},
+	})
 
 	return handler, nil
 }
@@ -261,8 +297,11 @@ func HealthSignalAggregatorProvider(
 	return interceptor.NewHealthSignalAggregator(
 		logger,
 		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
+		dynamicconfig.HistoryHealthSignalUsePercentiles.Get(dynamicCollection),
 		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
+		dynamicconfig.HistoryHealthSignalLatencyWindowSize.Get(dynamicCollection)(),
+		dynamicconfig.HistoryHealthSignalLatencyWindowCount.Get(dynamicCollection)(),
 	)
 }
 

@@ -214,6 +214,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkers":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":        1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":         1,
@@ -357,6 +358,7 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 func NewGlobalNamespaceRateLimiter(
 	memberCounter calculator.MemberCounter,
 	globalQuota dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	globalQuotaBurstRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) quotas.RequestRateLimiter {
 	rateFn := calculator.NewLoggedNamespaceCalculator(
@@ -372,7 +374,10 @@ func NewGlobalNamespaceRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return quotas.NewRequestRateLimiterAdapter(
 				quotas.NewDynamicRateLimiter(
-					quotas.NewDefaultIncomingRateBurst(func() float64 { return rateFn(req.Caller) }),
+					quotas.NewDefaultRateBurst(
+						func() float64 { return rateFn(req.Caller) },
+						func() float64 { return globalQuotaBurstRatio(req.Caller) },
+					),
 					time.Minute,
 				),
 			)

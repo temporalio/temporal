@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -295,19 +296,24 @@ func (o *Operation) loadStartArgs(
 		if err != nil {
 			return startArgs{}, err
 		}
+		// Workflow-backed operation: the store already appends a caller link (a workflow_event
+		// link pointing at the NexusOperationScheduled event); no further action here.
 	} else {
+		// Standalone operation: there is no workflow caller, so add a nexus_operation self-link
+		// as the caller link for the completion callback.
 		requestData := o.RequestData.Get(ctx)
 		invocationData = InvocationData{
 			Input:  requestData.GetInput(),
 			Header: requestData.GetNexusHeader(),
+			NexusLinks: []nexus.Link{
+				commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+					Namespace:   ctx.NamespaceEntry().Name().String(),
+					OperationId: ctx.ExecutionKey().BusinessID,
+					RunId:       ctx.ExecutionKey().RunID,
+				}),
+			},
 		}
 	}
-	invocationData.NexusLinks = append(invocationData.NexusLinks,
-		commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
-			Namespace:   ctx.NamespaceEntry().Name().String(),
-			OperationId: ctx.ExecutionKey().BusinessID,
-			RunId:       ctx.ExecutionKey().RunID,
-		}))
 
 	serializedRef, err := ctx.Ref(o)
 	if err != nil {
@@ -326,7 +332,7 @@ func (o *Operation) loadStartArgs(
 		scheduleToStartTimeout: o.GetScheduleToStartTimeout().AsDuration(),
 		startToCloseTimeout:    o.GetStartToCloseTimeout().AsDuration(),
 		payload:                invocationData.Input,
-		header:                 invocationData.Header,
+		header:                 maps.Clone(invocationData.Header),
 		nexusLinks:             invocationData.NexusLinks,
 		serializedRef:          serializedRef,
 	}, nil
@@ -345,7 +351,7 @@ func (o *Operation) saveInvocationResult(
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
 	case invocationResultOK:
-		links := convertResponseLinks(r.response.Links, ctx.Logger())
+		links := commonnexus.ConvertNexusLinksToProtoLinks(r.response.Links, ctx.Logger())
 		if r.response.Pending != nil {
 			// An async operation transitions to STARTED here;
 			// HandleNexusCompletion will apply its outcome from the completion callback.
@@ -547,6 +553,18 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		UserMetadata: requestData.GetUserMetadata(),
 		Links:        o.Links,
 		Identity:     requestData.GetIdentity(),
+	}
+
+	if cancellation, ok := o.Cancellation.TryGet(ctx); ok {
+		info.CancellationInfo = &nexuspb.NexusOperationExecutionCancellationInfo{
+			RequestedTime:           cancellation.RequestedTime,
+			State:                   CancellationAPIState(cancellation.Status),
+			Attempt:                 cancellation.Attempt,
+			LastAttemptCompleteTime: cancellation.LastAttemptCompleteTime,
+			LastAttemptFailure:      cancellation.LastAttemptFailure,
+			NextAttemptScheduleTime: cancellation.NextAttemptScheduleTime,
+			Reason:                  cancellation.Reason,
+		}
 	}
 
 	if o.ScheduledTime != nil {

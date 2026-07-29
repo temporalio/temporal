@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -81,6 +82,10 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	}
 	e.MarkExecutionStart()
 
+	if e.Config.EmitReplicationLifecycleEvents() {
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskSyncWorkflowState, int32(e.Attempt()))
+	}
+
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
@@ -93,7 +98,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -153,7 +158,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
-					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.TaskID(e.TaskID()),
 					tag.Error(syncStateErr),
 				)
 				return err
@@ -176,7 +181,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 
 		if doContinue, resendErr := e.Resend(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
+			e.SourceClusterName(),
 			retryErr,
 			ResendAttempt,
 		); resendErr != nil || !doContinue {
@@ -188,7 +193,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 			tag.Error(err),
 		)
 		return err
@@ -201,7 +206,7 @@ func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
 			NamespaceId: e.NamespaceID,
 			WorkflowId:  e.WorkflowID,
 			RunId:       e.RunID,
-			TaskId:      e.ExecutableTask.TaskID(),
+			TaskId:      e.TaskID(),
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 		}
 	}

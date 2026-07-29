@@ -2,6 +2,7 @@ package contextutil
 
 import (
 	"context"
+	"maps"
 	"strconv"
 	"strings"
 	"sync"
@@ -184,8 +185,6 @@ func ContextMetadataGetAll(ctx context.Context) map[string]any {
 
 	// Return a copy to prevent external modifications
 	result := make(map[string]any, len(metadataCtx.Metadata))
-	for k, v := range metadataCtx.Metadata {
-		result[k] = v
-	}
+	maps.Copy(result, metadataCtx.Metadata)
 	return result
 }

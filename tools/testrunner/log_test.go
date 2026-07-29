@@ -72,7 +72,7 @@ func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
 
 	alerts := parseAlerts(string(input))
 	require.NotEmpty(t, alerts)
-	require.Equal(t, 2, len(alerts))
+	require.Len(t, alerts, 2)
 
 	require.Contains(t, alerts[0].Details, "WARNING: DATA RACE")
 	require.Contains(t, alerts[0].Tests[0], "test.TestDataRaceExample")
@@ -83,7 +83,7 @@ func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
 
 	// Ensure dedupe works
 	deduped := dedupeAlerts(append(alerts, alerts...))
-	require.Equal(t, len(deduped), len(alerts))
+	require.Len(t, alerts, len(deduped))
 }
 
 func TestParseFailureDetails(t *testing.T) {
