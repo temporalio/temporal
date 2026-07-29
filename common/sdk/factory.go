@@ -110,10 +110,9 @@ func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 		client, err := sdkclient.NewLazyClient(clientOptions)
 		if err != nil {
 			f.logger.Fatal("error creating sdk client", tag.Error(err))
+			return nil
 		}
-		if client != nil {
-			client.Close()
-		}
+		client.Close()
 		return client
 	}
 
@@ -121,6 +120,7 @@ func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 	client, err := sdkclient.NewClientFromExisting(system, clientOptions)
 	if err != nil {
 		f.logger.Fatal("error creating sdk client", tag.Error(err))
+		return nil
 	}
 
 	tracked := &trackedClient{Client: client, factory: f}

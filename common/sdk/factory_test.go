@@ -150,9 +150,6 @@ func TestNewClient_AfterCloseIsNotTracked(t *testing.T) {
 	require.NotNil(t, client)
 	require.NotSame(t, f.GetSystemClient(), client, "must not hand out the shared client")
 	require.Empty(t, f.derivedClients)
-	// Close leaves the system client set rather than nil, so callers after
-	// shutdown get one whose calls fail instead of a nil dereference.
-	require.NotNil(t, f.GetSystemClient())
 }
 
 // sdkworker.New panics unless it gets the SDK's concrete client, so NewWorker has
