@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-// The version check has no other cancellation: a server that accepts the request
-// but withholds a response would otherwise strand the transport's goroutines for
-// as long as the connection stays open.
-const callTimeout = 30 * time.Second
+// The only bound on a version check: the request carries no context and Stop does
+// not wait, so a server that withholds a response would otherwise strand the
+// transport's goroutines. Overridden in tests.
+var callTimeout = 30 * time.Second
 
 type Caller struct {
 	Scheme string

@@ -96,9 +96,8 @@ func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 	clientOptions := f.options(options)
 
-	// Checked before GetSystemClient so a shut down factory does not dial a
-	// system client only to close it again. The check under clientsLock below
-	// covers a Close that lands after this one.
+	// Skips the system-client bootstrap for a factory that is already shut down;
+	// the check under clientsLock below covers a Close that lands after this one.
 	if f.isClosed() {
 		return f.newClosedClient(clientOptions)
 	}
@@ -126,11 +125,11 @@ func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 	return tracked
 }
 
-// newClosedClient serves a caller that asked for a client after shutdown.
-// Deriving from the system client would fetch capabilities over its closed
-// connection, so this dials lazily instead and releases it here, since nothing
-// else would. The wrapper is deliberately left out of derivedClients so the
-// caller's Close releases nothing rather than closing this client a second time.
+// Called with and without clientsLock held, so it must not take it. Deriving
+// from the system client would fetch capabilities over its closed connection, so
+// this dials lazily and releases it here, since nothing else would. The wrapper
+// is left out of derivedClients so the caller's Close releases nothing rather
+// than closing this client a second time.
 func (f *clientFactory) newClosedClient(options sdkclient.Options) sdkclient.Client {
 	client, err := sdkclient.NewLazyClient(options)
 	if err != nil {
@@ -240,8 +239,7 @@ func (f *clientFactory) Close() {
 	f.clientsLock.Lock()
 	defer f.clientsLock.Unlock()
 
-	// Nothing here may run twice: the SDK's guard against repeated Close is a
-	// plain write, so closing a client again would race.
+	// Close is idempotent: every client is released exactly once.
 	if f.closed {
 		return
 	}

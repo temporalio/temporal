@@ -70,7 +70,7 @@ func TestProcessorStart_FailureLeavesNothingToStop(t *testing.T) {
 	t.Parallel()
 
 	processor, worker := newTestProcessor(t)
-	// No Stop expectation: gomock fails if a worker that never started is stopped.
+	// No Stop expectation: gomock fails if the processor stops the worker.
 	worker.EXPECT().Start().Return(errors.New("boom"))
 
 	require.Error(t, processor.Start())

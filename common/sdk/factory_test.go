@@ -151,14 +151,21 @@ func TestNewClient_AfterCloseIsNotTracked(t *testing.T) {
 
 	client := f.NewClient(sdkclient.Options{Namespace: "ns"})
 
-	require.NotNil(t, client)
+	f.clientsLock.Lock()
+	dialed := f.systemSdkClient != nil
+	f.clientsLock.Unlock()
+	require.False(t, dialed, "a shut down factory must not dial a system client")
+
+	require.IsType(t, &trackedClient{}, client)
 	require.NotSame(t, f.GetSystemClient(), client, "must not hand out the shared client")
 	require.Empty(t, f.derivedClients)
 
-	// The factory already closed this client, so the caller's Close must release
-	// nothing rather than close it again.
-	require.IsType(t, &trackedClient{}, client)
-	require.NotPanics(t, client.Close)
+	// The factory already closed this client, so a caller's Close must release
+	// nothing: the SDK's guard against repeated Close is a plain write.
+	var wg sync.WaitGroup
+	wg.Go(client.Close)
+	wg.Go(client.Close)
+	wg.Wait()
 }
 
 // sdkworker.New panics unless it gets the SDK's concrete client, so NewWorker has

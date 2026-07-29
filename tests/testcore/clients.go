@@ -226,7 +226,6 @@ func (c *clients) close() []error {
 	if s, ok := c.matching.client.(interface{ Stop() }); ok {
 		s.Stop()
 	}
-	c.matching.client = nil
 
 	return errs
 }
