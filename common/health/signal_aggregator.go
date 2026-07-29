@@ -108,6 +108,14 @@ func (s *SignalAggregator) settingsChanged(newSettings Settings) bool {
 	return s.latencyByGroup == nil || !reflect.DeepEqual(newSettings, s.lastSettings)
 }
 
+// refresh rebuilds every bucket whenever the settings change at all.
+//
+// TODO: this discards all accumulated samples on any settings change, even one that doesn't
+// touch a given bucket, so quantiles and error ratios read 0 (healthy) until they refill
+// a settings change during an incident can therefore transiently clear an unhealthy signal
+// fixing it means diffing thresholds per bucket and carrying the unaffected ones over; the
+// reflect.DeepEqual above is too coarse for that. deferring since it's an optimization
+// rather than a correctness problem. TestRefresh pins the current behavior.
 func (s *SignalAggregator) refresh() {
 	newSettings := s.getSettings()
 
