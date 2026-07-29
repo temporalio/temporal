@@ -37,7 +37,7 @@ type (
 
 	RegistrableTaskOption func(*RegistrableTask)
 
-	validateFn              func(Context, any, TaskAttributes, any, *Registry) (bool, error)
+	validateFn              func(Context, any, TaskInvocation, any, *Registry) (bool, error)
 	pureTaskExecuteFn       func(MutableContext, any, TaskAttributes, any, *Registry) error
 	sideEffectTaskExecuteFn func(context.Context, ComponentRef, TaskAttributes, any) error
 	sideEffectTaskDiscardFn func(context.Context, ComponentRef, TaskAttributes, any) error
@@ -57,14 +57,14 @@ func NewRegistrableSideEffectTask[C any, T any](
 		func(
 			ctx Context,
 			component any,
-			taskAttrs TaskAttributes,
+			taskInvocation TaskInvocation,
 			taskData any,
 			registry *Registry,
 		) (bool, error) {
 			return handler.Validate(
 				ctx,
 				component.(C),
-				taskAttrs,
+				taskInvocation,
 				taskData.(T),
 			)
 		},
@@ -97,14 +97,14 @@ func NewRegistrablePureTask[C any, T any](
 		func(
 			ctx Context,
 			component any,
-			taskAttrs TaskAttributes,
+			taskInvocation TaskInvocation,
 			taskData any,
 			registry *Registry,
 		) (bool, error) {
 			return handler.Validate(
 				ctx,
 				component.(C),
-				taskAttrs,
+				taskInvocation,
 				taskData.(T),
 			)
 		},

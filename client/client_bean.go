@@ -29,8 +29,9 @@ type (
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)
 		GetRemoteFrontendClient(string) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
 		// Close deterministically releases bean-held resources on shutdown: it
-		// stops the matching client (its daemon goroutines and cached gRPC
-		// connections) and unregisters the cluster metadata change callback.
+		// stops the history and matching clients (their daemon goroutines and
+		// cached gRPC connections) and unregisters the cluster metadata change
+		// callback.
 		Close()
 	}
 
@@ -121,8 +122,12 @@ func (h *clientBeanImpl) registerClientEviction() {
 func (h *clientBeanImpl) Close() {
 	h.clusterMetadata.UnRegisterMetadataChangeCallback(h)
 
-	// The matching client wrapper chain implements Stop(); stopping it
-	// releases its daemon goroutines and cached gRPC connections.
+	// The history and matching client wrapper chains implement Stop();
+	// stopping them releases their daemon goroutines and cached gRPC
+	// connections.
+	if s, ok := h.historyClient.(interface{ Stop() }); ok {
+		s.Stop()
+	}
 	if mc := h.matchingClient.Load(); mc != nil {
 		if s, ok := mc.(interface{ Stop() }); ok {
 			s.Stop()

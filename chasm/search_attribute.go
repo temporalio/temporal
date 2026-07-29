@@ -60,9 +60,12 @@ var (
 	// CHASM search attribute of type Text is not supported at this moment.
 	// SearchAttributeFieldText01 = newSearchAttributeFieldText(1)
 
-	// Predefined search attributes don't have alias.
-	// TaskQueue is a system search attribute outside CHASM, but treated as predefined inside CHASM.
+	// Predefined search attributes use their system field names as aliases.
+	// TaskQueue and ExecutionTime are system search attributes; a component may override the value
+	// written to their system column by registering the identity-mapped attribute below and emitting
+	// its own value from SearchAttributes(). See sadefs.IsChasmOverridableSystem.
 	SearchAttributeTaskQueue                            = newSearchAttributeKeywordByField(sadefs.TaskQueue)
+	SearchAttributeExecutionTime                        = newSearchAttributeDateTimeByField(sadefs.ExecutionTime)
 	SearchAttributeTemporalChangeVersion                = newSearchAttributeKeywordListByField(sadefs.TemporalChangeVersion)
 	SearchAttributeBinaryChecksums                      = newSearchAttributeKeywordListByField(sadefs.BinaryChecksums)
 	SearchAttributeBuildIds                             = newSearchAttributeKeywordListByField(sadefs.BuildIds)

@@ -30,7 +30,7 @@ func TestEmitWorkflowCompletionStats_WorkflowDuration(t *testing.T) {
 	}
 
 	completionMetric := completionMetric{
-		initialized:      true,
+		shouldRecord:     true,
 		isWorkflow:       true,
 		taskQueue:        "test-task-queue",
 		namespaceState:   "active",

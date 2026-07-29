@@ -111,11 +111,13 @@ func TestIsChasmSystem(t *testing.T) {
 	require.True(t, IsChasmSystem(RunID))
 	require.True(t, IsChasmSystem(StartTime))
 	require.True(t, IsChasmSystem(CloseTime))
-	require.True(t, IsChasmSystem(ExecutionTime))
 	require.True(t, IsChasmSystem(HistoryLength))
 	require.True(t, IsChasmSystem(HistorySizeBytes))
 	require.True(t, IsChasmSystem(StateTransitionCount))
 
+	// ExecutionTime is a plain system search attribute, not a CHASM system search attribute:
+	// it is not defined in the CHASM execution and may be overridden by a CHASM component.
+	require.False(t, IsChasmSystem(ExecutionTime))
 	require.False(t, IsChasmSystem(ExecutionStatus))
 	require.False(t, IsChasmSystem(TaskQueue))
 
@@ -123,4 +125,31 @@ func TestIsChasmSystem(t *testing.T) {
 	require.False(t, IsChasmSystem(BinaryChecksums))
 
 	require.False(t, IsChasmSystem("NonExistent"))
+}
+
+func TestIsChasmOverridableSystem(t *testing.T) {
+	// Overridable: system search attributes on the visibility request base that are NOT CHASM
+	// system search attributes (i.e. not already exposed as dedicated VisibilityExecutionInfo fields).
+	require.True(t, IsChasmOverridableSystem(WorkflowType))
+	require.True(t, IsChasmOverridableSystem(ExecutionTime))
+	require.True(t, IsChasmOverridableSystem(TaskQueue))
+	require.True(t, IsChasmOverridableSystem(ParentWorkflowID))
+	require.True(t, IsChasmOverridableSystem(ParentRunID))
+	require.True(t, IsChasmOverridableSystem(RootWorkflowID))
+	require.True(t, IsChasmOverridableSystem(RootRunID))
+
+	// CHASM system search attributes: already exposed as dedicated VisibilityExecutionInfo fields.
+	require.False(t, IsChasmOverridableSystem(WorkflowID))
+	require.False(t, IsChasmOverridableSystem(RunID))
+	require.False(t, IsChasmOverridableSystem(StartTime))
+	require.False(t, IsChasmOverridableSystem(CloseTime))
+	require.False(t, IsChasmOverridableSystem(HistoryLength))
+	require.False(t, IsChasmOverridableSystem(HistorySizeBytes))
+	require.False(t, IsChasmOverridableSystem(StateTransitionCount))
+
+	// Not on the base write path / intentionally excluded.
+	require.False(t, IsChasmOverridableSystem(ExecutionDuration))
+	require.False(t, IsChasmOverridableSystem(ExecutionStatus))
+
+	require.False(t, IsChasmOverridableSystem("NonExistent"))
 }

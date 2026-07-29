@@ -385,13 +385,17 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerCommands)
 	s.False(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscaling)
+	s.False(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 
@@ -410,6 +414,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.WorkerCommandsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.PollerAutoscalingAutoEnroll = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.EnableWorkflowTaskCompletionPagination = dc.GetBoolPropertyFnFilteredByNamespace(true)
 
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
@@ -426,8 +431,18 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerCommands)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
+	s.True(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+
+	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.Activity.EnableStandaloneActivityOperatorCommands = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: "ns",
+	})
+	s.Require().NoError(err)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {

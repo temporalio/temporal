@@ -1155,7 +1155,16 @@ func (s *nodeSuite) TestApplyMutation_InvalidatesHydratedMapAncestors() {
 		mutation NodesMutation,
 		expected map[string]string,
 	) {
-		target, err := s.newTestTree(common.CloneProtoMap(persistedNodes))
+		s.nodeBackend.HandleChasmSkipPersistenceEnabled = func() bool { return false }
+		target, err := NewTreeFromDB(
+			common.CloneProtoMap(persistedNodes),
+			s.registry,
+			s.timeSource,
+			s.nodeBackend,
+			s.nodePathEncoder,
+			s.logger,
+			s.metricsHandler,
+		)
 		s.NoError(err)
 		component, err := target.Component(NewContext(context.Background(), target), ComponentRef{})
 		s.NoError(err)
@@ -1467,6 +1476,227 @@ func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 	snapshot := root.Snapshot(nil)
 	s.Len(snapshot.Nodes, 3)
 	s.Len(root.mutation.UpdatedNodes, 3)
+}
+
+func (s *nodeSuite) partitionedSnapshotTestNodes() map[string]*persistencespb.ChasmNode {
+	return map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+							{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(s.timeSource.Now().Add(time.Minute)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 3,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+						},
+					},
+				},
+			},
+		},
+		// A component node with no tasks carries no cluster-local metadata and must be skipped.
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testSubComponent1TypeID,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (s *nodeSuite) TestPartitionedSnapshot() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Cluster-local state captures only the component node with tasks, in order.
+	s.Len(localState.GetNodes(), 1)
+	rootState := localState.GetNodes()[""]
+	s.NotNil(rootState)
+	s.Equal([]int32{physicalTaskStatusCreated, physicalTaskStatusNone}, rootState.GetSideEffectTaskStatuses())
+	s.Equal([]int32{physicalTaskStatusCreated}, rootState.GetPureTaskStatuses())
+
+	// The clean snapshot keeps every node key but zeroes the cluster-local fields.
+	s.Len(clean.Nodes, 2)
+	cleanAttr := clean.Nodes[""].GetMetadata().GetComponentAttributes()
+	for _, t := range cleanAttr.GetSideEffectTasks() {
+		s.Equal(physicalTaskStatusNone, t.GetPhysicalTaskStatus())
+	}
+	for _, t := range cleanAttr.GetPureTasks() {
+		s.Equal(physicalTaskStatusNone, t.GetPhysicalTaskStatus())
+	}
+
+	// The live tree must be untouched: Snapshot returns the original statuses.
+	liveAttr := root.Snapshot(nil).Nodes[""].GetMetadata().GetComponentAttributes()
+	s.Equal(physicalTaskStatusCreated, liveAttr.GetSideEffectTasks()[0].GetPhysicalTaskStatus())
+	s.Equal(physicalTaskStatusCreated, liveAttr.GetPureTasks()[0].GetPhysicalTaskStatus())
+}
+
+func (s *nodeSuite) TestPartitionedSnapshot_MergeRoundTrip() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Merging the extracted state back into the clean snapshot restores the statuses with no mismatch.
+	s.Zero(clean.MergeClusterLocalState(localState))
+	mergedAttr := clean.Nodes[""].GetMetadata().GetComponentAttributes()
+	s.Equal(physicalTaskStatusCreated, mergedAttr.GetSideEffectTasks()[0].GetPhysicalTaskStatus())
+	s.Equal(physicalTaskStatusNone, mergedAttr.GetSideEffectTasks()[1].GetPhysicalTaskStatus())
+	s.Equal(physicalTaskStatusCreated, mergedAttr.GetPureTasks()[0].GetPhysicalTaskStatus())
+}
+
+func (s *nodeSuite) TestMergeClusterLocalState_ReportsLengthMismatch() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Truncate the root node's side-effect statuses so there are fewer statuses than tasks. The
+	// uncovered tasks stay zeroed — the benign, self-healing direction.
+	localState.Nodes[""].SideEffectTaskStatuses = localState.Nodes[""].SideEffectTaskStatuses[:1]
+	s.Equal(ClusterLocalStateMergeResult{NodesWithUncoveredTasks: 1}, clean.MergeClusterLocalState(localState))
+}
+
+func (s *nodeSuite) TestMergeClusterLocalState_ReportsExtraStatuses() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Append a surplus side-effect status so there are more statuses than tasks. The extra status
+	// has no task to apply to and is dropped — the suspicious (possible-divergence) direction.
+	localState.Nodes[""].SideEffectTaskStatuses = append(localState.Nodes[""].SideEffectTaskStatuses, physicalTaskStatusCreated)
+	s.Equal(ClusterLocalStateMergeResult{NodesWithExtraStatuses: 1}, clean.MergeClusterLocalState(localState))
+}
+
+func (s *nodeSuite) TestMergeClusterLocalState_SkipsMissingNodes() {
+	root, err := s.newTestTree(s.partitionedSnapshotTestNodes())
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+
+	// Simulate the component node being deleted from the snapshot before merge.
+	delete(clean.Nodes, "")
+	s.NotPanics(func() {
+		clean.MergeClusterLocalState(localState)
+	})
+	s.Len(clean.Nodes, 1)
+}
+
+// A tree whose nodes carry no tasks has no cluster-local state: PartitionedSnapshot returns a
+// state with an empty Nodes map, and merging that empty state back is a no-op.
+func (s *nodeSuite) TestPartitionedSnapshot_NoClusterLocalState() {
+	root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{TypeId: testComponentTypeID},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	clean, localState := root.PartitionedSnapshot(nil)
+	s.NotNil(localState)
+	s.Empty(localState.Nodes)
+	s.Len(clean.Nodes, 1)
+	s.Zero(clean.MergeClusterLocalState(localState))
+}
+
+// TestPartitionedSnapshot_ClusterLocalFieldGuard is a tripwire against silent drift in the set of
+// cluster-local CHASM fields. Cluster-local state — currently only
+// ChasmComponentAttributes.Task.physical_task_status — must be extracted by PartitionedSnapshot
+// before upload/replication and restored by MergeClusterLocalState on read; otherwise it leaks
+// across clusters. The partition logic only inspects component_attributes' side_effect_tasks and
+// pure_tasks, so a new field on any message below — or a new attribute type in the
+// ChasmNodeMetadata oneof — could introduce cluster-local state the logic silently misses.
+//
+// When this fails: decide whether the added/removed field is cluster-local. If it is, handle it in
+// PartitionedSnapshot + MergeClusterLocalState and extend ChasmLocalState. Either way, update
+// the expected field set below once the partition logic is confirmed correct.
+func TestPartitionedSnapshot_ClusterLocalFieldGuard(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		msg  proto.Message
+		want []string
+	}{
+		// The node wrapper itself: a cluster-local field added directly to the node (rather than its
+		// metadata) must still trip the guard.
+		{&persistencespb.ChasmNode{}, []string{"metadata", "data"}},
+		{
+			&persistencespb.ChasmNodeMetadata{},
+			[]string{
+				"initial_versioned_transition",
+				"last_update_versioned_transition",
+				"component_attributes",
+				"data_attributes",
+				"collection_attributes",
+				"pointer_attributes",
+			},
+		},
+		{
+			&persistencespb.ChasmComponentAttributes{},
+			[]string{"type_id", "side_effect_tasks", "pure_tasks", "detached", "requests", "user_metadata"},
+		},
+		{
+			// The only message carrying a cluster-local field today (physical_task_status).
+			&persistencespb.ChasmComponentAttributes_Task{},
+			[]string{
+				"type_id", "destination", "scheduled_time", "data",
+				"versioned_transition", "versioned_transition_offset", "physical_task_status",
+			},
+		},
+		// Reachable via ChasmComponentAttributes.requests.
+		{&persistencespb.ChasmComponentAttributes_RequestMetadata{}, []string{"links"}},
+		// Attribute types other than component carry no cluster-local state today; pinning their
+		// fields ensures a future cluster-local field added to one of them trips this guard too.
+		{&persistencespb.ChasmDataAttributes{}, nil},
+		{&persistencespb.ChasmCollectionAttributes{}, nil},
+		{&persistencespb.ChasmPointerAttributes{}, []string{"node_path"}},
+	}
+
+	for _, tc := range cases {
+		desc := tc.msg.ProtoReflect().Descriptor()
+		fields := desc.Fields()
+		got := make([]string, 0, fields.Len())
+		for i := 0; i < fields.Len(); i++ {
+			got = append(got, string(fields.Get(i).Name()))
+		}
+		require.ElementsMatchf(t, tc.want, got,
+			"%s field set changed; cluster-local partition logic in PartitionedSnapshot/"+
+				"MergeClusterLocalState may be stale (see this test's doc comment)", desc.FullName())
+	}
 }
 
 func (s *nodeSuite) TestRefreshTasks() {
@@ -1864,7 +2094,7 @@ func (s *nodeSuite) TestValidateAccess() {
 			s.NoError(err)
 
 			ctx := NewContext(
-				newContextWithOperationIntent(context.Background(), tc.intent),
+				NewContextWithOperationIntent(context.Background(), tc.intent),
 				root,
 			)
 
@@ -1921,7 +2151,7 @@ func (s *nodeSuite) TestGetComponent_DetachedNodeBypassesParentValidation() {
 
 	// Close the root node (set lifecycle to COMPLETED).
 	ctx := NewMutableContext(
-		newContextWithOperationIntent(context.Background(), OperationIntentProgress),
+		NewContextWithOperationIntent(context.Background(), OperationIntentProgress),
 		root,
 	)
 	err = root.prepareComponentValue(ctx)
@@ -1950,7 +2180,7 @@ func (s *nodeSuite) TestGetComponent_ClosedTargetSucceeds() {
 	s.True(ok)
 
 	ctx := NewMutableContext(
-		newContextWithOperationIntent(context.Background(), OperationIntentProgress),
+		NewContextWithOperationIntent(context.Background(), OperationIntentProgress),
 		root,
 	)
 
@@ -2498,7 +2728,7 @@ func (s *nodeSuite) TestCloseTransaction_CleanupTasksAfterInvalidTask() {
 	s.NotNil(root)
 
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(task1Attributes), gomock.Eq(task1)).
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: task1Attributes}), gomock.Eq(task1)).
 		Return(false, nil).
 		Times(1)
 	executed, err := root.ExecutePureTask(s.T().Context(), task1Attributes, task1)
@@ -2817,7 +3047,7 @@ func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
 		s.NoError(err)
 
 		ctx := NewContext(
-			newContextWithOperationIntent(context.Background(), OperationIntentProgress),
+			NewContextWithOperationIntent(context.Background(), OperationIntentProgress),
 			root,
 		)
 
@@ -3596,9 +3826,9 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	// One valid task, one invalid task
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).Return(false, nil).Times(1)
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).Return(true, nil).Times(1)
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Execute(
 			gomock.AssignableToTypeOf(&mutableCtx{}),
@@ -3643,7 +3873,7 @@ func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 	)
 
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(2)
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).Return(true, nil).Times(2)
 
 	var observedTimes []time.Time
 	s.testLibrary.mockPureTaskHandler.EXPECT().
@@ -3887,7 +4117,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 
 	expectValidate := func(retValue bool, errValue error) {
 		s.testLibrary.mockPureTaskHandler.EXPECT().
-			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Eq(pureTask)).
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Eq(pureTask)).
 			Return(retValue, errValue).
 			Times(1)
 	}
@@ -4013,8 +4243,8 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Eq(TaskAttributes{
-					chasmTask.GetVisibilityTime(),
-					chasmTask.Destination,
+					ScheduledTime: chasmTask.GetVisibilityTime(),
+					Destination:   chasmTask.Destination,
 				}),
 				gomock.Any(),
 			).DoAndReturn(
@@ -4275,9 +4505,11 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 			Validate(
 				gomock.AssignableToTypeOf((*immutableCtx)(nil)),
 				gomock.AssignableToTypeOf(componentType),
-				gomock.Eq(TaskAttributes{
-					ScheduledTime: chasmTask.GetVisibilityTime(),
-					Destination:   chasmTask.Destination,
+				gomock.Eq(TaskInvocation{
+					TaskAttributes: TaskAttributes{
+						ScheduledTime: chasmTask.GetVisibilityTime(),
+						Destination:   chasmTask.Destination,
+					},
 				}),
 				gomock.AssignableToTypeOf(&TestSideEffectTask{}),
 			).Return(retValue, errValue).Times(1)
@@ -4290,6 +4522,24 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	s.True(isValidByComponent)
 	s.NoError(err)
 	s.True(chasmTask.DeserializedTask.IsValid())
+
+	// The physical task's attempt is threaded into the validator's TaskInvocation.
+	chasmTask.Attempt = 7
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(
+			gomock.AssignableToTypeOf((*immutableCtx)(nil)),
+			gomock.AssignableToTypeOf((*TestComponent)(nil)),
+			gomock.Any(),
+			gomock.AssignableToTypeOf(&TestSideEffectTask{}),
+		).DoAndReturn(func(_ Context, _ any, inv TaskInvocation, _ *TestSideEffectTask) (bool, error) {
+		s.Equal(7, inv.Attempt)
+		return true, nil
+	}).Times(1)
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, chasmTask)
+	s.True(isTaskInTree)
+	s.True(isValidByComponent)
+	s.NoError(err)
+	chasmTask.Attempt = 0
 
 	// Task is in tree but component says invalid.
 	expectValidate((*TestComponent)(nil), false, nil)
@@ -4380,6 +4630,7 @@ func (s *nodeSuite) TestAndAllChildren_PathIndependence() {
 func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
+	s.nodeBackend.HandleChasmSkipPersistenceEnabled = func() bool { return true }
 	if len(serializedNodes) == 0 {
 		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
 	}

@@ -115,6 +115,7 @@ func (s *workflowReplicatorSuite) SetupTest() {
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 }
 
@@ -611,6 +612,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -703,6 +705,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -789,6 +792,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -884,6 +888,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -965,6 +970,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1596,6 +1602,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithSnapshot_S
 		serialization.NewSerializer(),
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1674,6 +1681,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithMutation_S
 		serialization.NewSerializer(),
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1747,6 +1755,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_InvalidArtifac
 		serialization.NewSerializer(),
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 
 	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{}
@@ -1772,6 +1781,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_CreateWorkflow
 		serialization.NewSerializer(),
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)

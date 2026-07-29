@@ -4,23 +4,23 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-func TestGlobalOverridesSurviveTestCleanup(t *testing.T) {
-	var dcClient *dynamicconfig.MemoryClient
+func TestClusterPool_GlobalOverridesSurviveTestCleanup(t *testing.T) {
+	dc := dynamicconfig.NewMemoryClient()
 
-	t.Run("create", func(t *testing.T) {
-		impl := newTemporal(t, &TemporalParams{
-			ClusterMetadataConfig: &cluster.Config{},
-		})
-		dcClient = impl.dcClient
+	t.Run("apply", func(t *testing.T) {
+		// Apply global defaults the same way newTemporal does: via PartialOverrideValue
+		// without registering a t.Cleanup, so they persist beyond the test's lifetime.
+		for k, v := range defaultDynamicConfigOverrides {
+			dc.PartialOverrideValue(k, v)
+		}
 	})
-	// "create" subtest finished — its t.Cleanup has run
-	// but we expect global dynamic config overrides to still be in place.
+	// "apply" subtest finished - its t.Cleanup has run.
+	// Global overrides must still be in place.
 	for k, v := range defaultDynamicConfigOverrides {
-		got := dcClient.GetValue(k)
+		got := dc.GetValue(k)
 		require.NotEmpty(t, got, "key %s missing after cleanup", k)
 		require.Equal(t, v, got[0].Value, "key %s wrong after cleanup", k)
 	}

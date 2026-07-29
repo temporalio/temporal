@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/temporal"
 )
 
 type (
@@ -89,22 +89,22 @@ type (
 		// and will panic if called.
 		isShared bool
 	}
-	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
-	TestClusterParams struct {
-		DCRedirectionPolicy             config.DCRedirectionPolicy
-		DynamicConfigOverrides          map[dynamicconfig.Key]any
-		ArchivalEnabled                 bool
-		EnableMTLS                      bool
-		EnableWorkerService             bool
-		FaultInjectionConfig            *config.FaultInjection
-		NumHistoryShards                int32
-		Logger                          log.Logger
-		SharedCluster                   bool
-		EnableHistoryTaskRecorder       bool
-		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
-		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
+	// testClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
+	testClusterParams struct {
+		DCRedirectionPolicy       config.DCRedirectionPolicy
+		DynamicConfigOverrides    map[dynamicconfig.Key]any
+		EnableMTLS                bool
+		EnableWorkerService       bool
+		FaultInjectionConfig      *config.FaultInjection
+		NumHistoryShards          int32
+		Logger                    log.Logger
+		SharedCluster             bool
+		EnableHistoryTaskRecorder bool
+		EnableReplicationRecorder bool
+		EnableArchival            bool
+		AdditionalServerOptions   []temporal.ServerOption
 	}
-	TestClusterOption func(params *TestClusterParams)
+	TestClusterOption func(params *testClusterParams)
 )
 
 func init() {
@@ -115,13 +115,13 @@ func init() {
 }
 
 func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.DCRedirectionPolicy = policy
 	}
 }
 
 func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		if params.DynamicConfigOverrides == nil {
 			params.DynamicConfigOverrides = overrides
 		} else {
@@ -130,32 +130,32 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 	}
 }
 
-func WithArchivalEnabled() TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.ArchivalEnabled = true
+func withArchivalConfig() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableArchival = true
 	}
 }
 
 func withMTLS() TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.EnableMTLS = true
 	}
 }
 
 func withWorkerService(enabled bool) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.EnableWorkerService = enabled
 	}
 }
 
 func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.FaultInjectionConfig = cfg
 	}
 }
 
 func WithNumHistoryShards(n int32) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.NumHistoryShards = n
 	}
 }
@@ -163,32 +163,26 @@ func WithNumHistoryShards(n int32) TestClusterOption {
 // WithClusterLogger sets a custom logger for the test cluster, used instead of
 // the default test logger. Useful for intercepting server log output.
 func WithClusterLogger(logger log.Logger) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.Logger = logger
 	}
 }
 
 func WithClusterHistoryTaskRecorder() TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.EnableHistoryTaskRecorder = true
 	}
 }
 
+func WithReplicationStreamRecorder() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableReplicationRecorder = true
+	}
+}
+
 func WithSharedCluster() TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.SharedCluster = true
-	}
-}
-
-func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.CustomHistoryArchiverFactory = factory
-	}
-}
-
-func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.CustomVisibilityArchiverFactory = factory
 	}
 }
 
@@ -271,6 +265,11 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 	// Reserve a slot from the dedicated test cluster pool.
 	testClusterRouter.dedicated.reserveSlot(s.T())
 	s.setupCluster(options...)
+	clusterRequest{
+		kind:              clusterKindDedicated,
+		dedicatedReason:   "legacy-suite",
+		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
+	}.recordCreation(s.T())
 }
 
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
@@ -300,15 +299,15 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
-		DCRedirectionPolicy:             params.DCRedirectionPolicy,
-		DynamicConfigOverrides:          params.DynamicConfigOverrides,
-		EnableMetricsCapture:            true,
-		EnableArchival:                  params.ArchivalEnabled,
-		EnableMTLS:                      params.EnableMTLS,
-		EnableHistoryTaskRecorder:       params.EnableHistoryTaskRecorder,
-		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
-		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
-		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
+		DCRedirectionPolicy:       params.DCRedirectionPolicy,
+		DynamicConfigOverrides:    params.DynamicConfigOverrides,
+		EnableMetricsCapture:      true,
+		EnableMTLS:                params.EnableMTLS,
+		EnableHistoryTaskRecorder: params.EnableHistoryTaskRecorder,
+		EnableReplicationRecorder: params.EnableReplicationRecorder,
+		EnableArchival:            params.EnableArchival,
+		AdditionalServerOptions:   params.AdditionalServerOptions,
+		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
 
 	// Apply configuration for shared clusters.
@@ -386,8 +385,8 @@ func (s *FunctionalTestBase) checkTestShard() {
 	checkTestShard(s.T())
 }
 
-func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
-	params := TestClusterParams{
+func ApplyTestClusterOptions(options []TestClusterOption) testClusterParams {
+	params := testClusterParams{
 		EnableWorkerService: true,
 	}
 	for _, opt := range options {
@@ -653,11 +652,6 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 		s.T().Fatalf("InjectHook: unknown scope %v", hook.Scope())
 	}
 	return s.testCluster.host.injectHook(s.T(), hook, scope)
-}
-
-// Context returns a context with RPC headers for use in this test.
-func (s *FunctionalTestBase) Context() context.Context {
-	return NewContext()
 }
 
 // CloseShard closes the shard that contains the given workflow.

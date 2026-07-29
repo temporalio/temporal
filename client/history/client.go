@@ -292,6 +292,11 @@ func (c *clientImpl) shardIDFromWorkflowID(namespaceID, workflowID string) int32
 	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, c.numberOfShards)
 }
 
+// Stop stops the membership watcher and closes pooled connections.
+func (c *clientImpl) Stop() {
+	c.redirector.Close()
+}
+
 func checkShardID(shardID int32) error {
 	if shardID <= 0 {
 		return serviceerror.NewInvalidArgumentf("Invalid ShardID: %d", shardID)

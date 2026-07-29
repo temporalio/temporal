@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -692,6 +693,90 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 
 	resp := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.NoError(resp.ExecutionErr)
+}
+
+func TestApplyChasmOverriddenSystemFields(t *testing.T) {
+	creationTime := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	semanticTime := creationTime.Add(90 * time.Minute)
+
+	newRequestBase := func() *manager.VisibilityRequestBase {
+		return &manager.VisibilityRequestBase{
+			Execution:     &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: "run"},
+			ExecutionTime: creationTime,
+			TaskQueue:     "base-tq",
+		}
+	}
+
+	t.Run("ExecutionTime and TaskQueue overrides applied", func(t *testing.T) {
+		requestBase := newRequestBase()
+		applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{
+			sadefs.ExecutionTime: chasm.VisibilityValueTime(semanticTime),
+			sadefs.TaskQueue:     chasm.VisibilityValueKeyword("override-tq"),
+		})
+		require.True(t, semanticTime.Equal(requestBase.ExecutionTime))
+		require.Equal(t, "override-tq", requestBase.TaskQueue)
+	})
+
+	t.Run("Parent and Root overrides create sub-executions", func(t *testing.T) {
+		requestBase := newRequestBase()
+		applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{
+			sadefs.ParentWorkflowID: chasm.VisibilityValueKeyword("parent-wf"),
+			sadefs.RootRunID:        chasm.VisibilityValueKeyword("root-run"),
+		})
+		require.Equal(t, "parent-wf", requestBase.ParentExecution.GetWorkflowId())
+		require.Equal(t, "root-run", requestBase.RootExecution.GetRunId())
+	})
+
+	t.Run("values are applied as-is without guards", func(t *testing.T) {
+		requestBase := newRequestBase()
+		applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{
+			sadefs.ExecutionTime: chasm.VisibilityValueTime(time.Time{}),
+		})
+		require.True(t, requestBase.ExecutionTime.IsZero())
+	})
+
+	t.Run("non-overridable field is ignored", func(t *testing.T) {
+		requestBase := newRequestBase()
+		require.NotPanics(t, func() {
+			applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{
+				sadefs.CloseTime: chasm.VisibilityValueTime(semanticTime),
+			})
+		})
+		require.True(t, creationTime.Equal(requestBase.ExecutionTime))
+	})
+}
+
+// TestChasmOverriddenSystemFieldsWriteBridgeCoversOverridableFields guards against drift: every
+// overridable system field must be handled by the write bridge, otherwise a registered override
+// would silently not be applied to the request base.
+func TestChasmOverriddenSystemFieldsWriteBridgeCoversOverridableFields(t *testing.T) {
+	sentinelTime := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	// project captures every field an override can write, avoiding proto-internal comparison.
+	project := func(rb *manager.VisibilityRequestBase) string {
+		return fmt.Sprintf("wf=%s run=%s type=%s start=%s exec=%s tq=%s pwf=%s prun=%s rwf=%s rrun=%s",
+			rb.Execution.GetWorkflowId(), rb.Execution.GetRunId(), rb.WorkflowTypeName,
+			rb.StartTime, rb.ExecutionTime, rb.TaskQueue,
+			rb.ParentExecution.GetWorkflowId(), rb.ParentExecution.GetRunId(),
+			rb.RootExecution.GetWorkflowId(), rb.RootExecution.GetRunId())
+	}
+	for field := range sadefs.ChasmOverridableSystem() {
+		t.Run(field, func(t *testing.T) {
+			var value chasm.VisibilityValue
+			switch sadefs.System()[field] {
+			case enumspb.INDEXED_VALUE_TYPE_DATETIME:
+				value = chasm.VisibilityValueTime(sentinelTime)
+			case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+				value = chasm.VisibilityValueKeyword("sentinel")
+			default:
+				t.Fatalf("unexpected value type for overridable field %q", field)
+			}
+			requestBase := &manager.VisibilityRequestBase{Execution: &commonpb.WorkflowExecution{}}
+			before := project(requestBase)
+			applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{field: value})
+			require.NotEqual(t, before, project(requestBase),
+				"write bridge applyChasmOverriddenSystemFields missing case for %q", field)
+		})
+	}
 }
 
 func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(

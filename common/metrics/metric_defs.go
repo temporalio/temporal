@@ -42,6 +42,7 @@ const (
 	MatchingRoleTagValue      = "matching"
 	FrontendRoleTagValue      = "frontend"
 	AdminRoleTagValue         = "admin"
+	OperatorRoleTagValue      = "operator"
 	DCRedirectionRoleTagValue = "dc_redirection"
 	BlobstoreRoleTagValue     = "blobstore"
 
@@ -348,6 +349,14 @@ const (
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
 	// ActivityTerminatedScope tracks TerminateActivityExecution API calls received by service
 	ActivityTerminatedScope = "ActivityTerminated"
+	// ActivityPausedScope tracks PauseActivityExecution API calls received by service
+	ActivityPausedScope = "ActivityPaused"
+	// ActivityUnpausedScope tracks UnpauseActivityExecution API calls received by service
+	ActivityUnpausedScope = "ActivityUnpaused"
+	// ActivityResetScope tracks ResetActivityExecution API calls received by service
+	ActivityResetScope = "ActivityReset"
+	// ActivityUpdateOptionsScope tracks UpdateActivityExecutionOptions API calls received by service
+	ActivityUpdateOptionsScope = "ActivityUpdateOptions"
 	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
 	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
@@ -960,6 +969,10 @@ var (
 	ActivityCancel                                   = NewCounterDef("activity_cancel", WithDescription("Number of activities that are cancelled."))
 	ActivityTerminate                                = NewCounterDef("activity_terminate", WithDescription("Number of activities that are terminated."))
 	ActivityTaskTimeout                              = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
+	ActivityUpdateOptions                            = NewCounterDef("activity_update_options", WithDescription("Number of activity update options calls."))
+	ActivityPause                                    = NewCounterDef("activity_pause", WithDescription("Number of activity pauses."))
+	ActivityUnpause                                  = NewCounterDef("activity_unpause", WithDescription("Number of activity unpauses."))
+	ActivityReset                                    = NewCounterDef("activity_reset", WithDescription("Number of activity resets."))
 	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
 	ActivityHeartbeatCount                           = NewCounterDef("activity_heartbeat_count", WithDescription("Count of activity heartbeats, with has_details tag indicating whether the heartbeat carried a payload."))
@@ -1174,12 +1187,8 @@ var (
 	ExecutionQueueSchedulerTaskLatency    = NewTimerDef("execution_queue_scheduler_task_latency")
 	ExecutionQueueSchedulerQueueWaitTime  = NewTimerDef("execution_queue_scheduler_queue_wait_time")
 
-	PausedActivitiesCounter       = NewCounterDef("paused_activities")
-	ActivityPauseRequests         = NewCounterDef("activity_pause_requests")
-	ActivityUnpauseRequests       = NewCounterDef("activity_unpause_requests")
-	ActivityResetRequests         = NewCounterDef("activity_reset_requests")
-	ActivityUpdateOptionsRequests = NewCounterDef("activity_update_options_requests")
-	ExternalPayloadUploadSize     = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
+	PausedActivitiesCounter   = NewCounterDef("paused_activities")
+	ExternalPayloadUploadSize = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
@@ -1200,6 +1209,20 @@ var (
 
 	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
 	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
+
+	// Pagination of RespondWorkflowTaskCompleted requests
+	WorkflowTaskCompletionPaginatedBytes = NewBytesHistogramDef(
+		"workflow_task_completion_paginated_bytes",
+		WithDescription("Total wire size of successfully completed paginated RespondWorkflowTaskCompleted requests. count givens the total number of successful paginated requests."),
+	)
+	WorkflowTaskCompletionBufferInflightBytes = NewGaugeDef(
+		"workflow_task_completion_buffer_inflight_bytes",
+		WithDescription("Process-wide total bytes currently held across all in-flight workflow task completion pagination buffers."),
+	)
+	WorkflowTaskCompletionBufferLost = NewCounterDef(
+		"workflow_task_completion_buffer_lost",
+		WithDescription("Paginated workflow task completions aborted because the buffer was lost (evicted, process limit exceeded, or a page was missing)."),
+	)
 
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
@@ -1222,7 +1245,6 @@ var (
 	)
 	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
-	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired") // TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
 	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
@@ -1281,6 +1303,7 @@ var (
 	PartitionScaleEvents = NewCounterDef("partition_scale_events")
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
 	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
+	PartitionScaleTarget = NewGaugeDef("partition_scale_target")
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to track the health of worker registry.
@@ -1336,6 +1359,13 @@ var (
 		"poller_autoscaling_heartbeat_count",
 		WithDescription(
 			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
+	)
+	PollerScaleDecisionCounter = NewCounterDef(
+		"poller_scale_decision",
+		WithDescription(
+			"Count of poller scaling decisions made by a physical task queue manager. Emitted only when the opt-in "+
+				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
+				"task_type, partition, decision (scale_up/scale_down/hold), reason (idle/backlog/task_rate/rate_limited)"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 
@@ -1440,6 +1470,7 @@ var (
 	ElasticsearchDocumentGenerateFailuresCount        = NewCounterDef("elasticsearch_document_generate_failures_counter")
 	ElasticsearchCustomOrderByClauseCount             = NewCounterDef("elasticsearch_custom_order_by_clause_counter")
 	CatchUpReadyShardCountGauge                       = NewGaugeDef("catchup_ready_shard_count")
+	CatchUpNotReadyShardCountGauge                    = NewGaugeDef("catchup_not_ready_shard_count")
 	HandoverReadyShardCountGauge                      = NewGaugeDef("handover_ready_shard_count")
 	ReplicatorMessages                                = NewCounterDef("replicator_messages")
 	ReplicatorFailures                                = NewCounterDef("replicator_errors")
@@ -1503,6 +1534,14 @@ var (
 	SchedulerGeneratorLoopCompleted = NewCounterDef(
 		"scheduler_generator_loop_completed",
 		WithDescription("The number of times a scheduler's generator stopped rescheduling itself without arming an idle task. The schedule is held open waiting for an external trigger (unpause, spec update, backfill completion)."),
+	)
+	ScheduleComputeLimitExceeded = NewCounterDef(
+		"schedule_compute_limit_exceeded",
+		WithDescription("The number of times a schedule's next-time search hit the hard compute iteration bound and stopped the schedule"),
+	)
+	ScheduleComputeLimitWarning = NewCounterDef(
+		"schedule_compute_limit_warning",
+		WithDescription("The number of times a schedule's next-time search crossed the warn compute iteration threshold; the search continued and the schedule was not stopped"),
 	)
 	ScheduleIdleTask = NewCounterDef(
 		"schedule_idle_task",

@@ -66,7 +66,7 @@ func NewSchedulerMigrateToWorkflowTaskHandler(
 func (h *SchedulerMigrateToWorkflowTaskHandler) Validate(
 	_ chasm.Context,
 	scheduler *Scheduler,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	_ *schedulerpb.SchedulerMigrateToWorkflowTask,
 ) (bool, error) {
 	if scheduler.Closed {

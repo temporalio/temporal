@@ -81,7 +81,13 @@ const (
 	// Lower bound for the deadline in which buffered actions are dropped.
 	startWorkflowMinDeadline = 5 * time.Second
 
-	// Upper bound on how many times starting an individual buffered action should be retried.
+	// InvokerMaxStartAttempts is the maximum number of StartWorkflowExecution
+	// RPCs issued for an individual buffered action, counting the first call.
+	// Attempt numbers are 1-based: recordProcessBufferResult readies a start at
+	// Attempt 1, and each retryable failure increments it. The bound is
+	// therefore inclusive - a start is refused locally (and dropped) only once
+	// its Attempt exceeds this value - so a value of 10 permits ten start RPCs,
+	// i.e. the initial call plus nine retries.
 	InvokerMaxStartAttempts = 10 // TODO - dial this up/remove it
 )
 
@@ -138,9 +144,12 @@ func (h *InvokerExecuteTaskHandler) recordDuplicateExecuteDrops(scheduler *Sched
 func (h *InvokerExecuteTaskHandler) Validate(
 	ctx chasm.Context,
 	invoker *Invoker,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	_ *schedulerpb.InvokerExecuteTask,
 ) (bool, error) {
+	if invoker.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	// If another execute task already happened to kick everything off, we don't need
 	// this one.
 	eligibleStarts := invoker.getEligibleBufferedStarts()
@@ -205,6 +214,9 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to read component: %w", err)
+	}
+	if scheduler == nil {
+		return errors.New("scheduler component was nil after read")
 	}
 
 	logger := newTaggedLogger(h.baseLogger, scheduler)
@@ -358,13 +370,6 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 			break
 		}
 
-		// Check if this start is already started. If so, we crashed after
-		// starting a workflow, but before recording the result.
-		if invoker.isWorkflowStarted(start.WorkflowId) {
-			logger.Info("skipping already-started workflow", tag.WorkflowID(start.WorkflowId))
-			continue
-		}
-
 		// Clone start before concurrent access. The clone will have RunId/StartTime
 		// set by startWorkflow, then copied back to the original in recordExecuteResult.
 		start = common.CloneProto(start)
@@ -409,9 +414,12 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 func (h *InvokerProcessBufferTaskHandler) Validate(
 	ctx chasm.Context,
 	invoker *Invoker,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
+	if invoker.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	valid, err := validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)
 	if err != nil {
 		return false, err
@@ -620,7 +628,9 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 ) error {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
-	if start.Attempt >= InvokerMaxStartAttempts {
+	// Inclusive bound: Attempt is 1-based, so the attempt numbered
+	// InvokerMaxStartAttempts is the last one that gets an RPC.
+	if start.Attempt > InvokerMaxStartAttempts {
 		return errRetryLimitExceeded
 	}
 
@@ -785,6 +795,9 @@ func (h *InvokerExecuteTaskHandler) newInvokerTaskHandlerContext(
 ) invokerTaskHandlerContext {
 	tweakables := h.config.Tweakables(scheduler.Namespace)
 	maxActions := tweakables.MaxActionsPerExecution
+	if maxActions <= 0 {
+		maxActions = DefaultTweakables.MaxActionsPerExecution
+	}
 
 	return invokerTaskHandlerContext{
 		Context:      ctx,

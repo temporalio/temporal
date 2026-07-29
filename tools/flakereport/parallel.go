@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
 // ArtifactJob represents a job to download and process an artifact
@@ -13,7 +15,7 @@ type ArtifactJob struct {
 	Repo         string
 	RunID        int64
 	RunCreatedAt time.Time
-	Artifact     WorkflowArtifact
+	Artifact     github.Artifact
 	TempDir      string
 	RunNumber    int
 	TotalRuns    int
@@ -104,7 +106,7 @@ func processArtifactJob(ctx context.Context, job ArtifactJob, totalArtifacts int
 		job.Artifact.Name, job.Artifact.ID)
 
 	// Download artifact
-	zipPath, err := downloadArtifact(ctx, job.Repo, job.Artifact.ID, job.TempDir)
+	zipPath, err := github.DownloadArtifact(ctx, job.Repo, job.Artifact.ID, job.TempDir)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to download artifact %d: %w", job.Artifact.ID, err)
 		fmt.Printf("  Warning: %v\n", result.Error)

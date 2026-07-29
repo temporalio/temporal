@@ -78,7 +78,7 @@ func TestScheduleIdleTask_ConsistentLabels(t *testing.T) {
 	// invalidated: Execute set Closed=true above, so Validate now rejects with
 	// reason=closed.
 	valid, err := h.Validate(env.MutableContext(), env.Scheduler,
-		chasm.TaskAttributes{ScheduledTime: env.TimeSource.Now()},
+		chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: env.TimeSource.Now()}},
 		&schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(10 * time.Minute)})
 	require.NoError(t, err)
 	require.False(t, valid)
@@ -109,7 +109,7 @@ func TestScheduleInvokerProcessBufferTask_ConsistentLabels(t *testing.T) {
 
 	// invalidated: a task scheduled before the high water mark is stale.
 	valid, err := h.Validate(env.ReadContext(), invoker,
-		chasm.TaskAttributes{ScheduledTime: env.TimeSource.Now().Add(-time.Minute)},
+		chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: env.TimeSource.Now().Add(-time.Minute)}},
 		&schedulerpb.InvokerProcessBufferTask{})
 	require.NoError(t, err)
 	require.False(t, valid)
@@ -156,7 +156,7 @@ func TestScheduleBackfillerTask_ConsistentLabels(t *testing.T) {
 	// invalidated: a task scheduled before the high water mark is stale.
 	backfiller.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
 	valid, err := h.Validate(env.ReadContext(), backfiller,
-		chasm.TaskAttributes{ScheduledTime: env.TimeSource.Now().Add(-time.Hour)},
+		chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: env.TimeSource.Now().Add(-time.Hour)}},
 		&schedulerpb.BackfillerTask{})
 	require.NoError(t, err)
 	require.False(t, valid)
@@ -184,7 +184,7 @@ func TestScheduleInvokerExecuteTask_ConsistentLabels(t *testing.T) {
 	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
 
 	// invalidated: no terminate/cancel/eligible work records reason=no_work.
-	valid, err := h.Validate(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	valid, err := h.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.False(t, valid)
 

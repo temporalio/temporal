@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/olivere/elastic/v7"
@@ -383,7 +383,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, ConvertElasticsearchClientError("ListWorkflowExecutions failed", err)
+		return nil, ConvertElasticsearchClientError("ListWorkflowExecutions failed", err, s.logger)
 	}
 
 	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
@@ -406,7 +406,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, ConvertElasticsearchClientError("ListChasmExecutions failed", err)
+		return nil, ConvertElasticsearchClientError("ListChasmExecutions failed", err, s.logger)
 	}
 
 	return s.GetListWorkflowExecutionsResponse(
@@ -460,7 +460,7 @@ func (s *VisibilityStore) CountChasmExecutions(
 
 	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
 	if err != nil {
-		return nil, ConvertElasticsearchClientError("CountChasmExecutions failed", err)
+		return nil, ConvertElasticsearchClientError("CountChasmExecutions failed", err, s.logger)
 	}
 
 	return &store.InternalCountExecutionsResponse{Count: count}, nil
@@ -491,7 +491,7 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 
 	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
 	if err != nil {
-		return nil, ConvertElasticsearchClientError("CountWorkflowExecutions failed", err)
+		return nil, ConvertElasticsearchClientError("CountWorkflowExecutions failed", err, s.logger)
 	}
 
 	return &store.InternalCountExecutionsResponse{Count: count}, nil
@@ -536,7 +536,7 @@ func (s *VisibilityStore) countGroupByExecutions(
 		termsAgg,
 	)
 	if err != nil {
-		return nil, ConvertElasticsearchClientError("CountWorkflowExecutions failed", err)
+		return nil, ConvertElasticsearchClientError("CountWorkflowExecutions failed", err, s.logger)
 	}
 	return s.parseCountGroupByResponse(esResponse, groupByFields, chasmMapper)
 }
@@ -548,7 +548,7 @@ func (s *VisibilityStore) GetWorkflowExecution(
 	docID := GetDocID(request.WorkflowID, request.RunID)
 	result, err := s.esClient.Get(ctx, s.index, docID)
 	if err != nil {
-		return nil, ConvertElasticsearchClientError("GetWorkflowExecution failed", err)
+		return nil, ConvertElasticsearchClientError("GetWorkflowExecution failed", err, s.logger)
 	}
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
@@ -1285,15 +1285,24 @@ func finishParseJSONValue(val any, t enumspb.IndexedValueType) (any, error) {
 	panic(fmt.Sprintf("Unknown field type: %v", t))
 }
 
-func ConvertElasticsearchClientError(message string, err error) error {
-	errMessage := fmt.Sprintf("%s: %s", message, detailedErrorMessage(err))
+func ConvertElasticsearchClientError(message string, err error, logger log.Logger) error {
+	// This message is returned to client, avoiding including too much details.
+	errMessage := fmt.Sprintf("%s: %s", message, shortErrorMessage(err))
 	var elasticErr *elastic.Error
 	switch {
 	case errors.As(err, &elasticErr):
+		// Logging the full error message, useful for debugging.
+		logger.Error(message, tag.ESResponseStatus(elasticErr.Status), tag.Error(err))
 		switch elasticErr.Status {
-		case 400: // BadRequest
+		case http.StatusBadRequest:
 			// Returning InvalidArgument error will prevent retry on a caller side.
 			return serviceerror.NewInvalidArgument(errMessage)
+		case http.StatusTooManyRequests:
+			return &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: errMessage,
+			}
 		}
 		return serviceerror.NewUnavailable(errMessage)
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
@@ -1303,25 +1312,20 @@ func ConvertElasticsearchClientError(message string, err error) error {
 	return serviceerror.NewUnavailable(errMessage)
 }
 
-func detailedErrorMessage(err error) string {
-	var elasticErr *elastic.Error
-	if !errors.As(err, &elasticErr) ||
-		elasticErr.Details == nil ||
-		len(elasticErr.Details.RootCause) == 0 ||
-		(len(elasticErr.Details.RootCause) == 1 && elasticErr.Details.RootCause[0].Reason == elasticErr.Details.Reason) {
-		return err.Error()
-	}
-
-	var sb strings.Builder
-	sb.WriteString(elasticErr.Error())
-	sb.WriteString(", root causes:")
-	for i, rootCause := range elasticErr.Details.RootCause {
-		sb.WriteString(fmt.Sprintf(" %s [type=%s]", rootCause.Reason, rootCause.Type))
-		if i != len(elasticErr.Details.RootCause)-1 {
-			sb.WriteRune(',')
+func shortErrorMessage(err error) string {
+	if elasticErr, ok := errors.AsType[*elastic.Error](err); ok {
+		msg := fmt.Sprintf(
+			"VisibilityStore: Error %d (%s)",
+			elasticErr.Status,
+			http.StatusText(elasticErr.Status),
+		)
+		if elasticErr.Status == http.StatusBadRequest && elasticErr.Details != nil &&
+			elasticErr.Details.Reason != "" {
+			msg += fmt.Sprintf(": %s [type=%s]", elasticErr.Details.Reason, elasticErr.Details.Type)
 		}
+		return msg
 	}
-	return sb.String()
+	return err.Error()
 }
 
 func isDefaultSorter(sorter []elastic.Sorter) bool {

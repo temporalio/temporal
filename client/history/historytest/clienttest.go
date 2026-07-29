@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/testing/nettest"
 	historyserver "go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -51,7 +52,7 @@ func TestClient(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQue
 	listener := nettest.NewListener(nettest.NewPipe())
 
 	serveErrs := make(chan error, 1)
-	grpcServer := createServer(historyTaskQueueManager)
+	grpcServer := createServer(t, historyTaskQueueManager)
 	go func() {
 		serveErrs <- grpcServer.Serve(listener)
 	}()
@@ -134,14 +135,14 @@ func readTasks(
 	}
 }
 
-func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *grpc.Server {
+func createServer(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQueueManager) *grpc.Server {
 	// TODO: find a better way to create a history handler
 	historyHandler, err := historyserver.HandlerProvider(historyserver.NewHandlerArgs{
 		TaskQueueManager:     historyTaskQueueManager,
 		TracerProvider:       fakeTracerProvider{},
 		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
 		ChasmRegistry:        chasm.NewRegistry(log.NewNoopLogger()),
-	})
+	}, fxtest.NewLifecycle(t))
 	if err != nil {
 		panic(err) // nolint:forbidigo // Panic is acceptable in test setup code.
 	}

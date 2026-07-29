@@ -28,12 +28,17 @@ type (
 	NamespaceHandoverInterceptor struct {
 		namespaceRegistry                      namespace.Registry
 		timeSource                             clock.TimeSource
-		enabledForNS                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		nsCacheRefreshInterval                 dynamicconfig.DurationPropertyFn
 		metricsHandler                         metrics.Handler
 		logger                                 log.Logger
 		requestErrorHandler                    ErrorHandler
 		additionalAllowedMethodsDuringHandover map[string]struct{}
+		// additionalServicePrefixes are gRPC service prefixes (besides WorkflowService) whose
+		// methods the handover gate also applies to. Empty by default; embedders set these via
+		// WithAdditionalServicePrefixes so the gate can cover other transports (e.g. a proxy
+		// service) whose requests already expose their namespace, without this package knowing
+		// about them.
+		additionalServicePrefixes []string
 	}
 )
 
@@ -53,7 +58,6 @@ func NewNamespaceHandoverInterceptor(
 	}
 
 	return &NamespaceHandoverInterceptor{
-		enabledForNS:                           dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
 		nsCacheRefreshInterval:                 dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 		namespaceRegistry:                      namespaceRegistry,
 		metricsHandler:                         metricsHandler,
@@ -64,6 +68,29 @@ func NewNamespaceHandoverInterceptor(
 	}
 }
 
+// WithAdditionalServicePrefixes returns a copy of the interceptor whose handover gate also applies
+// to methods under the given gRPC service prefixes (besides WorkflowService). Embedders use this to
+// extend the gate to other transports without this package referencing them.
+func (i *NamespaceHandoverInterceptor) WithAdditionalServicePrefixes(prefixes ...string) *NamespaceHandoverInterceptor {
+	clone := *i
+	clone.additionalServicePrefixes = append(append([]string{}, i.additionalServicePrefixes...), prefixes...)
+	return &clone
+}
+
+// handlesMethod reports whether the handover gate applies to fullMethod: always for WorkflowService,
+// plus any embedder-configured service prefixes.
+func (i *NamespaceHandoverInterceptor) handlesMethod(fullMethod string) bool {
+	if strings.HasPrefix(fullMethod, api.WorkflowServicePrefix) {
+		return true
+	}
+	for _, prefix := range i.additionalServicePrefixes {
+		if strings.HasPrefix(fullMethod, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (i *NamespaceHandoverInterceptor) Intercept(
 	ctx context.Context,
 	req any,
@@ -72,7 +99,7 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 ) (_ any, retError error) {
 	defer log.CapturePanic(i.logger, &retError)
 
-	if !strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
+	if !i.handlesMethod(info.FullMethod) {
 		return handler(ctx, req)
 	}
 
@@ -80,7 +107,7 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 	methodName := api.MethodName(info.FullMethod)
 	namespaceName := MustGetNamespaceName(i.namespaceRegistry, req)
 
-	if namespaceName != namespace.EmptyName && i.enabledForNS(namespaceName.String()) {
+	if namespaceName != namespace.EmptyName {
 		var waitTime *time.Duration
 		defer func() {
 			if waitTime != nil {

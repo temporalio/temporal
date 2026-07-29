@@ -1575,11 +1575,12 @@ func makeCurrentWorkflowConditionFailedError(
 				EventId:   common.BufferedEventID,
 			},
 		},
-		RunID:            tv.RunID(),
-		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		LastWriteVersion: lastWriteVersion,
-		StartTime:        timestamp.TimeValuePtr(startTime),
+		RunID:               tv.RunID(),
+		FirstExecutionRunID: tv.RunID(),
+		State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastWriteVersion:    lastWriteVersion,
+		StartTime:           timestamp.TimeValuePtr(startTime),
 	}
 }
 
@@ -1785,11 +1786,12 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 						EventId:   common.FirstEventID,
 					},
 				},
-				RunID:            prevRunID,
-				State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				LastWriteVersion: lastWriteVersion,
-				StartTime:        nil,
+				RunID:               prevRunID,
+				FirstExecutionRunID: prevRunID,
+				State:               enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				Status:              enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				LastWriteVersion:    lastWriteVersion,
+				StartTime:           nil,
 			}
 		}
 
@@ -1891,11 +1893,12 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 								EventId:   common.FirstEventID,
 							},
 						},
-						RunID:            prevRunID,
-						State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-						Status:           status,
-						LastWriteVersion: lastWriteVersion,
-						StartTime:        nil,
+						RunID:               prevRunID,
+						FirstExecutionRunID: prevRunID,
+						State:               enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+						Status:              status,
+						LastWriteVersion:    lastWriteVersion,
+						StartTime:           nil,
 					}
 				}
 

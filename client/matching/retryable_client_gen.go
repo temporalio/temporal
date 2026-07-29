@@ -86,6 +86,21 @@ func (c *retryableClient) CancelOutstandingWorkerPolls(
 	return resp, err
 }
 
+func (c *retryableClient) CancelOutstandingWorkerPollsPartition(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+	var resp *matchingservice.CancelOutstandingWorkerPollsPartitionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CancelOutstandingWorkerPollsPartition(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,

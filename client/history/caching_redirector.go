@@ -74,6 +74,11 @@ func (r *CachingRedirector[C]) stop() {
 	r.goros.Wait()
 }
 
+func (r *CachingRedirector[C]) Close() {
+	r.stop()
+	r.connections.Close()
+}
+
 func (r *CachingRedirector[C]) clientForShardID(shardID int32) (C, error) {
 	var zero C
 	if err := checkShardID(shardID); err != nil {

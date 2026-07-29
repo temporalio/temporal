@@ -39,7 +39,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) createBatchUpdateOptionsWorkflow(en
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: env.WorkerTaskQueue(),
 	}
-	workflowRun, err := env.SdkClient().ExecuteWorkflow(env.Context(), workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
 
@@ -52,7 +52,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
 	)
 
-	ctx := env.Context()
+	ctx := s.Context()
 
 	internalWorkflow := newInternalWorkflow()
 
@@ -120,7 +120,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// unpause the activities in both workflows with batch unpause
-	_, err = env.SdkClient().WorkflowService().StartBatchOperation(env.Context(), &workflowservice.StartBatchOperationRequest{
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
 			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
@@ -155,7 +155,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// unpause the activities in both workflows with batch unpause
-	_, err = env.SdkClient().WorkflowService().StartBatchOperation(env.Context(), &workflowservice.StartBatchOperationRequest{
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
@@ -200,7 +200,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsMatch
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
 	)
 
-	ctx := env.Context()
+	ctx := s.Context()
 	const workflowCount = 10
 	workflowTypeName := testcore.RandomizeStr("activity-batch-update-options-match-all-workflow")
 	updatedScheduleToClose := 10 * time.Second
@@ -293,7 +293,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFaile
 	)
 
 	// neither activity type nor "match all" is provided
-	_, err := env.SdkClient().WorkflowService().StartBatchOperation(env.Context(), &workflowservice.StartBatchOperationRequest{
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
 			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{},
@@ -307,7 +307,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFaile
 	env.ErrorAs(err, new(*serviceerror.InvalidArgument))
 
 	// neither activity type nor "match all" is provided
-	_, err = env.SdkClient().WorkflowService().StartBatchOperation(env.Context(), &workflowservice.StartBatchOperationRequest{
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
 			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
@@ -323,7 +323,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFaile
 	env.ErrorAs(err, new(*serviceerror.InvalidArgument))
 
 	// cannot set activity options and restore original
-	_, err = env.SdkClient().WorkflowService().StartBatchOperation(env.Context(), &workflowservice.StartBatchOperationRequest{
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
 			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
