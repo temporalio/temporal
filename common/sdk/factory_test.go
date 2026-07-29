@@ -20,18 +20,12 @@ import (
 	"google.golang.org/grpc"
 )
 
+// unreachableAddress refuses connections, and binding it needs privileges, so no
+// test here can accidentally make it reachable by claiming a released port.
+const unreachableAddress = "127.0.0.1:1"
+
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
-}
-
-// deadAddress returns an address nothing is listening on.
-func deadAddress(t *testing.T) string {
-	t.Helper()
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	require.NoError(t, listener.Close())
-	return listener.Addr().String()
 }
 
 func newFactory(hostPort string, logger log.Logger) *clientFactory {
@@ -194,7 +188,7 @@ func TestNewClient_DoesNotRaceClose(t *testing.T) {
 func TestGetSystemClient_AfterCloseDoesNotDial(t *testing.T) {
 	t.Parallel()
 
-	f := newFactory(deadAddress(t), testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
+	f := newFactory(unreachableAddress, testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
 	f.Close()
 
 	got := make(chan sdkclient.Client, 1)
@@ -208,15 +202,14 @@ func TestGetSystemClient_AfterCloseDoesNotDial(t *testing.T) {
 	}
 }
 
-// The retry around the dial cannot be cancelled, so the shutdown check has to run
-// on every attempt: a Close landing after the first attempt must still stop the
-// factory reaching for a frontend that is going away.
+// A Close landing after the first attempt must still stop the factory reaching for
+// a frontend that is going away.
 func TestGetSystemClient_CloseDuringDialStopsRetrying(t *testing.T) {
 	t.Parallel()
 
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 	dialFailed := logger.Expect(testlogger.Warn, "error creating sdk client")
-	f := newFactory(deadAddress(t), logger)
+	f := newFactory(unreachableAddress, logger)
 
 	got := make(chan sdkclient.Client, 1)
 	go func() { got <- f.GetSystemClient() }()
