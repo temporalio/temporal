@@ -66,9 +66,8 @@ type historyClients struct {
 }
 
 type matchingClient struct {
-	once       sync.Once
-	client     matchingservice.MatchingServiceClient
-	rpcFactory *rpc.RPCFactory
+	once   sync.Once
+	client matchingservice.MatchingServiceClient
 }
 
 func newClients(
@@ -207,7 +206,6 @@ func (c *clients) ensureMatching() {
 			c.logger.Fatal("unable to create matching test client", tag.Error(err))
 		}
 		c.matching.client = matchingClient
-		c.matching.rpcFactory = rpcFactory
 	})
 }
 
@@ -224,15 +222,11 @@ func (c *clients) close() []error {
 	c.frontend.conn = nil
 	c.history.conn = nil
 
-	// The matching client owns a connection cache keyed by matching host, and
-	// the RPC factory owns the connections dialed for it.
+	// The matching client owns a connection cache keyed by matching host.
 	if s, ok := c.matching.client.(interface{ Stop() }); ok {
 		s.Stop()
 	}
-	if c.matching.rpcFactory != nil {
-		c.matching.rpcFactory.Close()
-		c.matching.rpcFactory = nil
-	}
+	c.matching.client = nil
 
 	return errs
 }

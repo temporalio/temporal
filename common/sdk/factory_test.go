@@ -51,8 +51,9 @@ func track(f *clientFactory, client sdkclient.Client) *trackedClient {
 
 // newDialedFactory points a factory at a real listener so NewClient can build
 // clients through the SDK. An empty gRPC server is enough, because Dial tolerates
-// an Unimplemented GetSystemInfo.
-func newDialedFactory(t *testing.T) *clientFactory {
+// an Unimplemented GetSystemInfo. The returned stop releases both, so callers in
+// a loop do not hold one listener per iteration.
+func newDialedFactory(t *testing.T) (*clientFactory, func()) {
 	t.Helper()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -60,14 +61,15 @@ func newDialedFactory(t *testing.T) *clientFactory {
 
 	server := grpc.NewServer()
 	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(server.Stop)
 
 	// A noop logger's Fatal does nothing, so a failed dial would otherwise be
 	// silent. Passed to the constructor so the SDK's own logger is covered too.
 	f := newFactory(listener.Addr().String(),
 		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError))
-	t.Cleanup(f.Close)
-	return f
+	return f, func() {
+		f.Close()
+		server.Stop()
+	}
 }
 
 // The SDK closes the connection shared by these clients only once every one of
@@ -127,7 +129,8 @@ func TestClientFactoryClose_SkipsClientClosedByOwner(t *testing.T) {
 func TestNewClient_TracksDerivedClient(t *testing.T) {
 	t.Parallel()
 
-	f := newDialedFactory(t)
+	f, stop := newDialedFactory(t)
+	t.Cleanup(stop)
 	client := f.NewClient(sdkclient.Options{Namespace: "ns"})
 
 	require.IsType(t, &trackedClient{}, client)
@@ -142,7 +145,8 @@ func TestNewClient_TracksDerivedClient(t *testing.T) {
 func TestNewClient_AfterCloseIsNotTracked(t *testing.T) {
 	t.Parallel()
 
-	f := newDialedFactory(t)
+	f, stop := newDialedFactory(t)
+	t.Cleanup(stop)
 	f.Close()
 
 	client := f.NewClient(sdkclient.Options{Namespace: "ns"})
@@ -150,6 +154,11 @@ func TestNewClient_AfterCloseIsNotTracked(t *testing.T) {
 	require.NotNil(t, client)
 	require.NotSame(t, f.GetSystemClient(), client, "must not hand out the shared client")
 	require.Empty(t, f.derivedClients)
+
+	// The factory already closed this client, so the caller's Close must release
+	// nothing rather than close it again.
+	require.IsType(t, &trackedClient{}, client)
+	require.NotPanics(t, client.Close)
 }
 
 // sdkworker.New panics unless it gets the SDK's concrete client, so NewWorker has
@@ -157,7 +166,8 @@ func TestNewClient_AfterCloseIsNotTracked(t *testing.T) {
 func TestNewWorker_AcceptsDerivedClient(t *testing.T) {
 	t.Parallel()
 
-	f := newDialedFactory(t)
+	f, stop := newDialedFactory(t)
+	t.Cleanup(stop)
 	client := f.NewClient(sdkclient.Options{Namespace: "ns"})
 	require.IsType(t, &trackedClient{}, client)
 
@@ -167,20 +177,20 @@ func TestNewWorker_AcceptsDerivedClient(t *testing.T) {
 }
 
 // NewClient holds clientsLock across NewClientFromExisting because the SDK reads
-// the shared reference count there while Close writes it. Dropping the lock makes
-// -race report those two accesses; merely narrowing it only sometimes does.
+// the shared reference count there while Close writes it.
 func TestNewClient_DoesNotRaceClose(t *testing.T) {
 	t.Parallel()
 
 	// Repeated because the two accesses only overlap in a narrow window.
 	for range 100 {
-		f := newDialedFactory(t)
+		f, stop := newDialedFactory(t)
 		require.NotNil(t, f.GetSystemClient())
 
 		var wg sync.WaitGroup
 		wg.Go(func() { f.NewClient(sdkclient.Options{Namespace: "ns"}) })
 		wg.Go(f.Close)
 		wg.Wait()
+		stop()
 	}
 }
 
@@ -229,15 +239,14 @@ func TestGetSystemClient_CloseDuringDialStopsRetrying(t *testing.T) {
 }
 
 // setSystemClient publishes the shared client under clientsLock because Close
-// reads the same field under that lock. Dropping the lock there makes -race
-// report those two accesses.
+// reads the same field under that lock.
 func TestGetSystemClient_DoesNotRacePublishWithClose(t *testing.T) {
 	t.Parallel()
 
 	// Repeated because Close only overlaps the publish when it lands while the
 	// first dial is still in flight.
 	for range 100 {
-		f := newDialedFactory(t)
+		f, stop := newDialedFactory(t)
 
 		var client sdkclient.Client
 		var wg sync.WaitGroup
@@ -246,5 +255,6 @@ func TestGetSystemClient_DoesNotRacePublishWithClose(t *testing.T) {
 		wg.Wait()
 
 		require.NotNil(t, client)
+		stop()
 	}
 }

@@ -15,15 +15,15 @@ import (
 const localFrontendTarget = "127.0.0.1:9999"
 
 // gRPC connections are lazy, so nothing has to be listening on the target.
-func newTestFactory() *RPCFactory {
-	return NewFactory(nil, "tester", log.NewNoopLogger(), metrics.NoopMetricsHandler,
+func newTestFactory(logger log.Logger) *RPCFactory {
+	return NewFactory(nil, "tester", logger, metrics.NoopMetricsHandler,
 		nil, localFrontendTarget, "", 0, nil, nil, nil, nil, nil)
 }
 
 func TestRPCFactoryClose_ShutsDownDialedConns(t *testing.T) {
 	t.Parallel()
 
-	f := newTestFactory()
+	f := newTestFactory(log.NewNoopLogger())
 	first := f.dial("127.0.0.1:1234", nil)
 	second := f.dial("127.0.0.1:5678", nil)
 	require.NotNil(t, first)
@@ -39,7 +39,7 @@ func TestRPCFactoryClose_ShutsDownDialedConns(t *testing.T) {
 func TestRPCFactoryClose_Idempotent(t *testing.T) {
 	t.Parallel()
 
-	f := newTestFactory()
+	f := newTestFactory(log.NewNoopLogger())
 	conn := f.dial("127.0.0.1:1234", nil)
 	require.NotNil(t, conn)
 
@@ -53,7 +53,7 @@ func TestRPCFactoryClose_Idempotent(t *testing.T) {
 func TestRPCFactoryClose_ConnDialedAfterCloseIsClosed(t *testing.T) {
 	t.Parallel()
 
-	f := newTestFactory()
+	f := newTestFactory(log.NewNoopLogger())
 	f.Close()
 
 	conn := f.dial("127.0.0.1:1234", nil)
@@ -64,11 +64,10 @@ func TestRPCFactoryClose_ConnDialedAfterCloseIsClosed(t *testing.T) {
 func TestRPCFactoryClose_DoesNotFailOnConnClosedByOwner(t *testing.T) {
 	t.Parallel()
 
-	f := newTestFactory()
 	// Warn never fails a test on its own, so assert on the expectation.
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 	warned := logger.Expect(testlogger.Warn, "Failed to close gRPC connection")
-	f.logger = logger
+	f := newTestFactory(logger)
 
 	conn := f.dial("127.0.0.1:1234", nil)
 	require.NotNil(t, conn)
@@ -81,13 +80,10 @@ func TestRPCFactoryClose_DoesNotFailOnConnClosedByOwner(t *testing.T) {
 		"closing a connection its owner already closed must not warn")
 }
 
-// Connections closed by their owner must not stay reachable from the factory,
-// otherwise every host that ever left the ring is retained for the process
-// lifetime.
 func TestRPCFactoryDial_DropsConnsAlreadyShutDown(t *testing.T) {
 	t.Parallel()
 
-	f := newTestFactory()
+	f := newTestFactory(log.NewNoopLogger())
 	defer f.Close()
 
 	evicted := f.dial("127.0.0.1:1234", nil)
@@ -115,8 +111,7 @@ func TestRPCFactoryDial_DropsConnsAlreadyShutDown(t *testing.T) {
 func TestRPCFactoryLocalFrontendConn_Reused(t *testing.T) {
 	t.Parallel()
 
-	f := newTestFactory()
-	defer f.Close()
+	f := newTestFactory(log.NewNoopLogger())
 
 	first := f.CreateLocalFrontendGRPCConnection()
 	second := f.CreateLocalFrontendGRPCConnection()
@@ -133,13 +128,12 @@ func TestRPCFactoryLocalFrontendConn_Reused(t *testing.T) {
 }
 
 // A ring change can dial while the fx stop hook is closing the factory, so
-// trackConn and Close both take connsLock. Dropping it on either side makes
-// -race report the two accesses to the tracked set.
+// trackConn and Close both take connsLock.
 func TestRPCFactoryDial_DoesNotRaceClose(t *testing.T) {
 	t.Parallel()
 
 	for range 50 {
-		f := newTestFactory()
+		f := newTestFactory(log.NewNoopLogger())
 
 		start := make(chan struct{})
 		var wg sync.WaitGroup

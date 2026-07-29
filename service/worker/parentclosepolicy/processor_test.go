@@ -1,6 +1,7 @@
 package parentclosepolicy
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -60,5 +61,18 @@ func TestProcessorStop_WithoutStart(t *testing.T) {
 
 	processor, _ := newTestProcessor(t)
 
+	require.NotPanics(t, processor.Stop)
+}
+
+// Stopping a worker that never started would close its stop channel and shut it
+// down, so the processor only takes ownership once Start succeeds.
+func TestProcessorStart_FailureLeavesNothingToStop(t *testing.T) {
+	t.Parallel()
+
+	processor, worker := newTestProcessor(t)
+	// No Stop expectation: gomock fails if a worker that never started is stopped.
+	worker.EXPECT().Start().Return(errors.New("boom"))
+
+	require.Error(t, processor.Start())
 	require.NotPanics(t, processor.Stop)
 }

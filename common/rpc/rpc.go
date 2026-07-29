@@ -321,23 +321,26 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 
 func (d *RPCFactory) trackConn(conn *grpc.ClientConn) {
 	d.connsLock.Lock()
-	if d.closed {
-		d.connsLock.Unlock()
+	closed := d.closed
+	if !closed {
+		// The history pool and matching cache close their own connections when a
+		// host leaves the ring; without this every host that ever left would stay
+		// reachable from the factory for the lifetime of the process. Reclaiming
+		// is tied to dialing, so a ring that stops churning holds the departed
+		// hosts' closed connections until Close.
+		for tracked := range d.conns {
+			if tracked.GetState() == connectivity.Shutdown {
+				delete(d.conns, tracked)
+			}
+		}
+		d.conns[conn] = struct{}{}
+	}
+	d.connsLock.Unlock()
+
+	if closed {
 		// Nothing else would release a connection dialed after Close.
 		d.closeConn(conn)
-		return
 	}
-	defer d.connsLock.Unlock()
-
-	// The history pool and matching cache close their own connections when a
-	// host leaves the ring; without this every host that ever left would stay
-	// reachable from the factory for the lifetime of the process.
-	for tracked := range d.conns {
-		if tracked.GetState() == connectivity.Shutdown {
-			delete(d.conns, tracked)
-		}
-	}
-	d.conns[conn] = struct{}{}
 }
 
 // Close releases every gRPC connection still held by this factory. It is safe
