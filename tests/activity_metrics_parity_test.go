@@ -22,6 +22,7 @@ func (s *activityParityTestSuite) TestWFASAAMetricsParity() {
 		compared         bool
 		counter          bool
 		baseHandler      bool
+		legacyWFAHandler bool
 		recordingTagKeys []string
 	}
 	type scenario struct {
@@ -42,6 +43,11 @@ func (s *activityParityTestSuite) TestWFASAAMetricsParity() {
 		"versioning_behavior",
 		"workflowType",
 	}
+	legacyWFATagKeys := []string{
+		"activity_targeting_method",
+		"namespace",
+		"service_name",
+	}
 	catalog := []activityMetric{
 		{name: metrics.ActivitySuccess.Name(), compared: true, counter: true},
 		{name: metrics.ActivityFail.Name(), compared: true, counter: true},
@@ -52,10 +58,10 @@ func (s *activityParityTestSuite) TestWFASAAMetricsParity() {
 		{name: metrics.ActivityTaskTimeout.Name(), compared: true, counter: true, recordingTagKeys: []string{"timeout_type"}},
 		{name: metrics.ActivityStartToCloseLatency.Name(), compared: true},
 		{name: metrics.ActivityScheduleToCloseLatency.Name(), compared: true},
-		{name: metrics.ActivityPause.Name(), compared: true, counter: true},
-		{name: metrics.ActivityUnpause.Name(), compared: true, counter: true},
-		{name: metrics.ActivityReset.Name(), compared: true, counter: true},
-		{name: metrics.ActivityUpdateOptions.Name(), compared: true, counter: true},
+		{name: metrics.ActivityPause.Name(), compared: true, counter: true, legacyWFAHandler: true},
+		{name: metrics.ActivityUnpause.Name(), compared: true, counter: true, legacyWFAHandler: true},
+		{name: metrics.ActivityReset.Name(), compared: true, counter: true, legacyWFAHandler: true},
+		{name: metrics.ActivityUpdateOptions.Name(), compared: true, counter: true, legacyWFAHandler: true},
 		{name: metrics.ActivityHeartbeatCount.Name(), compared: true, counter: true, baseHandler: true},
 		{name: metrics.ActivityPayloadSize.Name(), compared: true, counter: true, baseHandler: true},
 	}
@@ -195,18 +201,30 @@ func (s *activityParityTestSuite) TestWFASAAMetricsParity() {
 				}
 				s.Run(metric.name, func(s *activityParityTestSuite) {
 					t := s.T()
-					tagKeys := seriesTagKeys(wfa[metric.name])
-					if !metric.baseHandler && len(wfa[metric.name]) > 0 {
-						expectedTagKeys := append([]string{}, perActivityTagKeys...)
-						expectedTagKeys = append(expectedTagKeys, metric.recordingTagKeys...)
-						sort.Strings(expectedTagKeys)
-						require.Equal(t, expectedTagKeys, tagKeys,
-							"WFA must use the standard per-activity tag keys")
+					wfaTagKeys := seriesTagKeys(wfa[metric.name])
+					saaTagKeys := seriesTagKeys(saa[metric.name])
+					comparisonTagKeys := wfaTagKeys
+					if metric.legacyWFAHandler && len(wfa[metric.name]) > 0 {
+						require.Equal(t, legacyWFATagKeys, wfaTagKeys,
+							"WFA currently emits this metric from its legacy activity handler")
+						for _, rec := range wfa[metric.name] {
+							require.Equal(t, "id", rec.Tags["activity_targeting_method"])
+						}
+						require.Equal(t, perActivityTagKeys, saaTagKeys,
+							"SAA must use the standard per-activity tag keys")
+						comparisonTagKeys = []string{"namespace", "service_name"}
+					} else {
+						if !metric.baseHandler && len(wfa[metric.name]) > 0 {
+							expectedTagKeys := append([]string{}, perActivityTagKeys...)
+							expectedTagKeys = append(expectedTagKeys, metric.recordingTagKeys...)
+							sort.Strings(expectedTagKeys)
+							require.Equal(t, expectedTagKeys, wfaTagKeys,
+								"WFA must use the standard per-activity tag keys")
+						}
+						require.Equal(t, wfaTagKeys, saaTagKeys, "WFA and SAA tag keys must match")
 					}
-					require.Equal(t, tagKeys, seriesTagKeys(saa[metric.name]),
-						"WFA and SAA tag keys must match")
-					wfaSeries := metricSeries(t, "WFA", wfa[metric.name], tagKeys, metric.counter)
-					saaSeries := metricSeries(t, "SAA", saa[metric.name], tagKeys, metric.counter)
+					wfaSeries := metricSeries(t, "WFA", wfa[metric.name], comparisonTagKeys, metric.counter)
+					saaSeries := metricSeries(t, "SAA", saa[metric.name], comparisonTagKeys, metric.counter)
 					if metric.counter {
 						require.Equal(t, wfaSeries, saaSeries, "WFA and SAA counter values must match")
 					} else {
