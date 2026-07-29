@@ -111,7 +111,9 @@ func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 		if err != nil {
 			f.logger.Fatal("error creating sdk client", tag.Error(err))
 		}
-		client.Close()
+		if client != nil {
+			client.Close()
+		}
 		return client
 	}
 
