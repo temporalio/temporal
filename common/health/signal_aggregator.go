@@ -1,0 +1,253 @@
+package health
+
+import (
+	"reflect"
+	"sync"
+	"time"
+
+	"go.temporal.io/server/common/aggregate"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/stats"
+)
+
+const (
+	// overallGroupName is used to aggregate across every key
+	overallGroupName = "!*!"
+	refreshInterval  = time.Minute
+
+	// fallbacks used when the overall bucket doesn't configure its own windows.
+	fallbackErrorRatioWindowSize = 10 * time.Second
+	fallbackErrorRatioBufferSize = 5000
+)
+
+var fallbackLatencyWindow = stats.WindowConfig{
+	WindowSize:  5 * time.Second,
+	WindowCount: 10,
+}
+
+type SignalAggregator struct {
+	logger      log.Logger
+	getSettings func() HealthCheckSettings
+	isUnhealthy func(error) bool
+
+	mu sync.RWMutex
+
+	latencyByGroup map[string]stats.TimeWindowedStats
+	latencyByKey   map[string]stats.TimeWindowedStats
+
+	errorRatioByGroup map[string]aggregate.MovingWindowAverage
+	errorRatioByKey   map[string]aggregate.MovingWindowAverage
+
+	lastSettings HealthCheckSettings
+
+	startOnce sync.Once
+	stopOnce  sync.Once
+	done      chan struct{}
+}
+
+type Option func(*SignalAggregator)
+
+// WithIsUnhealthy sets the classifier that decides whether a (non-nil) error counts
+// toward the error ratio. Without it, every error is counted
+func WithIsUnhealthy(isUnhealthy func(error) bool) Option {
+	return func(s *SignalAggregator) {
+		s.isUnhealthy = isUnhealthy
+	}
+}
+
+func NewSignalAggregator(
+	logger log.Logger,
+	getSettings func() HealthCheckSettings,
+	opts ...Option,
+) *SignalAggregator {
+	agg := &SignalAggregator{
+		logger:      logger,
+		getSettings: getSettings,
+		isUnhealthy: func(error) bool { return true }, // default to counting every error
+		done:        make(chan struct{}),
+	}
+
+	for _, opt := range opts {
+		opt(agg)
+	}
+
+	agg.refresh() // seed the maps
+
+	return agg
+}
+
+func (s *SignalAggregator) Start() {
+	s.startOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(refreshInterval)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-s.done:
+					return
+				case <-ticker.C:
+					s.refresh()
+				}
+			}
+		}()
+	})
+}
+
+func (s *SignalAggregator) Stop() {
+	s.stopOnce.Do(func() {
+		close(s.done)
+	})
+}
+
+func (s *SignalAggregator) settingsChanged(newSettings HealthCheckSettings) bool {
+	return s.latencyByGroup == nil || !reflect.DeepEqual(newSettings, s.lastSettings)
+}
+
+func (s *SignalAggregator) refresh() {
+	newSettings := s.getSettings()
+
+	if !s.settingsChanged(newSettings) {
+		return
+	}
+
+	latencyByGroup := make(map[string]stats.TimeWindowedStats)
+	latencyByKey := make(map[string]stats.TimeWindowedStats)
+	errorRatioByGroup := make(map[string]aggregate.MovingWindowAverage)
+	errorRatioByKey := make(map[string]aggregate.MovingWindowAverage)
+
+	overallWindow := fallbackLatencyWindow
+	if newSettings.Overall.WindowConfig != nil {
+		overallWindow = *newSettings.Overall.WindowConfig
+	}
+
+	dist := s.newLatencyDist(overallWindow)
+	if dist != nil {
+		latencyByGroup[overallGroupName] = dist
+	}
+
+	overallERWindow, overallERBuffer := fallbackErrorRatioWindowSize, fallbackErrorRatioBufferSize
+
+	ert := newSettings.Overall.ErrorRatioThreshold
+	if ert != nil {
+		overallERWindow, overallERBuffer = ert.WindowSize, ert.BufferSize
+	}
+
+	errorRatioByGroup[overallGroupName] = aggregate.NewMovingWindowAvgImpl(overallERWindow, overallERBuffer)
+
+	for _, group := range newSettings.Groups {
+		t := group.Thresholds
+
+		if t.WindowConfig != nil {
+			dist := s.newLatencyDist(*t.WindowConfig)
+			if dist != nil {
+				latencyByGroup[group.Name] = dist
+
+				for _, key := range group.Keys {
+					latencyByKey[key] = dist
+				}
+			}
+		}
+
+		if t.ErrorRatioThreshold != nil {
+			errorRatio := aggregate.NewMovingWindowAvgImpl(t.ErrorRatioThreshold.WindowSize, t.ErrorRatioThreshold.BufferSize)
+
+			errorRatioByGroup[group.Name] = errorRatio
+
+			for _, key := range group.Keys {
+				errorRatioByKey[key] = errorRatio
+			}
+		}
+	}
+
+	s.mu.Lock()
+	s.latencyByGroup = latencyByGroup
+	s.latencyByKey = latencyByKey
+	s.errorRatioByGroup = errorRatioByGroup
+	s.errorRatioByKey = errorRatioByKey
+	s.lastSettings = newSettings
+	s.mu.Unlock()
+}
+
+func (s *SignalAggregator) newLatencyDist(cfg stats.WindowConfig) stats.TimeWindowedStats {
+	dist, err := stats.NewWindowedTDigest(cfg)
+	if err != nil {
+		s.logger.Error("failed to create latency distribution, falling back to default", tag.Error(err))
+
+		dist, err = stats.NewWindowedTDigest(fallbackLatencyWindow)
+		if err != nil {
+			s.logger.Error("failed to create fallback latency distribution", tag.Error(err))
+			return nil
+		}
+	}
+
+	return dist
+}
+
+func (s *SignalAggregator) Record(key string, latency time.Duration, err error) {
+	unhealthy := err != nil && s.isUnhealthy(err)
+	ms := float64(latency.Milliseconds())
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	overallLatency := s.latencyByGroup[overallGroupName]
+	if overallLatency != nil {
+		overallLatency.RecordToLatestWindow(ms)
+	}
+
+	groupLatency := s.latencyByKey[key]
+	if groupLatency != nil {
+		groupLatency.RecordToLatestWindow(ms)
+	}
+
+	overallErrRatio := s.errorRatioByGroup[overallGroupName]
+	if overallErrRatio != nil {
+		if unhealthy {
+			overallErrRatio.Record(1)
+		} else {
+			overallErrRatio.Record(0)
+		}
+	}
+
+	groupErrRatio := s.errorRatioByKey[key]
+	if groupErrRatio != nil {
+		if unhealthy {
+			groupErrRatio.Record(1)
+		} else {
+			groupErrRatio.Record(0)
+		}
+	}
+}
+
+func (s *SignalAggregator) LatencyQuantile(quantile float64) float64 {
+	return s.LatencyQuantileByGroup(overallGroupName, quantile)
+}
+
+func (s *SignalAggregator) ErrorRatio() float64 {
+	return s.ErrorRatioByGroup(overallGroupName)
+}
+
+func (s *SignalAggregator) LatencyQuantileByGroup(groupName string, quantile float64) float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	dist, found := s.latencyByGroup[groupName]
+	if !found {
+		return 0
+	}
+
+	return dist.Quantile(quantile)
+}
+
+func (s *SignalAggregator) ErrorRatioByGroup(groupName string) float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	errRatio, found := s.errorRatioByGroup[groupName]
+	if !found {
+		return 0
+	}
+	return errRatio.Average()
+}
