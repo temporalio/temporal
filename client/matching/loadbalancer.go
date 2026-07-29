@@ -96,7 +96,45 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		partitionCount = max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
 	}
 
-	return taskQueue.NormalPartition(rand.Intn(partitionCount))
+	return taskQueue.NormalPartition(pickWritePartitionByGap(
+		pc.BacklogCount,
+		partitionCount,
+		number.DecodeCompact8(pc.BacklogCap),
+	))
+}
+
+// pickWritePartitionByGap picks a partition with probability proportional to how far its backlog
+// is below backlogCap. Falls back to uniform random if any of these are true:
+//   - every partition is at or above the backlogCap
+//   - backlogCap is 0
+//   - when backlog data is not available for all write partitions
+func pickWritePartitionByGap(counts []number.Compact8, partitionCount int, backlogCap int64) int {
+	if backlogCap == 0 ||
+		len(counts) < partitionCount {
+		return rand.Intn(partitionCount)
+	}
+
+	var total int64
+	for i := range partitionCount {
+		if gap := backlogCap - number.DecodeCompact8(counts[i]); gap > 0 {
+			total += gap
+		}
+	}
+	if total <= 0 { // all partitions are at or above cap
+		return rand.Intn(partitionCount)
+	}
+	r := rand.Int63n(total)
+	for i := range partitionCount {
+		gap := backlogCap - number.DecodeCompact8(counts[i])
+		if gap <= 0 { // this partition is at or above cap
+			continue
+		}
+		if r < gap { // more likely to be true the bigger this partition's gap is
+			return i
+		}
+		r -= gap
+	}
+	return partitionCount - 1 // unreachable in practice; guard against compact8 rounding
 }
 
 // PickReadPartition picks a partition for poller to poll task from, and keeps load balanced between partitions.

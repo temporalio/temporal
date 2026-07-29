@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/number"
@@ -172,12 +173,12 @@ func TestTQLoadBalancerWeighted_FillsEachBeforeFocussingOnBacklog(t *testing.T) 
 	// During the first Read picks, no partition should ever exceed one poller.
 	for range 4 {
 		lb.PickReadPartition(tq, pc)
-		assert.LessOrEqual(t, maxPollerCount(tqlb), 1,
+		require.LessOrEqual(t, maxPollerCount(tqlb), 1,
 			"no partition should get a 2nd poller until every partition has 1")
 	}
 	// After exactly Read picks, every partition has exactly one poller.
 	for i, c := range tqlb.pollerCounts {
-		assert.Equalf(t, 1, c, "partition %d should have exactly one poller after the first round", i)
+		require.Equalf(t, 1, c, "partition %d should have exactly one poller after the first round", i)
 	}
 
 	// Do a lot more rounds of picking
@@ -186,8 +187,8 @@ func TestTQLoadBalancerWeighted_FillsEachBeforeFocussingOnBacklog(t *testing.T) 
 	}
 
 	// The high-backlog partition gets the most pollers; empty partitions still get some.
-	assert.Greater(t, tqlb.pollerCounts[3], tqlb.pollerCounts[0])
-	assert.Greater(t, tqlb.pollerCounts[0], 0)
+	require.Greater(t, tqlb.pollerCounts[3], tqlb.pollerCounts[0])
+	require.Positive(t, tqlb.pollerCounts[0])
 }
 
 func TestTQLoadBalancerWeighted_EqualWeightsBalances(t *testing.T) {
@@ -205,13 +206,13 @@ func TestTQLoadBalancerWeighted_EqualWeightsBalances(t *testing.T) {
 		lb.PickReadPartition(tq, pc)
 	}
 	for _, c := range lb.getTaskQueueLoadBalancer(tq).pollerCounts {
-		assert.Equal(t, 2, c)
+		require.Equal(t, 2, c)
 	}
 }
 
 func TestPickReadPartition_NoBacklogFallsBack(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	tq := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
 	lb := &defaultLoadBalancer{
@@ -226,13 +227,13 @@ func TestPickReadPartition_NoBacklogFallsBack(t *testing.T) {
 	}
 	tqlb := lb.getTaskQueueLoadBalancer(tq)
 	for _, c := range tqlb.pollerCounts {
-		assert.Equal(t, 2, c)
+		require.Equal(t, 2, c)
 	}
 }
 
 func TestPickReadPartition_IncompleteBacklogFallsBack(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	tq := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
 	lb := &defaultLoadBalancer{
@@ -248,7 +249,82 @@ func TestPickReadPartition_IncompleteBacklogFallsBack(t *testing.T) {
 	}
 	tqlb := lb.getTaskQueueLoadBalancer(tq)
 	for _, c := range tqlb.pollerCounts {
-		assert.Equal(t, 2, c)
+		require.Equal(t, 2, c)
+	}
+}
+
+func TestPickWritePartition_BacklogAware(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	require.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
+	}
+
+	backlogCap := number.DecodeCompact8(number.EncodeCompact8(21_000_000))
+
+	// Both partitions are below the cap: partition 0 is empty (gap ~21M) and partition 1 is
+	// partially full (~12.6M, gap ~8.4M). Writes should favor the emptier partition 0
+	// in proportion to the gaps, while partition 1 still receives a meaningful share.
+	pc := PartitionCounts{
+		Read:         2,
+		Write:        2,
+		BacklogCap:   200,
+		BacklogCount: []number.Compact8{0, number.EncodeCompact8(13_000_000)},
+	}
+	counts := make([]int, 2)
+	const n = 3000
+	for range n {
+		p := lb.PickWritePartition(taskQueue, pc)
+		counts[p.PartitionId()]++
+	}
+	require.Greater(t, counts[0], counts[1], "emptier partition should receive more writes")
+	require.Positive(t, counts[1], "the below-cap partition should still receive some writes")
+	gap0 := backlogCap - number.DecodeCompact8(0)
+	gap1 := backlogCap - number.DecodeCompact8(number.EncodeCompact8(13_000_000))
+	require.InDelta(t, float64(n)*float64(gap0)/float64(gap0+gap1), counts[0], float64(n)*0.05,
+		"writes split in proportion to each partition's gap to cap")
+
+	// Now, every partition at/above cap -> no gap to weight by, so the picker declines and the caller
+	// falls back to uniform random.
+	pcAtCap := PartitionCounts{
+		Read:         2,
+		Write:        2,
+		BacklogCap:   200,
+		BacklogCount: []number.Compact8{200, 200},
+	}
+	atCap := make([]int, 2)
+	for range n {
+		p := lb.PickWritePartition(taskQueue, pcAtCap)
+		atCap[p.PartitionId()]++
+	}
+	for i := range atCap {
+		require.InDelta(t, n/2, atCap[i], float64(n)*0.1, "at-cap partition %d roughly uniform", i)
+	}
+}
+
+func TestPickWritePartition_NoBacklogUniform(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	require.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
+	}
+
+	// no backlog cap -> uniform random across the 4 write partitions.
+	pc := PartitionCounts{Read: 4, Write: 4}
+	counts := make([]int, 4)
+	const n = 4000
+	for range n {
+		p := lb.PickWritePartition(taskQueue, pc)
+		counts[p.PartitionId()]++
+	}
+	for i := range counts {
+		require.InDelta(t, n/4, counts[i], float64(n)*0.1, "partition %d roughly uniform", i)
 	}
 }
 
