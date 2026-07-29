@@ -230,6 +230,45 @@ func TestRecordAndRead(t *testing.T) {
 			},
 		},
 		{
+			desc: "key claimed by two groups feeds only the last one",
+			settings: Settings{
+				Overall: Thresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+				Groups: []Group{
+					{
+						Name: "first",
+						Keys: []string{"dup"},
+						Thresholds: Thresholds{
+							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
+							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
+						},
+					},
+					{
+						Name: "second",
+						Keys: []string{"dup"},
+						Thresholds: Thresholds{
+							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
+							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
+						},
+					},
+				},
+			},
+			records: []recordCall{
+				{key: "dup", latency: 200 * time.Millisecond},
+				{key: "dup", latency: 200 * time.Millisecond},
+				{key: "dup", latency: 200 * time.Millisecond},
+				{key: "dup", latency: 800 * time.Millisecond, err: errors.New("boom")},
+			},
+			expected: map[string]groupExpectation{
+				// refresh binds each key to one bucket, so the later group silently wins and
+				// "first" is left configured but never fed
+				"first":  {p50: 0, p99: 0, errorRatio: 0},
+				"second": {p50: 200, p99: 800, errorRatio: 0.25},
+			},
+		},
+		{
 			desc: "empty overall settings fall back to defaults",
 			// Overall left zero-valued; refresh seeds fallback latency + error-ratio windows
 			settings: Settings{},
