@@ -558,6 +558,12 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 						return nil, 0, err
 					}
 					metrics.ReplicationTaskLoadSize.With(p.metricsHandler).Record(int64(len(response.Tasks)))
+					// A store may legally return an empty page with a continuation token (e.g.
+					// Cassandra paging): only an empty token proves the range was fully scanned,
+					// so an empty page with a token is not authoritative and must not exit — the
+					// buffer would record coverage over tasks that were never read. Pages with
+					// tasks are returned as-is, never accumulated across store pages, to keep
+					// reads bounded by BatchSize.
 					if len(response.Tasks) == 0 && len(response.NextPageToken) > 0 {
 						pageToken = response.NextPageToken
 						continue
