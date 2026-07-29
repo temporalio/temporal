@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	invalidHeapIndex        = -13     // use unusual value to stand out in panics
 	maxPriorityLevels       = 60      // maximum value for priority levels (fits in a bitfield with a few bits reserved)
 	effectivePriorityFactor = 10      // multiply priority level by this to leave room for intermediate levels
 	pollForwarderPriority   = 1000000 // lower than any other priority. must be > maxPriorityLevels*effectivePriorityFactor.
@@ -79,7 +78,7 @@ func (p *pollerList) Len() int {
 }
 
 func (p *pollerList) Add(poller *waitingPoller) {
-	poller.matchHeapIndex = 0 // non-negative: signals "in queue"
+	poller.queued = true
 
 	// Insert after the last local poller: at the tail for a forwarder, or just before
 	// the forwarders (which stay grouped at the tail) for a local poller.
@@ -118,7 +117,7 @@ func (p *pollerList) Remove(poller *waitingPoller) {
 		p.tail = poller.prev
 	}
 	poller.prev, poller.next = nil, nil
-	poller.matchHeapIndex = invalidHeapIndex
+	poller.queued = false
 	p.count--
 }
 
@@ -167,7 +166,7 @@ func newTaskBTree() taskBTree {
 }
 
 func (b *taskBTree) Add(task *internalTask) {
-	task.matchHeapIndex = 0 // non-negative: signals "in queue"
+	task.queued = true
 	b.tree.Set(task)
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 		b.ages.record(task.event.Data.CreateTime, 1)
@@ -176,7 +175,7 @@ func (b *taskBTree) Add(task *internalTask) {
 
 func (b *taskBTree) Remove(task *internalTask) {
 	b.tree.Delete(task)
-	task.matchHeapIndex = invalidHeapIndex
+	task.queued = false
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 		b.ages.record(task.event.Data.CreateTime, -1)
 	}
@@ -199,7 +198,7 @@ func (b *taskBTree) ForEachTask(pred func(*internalTask) bool, post func(*intern
 	})
 	for _, task := range toRemove {
 		b.tree.Delete(task)
-		task.matchHeapIndex = invalidHeapIndex
+		task.queued = false
 		if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 			b.ages.record(task.event.Data.CreateTime, -1)
 		}
@@ -270,7 +269,7 @@ func (d *matcherData) RemoveTask(task *internalTask) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	if task.matchHeapIndex >= 0 {
+	if task.queued {
 		d.tasks.Remove(task)
 	}
 }
@@ -340,9 +339,9 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 			defer d.lock.Unlock()
 
 			if poller.matchResult == nil {
-				// if poll was being forwarded, it would be absent from heap even though
-				// matchResult == nil
-				if poller.matchHeapIndex >= 0 {
+				// if poll was being forwarded, it would be absent from the queue even
+				// though matchResult == nil
+				if poller.queued {
 					d.pollers.Remove(poller)
 				}
 				poller.wake(d.logger, &matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
@@ -621,9 +620,9 @@ func (d *matcherData) HasWaitingPoller() bool {
 
 type waitableMatchResult struct {
 	// these fields are under matcherData.lock even though they're embedded in other structs
-	matchCond      sync.Cond
-	matchResult    *matchResult
-	matchHeapIndex int // non-negative while queued (in pollerList or taskBTree), invalidHeapIndex otherwise
+	matchCond   sync.Cond
+	matchResult *matchResult
+	queued      bool // true while in a queue (pollerList or taskBTree)
 }
 
 func (w *waitableMatchResult) initMatch(d *matcherData) {
@@ -636,7 +635,7 @@ func (w *waitableMatchResult) initMatch(d *matcherData) {
 // w must not be in queues anymore.
 func (w *waitableMatchResult) wake(logger log.Logger, res *matchResult) {
 	softassert.That(logger, w.matchResult == nil, "wake called twice")
-	softassert.That(logger, w.matchHeapIndex < 0, "wake called but still in heap")
+	softassert.That(logger, !w.queued, "wake called but still queued")
 	w.matchResult = res
 	w.matchCond.Signal()
 }
