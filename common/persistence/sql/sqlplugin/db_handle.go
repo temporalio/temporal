@@ -111,11 +111,10 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 
 	// only retire the old pool once we have a healthy replacement, so we never
 	// leave h.db nil between destroying an old pool and establishing a new one
+	h.db.Store(newConn)
 	if prevConn != nil {
-		h.db.Store(nil)
 		go prevConn.Close()
 	}
-	h.db.Store(newConn)
 	return newConn
 }
 
