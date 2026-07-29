@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/stats"
 )
@@ -259,13 +259,20 @@ func TestRecordAndRead(t *testing.T) {
 				{key: "dup", latency: 200 * time.Millisecond},
 				{key: "dup", latency: 200 * time.Millisecond},
 				{key: "dup", latency: 200 * time.Millisecond},
+				{key: "dup", latency: 200 * time.Millisecond},
+				{key: "dup", latency: 200 * time.Millisecond},
+				{key: "dup", latency: 200 * time.Millisecond},
+				{key: "dup", latency: 200 * time.Millisecond},
+				{key: "dup", latency: 200 * time.Millisecond},
+				// 2 of 10 failed -> 0.2
+				{key: "dup", latency: 800 * time.Millisecond, err: errors.New("boom")},
 				{key: "dup", latency: 800 * time.Millisecond, err: errors.New("boom")},
 			},
 			expected: map[string]groupExpectation{
 				// refresh binds each key to one bucket, so the later group silently wins and
 				// "first" is left configured but never fed
 				"first":  {p50: 0, p99: 0, errorRatio: 0},
-				"second": {p50: 200, p99: 800, errorRatio: 0.25},
+				"second": {p50: 200, p99: 800, errorRatio: 0.2},
 			},
 		},
 		{
@@ -422,9 +429,14 @@ func TestRecordAndRead(t *testing.T) {
 			}
 
 			for group, exp := range tc.expected {
-				assert.Equal(t, exp.errorRatio, s.ErrorRatioByGroup(group), "group %q error ratio", group)
-				assert.InDelta(t, exp.p50, s.LatencyQuantileByGroup(group, 0.5), 1, "group %q p50", group)
-				assert.InDelta(t, exp.p99, s.LatencyQuantileByGroup(group, 0.99), 1, "group %q p99", group)
+				errorRatio, _ := s.ErrorRatioByGroup(group)
+				require.Equal(t, exp.errorRatio, errorRatio, "group %q error ratio", group)
+
+				p50, _ := s.LatencyQuantileByGroup(group, 0.5)
+				require.InDelta(t, exp.p50, p50, 1, "group %q p50", group)
+
+				p99, _ := s.LatencyQuantileByGroup(group, 0.99)
+				require.InDelta(t, exp.p99, p99, 1, "group %q p99", group)
 			}
 		})
 	}
@@ -448,8 +460,9 @@ func TestRefresh(t *testing.T) {
 		settings := Settings{Overall: overall}
 		s := NewSignalAggregator(log.NewNoopLogger(), func() Settings { return settings })
 
-		// the group doesn't exist yet
-		assert.Zero(t, s.ErrorRatioByGroup("critical"))
+		// the group doesn't exist yet, so the lookup misses rather than reading zero
+		_, found := s.ErrorRatioByGroup("critical")
+		require.False(t, found)
 
 		// add the critical group and pick it up
 		settings = Settings{Overall: overall, Groups: []Group{critical}}
@@ -461,8 +474,13 @@ func TestRefresh(t *testing.T) {
 		// 1 of 4 failed -> 0.25
 		s.Record("crit", 800*time.Millisecond, errors.New("boom"))
 
-		assert.InDelta(t, 200, s.LatencyQuantileByGroup("critical", 0.5), 1)
-		assert.Equal(t, 0.25, s.ErrorRatioByGroup("critical"))
+		p50, found := s.LatencyQuantileByGroup("critical", 0.5)
+		require.True(t, found)
+		require.InDelta(t, 200, p50, 1)
+
+		errorRatio, found := s.ErrorRatioByGroup("critical")
+		require.True(t, found)
+		require.Equal(t, 0.25, errorRatio)
 	})
 
 	t.Run("removing a group drops its bucket", func(t *testing.T) {
@@ -470,14 +488,19 @@ func TestRefresh(t *testing.T) {
 		s := NewSignalAggregator(log.NewNoopLogger(), func() Settings { return settings })
 
 		s.Record("crit", 200*time.Millisecond, errors.New("boom"))
-		assert.Equal(t, float64(1), s.ErrorRatioByGroup("critical"))
+		errorRatio, found := s.ErrorRatioByGroup("critical")
+		require.True(t, found)
+		require.Equal(t, float64(1), errorRatio)
 
-		// drop the group; its bucket goes away
+		// drop the group; its bucket goes away entirely
 		settings = Settings{Overall: overall}
 		s.refresh()
 
-		assert.Zero(t, s.ErrorRatioByGroup("critical"))
-		assert.Zero(t, s.LatencyQuantileByGroup("critical", 0.5))
+		_, found = s.ErrorRatioByGroup("critical")
+		require.False(t, found)
+
+		_, found = s.LatencyQuantileByGroup("critical", 0.5)
+		require.False(t, found)
 	})
 
 	t.Run("rebuilding a bucket resets its recorded data", func(t *testing.T) {
@@ -487,8 +510,12 @@ func TestRefresh(t *testing.T) {
 		// 1 of 2 failed -> 0.5
 		s.Record("a", 100*time.Millisecond, errors.New("boom"))
 		s.Record("a", 100*time.Millisecond, nil)
-		assert.Equal(t, 0.5, s.ErrorRatioByGroup(overallGroupName))
-		assert.InDelta(t, 100, s.LatencyQuantileByGroup(overallGroupName, 0.5), 1)
+
+		errorRatio, _ := s.ErrorRatioByGroup(overallGroupName)
+		require.Equal(t, 0.5, errorRatio)
+
+		p50, _ := s.LatencyQuantileByGroup(overallGroupName, 0.5)
+		require.InDelta(t, 100, p50, 1)
 
 		// any settings change rebuilds the maps, discarding recorded data
 		settings = Settings{
@@ -499,8 +526,14 @@ func TestRefresh(t *testing.T) {
 		}
 		s.refresh()
 
-		assert.Zero(t, s.ErrorRatioByGroup(overallGroupName))
-		assert.Zero(t, s.LatencyQuantileByGroup(overallGroupName, 0.5))
+		// the buckets still exist, they just read zero again
+		errorRatio, found := s.ErrorRatioByGroup(overallGroupName)
+		require.True(t, found)
+		require.Zero(t, errorRatio)
+
+		p50, found = s.LatencyQuantileByGroup(overallGroupName, 0.5)
+		require.True(t, found)
+		require.Zero(t, p50)
 	})
 
 	t.Run("refresh with unchanged settings keeps recorded data", func(t *testing.T) {
@@ -514,8 +547,11 @@ func TestRefresh(t *testing.T) {
 		// settings are identical, so refresh is a no-op and does not rebuild the buckets
 		s.refresh()
 
-		assert.Equal(t, 0.5, s.ErrorRatioByGroup(overallGroupName))
-		assert.InDelta(t, 100, s.LatencyQuantileByGroup(overallGroupName, 0.5), 1)
+		errorRatio, _ := s.ErrorRatioByGroup(overallGroupName)
+		require.Equal(t, 0.5, errorRatio)
+
+		p50, _ := s.LatencyQuantileByGroup(overallGroupName, 0.5)
+		require.InDelta(t, 100, p50, 1)
 	})
 }
 
@@ -643,7 +679,7 @@ func TestSettingsChanged(t *testing.T) {
 
 			actual := s.settingsChanged(tc.newSettings)
 
-			assert.Equal(t, tc.expected, actual)
+			require.Equal(t, tc.expected, actual)
 		})
 	}
 }
