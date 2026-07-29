@@ -138,19 +138,6 @@ var (
 	}
 )
 
-func validateParamsForAllowNoPollers(versionObj *deploymentspb.WorkerDeploymentVersion, maxIDLengthLimit int) error {
-	// AllowNoPollers makes the Worker Deployment Client create a version workflow without requiring that pollers have
-	// already created it. When the target version of the routing config update is nil / unset, we _could_ branch around
-	// that "create version" logic since there is no version to create, but it is simpler for our code and conceptually
-	// simpler for the callers of the API to instead just forbid this combination, because it doesn't make sense to
-	// --allow-no-pollers of a nil version.
-	if versionObj.GetBuildId() == "" {
-		return serviceerror.NewInvalidArgument("Build ID cannot be empty when AllowNoPollers is set to true")
-	}
-
-	return validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), maxIDLengthLimit)
-}
-
 // validateVersionWfParams is a helper that verifies if the fields used for generating
 // Worker Deployment Version related workflowID's are valid
 func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
