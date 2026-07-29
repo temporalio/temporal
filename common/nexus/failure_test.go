@@ -13,13 +13,13 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
-func TestEnsureCanceledFailureInfo(t *testing.T) {
+func TestCoerceToCanceledFailure(t *testing.T) {
 	t.Run("already a CanceledFailure is returned unchanged", func(t *testing.T) {
 		f := &failurepb.Failure{
 			Message:     "canceled",
 			FailureInfo: &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}},
 		}
-		require.Same(t, f, EnsureCanceledFailureInfo(f))
+		require.Same(t, f, CoerceToCanceledFailure(f))
 	})
 
 	t.Run("non-canceled failure is rebuilt as a CanceledFailure, preserving fields", func(t *testing.T) {
@@ -38,7 +38,7 @@ func TestEnsureCanceledFailureInfo(t *testing.T) {
 			Cause: cause,
 		}
 
-		got := EnsureCanceledFailureInfo(in)
+		got := CoerceToCanceledFailure(in)
 
 		require.NotNil(t, got.GetCanceledFailureInfo(), "must surface as a CanceledFailure")
 		require.Equal(t, "canceled from handler", got.GetMessage())
