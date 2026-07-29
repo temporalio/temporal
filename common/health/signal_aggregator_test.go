@@ -28,7 +28,7 @@ func TestRecordAndRead(t *testing.T) {
 	testCases := []struct {
 		desc string
 
-		settings HealthCheckSettings
+		settings Settings
 		records  []recordCall
 		// isUnhealthy, when set, is passed via WithIsUnhealthy; nil counts every error
 		isUnhealthy func(error) bool
@@ -38,8 +38,8 @@ func TestRecordAndRead(t *testing.T) {
 	}{
 		{
 			desc: "overall latency and error ratio",
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000, Threshold: 0.5},
 				},
@@ -63,17 +63,17 @@ func TestRecordAndRead(t *testing.T) {
 		},
 		{
 			desc: "critical group isolates traffic that overall dilutes",
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 				},
-				Groups: []HealthCheckGroup{
+				Groups: []Group{
 					{
 						Name: "critical",
 						Keys: []string{"crit"},
 						// tighter windows than overall
-						Thresholds: HealthCheckThresholds{
+						Thresholds: Thresholds{
 							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
 							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
 						},
@@ -116,8 +116,8 @@ func TestRecordAndRead(t *testing.T) {
 			desc: "isUnhealthy classifier excludes some errors from the ratio",
 			// only errors that aren't "ignored" count toward the ratio
 			isUnhealthy: func(err error) bool { return err.Error() != "ignored" },
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 				},
@@ -141,17 +141,17 @@ func TestRecordAndRead(t *testing.T) {
 		},
 		{
 			desc: "latency-only and error-ratio-only groups",
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 				},
-				Groups: []HealthCheckGroup{
+				Groups: []Group{
 					{
 						Name: "latencyonly",
 						Keys: []string{"lat"},
 						// no ErrorRatioThreshold -> error ratio not tracked for this group
-						Thresholds: HealthCheckThresholds{
+						Thresholds: Thresholds{
 							WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 						},
 					},
@@ -159,7 +159,7 @@ func TestRecordAndRead(t *testing.T) {
 						Name: "erroronly",
 						Keys: []string{"err"},
 						// no WindowConfig -> latency not tracked for this group
-						Thresholds: HealthCheckThresholds{
+						Thresholds: Thresholds{
 							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 						},
 					},
@@ -196,16 +196,16 @@ func TestRecordAndRead(t *testing.T) {
 		},
 		{
 			desc: "group aggregates multiple keys",
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 				},
-				Groups: []HealthCheckGroup{
+				Groups: []Group{
 					{
 						Name: "critical",
 						Keys: []string{"a", "b"},
-						Thresholds: HealthCheckThresholds{
+						Thresholds: Thresholds{
 							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
 							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
 						},
@@ -232,7 +232,7 @@ func TestRecordAndRead(t *testing.T) {
 		{
 			desc: "empty overall settings fall back to defaults",
 			// Overall left zero-valued; refresh seeds fallback latency + error-ratio windows
-			settings: HealthCheckSettings{},
+			settings: Settings{},
 			records: []recordCall{
 				{key: "a", latency: 100 * time.Millisecond},
 				{key: "a", latency: 100 * time.Millisecond},
@@ -251,8 +251,8 @@ func TestRecordAndRead(t *testing.T) {
 		},
 		{
 			desc: "all calls succeed -> zero error ratio",
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 				},
@@ -270,8 +270,8 @@ func TestRecordAndRead(t *testing.T) {
 		},
 		{
 			desc: "all calls fail -> full error ratio",
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 				},
@@ -289,16 +289,16 @@ func TestRecordAndRead(t *testing.T) {
 		},
 		{
 			desc: "ungrouped key feeds only overall",
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 				},
-				Groups: []HealthCheckGroup{
+				Groups: []Group{
 					{
 						Name: "critical",
 						Keys: []string{"crit"},
-						Thresholds: HealthCheckThresholds{
+						Thresholds: Thresholds{
 							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
 							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
 						},
@@ -325,8 +325,8 @@ func TestRecordAndRead(t *testing.T) {
 		},
 		{
 			desc: "unknown group reads zero",
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 				},
@@ -342,16 +342,16 @@ func TestRecordAndRead(t *testing.T) {
 		},
 		{
 			desc: "no records reads zero",
-			settings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			settings: Settings{
+				Overall: Thresholds{
 					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 				},
-				Groups: []HealthCheckGroup{
+				Groups: []Group{
 					{
 						Name: "critical",
 						Keys: []string{"crit"},
-						Thresholds: HealthCheckThresholds{
+						Thresholds: Thresholds{
 							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
 							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
 						},
@@ -374,7 +374,7 @@ func TestRecordAndRead(t *testing.T) {
 
 			s := NewSignalAggregator(
 				log.NewNoopLogger(),
-				func() HealthCheckSettings { return tc.settings },
+				func() Settings { return tc.settings },
 				opts...,
 			)
 
@@ -392,28 +392,28 @@ func TestRecordAndRead(t *testing.T) {
 }
 
 func TestRefresh(t *testing.T) {
-	overall := HealthCheckThresholds{
+	overall := Thresholds{
 		WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 		ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 	}
-	critical := HealthCheckGroup{
+	critical := Group{
 		Name: "critical",
 		Keys: []string{"crit"},
-		Thresholds: HealthCheckThresholds{
+		Thresholds: Thresholds{
 			WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
 			ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
 		},
 	}
 
 	t.Run("adding a group starts a new bucket", func(t *testing.T) {
-		settings := HealthCheckSettings{Overall: overall}
-		s := NewSignalAggregator(log.NewNoopLogger(), func() HealthCheckSettings { return settings })
+		settings := Settings{Overall: overall}
+		s := NewSignalAggregator(log.NewNoopLogger(), func() Settings { return settings })
 
 		// the group doesn't exist yet
 		assert.Zero(t, s.ErrorRatioByGroup("critical"))
 
 		// add the critical group and pick it up
-		settings = HealthCheckSettings{Overall: overall, Groups: []HealthCheckGroup{critical}}
+		settings = Settings{Overall: overall, Groups: []Group{critical}}
 		s.refresh()
 
 		s.Record("crit", 200*time.Millisecond, nil)
@@ -427,14 +427,14 @@ func TestRefresh(t *testing.T) {
 	})
 
 	t.Run("removing a group drops its bucket", func(t *testing.T) {
-		settings := HealthCheckSettings{Overall: overall, Groups: []HealthCheckGroup{critical}}
-		s := NewSignalAggregator(log.NewNoopLogger(), func() HealthCheckSettings { return settings })
+		settings := Settings{Overall: overall, Groups: []Group{critical}}
+		s := NewSignalAggregator(log.NewNoopLogger(), func() Settings { return settings })
 
 		s.Record("crit", 200*time.Millisecond, errors.New("boom"))
 		assert.Equal(t, float64(1), s.ErrorRatioByGroup("critical"))
 
 		// drop the group; its bucket goes away
-		settings = HealthCheckSettings{Overall: overall}
+		settings = Settings{Overall: overall}
 		s.refresh()
 
 		assert.Zero(t, s.ErrorRatioByGroup("critical"))
@@ -442,8 +442,8 @@ func TestRefresh(t *testing.T) {
 	})
 
 	t.Run("rebuilding a bucket resets its recorded data", func(t *testing.T) {
-		settings := HealthCheckSettings{Overall: overall}
-		s := NewSignalAggregator(log.NewNoopLogger(), func() HealthCheckSettings { return settings })
+		settings := Settings{Overall: overall}
+		s := NewSignalAggregator(log.NewNoopLogger(), func() Settings { return settings })
 
 		// 1 of 2 failed -> 0.5
 		s.Record("a", 100*time.Millisecond, errors.New("boom"))
@@ -452,8 +452,8 @@ func TestRefresh(t *testing.T) {
 		assert.InDelta(t, 100, s.LatencyQuantileByGroup(overallGroupName, 0.5), 1)
 
 		// any settings change rebuilds the maps, discarding recorded data
-		settings = HealthCheckSettings{
-			Overall: HealthCheckThresholds{
+		settings = Settings{
+			Overall: Thresholds{
 				WindowConfig:        &stats.WindowConfig{WindowSize: 30 * time.Second, WindowCount: 10},
 				ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
 			},
@@ -465,8 +465,8 @@ func TestRefresh(t *testing.T) {
 	})
 
 	t.Run("refresh with unchanged settings keeps recorded data", func(t *testing.T) {
-		settings := HealthCheckSettings{Overall: overall}
-		s := NewSignalAggregator(log.NewNoopLogger(), func() HealthCheckSettings { return settings })
+		settings := Settings{Overall: overall}
+		s := NewSignalAggregator(log.NewNoopLogger(), func() Settings { return settings })
 
 		// 1 of 2 failed -> 0.5
 		s.Record("a", 100*time.Millisecond, errors.New("boom"))
@@ -485,20 +485,20 @@ func TestSettingsChanged(t *testing.T) {
 		desc string
 		// seeded controls whether latencyByGroup is non-nil, i.e. refresh has run at least once
 		seeded       bool
-		lastSettings HealthCheckSettings
-		newSettings  HealthCheckSettings
+		lastSettings Settings
+		newSettings  Settings
 		expected     bool
 	}{
 		{
 			desc:   "seeded, identical settings",
 			seeded: true,
-			lastSettings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			lastSettings: Settings{
+				Overall: Thresholds{
 					WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 				},
 			},
-			newSettings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			newSettings: Settings{
+				Overall: Thresholds{
 					WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 				},
 			},
@@ -519,13 +519,13 @@ func TestSettingsChanged(t *testing.T) {
 		{
 			desc:   "overall window config changed",
 			seeded: true,
-			lastSettings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			lastSettings: Settings{
+				Overall: Thresholds{
 					WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 				},
 			},
-			newSettings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			newSettings: Settings{
+				Overall: Thresholds{
 					WindowConfig: &stats.WindowConfig{WindowSize: 10 * time.Second, WindowCount: 10},
 				},
 			},
@@ -534,8 +534,8 @@ func TestSettingsChanged(t *testing.T) {
 		{
 			desc:   "overall window config added",
 			seeded: true,
-			newSettings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			newSettings: Settings{
+				Overall: Thresholds{
 					WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
 				},
 			},
@@ -544,13 +544,13 @@ func TestSettingsChanged(t *testing.T) {
 		{
 			desc:   "overall error ratio threshold changed",
 			seeded: true,
-			lastSettings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			lastSettings: Settings{
+				Overall: Thresholds{
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000, Threshold: 0.5},
 				},
 			},
-			newSettings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{
+			newSettings: Settings{
+				Overall: Thresholds{
 					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000, Threshold: 0.8},
 				},
 			},
@@ -559,19 +559,19 @@ func TestSettingsChanged(t *testing.T) {
 		{
 			desc:   "overall enforced flag changed",
 			seeded: true,
-			lastSettings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{Enforced: false},
+			lastSettings: Settings{
+				Overall: Thresholds{Enforced: false},
 			},
-			newSettings: HealthCheckSettings{
-				Overall: HealthCheckThresholds{Enforced: true},
+			newSettings: Settings{
+				Overall: Thresholds{Enforced: true},
 			},
 			expected: true,
 		},
 		{
 			desc:   "group added",
 			seeded: true,
-			newSettings: HealthCheckSettings{
-				Groups: []HealthCheckGroup{
+			newSettings: Settings{
+				Groups: []Group{
 					{Name: "frontend", Keys: []string{"a", "b"}},
 				},
 			},
@@ -580,13 +580,13 @@ func TestSettingsChanged(t *testing.T) {
 		{
 			desc:   "group keys changed",
 			seeded: true,
-			lastSettings: HealthCheckSettings{
-				Groups: []HealthCheckGroup{
+			lastSettings: Settings{
+				Groups: []Group{
 					{Name: "frontend", Keys: []string{"a"}},
 				},
 			},
-			newSettings: HealthCheckSettings{
-				Groups: []HealthCheckGroup{
+			newSettings: Settings{
+				Groups: []Group{
 					{Name: "frontend", Keys: []string{"a", "b"}},
 				},
 			},

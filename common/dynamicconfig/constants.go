@@ -268,7 +268,7 @@ response to a StartWorkflowExecution request and skipping the trip through match
 	)
 	HealthCheckGRPCSettings = NewGlobalTypedSetting(
 		"system.healthCheckGRPCSettings",
-		health.HealthCheckSettings{},
+		health.Settings{},
 		"controls gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables the group checks",
 	)
 	// TODO: This should be removed once percentiles are the default.

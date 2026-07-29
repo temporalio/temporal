@@ -6,20 +6,20 @@ import (
 	"go.temporal.io/server/common/stats"
 )
 
-// HealthCheckSettings is the high-level config: the overall/all bucket that applies
+// Settings is the high-level config: the overall/all bucket that applies
 // across every key, then there is an optional named groups for more specific health checks
-type HealthCheckSettings struct {
+type Settings struct {
 	// Overall applies across every key
-	Overall HealthCheckThresholds
+	Overall Thresholds
 
 	// Groups are subsets of keys with their own thresholds
-	Groups []HealthCheckGroup
+	Groups []Group
 }
 
-// HealthCheckThresholds defines how one bucket of keys is measured and when it's
+// Thresholds defines how one bucket of keys is measured and when it's
 // considered unhealthy. Nil/empty sub-fields mean "skip that check", which supports
 // partial setups (e.g. latency-only or error-ratio-only)
-type HealthCheckThresholds struct {
+type Thresholds struct {
 	// WindowConfig is the latency (tdigest) recording window. Nil = no latency tracking
 	WindowConfig *stats.WindowConfig
 
@@ -34,11 +34,11 @@ type HealthCheckThresholds struct {
 	Enforced bool
 }
 
-// HealthCheckGroup is a named subset of keys with its own thresholds
-type HealthCheckGroup struct {
+// Group is a named subset of keys with its own thresholds
+type Group struct {
 	Name       string
 	Keys       []string
-	Thresholds HealthCheckThresholds
+	Thresholds Thresholds
 }
 
 type QuantileThreshold struct {

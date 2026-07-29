@@ -28,7 +28,7 @@ var fallbackLatencyWindow = stats.WindowConfig{
 
 type SignalAggregator struct {
 	logger      log.Logger
-	getSettings func() HealthCheckSettings
+	getSettings func() Settings
 	isUnhealthy func(error) bool
 
 	mu sync.RWMutex
@@ -39,7 +39,7 @@ type SignalAggregator struct {
 	errorRatioByGroup map[string]aggregate.MovingWindowAverage
 	errorRatioByKey   map[string]aggregate.MovingWindowAverage
 
-	lastSettings HealthCheckSettings
+	lastSettings Settings
 
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -58,7 +58,7 @@ func WithIsUnhealthy(isUnhealthy func(error) bool) Option {
 
 func NewSignalAggregator(
 	logger log.Logger,
-	getSettings func() HealthCheckSettings,
+	getSettings func() Settings,
 	opts ...Option,
 ) *SignalAggregator {
 	agg := &SignalAggregator{
@@ -101,7 +101,7 @@ func (s *SignalAggregator) Stop() {
 	})
 }
 
-func (s *SignalAggregator) settingsChanged(newSettings HealthCheckSettings) bool {
+func (s *SignalAggregator) settingsChanged(newSettings Settings) bool {
 	return s.latencyByGroup == nil || !reflect.DeepEqual(newSettings, s.lastSettings)
 }
 

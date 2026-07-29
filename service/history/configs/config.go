@@ -415,7 +415,7 @@ type Config struct {
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
-	HealthCheckGRPCSettings             dynamicconfig.TypedPropertyFn[health.HealthCheckSettings]
+	HealthCheckGRPCSettings             dynamicconfig.TypedPropertyFn[health.Settings]
 	HealthPersistenceLatencyFailure     dynamicconfig.FloatPropertyFn
 	HealthPersistenceLatencyPercentiles dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
 	HealthPersistenceErrorRatio         dynamicconfig.FloatPropertyFn

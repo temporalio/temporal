@@ -741,7 +741,7 @@ func TestDeepHealthCheck(t *testing.T) {
 						}
 					},
 				},
-				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, func() bool { return true }, func() health2.HealthCheckSettings { return health2.HealthCheckSettings{} }, time.Second, 10),
+				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, func() bool { return true }, func() health2.Settings { return health2.Settings{} }, time.Second, 10),
 				persistenceHealthSignal: persistence.NewHealthSignalAggregator(true, func() bool { return true }, time.Second, 100, metrics.NoopMetricsHandler, testLogger, time.Second, 10),
 				startupTime:             startupTime,
 			}
