@@ -46,6 +46,17 @@ func TestProcessBufferTask_Validate(t *testing.T) {
 	}
 }
 
+func TestProcessBufferTask_Validate_MigrationPending(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+
+	valid, err := newProcessBufferHandler(env).Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerProcessBufferTask{})
+	require.NoError(t, err)
+	require.False(t, valid)
+}
+
 // A buffer of only deferred starts (Attempt=-1) must NOT start a workflow or
 // emit a ProcessBufferTask. Deferred starts wait on completion events, not on a
 // wall-clock deadline, so emitting an immediate ProcessBufferTask would

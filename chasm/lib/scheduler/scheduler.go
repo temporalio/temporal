@@ -91,6 +91,12 @@ const (
 	// How many recent actions to keep on the Info.RecentActions list.
 	recentActionCount = 10
 
+	// How many recent actions to surface on the ScheduleListInfo memo. Unlike
+	// Describe, the memo is persisted to visibility, so it must be hard-capped:
+	// recentActions() includes running starts, which aren't bounded by
+	// completed-action retention. Mirrors V1's RecentActionCountForList.
+	recentActionCountForList = 5
+
 	// Item limit per spec field on the ScheduleInfo memo.
 	listInfoSpecFieldLimit = 10
 
@@ -570,8 +576,20 @@ func executionStatusFromFailure(failure *failurepb.Failure) enumspb.WorkflowExec
 		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED
 	case *failurepb.Failure_TimeoutFailureInfo:
 		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+	case *failurepb.Failure_TerminatedFailureInfo:
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 	default:
 		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	}
+}
+
+func countsAsFailureForPause(status enumspb.WorkflowExecutionStatus) bool {
+	switch status {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -628,7 +646,7 @@ func (s *Scheduler) HandleNexusCompletion(
 	}
 
 	// Handle pause-on-failure.
-	if wfStatus != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED &&
+	if countsAsFailureForPause(wfStatus) &&
 		s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
 		s.Schedule.State.Paused = true
 		s.Schedule.State.Notes = fmt.Sprintf(
@@ -804,6 +822,9 @@ func (s *Scheduler) Delete(
 	if s.Sentinel {
 		return nil, ErrSentinel
 	}
+	if s.WorkflowMigration != nil {
+		return nil, ErrMigrationPending
+	}
 	s.Closed = true
 	return &schedulerpb.DeleteScheduleResponse{
 		FrontendResponse: &workflowservice.DeleteScheduleResponse{},
@@ -857,6 +878,9 @@ func (s *Scheduler) Update(
 	if s.Closed {
 		return nil, ErrClosed
 	}
+	if s.WorkflowMigration != nil {
+		return nil, ErrMigrationPending
+	}
 	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
@@ -875,12 +899,6 @@ func (s *Scheduler) Update(
 
 		visibility := chasm.NewVisibilityWithData(ctx, userCustomSearchAttributes(req.FrontendRequest.GetSearchAttributes().GetIndexedFields()), oldMemo)
 		s.Visibility = chasm.NewComponentField(ctx, visibility)
-	}
-
-	// Reject updates outright when a migration is pending so that changes are
-	// not silently lost during the migration window.
-	if s.WorkflowMigration != nil {
-		return nil, ErrMigrationPending
 	}
 
 	// Update custom memo.
@@ -917,6 +935,9 @@ func (s *Scheduler) Patch(
 	if s.Closed {
 		return nil, ErrClosed
 	}
+	if s.WorkflowMigration != nil {
+		return nil, ErrMigrationPending
+	}
 	// Handle paused status.
 	if req.FrontendRequest.Patch.Pause != "" {
 		s.Schedule.State.Paused = true
@@ -924,9 +945,6 @@ func (s *Scheduler) Patch(
 		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("paused via API: %s", req.FrontendRequest.Patch.Pause))
 	}
 	if req.FrontendRequest.Patch.Unpause != "" {
-		if s.WorkflowMigration != nil {
-			return nil, ErrMigrationPending
-		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
 		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("unpaused via API: %s", req.FrontendRequest.Patch.Unpause))
@@ -1028,12 +1046,20 @@ func (s *Scheduler) ListInfo(
 	generator := s.Generator.Get(ctx)
 	invoker := s.Invoker.Get(ctx)
 
+	// Hard-cap the memo's recent-action list by length after sorting by actual time
+	// (ascending towards most recent).
+	recentActions := invoker.recentActions()
+	slices.SortFunc(recentActions, func(a, b *schedulepb.ScheduleActionResult) int {
+		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+	})
+	recentActions = util.SliceTail(recentActions, recentActionCountForList)
+
 	return &schedulepb.ScheduleListInfo{
 		Spec:              spec,
 		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
 		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
-		RecentActions:     invoker.recentActions(),
+		RecentActions:     recentActions,
 		FutureActionTimes: generator.FutureActionTimes,
 	}
 }

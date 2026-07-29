@@ -6561,6 +6561,44 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, 0, engine.shutdownWorkers.Size())
 	})
 
+	t.Run("repeated calls are idempotent", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		workerKey := "test-worker"
+		cancelCount := 0
+		engine.workerInstancePollers.Add(workerKey, "poller-1", func() { cancelCount++ })
+		engine.workerInstancePollers.Add(workerKey, "poller-2", func() { cancelCount++ })
+
+		req := &matchingservice.CancelOutstandingWorkerPollsRequest{
+			WorkerInstanceKey: workerKey,
+		}
+
+		// First call cancels both pollers.
+		resp1, err := engine.CancelOutstandingWorkerPolls(context.Background(), req)
+		require.NoError(t, err)
+		require.Equal(t, int32(2), resp1.CancelledCount)
+		require.Equal(t, 2, cancelCount)
+
+		// Second call succeeds with zero cancellations — pollers already gone.
+		resp2, err := engine.CancelOutstandingWorkerPolls(context.Background(), req)
+		require.NoError(t, err)
+		require.Equal(t, int32(0), resp2.CancelledCount)
+		require.Equal(t, 2, cancelCount, "cancel functions should not be called again")
+
+		// Worker remains in shutdown cache after both calls.
+		require.NotNil(t, engine.shutdownWorkers.Get(workerKey))
+	})
+
 	// Flat fan-out test helper: creates an engine with a mock root PM and routing client.
 	setupFanOutTest := func(t *testing.T, numPartitions int, routeFn func(p tqid.Partition) (string, error)) (
 		*matchingEngineImpl,
@@ -7018,7 +7056,6 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	_, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
 
 	config := NewConfig(dcCollection)
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
 
@@ -7116,7 +7153,6 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	_, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
 
 	config := NewConfig(dcCollection)
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
 

@@ -4,17 +4,17 @@ import (
 	"encoding/binary"
 	"time"
 
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	schedulescommon "go.temporal.io/server/common/schedules"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func generateRequestID(scheduler *Scheduler, backfillID string, nominal, actual time.Time) string {
-	return schedulescommon.GenerateRequestID(
+	return schedulerinternal.GenerateRequestID(
 		scheduler.NamespaceId,
 		scheduler.ScheduleId,
 		scheduler.ConflictToken,
