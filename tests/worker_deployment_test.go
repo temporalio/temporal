@@ -1874,52 +1874,35 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 
 // TestSetCurrentVersion_Unversioned_AllowNoPollers tests unsetting current version with allowNoPollers=true
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_AllowNoPollers() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
-	currentVars := testvars.New(s).WithBuildIDNumber(1)
+	env := s.newTestEnv()
+	currentVars := env.Tv().WithBuildIDNumber(1)
 
-	go s.pollFromDeployment(ctx, currentVars)
-	s.ensureCreateVersionInDeployment(currentVars)
+	go s.pollFromDeployment(env, currentVars)
+	s.ensureCreateVersionInDeployment(env, currentVars)
 
 	// set current version
-	s.setCurrentVersion(ctx, currentVars, true, "")
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
+	s.setCurrentVersion(env, currentVars, true, "")
+	env.waitForTaskQueueVersioningInfo(s, env.Tv().TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
 
 	// unset current version with allowNoPollers=true - this should work even though buildId is empty
-	s.setCurrentVersionUnversionedOption(ctx, currentVars, true, true, true, true, "")
-	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
-
-	// verify deployment state
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: currentVars.DeploymentSeries(),
-	})
-	s.NoError(err)
-	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
+	s.setCurrentVersionUnversionedOption(env, currentVars, true, true, true, true,
+		"Build ID cannot be empty when AllowNoPollers is set to true")
 }
 
 // TestSetRampingVersion_Unset_AllowNoPollers tests unsetting ramping version with allowNoPollers=true
 func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unset_AllowNoPollers() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-	defer cancel()
-	tv := testvars.New(s).WithBuildIDNumber(1)
+	env := s.newTestEnv()
+	tv := env.Tv().WithBuildIDNumber(1)
 
-	go s.pollFromDeployment(ctx, tv)
-	s.ensureCreateVersionInDeployment(tv)
+	go s.pollFromDeployment(env, tv)
+	s.ensureCreateVersionInDeployment(env, tv)
 
 	// set ramping version
-	s.setAndVerifyRampingVersion(ctx, tv, false, 50, true, "")
+	s.setAndVerifyRampingVersion(env, tv, false, 50, true, "")
 
 	// unset ramping version with allowNoPollers=true - this should work even though buildId is empty
-	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, false, true, 0, true, true, true, "")
-
-	// verify deployment state
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv.DeploymentSeries(),
-	})
-	s.NoError(err)
-	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
+	s.setAndVerifyRampingVersionUnversionedOption(env, tv, false, true, 0, true, true, true,
+		"Build ID cannot be empty when AllowNoPollers is set to true")
 }
 
 // Should see that the current version of the task queue becomes unversioned, and the unversioned ramping version of the task queue is removed
