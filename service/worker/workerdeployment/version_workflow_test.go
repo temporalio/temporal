@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -66,6 +67,49 @@ func (s *VersionWorkflowSuite) SetupTest() {
 func (s *VersionWorkflowSuite) TearDownTest() {
 	s.controller.Finish()
 	s.env.AssertExpectations(s.T())
+}
+
+func TestValidateRegisterWorker_AllowsNewTaskQueueTypeAtFamilyLimit(t *testing.T) {
+	t.Parallel()
+
+	const (
+		existingTaskQueue = "existing-task-queue"
+		newTaskQueue      = "new-task-queue"
+		maxTaskQueues     = 1
+	)
+	runner := &VersionWorkflowRunner{
+		WorkerDeploymentVersionWorkflowArgs: &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+			VersionState: &deploymentspb.VersionLocalState{
+				TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+					existingTaskQueue: {
+						TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
+							int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	t.Run("existing family", func(t *testing.T) {
+		err := runner.validateRegisterWorker(&deploymentspb.RegisterWorkerInVersionArgs{
+			TaskQueueName: existingTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			MaxTaskQueues: maxTaskQueues,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("new family", func(t *testing.T) {
+		err := runner.validateRegisterWorker(&deploymentspb.RegisterWorkerInVersionArgs{
+			TaskQueueName: newTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			MaxTaskQueues: maxTaskQueues,
+		})
+		var applicationErr *temporal.ApplicationError
+		require.ErrorAs(t, err, &applicationErr)
+		require.Equal(t, errMaxTaskQueuesInVersionType, applicationErr.Type())
+	})
 }
 
 // Test_SyncState_BatchSize verifies if the right number of batches are created during the SyncDeploymentVersionUserData activity
