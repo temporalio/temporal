@@ -98,6 +98,10 @@ func TestClientFactoryClose_Idempotent(t *testing.T) {
 
 	f.Close()
 	f.Close()
+
+	// Close leaves the field set, so a caller after shutdown gets a client whose
+	// calls fail rather than a nil dereference.
+	require.NotNil(t, f.GetSystemClient())
 }
 
 // The SDK's guard against repeated Close is a plain write, so the factory and the
