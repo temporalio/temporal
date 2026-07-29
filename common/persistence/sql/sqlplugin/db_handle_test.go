@@ -97,20 +97,7 @@ func TestDatabaseHandleReconnect(t *testing.T) {
 
 var errTest = errors.New("test")
 
-// TestReconnectPoolAccumulationDuringOutage reproduces the connection storm described in issue #9211.
-//
-// When many goroutines hit a connection error at the same moment, they all call
-// reconnect(true) within the same 1s throttle window. Under the old code the
-// first call destroyed the pool (Store(nil)) before the throttle check, leaving
-// h.db nil for the whole window. Every retry then saw a nil pool, triggered
-// another ConvertError, and the cycle repeated — each successful reconnect created
-// a fresh *sql.DB while the previous one's Close() goroutine was stuck waiting
-// for in-flight connections to drain. Pools accumulated.
-//
-// The fix: check throttle BEFORE destroying the existing pool, and return the
-// existing pool if throttled. This means a burst of concurrent force-reconnects
-// within one throttle window leaves the pool alive and never calls connect() more
-// than once per window.
+// TestReconnectPoolAccumulationDuringOutage ensures a burst of concurrent force-reconnects within one throttle window does not create multiple pools.
 func TestReconnectPoolAccumulationDuringOutage(t *testing.T) {
 	connectCount := 0
 	connectFunc := func() (*sqlx.DB, error) {
@@ -148,15 +135,7 @@ func TestReconnectPoolAccumulationDuringOutage(t *testing.T) {
 	assert.NotNil(t, db, "pool should not be nil after rapid burst")
 }
 
-// TestReconnectNilPoolOnThrottle reproduces the second aspect of the same bug:
-// reconnect(true) destroys the current pool (h.db = nil) BEFORE checking the throttle.
-// When throttled, no new pool is created, so h.db stays nil for the entire
-// throttle window. All DB() calls during that window return DatabaseUnavailableError
-// even though the previous pool was perfectly healthy.
-//
-// This forces every goroutine that gets DatabaseUnavailableError to call ConvertError
-// again on the next retry, triggering another reconnect(true), destroying the pool
-// again — locking the handle into a nil-pool loop for the entire outage window.
+// TestReconnectNilPoolOnThrottle ensures DB() still returns the existing healthy pool when a reconnect is throttled.
 func TestReconnectNilPoolOnThrottle(t *testing.T) {
 	connectFunc := func() (*sqlx.DB, error) {
 		return mustNoopDB(t), nil
