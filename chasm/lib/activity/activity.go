@@ -908,14 +908,15 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	newReqID := req.GetRequestId()
 	existingReqID := a.GetCancelState().GetRequestId()
 
-	// If already in cancel requested state, fail if request ID is different, else no-op
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
-		if existingReqID != newReqID {
-			return nil, serviceerror.NewFailedPrecondition(
-				fmt.Sprintf("cancellation already requested with request ID %s", existingReqID))
-		}
-
+	// Deduplicate first because a retry may arrive after the activity transitions to Canceled.
+	if newReqID != "" && existingReqID == newReqID {
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
+	}
+
+	// Reject a second cancellation request with a different request ID.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return nil, serviceerror.NewFailedPrecondition(
+			fmt.Sprintf("cancellation already requested with request ID %s", existingReqID))
 	}
 
 	hasAttemptInProgress := a.hasAttemptInProgress()
