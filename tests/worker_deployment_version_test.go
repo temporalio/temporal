@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -514,6 +515,116 @@ func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, env *t
 
 func (s *DeploymentVersionSuite) startUnpinnedWorkflow(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) sdkclient.WorkflowRun {
 	return s.startVersionedWorkflow(ctx, env, tv, workflow.VersioningBehaviorAutoUpgrade)
+}
+
+func (s *DeploymentVersionSuite) TestWorkerDeploymentLatencyMetricTags() {
+	for _, tc := range []struct {
+		name                      string
+		versioned                 bool
+		breakdownMetricsByBuildID bool
+	}{
+		{
+			name:                      "versioned with breakdown enabled",
+			versioned:                 true,
+			breakdownMetricsByBuildID: true,
+		},
+		{
+			name:                      "versioned with breakdown disabled",
+			versioned:                 true,
+			breakdownMetricsByBuildID: false,
+		},
+		{
+			name:                      "unversioned with breakdown enabled",
+			breakdownMetricsByBuildID: true,
+		},
+	} {
+		s.Run(tc.name, func(s *DeploymentVersionSuite) {
+			env := s.newTestEnv(
+				testcore.WithDynamicConfig(
+					dynamicconfig.MetricsBreakdownByBuildID,
+					tc.breakdownMetricsByBuildID,
+				),
+			)
+			tv := env.Tv()
+
+			if tc.versioned {
+				s.startVersionWorkflow(s.Context(), env, tv)
+				s.NoError(s.setCurrent(env, tv, false))
+			}
+
+			capture := env.StartNamespaceMetricCapture()
+			activity := func(context.Context) error {
+				return nil
+			}
+			wf := func(ctx workflow.Context) error {
+				ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+					StartToCloseTimeout: time.Minute,
+				})
+				return workflow.ExecuteActivity(ctx, activity).Get(ctx, nil)
+			}
+			workerOptions := worker.Options{
+				Identity:               tv.WorkerIdentity(),
+				DisableEagerActivities: true,
+			}
+			if tc.versioned {
+				workerOptions.DeploymentOptions = worker.DeploymentOptions{
+					Version:       tv.SDKDeploymentVersion(),
+					UseVersioning: true,
+				}
+			}
+			w := worker.New(env.SdkClient(), tv.TaskQueue().GetName(), workerOptions)
+			if tc.versioned {
+				w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{
+					VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+				})
+			} else {
+				w.RegisterWorkflow(wf)
+			}
+			w.RegisterActivity(activity)
+			s.NoError(w.Start())
+			defer w.Stop()
+
+			run, err := env.SdkClient().ExecuteWorkflow(
+				s.Context(),
+				sdkclient.StartWorkflowOptions{
+					ID:        tv.WorkflowID(),
+					TaskQueue: tv.TaskQueue().GetName(),
+				},
+				wf,
+			)
+			s.NoError(err)
+			s.NoError(run.Get(s.Context(), nil))
+
+			expectedDeploymentName := ""
+			expectedBuildID := ""
+			if tc.versioned && tc.breakdownMetricsByBuildID {
+				expectedDeploymentName = tv.DeploymentSeries()
+				expectedBuildID = tv.BuildID()
+			}
+
+			for _, metricName := range []string{
+				metrics.TaskScheduleToStartLatency.Name(),
+				metrics.TaskDispatchLatencyPerTaskQueue.Name(),
+			} {
+				seenTaskTypes := make(map[string]bool)
+				for _, recording := range capture.Metric(metricName) {
+					if recording.Tags["taskqueue"] != tv.TaskQueue().GetName() {
+						continue
+					}
+					taskType := recording.Tags["task_type"]
+					if taskType != enumspb.TASK_QUEUE_TYPE_WORKFLOW.String() &&
+						taskType != enumspb.TASK_QUEUE_TYPE_ACTIVITY.String() {
+						continue
+					}
+					s.Equal(expectedDeploymentName, recording.Tags["worker_deployment_name"])
+					s.Equal(expectedBuildID, recording.Tags["worker_build_id"])
+					seenTaskTypes[taskType] = true
+				}
+				s.True(seenTaskTypes[enumspb.TASK_QUEUE_TYPE_WORKFLOW.String()])
+				s.True(seenTaskTypes[enumspb.TASK_QUEUE_TYPE_ACTIVITY.String()])
+			}
+		})
+	}
 }
 
 func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRamping() {

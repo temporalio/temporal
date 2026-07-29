@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -121,11 +122,14 @@ func Invoke(
 				AttemptStartedTime: attemptStartedTime,
 				FirstScheduledTime: firstScheduledTime,
 				Closed:             true,
+				VersioningInfo: workflow.VersioningMetricContext{
+					Behavior:          versioningBehavior,
+					DeploymentVersion: worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()),
+				},
 			},
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
-			metrics.ActivityTypeTag(token.ActivityType),
-			metrics.VersioningBehaviorTag(versioningBehavior))
+			metrics.ActivityTypeTag(token.ActivityType))
 	}
 	return &historyservice.RespondActivityTaskCanceledResponse{}, err
 }

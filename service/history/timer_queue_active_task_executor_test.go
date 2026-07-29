@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -22,9 +23,11 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -2554,6 +2557,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 		expectAddTimedTask           bool
 		expectedUpdateMutableState   bool
 		expectedScheduleWorkflowTask bool
+		expectedDeploymentName       string
+		expectedBuildID              string
 	}{
 		{
 			name: "Retry Policy Not Set",
@@ -2561,8 +2566,13 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 				Attempt: 1,
 			},
 			ai: &persistencespb.ActivityInfo{
-				Attempt: 1,
-				Stamp:   1,
+				Attempt:        1,
+				Stamp:          1,
+				StartedEventId: common.TransientEventID,
+				LastDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "deployment",
+					BuildId:        "build-id",
+				},
 			},
 			expectRetryActivity:          true,
 			retryState:                   enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
@@ -2570,6 +2580,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 			expectAddTimedTask:           true,
 			expectedUpdateMutableState:   true,
 			expectedScheduleWorkflowTask: true,
+			expectedDeploymentName:       "deployment",
+			expectedBuildID:              "build-id",
 		},
 		{
 			name: "Retry State Timeout",
@@ -2579,6 +2591,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 			ai: &persistencespb.ActivityInfo{
 				Attempt: 1,
 				Stamp:   1,
+				LastDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "previous-deployment",
+					BuildId:        "previous-build",
+				},
 			},
 			expectRetryActivity:          true,
 			retryState:                   enumspb.RETRY_STATE_TIMEOUT,
@@ -2617,9 +2633,15 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 		},
 	}
 	info := &persistencespb.WorkflowExecutionInfo{}
+	s.config.BreakdownMetricsByBuildID = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+			s.mockShard.SetMetricsHandler(handler)
+
 			if tc.expectRetryActivity {
 				ms.EXPECT().RetryActivity(gomock.Any(), gomock.Any()).Return(tc.retryState, tc.retryError)
 				ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "test-workflow-type"}).AnyTimes()
@@ -2638,6 +2660,12 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 			s.NoError(err)
 			s.Equal(tc.expectedScheduleWorkflowTask, result.shouldScheduleWorkflowTask, "scheduleWorkflowTask")
 			s.Equal(tc.expectedUpdateMutableState, result.shouldUpdateMutableState, "updateMutableState")
+			if tc.expectRetryActivity && tc.retryError == nil {
+				recordings := capture.Snapshot()[metrics.ActivityTaskTimeout.Name()]
+				s.Require().Len(recordings, 1)
+				s.Equal(tc.expectedDeploymentName, recordings[0].Tags["worker_deployment_name"])
+				s.Equal(tc.expectedBuildID, recordings[0].Tags["worker_build_id"])
+			}
 		})
 	}
 }
