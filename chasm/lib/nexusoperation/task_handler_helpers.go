@@ -275,7 +275,7 @@ func newInvocationResult(
 			return nil, err
 		}
 		if opErr.State == nexus.OperationStateCanceled {
-			failure = commonnexus.EnsureCanceledFailureInfo(failure)
+			failure = commonnexus.CoerceToCanceledFailure(failure)
 			return invocationResultCancel{failure: failure}, nil
 		}
 		return invocationResultFail{failure: failure}, nil
