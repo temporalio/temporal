@@ -726,7 +726,15 @@ var (
 	TimeBetweenShardInfoUpdates      = NewTimerDef("time_between_shardinfo_update")
 	SearchAttributesSize             = NewBytesHistogramDef("search_attributes_size")
 	MemoSize                         = NewBytesHistogramDef("memo_size")
-	TooManyPendingChildWorkflows     = NewCounterDef(
+	WorkflowReportedProblemsSet      = NewCounterDef(
+		"wf_reported_problems_set",
+		WithDescription("Incremented when the TemporalReportedProblems search attribute is set or updated on a workflow after consecutive workflow task problems."),
+	)
+	WorkflowReportedProblemsCleared = NewCounterDef(
+		"wf_reported_problems_cleared",
+		WithDescription("Incremented when the TemporalReportedProblems search attribute is cleared after a workflow task completes successfully."),
+	)
+	TooManyPendingChildWorkflows = NewCounterDef(
 		"wf_too_many_pending_child_workflows",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending child workflows to be exceeded. See https://t.mp/limits for more information."),
 	)
