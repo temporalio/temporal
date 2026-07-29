@@ -1893,7 +1893,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_AllowNoPollers
 		Namespace:      env.Namespace().String(),
 		DeploymentName: currentVars.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	var emptyVersion *deploymentpb.WorkerDeploymentVersion
 	s.Equal(emptyVersion, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
 }
@@ -1918,7 +1918,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unset_AllowNoPollers() {
 		Namespace:      env.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	var emptyVersion *deploymentpb.WorkerDeploymentVersion
 	s.Equal(emptyVersion, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
 }
