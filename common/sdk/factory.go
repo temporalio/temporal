@@ -200,7 +200,7 @@ func (f *clientFactory) setSystemClient(client sdkclient.Client) {
 	closed := f.closed
 	f.clientsLock.Unlock()
 
-	if closed {
+	if closed && client != nil {
 		client.Close()
 	}
 }
