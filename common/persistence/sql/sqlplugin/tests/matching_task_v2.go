@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -61,7 +60,7 @@ func (s *matchingTaskV2Suite) TestInsertSelect_Order() {
 		RangeHash:         testMatchingTaskRangeHash,
 		TaskQueueID:       queueID,
 		InclusiveMinLevel: &sqlplugin.FairLevel{TaskPass: 1, TaskID: 0},
-		PageSize:          util.Ptr(len(tasks)),
+		PageSize:          new(len(tasks)),
 	}
 	rows, err := s.store.SelectFromTasksV2(newExecutionContext(), filter)
 	s.NoError(err)
@@ -91,7 +90,7 @@ func (s *matchingTaskV2Suite) TestInsertDeleteRange() {
 		RangeHash:         testMatchingTaskRangeHash,
 		TaskQueueID:       queueID,
 		ExclusiveMaxLevel: &sqlplugin.FairLevel{TaskPass: 3, TaskID: 0},
-		Limit:             util.Ptr(10),
+		Limit:             new(10),
 	}
 	result, err = s.store.DeleteFromTasksV2(newExecutionContext(), filter)
 	s.NoError(err)
@@ -103,7 +102,7 @@ func (s *matchingTaskV2Suite) TestInsertDeleteRange() {
 		RangeHash:         testMatchingTaskRangeHash,
 		TaskQueueID:       queueID,
 		InclusiveMinLevel: &sqlplugin.FairLevel{TaskPass: 1, TaskID: 0},
-		PageSize:          util.Ptr(10),
+		PageSize:          new(10),
 	}
 	rows, err := s.store.SelectFromTasksV2(newExecutionContext(), filter)
 	s.NoError(err)

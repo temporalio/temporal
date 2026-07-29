@@ -93,7 +93,7 @@ func getLinksFromHeader(httpHeader http.Header) ([]nexus.Link, error) {
 	if len(headerValues) == 0 {
 		return nil, nil
 	}
-	for _, encodedLink := range strings.Split(strings.Join(headerValues, ","), ",") {
+	for encodedLink := range strings.SplitSeq(strings.Join(headerValues, ","), ",") {
 		link, err := decodeLink(encodedLink)
 		if err != nil {
 			return nil, err
@@ -280,7 +280,9 @@ func FormatDuration(d time.Duration) string {
 	return strconv.FormatInt(d.Milliseconds(), 10) + "ms"
 }
 
-// MarkAsWrapperError adds the "unwrap-error" metadata to the original failure of the given OperationError, which
+const wrapperErrorMetadataKey = "unwrap-error"
+
+// MarkAsWrapperError adds the wrapper-error metadata to the original failure of the given OperationError, which
 // signals the Temporal codebase to unwrap the underlying failure as the failure cause.
 // This is used as a shim for Temporal->Temporal calls. Temporal already has a Failure type that represents an
 // OperationError and does not need to record this wrapper error.
@@ -289,7 +291,16 @@ func MarkAsWrapperError(failureConverter FailureConverter, opErr *nexus.Operatio
 	if err != nil {
 		return err
 	}
-	originalFailure.Metadata["unwrap-error"] = "true"
+	originalFailure.Metadata[wrapperErrorMetadataKey] = "true"
 	opErr.OriginalFailure = &originalFailure
 	return nil
+}
+
+// UnwrapFailure returns the cause of failures marked by MarkAsWrapperError.
+// Other failures are returned unchanged.
+func UnwrapFailure(failure *nexus.Failure) *nexus.Failure {
+	if failure != nil && failure.Metadata[wrapperErrorMetadataKey] == "true" && failure.Cause != nil {
+		return failure.Cause
+	}
+	return failure
 }

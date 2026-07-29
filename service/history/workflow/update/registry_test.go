@@ -703,18 +703,16 @@ func TestClear(t *testing.T) {
 	require.NotNil(t, upd)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, err := upd.WaitLifecycleStage(
 			context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 2*time.Second)
 		require.Equal(t, update.AbortedByServerErr, err)
-	}()
+	})
 
 	reg.Clear()
 	wg.Wait()
 
-	require.Equal(t, reg.Len(), 0, "registry should be cleared")
+	require.Equal(t, 0, reg.Len(), "registry should be cleared")
 }
 
 func TestFailoverVersion(t *testing.T) {
@@ -790,11 +788,11 @@ func TestTryResurrect(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
 
 		upd, err := reg.TryResurrect(context.Background(), nil)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Nil(t, upd)
 
 		upd, err = reg.TryResurrect(context.Background(), &protocolpb.Message{Body: nil})
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Nil(t, upd)
 	})
 
@@ -805,7 +803,7 @@ func TestTryResurrect(t *testing.T) {
 		})}
 
 		upd, err := reg.TryResurrect(context.Background(), completedMsg)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Nil(t, upd)
 	})
 

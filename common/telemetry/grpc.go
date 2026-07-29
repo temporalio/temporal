@@ -175,7 +175,7 @@ func (c *customServerStatsHandler) annotateTags(
 		case tag.WorkflowIDKey:
 			k = WorkflowIDKey
 		case tag.WorkflowRunIDKey:
-			k = WorkflowRunIDKey
+			k = RunIDKey
 		default:
 			continue
 		}

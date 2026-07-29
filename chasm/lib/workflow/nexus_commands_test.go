@@ -54,16 +54,21 @@ func (tcx *testContext) setHasAnyBufferedEvent(value bool) {
 }
 
 var defaultConfig = &nexusoperation.Config{
-	EnableChasmNexusWorkflowOperations: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-	MaxServiceNameLength:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
-	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
-	MaxConcurrentOperationsPerWorkflow: dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
-	MaxOperationHeaderSize:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
-	DisallowedOperationHeaders:         dynamicconfig.GetTypedPropertyFn([]string{"request-timeout"}),
-	MaxOperationScheduleToCloseTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),
+	EnableChasmNexusWorkflowOperations:         dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	ChasmNexusWorkflowOperationsRolloutPercent: dynamicconfig.GetIntPropertyFnFilteredByNamespace(100),
+	MaxServiceNameLength:                       dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
+	MaxOperationNameLength:                     dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
+	MaxConcurrentOperationsPerWorkflow:         dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+	MaxOperationHeaderSize:                     dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
+	DisallowedOperationHeaders:                 dynamicconfig.GetTypedPropertyFn([]string{"request-timeout"}),
+	MaxOperationScheduleToCloseTimeout:         dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),
 }
 
-func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
+func newTestContext(t *testing.T, cfg *nexusoperation.Config, workflowID ...string) testContext {
+	wfID := ""
+	if len(workflowID) > 0 {
+		wfID = workflowID[0]
+	}
 	endpointReg := nexustest.FakeEndpointRegistry{
 		OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
 			if endpointName == "endpoint caller namespace unauthorized" {
@@ -113,6 +118,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 			HandleExecutionKey: func() chasm.ExecutionKey {
 				return chasm.ExecutionKey{
 					NamespaceID: tests.GlobalNamespaceEntry.ID().String(),
+					BusinessID:  wfID,
 				}
 			},
 			GoCtx: context.WithValue(context.Background(), nexusoperation.OperationContextKey, &nexusoperation.OperationContext{MetricTagConfig: dynamicconfig.GetTypedPropertyFn(nexusoperation.NexusMetricTagConfig{})}),
@@ -143,11 +149,61 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 func TestHandleScheduleCommand(t *testing.T) {
 	t.Run("chasm nexus not enabled", func(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperation.Config{
-			EnableChasmNexusWorkflowOperations: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			EnableChasmNexusWorkflowOperations:         dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			ChasmNexusWorkflowOperationsRolloutPercent: dynamicconfig.GetIntPropertyFnFilteredByNamespace(100),
 		})
 		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.ErrorIs(t, err, ErrCommandNotSupported)
 		require.Empty(t, tcx.history.Events)
+	})
+
+	validScheduleCmd := &commandpb.Command{
+		Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+			ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "op",
+			},
+		},
+	}
+
+	t.Run("rollout percent 0 routes all operations to HSM", func(t *testing.T) {
+		cfg := *defaultConfig
+		cfg.ChasmNexusWorkflowOperationsRolloutPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
+		tcx := newTestContext(t, &cfg, "any-workflow")
+		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, validScheduleCmd, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		require.ErrorIs(t, err, ErrCommandNotSupported)
+		require.Empty(t, tcx.history.Events)
+	})
+
+	t.Run("rollout percent 100 routes all operations to CHASM", func(t *testing.T) {
+		cfg := *defaultConfig
+		cfg.ChasmNexusWorkflowOperationsRolloutPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(100)
+		tcx := newTestContext(t, &cfg, "any-workflow")
+		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, validScheduleCmd, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		require.NoError(t, err)
+		require.Len(t, tcx.history.Events, 1)
+	})
+
+	t.Run("rollout percent routes by workflow id", func(t *testing.T) {
+		nsName := tests.GlobalNamespaceEntry.Name().String()
+		const percent = 50
+		// These IDs are pinned to opposite sides of the 50% rollout for this namespace.
+		const insideID, outsideID = "wf-4", "wf-0"
+		require.True(t, dynamicconfig.RolloutAccepts(fmt.Appendf(nil, "%s\x00%s", nsName, insideID), percent))
+		require.False(t, dynamicconfig.RolloutAccepts(fmt.Appendf(nil, "%s\x00%s", nsName, outsideID), percent))
+
+		cfg := *defaultConfig
+		cfg.ChasmNexusWorkflowOperationsRolloutPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(percent)
+
+		scheduleFor := func(workflowID string) error {
+			tcx := newTestContext(t, &cfg, workflowID)
+			return tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, validScheduleCmd, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}
+
+		// A workflow inside the rollout routes to CHASM; one outside falls back to HSM.
+		require.NoError(t, scheduleFor(insideID))
+		require.ErrorIs(t, scheduleFor(outsideID), ErrCommandNotSupported)
 	})
 
 	t.Run("empty attributes", func(t *testing.T) {
@@ -639,15 +695,6 @@ func TestHandleScheduleCommand(t *testing.T) {
 }
 
 func TestHandleCancelCommand(t *testing.T) {
-	t.Run("chasm nexus not enabled", func(t *testing.T) {
-		tcx := newTestContext(t, &nexusoperation.Config{
-			EnableChasmNexusWorkflowOperations: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		})
-		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		require.ErrorIs(t, err, ErrCommandNotSupported)
-		require.Empty(t, tcx.history.Events)
-	})
-
 	t.Run("empty attributes", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
@@ -658,9 +705,11 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.Empty(t, tcx.history.Events)
 	})
 
-	t.Run("operation not found", func(t *testing.T) {
+	t.Run("operation not in chasm tree defers to hsm", func(t *testing.T) {
+		// The operation is not in the CHASM tree (it lives in HSM, or does not exist) and no terminal event is
+		// buffered for it. The handler must defer to the HSM command handler via ErrCommandTargetNotFound rather than
+		// failing the workflow task, so cancelation follows the tree that owns the operation.
 		tcx := newTestContext(t, defaultConfig)
-
 		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
 			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
@@ -668,10 +717,7 @@ func TestHandleCancelCommand(t *testing.T) {
 				},
 			},
 		}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr FailWorkflowTaskError
-		require.ErrorAs(t, err, &failWFTErr)
-		require.False(t, failWFTErr.TerminateWorkflow)
-		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.ErrorIs(t, err, ErrCommandTargetNotFound)
 		require.Empty(t, tcx.history.Events)
 	})
 
@@ -694,7 +740,8 @@ func TestHandleCancelCommand(t *testing.T) {
 		// TODO: Complete the operation using CHASM equivalent of CompletedEventDefinition.
 		tcx.wf.removeNexusOperation(event.EventId)
 
-		// Try to cancel - should fail since operation is completed/deleted.
+		// The operation is no longer in the CHASM tree, so the handler defers to the HSM command handler
+		// via ErrCommandTargetNotFound.
 		err = tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
 			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
@@ -702,10 +749,7 @@ func TestHandleCancelCommand(t *testing.T) {
 				},
 			},
 		}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr FailWorkflowTaskError
-		require.ErrorAs(t, err, &failWFTErr)
-		require.False(t, failWFTErr.TerminateWorkflow)
-		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.ErrorIs(t, err, ErrCommandTargetNotFound)
 		require.Len(t, tcx.history.Events, 1) // Only scheduled event should be recorded.
 	})
 

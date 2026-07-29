@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -11,6 +12,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -117,8 +119,10 @@ func handleOperationError(
 	}
 }
 
-// Adds a NEXUS_OPERATION_STARTED history event and sets the operation state machine to NEXUS_OPERATION_STATE_STARTED.
-// Necessary if the completion is received before the start response.
+// fabricateStartedEventIfMissing adds a NEXUS_OPERATION_STARTED history event and transitions the
+// operation to NEXUS_OPERATION_STATE_STARTED if it has not started yet. It is necessary if the
+// completion is received before the start response. Callers that need to know whether a start was
+// fabricated should check the operation's state before calling (see TransitionStarted.Possible).
 func fabricateStartedEventIfMissing(
 	node *hsm.Node,
 	requestID string,
@@ -156,10 +160,25 @@ func fabricateStartedEventIfMissing(
 			e.EventTime = startTime
 		}
 	})
-	return StartedEventDefinition{}.Apply(node.Parent, event)
+	return (StartedEventDefinition{}).Apply(node.Parent, event)
 }
 
-func CompletionHandler(
+// CompletionHandler resolves async Nexus operation completions delivered to the history service
+// and emits the caller-side terminal metrics. It is provided via fx and injected into the history
+// handler so the metrics handler and tag config are sourced from the dependency graph rather than
+// threaded through the call site.
+type CompletionHandler struct {
+	metricsHandler metrics.Handler
+	config         *Config
+}
+
+// NewCompletionHandler returns a CompletionHandler. Wired via fx; see Module.
+func NewCompletionHandler(metricsHandler metrics.Handler, config *Config) *CompletionHandler {
+	return &CompletionHandler{metricsHandler: metricsHandler, config: config}
+}
+
+// Handle resolves an async Nexus operation completion.
+func (h *CompletionHandler) Handle(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
@@ -173,21 +192,30 @@ func CompletionHandler(
 	// The initial version of the completion token did not include a request ID.
 	// Only retry Access without a run ID if the request ID is not empty.
 	isRetryableNotFoundErr := requestID != ""
+	// emitMetrics is populated inside the Access closure and invoked only after the write
+	// transaction commits successfully, so a failed commit (which retries the completion) does not
+	// double-count the metric. See operationMetricsHandler's doc comment.
+	var emitMetrics func()
 	err := env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
-		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
-			return err
-		}
 		operation, err := hsm.MachineData[Operation](node)
 		if err != nil {
-			return nil
+			return err
+		}
+		// If the operation has not started yet, this completion arrived before the start response and
+		// fabricateStartedEventIfMissing will transition it to started below; the executor never emitted
+		// schedule-to-start in that case, so we emit it here.
+		fabricatedStart := TransitionStarted.Possible(operation)
+		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
+			return err
 		}
 		if requestID != "" && operation.RequestId != requestID {
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
+
 		if opFailedError != nil {
 			err = handleOperationError(node, operation, opFailedError)
 		} else {
@@ -199,7 +227,13 @@ func CompletionHandler(
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		// fabricatedStart means the executor never emitted schedule-to-start, so we emit it here.
+		emitScheduleToStart := fabricatedStart && operation.StartedTime != nil
+		emitMetrics = h.deferredCompletionMetric(operation, node.NamespaceName(), node.WorkflowTypeName(), opFailedError, emitScheduleToStart, env.Now())
+		return nil
 	})
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
 		// Try again without a run ID in case the original run was reset.
@@ -210,7 +244,40 @@ func CompletionHandler(
 		ref.StateMachineRef.MutableStateVersionedTransition = nil
 		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount = 0
 		ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount = 0
-		return CompletionHandler(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
+		return h.Handle(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if emitMetrics != nil {
+		emitMetrics()
+	}
+	return nil
+}
+
+// deferredCompletionMetric builds the post-commit caller-side emit for a resolved async completion:
+// the terminal outcome (the canceled vs failed split mirrors handleOperationError so the metric
+// matches the recorded transition) plus, when the start was fabricated here, schedule-to-start.
+func (h *CompletionHandler) deferredCompletionMetric(
+	operation Operation,
+	namespaceName, workflowType string,
+	opFailedError *nexus.OperationError,
+	emitScheduleToStart bool,
+	closeTime time.Time,
+) func() {
+	metricsHandler := h.metricsHandler
+	metricTagConfig := h.config.ResolvedMetricTagConfig()
+	return func() {
+		if emitScheduleToStart {
+			emitScheduleToStartLatency(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, operation.StartedTime.AsTime())
+		}
+		switch {
+		case opFailedError == nil:
+			emitOperationSucceeded(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+		case opFailedError.State == nexus.OperationStateCanceled:
+			emitOperationCanceled(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+		default:
+			emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+		}
+	}
 }

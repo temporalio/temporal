@@ -22,12 +22,12 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -175,8 +175,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"Keyword01":             payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+							"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 						},
 					},
 				},
@@ -263,7 +263,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
@@ -285,8 +285,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"Keyword01":             payload.EncodeString("random-keyword"),
-								"TemporalChangeVersion": payload.EncodeString("random-data"),
+								"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+								"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 							},
 						},
 					},
@@ -377,7 +377,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
@@ -414,7 +414,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 			RequestId:                requestID,
 		},
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp.RunId)
 }
 
@@ -472,7 +472,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(runID, resp.GetRunId())
 }
 
@@ -521,6 +521,6 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp.GetRunId())
 }

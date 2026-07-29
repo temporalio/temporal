@@ -1071,6 +1071,8 @@ func (s *chasmEngineSuite) TestPollComponent_SetsContextMetadata() {
 
 // TestPollComponent_Success_Wait tests the waiting behavior of PollComponent.
 func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
+	s.config.EnableCHASMSkipPersistence = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
 	testCases := []struct {
 		name          string
 		useEmptyRunID bool
@@ -1094,7 +1096,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 	//
 	// All three UpdateComponent calls result in a workflow execution mutation (UpdateWorkflowExecution
 	// is always called). However, only the third call actually mutates CHASM node data, so
-	// NotifyChasmExecution fires exactly once — for that satisfying update — which is sufficient
+	// NotifyChasmExecution fires exactly once - for that satisfying update - which is sufficient
 	// to wake the poll.
 	const numUpdatesTotal = 3
 	const numChasmNodeUpdates = 1 // only the satisfying update changes CHASM node bytes

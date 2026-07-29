@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
@@ -80,6 +81,7 @@ type (
 
 		tokenSerializer              *tasktoken.Serializer
 		config                       *configs.Config
+		nexusCompletionHandler       *nexusoperations.CompletionHandler
 		eventNotifier                events.Notifier
 		deepHealthCheckHandler       deepHealthCheckHandler
 		logger                       log.Logger
@@ -104,6 +106,7 @@ type (
 		chasmEngine                  chasm.Engine
 		chasmRegistry                *chasm.Registry
 		nexusHandler                 nexus.Handler
+		testHooks                    testhooks.TestHooks
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -115,6 +118,7 @@ type (
 		fx.In
 
 		Config                       *configs.Config
+		NexusCompletionHandler       *nexusoperations.CompletionHandler
 		Logger                       log.SnTaggedLogger
 		ThrottledLogger              log.ThrottledLogger
 		PersistenceExecutionManager  persistence.ExecutionManager
@@ -140,6 +144,7 @@ type (
 		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
 		ChasmEngine                  chasm.Engine
 		ChasmRegistry                *chasm.Registry
+		TestHooks                    testhooks.TestHooks
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -282,11 +287,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 		return response, h.convertError(err)
 	}
 
-	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
-		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
-			tag.WorkflowID(taskToken.GetWorkflowId()),
-			tag.ActivityID(taskToken.GetActivityId()))
-	}
+	h.markActivityIDForContextMetadata(ctx, taskToken.GetActivityId(), taskToken.GetWorkflowId())
 
 	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -490,7 +491,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	return resp, nil
 }
 
-// RespondActivityTaskCanceled - records failure of an activity task
+// RespondActivityTaskCanceled - records cancellation of an activity task
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	taskToken, err := h.tokenSerializer.Deserialize(request.CancelRequest.GetTaskToken())
 	if err != nil {
@@ -1788,6 +1789,11 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		return nil, errWorkflowExecutionNotSet
 	}
 
+	closeTime := new(request.WorkflowCloseTime.AsTime())
+	if !closeTime.After(time.Unix(0, 0)) {
+		closeTime = nil
+	}
+
 	// NOTE: the deletion is best effort, for sql visibility implementation,
 	// we can't guarantee there's no update or record close request for this workflow since
 	// visibility queue processing is async. Operator can call this api (through admin workflow
@@ -1795,10 +1801,13 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	// For ES implementation, we used max int64 as the TaskID (version) to make sure deletion is
 	// the last operation applied for this workflow
 	err := h.persistenceVisibilityManager.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: namespaceID,
-		WorkflowID:  request.Execution.GetWorkflowId(),
-		RunID:       request.Execution.GetRunId(),
-		TaskID:      math.MaxInt64,
+		NamespaceID:       namespaceID,
+		WorkflowID:        request.Execution.GetWorkflowId(),
+		RunID:             request.Execution.GetRunId(),
+		TaskID:            math.MaxInt64,
+		CloseTime:         closeTime,
+		StartTime:         request.WorkflowStartTime.AsTime(),
+		IsRetentionDelete: false,
 	})
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2047,6 +2056,16 @@ func (h *Handler) DeleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
+	if hook, ok := testhooks.Get(h.testHooks, testhooks.HistoryDLQTaskDeleteInterceptor, testhooks.GlobalScope); ok {
+		return hook(ctx, request, h.deleteDLQTasks)
+	}
+	return h.deleteDLQTasks(ctx, request)
+}
+
+func (h *Handler) deleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+) (*historyservice.DeleteDLQTasksResponse, error) {
 	return deletedlqtasks.Invoke(ctx, h.taskQueueManager, request, h.taskCategoryRegistry)
 }
 
@@ -2130,7 +2149,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 			}
 		}
 	}
-	err = nexusoperations.CompletionHandler(
+	err = h.nexusCompletionHandler.Handle(
 		ctx,
 		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
 		ref,
@@ -2151,23 +2170,8 @@ func (h *Handler) CompleteNexusOperationChasm(
 	ctx context.Context,
 	request *historyservice.CompleteNexusOperationChasmRequest,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
-	componentRef := request.GetCompletion().GetComponentRef()
-	if len(componentRef) == 0 {
-		return nil, serviceerror.NewInvalidArgument("invalid component ref")
-	}
-
-	// Ignore transition-history fields when applying completion,
-	// use Request ID to accept or reject the completion instead.
-	// TODO(stephan): This should be a CHASM transition option.
-	ref := &persistencespb.ChasmComponentRef{}
-	if err := ref.Unmarshal(componentRef); err != nil {
-		return nil, serviceerror.NewInvalidArgument("invalid component ref")
-	}
-	ref.ExecutionVersionedTransition = nil
-	ref.ComponentInitialVersionedTransition = nil
-	var err error
-	componentRef, err = ref.Marshal()
-	if err != nil {
+	componentRefBytes := request.GetCompletion().GetComponentRef()
+	if len(componentRefBytes) == 0 {
 		return nil, serviceerror.NewInvalidArgument("invalid component ref")
 	}
 
@@ -2191,22 +2195,63 @@ func (h *Handler) CompleteNexusOperationChasm(
 		return nil, serviceerror.NewUnimplemented("unhandled Nexus operation outcome")
 	}
 
-	// Attempt to access the component and call its invocation method. We execute
-	// this similarly as we would a pure task (holding an exclusive lock), as the
-	// assumption is that the accessed component will be recording (or generating a
-	// task) based on this result.
-	_, _, err = chasm.UpdateComponent(
-		ctx,
-		componentRef,
-		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
-			return nil, c.HandleNexusCompletion(ctx, completion)
-		},
-		completion)
+	// Access the component with progress intent so that the framework blocks access to a
+	// completion targeting an operation under a closed workflow and surfaces it as a
+	// NotFound. That NotFound is the signal to fall back to the current run below.
+	ctx = chasm.NewContextWithOperationIntent(ctx, chasm.OperationIntentProgress)
+
+	// First try the component as of its creation transition. This tolerates refs
+	// from before a reset while still ensuring the loaded state has the operation.
+	handlerInvoked, err := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelComponentCreation)
+	if shouldFallBackToCurrentRun(handlerInvoked, err, completion) {
+		// If reset moved the operation to the current run, retry without the ref's
+		// run ID or transition tokens. Non-workflow refs cannot use this lookup.
+		if _, fbErr := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelCurrentRun); !errors.Is(fbErr, chasm.ErrInvalidRefConsistencyLevel) {
+			err = fbErr
+		}
+	}
 	if err != nil {
 		return nil, h.convertError(err)
 	}
 
 	return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+}
+
+// shouldFallBackToCurrentRun reports whether a pre-handler NotFound can be
+// retried against the current workflow run.
+//
+// CurrentRun drops the run ID and transition tokens, so the completion must have
+// a request ID for the handler to re-establish operation identity.
+func shouldFallBackToCurrentRun(
+	handlerInvoked bool,
+	err error,
+	completion *persistencespb.ChasmNexusCompletion,
+) bool {
+	_, isNotFound := errors.AsType[*serviceerror.NotFound](err)
+	return !handlerInvoked &&
+		isNotFound &&
+		completion.GetRequestId() != ""
+}
+
+// applyChasmNexusCompletion applies a Nexus completion using the requested ref
+// consistency level. handlerInvoked is true only if the ref resolved and access
+// checks passed before calling HandleNexusCompletion.
+func (h *Handler) applyChasmNexusCompletion(
+	ctx context.Context,
+	componentRefBytes []byte,
+	completion *persistencespb.ChasmNexusCompletion,
+	level chasm.RefConsistencyLevel,
+) (handlerInvoked bool, err error) {
+	_, _, err = chasm.UpdateComponent(
+		ctx,
+		componentRefBytes,
+		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+			handlerInvoked = true
+			return nil, c.HandleNexusCompletion(ctx, completion)
+		},
+		completion,
+		chasm.WithRefConsistencyLevel(level))
+	return handlerInvoked, err
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
@@ -2300,6 +2345,23 @@ func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice
 	return response, nil
 }
 
+// markActivityIDForContextMetadata records the activity ID targeted by a request on the context so
+// that mutable state can resolve it to the activity's type and task queue during closeTransaction
+// (see contextutil.ContextMetadataMarkActivityID). activityID is empty when the request targets
+// activities by type or matches all pending activities: such a request can fan out to several
+// activities, which context metadata cannot attribute to a single one, so it is left unmarked and
+// attribution falls back to the workflow.
+func (h *Handler) markActivityIDForContextMetadata(ctx context.Context, activityID string, workflowID string) {
+	if activityID == "" {
+		return
+	}
+	if !contextutil.ContextMetadataMarkActivityID(ctx, activityID) {
+		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
+			tag.WorkflowID(workflowID),
+			tag.ActivityID(activityID))
+	}
+}
+
 func (h *Handler) UpdateActivityOptions(
 	ctx context.Context, request *historyservice.UpdateActivityOptionsRequest,
 ) (*historyservice.UpdateActivityOptionsResponse, error) {
@@ -2308,6 +2370,8 @@ func (h *Handler) UpdateActivityOptions(
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
+
+	h.markActivityIDForContextMetadata(ctx, request.GetUpdateRequest().GetId(), workflowID)
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -2334,6 +2398,8 @@ func (h *Handler) PauseActivity(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
+	h.markActivityIDForContextMetadata(ctx, request.GetFrontendRequest().GetId(), workflowID)
+
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2359,6 +2425,8 @@ func (h *Handler) UnpauseActivity(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
+	h.markActivityIDForContextMetadata(ctx, request.GetFrontendRequest().GetId(), workflowID)
+
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2383,6 +2451,8 @@ func (h *Handler) ResetActivity(
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
+
+	h.markActivityIDForContextMetadata(ctx, request.GetFrontendRequest().GetId(), workflowID)
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {

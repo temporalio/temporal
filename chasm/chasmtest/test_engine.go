@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -47,6 +48,8 @@ type (
 		backend   *chasm.MockNodeBackend
 		root      chasm.RootComponent
 		requestID string
+		// commitTransition advances the backend's committed transition count.
+		commitTransition func()
 	}
 
 	businessKey struct {
@@ -117,9 +120,7 @@ func (e *Engine) Tasks(ref chasm.ComponentRef) (map[tasks.Category][]tasks.Task,
 	}
 	// Return a shallow copy so callers cannot mutate the internal task lists.
 	result := make(map[tasks.Category][]tasks.Task, len(exec.backend.TasksByCategory))
-	for cat, ts := range exec.backend.TasksByCategory {
-		result[cat] = ts
-	}
+	maps.Copy(result, exec.backend.TasksByCategory)
 	return result, nil
 }
 
@@ -440,7 +441,7 @@ func (e *Engine) startNew(
 	if err := exec.node.SetRootComponent(root); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
-	if _, err = exec.node.CloseTransaction(); err != nil {
+	if err = exec.closeTransaction(); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
@@ -483,7 +484,7 @@ func (e *Engine) startAndUpdateNew(
 	if err := updateFn(mutableCtx, root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
-	if _, err = exec.node.CloseTransaction(); err != nil {
+	if err = exec.closeTransaction(); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
@@ -516,13 +517,11 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	)
 
 	backend := &chasm.MockNodeBackend{
-		// NextTransitionCount increments on every CloseTransaction call, matching
-		// the real engine's per transition monotonic counter.
+		// NextTransitionCount is the count the in-flight transaction will commit as.
 		HandleNextTransitionCount: func() int64 {
 			bsMu.Lock()
 			defer bsMu.Unlock()
-			transitionCount++
-			return transitionCount
+			return transitionCount + 1
 		},
 		// CurrentVersionedTransition reflects the latest committed transition count.
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
@@ -570,7 +569,21 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			e.logger,
 			e.metrics,
 		),
+		commitTransition: func() {
+			bsMu.Lock()
+			defer bsMu.Unlock()
+			transitionCount++
+		},
 	}
+}
+
+// closeTransaction closes the execution's transaction and commits its transition count.
+func (x *execution) closeTransaction() error {
+	if _, err := x.node.CloseTransaction(); err != nil {
+		return err
+	}
+	x.commitTransition()
+	return nil
 }
 
 // executionForRef looks up an execution by the ref's RunID when present, or falls back
@@ -600,18 +613,17 @@ func (e *Engine) updateComponentInExecution(
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 ) ([]byte, error) {
-	chasmCtx := chasm.NewContext(ctx, execution.node)
-	component, err := execution.node.Component(chasmCtx, ref)
+	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
+	component, err := execution.node.Component(mutableCtx, ref)
 	if err != nil {
 		return nil, err
 	}
 
-	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	if err := updateFn(mutableCtx, component); err != nil {
 		return nil, err
 	}
 
-	if _, err = execution.node.CloseTransaction(); err != nil {
+	if err = execution.closeTransaction(); err != nil {
 		return nil, err
 	}
 

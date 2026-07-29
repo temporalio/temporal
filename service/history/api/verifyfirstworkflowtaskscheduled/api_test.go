@@ -132,7 +132,6 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		25*time.Second, 20*time.Second, 200*time.Second, nil, "identity")
 
 	_, err := ms.AddTimeoutWorkflowEvent(
-		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)

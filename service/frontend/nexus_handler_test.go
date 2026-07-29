@@ -201,7 +201,7 @@ func TestNexusInterceptRequest_InvalidNamespaceState_ResultsInBadRequest(t *test
 	oc.metricsHandler.Counter("test").Record(1)
 	mh.StopCapture(capture)
 	snap := capture.Snapshot()
-	require.Equal(t, 1, len(snap["test"]))
+	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "invalid_namespace_state"}, snap["test"][0].Tags)
 }
 
@@ -225,7 +225,7 @@ func TestNexusInterceptRequest_NamespaceConcurrencyLimited_ResultsInResourceExha
 	oc.metricsHandler.Counter("test").Record(1)
 	mh.StopCapture(capture)
 	snap := capture.Snapshot()
-	require.Equal(t, 1, len(snap["test"]))
+	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "namespace_concurrency_limited"}, snap["test"][0].Tags)
 }
 
@@ -249,7 +249,7 @@ func TestNexusInterceptRequest_NamespaceRateLimited_ResultsInResourceExhausted(t
 	oc.metricsHandler.Counter("test").Record(1)
 	mh.StopCapture(capture)
 	snap := capture.Snapshot()
-	require.Equal(t, 1, len(snap["test"]))
+	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "namespace_rate_limited"}, snap["test"][0].Tags)
 }
 
@@ -273,7 +273,7 @@ func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *t
 	oc.metricsHandler.Counter("test").Record(1)
 	mh.StopCapture(capture)
 	snap := capture.Snapshot()
-	require.Equal(t, 1, len(snap["test"]))
+	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "global_rate_limited"}, snap["test"][0].Tags)
 }
 
@@ -298,7 +298,7 @@ func TestNexusInterceptRequest_ForwardingDisabled_ResultsInUnavailable(t *testin
 	oc.metricsHandler.Counter("test").Record(1)
 	mh.StopCapture(capture)
 	snap := capture.Snapshot()
-	require.Equal(t, 1, len(snap["test"]))
+	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "namespace_inactive_forwarding_disabled"}, snap["test"][0].Tags)
 }
 
@@ -322,7 +322,7 @@ func TestNexusInterceptRequest_ForwardingEnabled_ResultsInNotActiveError(t *test
 	oc.metricsHandler.Counter("test").Record(1)
 	mh.StopCapture(capture)
 	snap := capture.Snapshot()
-	require.Equal(t, 1, len(snap["test"]))
+	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "request_forwarded"}, snap["test"][0].Tags)
 }
 
@@ -349,7 +349,7 @@ func TestNexusInterceptRequest_InvalidSDKVersion_ResultsInBadRequest(t *testing.
 	oc.metricsHandler.Counter("test").Record(1)
 	mh.StopCapture(capture)
 	snap := capture.Snapshot()
-	require.Equal(t, 1, len(snap["test"]))
+	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "unsupported_client"}, snap["test"][0].Tags)
 }
 

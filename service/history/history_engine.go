@@ -244,7 +244,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.StateMachineRegistry(), shard.GetMetricsHandler(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.StateMachineRegistry(), shard.ChasmWorkflowRegistry(), shard.GetMetricsHandler(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
@@ -280,6 +280,7 @@ func NewEngineWithShardContext(
 			serializer,
 			persistenceRateLimiter,
 			logger,
+			shard.GetEventLogger(),
 		)
 		historyEngImpl.nDCHSMStateReplicator = ndc.NewHSMStateReplicator(
 			shard,
@@ -310,6 +311,8 @@ func NewEngineWithShardContext(
 			config.VisibilityAllowList,
 		),
 		config.SuppressErrorSetSystemSearchAttribute,
+		shard.GetMetricsHandler(),
+		logger,
 	)
 
 	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(
@@ -393,6 +396,7 @@ func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 
 		if ns.IsGlobalNamespace() &&
 			ns.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+			//nolint:forbidigo // namespace state-change callback; FailoverNamespace operates per-namespace, no workflow context
 			ns.ActiveInCluster(e.currentClusterName) {
 
 			for _, queueProcessor := range e.queueProcessors {

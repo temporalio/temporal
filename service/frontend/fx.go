@@ -13,6 +13,7 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -67,6 +68,7 @@ type (
 
 var Module = fx.Options(
 	resource.Module,
+	chasmtests.Module,
 	scheduler.Module,
 	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
@@ -410,21 +412,28 @@ func BusinessIDInterceptorProvider(
 	)
 }
 
+type NamespaceHandoverInterceptorParams struct {
+	fx.In
+	DynamicConfig                          *dynamicconfig.Collection
+	NamespaceRegistry                      namespace.Registry
+	Logger                                 log.Logger
+	MetricsHandler                         metrics.Handler
+	TimeSource                             clock.TimeSource
+	RequestErrorHandler                    *interceptor.RequestErrorHandler
+	AdditionalAllowedMethodsDuringHandover []string `group:"additionalAllowedMethodsDuringHandover"`
+}
+
 func NamespaceHandoverInterceptorProvider(
-	dc *dynamicconfig.Collection,
-	namespaceCache namespace.Registry,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	timeSource clock.TimeSource,
-	requestErrorHandler *interceptor.RequestErrorHandler,
+	params NamespaceHandoverInterceptorParams,
 ) *interceptor.NamespaceHandoverInterceptor {
 	return interceptor.NewNamespaceHandoverInterceptor(
-		dc,
-		namespaceCache,
-		metricsHandler,
-		logger,
-		timeSource,
-		requestErrorHandler,
+		params.DynamicConfig,
+		params.NamespaceRegistry,
+		params.MetricsHandler,
+		params.Logger,
+		params.TimeSource,
+		params.RequestErrorHandler,
+		params.AdditionalAllowedMethodsDuringHandover,
 	)
 }
 
@@ -736,16 +745,13 @@ func AdminHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	clientFactory client.Factory,
-	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	sdkClientFactory sdk.ClientFactory,
 	membershipMonitor membership.Monitor,
 	hostInfoProvider membership.HostInfoProvider,
-	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
-	saProvider searchattribute.Provider,
-	saManager searchattribute.Manager,
 	saMapperProvider searchattribute.MapperProvider,
+	saValidator *searchattribute.Validator,
 	clusterMetadata cluster.Metadata,
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
@@ -770,16 +776,13 @@ func AdminHandlerProvider(
 		clusterMetadataManager,
 		persistenceMetadataManager,
 		clientFactory,
-		clientBean,
 		historyClient,
 		sdkClientFactory,
 		membershipMonitor,
 		hostInfoProvider,
-		metricsHandler,
 		namespaceRegistry,
-		saProvider,
-		saManager,
 		saMapperProvider,
+		saValidator,
 		clusterMetadata,
 		healthServer,
 		eventSerializer,
@@ -905,6 +908,7 @@ func HandlerProvider(
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
 		serviceConfig.GlobalWorkerDeploymentReadRPS,
+		serviceConfig.GlobalWorkerDeploymentReadBurstRatio,
 		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
 	)
 

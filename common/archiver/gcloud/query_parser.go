@@ -9,7 +9,6 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/sqlquery"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -130,7 +129,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowID = util.Ptr(val)
+		parsedQuery.workflowID = new(val)
 	case RunID:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
@@ -143,7 +142,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.runID = util.Ptr(val)
+		parsedQuery.runID = new(val)
 	case CloseTime:
 		closeTime, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
@@ -175,7 +174,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowType = util.Ptr(val)
+		parsedQuery.workflowType = new(val)
 	case SearchPrecision:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
@@ -195,7 +194,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		default:
 			return fmt.Errorf("invalid value for %s: %s", SearchPrecision, val)
 		}
-		parsedQuery.searchPrecision = util.Ptr(val)
+		parsedQuery.searchPrecision = new(val)
 	default:
 		return fmt.Errorf("unknown filter name: %s", colNameStr)
 	}

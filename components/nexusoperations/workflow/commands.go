@@ -234,6 +234,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 			},
 		}
 		he.UserMetadata = command.UserMetadata
+		he.EventGroupMarkers = command.EventGroupMarkers
 	})
 
 	return nexusoperations.ScheduledEventDefinition{}.Apply(root, event)
@@ -303,6 +304,7 @@ func (ch *commandHandler) HandleCancelCommand(
 			},
 		}
 		he.UserMetadata = command.UserMetadata
+		he.EventGroupMarkers = command.EventGroupMarkers
 	})
 
 	err = nexusoperations.CancelRequestedEventDefinition{}.Apply(ms.HSM(), event)

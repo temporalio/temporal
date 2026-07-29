@@ -467,6 +467,7 @@ func (s *retryActivitySuite) makeActivityAndPutIntoFailingState() *persistencesp
 		nil,
 		nil,
 		"",
+		nil,
 	)
 	s.NoError(err)
 

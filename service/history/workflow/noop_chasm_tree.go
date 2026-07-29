@@ -25,6 +25,10 @@ func (*noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesS
 	return chasm.NodesSnapshot{}
 }
 
+func (*noopChasmTree) PartitionedSnapshot(*persistencespb.VersionedTransition) (chasm.NodesSnapshot, *persistencespb.ChasmLocalState) {
+	return chasm.NodesSnapshot{}, nil
+}
+
 func (*noopChasmTree) ApplySystemMutation(chasm.NodesMutation) error {
 	return nil
 }
@@ -101,6 +105,6 @@ func (*noopChasmTree) ExecuteSideEffectDiscardTask(
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
-) (bool, error) {
-	return false, nil
+) (isTaskInTree bool, isValidByComponent bool, err error) {
+	return false, false, nil
 }

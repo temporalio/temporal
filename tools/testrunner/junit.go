@@ -99,6 +99,34 @@ func (j *junitReport) write() error {
 	return nil
 }
 
+// appendSyntheticFailure adds a failure entry under a "testrunner" suite for
+// events outside any real testcase (e.g. timeout killing gotestsum pre-write).
+func (j *junitReport) appendSyntheticFailure(name string, kind failureType, detail string) {
+	tc := junit.Testcase{
+		Name:    name,
+		Failure: generateFailure(kind, detail),
+	}
+	// Reuse an existing testrunner suite if one is already present.
+	for i := range j.Suites {
+		if j.Suites[i].Name == "testrunner" {
+			j.Suites[i].Testcases = append(j.Suites[i].Testcases, tc)
+			j.Suites[i].Failures++
+			j.Suites[i].Tests++
+			j.Tests++
+			j.Failures++
+			return
+		}
+	}
+	j.Suites = append(j.Suites, junit.Testsuite{
+		Name:      "testrunner",
+		Failures:  1,
+		Tests:     1,
+		Testcases: []junit.Testcase{tc},
+	})
+	j.Tests++
+	j.Failures++
+}
+
 // appendAlertsSuite adds a synthetic JUnit suite summarizing high-priority alerts
 // (data races, panics, fatals) so that CI surfaces them prominently.
 func (j *junitReport) appendAlertsSuite(alerts []alert) {
@@ -233,16 +261,16 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 
 	var reportingErrs []error
 	var combined junit.Testsuites
-	combined.XMLName = reports[0].Testsuites.XMLName
-	combined.Name = reports[0].Testsuites.Name
+	combined.XMLName = reports[0].XMLName
+	combined.Name = reports[0].Name
 
 	for i, report := range reports {
-		combined.Tests += report.Testsuites.Tests
-		combined.Errors += report.Testsuites.Errors
-		combined.Failures += report.Testsuites.Failures
-		combined.Skipped += report.Testsuites.Skipped
-		combined.Disabled += report.Testsuites.Disabled
-		combined.Time += report.Testsuites.Time
+		combined.Tests += report.Tests
+		combined.Errors += report.Errors
+		combined.Failures += report.Failures
+		combined.Skipped += report.Skipped
+		combined.Disabled += report.Disabled
+		combined.Time += report.Time
 
 		// If the report is for a retry ...
 		var suffix string
@@ -266,7 +294,7 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			}
 		}
 
-		for _, suite := range report.Testsuites.Suites {
+		for _, suite := range report.Suites {
 			if len(suite.Testcases) == 0 {
 				continue
 			}

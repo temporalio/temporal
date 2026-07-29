@@ -43,9 +43,8 @@ func Invoke(
 	//
 	// Close workflow execution is deleted using DeleteExecutionTask.
 	//
-	// DeleteWorkflowExecution is not replicated automatically. Workflow executions must be deleted separately in each cluster.
-	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
-	// In passive cluster, workflow executions are just deleted in regardless of its state.
+	// Running workflows are terminated with deleteAfterTerminate set; the close task then deletes the execution.
+	// In passive cluster, workflow executions are deleted regardless of state.
 
 	if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
 		if request.GetClosedWorkflowOnly() {
@@ -56,7 +55,7 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		if ns.ActiveInCluster(shardContext.GetClusterMetadata().GetCurrentClusterName()) {
+		if ns.ActiveClusterName(namespace.RoutingKey{ID: request.WorkflowExecution.GetWorkflowId()}) == shardContext.GetClusterMetadata().GetCurrentClusterName() {
 			// If workflow execution is running and in active cluster.
 			if err := api.UpdateWorkflowWithNew(
 				shardContext,

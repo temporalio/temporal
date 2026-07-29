@@ -78,7 +78,6 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 			ExpectedErr: testErr,
 		},
 	} {
-		c := c
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 			closeTime := time.Unix(100, 0).UTC()

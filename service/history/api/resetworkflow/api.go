@@ -2,6 +2,7 @@ package resetworkflow
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -89,6 +90,7 @@ func Invoke(
 		request.WorkflowExecution.GetWorkflowId(),
 		locks.PriorityHigh,
 	)
+	currentExecutionMissing, err := shouldTolerateMissingCurrentExecution(err, baseRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,9 +99,12 @@ func Invoke(
 	}
 
 	var currentWorkflowLease api.WorkflowLease
-	if currentRunID == baseRunID {
+	switch {
+	case currentExecutionMissing:
+		// no current run to lease; leave the lease nil.
+	case currentRunID == baseRunID:
 		currentWorkflowLease = baseWorkflowLease
-	} else {
+	default:
 		currentWorkflowLease, err = workflowConsistencyChecker.GetWorkflowLease(
 			ctx,
 			nil,
@@ -117,7 +122,8 @@ func Invoke(
 	}
 
 	// dedup by requestID
-	if currentWorkflowLease.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
+	if currentWorkflowLease != nil &&
+		currentWorkflowLease.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
 		shardContext.GetLogger().Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
@@ -160,6 +166,16 @@ func Invoke(
 		),
 	).Record(1)
 
+	var currentWorkflow ndc.Workflow
+	if currentWorkflowLease != nil {
+		currentWorkflow = ndc.NewWorkflow(
+			shardContext.GetClusterMetadata(),
+			currentWorkflowLease.GetContext(),
+			currentWorkflowLease.GetMutableState(),
+			currentWorkflowLease.GetReleaseFn(),
+		)
+	}
+
 	allowResetWithPendingChildren := shardContext.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
 	if err := ndc.NewWorkflowResetter(
 		shardContext,
@@ -176,12 +192,7 @@ func Invoke(
 		baseNextEventID,
 		resetRunID,
 		baseWorkflow,
-		ndc.NewWorkflow(
-			shardContext.GetClusterMetadata(),
-			currentWorkflowLease.GetContext(),
-			currentWorkflowLease.GetMutableState(),
-			currentWorkflowLease.GetReleaseFn(),
-		),
+		currentWorkflow,
 		request.GetReason(),
 		nil,
 		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
@@ -202,6 +213,21 @@ func Invoke(
 	return &historyservice.ResetWorkflowExecutionResponse{
 		RunId: resetRunID,
 	}, nil
+}
+
+// shouldTolerateMissingCurrentExecution reports whether a failure to resolve the current execution
+// should be tolerated (reset proceeds with no current run). A NotFound is tolerated only when an
+// explicit base runId was provided; without one there is nothing to reset from. Any other error is
+// returned unchanged.
+func shouldTolerateMissingCurrentExecution(currentErr error, baseRunID string) (currentExecutionMissing bool, err error) {
+	if currentErr == nil {
+		return false, nil
+	}
+	var notFound *serviceerror.NotFound
+	if errors.As(currentErr, &notFound) && baseRunID != "" {
+		return true, nil
+	}
+	return false, currentErr
 }
 
 // GetResetReapplyExcludeTypes computes the set of requested exclude types. It

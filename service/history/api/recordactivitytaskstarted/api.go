@@ -257,13 +257,12 @@ func recordActivityTaskStarted(
 	if err != nil {
 		return nil, rejectCodeUndefined, err
 	}
-	ai.StartedClock = clock
-
 	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions) //nolint:staticcheck // SA1019: WorkerVersionCapabilities is deprecated but still used for old versioning [cleanup-old-wv]
 	if _, err := mutableState.AddActivityTaskStartedEvent(
 		ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
 		versioningStamp, pollerDeployment, request.GetBuildIdRedirectInfo(),
 		request.PollRequest.GetWorkerControlTaskQueue(),
+		clock,
 	); err != nil {
 		return nil, rejectCodeUndefined, err
 	}

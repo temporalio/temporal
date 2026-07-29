@@ -113,7 +113,9 @@ func GetTimerTaskEventID(
 	case *StateMachineTimerTask:
 		eventID = common.FirstEventID
 	case *TimeSkippingTimerTask:
-		eventID = task.EventID
+		// time skipping timer tasks supports both for workflow and chasm executions,
+		// and it doesn't depend on eventID, so it uses the dummy chasm task eventID here.
+		return getChasmTaskEventID()
 	case *ChasmTaskPure:
 		return getChasmTaskEventID()
 	case *ChasmTask:

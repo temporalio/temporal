@@ -8,12 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -80,7 +83,6 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	s.ns = ns
 	config := defaultTestConfig()
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	if s.fairness {
 		useFairness(config)
 	} else if !s.newMatcher {
@@ -214,12 +216,27 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 		}
 	}
 
-	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	// Fresh migrating queues briefly expose a draining backlog in their internal
+	// status; only the active (non-draining) backlog is relevant here.
+	status1 := activeInternalStatus(resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status1))
 	s.ProtoEqual(status0, status1[0])
-	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	status2 := activeInternalStatus(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status2))
 	s.ProtoEqual(status0, status2[0])
+}
+
+// activeInternalStatus filters out any draining backlog entries, leaving only
+// the active backlog(s). Migrating queues transiently report a draining backlog
+// alongside the active one.
+func activeInternalStatus(status []*taskqueuespb.InternalTaskQueueStatus) []*taskqueuespb.InternalTaskQueueStatus {
+	active := make([]*taskqueuespb.InternalTaskQueueStatus, 0, len(status))
+	for _, st := range status {
+		if !st.Draining {
+			active = append(active, st)
+		}
+	}
+	return active
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
@@ -1394,6 +1411,27 @@ func (h *capturingTaskMatchHook) getCalls() []capturedTaskMatchDetails {
 	return append([]capturedTaskMatchDetails(nil), h.calls...)
 }
 
+// The matching engine drops an unstarted manager on the loser side of a concurrent
+// load of the same partition. Construction must therefore not register any dynamic
+// config subscriptions — otherwise the abandoned manager would stay reachable from
+// the dynamic config collection forever. Subscriptions are only registered in Start.
+func (s *PartitionManagerTestSuite) TestConstructionDoesNotRegisterDynamicConfigSubscriptions() {
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	s.Require().NoError(err)
+	s.Empty(pm.rateLimitManager.cancels)
+
+	pm.rateLimitManager.Start()
+	s.NotEmpty(pm.rateLimitManager.cancels)
+
+	pm.rateLimitManager.Stop()
+	s.Empty(pm.rateLimitManager.cancels)
+}
+
 // setupPartitionManagerWithTaskHookFactories creates a partition manager with the given task match hooks.
 func (s *PartitionManagerTestSuite) setupPartitionManagerWithTaskHookFactories(taskHookFactories []hooks.TaskHookFactory) (*taskQueuePartitionManagerImpl, func()) {
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
@@ -1817,6 +1855,205 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook2.getCalls()[0].SyncMatchOutcome)
 }
 
+func newTestQueryWorkflowRequest(forwardInfo *taskqueuespb.TaskForwardInfo) *matchingservice.QueryWorkflowRequest {
+	return &matchingservice.QueryWorkflowRequest{
+		NamespaceId: namespaceID,
+		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		QueryRequest: &workflowservice.QueryWorkflowRequest{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: "run1"},
+		},
+		ForwardInfo: forwardInfo,
+	}
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_FiresWhenNoPollers() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(nil))
+	}()
+
+	await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(taskQueueName, calls[0].TaskQueueName)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+
+	cancel()
+	await.RequireTrue(s.T(), func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_UsesSelectedQueueVersion() {
+	const (
+		deploymentName = "deployment"
+		currentBuildID = "current"
+		pinnedBuildID  = "pinned"
+	)
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									CurrentVersionChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									pinnedBuildID:  {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	req := newTestQueryWorkflowRequest(nil)
+	req.VersionDirective = &taskqueuespb.TaskVersionDirective{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+		DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        pinnedBuildID,
+		},
+		RevisionNumber: 1,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", req)
+	}()
+
+	await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.ProtoEqual(&deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        pinnedBuildID,
+	}, calls[0].DeploymentVersion)
+
+	cancel()
+	await.RequireTrue(s.T(), func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_DoesNotFireWithRecentPoller() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	pm.defaultQueue().UpdatePollerInfo("poller-1", &pollMetadata{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(nil))
+	s.Require().Empty(hook.getCalls())
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_DoesNotFireForForwardedQuery() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	// Forwarded queries must not fire the hook — the originating partition already did.
+	// Firing on every hop causes duplicate Lambda invocations since each Matching node
+	// has independent per-node batching state.
+	forwardInfo := &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"}
+	_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(forwardInfo))
+	s.Require().Empty(hook.getCalls())
+}
+
+func newTestDispatchNexusTaskRequest(forwardInfo *taskqueuespb.TaskForwardInfo) *matchingservice.DispatchNexusTaskRequest {
+	return &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: namespaceID,
+		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Request:     &nexuspb.Request{},
+		ForwardInfo: forwardInfo,
+	}
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_NexusDispatch_FiresWhenNoPollers() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = pm.DispatchNexusTask(ctx, "task-id-1", newTestDispatchNexusTaskRequest(nil))
+	}()
+
+	await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(taskQueueName, calls[0].TaskQueueName)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+
+	cancel()
+	await.RequireTrue(s.T(), func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_NexusDispatch_DoesNotFireForForwardedTask() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	forwardInfo := &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"}
+	_, _ = pm.DispatchNexusTask(ctx, "task-id-1", newTestDispatchNexusTaskRequest(forwardInfo))
+	s.Require().Empty(hook.getCalls())
+}
+
 type mockUserDataManager struct {
 	sync.Mutex
 	data      *persistencespb.VersionedTaskQueueUserData
@@ -1888,3 +2125,75 @@ func (m *mockUserDataManager) updateVersioningData(data *persistencespb.Versioni
 }
 
 var _ userDataManager = (*mockUserDataManager)(nil)
+
+// TestWorkerCommandsPollTask_VersioningFieldsIgnored verifies that PollTask on a
+// WorkerCommandsPartition does not reject polls that include versioning fields.
+func TestWorkerCommandsPollTask_VersioningFieldsIgnored(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		pollMetadata *pollMetadata
+	}{
+		{
+			name: "DeploymentOptions with versioned mode",
+			pollMetadata: &pollMetadata{
+				deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					DeploymentName:       "my-deployment",
+					BuildId:              "v1",
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+				},
+			},
+		},
+		{
+			name: "WorkerVersionCapabilities with UseVersioning",
+			pollMetadata: &pollMetadata{
+				workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+					BuildId:       "v1",
+					UseVersioning: true,
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+			ns, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
+			config := defaultTestConfig()
+			config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+			engine := createTestMatchingEngine(logger, controller, config, matchingClient, registry)
+
+			f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+			require.NoError(t, err)
+			partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition()
+			tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+			userDataMgr := &mockUserDataManager{}
+
+			pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)
+			require.NoError(t, err)
+			engine.Start()
+			pm.Start()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+			defer cancel()
+			err = pm.WaitUntilInitialized(ctx)
+			require.NoError(t, err)
+
+			// Poll with a short timeout — we expect no task (nothing dispatched),
+			// but the poll must not fail with a versioning rejection error.
+			pollCtx, pollCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer pollCancel()
+			_, _, err = pm.PollTask(pollCtx, tc.pollMetadata)
+			// errNoTasks is expected (no tasks dispatched). Any other error indicates
+			// the versioning path incorrectly rejected the poll.
+			require.ErrorIs(t, err, errNoTasks, "PollTask on WorkerCommandsPartition must not reject versioning fields")
+		})
+	}
+}

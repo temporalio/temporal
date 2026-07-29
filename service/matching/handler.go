@@ -74,6 +74,7 @@ type (
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
 		TaskHookFactories             []hooks.TaskHookFactory `group:"TaskHookFactories"`
+		PartitionScalerFactory        PartitionScalerFactory
 	}
 )
 
@@ -117,6 +118,7 @@ func NewHandler(
 			params.RateLimiter,
 			params.Serializer,
 			params.TaskHookFactories,
+			params.PartitionScalerFactory,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,
@@ -326,6 +328,13 @@ func (h *Handler) CancelOutstandingWorkerPolls(ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest) (_ *matchingservice.CancelOutstandingWorkerPollsResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.CancelOutstandingWorkerPolls(ctx, request)
+}
+
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
+func (h *Handler) CancelOutstandingWorkerPollsPartition(ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest) (_ *matchingservice.CancelOutstandingWorkerPollsPartitionResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CancelOutstandingWorkerPollsPartition(ctx, request)
 }
 
 // DescribeTaskQueue returns information about the target task queue, right now this API returns the
@@ -591,7 +600,8 @@ func (h *Handler) ListNexusEndpoints(ctx context.Context, request *matchingservi
 // RecordWorkerHeartbeat receive heartbeat request from the worker.
 func (h *Handler) RecordWorkerHeartbeat(
 	ctx context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
-) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
+) (_ *matchingservice.RecordWorkerHeartbeatResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	nsID := namespace.ID(request.GetNamespaceId())
 	nsName := h.namespaceName(nsID)
 	principal := headers.GetPrincipal(ctx)
@@ -603,7 +613,8 @@ func (h *Handler) RecordWorkerHeartbeat(
 // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
 func (h *Handler) ListWorkers(
 	_ context.Context, request *matchingservice.ListWorkersRequest,
-) (*matchingservice.ListWorkersResponse, error) {
+) (_ *matchingservice.ListWorkersResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	nsID := namespace.ID(request.GetNamespaceId())
 	listRequest := request.GetListRequest()
 	resp, err := h.workersRegistry.ListWorkers(nsID, workers.ListWorkersParams{
@@ -650,9 +661,25 @@ func workerHeartbeatToListInfo(hb *workerpb.WorkerHeartbeat) *workerpb.WorkerLis
 	}
 }
 
+func (h *Handler) CountWorkers(
+	_ context.Context, request *matchingservice.CountWorkersRequest,
+) (_ *matchingservice.CountWorkersResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	nsID := namespace.ID(request.GetNamespaceId())
+	countRequest := request.GetCountRequest()
+	count, err := h.workersRegistry.CountWorkers(nsID, countRequest.GetQuery(), countRequest.GetIncludeSystemWorkers())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.CountWorkersResponse{
+		Count: count,
+	}, nil
+}
+
 func (h *Handler) UpdateFairnessState(
 	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
-) (*matchingservice.UpdateFairnessStateResponse, error) {
+) (_ *matchingservice.UpdateFairnessStateResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.UpdateFairnessState(ctx, request)
 }
 
@@ -676,13 +703,15 @@ func (h *Handler) reportForwardedPerTaskQueueCounter(opMetrics metrics.Handler, 
 
 func (h *Handler) UpdateTaskQueueConfig(
 	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
-) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+) (_ *matchingservice.UpdateTaskQueueConfigResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.UpdateTaskQueueConfig(ctx, request)
 }
 
 func (h *Handler) DescribeWorker(
 	_ context.Context, request *matchingservice.DescribeWorkerRequest,
-) (*matchingservice.DescribeWorkerResponse, error) {
+) (_ *matchingservice.DescribeWorkerResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	nsID := namespace.ID(request.GetNamespaceId())
 	hb, err := h.workersRegistry.DescribeWorker(
 		nsID, request.Request.GetWorkerInstanceKey())

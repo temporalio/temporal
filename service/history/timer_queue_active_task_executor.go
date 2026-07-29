@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -123,6 +124,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTaskPure:
 		err = t.executeChasmPureTimerTask(ctx, task)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
@@ -313,7 +315,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	// always resolved as failed.
 	if retryState == enumspb.RETRY_STATE_TIMEOUT && timerSequenceID.TimerType != enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		timeoutFailure = failure.NewTimeoutFailure(
-			"Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying",
+			common.FailureReasonActivityRetryScheduleToCloseTimeout,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		)
 	}
@@ -730,7 +732,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
 	// TODO@time-skipping: if time skipping happened, the virtual time is
-	// propagated to the new mutable state, need to check the bound works correctly in the retry.
+	// propagated to the new mutable state, need to check the fast-forward works correctly in the retry.
 	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
@@ -786,6 +788,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 			t.logger,
 			t.shardContext.GetThrottledLogger(),
 			t.shardContext.GetMetricsHandler(),
+			nil, // no pagination buffer limiter as it is a transient context
 		),
 		newMutableState,
 	)
@@ -901,9 +904,9 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	return workflow.NewTimerSequence(mutableState)
 }
 
-// executeTimeSkippingTimerTask fires when the elapsed-duration bound is hit. It emits the
-// disable transition directly so the bound is honored even if the workflow has accumulated
-// in-flight work since the bound was configured. The bound's wake-up cue is wall-clock-anchored,
+// executeTimeSkippingTimerTask fires when the fast-forward is hit. It emits the
+// disable transition directly so the fast-forward is honored even if the workflow has accumulated
+// in-flight work since the fast-forward was configured. The fast-forward's wake-up cue is wall-clock-anchored,
 // so by the time we get here the user-visible elapsed budget is genuinely exhausted.
 func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
@@ -927,38 +930,72 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
+	// Route by execution archetype. Treat an unspecified archetype — a record persisted before
+	// archetype IDs existed, or a not-yet-initialized chasm tree — as the built-in workflow archetype.
+	archetypeID := mutableState.ChasmTree().ArchetypeID()
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+	if archetypeID != chasm.WorkflowArchetypeID {
+		// TODO@time-skipping: chasm execution path is not implemented yet.
+		release(nil)
+		return nil
+	}
+
 	if !mutableState.IsWorkflowExecutionRunning() {
 		release(nil)
 		return consts.ErrWorkflowCompleted
 	}
 
-	if !timeSkippingBoundTaskIsLive(mutableState, task) {
+	// task staleness check
+	// 1) time skipping is disabled
+	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	tsiUtil := workflow.NewTimeSkippingInfoUtil(tsi)
+	if !tsiUtil.IsEnabled() {
 		release(nil)
 		return errNoTimerFired
 	}
 
+	// 2) match current pending fast-forward
+	if !tsiUtil.HasPendingFastForward() {
+		release(nil)
+		return errNoTimerFired
+	}
+
+	ffVT := tsi.GetFastForwardInfo().GetLastUpdateVersionedTransition()
+	if ffVT == nil || task.VersionedTransition == nil {
+		// Invariant: when a pending fast-forward and a task both exist, they must both have a
+		// non-nil versioned transition. A nil here is a "should never happen" state bug, not lost
+		// data, so we soft-assert (loud in dev/test) and return a terminal task error. The task
+		// framework then records failure/corruption metrics, logs, and drops the task (or DLQs it
+		// only if that is enabled for the category).
+		errorMsg := fmt.Sprintf(
+			"time-skipping timer task validation failed: VersionedTransition is nil (task: %t, pending fast-forward: %t)",
+			task.VersionedTransition == nil,
+			ffVT == nil,
+		)
+		softassert.Fail(t.logger, errorMsg)
+		return queues.NewTerminalTaskError(errorMsg)
+	}
+
+	if ffVT.GetTransitionCount() != task.VersionedTransition.GetTransitionCount() {
+		release(nil)
+		return errNoTimerFired
+	}
+	taskVersion := task.VersionedTransition.GetNamespaceFailoverVersion()
+	ffVersion := ffVT.GetNamespaceFailoverVersion()
+	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ffVersion, taskVersion, task); err != nil {
+		return err
+	}
+
+	// 3) firing fast-forward timer (only turns off time skipping, and no task regeneration)
+	// TODO@time-skipping: chasm execution path is not implemented yet.
 	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 		ctx, time.Time{}, true)
 	if err != nil {
 		return err
 	}
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
-}
-
-// timeSkippingBoundTaskIsLive returns false when the task should be dropped silently —
-// either time skipping has been disabled since the task was emitted, or the bound this
-// task was associated with has been superseded (different SourceEventId) or already fired
-// (HasReached=true). Dropping is harmless: the new bound, if any, has its own wake-up task.
-func timeSkippingBoundTaskIsLive(mutableState historyi.MutableState, task *tasks.TimeSkippingTimerTask) bool {
-	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi == nil || !tsi.GetConfig().GetEnabled() {
-		return false
-	}
-	boundInfo := tsi.GetCurrentElapsedDurationBound()
-	if boundInfo == nil || boundInfo.GetTargetTime() == nil || boundInfo.GetSourceEventId() == 0 || boundInfo.GetHasReached() {
-		return false
-	}
-	return boundInfo.GetSourceEventId() == task.EventID
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(

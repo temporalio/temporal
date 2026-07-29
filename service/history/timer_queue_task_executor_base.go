@@ -107,6 +107,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	}
 	defer func() { release(retError) }()
 
+	// todo if we need add archetype id for loadMutableState
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	switch err.(type) {
 	case nil:

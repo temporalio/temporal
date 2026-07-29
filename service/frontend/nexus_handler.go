@@ -187,6 +187,7 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
+	//nolint:forbidigo // Nexus requests are not tied to a business ID by design (see line 184)
 	if !c.namespace.ActiveInCluster(c.clusterMetadata.GetCurrentClusterName()) {
 		if c.shouldForwardRequest(ctx, header) {
 			// Handler methods should have special logic to forward requests if this method returns
@@ -460,7 +461,7 @@ func (h *nexusHandler) StartOperation(
 		// the worker.
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
-		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
+		nf, err := commonnexus.TemporalFailureToNexusFailureInPlace(t.Failure)
 		if err != nil {
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -530,7 +531,7 @@ func (h *nexusHandler) StartOperation(
 			// the worker.
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("failure"))
 			oc.setFailureSource(commonnexus.FailureSourceWorker)
-			nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
+			nf, err := commonnexus.TemporalFailureToNexusFailureInPlace(t.Failure)
 			if err != nil {
 				oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -591,7 +592,8 @@ func (h *nexusHandler) forwardStartOperation(
 	options nexus.StartOperationOptions,
 	oc *operationContext,
 ) (nexus.HandlerStartOperationResult[any], error) {
-	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionSourceCellHeaderName] = h.clusterMetadata.GetCurrentClusterName()
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {
@@ -678,7 +680,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
 		// the worker.
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
-		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
+		nf, err := commonnexus.TemporalFailureToNexusFailureInPlace(t.Failure)
 		if err != nil {
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -693,7 +695,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		err := convertOutcomeToNexusHandlerError(t)
 		return err
 
@@ -708,7 +710,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+	oc.setFailureSource(commonnexus.FailureSourceWorker)
 
 	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -721,7 +723,8 @@ func (h *nexusHandler) forwardCancelOperation(
 	options nexus.CancelOperationOptions,
 	oc *operationContext,
 ) error {
-	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionSourceCellHeaderName] = h.clusterMetadata.GetCurrentClusterName()
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {

@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -94,6 +93,7 @@ func (s *resetterSuite) SetupTest() {
 		s.logger,
 		s.mockShard.GetThrottledLogger(),
 		s.mockShard.GetMetricsHandler(),
+		nil,
 	)
 	s.newRunID = uuid.NewString()
 
@@ -161,7 +161,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		),
 		branchToken,
 		baseEventID,
-		util.Ptr(baseVersion),
+		new(baseVersion),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
@@ -241,7 +241,7 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 		incomingFirstEventVersion,
 	)
 	s.Error(err)
-	s.IsType(&serviceerrors.RetryReplication{}, err)
+	s.ErrorAs(err, new(*serviceerrors.RetryReplication))
 	s.Nil(rebuiltMutableState)
 
 	retryErr, isRetryError := err.(*serviceerrors.RetryReplication)
@@ -256,5 +256,5 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 		incomingFirstEventID,
 		incomingFirstEventVersion,
 	)
-	s.Equal(retryErr, expectedErr)
+	s.Equal(expectedErr, retryErr)
 }

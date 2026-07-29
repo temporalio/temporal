@@ -80,12 +80,10 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 	m := sync.Map{}
 	concurrency := 1000
 	for range concurrency {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			u := uuid.NewString()
 			m.Store(u, true)
-		}()
+		})
 	}
 	wg.Wait()
 	cnt := 0
