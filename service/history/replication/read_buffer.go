@@ -3,6 +3,7 @@ package replication
 import (
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/log"
@@ -40,6 +41,9 @@ type readBuffer struct {
 	logger         log.Logger               // optional; nil means no logging
 	serializer     serialization.Serializer // required when capacityFn can return > 0
 
+	// hasRows mirrors len(buffered) > 0; see passThrough.
+	hasRows atomic.Bool
+
 	mu         sync.Mutex
 	buffered   []bufferedRow // sorted by task id, contiguous coverage
 	minCovered int64         // inclusive
@@ -49,6 +53,19 @@ type readBuffer struct {
 type bufferedRow struct {
 	id   int64
 	blob *commonpb.DataBlob
+}
+
+func newReadBuffer(
+	capacityFn func() int,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) *readBuffer {
+	return &readBuffer{
+		capacityFn:     capacityFn,
+		metricsHandler: metricsHandler,
+		logger:         logger,
+		serializer:     serialization.NewSerializer(),
+	}
 }
 
 func (b *readBuffer) handler() metrics.Handler {
@@ -85,9 +102,7 @@ func (b *readBuffer) readPage(
 		capacity = b.capacityFn()
 	}
 	if capacity <= 0 {
-		b.clear()
-		page, coveredTo, err := fetch(minInclusive, maxExclusive)
-		return page, nextPageStart(coveredTo, maxExclusive), err
+		return b.passThrough(minInclusive, maxExclusive, fetch)
 	}
 
 	b.mu.Lock()
@@ -166,6 +181,9 @@ func (b *readBuffer) readPage(
 	default:
 		// Below coverage: serve without caching (no re-buffering of old ranges).
 	}
+	if len(b.buffered) > 0 {
+		b.hasRows.Store(true)
+	}
 	if len(b.buffered) > capacity {
 		evicted := b.buffered[:len(b.buffered)-capacity]
 		b.minCovered = evicted[len(evicted)-1].id + 1
@@ -202,6 +220,21 @@ func (b *readBuffer) deserialize(blobs []*commonpb.DataBlob) ([]tasks.Task, erro
 	return page, nil
 }
 
+// passThrough serves a read straight from persistence with the buffer disabled,
+// first releasing any rows buffered while it was enabled (capacity is dynamic).
+// The hasRows gate keeps the disabled path off the shard-wide lock per read.
+func (b *readBuffer) passThrough(
+	minInclusive int64,
+	maxExclusive int64,
+	fetch func(minInclusive int64, maxExclusive int64) ([]tasks.Task, int64, error),
+) ([]tasks.Task, int64, error) {
+	if b.hasRows.Load() {
+		b.clear()
+	}
+	page, coveredTo, err := fetch(minInclusive, maxExclusive)
+	return page, nextPageStart(coveredTo, maxExclusive), err
+}
+
 // clear drops all buffered rows and coverage (buffer disabled at runtime, or
 // contents no longer trustworthy).
 func (b *readBuffer) clear() {
@@ -209,6 +242,7 @@ func (b *readBuffer) clear() {
 	b.buffered = nil
 	b.minCovered = 0
 	b.maxCovered = 0
+	b.hasRows.Store(false)
 	b.mu.Unlock()
 }
 

@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -126,7 +125,7 @@ func NewAckManager(
 		syncVersionedTransitionTaskConverter: newSyncVersionedTransitionTaskConverter(shardContext, workflowCache, eventBlobCache, replicationProgressCache, executionMgr, syncStateRetriever, logger),
 		pageSize:                             config.ReplicatorProcessorFetchTasksBatchSize,
 		maxSkipTaskCount:                     config.ReplicatorProcessorMaxSkipTaskCount,
-		readBuffer:                           &readBuffer{capacityFn: config.ReplicationStreamReadBufferSize, metricsHandler: metricsHandler, logger: taggedLogger, serializer: serialization.NewSerializer()},
+		readBuffer:                           newReadBuffer(config.ReplicationStreamReadBufferSize, metricsHandler, taggedLogger),
 
 		maxTaskID:       nil,
 		sanityCheckTime: time.Time{},
