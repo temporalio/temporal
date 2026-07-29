@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -414,6 +415,7 @@ type Config struct {
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
+	HealthCheckGRPCSettings             dynamicconfig.TypedPropertyFn[health.HealthCheckSettings]
 	HealthPersistenceLatencyFailure     dynamicconfig.FloatPropertyFn
 	HealthPersistenceLatencyPercentiles dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
 	HealthPersistenceErrorRatio         dynamicconfig.FloatPropertyFn
@@ -805,6 +807,7 @@ func NewConfig(
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
 
+		HealthCheckGRPCSettings:             dynamicconfig.HealthCheckGRPCSettings.Get(dc),
 		HealthPersistenceLatencyFailure:     dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceLatencyPercentiles: dynamicconfig.PersistenceHealthSignalPercentileLatencySettings.Get(dc),
 		HealthPersistenceErrorRatio:         dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
