@@ -227,3 +227,24 @@ func TestGetSystemClient_CloseDuringDialStopsRetrying(t *testing.T) {
 		t.Fatal("Close during a dial must stop the factory retrying")
 	}
 }
+
+// setSystemClient publishes the shared client under clientsLock because Close
+// reads the same field under that lock. Dropping the lock there makes -race
+// report those two accesses.
+func TestGetSystemClient_DoesNotRacePublishWithClose(t *testing.T) {
+	t.Parallel()
+
+	// Repeated because Close only overlaps the publish when it lands while the
+	// first dial is still in flight.
+	for range 100 {
+		f := newDialedFactory(t)
+
+		var client sdkclient.Client
+		var wg sync.WaitGroup
+		wg.Go(func() { client = f.GetSystemClient() })
+		wg.Go(f.Close)
+		wg.Wait()
+
+		require.NotNil(t, client)
+	}
+}

@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -128,4 +130,30 @@ func TestRPCFactoryLocalFrontendConn_Reused(t *testing.T) {
 
 	f.Close()
 	require.Equal(t, connectivity.Shutdown, first.GetState())
+}
+
+// A ring change can dial while the fx stop hook is closing the factory, so
+// trackConn and Close both take connsLock. Dropping it on either side makes
+// -race report the two accesses to the tracked set.
+func TestRPCFactoryDial_DoesNotRaceClose(t *testing.T) {
+	t.Parallel()
+
+	for range 50 {
+		f := newTestFactory()
+
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for i := range 8 {
+			wg.Go(func() {
+				<-start
+				for j := range 5 {
+					f.dial("127.0.0.1:"+strconv.Itoa(20000+i*10+j), nil)
+				}
+			})
+		}
+		wg.Go(func() { <-start; f.Close() })
+		close(start)
+		wg.Wait()
+		f.Close()
+	}
 }
