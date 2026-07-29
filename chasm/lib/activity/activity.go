@@ -1658,16 +1658,20 @@ func InternalStatusToAPIStatus(status activitypb.ActivityExecutionStatus) enumsp
 	}
 }
 
-func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb.PendingActivityState {
+func (a *Activity) runState() enumspb.PendingActivityState {
+	status := a.GetStatus()
 	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
 		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		// RESET_REQUESTED surfaces as STARTED externally — the worker is still executing
-		// under its existing task token; the public PendingActivityState enum does not have
-		// a RESET_REQUESTED variant. The reset is surfaced to the worker via
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+		return enumspb.PENDING_ACTIVITY_STATE_STARTED
+	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		// The worker is still executing under its existing task token; the public PendingActivityState
+		// enum does not have a RESET_REQUESTED variant. The reset is surfaced to the worker via
 		// ActivityReset=true on its next heartbeat response.
+		if a.isPaused() {
+			return enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+		}
 		return enumspb.PENDING_ACTIVITY_STATE_STARTED
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
@@ -1692,7 +1696,7 @@ func (a *Activity) buildActivityExecutionInfo(
 	request *workflowservice.DescribeActivityExecutionRequest,
 ) *apiactivitypb.ActivityExecutionInfo {
 	status := InternalStatusToAPIStatus(a.GetStatus())
-	runState := internalStatusToRunState(a.GetStatus())
+	runState := a.runState()
 
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
