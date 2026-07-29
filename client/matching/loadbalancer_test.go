@@ -263,16 +263,16 @@ func TestPickWritePartition_BacklogAware(t *testing.T) {
 		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
 	}
 
-	backlogCap := number.DecodeCompact8(number.EncodeCompact8(21000000))
+	backlogCap := number.DecodeCompact8(number.EncodeCompact8(21_000_000))
 
 	// Both partitions are below the cap: partition 0 is empty (gap ~21M) and partition 1 is
-	// partially full (byte 192 ~12.6M, gap ~8.4M). Writes should favor the emptier partition 0
+	// partially full (~12.6M, gap ~8.4M). Writes should favor the emptier partition 0
 	// in proportion to the gaps, while partition 1 still receives a meaningful share.
 	pc := PartitionCounts{
 		Read:         2,
 		Write:        2,
 		BacklogCap:   200,
-		BacklogCount: []number.Compact8{0, 192},
+		BacklogCount: []number.Compact8{0, number.EncodeCompact8(13_000_000)},
 	}
 	counts := make([]int, 2)
 	const n = 3000
@@ -283,7 +283,7 @@ func TestPickWritePartition_BacklogAware(t *testing.T) {
 	require.Greater(t, counts[0], counts[1], "emptier partition should receive more writes")
 	require.Positive(t, counts[1], "the below-cap partition should still receive some writes")
 	gap0 := backlogCap - number.DecodeCompact8(0)
-	gap1 := backlogCap - number.DecodeCompact8(192)
+	gap1 := backlogCap - number.DecodeCompact8(number.EncodeCompact8(13_000_000))
 	require.InDelta(t, float64(n)*float64(gap0)/float64(gap0+gap1), counts[0], float64(n)*0.05,
 		"writes split in proportion to each partition's gap to cap")
 
