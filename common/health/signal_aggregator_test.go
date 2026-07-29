@@ -1,0 +1,610 @@
+package health
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/stats"
+)
+
+func TestRecordAndRead(t *testing.T) {
+	type recordCall struct {
+		key     string
+		latency time.Duration
+		err     error
+	}
+
+	// groupExpectation is what one bucket should read back after the records are applied.
+	// p50/p99 are latency and are asserted with a delta since the t-digest is approximate
+	type groupExpectation struct {
+		p50        float64
+		p99        float64
+		errorRatio float64
+	}
+
+	testCases := []struct {
+		desc string
+
+		settings HealthCheckSettings
+		records  []recordCall
+		// isUnhealthy, when set, is passed via WithIsUnhealthy; nil counts every error
+		isUnhealthy func(error) bool
+
+		// expected is keyed by group name; use overallGroupName for the overall bucket
+		expected map[string]groupExpectation
+	}{
+		{
+			desc: "overall latency and error ratio",
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000, Threshold: 0.5},
+				},
+			},
+			records: []recordCall{
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				// 2 of 10 calls failed -> 0.2 error ratio
+				{key: "a", latency: 500 * time.Millisecond, err: errors.New("boom")},
+				{key: "a", latency: 500 * time.Millisecond, err: errors.New("boom")},
+			},
+			expected: map[string]groupExpectation{
+				overallGroupName: {p50: 100, p99: 500, errorRatio: 0.2},
+			},
+		},
+		{
+			desc: "critical group isolates traffic that overall dilutes",
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+				Groups: []HealthCheckGroup{
+					{
+						Name: "critical",
+						Keys: []string{"crit"},
+						// tighter windows than overall
+						Thresholds: HealthCheckThresholds{
+							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
+							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
+						},
+					},
+				},
+			},
+			records: []recordCall{
+				// normal traffic: ungrouped, fast and healthy, only feeds overall
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				// critical traffic: feeds both overall and the critical group;
+				// 2 of 8 slow calls failed -> 0.25 for the group
+				{key: "crit", latency: 200 * time.Millisecond},
+				{key: "crit", latency: 200 * time.Millisecond},
+				{key: "crit", latency: 200 * time.Millisecond},
+				{key: "crit", latency: 200 * time.Millisecond},
+				{key: "crit", latency: 200 * time.Millisecond},
+				{key: "crit", latency: 200 * time.Millisecond},
+				{key: "crit", latency: 800 * time.Millisecond, err: errors.New("boom")},
+				{key: "crit", latency: 800 * time.Millisecond, err: errors.New("boom")},
+			},
+			expected: map[string]groupExpectation{
+				// overall is dominated by the healthy normal traffic: 2 of 20 failed -> 0.1
+				overallGroupName: {p50: 100, p99: 800, errorRatio: 0.1},
+				// the critical group surfaces the problem the overall bucket hides
+				"critical": {p50: 200, p99: 800, errorRatio: 0.25},
+			},
+		},
+		{
+			desc: "isUnhealthy classifier excludes some errors from the ratio",
+			// only errors that aren't "ignored" count toward the ratio
+			isUnhealthy: func(err error) bool { return err.Error() != "ignored" },
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+			},
+			records: []recordCall{
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				// both are errors, but only the counted one is classified unhealthy -> 1 of 10
+				{key: "a", latency: 100 * time.Millisecond, err: errors.New("ignored")},
+				{key: "a", latency: 100 * time.Millisecond, err: errors.New("counted")},
+			},
+			expected: map[string]groupExpectation{
+				overallGroupName: {p50: 100, p99: 100, errorRatio: 0.1},
+			},
+		},
+		{
+			desc: "latency-only and error-ratio-only groups",
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+				Groups: []HealthCheckGroup{
+					{
+						Name: "latencyonly",
+						Keys: []string{"lat"},
+						// no ErrorRatioThreshold -> error ratio not tracked for this group
+						Thresholds: HealthCheckThresholds{
+							WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+						},
+					},
+					{
+						Name: "erroronly",
+						Keys: []string{"err"},
+						// no WindowConfig -> latency not tracked for this group
+						Thresholds: HealthCheckThresholds{
+							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+						},
+					},
+				},
+			},
+			records: []recordCall{
+				// latency-only group: latency tracked, ratio reads 0
+				{key: "lat", latency: 100 * time.Millisecond},
+				{key: "lat", latency: 100 * time.Millisecond},
+				{key: "lat", latency: 100 * time.Millisecond},
+				{key: "lat", latency: 100 * time.Millisecond},
+				{key: "lat", latency: 100 * time.Millisecond},
+				{key: "lat", latency: 100 * time.Millisecond},
+				{key: "lat", latency: 100 * time.Millisecond},
+				{key: "lat", latency: 100 * time.Millisecond},
+				{key: "lat", latency: 500 * time.Millisecond},
+				{key: "lat", latency: 500 * time.Millisecond},
+				// error-only group: ratio tracked (3 of 10 fail), latency reads 0
+				{key: "err", latency: 100 * time.Millisecond},
+				{key: "err", latency: 100 * time.Millisecond},
+				{key: "err", latency: 100 * time.Millisecond},
+				{key: "err", latency: 100 * time.Millisecond},
+				{key: "err", latency: 100 * time.Millisecond},
+				{key: "err", latency: 100 * time.Millisecond},
+				{key: "err", latency: 100 * time.Millisecond},
+				{key: "err", latency: 100 * time.Millisecond, err: errors.New("boom")},
+				{key: "err", latency: 100 * time.Millisecond, err: errors.New("boom")},
+				{key: "err", latency: 100 * time.Millisecond, err: errors.New("boom")},
+			},
+			expected: map[string]groupExpectation{
+				"latencyonly": {p50: 100, p99: 500, errorRatio: 0},
+				"erroronly":   {p50: 0, p99: 0, errorRatio: 0.3},
+			},
+		},
+		{
+			desc: "group aggregates multiple keys",
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+				Groups: []HealthCheckGroup{
+					{
+						Name: "critical",
+						Keys: []string{"a", "b"},
+						Thresholds: HealthCheckThresholds{
+							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
+							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
+						},
+					},
+				},
+			},
+			records: []recordCall{
+				// both keys feed the one critical bucket: 8@200 + 2@800, 2 of 10 fail
+				{key: "a", latency: 200 * time.Millisecond},
+				{key: "a", latency: 200 * time.Millisecond},
+				{key: "a", latency: 200 * time.Millisecond},
+				{key: "a", latency: 200 * time.Millisecond},
+				{key: "b", latency: 200 * time.Millisecond},
+				{key: "b", latency: 200 * time.Millisecond},
+				{key: "b", latency: 200 * time.Millisecond},
+				{key: "b", latency: 200 * time.Millisecond},
+				{key: "a", latency: 800 * time.Millisecond, err: errors.New("boom")},
+				{key: "b", latency: 800 * time.Millisecond, err: errors.New("boom")},
+			},
+			expected: map[string]groupExpectation{
+				"critical": {p50: 200, p99: 800, errorRatio: 0.2},
+			},
+		},
+		{
+			desc: "empty overall settings fall back to defaults",
+			// Overall left zero-valued; refresh seeds fallback latency + error-ratio windows
+			settings: HealthCheckSettings{},
+			records: []recordCall{
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 500 * time.Millisecond, err: errors.New("boom")},
+				{key: "a", latency: 500 * time.Millisecond, err: errors.New("boom")},
+			},
+			expected: map[string]groupExpectation{
+				overallGroupName: {p50: 100, p99: 500, errorRatio: 0.2},
+			},
+		},
+		{
+			desc: "all calls succeed -> zero error ratio",
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+			},
+			records: []recordCall{
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+			},
+			expected: map[string]groupExpectation{
+				overallGroupName: {p50: 100, p99: 100, errorRatio: 0},
+			},
+		},
+		{
+			desc: "all calls fail -> full error ratio",
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+			},
+			records: []recordCall{
+				{key: "a", latency: 100 * time.Millisecond, err: errors.New("boom")},
+				{key: "a", latency: 100 * time.Millisecond, err: errors.New("boom")},
+				{key: "a", latency: 100 * time.Millisecond, err: errors.New("boom")},
+				{key: "a", latency: 100 * time.Millisecond, err: errors.New("boom")},
+				{key: "a", latency: 100 * time.Millisecond, err: errors.New("boom")},
+			},
+			expected: map[string]groupExpectation{
+				overallGroupName: {p50: 100, p99: 100, errorRatio: 1},
+			},
+		},
+		{
+			desc: "ungrouped key feeds only overall",
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+				Groups: []HealthCheckGroup{
+					{
+						Name: "critical",
+						Keys: []string{"crit"},
+						Thresholds: HealthCheckThresholds{
+							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
+							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
+						},
+					},
+				},
+			},
+			records: []recordCall{
+				// only ungrouped "norm" traffic; the critical group never sees a record
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 100 * time.Millisecond},
+				{key: "norm", latency: 500 * time.Millisecond, err: errors.New("boom")},
+				{key: "norm", latency: 500 * time.Millisecond, err: errors.New("boom")},
+			},
+			expected: map[string]groupExpectation{
+				overallGroupName: {p50: 100, p99: 500, errorRatio: 0.2},
+				"critical":       {p50: 0, p99: 0, errorRatio: 0},
+			},
+		},
+		{
+			desc: "unknown group reads zero",
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+			},
+			records: []recordCall{
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond},
+				{key: "a", latency: 100 * time.Millisecond, err: errors.New("boom")},
+			},
+			expected: map[string]groupExpectation{
+				"does-not-exist": {p50: 0, p99: 0, errorRatio: 0},
+			},
+		},
+		{
+			desc: "no records reads zero",
+			settings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+				},
+				Groups: []HealthCheckGroup{
+					{
+						Name: "critical",
+						Keys: []string{"crit"},
+						Thresholds: HealthCheckThresholds{
+							WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
+							ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
+						},
+					},
+				},
+			},
+			records: []recordCall{},
+			expected: map[string]groupExpectation{
+				overallGroupName: {p50: 0, p99: 0, errorRatio: 0},
+				"critical":       {p50: 0, p99: 0, errorRatio: 0},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			var opts []Option
+			if tc.isUnhealthy != nil {
+				opts = append(opts, WithIsUnhealthy(tc.isUnhealthy))
+			}
+
+			s := NewSignalAggregator(
+				log.NewNoopLogger(),
+				func() HealthCheckSettings { return tc.settings },
+				opts...,
+			)
+
+			for _, r := range tc.records {
+				s.Record(r.key, r.latency, r.err)
+			}
+
+			for group, exp := range tc.expected {
+				assert.Equal(t, exp.errorRatio, s.ErrorRatioByGroup(group), "group %q error ratio", group)
+				assert.InDelta(t, exp.p50, s.LatencyQuantileByGroup(group, 0.5), 1, "group %q p50", group)
+				assert.InDelta(t, exp.p99, s.LatencyQuantileByGroup(group, 0.99), 1, "group %q p99", group)
+			}
+		})
+	}
+}
+
+func TestRefresh(t *testing.T) {
+	overall := HealthCheckThresholds{
+		WindowConfig:        &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+		ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+	}
+	critical := HealthCheckGroup{
+		Name: "critical",
+		Keys: []string{"crit"},
+		Thresholds: HealthCheckThresholds{
+			WindowConfig:        &stats.WindowConfig{WindowSize: 2 * time.Second, WindowCount: 10},
+			ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 5 * time.Second, BufferSize: 1000},
+		},
+	}
+
+	t.Run("adding a group starts a new bucket", func(t *testing.T) {
+		settings := HealthCheckSettings{Overall: overall}
+		s := NewSignalAggregator(log.NewNoopLogger(), func() HealthCheckSettings { return settings })
+
+		// the group doesn't exist yet
+		assert.Zero(t, s.ErrorRatioByGroup("critical"))
+
+		// add the critical group and pick it up
+		settings = HealthCheckSettings{Overall: overall, Groups: []HealthCheckGroup{critical}}
+		s.refresh()
+
+		s.Record("crit", 200*time.Millisecond, nil)
+		s.Record("crit", 200*time.Millisecond, nil)
+		s.Record("crit", 200*time.Millisecond, nil)
+		// 1 of 4 failed -> 0.25
+		s.Record("crit", 800*time.Millisecond, errors.New("boom"))
+
+		assert.InDelta(t, 200, s.LatencyQuantileByGroup("critical", 0.5), 1)
+		assert.Equal(t, 0.25, s.ErrorRatioByGroup("critical"))
+	})
+
+	t.Run("removing a group drops its bucket", func(t *testing.T) {
+		settings := HealthCheckSettings{Overall: overall, Groups: []HealthCheckGroup{critical}}
+		s := NewSignalAggregator(log.NewNoopLogger(), func() HealthCheckSettings { return settings })
+
+		s.Record("crit", 200*time.Millisecond, errors.New("boom"))
+		assert.Equal(t, float64(1), s.ErrorRatioByGroup("critical"))
+
+		// drop the group; its bucket goes away
+		settings = HealthCheckSettings{Overall: overall}
+		s.refresh()
+
+		assert.Zero(t, s.ErrorRatioByGroup("critical"))
+		assert.Zero(t, s.LatencyQuantileByGroup("critical", 0.5))
+	})
+
+	t.Run("rebuilding a bucket resets its recorded data", func(t *testing.T) {
+		settings := HealthCheckSettings{Overall: overall}
+		s := NewSignalAggregator(log.NewNoopLogger(), func() HealthCheckSettings { return settings })
+
+		// 1 of 2 failed -> 0.5
+		s.Record("a", 100*time.Millisecond, errors.New("boom"))
+		s.Record("a", 100*time.Millisecond, nil)
+		assert.Equal(t, 0.5, s.ErrorRatioByGroup(overallGroupName))
+		assert.InDelta(t, 100, s.LatencyQuantileByGroup(overallGroupName, 0.5), 1)
+
+		// any settings change rebuilds the maps, discarding recorded data
+		settings = HealthCheckSettings{
+			Overall: HealthCheckThresholds{
+				WindowConfig:        &stats.WindowConfig{WindowSize: 30 * time.Second, WindowCount: 10},
+				ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000},
+			},
+		}
+		s.refresh()
+
+		assert.Zero(t, s.ErrorRatioByGroup(overallGroupName))
+		assert.Zero(t, s.LatencyQuantileByGroup(overallGroupName, 0.5))
+	})
+
+	t.Run("refresh with unchanged settings keeps recorded data", func(t *testing.T) {
+		settings := HealthCheckSettings{Overall: overall}
+		s := NewSignalAggregator(log.NewNoopLogger(), func() HealthCheckSettings { return settings })
+
+		// 1 of 2 failed -> 0.5
+		s.Record("a", 100*time.Millisecond, errors.New("boom"))
+		s.Record("a", 100*time.Millisecond, nil)
+
+		// settings are identical, so refresh is a no-op and does not rebuild the buckets
+		s.refresh()
+
+		assert.Equal(t, 0.5, s.ErrorRatioByGroup(overallGroupName))
+		assert.InDelta(t, 100, s.LatencyQuantileByGroup(overallGroupName, 0.5), 1)
+	})
+}
+
+func TestSettingsChanged(t *testing.T) {
+	testCases := []struct {
+		desc string
+		// seeded controls whether latencyByGroup is non-nil, i.e. refresh has run at least once
+		seeded       bool
+		lastSettings HealthCheckSettings
+		newSettings  HealthCheckSettings
+		expected     bool
+	}{
+		{
+			desc:   "seeded, identical settings",
+			seeded: true,
+			lastSettings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+				},
+			},
+			newSettings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+				},
+			},
+			expected: false,
+		},
+		{
+			desc:     "seeded, both empty settings",
+			seeded:   true,
+			expected: false,
+		},
+		{
+			// nil latencyByGroup means refresh hasn't seeded the maps yet, so it always
+			// reports changed regardless of equality
+			desc:     "not seeded, identical settings",
+			seeded:   false,
+			expected: true,
+		},
+		{
+			desc:   "overall window config changed",
+			seeded: true,
+			lastSettings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+				},
+			},
+			newSettings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig: &stats.WindowConfig{WindowSize: 10 * time.Second, WindowCount: 10},
+				},
+			},
+			expected: true,
+		},
+		{
+			desc:   "overall window config added",
+			seeded: true,
+			newSettings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+				},
+			},
+			expected: true,
+		},
+		{
+			desc:   "overall error ratio threshold changed",
+			seeded: true,
+			lastSettings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000, Threshold: 0.5},
+				},
+			},
+			newSettings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{
+					ErrorRatioThreshold: &ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000, Threshold: 0.8},
+				},
+			},
+			expected: true,
+		},
+		{
+			desc:   "overall enforced flag changed",
+			seeded: true,
+			lastSettings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{Enforced: false},
+			},
+			newSettings: HealthCheckSettings{
+				Overall: HealthCheckThresholds{Enforced: true},
+			},
+			expected: true,
+		},
+		{
+			desc:   "group added",
+			seeded: true,
+			newSettings: HealthCheckSettings{
+				Groups: []HealthCheckGroup{
+					{Name: "frontend", Keys: []string{"a", "b"}},
+				},
+			},
+			expected: true,
+		},
+		{
+			desc:   "group keys changed",
+			seeded: true,
+			lastSettings: HealthCheckSettings{
+				Groups: []HealthCheckGroup{
+					{Name: "frontend", Keys: []string{"a"}},
+				},
+			},
+			newSettings: HealthCheckSettings{
+				Groups: []HealthCheckGroup{
+					{Name: "frontend", Keys: []string{"a", "b"}},
+				},
+			},
+			expected: true,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			s := SignalAggregator{
+				lastSettings: tc.lastSettings,
+			}
+			if tc.seeded {
+				s.latencyByGroup = map[string]stats.TimeWindowedStats{}
+			}
+
+			actual := s.settingsChanged(tc.newSettings)
+
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
+}
