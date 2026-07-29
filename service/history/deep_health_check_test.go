@@ -741,7 +741,7 @@ func TestDeepHealthCheck(t *testing.T) {
 						}
 					},
 				},
-				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, func() bool { return true }, time.Second, 10, time.Second, 10),
+				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, func() bool { return true }, func() health2.HealthCheckSettings { return health2.HealthCheckSettings{} }, time.Second, 10),
 				persistenceHealthSignal: persistence.NewHealthSignalAggregator(true, func() bool { return true }, time.Second, 100, metrics.NoopMetricsHandler, testLogger, time.Second, 10),
 				startupTime:             startupTime,
 			}
@@ -749,7 +749,7 @@ func TestDeepHealthCheck(t *testing.T) {
 			handler.healthServer.SetServingStatus(serviceName, tc.grpcHealthStatus)
 
 			for _, r := range tc.historyRecords {
-				handler.historyHealthSignal.Record(r.latency, r.err)
+				handler.historyHealthSignal.Record("", r.latency, r.err)
 			}
 
 			for _, r := range tc.persistRecords {
