@@ -232,33 +232,45 @@ func (s *SignalAggregator) Record(key string, latency time.Duration, err error) 
 	}
 }
 
-func (s *SignalAggregator) LatencyQuantile(quantile float64) float64 {
+// LatencyQuantile reports the quantile across every key. The bool is false when no
+// latency bucket exists, which callers must not treat as a healthy zero reading.
+func (s *SignalAggregator) LatencyQuantile(quantile float64) (float64, bool) {
 	return s.LatencyQuantileByGroup(overallGroupName, quantile)
 }
 
-func (s *SignalAggregator) ErrorRatio() float64 {
+// ErrorRatio reports the error ratio across every key. The bool is false when no
+// error ratio bucket exists, which callers must not treat as a healthy zero reading.
+func (s *SignalAggregator) ErrorRatio() (float64, bool) {
 	return s.ErrorRatioByGroup(overallGroupName)
 }
 
-func (s *SignalAggregator) LatencyQuantileByGroup(groupName string, quantile float64) float64 {
+// LatencyQuantileByGroup returns false when the group has no latency bucket, either
+// because the group isn't configured or because its thresholds omit a WindowConfig.
+// Note that a configured bucket which never received a sample still reports (0, true):
+// an empty tdigest quantile is indistinguishable from a genuinely fast one.
+func (s *SignalAggregator) LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	dist, found := s.latencyByGroup[groupName]
 	if !found {
-		return 0
+		return 0, false
 	}
 
-	return dist.Quantile(quantile)
+	return dist.Quantile(quantile), true
 }
 
-func (s *SignalAggregator) ErrorRatioByGroup(groupName string) float64 {
+// ErrorRatioByGroup returns false when the group has no error ratio bucket, either
+// because the group isn't configured or because its thresholds omit an
+// ErrorRatioThreshold. As with LatencyQuantileByGroup, an empty bucket reports (0, true).
+func (s *SignalAggregator) ErrorRatioByGroup(groupName string) (float64, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	errRatio, found := s.errorRatioByGroup[groupName]
 	if !found {
-		return 0
+		return 0, false
 	}
-	return errRatio.Average()
+
+	return errRatio.Average(), true
 }
