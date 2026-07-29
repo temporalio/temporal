@@ -262,9 +262,7 @@ func TestPickWritePartition_BacklogAware(t *testing.T) {
 		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
 	}
 
-	// compact8: byte 0 -> 0, byte 192 -> ~12.6M, byte 200 (cap) -> ~21M
-	// (see common/number/compact8_test.go).
-	backlogCap := number.DecodeCompact8(200)
+	backlogCap := number.DecodeCompact8(number.EncodeCompact8(21000000))
 
 	// Both partitions are below the cap: partition 0 is empty (gap ~21M) and partition 1 is
 	// partially full (byte 192 ~12.6M, gap ~8.4M). Writes should favor the emptier partition 0
