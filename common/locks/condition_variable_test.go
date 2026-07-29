@@ -230,13 +230,3 @@ func randSignalBroadcast(
 		cv.Broadcast()
 	}
 }
-
-func min(left int, right int) int {
-	if left < right {
-		return left
-	} else if left > right {
-		return right
-	} else {
-		return left
-	}
-}
