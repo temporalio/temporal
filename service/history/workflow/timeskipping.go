@@ -65,7 +65,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 
 	if !tsc.GetEnabled() || tsc.GetFastForwardConfig().GetDuration().AsDuration() <= 0 {
 		if tsi.FastForwardInfo != nil {
-			tsi.FastForwardInfo = nil
+			ms.setAndStampFastForwardInfo(nil)
 		}
 		return
 	}
@@ -79,22 +79,30 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		targetTime = ms.Now().Add(tsc.GetFastForwardConfig().GetDuration().AsDuration())
 	}
 
-	currentVersionedTransition := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: ms.GetCurrentVersion(),
-		TransitionCount:          ms.NextTransitionCount(),
-	}
-
-	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
-		TargetTime:                    timestamppb.New(targetTime),
-		HasReached:                    false,
-		LastUpdateVersionedTransition: currentVersionedTransition,
-	}
+	ffVersionedTransition := ms.setAndStampFastForwardInfo(&persistencespb.FastForwardInfo{
+		TargetTime: timestamppb.New(targetTime),
+		HasReached: false,
+	})
 	ms.AddTasks(&tasks.TimeSkippingTimerTask{
 		WorkflowKey:         ms.GetWorkflowKey(),
 		VisibilityTimestamp: targetTime,
-		VersionedTransition: currentVersionedTransition,
+		VersionedTransition: ffVersionedTransition,
 		ArchetypeID:         ms.ChasmTree().ArchetypeID(),
 	})
+}
+
+// setAndStampFastForwardInfo sets the fast-forward info and stamps it with the current transaction's versioned transition.
+// Nothing else may write these two fields; routing every update through here is what keeps them in lockstep.
+func (ms *MutableStateImpl) setAndStampFastForwardInfo(
+	ffInfo *persistencespb.FastForwardInfo,
+) *persistencespb.VersionedTransition {
+	tsi := ms.executionInfo.TimeSkippingInfo
+	tsi.FastForwardInfo = ffInfo
+	tsi.FastForwardInfoLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: ms.GetCurrentVersion(),
+		TransitionCount:          ms.NextTransitionCount(),
+	}
+	return tsi.FastForwardInfoLastUpdateVersionedTransition
 }
 
 func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationpb.Duration) {
@@ -337,7 +345,7 @@ func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFast
 	}
 	config := util.tsi.GetConfig()
 	return &commonpb.TimeSkippingFastForwardInfo{
-		TargetTime:          common.CloneProto(ff.GetTargetTime()),
+		TargetTime:          ff.GetTargetTime(),
 		HasCompleted:        ff.GetHasReached(),
 		FastForwardId:       config.GetFastForwardConfig().GetId(),
 		FastForwardDuration: config.GetFastForwardConfig().GetDuration(),
@@ -548,7 +556,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	}
 	// update enabled state
 	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
-		tsi.GetFastForwardInfo().HasReached = true
+		reachedFFInfo := tsi.GetFastForwardInfo()
+		reachedFFInfo.HasReached = true
+		ms.setAndStampFastForwardInfo(reachedFFInfo)
 		tsi.Config.Enabled = false
 	}
 	// update skip

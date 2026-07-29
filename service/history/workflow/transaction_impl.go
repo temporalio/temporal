@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/notification"
@@ -79,7 +80,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyOnExecutionSnapshot(engine, newWorkflowSnapshot)
+		NotifyOnExecutionSnapshot(engine, archetypeID, newWorkflowSnapshot)
 	}
 	if err != nil {
 		return 0, err
@@ -134,9 +135,9 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyOnExecutionSnapshot(engine, resetWorkflowSnapshot)
-		NotifyOnExecutionSnapshot(engine, newWorkflowSnapshot)
-		NotifyOnExecutionMutation(engine, currentWorkflowMutation)
+		NotifyOnExecutionSnapshot(engine, archetypeID, resetWorkflowSnapshot)
+		NotifyOnExecutionSnapshot(engine, archetypeID, newWorkflowSnapshot)
+		NotifyOnExecutionMutation(engine, archetypeID, currentWorkflowMutation)
 	}
 	if err != nil {
 		return 0, 0, 0, err
@@ -198,8 +199,8 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyOnExecutionMutation(engine, currentWorkflowMutation)
-		NotifyOnExecutionSnapshot(engine, newWorkflowSnapshot)
+		NotifyOnExecutionMutation(engine, archetypeID, currentWorkflowMutation)
+		NotifyOnExecutionSnapshot(engine, archetypeID, newWorkflowSnapshot)
 	}
 	if err != nil {
 		return 0, 0, err
@@ -236,7 +237,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 		SetWorkflowSnapshot: *workflowSnapshot,
 	})
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyOnExecutionSnapshot(engine, workflowSnapshot)
+		NotifyOnExecutionSnapshot(engine, archetypeID, workflowSnapshot)
 	}
 	if err != nil {
 		return err
@@ -587,6 +588,7 @@ func setWorkflowExecution(
 
 func NotifyOnExecutionSnapshot(
 	engine historyi.Engine,
+	archetypeID chasm.ArchetypeID,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) {
 	if workflowSnapshot == nil {
@@ -600,11 +602,12 @@ func NotifyOnExecutionSnapshot(
 			RunID:       workflowSnapshot.ExecutionState.RunId,
 		}, nil)
 	}
-	notifyFastForwardUpdate(engine, workflowSnapshot.ExecutionInfo, workflowSnapshot.ExecutionState)
+	notifyFastForwardUpdate(engine, archetypeID, workflowSnapshot.ExecutionInfo, workflowSnapshot.ExecutionState)
 }
 
 func NotifyOnExecutionMutation(
 	engine historyi.Engine,
+	archetypeID chasm.ArchetypeID,
 	workflowMutation *persistence.WorkflowMutation,
 ) {
 	if workflowMutation == nil {
@@ -619,28 +622,32 @@ func NotifyOnExecutionMutation(
 			RunID:       workflowMutation.ExecutionState.RunId,
 		}, nil)
 	}
-	notifyFastForwardUpdate(engine, workflowMutation.ExecutionInfo, workflowMutation.ExecutionState)
+	notifyFastForwardUpdate(engine, archetypeID, workflowMutation.ExecutionInfo, workflowMutation.ExecutionState)
 }
 
-// notifyFastForwardUpdate wakes any PollWorkflowExecutionTimeSkipping waiter after a persist.
-// It over-notifies on purpose: it fires on every transaction of a time-skipping workflow (gated
-// only on TimeSkippingInfo presence, which is derivable from the persisted state and, once set,
-// never cleared). Waiters filter benign wake-ups by re-checking the delivered fast-forward, so a
-// spurious notification only costs a re-block, never a missed one — and Notify is a no-op when no
-// one is watching the key.
 func notifyFastForwardUpdate(
 	engine historyi.Engine,
+	archetypeID chasm.ArchetypeID,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 ) {
-	if executionInfo.GetTimeSkippingInfo() == nil {
+	tsi := executionInfo.GetTimeSkippingInfo()
+	if tsi == nil {
 		return
 	}
-	// we only set completed when the whole chain of runs completes
 	completed := executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED &&
 		executionInfo.GetNewExecutionRunId() == ""
-	key := notification.NewTimeSkippingNotificationKey(executionInfo.GetNamespaceId(), executionInfo.GetWorkflowId())
-	engine.NotifyFastForwardUpdate(key, &notification.TimeSkippingNotification{
+	msVT := transitionhistory.LastVersionedTransition(executionInfo.GetTransitionHistory())
+	ffVT := executionInfo.GetTimeSkippingInfo().GetFastForwardInfoLastUpdateVersionedTransition()
+	ffUpdated := transitionhistory.Compare(msVT, ffVT) == 0
+
+	// we only notify if the chain of runs ends OR fast-forward info is updated in last transaction
+	if !completed && !ffUpdated {
+		return
+	}
+
+	key := notification.NewTimeSkippingNotificationKey(executionInfo.GetNamespaceId(), executionInfo.GetWorkflowId(), archetypeID)
+	engine.NotifyFastForwardUpdate(key, &notification.TimeSkippingFastForwardNotification{
 		TimeSkippingInfo:           common.CloneProto(executionInfo.GetTimeSkippingInfo()),
 		WorkflowExecutionCompleted: completed,
 	})

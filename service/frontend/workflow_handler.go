@@ -717,7 +717,7 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	}
 
 	if ff := tsc.GetFastForwardConfig(); ff != nil {
-		if ff.GetDuration().AsDuration() < 0 {
+		if ff.GetDuration().AsDuration() <= 0 {
 			return serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward duration must be positive")
 		}
 		if strings.TrimSpace(ff.GetId()) == "" {

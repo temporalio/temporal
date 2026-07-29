@@ -1,8 +1,8 @@
 // Package notification provides a generic, keyed in-memory pub/sub used by
-// server-side long polls: a waiter subscribes on a workflow's (namespace,
-// workflowID) key and is woken with a value of type T when something publishes
-// to that key. Concrete features (e.g. time-skipping fast-forward) instantiate
-// PubSubNotifier[T] with their own payload type.
+// server-side long polls: a waiter subscribes on a key of type K and is woken with a
+// value of type T when something publishes to that key. Concrete features (e.g.
+// time-skipping fast-forward) instantiate PubSubNotifier[K, T] with their own key and
+// payload types.
 package notification
 
 import (
@@ -10,71 +10,78 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/namespace"
 )
 
 // PubSubNotifier is a keyed pub/sub over payloads of type T. Notify fans out
 // synchronously on the publisher's goroutine (the one producing the change, not the
 // waiter's) with non-blocking sends over buffered-1 channels: a value is dropped when a
-// waiter already has one pending, which is safe for callers that re-read authoritative
-// state on wake. Watch rejects a new subscriber once a key already has the configured
+// waiter already has one pending.
+// Watch rejects a new subscriber once a key already has the configured
 // maximum, bounding the number of concurrent waiters per key.
-type PubSubNotifier[T any] interface {
-	Notify(key definition.WorkflowKey, value T)
-	Watch(key definition.WorkflowKey) (subscriberID string, channel <-chan T, err error)
-	Unwatch(key definition.WorkflowKey, subscriberID string) error
+type PubSubNotifier[K comparable, T any] interface {
+	Notify(key K, value T)
+	Watch(key K) (subscriberID string, channel <-chan T, err error)
+	Unwatch(key K, subscriberID string) error
 }
 
-type pubSubNotifierImpl[T any] struct {
+type pubSubNotifierImpl[K comparable, T any] struct {
 	maxSubscribersPerKey int
-	// key: definition.WorkflowKey, value: map[subscriberID]chan T. The inner map is
+	// key: K, value: map[subscriberID]chan T. The inner map is
 	// not thread-safe on its own; every access is guarded by the ConcurrentTxMap's
 	// per-key action callbacks. Subscribers per key are expected to be few.
 	subscriptions collection.ConcurrentTxMap
 }
 
 // noopNotifier drops every notification and registers no subscribers.
-type noopNotifier[T any] struct{}
+type noopNotifier[K comparable, T any] struct{}
 
 // NewNoopNotifier returns a PubSubNotifier for components (and tests) that never
 // participate in the long poll: publishing is a no-op and watching returns an already
 // closed channel so an accidental waiter wakes immediately instead of blocking forever.
-func NewNoopNotifier[T any]() PubSubNotifier[T] {
-	return noopNotifier[T]{}
+func NewNoopNotifier[K comparable, T any]() PubSubNotifier[K, T] {
+	return noopNotifier[K, T]{}
 }
 
-func (noopNotifier[T]) Notify(definition.WorkflowKey, T) {}
+func (noopNotifier[K, T]) Notify(K, T) {}
 
-func (noopNotifier[T]) Watch(definition.WorkflowKey) (string, <-chan T, error) {
+func (noopNotifier[K, T]) Watch(K) (string, <-chan T, error) {
 	ch := make(chan T)
 	close(ch)
 	return "", ch, nil
 }
 
-func (noopNotifier[T]) Unwatch(definition.WorkflowKey, string) error { return nil }
+func (noopNotifier[K, T]) Unwatch(K, string) error { return nil }
 
 // NewPubSubNotifier creates a notifier that admits at most maxSubscribersPerKey
 // concurrent waiters per key; Watch beyond that returns a ResourceExhausted error.
 //
-// hashKey only stripes the internal map's locks for concurrency — any uniform hash of
-// (namespace, workflowID) works and it has no history-shard meaning here (callers just pass
-// the workflow->shard hash as a convenient, well-distributed one).
-func NewPubSubNotifier[T any](hashKey func(namespace.ID, string) int32, maxSubscribersPerKey int) PubSubNotifier[T] {
+// hashKey only stripes the internal map's locks for concurrency — any uniform hash of the
+// key works and it has no history-shard meaning here (callers just pass the workflow->shard
+// hash as a convenient, well-distributed one). It need not cover every field of K: keys are
+// matched by equality, so a hash over a subset only affects lock distribution.
+func NewPubSubNotifier[K comparable, T any](hashKey func(K) uint32, maxSubscribersPerKey int) PubSubNotifier[K, T] {
+	if hashKey == nil {
+		// A caller bug, but not a fatal one, and better caught here than as a nil-func panic on
+		// the first Watch: a constant is still a correct hash, costing lock striping not lookups.
+		hashKey = func(K) uint32 { return 0 }
+	}
+	// The any-typed hash exists only because ConcurrentTxMap is not generic.
 	hashFn := func(key any) uint32 {
-		wk, ok := key.(definition.WorkflowKey)
+		k, ok := key.(K)
 		if !ok {
+			// Unreachable: the map is only ever keyed through Notify/Watch/Unwatch, which are
+			// typed K. Checked for sanity, and degrading beats panicking as above.
 			return 0
 		}
-		return uint32(hashKey(namespace.ID(wk.NamespaceID), wk.WorkflowID))
+		return hashKey(k)
 	}
-	return &pubSubNotifierImpl[T]{
+	return &pubSubNotifierImpl[K, T]{
 		maxSubscribersPerKey: maxSubscribersPerKey,
 		subscriptions:        collection.NewShardedConcurrentTxMap(1024, hashFn),
 	}
 }
 
-func (n *pubSubNotifierImpl[T]) Watch(key definition.WorkflowKey) (string, <-chan T, error) {
+func (n *pubSubNotifierImpl[K, T]) Watch(key K) (string, <-chan T, error) {
 	channel := make(chan T, 1)
 	subscriberID := uuid.NewString()
 	subscribers := map[string]chan T{subscriberID: channel}
@@ -101,7 +108,7 @@ func (n *pubSubNotifierImpl[T]) Watch(key definition.WorkflowKey) (string, <-cha
 	return subscriberID, channel, nil
 }
 
-func (n *pubSubNotifierImpl[T]) Unwatch(key definition.WorkflowKey, subscriberID string) error {
+func (n *pubSubNotifierImpl[K, T]) Unwatch(key K, subscriberID string) error {
 	success := true
 	n.subscriptions.RemoveIf(key, func(_ any, value any) bool {
 		subscribers, ok := value.(map[string]chan T)
@@ -122,7 +129,7 @@ func (n *pubSubNotifierImpl[T]) Unwatch(key definition.WorkflowKey, subscriberID
 	return nil
 }
 
-func (n *pubSubNotifierImpl[T]) Notify(key definition.WorkflowKey, value T) {
+func (n *pubSubNotifierImpl[K, T]) Notify(key K, value T) {
 	_, _, _ = n.subscriptions.GetAndDo(key, func(_ any, existing any) error {
 		subscribers, ok := existing.(map[string]chan T)
 		if !ok {
@@ -132,8 +139,9 @@ func (n *pubSubNotifierImpl[T]) Notify(key definition.WorkflowKey, value T) {
 			select {
 			case channel <- value:
 			default:
-				// Buffered (size 1) channel already holds a pending value; the waiter
-				// re-reads authoritative state on wake, so dropping is safe.
+				// Buffer (size 1) is full: this value is dropped, so a newer one can be lost
+				// behind an older one. Delivery is best-effort; subscribers must recover on
+				// their own (re-read state on wake, or time out and get polled again).
 			}
 		}
 		return nil

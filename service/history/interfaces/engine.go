@@ -104,7 +104,7 @@ type (
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)
 		NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte)
-		NotifyFastForwardUpdate(key definition.WorkflowKey, fastforwardNotification *notification.TimeSkippingNotification)
+		NotifyFastForwardUpdate(key notification.TimeSkippingNotificationKey, fastforwardNotification *notification.TimeSkippingFastForwardNotification)
 		// TODO(bergundy): This Environment should be host level once shard level workflow cache is deprecated.
 		StateMachineEnvironment(operationTag metrics.Tag) hsm.Environment
 

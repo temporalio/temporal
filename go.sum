@@ -479,10 +479,10 @@ go.opentelemetry.io/proto/slim/otlp/collector/profiles/v1development v0.3.0 h1:R
 go.opentelemetry.io/proto/slim/otlp/collector/profiles/v1development v0.3.0/go.mod h1:I89cynRj8y+383o7tEQVg2SVA6SRgDVIouWPUVXjx0U=
 go.opentelemetry.io/proto/slim/otlp/profiles/v1development v0.3.0 h1:CQvJSldHRUN6Z8jsUeYv8J0lXRvygALXIzsmAeCcZE0=
 go.opentelemetry.io/proto/slim/otlp/profiles/v1development v0.3.0/go.mod h1:xSQ+mEfJe/GjK1LXEyVOoSI1N9JV9ZI923X5kup43W4=
-go.temporal.io/api v1.63.4-0.20260722231158-655e4f9a4f6d h1:EAWpmdIMNtrN4x0/uyWUiaUn967BIDc7rADx7gOa/3U=
-go.temporal.io/api v1.63.4-0.20260722231158-655e4f9a4f6d/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
 go.temporal.io/api v1.63.4-0.20260726063636-349020f55c75 h1:hQMDUGTuzzj38XtH5EishXGz79y85Q+ZC5khu8/Gmqo=
 go.temporal.io/api v1.63.4-0.20260726063636-349020f55c75/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
+go.temporal.io/api v1.63.4-0.20260729205600-36d14d720429 h1:vZbFqVe7qXgq/1w0ft1hRLh3o5x92cXRk/s3wvr54g8=
+go.temporal.io/api v1.63.4-0.20260729205600-36d14d720429/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
 go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee h1:y6A65Iml06cR3CpxW2Zn8FQLjniPDTnN4jtr69UZxXI=
 go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee/go.mod h1:hhHijO9XRPIkAflLJJHix61M9FzbRPqk8fSydkcLkqw=
 go.temporal.io/sdk v1.41.1 h1:yOpvsHyDD1lNuwlGBv/SUodCPhjv9nDeC9lLHW/fJUA=

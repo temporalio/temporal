@@ -1448,5 +1448,5 @@ message PollWorkflowExecutionTimeSkippingRequest {
 }
 
 message PollWorkflowExecutionTimeSkippingResponse {
-  temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse response = 2;
+  temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse response = 1;
 }

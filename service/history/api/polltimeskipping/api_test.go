@@ -30,6 +30,11 @@ const (
 	testFastForwardID = "ff-id"
 )
 
+// testFastForwardTarget is the target every fixture below installs. waitFastForwardNotification
+// compares the notification's target against the caller's, so the pending info and the notified
+// info must agree on it or every notification reads as a replaced fast-forward.
+var testFastForwardTarget = time.Unix(0, 0).Add(time.Hour)
+
 // mockConsistencyChecker returns a fixed lease (or error) from GetWorkflowLease; the
 // other WorkflowConsistencyChecker methods are unused here and left to the embedded nil.
 type mockConsistencyChecker struct {
@@ -60,13 +65,13 @@ func fastForwardTSI(fastForwardID string, hasReached bool) *persistencespb.TimeS
 		},
 		FastForwardInfo: &persistencespb.FastForwardInfo{
 			HasReached: hasReached,
-			TargetTime: timestamppb.New(time.Unix(0, 0).Add(time.Hour)),
+			TargetTime: timestamppb.New(testFastForwardTarget),
 		},
 	}
 }
 
-func tsiNotif(fastForwardID string, hasReached, workflowCompleted bool) *notification.TimeSkippingNotification {
-	return &notification.TimeSkippingNotification{
+func tsiNotif(fastForwardID string, hasReached, workflowCompleted bool) *notification.TimeSkippingFastForwardNotification {
+	return &notification.TimeSkippingFastForwardNotification{
 		TimeSkippingInfo:           fastForwardTSI(fastForwardID, hasReached),
 		WorkflowExecutionCompleted: workflowCompleted,
 	}
@@ -127,22 +132,24 @@ func TestInvoke(t *testing.T) {
 		require.ErrorAs(t, err, &notFound)
 	})
 
-	t.Run("no fast-forward info returns not found", func(t *testing.T) {
+	t.Run("no fast-forward info fails with an id mismatch", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, nil, true, "")}}
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		require.NoError(t, err)
-		require.Equal(t, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_ID_MISMATCH, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, failedReasonIDMismatch, resp.GetResponse().GetFailedReason())
 	})
 
-	t.Run("fast-forward id mismatch returns not found", func(t *testing.T) {
+	t.Run("fast-forward id mismatch fails with an id mismatch", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI("other-id", false), true, "")}}
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		require.NoError(t, err)
-		require.Equal(t, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_ID_MISMATCH, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, failedReasonIDMismatch, resp.GetResponse().GetFailedReason())
 	})
 
 	t.Run("already completed returns completed", func(t *testing.T) {
@@ -151,29 +158,63 @@ func TestInvoke(t *testing.T) {
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		require.NoError(t, err)
-		require.Equal(t, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_COMPLETED, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED, resp.GetResponse().GetFastForwardPollingResult())
 		require.True(t, resp.GetResponse().GetFastForwardInfo().GetHasCompleted())
 		require.Equal(t, testFastForwardID, resp.GetResponse().GetFastForwardInfo().GetFastForwardId())
 	})
 
-	t.Run("run closed before completion returns workflow-end", func(t *testing.T) {
+	t.Run("run closed before completion fails because the execution ended", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		// pending fast-forward, not running, no successor run => can never complete.
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI(testFastForwardID, false), false, "")}}
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		require.NoError(t, err)
-		require.Equal(t, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_EXECUTION_ENDED_BEFORE_FAST_FORWARD_COMPLETION, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, failedReasonExecutionEnded, resp.GetResponse().GetFailedReason())
 	})
 
-	t.Run("time skipping disabled before completion returns disabled", func(t *testing.T) {
+	t.Run("time skipping disabled before completion fails with the disabled reason", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		// matching pending fast-forward, but time skipping is disabled => can never complete.
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, disabledTSI(testFastForwardID), true, "")}}
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		require.NoError(t, err)
-		require.Equal(t, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_TIME_SKIPPING_DISABLED_BEFORE_FAST_FORWARD_COMPLETION, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, failedReasonTimeSkippingDisabled, resp.GetResponse().GetFailedReason())
+	})
+
+	// step-2's checks are ordered, and the states below satisfy more than one of them at once,
+	// so these pin the precedence and must mirror waitFastForwardNotification's switch order.
+	t.Run("step-2 mismatched id wins over completion and closed run", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI("other-id", true), false, "")}}
+		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
+			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, failedReasonIDMismatch, resp.GetResponse().GetFailedReason())
+	})
+
+	t.Run("step-2 completion wins over closed run", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI(testFastForwardID, true), false, "")}}
+		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
+			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED, resp.GetResponse().GetFastForwardPollingResult())
+		require.True(t, resp.GetResponse().GetFastForwardInfo().GetHasCompleted())
+	})
+
+	t.Run("step-2 closed run wins over time skipping disabled", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, disabledTSI(testFastForwardID), false, "")}}
+		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
+			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
+		require.NoError(t, err)
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, failedReasonExecutionEnded, resp.GetResponse().GetFailedReason())
 	})
 
 	t.Run("closed run with successor is not workflow-end and long-polls until timeout", func(t *testing.T) {
@@ -184,7 +225,7 @@ func TestInvoke(t *testing.T) {
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, ffNotifier)
 		require.NoError(t, err)
-		require.Equal(t, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_POLL_TIMEOUT, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_POLL_TIMEOUT, resp.GetResponse().GetFastForwardPollingResult())
 	})
 
 	t.Run("pending fast-forward with no notification times out and returns the pending info", func(t *testing.T) {
@@ -195,96 +236,179 @@ func TestInvoke(t *testing.T) {
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, ffNotifier)
 		require.NoError(t, err)
-		require.Equal(t, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_POLL_TIMEOUT, resp.GetResponse().GetFastForwardPollingResult())
+		require.Equal(t, enumspb.FAST_FORWARD_POLLING_RESULT_POLL_TIMEOUT, resp.GetResponse().GetFastForwardPollingResult())
 		require.Equal(t, testFastForwardID, resp.GetResponse().GetFastForwardInfo().GetFastForwardId())
 	})
 }
 
 func TestWaitFastForwardNotification(t *testing.T) {
-	pending := &commonpb.TimeSkippingFastForwardInfo{FastForwardId: testFastForwardID}
-	completed := enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_COMPLETED
-	notFound := enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_ID_MISMATCH
-	workflowEnd := enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_EXECUTION_ENDED_BEFORE_FAST_FORWARD_COMPLETION
-	pollTimeout := enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_POLL_TIMEOUT
+	pending := &commonpb.TimeSkippingFastForwardInfo{
+		FastForwardId: testFastForwardID,
+		TargetTime:    timestamppb.New(testFastForwardTarget),
+	}
+	completed := enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED
+	failed := enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED
+	pollTimeout := enumspb.FAST_FORWARD_POLLING_RESULT_POLL_TIMEOUT
 
 	t.Run("completion notification returns completed", func(t *testing.T) {
-		ch := make(chan *notification.TimeSkippingNotification, 1)
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
 		ch <- tsiNotif(testFastForwardID, true, false)
-		ffinfo, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		ffinfo, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
 		require.Equal(t, completed, result)
+		require.Empty(t, reason, "a successful outcome must not carry a failure reason")
 		require.True(t, ffinfo.GetHasCompleted())
 	})
 
-	t.Run("different fast-forward id returns not-found", func(t *testing.T) {
-		ch := make(chan *notification.TimeSkippingNotification, 1)
+	t.Run("different fast-forward id fails with an id mismatch", func(t *testing.T) {
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
 		ch <- tsiNotif("new-id", false, false)
-		ffinfo, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		ffinfo, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
-		require.Equal(t, notFound, result)
+		require.Equal(t, failed, result)
+		require.Equal(t, failedReasonIDMismatch, reason)
 		require.Equal(t, "new-id", ffinfo.GetFastForwardId())
 	})
 
-	t.Run("closed run returns workflow-end", func(t *testing.T) {
-		ch := make(chan *notification.TimeSkippingNotification, 1)
-		ch <- tsiNotif(testFastForwardID, false, true)
-		_, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+	// Reusing an id does not make it the same fast-forward: a replaced target must be reported
+	// rather than silently waited on.
+	t.Run("same id with a different target fails as replaced", func(t *testing.T) {
+		replaced := fastForwardTSI(testFastForwardID, false)
+		replaced.FastForwardInfo.TargetTime = timestamppb.New(testFastForwardTarget.Add(time.Hour))
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
+		ch <- &notification.TimeSkippingFastForwardNotification{TimeSkippingInfo: replaced}
+		ffinfo, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
-		require.Equal(t, workflowEnd, result)
+		require.Equal(t, failed, result)
+		require.Equal(t, failedReasonReset, reason)
+		require.Equal(t, testFastForwardID, ffinfo.GetFastForwardId())
 	})
 
-	t.Run("time skipping disabled notification returns disabled", func(t *testing.T) {
-		disabled := enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_TIME_SKIPPING_DISABLED_BEFORE_FAST_FORWARD_COMPLETION
-		ch := make(chan *notification.TimeSkippingNotification, 1)
-		ch <- &notification.TimeSkippingNotification{TimeSkippingInfo: disabledTSI(testFastForwardID)}
-		_, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+	// Completion preserves the target, so the target check must not swallow the caller's own
+	// completion — the arm ordering is what guarantees that.
+	t.Run("completion with the caller's target still returns completed", func(t *testing.T) {
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
+		ch <- tsiNotif(testFastForwardID, true, false)
+		ffinfo, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
-		require.Equal(t, disabled, result)
+		require.Equal(t, completed, result)
+		require.Empty(t, reason, "a successful outcome must not carry a failure reason")
+		require.True(t, ffinfo.GetHasCompleted())
+	})
+
+	t.Run("closed run fails because the execution ended", func(t *testing.T) {
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
+		ch <- tsiNotif(testFastForwardID, false, true)
+		_, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		require.NoError(t, err)
+		require.Equal(t, failed, result)
+		require.Equal(t, failedReasonExecutionEnded, reason)
+	})
+
+	t.Run("time skipping disabled fails with the disabled reason", func(t *testing.T) {
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
+		ch <- &notification.TimeSkippingFastForwardNotification{TimeSkippingInfo: disabledTSI(testFastForwardID)}
+		_, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		require.NoError(t, err)
+		require.Equal(t, failed, result)
+		require.Equal(t, failedReasonTimeSkippingDisabled, reason)
+	})
+
+	// The switch arms are mutually reachable, so these pin the precedence rather than the
+	// individual outcomes: each notification below satisfies more than one arm.
+	t.Run("mismatched id wins over both completions", func(t *testing.T) {
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
+		ch <- tsiNotif("new-id", true, true)
+		ffinfo, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		require.NoError(t, err)
+		require.Equal(t, failed, result)
+		require.Equal(t, failedReasonIDMismatch, reason)
+		require.Equal(t, "new-id", ffinfo.GetFastForwardId())
+	})
+
+	t.Run("fast-forward completion wins over workflow completion", func(t *testing.T) {
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
+		ch <- tsiNotif(testFastForwardID, true, true)
+		ffinfo, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		require.NoError(t, err)
+		require.Equal(t, completed, result)
+		require.Empty(t, reason, "a successful outcome must not carry a failure reason")
+		require.True(t, ffinfo.GetHasCompleted())
+	})
+
+	t.Run("workflow completion wins over time skipping disabled", func(t *testing.T) {
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
+		ch <- &notification.TimeSkippingFastForwardNotification{
+			TimeSkippingInfo:           disabledTSI(testFastForwardID),
+			WorkflowExecutionCompleted: true,
+		}
+		_, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		require.NoError(t, err)
+		require.Equal(t, failed, result)
+		require.Equal(t, failedReasonExecutionEnded, reason)
 	})
 
 	t.Run("no-op wake keeps waiting until a meaningful change", func(t *testing.T) {
-		ch := make(chan *notification.TimeSkippingNotification, 2)
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 2)
 		// same id, not completed, not closed => no meaningful change, must keep waiting.
 		ch <- tsiNotif(testFastForwardID, false, false)
 		ch <- tsiNotif(testFastForwardID, true, false)
-		_, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		_, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
 		require.Equal(t, completed, result)
+		require.Empty(t, reason)
+	})
+
+	// Delivery permits a nil payload, so this must not depend on the switch order to stay safe.
+	t.Run("nil notification fails with an id mismatch without panicking", func(t *testing.T) {
+		ch := make(chan *notification.TimeSkippingFastForwardNotification, 1)
+		ch <- nil
+		var result enumspb.FastForwardPollingResult
+		var reason string
+		var err error
+		require.NotPanics(t, func() {
+			_, result, reason, err = waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		})
+		require.NoError(t, err)
+		require.Equal(t, failed, result)
+		require.Equal(t, failedReasonIDMismatch, reason)
 	})
 
 	t.Run("closed channel returns an internal error", func(t *testing.T) {
-		ch := make(chan *notification.TimeSkippingNotification)
+		ch := make(chan *notification.TimeSkippingFastForwardNotification)
 		close(ch)
-		_, _, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
+		_, _, _, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		var internalErr *serviceerror.Internal
 		require.ErrorAs(t, err, &internalErr)
 	})
 
 	t.Run("shard move wakes the poll before the soft timeout", func(t *testing.T) {
-		ch := make(chan *notification.TimeSkippingNotification)
+		ch := make(chan *notification.TimeSkippingFastForwardNotification)
 		shardCtx, cancelShard := context.WithCancel(context.Background())
 		cancelShard() // shard already moved/closed
 		// Long soft timeout: if the shard-lifecycle case were missing, this would block for a minute.
-		ffinfo, result, err := waitFastForwardNotification(context.Background(), shardCtx, ch, time.Minute, testFastForwardID, pending)
+		ffinfo, result, reason, err := waitFastForwardNotification(context.Background(), shardCtx, ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
 		require.Equal(t, pollTimeout, result)
+		require.Empty(t, reason)
 		require.Same(t, pending, ffinfo)
 	})
 
 	t.Run("timeout returns the pending info unchanged", func(t *testing.T) {
-		ch := make(chan *notification.TimeSkippingNotification)
-		ffinfo, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, 20*time.Millisecond, testFastForwardID, pending)
+		ch := make(chan *notification.TimeSkippingFastForwardNotification)
+		ffinfo, result, reason, err := waitFastForwardNotification(context.Background(), context.Background(), ch, 20*time.Millisecond, testFastForwardID, pending)
 		require.NoError(t, err)
 		require.Equal(t, pollTimeout, result)
+		require.Empty(t, reason)
 		require.Same(t, pending, ffinfo)
 	})
 
 	t.Run("caller context cancellation is propagated as an error, not a poll-timeout", func(t *testing.T) {
-		ch := make(chan *notification.TimeSkippingNotification)
+		ch := make(chan *notification.TimeSkippingFastForwardNotification)
 		callerCtx, cancelCaller := context.WithCancel(context.Background())
 		cancelCaller() // client disconnected / deadline exceeded
 		// Long soft timeout so the only thing that fires is the caller's cancelled context.
-		_, _, err := waitFastForwardNotification(callerCtx, context.Background(), ch, time.Minute, testFastForwardID, pending)
+		_, _, _, err := waitFastForwardNotification(callerCtx, context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.ErrorIs(t, err, context.Canceled)
 	})
 }

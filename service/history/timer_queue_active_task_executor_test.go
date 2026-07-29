@@ -2419,10 +2419,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 			FastForwardInfo: &persistencespb.FastForwardInfo{
 				TargetTime: target,
 				HasReached: hasReached,
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: version,
-					TransitionCount:          transitionCount,
-				},
+			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: version,
+				TransitionCount:          transitionCount,
 			},
 		}
 	}
@@ -2452,11 +2452,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 		{
 			name: "ConfigDisabled",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &commonpb.TimeSkippingConfig{Enabled: false},
-				FastForwardInfo: &persistencespb.FastForwardInfo{
-					TargetTime:                    target,
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
-				},
+				Config:          &commonpb.TimeSkippingConfig{Enabled: false},
+				FastForwardInfo: &persistencespb.FastForwardInfo{TargetTime: target},
+				FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 			},
 			taskVersion:         s.version,
 			taskTransitionCount: 1,

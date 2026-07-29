@@ -503,7 +503,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	NotifyOnExecutionSnapshot(engine, newWorkflow)
+	NotifyOnExecutionSnapshot(engine, c.archetypeID, newWorkflow)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
 
 	return nil

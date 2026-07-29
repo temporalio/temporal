@@ -10354,7 +10354,7 @@ func (x *PollWorkflowExecutionTimeSkippingRequest) GetRequest() *v1.PollWorkflow
 
 type PollWorkflowExecutionTimeSkippingResponse struct {
 	state         protoimpl.MessageState                        `protogen:"open.v1"`
-	Response      *v1.PollWorkflowExecutionTimeSkippingResponse `protobuf:"bytes,2,opt,name=response,proto3" json:"response,omitempty"`
+	Response      *v1.PollWorkflowExecutionTimeSkippingResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11476,7 +11476,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
 	"\arequest\x18\x02 \x01(\v2I.temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingRequestR\arequest:,\x92\xc4\x03(*&request.workflow_execution.workflow_id\"\x93\x01\n" +
 	")PollWorkflowExecutionTimeSkippingResponse\x12f\n" +
-	"\bresponse\x18\x02 \x01(\v2J.temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponseR\bresponse:t\n" +
+	"\bresponse\x18\x01 \x01(\v2J.temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponseR\bresponse:t\n" +
 	"\arouting\x12\x1f.google.protobuf.MessageOptions\x18\xc28 \x01(\v25.temporal.server.api.historyservice.v1.RoutingOptionsR\arouting\x88\x01\x01B<Z:go.temporal.io/server/api/historyservice/v1;historyserviceb\x06proto3"
 
 var (

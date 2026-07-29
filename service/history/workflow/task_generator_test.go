@@ -1497,10 +1497,10 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)}},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
-					TargetTime:                    timestamppb.New(fastForwardTarget),
-					LastUpdateVersionedTransition: fastForwardVT,
-					HasReached:                    false,
+					TargetTime: timestamppb.New(fastForwardTarget),
+					HasReached: false,
 				},
+				FastForwardInfoLastUpdateVersionedTransition: fastForwardVT,
 			},
 			wantFastForwardTask: &wantTask{visibilityTimestamp: fastForwardTarget, versionedTransition: fastForwardVT},
 		},
@@ -1512,10 +1512,10 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)}},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
-					TargetTime:                    timestamppb.New(fastForwardTarget),
-					LastUpdateVersionedTransition: fastForwardVT,
-					HasReached:                    true,
+					TargetTime: timestamppb.New(fastForwardTarget),
+					HasReached: true,
 				},
+				FastForwardInfoLastUpdateVersionedTransition: fastForwardVT,
 			},
 		},
 		{
@@ -1526,10 +1526,10 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)}},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
-					TargetTime:                    timestamppb.New(fastForwardTarget),
-					LastUpdateVersionedTransition: fastForwardVT,
-					HasReached:                    false,
+					TargetTime: timestamppb.New(fastForwardTarget),
+					HasReached: false,
 				},
+				FastForwardInfoLastUpdateVersionedTransition: fastForwardVT,
 			},
 		},
 		{
@@ -1871,10 +1871,10 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:                    timestamppb.New(now.Add(2 * time.Hour)),
-				LastUpdateVersionedTransition: ffVersionedTransition,
-				HasReached:                    false,
+				TargetTime: timestamppb.New(now.Add(2 * time.Hour)),
+				HasReached: false,
 			},
+			FastForwardInfoLastUpdateVersionedTransition: ffVersionedTransition,
 		},
 	}).AnyTimes()
 	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{

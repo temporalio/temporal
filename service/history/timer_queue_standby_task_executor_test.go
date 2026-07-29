@@ -2503,9 +2503,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)},
 			},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:                    timestamppb.New(s.now.Add(time.Hour)),
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
+				TargetTime: timestamppb.New(s.now.Add(time.Hour)),
 			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 		}
 		return pms, workflowKey
 	}

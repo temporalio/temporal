@@ -428,7 +428,7 @@ func (mr *MockEngineMockRecorder) NotifyChasmExecution(executionKey, componentRe
 }
 
 // NotifyFastForwardUpdate mocks base method.
-func (m *MockEngine) NotifyFastForwardUpdate(key definition.WorkflowKey, fastforwardNotification *notification.TimeSkippingNotification) {
+func (m *MockEngine) NotifyFastForwardUpdate(key notification.TimeSkippingNotificationKey, fastforwardNotification *notification.TimeSkippingFastForwardNotification) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyFastForwardUpdate", key, fastforwardNotification)
 }

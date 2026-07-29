@@ -3798,7 +3798,7 @@ func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
 
 		want := &workflowservice.PollWorkflowExecutionTimeSkippingResponse{
-			FastForwardPollingResult: enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_COMPLETED,
+			FastForwardPollingResult: enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED,
 			FastForwardInfo: &commonpb.TimeSkippingFastForwardInfo{
 				FastForwardId: "ff-id",
 				HasCompleted:  true,
