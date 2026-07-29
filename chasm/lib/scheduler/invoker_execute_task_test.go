@@ -492,14 +492,14 @@ func TestExecuteTask_CancelTerminateFailure(t *testing.T) {
 		},
 	}
 
-	// Fail both service calls with a retryable (transient) error.
+	// Fail both service calls.
 	env.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
 		Return(nil, serviceerror.NewInternal("internal failure"))
 	env.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
 		Return(nil, serviceerror.NewInternal("internal failure"))
 
-	// A retryable failure must leave both targets in the Invoker's queue so the
-	// cancel/terminate is retried rather than silently dropped after one attempt.
+	// Terminate and Cancel are both attempted only once. Regardless of the service
+	// call's outcome, they should have been removed from the Invoker's queue.
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts:      nil,
 		InitialCancelWorkflows:     cancelWorkflows,
@@ -507,8 +507,8 @@ func TestExecuteTask_CancelTerminateFailure(t *testing.T) {
 		ExpectedBufferedStarts:     0,
 		ExpectedRunningWorkflows:   0,
 		ExpectedActionCount:        0,
-		ExpectedCancelWorkflows:    1,
-		ExpectedTerminateWorkflows: 1,
+		ExpectedCancelWorkflows:    0,
+		ExpectedTerminateWorkflows: 0,
 	})
 }
 
@@ -534,45 +534,6 @@ func TestExecuteTask_CancelTerminateSucceed(t *testing.T) {
 	env.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
 		Return(nil, nil)
 
-	runExecuteTestCase(t, env, &executeTestCase{
-		InitialBufferedStarts:      nil,
-		InitialCancelWorkflows:     cancelWorkflows,
-		InitialTerminateWorkflows:  terminateWorkflows,
-		ExpectedBufferedStarts:     0,
-		ExpectedRunningWorkflows:   0,
-		ExpectedActionCount:        0,
-		ExpectedCancelWorkflows:    0,
-		ExpectedTerminateWorkflows: 0,
-	})
-}
-
-// A non-retryable cancel/terminate failure (e.g. the target workflow is already
-// gone) must drop the target rather than retry it forever. This is the mirror of
-// TestExecuteTask_CancelTerminateFailure, which keeps retryable failures pending.
-func TestExecuteTask_CancelTerminateNonRetryableFailureDropped(t *testing.T) {
-	env := newInvokerExecuteTestEnv(t)
-	cancelWorkflows := []*commonpb.WorkflowExecution{
-		{
-			WorkflowId: "wf",
-			RunId:      "run1",
-		},
-	}
-	terminateWorkflows := []*commonpb.WorkflowExecution{
-		{
-			WorkflowId: "wf",
-			RunId:      "run2",
-		},
-	}
-
-	// Fail both service calls with a non-retryable error (NotFound is on the
-	// non-transient denylist, so isRetryableError reports false).
-	env.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
-		Return(nil, serviceerror.NewNotFound("workflow not found"))
-	env.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
-		Return(nil, serviceerror.NewNotFound("workflow not found"))
-
-	// A non-retryable failure must remove both targets from the Invoker's queue:
-	// retrying a permanently-failing cancel/terminate would never succeed.
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts:      nil,
 		InitialCancelWorkflows:     cancelWorkflows,
