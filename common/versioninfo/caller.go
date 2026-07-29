@@ -9,7 +9,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 )
+
+// The version check has no other cancellation: a server that accepts the request
+// but withholds a response would otherwise strand the transport's goroutines for
+// as long as the connection stays open.
+const callTimeout = 30 * time.Second
 
 type Caller struct {
 	Scheme string
@@ -33,7 +39,7 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	if c.Scheme == "https" {
 		tr.TLSClientConfig = &tls.Config{}
 	}
-	client := &http.Client{Transport: tr}
+	client := &http.Client{Transport: tr, Timeout: callTimeout}
 	reqBody, err := json.Marshal(r)
 	if err != nil {
 		return nil, err
