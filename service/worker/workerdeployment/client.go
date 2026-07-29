@@ -861,7 +861,6 @@ func (d *ClientImpl) SetCurrentVersion(
 			return nil, serviceerror.NewInvalidArgument("Build ID cannot be empty when AllowNoPollers is set to true")
 		}
 
-		// Empty build id is accepted for unset
 		err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
 		if err != nil {
 			return nil, err
@@ -984,7 +983,6 @@ func (d *ClientImpl) SetRampingVersion(
 			return nil, serviceerror.NewInvalidArgument("Build ID cannot be empty when AllowNoPollers is set to true")
 		}
 
-		// Empty build id is accepted for unset.
 		err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
 		if err != nil {
 			return nil, err
