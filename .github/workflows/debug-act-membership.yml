@@ -1,0 +1,44 @@
+# TEMPORARY debug workflow: reproduce the app-token team-membership check that
+# claude-review-teams.yml performs, dumping the raw API response for each user.
+# Delete this workflow and its branch once the discrepancy is understood.
+name: DEBUG act membership
+
+on:
+  push:
+    branches: [debug/act-membership]
+
+jobs:
+  debug:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Generate app token
+        id: generate_token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.TEMPORAL_AI_REVIEW_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_AI_REVIEW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-members: read
+      - name: Probe team memberships
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+        run: |
+          set -uo pipefail
+          for team in nexus act; do
+            for user in dandavison fretz12; do
+              echo "=================================================="
+              echo "GET /orgs/temporalio/teams/${team}/memberships/${user}"
+              gh api -i -H "Accept: application/vnd.github+json" \
+                "/orgs/temporalio/teams/${team}/memberships/${user}" 2>&1 \
+                | grep -Ei '^HTTP|^x-accepted|state|role|message' || true
+            done
+          done
+          echo "=================================================="
+          echo "Org membership (control - known to work):"
+          for user in dandavison fretz12; do
+            echo "GET /orgs/temporalio/memberships/${user}"
+            gh api -i "/orgs/temporalio/memberships/${user}" 2>&1 \
+              | grep -Ei '^HTTP|state|role|message' || true
+          done
