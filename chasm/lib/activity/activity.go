@@ -1838,14 +1838,15 @@ func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.Callb
 			Trigger: &apiactivitypb.CallbackInfo_Trigger{
 				Variant: &apiactivitypb.CallbackInfo_Trigger_ActivityClosed{},
 			},
+			// This outlives the CHASM transaction, so clone every proto sourced from the persisted state.
 			Info: &callbackpb.CallbackInfo{
 				Callback:                cbSpec,
-				RegistrationTime:        cb.RegistrationTime,
+				RegistrationTime:        common.CloneProto(cb.RegistrationTime),
 				State:                   state,
 				Attempt:                 cb.Attempt,
-				LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
-				LastAttemptFailure:      cb.LastAttemptFailure,
-				NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
+				LastAttemptCompleteTime: common.CloneProto(cb.LastAttemptCompleteTime),
+				LastAttemptFailure:      common.CloneProto(cb.LastAttemptFailure),
+				NextAttemptScheduleTime: common.CloneProto(cb.NextAttemptScheduleTime),
 				Outcome:                 cb.Outcome(ctx),
 			},
 		})

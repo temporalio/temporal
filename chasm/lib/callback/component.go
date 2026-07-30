@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -33,8 +34,7 @@ type Callback struct {
 	// Persisted internal state
 	*callbackspb.CallbackState
 	// The failure that terminated the callback. May differ from LastAttemptFailure when the callback
-	// fails for a reason other than a delivery attempt, such as a timeout. No such reasons exist
-	// yet, so today it always matches LastAttemptFailure when the callback is in a terminal state.
+	// fails for a reason other than a delivery attempt, such as a timeout.
 	TerminalFailure chasm.Field[*failurepb.Failure]
 
 	// Interface to retrieve Nexus operation completion data
@@ -151,6 +151,7 @@ func (c *Callback) saveResult(
 }
 
 // Outcome returns the callback's outcome, or nil if the Callback isn't in a terminal state.
+// The returned proto is a copy, safe to use after the CHASM context closes.
 func (c *Callback) Outcome(ctx chasm.Context) *callbackpb.CallbackOutcome {
 	switch c.Status {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
@@ -164,11 +165,14 @@ func (c *Callback) Outcome(ctx chasm.Context) *callbackpb.CallbackOutcome {
 		if !ok {
 			// TerminalFailure will not be present on Callbacks which failed before the field was added
 			// to the CHASM component. So fallback to including the LastAttemptFailure.
+			//
+			// This is still accurate, since we didn't have any way a callback could fail outside of
+			// the callback's invocation failure before we added the TerminalFailure field.
 			failure = c.LastAttemptFailure
 		}
 		return &callbackpb.CallbackOutcome{
 			Value: &callbackpb.CallbackOutcome_Failure{
-				Failure: failure,
+				Failure: common.CloneProto(failure),
 			},
 		}
 	default:

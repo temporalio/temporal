@@ -16,11 +16,14 @@ func TestOutcome(t *testing.T) {
 	lastAttemptFailure := &failurepb.Failure{Message: "last attempt"}
 
 	cases := []struct {
-		name   string
-		status callbackspb.CallbackStatus
-		// Set the Callback's state before Outcome is called.
-		initCallback func(*chasm.MockMutableContext, *Callback)
-		expected     *callbackpb.CallbackOutcome
+		name string
+
+		// Callback state to set.
+		status             callbackspb.CallbackStatus
+		lastAttemptFailure *failurepb.Failure
+		terminalFailure    *failurepb.Failure
+
+		want *callbackpb.CallbackOutcome
 	}{
 		{
 			name:   "unspecified is non-terminal",
@@ -35,38 +38,32 @@ func TestOutcome(t *testing.T) {
 			status: callbackspb.CALLBACK_STATUS_SCHEDULED,
 		},
 		{
-			name:   "backing off is non-terminal, even with a last attempt failure",
-			status: callbackspb.CALLBACK_STATUS_BACKING_OFF,
-			initCallback: func(_ *chasm.MockMutableContext, cb *Callback) {
-				cb.LastAttemptFailure = lastAttemptFailure
-			},
+			name:               "backing off is non-terminal, even with a last attempt failure",
+			status:             callbackspb.CALLBACK_STATUS_BACKING_OFF,
+			lastAttemptFailure: lastAttemptFailure,
 		},
 		{
 			name:   "succeeded",
 			status: callbackspb.CALLBACK_STATUS_SUCCEEDED,
-			expected: &callbackpb.CallbackOutcome{
+			want: &callbackpb.CallbackOutcome{
 				Value: &callbackpb.CallbackOutcome_Success{Success: &emptypb.Empty{}},
 			},
 		},
 		{
-			name:   "failed reports the terminal failure",
-			status: callbackspb.CALLBACK_STATUS_FAILED,
-			initCallback: func(mctx *chasm.MockMutableContext, cb *Callback) {
-				cb.LastAttemptFailure = lastAttemptFailure
-				cb.TerminalFailure = chasm.NewDataField(mctx, terminalFailure)
-			},
-			expected: &callbackpb.CallbackOutcome{
+			name:               "failed reports the terminal failure",
+			status:             callbackspb.CALLBACK_STATUS_FAILED,
+			lastAttemptFailure: lastAttemptFailure,
+			terminalFailure:    terminalFailure,
+			want: &callbackpb.CallbackOutcome{
 				Value: &callbackpb.CallbackOutcome_Failure{Failure: terminalFailure},
 			},
 		},
 		{
-			name:   "failed falls back to the last attempt failure when TerminalFailure is unset",
-			status: callbackspb.CALLBACK_STATUS_FAILED,
-			initCallback: func(_ *chasm.MockMutableContext, cb *Callback) {
-				// Mimics a callback persisted before TerminalFailure was introduced.
-				cb.LastAttemptFailure = lastAttemptFailure
-			},
-			expected: &callbackpb.CallbackOutcome{
+			name:               "failed falls back to the last attempt failure when TerminalFailure is unset",
+			status:             callbackspb.CALLBACK_STATUS_FAILED,
+			lastAttemptFailure: lastAttemptFailure,
+			terminalFailure:    nil,
+			want: &callbackpb.CallbackOutcome{
 				Value: &callbackpb.CallbackOutcome_Failure{Failure: lastAttemptFailure},
 			},
 		},
@@ -75,12 +72,17 @@ func TestOutcome(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			mctx := &chasm.MockMutableContext{}
-			cb := &Callback{CallbackState: &callbackspb.CallbackState{}}
-			cb.SetStateMachineState(tc.status)
-			if tc.initCallback != nil {
-				tc.initCallback(mctx, cb)
+			cb := &Callback{
+				CallbackState: &callbackspb.CallbackState{
+					LastAttemptFailure: tc.lastAttemptFailure,
+				},
 			}
-			protorequire.ProtoEqual(t, tc.expected, cb.Outcome(mctx))
+			cb.SetStateMachineState(tc.status)
+			if tc.terminalFailure != nil {
+				cb.TerminalFailure = chasm.NewDataField(mctx, tc.terminalFailure)
+			}
+
+			protorequire.ProtoEqual(t, tc.want, cb.Outcome(mctx))
 		})
 	}
 }
