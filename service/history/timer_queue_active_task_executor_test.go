@@ -11,6 +11,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -2554,6 +2555,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 		expectRetryActivity          bool
 		retryState                   enumspb.RetryState
 		retryError                   error
+		clearStartedStateOnRetry     bool
 		expectAddTimedTask           bool
 		expectedUpdateMutableState   bool
 		expectedScheduleWorkflowTask bool
@@ -2586,7 +2588,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 		{
 			name: "Retry State Timeout",
 			timerSequenceID: workflow.TimerSequenceID{
-				Attempt: 1,
+				Attempt:   1,
+				TimerType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 			},
 			ai: &persistencespb.ActivityInfo{
 				Attempt: 1,
@@ -2606,17 +2609,26 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 		{
 			name: "Retry State In Progress",
 			timerSequenceID: workflow.TimerSequenceID{
-				Attempt: 1,
+				Attempt:   1,
+				TimerType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			},
 			ai: &persistencespb.ActivityInfo{
-				Attempt: 1,
+				Attempt:        1,
+				StartedEventId: common.TransientEventID,
+				LastDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "deployment",
+					BuildId:        "build-id",
+				},
 			},
 			expectRetryActivity:          true,
 			retryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
 			retryError:                   nil,
+			clearStartedStateOnRetry:     true,
 			expectAddTimedTask:           false,
 			expectedUpdateMutableState:   true,
 			expectedScheduleWorkflowTask: false,
+			expectedDeploymentName:       "deployment",
+			expectedBuildID:              "build-id",
 		},
 		{
 			name: "Attempt dont match",
@@ -2643,7 +2655,13 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask
 			s.mockShard.SetMetricsHandler(handler)
 
 			if tc.expectRetryActivity {
-				ms.EXPECT().RetryActivity(gomock.Any(), gomock.Any()).Return(tc.retryState, tc.retryError)
+				retryCall := ms.EXPECT().RetryActivity(gomock.Any(), gomock.Any())
+				if tc.clearStartedStateOnRetry {
+					retryCall.Do(func(ai *persistencespb.ActivityInfo, _ *failurepb.Failure) {
+						workflow.ClearActivityStartedState(ai)
+					})
+				}
+				retryCall.Return(tc.retryState, tc.retryError)
 				ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "test-workflow-type"}).AnyTimes()
 			}
 

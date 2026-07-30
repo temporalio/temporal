@@ -305,13 +305,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 
 	failureMsg := fmt.Sprintf(common.FailureReasonActivityTimeout, timerSequenceID.TimerType.String())
 	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
-	var deploymentVersion *deploymentspb.WorkerDeploymentVersion
-	if ai.GetStartedEventId() != common.EmptyEventID && ai.GetLastDeploymentVersion() != nil {
-		deploymentVersion = &deploymentspb.WorkerDeploymentVersion{
-			DeploymentName: ai.GetLastDeploymentVersion().GetDeploymentName(),
-			BuildId:        ai.GetLastDeploymentVersion().GetBuildId(),
-		}
-	}
+	activityAttemptStarted := ai.GetStartedEventId() != common.EmptyEventID
 	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
 	if err != nil {
 		return result, nil
@@ -328,6 +322,13 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		)
 	}
 
+	var deploymentVersion *deploymentspb.WorkerDeploymentVersion
+	if activityAttemptStarted && ai.GetLastDeploymentVersion() != nil {
+		deploymentVersion = &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: ai.GetLastDeploymentVersion().GetDeploymentName(),
+			BuildId:        ai.GetLastDeploymentVersion().GetBuildId(),
+		}
+	}
 	workflow.RecordActivityCompletionMetrics(
 		t.shardContext,
 		mutableState.GetNamespaceEntry().Name(),
