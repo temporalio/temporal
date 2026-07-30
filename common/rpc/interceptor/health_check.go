@@ -45,6 +45,7 @@ type (
 		LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool)
 		ErrorRatio() (float64, bool)
 		ErrorRatioByGroup(groupName string) (float64, bool)
+		Stop()
 	}
 
 	// HealthSignalAggregatorImpl implements HealthSignalAggregator
@@ -178,7 +179,7 @@ func NewHealthSignalAggregator(
 	maxBufferSize int,
 ) *healthSignalAggregatorImpl {
 	signals := health.NewSignalAggregator(logger, getSettings, health.WithIsUnhealthy(isUnhealthyError))
-	signals.Start() // TODO: we will Stop() once we hook this up to fx
+	signals.Start()
 
 	return &healthSignalAggregatorImpl{
 		logger:             logger,
@@ -258,6 +259,11 @@ func (s *healthSignalAggregatorImpl) ErrorRatioByGroup(groupName string) (float6
 	}
 
 	return s.signals.ErrorRatioByGroup(groupName)
+}
+
+// Stop halts the underlying signal aggregator's settings refresh loop.
+func (s *healthSignalAggregatorImpl) Stop() {
+	s.signals.Stop()
 }
 
 func isUnhealthyError(err error) bool {

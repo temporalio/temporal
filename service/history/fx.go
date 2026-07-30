@@ -291,10 +291,11 @@ func TelemetryInterceptorProvider(
 }
 
 func HealthSignalAggregatorProvider(
+	lc fx.Lifecycle,
 	dynamicCollection *dynamicconfig.Collection,
 	logger log.ThrottledLogger,
 ) interceptor.HealthSignalAggregator {
-	return interceptor.NewHealthSignalAggregator(
+	aggregator := interceptor.NewHealthSignalAggregator(
 		logger,
 		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
 		dynamicconfig.HistoryHealthSignalUsePercentiles.Get(dynamicCollection),
@@ -302,6 +303,9 @@ func HealthSignalAggregatorProvider(
 		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
 	)
+	lc.Append(fx.StopHook(aggregator.Stop))
+
+	return aggregator
 }
 
 func HealthCheckInterceptorProvider(
