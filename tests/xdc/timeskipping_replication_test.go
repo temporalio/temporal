@@ -208,8 +208,8 @@ func (s *timeSkippingReplicationSuite) TestFastForwardDisablePropagates() {
 	)
 	runID := s.startSkippingWorkflow(ctx, ns, wfID, tq, 24*time.Hour, 0,
 		&commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(fastForward),
+			Enabled:           true,
+			FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"},
 		},
 	)
 
@@ -289,8 +289,8 @@ func (s *timeSkippingReplicationSuite) TestStandbyTimeSkippingTimerTaskAcksOnRea
 	const fastForward = 30 * time.Minute
 	runID := s.startSkippingWorkflow(ctx, ns, wfID, tq, 24*time.Hour, 0,
 		&commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(fastForward),
+			Enabled:           true,
+			FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"},
 		},
 	)
 

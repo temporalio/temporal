@@ -39,7 +39,6 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.wrapExecutionTimes(initialSkip)
 	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
-
 	ms.timeSkippingInfoUpdated = true
 }
 
@@ -64,9 +63,9 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 	tsc := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
 	tsi := ms.executionInfo.TimeSkippingInfo
 
-	if !tsc.GetEnabled() || tsc.GetFastForward().AsDuration() <= 0 {
+	if !tsc.GetEnabled() || tsc.GetFastForwardConfig().GetDuration().AsDuration() <= 0 {
 		if tsi.FastForwardInfo != nil {
-			tsi.FastForwardInfo = nil
+			ms.setAndStampFastForwardInfo(nil)
 		}
 		return
 	}
@@ -77,25 +76,33 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 	} else {
 		// if there is no propagated target time,
 		// fast-forward refers to a new duration from now.
-		targetTime = ms.Now().Add(tsc.GetFastForward().AsDuration())
+		targetTime = ms.Now().Add(tsc.GetFastForwardConfig().GetDuration().AsDuration())
 	}
 
-	currentVersionedTransition := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: ms.GetCurrentVersion(),
-		TransitionCount:          ms.NextTransitionCount(),
-	}
-
-	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
-		TargetTime:                    timestamppb.New(targetTime),
-		HasReached:                    false,
-		LastUpdateVersionedTransition: currentVersionedTransition,
-	}
+	ffVersionedTransition := ms.setAndStampFastForwardInfo(&persistencespb.FastForwardInfo{
+		TargetTime: timestamppb.New(targetTime),
+		HasReached: false,
+	})
 	ms.AddTasks(&tasks.TimeSkippingTimerTask{
 		WorkflowKey:         ms.GetWorkflowKey(),
 		VisibilityTimestamp: targetTime,
-		VersionedTransition: currentVersionedTransition,
+		VersionedTransition: ffVersionedTransition,
 		ArchetypeID:         ms.ChasmTree().ArchetypeID(),
 	})
+}
+
+// setAndStampFastForwardInfo sets the fast-forward info and stamps it with the current transaction's versioned transition.
+// Nothing else may write these two fields; routing every update through here is what keeps them in lockstep.
+func (ms *MutableStateImpl) setAndStampFastForwardInfo(
+	ffInfo *persistencespb.FastForwardInfo,
+) *persistencespb.VersionedTransition {
+	tsi := ms.executionInfo.TimeSkippingInfo
+	tsi.FastForwardInfo = ffInfo
+	tsi.FastForwardInfoLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: ms.GetCurrentVersion(),
+		TransitionCount:          ms.NextTransitionCount(),
+	}
+	return tsi.FastForwardInfoLastUpdateVersionedTransition
 }
 
 func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationpb.Duration) {
@@ -193,8 +200,8 @@ func propagateTimeSkippingToChild(
 
 	// propagate both config and state
 	return &commonpb.TimeSkippingConfig{
-		Enabled:           true,
-		MaxSkipPerSession: tsc.GetMaxSkipPerSession(),
+		Enabled:             true,
+		MaxSessionSkipCount: tsc.GetMaxSessionSkipCount(),
 	}, stateProp
 }
 
@@ -323,8 +330,25 @@ func (util *TimeSkippingInfoUtil) ToDescribeInfo(currentTime time.Time) *commonp
 		return nil
 	}
 	return &commonpb.TimeSkippingInfo{
-		CurrentTime: timestamppb.New(currentTime),
-		IsRunning:   util.IsEnabled(),
+		CurrentTime:     timestamppb.New(currentTime),
+		EffectiveConfig: common.CloneProto(util.tsi.GetConfig()),
+	}
+}
+
+func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFastForwardInfo {
+	if util == nil || util.tsi == nil {
+		return nil
+	}
+	ff := util.tsi.GetFastForwardInfo()
+	if ff == nil {
+		return nil
+	}
+	config := util.tsi.GetConfig()
+	return &commonpb.TimeSkippingFastForwardInfo{
+		TargetTime:          ff.GetTargetTime(),
+		HasCompleted:        ff.GetHasReached(),
+		FastForwardId:       config.GetFastForwardConfig().GetId(),
+		FastForwardDuration: config.GetFastForwardConfig().GetDuration(),
 	}
 }
 
@@ -532,12 +556,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	}
 	// update enabled state
 	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
-		tsi.GetFastForwardInfo().HasReached = true
+		reachedFFInfo := tsi.GetFastForwardInfo()
+		reachedFFInfo.HasReached = true
+		ms.setAndStampFastForwardInfo(reachedFFInfo)
 		tsi.Config.Enabled = false
 	}
 	// update skip
 	tsi.SessionSkipCount += 1
-	if tsi.SessionSkipCount >= tsi.Config.GetMaxSkipPerSession() && tsi.Config.Enabled {
+	if tsi.SessionSkipCount >= tsi.Config.GetMaxSessionSkipCount() && tsi.Config.Enabled {
 		tsi.Config.Enabled = false
 	}
 

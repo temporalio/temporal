@@ -334,6 +334,7 @@ message TimeSkippingInfo {
 
   // The current fast-forward info for time skipping.
   FastForwardInfo fast_forward_info = 4;
+  VersionedTransition fast_forward_info_last_update_versioned_transition = 7;
 
   // Versioned transition at which this TimeSkippingInfo was last modified (i.e. when a
   // skip transition changed accumulated_skipped_duration or a request updated the config.)
@@ -345,16 +346,14 @@ message TimeSkippingInfo {
 }
 
 message FastForwardInfo {
-  reserved 3;
-  reserved "source_event_id";
+  reserved 3, 4;
+  reserved "source_event_id", "last_update_versioned_transition";
 
   // Target time for the fast-forward, expressed in virtual time.
   google.protobuf.Timestamp target_time = 1;
 
   // Indicates whether this fast-forward has already been reached, used for idempotency checks.
   bool has_reached = 2;
-
-  VersionedTransition last_update_versioned_transition = 4;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from

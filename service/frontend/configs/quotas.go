@@ -36,11 +36,12 @@ var (
 	// they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		// These methods here are long-running because they block until there is a task available.
-		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":             1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":             1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionTimeSkipping": 1,
 
 		// Long-running if activity outcome is not already available
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
