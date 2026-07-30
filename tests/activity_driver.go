@@ -275,23 +275,26 @@ func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event) {
 // does not within (window + margin).
 func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadline time.Time) {
 	state := a.driverState()
-	eventTimeoutType := timeoutType(e)
-	var reported activityTimeoutInfo
 	await.Require(state.ctx, t, func(t *await.T) {
-		reported = a.timeoutInfo(t)
-		// A terminal attempt timeout is reported as schedule-to-close when there is not enough
-		// time remaining to schedule another attempt.
-		attemptTimeoutReportedAsScheduleToClose := reported.terminal &&
-			reported.timeout == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE &&
-			(eventTimeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-				eventTimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT)
-		timeoutEventObserved := reported.timeout == eventTimeoutType ||
-			attemptTimeoutReportedAsScheduleToClose
-		attemptEnded := reported.terminal || reported.attempt > state.startedAttempt
-		t.Require().Truef(timeoutEventObserved && attemptEnded,
+		got := a.timeoutInfo(t)
+		t.Require().Truef(got.reportsTimeout(e, state.startedAttempt),
 			"%s: activity reports timeout %s at attempt %d (terminal=%v) after timeout event %s on attempt %d",
-			e, reported.timeout, reported.attempt, reported.terminal, eventTimeoutType, state.startedAttempt)
+			e, got.timeout, got.attempt, got.terminal, timeoutType(e), state.startedAttempt)
 	}, max(0, time.Until(deadline)), activityDriverPollInterval)
+}
+
+func (i activityTimeoutInfo) reportsTimeout(e model.Event, startedAttempt int32) bool {
+	if !i.terminal && i.attempt <= startedAttempt {
+		return false
+	}
+	want := timeoutType(e)
+	if i.timeout == want {
+		return true
+	}
+	// A terminal attempt timeout is reported as schedule-to-close when no retry fits before that deadline.
+	return i.terminal &&
+		i.timeout == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE &&
+		(want == enumspb.TIMEOUT_TYPE_START_TO_CLOSE || want == enumspb.TIMEOUT_TYPE_HEARTBEAT)
 }
 
 // awaitActivityDispatchDelay waits until the server no longer reports a future dispatch deadline.
