@@ -13673,9 +13673,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 	// ResetActivityExecution with keep_paused=true can arrive while a worker still owns
 	// the current attempt. The reset itself must remain deferred until that worker
-	// reports back. An unpause request that arrives in that window is rejected outright:
-	// RESET_REQUESTED is a niche state permutation the server refuses rather than resolving
-	// ambiguously (e.g. by clearing the pending keep-paused intent).
+	// reports back. An unpause request that arrives in that window is rejected.
 	t.Run("UnpauseWhileResetKeepPausedFails", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -13723,9 +13721,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		failAttemptRetryably(ctx, t, pollResp1.TaskToken, 0)
 
 		// The deferred reset should land the activity in PAUSED, honoring the keep-paused intent
-		// that survived the rejected unpause (rather than dispatching a new attempt).
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED,
-			describeActivity(ctx, t, activityID, startResp.GetRunId()).GetInfo().GetRunState())
+		// that survived the rejected unpause.
+		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSED)
 	})
 
 	// startAttemptWithTimeouts starts a SAA with the given per-attempt timeouts and retry policy and

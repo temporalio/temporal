@@ -688,17 +688,18 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	req *activitypb.UpdateActivityExecutionOptionsRequest,
 ) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
 	frontendReq := req.GetFrontendRequest()
+	if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		return nil, serviceerror.NewFailedPrecondition("cannot update options while a reset is pending")
+	}
 	requestID := frontendReq.GetRequestId()
 	if requestID != "" && requestID == a.GetLastUpdateOptionsRequestId() {
 		// A repeated request ID returns the current options, which may differ from the original response.
 		return a.updateActivityExecutionOptionsResponse(), nil
 	}
-
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
@@ -1507,7 +1508,7 @@ func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, a
 // currently-running attempt, anchored to the attempt's StartedTime. Called from options-update
 // paths after stamp bump so the old tasks are invalidated and replaced with the (possibly
 // updated) timeouts. No-op unless the activity is in a status where a worker holds the task token
-// (STARTED / CANCEL_REQUESTED / PAUSE_REQUESTED / RESET_REQUESTED).
+// (STARTED / CANCEL_REQUESTED / PAUSE_REQUESTED).
 func (a *Activity) reissueRunningAttemptTimers(ctx chasm.MutableContext, attempt *activitypb.ActivityAttemptState) {
 	if !a.hasAttemptInProgress() {
 		return
