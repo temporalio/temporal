@@ -298,7 +298,11 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflows(
 				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 			}
 
-			// Cancels are only attempted once.
+			// Cancels are only attempted once here: transient failures are
+			// already retried at the history-client layer (resource.HistoryClient
+			// is retry-wrapped), so a single best-effort attempt is intentional.
+			// todo: consider splitting these out to individual tasks so they can be retried
+			// independently
 			result.CompletedCancels = append(result.CompletedCancels, wf)
 		})
 	}
@@ -336,7 +340,11 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 			}
 
-			// Terminates are only attempted once.
+			// Terminates are only attempted once here: transient failures are
+			// already retried at the history-client layer (resource.HistoryClient
+			// is retry-wrapped), so a single best-effort attempt is intentional.
+			// todo: consider splitting these out to individual tasks so they can be retried
+			// independently
 			result.CompletedTerminates = append(result.CompletedTerminates, wf)
 		})
 	}
