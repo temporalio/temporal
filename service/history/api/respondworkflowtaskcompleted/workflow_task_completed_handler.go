@@ -656,6 +656,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 		Priority:                    ai.Priority,
+		RetryPolicy:                 attr.RetryPolicy,
 	}
 	metrics.ActivityEagerExecutionCounter.With(
 		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
