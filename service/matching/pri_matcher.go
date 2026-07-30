@@ -53,6 +53,7 @@ type waitingPoller struct {
 	forwardCtx        context.Context   // non-nil iff poll can be forwarded
 	pollMetadata      *pollMetadata     // non-nil iff poll can be forwarded
 	queryOnly         bool              // if true, poller can be given only query task, otherwise any task
+	queued            bool              // true while in matcherData.pollers
 	taskForwarderType taskForwarderType // type of task forwarder (if any)
 }
 

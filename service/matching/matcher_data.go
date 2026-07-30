@@ -69,6 +69,7 @@ const maxTokens = 1
 // and removal is O(1) given the poller. There are only ever a handful of forwarders, so
 // keeping them grouped at the tail on insert is cheap.
 type pollerList struct {
+	logger     log.Logger
 	head, tail *waitingPoller
 	count      int
 }
@@ -78,6 +79,7 @@ func (p *pollerList) Len() int {
 }
 
 func (p *pollerList) Add(poller *waitingPoller) {
+	softassert.That(p.logger, !poller.queued, "adding poller that is already queued")
 	poller.queued = true
 
 	// Insert after the last local poller: at the tail for a forwarder, or just before
@@ -106,6 +108,7 @@ func (p *pollerList) Add(poller *waitingPoller) {
 }
 
 func (p *pollerList) Remove(poller *waitingPoller) {
+	softassert.That(p.logger, poller.queued, "removing poller that is not queued")
 	if poller.prev != nil {
 		poller.prev.next = poller.next
 	} else {
@@ -221,7 +224,7 @@ type matcherData struct {
 	reconsiderForwardTimer resettableTimer
 
 	// waiting pollers and tasks
-	// invariant: all pollers and tasks in these data structures have matchResult == nil
+	// invariant: all pollers and tasks in these data structures have matchResult == nil and queued == true
 	pollers pollerList
 	tasks   taskBTree
 
@@ -240,6 +243,7 @@ func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock
 		canForward:       canForward,
 		rateLimitManager: rateLimitManager,
 		onRateLimited:    onRateLimited,
+		pollers:          pollerList{logger: logger},
 		tasks:            newTaskBTree(),
 	}
 }
@@ -622,7 +626,6 @@ type waitableMatchResult struct {
 	// these fields are under matcherData.lock even though they're embedded in other structs
 	matchCond   sync.Cond
 	matchResult *matchResult
-	queued      bool // true while in a queue (pollerList or taskBTree)
 }
 
 func (w *waitableMatchResult) initMatch(d *matcherData) {
@@ -632,10 +635,10 @@ func (w *waitableMatchResult) initMatch(d *matcherData) {
 
 // call with matcherData.lock held.
 // w.matchResult must be nil (can't call wake twice).
-// w must not be in queues anymore.
+// w must not be queued anymore. We don't assert that here: queued lives on the outer
+// struct now, not w, and callers always Remove (which asserts it) before waking.
 func (w *waitableMatchResult) wake(logger log.Logger, res *matchResult) {
 	softassert.That(logger, w.matchResult == nil, "wake called twice")
-	softassert.That(logger, !w.queued, "wake called but still queued")
 	w.matchResult = res
 	w.matchCond.Signal()
 }
