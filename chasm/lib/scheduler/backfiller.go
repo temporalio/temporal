@@ -37,11 +37,12 @@ func addBackfiller(
 ) *Backfiller {
 	id := schedulerinternal.GenerateBackfillerID()
 	// LastProcessedTime is intentionally left unset here. For range backfills it
-	// doubles as the "progress recorded" signal and must stay zero until a batch is
+	// is the "progress recorded" signal and must stay zero until a batch is
 	// actually processed (see processBackfill). Trigger backfills, which use it as
 	// their fire time, set it explicitly in NewImmediateBackfiller.
 	backfiller := newBackfillerWithState(ctx, &schedulerpb.BackfillerState{
-		BackfillId: id,
+		BackfillId:        id,
+		LastProcessedTime: nil,
 	})
 
 	if scheduler.Backfillers == nil {
