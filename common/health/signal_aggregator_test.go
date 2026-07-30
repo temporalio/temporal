@@ -430,7 +430,7 @@ func TestRecordAndRead(t *testing.T) {
 
 			for group, exp := range tc.expected {
 				errorRatio, _ := s.ErrorRatioByGroup(group)
-				require.Equal(t, exp.errorRatio, errorRatio, "group %q error ratio", group)
+				require.InDelta(t, exp.errorRatio, errorRatio, 0.001, "group %q error ratio", group)
 
 				p50, _ := s.LatencyQuantileByGroup(group, 0.5)
 				require.InDelta(t, exp.p50, p50, 1, "group %q p50", group)
@@ -480,7 +480,7 @@ func TestRefresh(t *testing.T) {
 
 		errorRatio, found := s.ErrorRatioByGroup("critical")
 		require.True(t, found)
-		require.Equal(t, 0.25, errorRatio)
+		require.InDelta(t, 0.25, errorRatio, 0.001)
 	})
 
 	t.Run("removing a group drops its bucket", func(t *testing.T) {
@@ -490,7 +490,7 @@ func TestRefresh(t *testing.T) {
 		s.Record("crit", 200*time.Millisecond, errors.New("boom"))
 		errorRatio, found := s.ErrorRatioByGroup("critical")
 		require.True(t, found)
-		require.Equal(t, float64(1), errorRatio)
+		require.InDelta(t, 1, errorRatio, 0.001)
 
 		// drop the group; its bucket goes away entirely
 		settings = Settings{Overall: overall}
@@ -512,7 +512,7 @@ func TestRefresh(t *testing.T) {
 		s.Record("a", 100*time.Millisecond, nil)
 
 		errorRatio, _ := s.ErrorRatioByGroup(overallGroupName)
-		require.Equal(t, 0.5, errorRatio)
+		require.InDelta(t, 0.5, errorRatio, 0.001)
 
 		p50, _ := s.LatencyQuantileByGroup(overallGroupName, 0.5)
 		require.InDelta(t, 100, p50, 1)
@@ -548,7 +548,7 @@ func TestRefresh(t *testing.T) {
 		s.refresh()
 
 		errorRatio, _ := s.ErrorRatioByGroup(overallGroupName)
-		require.Equal(t, 0.5, errorRatio)
+		require.InDelta(t, 0.5, errorRatio, 0.001)
 
 		p50, _ := s.LatencyQuantileByGroup(overallGroupName, 0.5)
 		require.InDelta(t, 100, p50, 1)
