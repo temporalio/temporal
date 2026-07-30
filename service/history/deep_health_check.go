@@ -84,9 +84,9 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		))
 	}
 
-	////////////////////
+	// //////////////////
 	// overall latency
-	////////////////////
+	// //////////////////
 
 	healthCheckSettings := h.config.HealthCheckHistoryGRPCSettings()
 
@@ -105,9 +105,9 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		))
 	}
 
-	////////////////////
+	// //////////////////
 	// overall error ratio
-	////////////////////
+	// //////////////////
 
 	if healthCheckSettings.Overall.ErrorRatioThreshold != nil {
 		errorRatio, found := h.historyHealthSignal.ErrorRatio()
@@ -122,9 +122,9 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		}
 	}
 
-	////////////////////
+	// //////////////////
 	// groups
-	////////////////////
+	// //////////////////
 
 	for _, group := range healthCheckSettings.Groups {
 		for _, qt := range group.Thresholds.QuantileThresholds {
