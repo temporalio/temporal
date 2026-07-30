@@ -1,6 +1,8 @@
 package nexusoperation
 
 import (
+	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -22,6 +25,29 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+const errInvalidRunID = "run_id is not a valid UUID"
+
+func newTestValidator(config *Config) *validator {
+	return newValidator(config, log.NewNoopLogger(), nil, nil, newTestCallbackValidator())
+}
+
+// newTestCallbackValidator returns a callback.Validator that accepts any well-formed callback, so
+// that tests here exercise this package's validation rather than callback.Validator's.
+func newTestCallbackValidator() callback.Validator {
+	return callback.NewValidator(
+		func(string) int { return 10 },
+		func(string) int { return 1000 },
+		func(string) int { return 4096 },
+		func(string) callback.AddressMatchRules {
+			return callback.AddressMatchRules{
+				Rules: []callback.AddressMatchRule{
+					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
+				},
+			}
+		},
+	)
+}
 
 func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -371,7 +397,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(req)
 			}
-			err := validateAndNormalizeStartRequest(req, config, log.NewNoopLogger(), nil, saValidator)
+			err := newValidator(config, log.NewNoopLogger(), nil, saValidator, newTestCallbackValidator()).
+				validateAndNormalizeStartRequest(context.Background(), req)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -433,7 +460,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "long_poll_token - requires run_id",
@@ -467,7 +494,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeDescribeRequest(validReq, "test-namespace-id", config)
+			err := newTestValidator(config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -529,7 +556,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -554,7 +581,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeCancelRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizeCancelRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -607,7 +634,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
 				r.RunId = "not-a-valid-uuid"
 			},
-			errMsg: "invalid run id: must be a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -618,7 +645,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeDeleteRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizeDeleteRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -680,7 +707,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -705,7 +732,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeTerminateRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizeTerminateRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -753,7 +780,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "wait_stage - normalizes UNSPECIFIED to CLOSED",
@@ -798,7 +825,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizePollRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizePollRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -813,7 +840,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 	}
 }
 
-func TestValidateCompletionCallbacks(t *testing.T) {
+func TestValidateAndNormalizeCompletionCallbacks(t *testing.T) {
 	t.Parallel()
 
 	newReq := func(cbs ...*commonpb.Callback) *workflowservice.StartNexusOperationExecutionRequest {
@@ -822,35 +849,37 @@ func TestValidateCompletionCallbacks(t *testing.T) {
 			CompletionCallbacks: cbs,
 		}
 	}
-	enabled := &Config{EnableNexusCallbacks: func(string) bool { return true }}
-	disabled := &Config{EnableNexusCallbacks: func(string) bool { return false }}
+	enabled := newTestValidator(&Config{EnableNexusCallbacks: func(string) bool { return true }})
+	disabled := newTestValidator(&Config{EnableNexusCallbacks: func(string) bool { return false }})
 
 	t.Run("NoCallbacksSkipsTheEnabledCheck", func(t *testing.T) {
 		// The namespace flag must not be consulted when no callbacks were requested, so that existing
 		// callers are unaffected by it. A nil getter would panic if it were.
-		require.NoError(t, validateCompletionCallbacks(newReq(), &Config{}))
+		require.NoError(t, newTestValidator(&Config{}).
+			validateAndNormalizeCompletionCallbacks(context.Background(), newReq()))
 	})
 
 	t.Run("Enabled", func(t *testing.T) {
-		require.NoError(t, validateCompletionCallbacks(
+		require.NoError(t, enabled.validateAndNormalizeCompletionCallbacks(
+			context.Background(),
 			newReq(testNexusCallback("http://localhost/cb"), testNexusCallback("http://localhost/cb2")),
-			enabled,
 		))
 	})
 
 	t.Run("Disabled", func(t *testing.T) {
-		err := validateCompletionCallbacks(newReq(testNexusCallback("http://localhost/cb")), disabled)
+		err := disabled.validateAndNormalizeCompletionCallbacks(
+			context.Background(), newReq(testNexusCallback("http://localhost/cb")))
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "completion callbacks are not enabled for this namespace")
 	})
 
 	t.Run("RejectsInternalVariant", func(t *testing.T) {
-		err := validateCompletionCallbacks(newReq(&commonpb.Callback{
+		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(&commonpb.Callback{
 			Variant: &commonpb.Callback_Internal_{
 				Internal: &commonpb.Callback_Internal{Data: []byte("data")},
 			},
-		}), enabled)
+		}))
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "completion_callbacks[0]: unsupported callback variant")
@@ -858,42 +887,53 @@ func TestValidateCompletionCallbacks(t *testing.T) {
 
 	t.Run("RejectsWorkerVariant", func(t *testing.T) {
 		// Worker callbacks are a newer API addition that standalone Nexus operations do not support yet.
-		err := validateCompletionCallbacks(newReq(
+		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(
 			testNexusCallback("http://localhost/cb"),
 			&commonpb.Callback{
 				Variant: &commonpb.Callback_Worker_{Worker: &commonpb.Callback_Worker{}},
 			},
-		), enabled)
+		))
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "completion_callbacks[1]: unsupported callback variant")
 	})
 
 	t.Run("RejectsUnsetVariant", func(t *testing.T) {
-		err := validateCompletionCallbacks(newReq(&commonpb.Callback{}), enabled)
+		err := enabled.validateAndNormalizeCompletionCallbacks(
+			context.Background(), newReq(&commonpb.Callback{}))
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "completion_callbacks[0]: unsupported callback variant")
+	})
+
+	t.Run("DelegatesToTheCallbackValidator", func(t *testing.T) {
+		// The delegate lower-cases the callback headers in place.
+		cb := testNexusCallback("http://localhost/cb")
+		cb.GetNexus().Header = map[string]string{"Some-Key": "value"}
+		require.NoError(t, enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(cb)))
+		require.Equal(t, map[string]string{"some-key": "value"}, cb.GetNexus().GetHeader())
 	})
 }
 
 func TestValidateOnConflictOptions(t *testing.T) {
 	t.Parallel()
 
+	// on_conflict_options validation is config-independent.
+	v := newTestValidator(&Config{})
 	cb := testNexusCallback("http://localhost/cb")
 
 	t.Run("Unset", func(t *testing.T) {
-		require.NoError(t, validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{}))
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{}))
 	})
 
 	t.Run("Empty", func(t *testing.T) {
-		require.NoError(t, validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
 			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{},
 		}))
 	})
 
 	t.Run("AttachRequestIdAndCallbacksWithCallback", func(t *testing.T) {
-		require.NoError(t, validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
 			CompletionCallbacks: []*commonpb.Callback{cb},
 			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
 				AttachRequestId:           true,
@@ -903,14 +943,14 @@ func TestValidateOnConflictOptions(t *testing.T) {
 	})
 
 	t.Run("AttachRequestIdOnlyWithCallback", func(t *testing.T) {
-		require.NoError(t, validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
 			CompletionCallbacks: []*commonpb.Callback{cb},
 			OnConflictOptions:   &apinexusoperationpb.OnConflictOptions{AttachRequestId: true},
 		}))
 	})
 
 	t.Run("AttachCallbacksWithoutAttachRequestId", func(t *testing.T) {
-		err := validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
 			CompletionCallbacks: []*commonpb.Callback{cb},
 			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
 				AttachCompletionCallbacks: true,
@@ -922,7 +962,7 @@ func TestValidateOnConflictOptions(t *testing.T) {
 	})
 
 	t.Run("AttachRequestIdWithoutCallback", func(t *testing.T) {
-		err := validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
 			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{AttachRequestId: true},
 		})
 		var invalidArgErr *serviceerror.InvalidArgument
@@ -931,7 +971,7 @@ func TestValidateOnConflictOptions(t *testing.T) {
 	})
 
 	t.Run("AttachRequestIdAndCallbacksWithoutCallbackProvided", func(t *testing.T) {
-		err := validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
 			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
 				AttachRequestId:           true,
 				AttachCompletionCallbacks: true,
@@ -945,7 +985,7 @@ func TestValidateOnConflictOptions(t *testing.T) {
 	t.Run("AttachLinksIsUnimplemented", func(t *testing.T) {
 		// StartNexusOperationExecutionRequest carries no links, so honoring attach_links is impossible.
 		// Reject loudly rather than silently dropping the caller's intent.
-		err := validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
 			CompletionCallbacks: []*commonpb.Callback{cb},
 			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
 				AttachRequestId:           true,
