@@ -698,7 +698,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					HealthPersistenceErrorRatio:     func() float64 { return 0.1 },
 					HealthRPCErrorRatio:             func() float64 { return 0.1 },
 					HealthHistoryInitializationTime: func() time.Duration { return time.Minute },
-					HealthCheckGRPCSettings:         func() health2.Settings { return health2.Settings{} },
+					HealthCheckHistoryGRPCSettings:  func() health2.Settings { return health2.Settings{} },
 					HealthRPCLatencyPercentiles: func() dynamicconfig.LatencyHealthChecksPerPercentile {
 						return dynamicconfig.LatencyHealthChecksPerPercentile{
 							PercentileSettings: []dynamicconfig.LatencyHealthCheckSettings{

@@ -266,10 +266,10 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		LatencyHealthChecksPerPercentile{},
 		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
 	)
-	HealthCheckGRPCSettings = NewGlobalTypedSetting(
-		"system.healthCheckGRPCSettings",
+	HealthCheckHistoryGRPCSettings = NewGlobalTypedSetting(
+		"system.healthCheckHistoryGRPCSettings",
 		health.Settings{},
-		"controls gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables the group checks",
+		"controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables the group checks",
 	)
 	// TODO: This should be removed once percentiles are the default.
 	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(

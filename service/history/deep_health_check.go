@@ -88,8 +88,7 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 	// overall latency
 	////////////////////
 
-	// TODO: change this to HistoryGRPCSettings
-	healthCheckSettings := h.config.HealthCheckGRPCSettings()
+	healthCheckSettings := h.config.HealthCheckHistoryGRPCSettings()
 
 	for _, qt := range healthCheckSettings.Overall.QuantileThresholds {
 		latency, found := h.historyHealthSignal.LatencyQuantile(qt.Quantile)

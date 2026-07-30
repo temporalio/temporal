@@ -298,7 +298,7 @@ func HealthSignalAggregatorProvider(
 		logger,
 		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
 		dynamicconfig.HistoryHealthSignalUsePercentiles.Get(dynamicCollection),
-		dynamicconfig.HealthCheckGRPCSettings.Get(dynamicCollection),
+		dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dynamicCollection),
 		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
 	)
