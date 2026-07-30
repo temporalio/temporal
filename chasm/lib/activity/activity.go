@@ -1020,27 +1020,22 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	if a.isTerminal() {
 		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
 	}
-	// TODO(sean): this should be FailedPrecondition, instead of no-op. And remove persisting LastUnpauseRequestId since it fails
-	if !a.isPaused() {
-		return &activitypb.UnpauseActivityExecutionResponse{}, nil
-	}
-
 	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.ActivityUnpausedScope)
 	if err != nil {
 		return nil, err
 	}
 
 	event := unpauseEvent{req: frontendReq, metricsHandler: metricsHandler}
-	switch a.GetStatus() {
-	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+	switch {
+	case TransitionUnpaused.Possible(a):
 		if err := TransitionUnpaused.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
-	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+	case TransitionUnpausedWhilePauseRequested.Possible(a):
 		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
-	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+	case a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
 		a.ResetShouldPause = false
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())

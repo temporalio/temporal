@@ -12203,7 +12203,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 			"expected activity to be STARTED after unpause")
 	})
 
-	t.Run("UnpauseIdempotent", func(t *testing.T) {
+	t.Run("UnpauseNonPausedActivityFails", func(t *testing.T) {
 		ctx := testcore.NewContext()
 
 		activityID := testcore.RandomizeStr(t.Name())
@@ -12212,19 +12212,19 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		// Unpause a non-paused activity — should succeed with no error.
+		// An activity must be paused before it can be unpaused.
 		_, err := env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   "test-identity",
 		})
-		require.NoError(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
 
-	// TODO(sean): unpause should fail instead of no-op. Tailor to expect request ID not save on failedprecondition.
-	// Record a no-op unpause, pause the activity, then retry the same unpause request ID. The retry
-	// must not undo the later pause.
+	// Unpause the activity, pause it again, then retry the same unpause request ID. The retry must
+	// not undo the later pause.
 	t.Run("DuplicateRequestIDDoesNotUndoLaterPause", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
@@ -12238,7 +12238,15 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 			RequestId:  "unpause-request-id",
 		}
 
-		_, err := env.FrontendClient().UnpauseActivityExecution(ctx, unpauseReq)
+		_, err := env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			RequestId:  "initial-pause-request-id",
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, unpauseReq)
 		require.NoError(t, err)
 
 		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
