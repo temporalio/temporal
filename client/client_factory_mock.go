@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	operatorservice "go.temporal.io/api/operatorservice/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 	adminservice "go.temporal.io/server/api/adminservice/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
@@ -97,6 +98,21 @@ func (mr *MockFactoryMockRecorder) NewLocalFrontendClientWithTimeout(timeout, lo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewLocalFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewLocalFrontendClientWithTimeout), timeout, longPollTimeout)
 }
 
+// NewLocalOperatorClientWithTimeout mocks base method.
+func (m *MockFactory) NewLocalOperatorClientWithTimeout(timeout time.Duration) (operatorservice.OperatorServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewLocalOperatorClientWithTimeout", timeout)
+	ret0, _ := ret[0].(operatorservice.OperatorServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewLocalOperatorClientWithTimeout indicates an expected call of NewLocalOperatorClientWithTimeout.
+func (mr *MockFactoryMockRecorder) NewLocalOperatorClientWithTimeout(timeout any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewLocalOperatorClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewLocalOperatorClientWithTimeout), timeout)
+}
+
 // NewMatchingClientWithTimeout mocks base method.
 func (m *MockFactory) NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout, longPollTimeout time.Duration) (matchingservice.MatchingServiceClient, error) {
 	m.ctrl.T.Helper()
@@ -139,6 +155,20 @@ func (m *MockFactory) NewRemoteFrontendClientWithTimeout(rpcAddress string, time
 func (mr *MockFactoryMockRecorder) NewRemoteFrontendClientWithTimeout(rpcAddress, timeout, longPollTimeout any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteFrontendClientWithTimeout), rpcAddress, timeout, longPollTimeout)
+}
+
+// NewRemoteOperatorClientWithTimeout mocks base method.
+func (m *MockFactory) NewRemoteOperatorClientWithTimeout(rpcAddress string, timeout time.Duration) operatorservice.OperatorServiceClient {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewRemoteOperatorClientWithTimeout", rpcAddress, timeout)
+	ret0, _ := ret[0].(operatorservice.OperatorServiceClient)
+	return ret0
+}
+
+// NewRemoteOperatorClientWithTimeout indicates an expected call of NewRemoteOperatorClientWithTimeout.
+func (mr *MockFactoryMockRecorder) NewRemoteOperatorClientWithTimeout(rpcAddress, timeout any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteOperatorClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteOperatorClientWithTimeout), rpcAddress, timeout)
 }
 
 // MockFactoryProvider is a mock of FactoryProvider interface.
