@@ -698,6 +698,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
@@ -1021,17 +1022,15 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	}
 
 	event := unpauseEvent{req: frontendReq, metricsHandler: metricsHandler}
-	switch a.GetStatus() {
-	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+	switch {
+	case TransitionUnpaused.Possible(a):
 		if err := TransitionUnpaused.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
-	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+	case TransitionUnpausedWhilePauseRequested.Possible(a):
 		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
-	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		a.ResetKeepPaused = false
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
 	}
