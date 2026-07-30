@@ -56,9 +56,8 @@ func (noopNotifier[K, T]) Unwatch(K, string) error { return nil }
 // concurrent waiters per key; Watch beyond that returns a ResourceExhausted error.
 //
 // hashKey only stripes the internal map's locks for concurrency — any uniform hash of the
-// key works and it has no history-shard meaning here (callers just pass the workflow->shard
-// hash as a convenient, well-distributed one). It need not cover every field of K: keys are
-// matched by equality, so a hash over a subset only affects lock distribution.
+// key works and it carries no history-shard meaning here. It need not cover every field of K:
+// keys are matched by equality, so a hash over a subset only affects lock distribution.
 func NewPubSubNotifier[K comparable, T any](hashKey func(K) uint32, maxSubscribersPerKey int) PubSubNotifier[K, T] {
 	if hashKey == nil {
 		// A caller bug, but not a fatal one, and better caught here than as a nil-func panic on

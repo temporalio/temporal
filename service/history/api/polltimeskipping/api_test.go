@@ -221,7 +221,7 @@ func TestInvoke(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		// not running, but NewExecutionRunId set (retry/cron/CaN) => not "closed"; polls and times out.
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI(testFastForwardID, false), false, "next-run")}}
-		ffNotifier := notification.NewTimeSkippingFastForwardNotifier(func(namespace.ID, string) int32 { return 1 })
+		ffNotifier := notification.NewTimeSkippingFastForwardNotifier()
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, ffNotifier)
 		require.NoError(t, err)
@@ -232,7 +232,7 @@ func TestInvoke(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI(testFastForwardID, false), true, "")}}
 		// Real notifier: never notified, so the wait blocks until the soft timeout.
-		ffNotifier := notification.NewTimeSkippingFastForwardNotifier(func(namespace.ID, string) int32 { return 1 })
+		ffNotifier := notification.NewTimeSkippingFastForwardNotifier()
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, ffNotifier)
 		require.NoError(t, err)

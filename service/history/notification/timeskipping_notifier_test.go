@@ -5,16 +5,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/namespace"
 )
 
 func TestTimeSkippingFastForwardNotifier(t *testing.T) {
-	// The notifier's hash covers only (namespace, workflowID), so keys differing solely by
-	// archetype land on the same lock shard and stay distinct by struct equality alone.
-	oneShardByWorkflow := func(namespace.ID, string) int32 { return 1 }
-
 	t.Run("archetype isolates executions sharing a business id", func(t *testing.T) {
-		n := NewTimeSkippingFastForwardNotifier(oneShardByWorkflow)
+		n := NewTimeSkippingFastForwardNotifier()
 		workflowKey := NewTimeSkippingNotificationKey("ns", "wf", chasm.WorkflowArchetypeID)
 		schedulerKey := NewTimeSkippingNotificationKey("ns", "wf", chasm.SchedulerArchetypeID)
 
@@ -38,7 +33,7 @@ func TestTimeSkippingFastForwardNotifier(t *testing.T) {
 	// The waiter always names the workflow archetype while the publisher forwards whatever the
 	// execution carries, so a pre-archetype record (unspecified) must reach the workflow waiter.
 	t.Run("unspecified archetype is normalized to workflow", func(t *testing.T) {
-		n := NewTimeSkippingFastForwardNotifier(oneShardByWorkflow)
+		n := NewTimeSkippingFastForwardNotifier()
 		require.Equal(t,
 			NewTimeSkippingNotificationKey("ns", "wf", chasm.WorkflowArchetypeID),
 			NewTimeSkippingNotificationKey("ns", "wf", chasm.UnspecifiedArchetypeID))
@@ -71,7 +66,7 @@ func TestTimeSkippingFastForwardNotifier(t *testing.T) {
 	})
 
 	t.Run("keys match by value, not identity", func(t *testing.T) {
-		n := NewTimeSkippingFastForwardNotifier(oneShardByWorkflow)
+		n := NewTimeSkippingFastForwardNotifier()
 		_, ch, err := n.Watch(NewTimeSkippingNotificationKey("ns", "wf", chasm.WorkflowArchetypeID))
 		require.NoError(t, err)
 

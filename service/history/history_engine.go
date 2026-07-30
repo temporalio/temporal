@@ -161,7 +161,6 @@ func NewEngineWithShardContext(
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
-	fastForwardNotifier notification.TimeSkippingFastForwardNotifier,
 	config *configs.Config,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	workerDeploymentClient workerdeployment.Client,
@@ -218,7 +217,7 @@ func NewEngineWithShardContext(
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
 		metricsHandler:             shard.GetMetricsHandler(),
 		eventNotifier:              eventNotifier,
-		fastForwardNotifier:        fastForwardNotifier,
+		fastForwardNotifier:        notification.NewTimeSkippingFastForwardNotifier(),
 		config:                     config,
 		sdkClientFactory:           sdkClientFactory,
 		matchingClient:             matchingClient,
@@ -895,7 +894,7 @@ func (e *historyEngineImpl) NotifyFastForwardUpdate(
 	fastforwardNotification *notification.TimeSkippingFastForwardNotification,
 ) {
 	if e.fastForwardNotifier == nil {
-		// Always injected in production via fx; a nil here means a misconfigured engine.
+		// Always set by NewEngineWithShardContext; a nil here means a hand-built engine.
 		// Fast-forward notification is best-effort (waiters re-poll on timeout), so log and
 		// skip rather than panic.
 		e.logger.Warn("fastForwardNotifier is not configured; skipping fast-forward notification",

@@ -1,9 +1,11 @@
 package notification
 
 import (
+	"strconv"
+
+	"github.com/dgryski/go-farm"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/namespace"
 )
 
 // TimeSkippingFastForwardNotification is the payload delivered to subscribers waiting for
@@ -78,13 +80,17 @@ func NewTimeSkippingNotificationKey(
 
 const maxFastForwardWaitersPerExecution = 5
 
-func NewTimeSkippingFastForwardNotifier(hashKey func(namespace.ID, string) int32) TimeSkippingFastForwardNotifier {
+func NewTimeSkippingFastForwardNotifier() TimeSkippingFastForwardNotifier {
 	return NewPubSubNotifier[TimeSkippingNotificationKey, *TimeSkippingFastForwardNotification](
-		func(key TimeSkippingNotificationKey) uint32 {
-			return uint32(hashKey(namespace.ID(key.NamespaceID), key.WorkflowID))
-		},
+		hashTimeSkippingNotificationKey,
 		maxFastForwardWaitersPerExecution,
 	)
+}
+
+func hashTimeSkippingNotificationKey(key TimeSkippingNotificationKey) uint32 {
+	return farm.Fingerprint32([]byte(
+		key.NamespaceID + "_" + key.WorkflowID + "_" + strconv.FormatUint(uint64(key.ArchetypeID), 10),
+	))
 }
 
 var NoopTimeSkippingFastForwardNotifier = NewNoopNotifier[TimeSkippingNotificationKey, *TimeSkippingFastForwardNotification]()
