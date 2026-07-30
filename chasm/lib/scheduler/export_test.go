@@ -65,14 +65,6 @@ func (i *Invoker) RecordExecuteResult(
 	})
 }
 
-func (b *BackfillerTaskHandler) ProcessBackfill(
-	scheduler *Scheduler,
-	backfiller *Backfiller,
-	limit int,
-) (backfillProgressResult, error) {
-	return b.processBackfill(nil, scheduler, backfiller, limit)
-}
-
 func (b *BackfillerTaskHandler) AllowedBufferedStarts(
 	ctx chasm.Context,
 	scheduler *Scheduler,

@@ -1,6 +1,7 @@
 package scheduler_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,9 +10,14 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/common/testing/testvars"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -283,4 +289,139 @@ func TestBackfillTask_PartialFill(t *testing.T) {
 
 	// After second iteration, should have processed another batch.
 	require.Equal(t, int64(2), backfiller.GetAttempt())
+}
+
+// TestBackfillCapacityStallDoesNotSkipRange pins that a backfill whose first
+// attempt is stalled by a full buffer still reprocesses its complete range on
+// retry, rather than skipping the earlier part.
+//
+// A stalled attempt takes Execute's buffer-full back-off path, which increments
+// Attempt (its documented back-off counter) but returns before any watermark is
+// written. So the real post-stall state is Attempt > 0 with the high watermark
+// left unset. processBackfill must therefore key its resume decision on the
+// watermark's presence, not on Attempt: keying on Attempt (the original bug)
+// treated the stall as durable progress and resumed from the backfiller's
+// creation-time default, skipping the earlier part of the requested range.
+//
+// This drives the stall and the retry through the real Execute/Validate pair via
+// the CHASM test engine (rather than calling processBackfill directly), so a
+// regression in Validate would fail this test too.
+func TestBackfillCapacityStallDoesNotSkipRange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	specProcessor := newRealSpecProcessor(ctrl, logger)
+	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
+
+	ts := clock.NewEventTimeSource()
+	fixedNow := time.Now().Truncate(defaultInterval)
+	ts.Update(fixedNow)
+	tv := testvars.New(t)
+	testEngine := chasmtest.NewEngine(t, registry,
+		chasmtest.WithTimeSource(ts),
+		chasmtest.WithNodeBackendDecorator(func(b *chasm.MockNodeBackend) {
+			b.HandleGetNamespaceEntry = tv.Namespace
+		}),
+	)
+	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
+
+	key := chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID}
+	_, err := chasm.StartExecution(engineCtx, key,
+		func(mc chasm.MutableContext, _ any) (*scheduler.Scheduler, error) {
+			sched, err := scheduler.NewScheduler(mc, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+			if err != nil {
+				return nil, err
+			}
+			// Pin the Generator's high water mark to fixedNow (matching newTestEnv's
+			// setup) so the schedule's own regular ticking doesn't independently fire
+			// an action inside our backfill window and skew the buffered-start count.
+			sched.Generator.Get(mc).LastProcessedTime = timestamppb.New(fixedNow)
+			return sched, nil
+		}, nil)
+	require.NoError(t, err)
+	schedRef := chasm.NewComponentRef[*scheduler.Scheduler](key)
+
+	// ALLOW_ALL, matching TestBackfillTask_CompleteFill/PartialFill above: with the
+	// default SKIP policy, each buffered (not yet completed) start would block every
+	// later nominal time in the range as "overlapping," collapsing a multi-action
+	// backfill down to just its first action.
+	request := &schedulepb.BackfillRequest{
+		StartTime:     timestamppb.New(fixedNow.Add(-5 * defaultInterval)),
+		EndTime:       timestamppb.New(fixedNow),
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+	}
+
+	// Number of starts an unstalled first attempt would buffer for the full range.
+	var want int
+	_, err = chasm.ReadComponent(engineCtx, schedRef,
+		func(sched *scheduler.Scheduler, _ chasm.Context, _ any) (any, error) {
+			result, err := specProcessor.ProcessTimeRange(
+				sched,
+				request.StartTime.AsTime().Add(-time.Millisecond),
+				request.EndTime.AsTime(),
+				request.GetOverlapPolicy(),
+				sched.WorkflowID(),
+				"expected",
+				true,
+				nil,
+			)
+			want = len(result.BufferedStarts)
+			return nil, err
+		}, nil)
+	require.NoError(t, err)
+	require.Positive(t, want)
+
+	// Fill the buffer to capacity and create the backfiller in the same
+	// transaction, so the immediate first-attempt task (auto-executed by
+	// CloseTransaction, same as production) genuinely stalls on a full buffer
+	// rather than a synthetic Attempt bump.
+	var backfiller *scheduler.Backfiller
+	_, _, err = chasm.UpdateComponent(engineCtx, schedRef,
+		func(sched *scheduler.Scheduler, mc chasm.MutableContext, _ any) (any, error) {
+			invoker := sched.Invoker.Get(mc)
+			for range scheduler.DefaultTweakables.MaxBufferSize {
+				invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
+			}
+			backfiller = sched.NewRangeBackfiller(mc, request)
+			return nil, nil
+		}, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, int64(1), backfiller.GetAttempt(),
+		"the stalled first attempt must still count as an attempt")
+	require.Nil(t, backfiller.GetLastProcessedTime(),
+		"a capacity-only stall must not record progress")
+
+	// Free up the buffer, then drive the retry through the real Execute/Validate
+	// pair, exactly as the framework would dispatch it.
+	_, _, err = chasm.UpdateComponent(engineCtx, schedRef,
+		func(sched *scheduler.Scheduler, mc chasm.MutableContext, _ any) (any, error) {
+			sched.Invoker.Get(mc).BufferedStarts = nil
+			return nil, nil
+		}, nil)
+	require.NoError(t, err)
+
+	handler := scheduler.NewBackfillerTaskHandler(scheduler.BackfillerTaskHandlerOptions{
+		Config:         defaultConfig(),
+		MetricsHandler: metrics.NoopMetricsHandler,
+		BaseLogger:     logger,
+		SpecProcessor:  specProcessor,
+	})
+	taskDropped, err := chasmtest.ExecutePureTask(
+		engineCtx, testEngine, backfiller, handler, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{},
+	)
+	require.NoError(t, err)
+	require.False(t, taskDropped)
+
+	_, err = chasm.ReadComponent(engineCtx, schedRef,
+		func(sched *scheduler.Scheduler, ctx chasm.Context, _ any) (any, error) {
+			_, exists := sched.Backfillers[backfiller.BackfillId].TryGet(ctx)
+			require.False(t, exists,
+				"a capacity-only retry must process the complete range and delete the Backfiller")
+			require.Len(t, sched.Invoker.Get(ctx).BufferedStarts, want,
+				"a capacity-only retry must process the same complete range as an unstalled first attempt")
+			return nil, nil
+		}, nil)
+	require.NoError(t, err)
 }
