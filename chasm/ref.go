@@ -13,6 +13,9 @@ var ErrMalformedComponentRef = serviceerror.NewInvalidArgument("malformed compon
 // ErrInvalidComponentRef is returned when component ref bytes deserialize to an invalid component ref.
 var ErrInvalidComponentRef = serviceerror.NewInvalidArgument("invalid component ref")
 
+// ErrInvalidRefConsistencyLevel is returned when a component ref cannot be used at the requested RefConsistencyLevel.
+var ErrInvalidRefConsistencyLevel = serviceerror.NewInvalidArgument("invalid consistency level for component ref")
+
 // ExecutionKey uniquely identifies a CHASM execution in the system.
 type ExecutionKey struct {
 	NamespaceID string
@@ -100,6 +103,11 @@ func (r *ComponentRef) forConsistencyLevel(level RefConsistencyLevel) (Component
 		ref.executionLastUpdateVT = ref.componentInitialVT
 		return ref, nil
 	case RefConsistencyLevelCurrentRun:
+		// Only workflow executions have a run chain to resolve a "current run" against, so this level
+		// is invalid for other archetypes (see ErrInvalidRefConsistencyLevel).
+		if r.archetypeID != WorkflowArchetypeID {
+			return ComponentRef{}, ErrInvalidRefConsistencyLevel
+		}
 		// Weakest: resolve by component path on the current run. Drop the run ID and every versioned
 		// transition; identity must be re-established by caller logic (e.g. request ID).
 		ref.executionLastUpdateVT = nil

@@ -28,6 +28,29 @@ type testingSuite interface {
 	initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context)
 }
 
+// Scope provides the context and test handles for a test or await attempt.
+// It is useful for test helpers.
+type Scope interface {
+	Context() context.Context
+	TB() testing.TB
+	Require() *require.Assertions
+	AssertionT() require.TestingT
+}
+
+type contextScope struct {
+	Scope
+	ctx context.Context
+}
+
+// WithContext returns a scope that uses ctx and delegates assertions to scope.
+func WithContext(ctx context.Context, scope Scope) Scope {
+	return contextScope{Scope: scope, ctx: ctx}
+}
+
+func (s contextScope) Context() context.Context {
+	return s.ctx
+}
+
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
 //
 // It enforces a strict rule: a test method (or subtest) must either use assertions
@@ -40,6 +63,7 @@ type Suite[T testingSuite] struct {
 
 	guardT      guardT
 	runParallel bool
+	assertT     require.TestingT
 	ctx         context.Context // override set in initSuite; lazy-filled by Context() under ctxOnce when nil
 	ctxOnce     sync.Once
 }
@@ -70,6 +94,7 @@ func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.Testin
 	if assertT == nil {
 		assertT = g
 	}
+	s.assertT = assertT
 	s.Assertions = require.New(assertT)
 	s.ProtoAssertions = protorequire.New(assertT)
 	s.HistoryRequire = historyrequire.New(assertT)
@@ -81,6 +106,21 @@ func (s *Suite[T]) T() *testing.T {
 		panic("parallelsuite: do not call T() after Run(); use the subtest callback's parameter instead")
 	}
 	return s.guardT.T
+}
+
+// TB returns the underlying test handle.
+func (s *Suite[T]) TB() testing.TB {
+	return s.T()
+}
+
+// Require returns assertions bound to the active test or await attempt.
+func (s *Suite[T]) Require() *require.Assertions {
+	return s.Assertions
+}
+
+// AssertionT returns the active assertion target.
+func (s *Suite[T]) AssertionT() require.TestingT {
+	return s.assertT
 }
 
 // Context returns the test-scoped context (created from [testcontext]).

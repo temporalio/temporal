@@ -51,8 +51,26 @@ type VisibilitySearchAttributesMapper struct {
 	fieldToAlias map[string]string
 	saTypeMap    map[string]enumspb.IndexedValueType
 
-	// map from system search attribute aliases to field names.
+	// systemAliasToField maps a CHASM search attribute alias to a system field
+	// (e.g. "ScheduleId" -> "WorkflowId"). Used to resolve system search attribute aliases,
+	// including the businessID alias configured via WithBusinessIDAlias.
 	systemAliasToField map[string]string
+
+	// overriddenSystemFields records system search attribute fields (e.g. ExecutionTime, TaskQueue)
+	// this archetype overrides with its own value, stored in the dedicated system column. Value is
+	// the field's indexed value type.
+	overriddenSystemFields map[string]enumspb.IndexedValueType
+}
+
+// newVisibilitySearchAttributesMapper returns a mapper with all maps initialized.
+func newVisibilitySearchAttributesMapper() *VisibilitySearchAttributesMapper {
+	return &VisibilitySearchAttributesMapper{
+		aliasToField:           make(map[string]string),
+		fieldToAlias:           make(map[string]string),
+		saTypeMap:              make(map[string]enumspb.IndexedValueType),
+		systemAliasToField:     make(map[string]string),
+		overriddenSystemFields: make(map[string]enumspb.IndexedValueType),
+	}
 }
 
 // Alias returns the alias for a given field.
@@ -115,6 +133,25 @@ func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.Indexe
 		return nil
 	}
 	return v.saTypeMap
+}
+
+// IsSystemOverride returns true if this archetype overrides the given system search attribute
+// field with its own value (written to the dedicated system column).
+func (v *VisibilitySearchAttributesMapper) IsSystemOverride(field string) bool {
+	if v == nil {
+		return false
+	}
+	_, ok := v.overriddenSystemFields[field]
+	return ok
+}
+
+// OverriddenSystemFields returns the system search attribute fields this archetype overrides,
+// keyed by field name with the field's indexed value type as the value.
+func (v *VisibilitySearchAttributesMapper) OverriddenSystemFields() map[string]enumspb.IndexedValueType {
+	if v == nil {
+		return nil
+	}
+	return v.overriddenSystemFields
 }
 
 // ValueType returns the type of a CHASM search attribute field.

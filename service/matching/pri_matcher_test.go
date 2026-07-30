@@ -66,6 +66,7 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 	})
 
 	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rateLimitManager.Start()
 
 	tm := newPriTaskMatcher(
 		ctx,
@@ -160,6 +161,7 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 		require.NoError(t, err)
 
 		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		rateLimitManager.Start()
 
 		tm := newPriTaskMatcher(
 			ctx,
@@ -228,6 +230,7 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 			mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
 
 			rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			rateLimitManager.Start()
 			tm := newPriTaskMatcher(
 				ctx,
 				cfg,

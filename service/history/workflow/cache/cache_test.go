@@ -11,15 +11,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
@@ -223,6 +226,78 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.NoError(err4)
 	s.NotEqual(ctx, newContext)
 	release(err4)
+}
+
+// TestHistoryCacheEvictionReleasesPaginationBuffer verifies that when a cached context
+// holding an in-flight pagination buffer is evicted, the bytes it
+// reserved on the shared pagination limiter are released. Without a Clear() on the eviction
+// path those bytes leak and eventually reject all paginated completions on the host.
+func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() {
+	// Count-based cache with room for a single entry, so the next insert forces eviction.
+	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
+	// Production shards always have a finalizer, so give the test shard one too
+	s.mockShard.SetFinalizerForTest(finalizer.New(s.mockShard.GetLogger(), metrics.NoopMetricsHandler))
+	namespaceID := namespace.ID("test_namespace_id")
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	limiter := s.cache.(*cacheImpl).paginationLimiter
+
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wf-cache-test-eviction-buffer",
+		RunId:      uuid.NewString(),
+	}
+	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		namespaceID,
+		&we,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+
+	// Give the context a MutableState so it can buffer a page and later Clear().
+	mock := historyi.NewMockMutableState(s.controller)
+	mock.EXPECT().IsDirty().Return(false).AnyTimes()
+	mock.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	mock.EXPECT().GetStartedWorkflowTask().Return(&historyi.WorkflowTaskInfo{}).AnyTimes()
+	mock.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mock.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
+	wfCtx := ctx.(*workflow.ContextImpl)
+	wfCtx.MutableState = mock
+
+	// Buffer an intermediate page; this reserves bytes on the shared limiter.
+	page := &workflowservice.RespondWorkflowTaskCompletedRequest{
+		IntermediatePage: true,
+		PageNumber:       0,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+			Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{MarkerName: "m"},
+			},
+		}},
+	}
+	s.NoError(wfCtx.AppendTaskCompletionPage(10, 1, page))
+	s.Positive(limiter.Used())
+
+	// Unpin the entry so it is eligible for eviction.
+	release(nil)
+
+	// Insert a second workflow, forcing eviction of the first from the cache.
+	we2 := commonpb.WorkflowExecution{
+		WorkflowId: "wf-cache-test-eviction-buffer-2",
+		RunId:      uuid.NewString(),
+	}
+	_, release2, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		namespaceID,
+		&we2,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	release2(nil)
+
+	// The evicted context must have released its reserved pagination bytes.
+	s.Equal(int64(0), limiter.Used())
 }
 
 func (s *workflowCacheSuite) TestHistoryCacheClear() {
@@ -559,6 +634,7 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 				s.mockShard.GetLogger(),
 				s.mockShard.GetThrottledLogger(),
 				s.mockShard.GetMetricsHandler(),
+				nil,
 			)
 			ctx := headers.SetCallerType(context.Background(), tt.callerType)
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -663,6 +739,9 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	}
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
+	// Eviction now clears the evicted context, which drains these on its MutableState.
+	mockMS1.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mockMS1.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 
 	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
@@ -694,6 +773,8 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	}
 	mockMS2 := historyi.NewMockMutableState(s.controller)
 	mockMS2.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockMS2.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mockMS2.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 	ctx, release2, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
@@ -722,6 +803,8 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	}
 	mockMS3 := historyi.NewMockMutableState(s.controller)
 	mockMS3.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockMS3.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mockMS3.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 	_, _, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,

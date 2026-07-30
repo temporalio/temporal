@@ -1071,6 +1071,8 @@ func (s *chasmEngineSuite) TestPollComponent_SetsContextMetadata() {
 
 // TestPollComponent_Success_Wait tests the waiting behavior of PollComponent.
 func (s *chasmEngineSuite) TestPollComponent_Success_Wait() {
+	s.config.EnableCHASMSkipPersistence = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
 	testCases := []struct {
 		name          string
 		useEmptyRunID bool

@@ -72,9 +72,20 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		h.historyHealthSignal.ErrorRatio(), h.config.HealthRPCErrorRatio(),
 		"historyservice error ratio", true))
 
+	// TODO: Remove AverageLatency check once Latency is used by default.
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceLatency,
 		h.persistenceHealthSignal.AverageLatency(), h.config.HealthPersistenceLatencyFailure(),
 		"persistenceservice latency", true))
+
+	for _, settings := range h.config.HealthPersistenceLatencyPercentiles().PercentileSettings {
+		checks = append(checks, errorIfOverThreshold(
+			healthcheck.CheckTypePersistenceLatency+fmt.Sprintf("_P%0.2f", 100.0*settings.Percentile),
+			h.persistenceHealthSignal.LatencyQuantile(settings.Percentile),
+			float64(settings.Threshold.Milliseconds()),
+			fmt.Sprintf("persistenceservice percentile latency (P%0.2f < %d, enforced: %t)", 100.0*settings.Percentile, settings.Threshold.Milliseconds(), settings.Enforced),
+			settings.Enforced,
+		))
+	}
 
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceErrRatio,
 		h.persistenceHealthSignal.ErrorRatio(), h.config.HealthPersistenceErrorRatio(),

@@ -187,6 +187,9 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to read component: %w", err)
 	}
+	if scheduler == nil {
+		return errors.New("scheduler component was nil after read")
+	}
 
 	// Attach callbacks and check workflow status.
 	results := make(map[string]*watchResult, len(starts))
