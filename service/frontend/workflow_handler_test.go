@@ -5141,7 +5141,6 @@ func (s *WorkflowHandlerSuite) TestUpdateSchedule_ValidationAndErrors() {
 		resp, err := wh.UpdateSchedule(ctx, nil)
 		s.Nil(resp)
 		s.Equal(errRequestNotSet, err)
-		s.IsType(&serviceerror.InvalidArgument{}, err)
 	})
 
 	s.Run("schedules disabled should return error", func() {
