@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,12 +14,19 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkactivity "go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	contextpropagationspb "go.temporal.io/server/api/contextpropagation/v1"
+	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -930,4 +938,111 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestActivityApiPause_AttributesToActivityInContextMetadata verifies end to end that PauseActivity
+// marks the targeted activity so that the activity's type and task queue — not just the workflow's —
+// are resolved from mutable state and propagated to the caller in the "contextmetadata-bin" gRPC
+// trailer, the same way RecordActivityTaskHeartbeat does.
+func TestActivityApiPause_AttributesToActivityInContextMetadata(t *testing.T) {
+	t.Parallel()
+
+	const (
+		activityID   = "activity-id"
+		activityType = "PauseAttributionActivity"
+	)
+
+	// The frontend only emits context metadata trailers when this is enabled, and it is read when
+	// the frontend interceptor is constructed, so it must be set at cluster startup.
+	s := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.FrontendContextMetadataSetTrailer, true))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	activityStartedCn := make(chan struct{}, 1)
+	releaseActivityCn := make(chan struct{})
+	// Block on the activity's own context rather than a suite helper: the helper calls FailNow on
+	// timeout, which is only safe on the test goroutine, and the test's own timeout below already
+	// reports a hang.
+	activityFunction := func(activityCtx context.Context) (string, error) {
+		activityStartedCn <- struct{}{}
+		select {
+		case <-releaseActivityCn:
+			return "done!", nil
+		case <-activityCtx.Done():
+			return "", activityCtx.Err()
+		}
+	}
+	workflowFn := func(wfCtx workflow.Context) error {
+		var ret string
+		return workflow.ExecuteActivity(workflow.WithActivityOptions(wfCtx, workflow.ActivityOptions{
+			ActivityID:             activityID,
+			DisableEagerExecution:  true,
+			StartToCloseTimeout:    15 * time.Minute,
+			ScheduleToCloseTimeout: 30 * time.Minute,
+		}), activityType).Get(wfCtx, &ret)
+	}
+
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivityWithOptions(activityFunction, sdkactivity.RegisterOptions{Name: activityType})
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
+		TaskQueue: s.WorkerTaskQueue(),
+	}, workflowFn)
+	require.NoError(t, err)
+
+	s.WaitForChannel(activityStartedCn)
+
+	var trailer metadata.MD
+	_, err = s.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()},
+		Activity:  &workflowservice.PauseActivityRequest_Id{Id: activityID},
+		Identity:  "test-identity",
+		Reason:    "test-reason",
+	}, grpc.Trailer(&trailer))
+	require.NoError(t, err)
+
+	entries := contextMetadataFromTrailer(t, trailer)
+	// Attribution is keyed by scheduled event ID, which the caller doesn't know, so look up the
+	// single activity entry the way consumers do.
+	var gotActivityType, gotActivityTaskQueue string
+	for key, value := range entries {
+		switch {
+		case strings.HasPrefix(key, "activity-type-"):
+			require.Empty(t, gotActivityType, "expected metadata for exactly one activity, got %v", entries)
+			gotActivityType = value
+		case strings.HasPrefix(key, "activity-task-queue-"):
+			require.Empty(t, gotActivityTaskQueue, "expected metadata for exactly one activity, got %v", entries)
+			gotActivityTaskQueue = value
+		default:
+			// Not activity-scoped (e.g. the workflow's own type and task queue).
+		}
+	}
+	require.Equal(t, activityType, gotActivityType, "trailer entries: %v", entries)
+	require.Equal(t, s.WorkerTaskQueue(), gotActivityTaskQueue, "trailer entries: %v", entries)
+	// Workflow attribution is still emitted alongside the activity's.
+	require.NotEmpty(t, entries[contextutil.MetadataKeyWorkflowType], "trailer entries: %v", entries)
+
+	_, err = s.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()},
+		Activity:  &workflowservice.UnpauseActivityRequest_Id{Id: activityID},
+	})
+	require.NoError(t, err)
+
+	close(releaseActivityCn)
+	require.NoError(t, workflowRun.Get(ctx, nil))
+}
+
+// contextMetadataFromTrailer decodes the ContextMetadata proto that ContextMetadataInterceptor
+// writes to the "contextmetadata-bin" gRPC trailer.
+func contextMetadataFromTrailer(t *testing.T, trailer metadata.MD) map[string]string {
+	t.Helper()
+	values := trailer.Get("contextmetadata-bin")
+	require.Len(t, values, 1, "expected exactly one contextmetadata-bin trailer, got trailer %v", trailer)
+	var metadataProto contextpropagationspb.ContextMetadata
+	require.NoError(t, proto.Unmarshal([]byte(values[0]), &metadataProto))
+	return metadataProto.GetEntries()
 }
