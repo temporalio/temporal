@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
@@ -84,6 +85,38 @@ func TestNewRegistry(t *testing.T) {
 
 		// ensure update can complete its lifecycle
 		assertCompleteUpdateInRegistry(t, reg, evStore, upd)
+	})
+
+	t.Run("registry restores serialization context for duplicate validation", func(t *testing.T) {
+		propagatedContext := &commonpb.PropagatedNexusSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		}
+		reg := update.NewRegistry(&mockUpdateStore{
+			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+				visitor(tv.UpdateID(), &persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Acceptance{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
+					},
+					PropagatedNexusSerializationContext: propagatedContext,
+				})
+			},
+		})
+		upd := reg.Find(t.Context(), tv.UpdateID())
+		require.NotNil(t, upd)
+
+		require.NoError(t, upd.Admit(&updatepb.Request{
+			PropagatedNexusSerializationContext: propagatedContext,
+		}, nil))
+		var failedPrecondition *serviceerror.FailedPrecondition
+		require.ErrorAs(t, upd.Admit(&updatepb.Request{
+			PropagatedNexusSerializationContext: &commonpb.PropagatedNexusSerializationContext{
+				Endpoint:  "other-endpoint",
+				Service:   "service",
+				Operation: "operation",
+			},
+		}, nil), &failedPrecondition)
 	})
 
 	t.Run("registry created from store with update in stateAccepted but non-running workflow contains aborted update", func(t *testing.T) {

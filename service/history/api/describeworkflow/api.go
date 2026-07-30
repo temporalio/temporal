@@ -142,12 +142,13 @@ func Invoke(
 			Priority:                     executionInfo.Priority,
 		},
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
-			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
-			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
-			OriginalStartTime:       startEvent.EventTime,
-			CancelRequested:         executionInfo.CancelRequested,
-			ResetRunId:              executionInfo.ResetRunId,
-			RequestIdInfos:          make(map[string]*workflowpb.RequestIdInfo),
+			ExecutionExpirationTime:             executionInfo.WorkflowExecutionExpirationTime,
+			RunExpirationTime:                   executionInfo.WorkflowRunExpirationTime,
+			OriginalStartTime:                   startEvent.EventTime,
+			CancelRequested:                     executionInfo.CancelRequested,
+			ResetRunId:                          executionInfo.ResetRunId,
+			RequestIdInfos:                      make(map[string]*workflowpb.RequestIdInfo),
+			PropagatedNexusSerializationContext: executionInfo.PropagatedNexusSerializationContext,
 		},
 	}
 

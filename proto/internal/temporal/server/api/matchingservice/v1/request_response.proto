@@ -62,6 +62,7 @@ message PollWorkflowTaskQueueResponse {
   // Raw history bytes sent from matching service when history.sendRawHistoryBetweenInternalServices is enabled.
   // Matching client will deserialize this to History when it receives the response.
   temporal.api.history.v1.History raw_history = 22;
+  temporal.api.common.v1.PropagatedNexusSerializationContext propagated_nexus_serialization_context = 23;
 }
 
 // PollWorkflowTaskQueueResponseWithRawHistory is wire-compatible with PollWorkflowTaskQueueResponse.
@@ -112,6 +113,7 @@ message PollWorkflowTaskQueueResponseWithRawHistory {
   // When matching client deserializes this to PollWorkflowTaskQueueResponse, this field
   // will be automatically deserialized to the raw_history field as History.
   repeated bytes raw_history = 22;
+  temporal.api.common.v1.PropagatedNexusSerializationContext propagated_nexus_serialization_context = 23;
 }
 
 message PollActivityTaskQueueRequest {
@@ -149,6 +151,7 @@ message PollActivityTaskQueueResponse {
   temporal.api.common.v1.RetryPolicy retry_policy = 19;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 20;
+  temporal.api.common.v1.PropagatedNexusSerializationContext propagated_nexus_serialization_context = 21;
 }
 
 message AddWorkflowTaskRequest {

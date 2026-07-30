@@ -268,6 +268,9 @@ message ActivityRequestData {
   // only to read state persisted before the migration; new activities leave
   // this empty.
   temporal.api.sdk.v1.UserMetadata user_metadata = 3 [deprecated = true];
+
+  // Serialization context propagated from the Nexus caller that started this activity.
+  temporal.api.common.v1.PropagatedNexusSerializationContext propagated_nexus_serialization_context = 4;
 }
 
 message ActivityOutcome {

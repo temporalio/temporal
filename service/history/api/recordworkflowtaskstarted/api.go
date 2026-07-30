@@ -377,23 +377,24 @@ func CreateRecordWorkflowTaskStartedResponse(
 		return nil, err
 	}
 	return &historyservice.RecordWorkflowTaskStartedResponse{
-		WorkflowType:               rawResp.WorkflowType,
-		PreviousStartedEventId:     rawResp.PreviousStartedEventId,
-		ScheduledEventId:           rawResp.ScheduledEventId,
-		StartedEventId:             rawResp.StartedEventId,
-		NextEventId:                rawResp.NextEventId,
-		Attempt:                    rawResp.Attempt,
-		StickyExecutionEnabled:     rawResp.StickyExecutionEnabled,
-		TransientWorkflowTask:      rawResp.TransientWorkflowTask,
-		WorkflowExecutionTaskQueue: rawResp.WorkflowExecutionTaskQueue,
-		BranchToken:                rawResp.BranchToken,
-		ScheduledTime:              rawResp.ScheduledTime,
-		StartedTime:                rawResp.StartedTime,
-		Queries:                    rawResp.Queries,
-		Clock:                      rawResp.Clock,
-		Messages:                   rawResp.Messages,
-		Version:                    rawResp.Version,
-		NextPageToken:              rawResp.NextPageToken,
+		WorkflowType:                        rawResp.WorkflowType,
+		PreviousStartedEventId:              rawResp.PreviousStartedEventId,
+		ScheduledEventId:                    rawResp.ScheduledEventId,
+		StartedEventId:                      rawResp.StartedEventId,
+		NextEventId:                         rawResp.NextEventId,
+		Attempt:                             rawResp.Attempt,
+		StickyExecutionEnabled:              rawResp.StickyExecutionEnabled,
+		TransientWorkflowTask:               rawResp.TransientWorkflowTask,
+		WorkflowExecutionTaskQueue:          rawResp.WorkflowExecutionTaskQueue,
+		BranchToken:                         rawResp.BranchToken,
+		ScheduledTime:                       rawResp.ScheduledTime,
+		StartedTime:                         rawResp.StartedTime,
+		Queries:                             rawResp.Queries,
+		Clock:                               rawResp.Clock,
+		Messages:                            rawResp.Messages,
+		Version:                             rawResp.Version,
+		NextPageToken:                       rawResp.NextPageToken,
+		PropagatedNexusSerializationContext: rawResp.PropagatedNexusSerializationContext,
 	}, nil
 }
 
@@ -426,6 +427,7 @@ func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	response.ScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
 	response.StartedTime = timestamppb.New(workflowTask.StartedTime)
 	response.Version = workflowTask.Version
+	response.PropagatedNexusSerializationContext = executionInfo.PropagatedNexusSerializationContext
 
 	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
 	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)

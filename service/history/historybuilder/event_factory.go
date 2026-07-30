@@ -81,11 +81,12 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		Priority:               req.GetPriority(),
 		InheritedPinnedVersion: request.InheritedPinnedVersion,
 		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
-		EagerExecutionAccepted:       req.GetRequestEagerExecution(),
-		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
-		DeclinedTargetVersionUpgrade: request.DeclinedTargetVersionUpgrade,
-		TimeSkippingConfig:           req.GetTimeSkippingConfig(),
-		TimeSkippingStatePropagation: request.GetTimeSkippingStatePropagation(),
+		EagerExecutionAccepted:              req.GetRequestEagerExecution(),
+		InheritedAutoUpgradeInfo:            request.InheritedAutoUpgradeInfo,
+		DeclinedTargetVersionUpgrade:        request.DeclinedTargetVersionUpgrade,
+		TimeSkippingConfig:                  req.GetTimeSkippingConfig(),
+		TimeSkippingStatePropagation:        request.GetTimeSkippingStatePropagation(),
+		PropagatedNexusSerializationContext: req.PropagatedNexusSerializationContext,
 	}
 
 	parentInfo := request.ParentExecutionInfo

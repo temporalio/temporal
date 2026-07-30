@@ -319,6 +319,9 @@ message WorkflowExecutionInfo {
 
   // Time skipping info that contains the config and runtime history of the time skipping for the workflow.
   TimeSkippingInfo time_skipping_info = 115;
+
+  // Serialization context propagated from the Nexus caller that started this workflow.
+  temporal.api.common.v1.PropagatedNexusSerializationContext propagated_nexus_serialization_context = 116;
 }
 
 message TimeSkippingInfo {

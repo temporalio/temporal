@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"go.opentelemetry.io/otel/trace"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
@@ -88,10 +89,11 @@ type (
 		updates map[string]*Update
 		// A store from which Registry is constructed with NewRegistry function,
 		// and completed Updates are loaded. Practically it is a Mutable State.
-		store           UpdateStore
-		completedCount  int
-		failoverVersion int64
-		instrumentation instrumentation
+		store                               UpdateStore
+		completedCount                      int
+		completedNexusSerializationContexts map[string]*commonpb.PropagatedNexusSerializationContext
+		failoverVersion                     int64
+		instrumentation                     instrumentation
 
 		maxTotal                              func() int
 		maxInFlightUpdateCount                func() int
@@ -171,6 +173,7 @@ func NewRegistry(
 ) Registry {
 	r := &registry{
 		updates:                               make(map[string]*Update),
+		completedNexusSerializationContexts:   make(map[string]*commonpb.PropagatedNexusSerializationContext),
 		store:                                 store,
 		instrumentation:                       noopInstrumentation,
 		failoverVersion:                       store.GetCurrentVersion(),
@@ -202,6 +205,7 @@ func NewRegistry(
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
+			r.updates[updID].propagatedNexusSerializationContext = updInfo.PropagatedNexusSerializationContext
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
 			u := newAccepted(
 				updID,
@@ -209,6 +213,7 @@ func NewRegistry(
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
 			)
+			u.propagatedNexusSerializationContext = updInfo.PropagatedNexusSerializationContext
 			if !r.store.IsWorkflowExecutionRunning() {
 				// If the Workflow is completed, accepted Update will never be completed
 				// and therefore must be aborted.
@@ -218,6 +223,7 @@ func NewRegistry(
 			r.updates[updID] = u
 		} else if updInfo.GetCompletion() != nil {
 			r.completedCount++
+			r.completedNexusSerializationContexts[updID] = updInfo.PropagatedNexusSerializationContext
 		}
 	})
 	return r
@@ -275,6 +281,7 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 		r.remover(updateID),
 		withInstrumentation(&r.instrumentation),
 	)
+	upd.propagatedNexusSerializationContext = reqMsg.PropagatedNexusSerializationContext
 	r.updates[updateID] = upd
 
 	return upd, nil
@@ -362,6 +369,7 @@ func (r *registry) Clear() {
 
 	r.updates = nil
 	r.completedCount = 0
+	r.completedNexusSerializationContexts = nil
 }
 
 func (r *registry) Len() int {
@@ -380,6 +388,7 @@ func (r *registry) remover(id string) updateOpt {
 			// as that would negatively impact the registry's rate limit.
 			if upd := r.updates[id]; upd != nil && upd.acceptedEventID != common.EmptyEventID {
 				r.completedCount++
+				r.completedNexusSerializationContexts[id] = upd.propagatedNexusSerializationContext
 			}
 
 			// The update was either discarded or persisted; no need to keep it here anymore.
@@ -473,11 +482,13 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 	// (UpdateInfo in mutable state is invalid or Update completion event is not found).
 
 	// The Update is completed and its outcome loaded from the corresponding history event.
-	return newCompleted(
+	upd := newCompleted(
 		id,
 		future.NewReadyFuture(updOutcome, err),
 		withInstrumentation(&r.instrumentation),
 	)
+	upd.propagatedNexusSerializationContext = r.completedNexusSerializationContexts[id]
+	return upd
 }
 
 func (r *registry) GetSize() int {

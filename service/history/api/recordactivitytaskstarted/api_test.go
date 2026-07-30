@@ -326,7 +326,13 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 	mockMS.EXPECT().GetActivityScheduledEvent(gomock.Any(), scheduledEventID).Return(
 		&historypb.HistoryEvent{EventId: scheduledEventID}, nil,
 	)
-	mockMS.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
+	mockMS.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		PropagatedNexusSerializationContext: &commonpb.PropagatedNexusSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		},
+	})
 
 	request := &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId: nsID,
@@ -376,4 +382,7 @@ func TestRecordActivityTaskStarted_DuplicateRequest_WithStartedClock(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, rejectCodeAccepted, code)
 	require.Equal(t, storedClock, resp.Clock, "Should return the stored StartedClock")
+	require.Equal(t, "endpoint", resp.PropagatedNexusSerializationContext.Endpoint)
+	require.Equal(t, "service", resp.PropagatedNexusSerializationContext.Service)
+	require.Equal(t, "operation", resp.PropagatedNexusSerializationContext.Operation)
 }

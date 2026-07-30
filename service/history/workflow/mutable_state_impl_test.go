@@ -2797,11 +2797,19 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 
 	// 2nd accepted update (with acceptedRequest)
 	updateID2 := fmt.Sprintf("%s-2-accepted-update-id", s.T().Name())
+	propagatedNexusSerializationContext := &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
 	acptEvent2, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
 		updateID2,
 		fmt.Sprintf("%s-2-accepted-msg-id", s.T().Name()),
 		1,
-		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: updateID2}})
+		&updatepb.Request{
+			Meta:                                &updatepb.Meta{UpdateId: updateID2},
+			PropagatedNexusSerializationContext: propagatedNexusSerializationContext,
+		})
 	s.NoError(err)
 	s.NotNil(acptEvent2)
 
@@ -2839,6 +2847,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 			numCompleted++
 		case updInfo.GetAcceptance() != nil:
 			numAccepted++
+			protorequire.ProtoEqual(s.T(), propagatedNexusSerializationContext, updInfo.PropagatedNexusSerializationContext)
 		}
 	})
 	s.Equal(numCompleted, 1, "expected 1 completed")
@@ -2939,6 +2948,13 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	)
 	s.NoError(err)
 
+	currentRunExecutionInfo := s.mutableState.GetExecutionInfo()
+	currentRunExecutionInfo.PropagatedNexusSerializationContext = &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+
 	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(2)
 	_, newRunMutableState, err := s.mutableState.AddContinueAsNewEvent(
@@ -2956,7 +2972,6 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	newColl := callbacks.MachineCollection(newRunMutableState.HSM())
 	s.Equal(1, newColl.Size())
 
-	currentRunExecutionInfo := s.mutableState.GetExecutionInfo()
 	newRunExecutionInfo := newRunMutableState.GetExecutionInfo()
 	s.Equal(currentRunExecutionInfo.TaskQueue, newRunExecutionInfo.TaskQueue)
 	s.Equal(currentRunExecutionInfo.WorkflowTypeName, newRunExecutionInfo.WorkflowTypeName)
@@ -2965,8 +2980,35 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	protorequire.ProtoEqual(s.T(), currentRunExecutionInfo.WorkflowExecutionExpirationTime, newRunExecutionInfo.WorkflowExecutionExpirationTime)
 	s.Equal(currentRunExecutionInfo.WorkflowExecutionTimerTaskStatus, newRunExecutionInfo.WorkflowExecutionTimerTaskStatus)
 	s.Equal(currentRunExecutionInfo.FirstExecutionRunId, newRunExecutionInfo.FirstExecutionRunId)
+	protorequire.ProtoEqual(s.T(), currentRunExecutionInfo.PropagatedNexusSerializationContext, newRunExecutionInfo.PropagatedNexusSerializationContext)
 
 	// Add more checks here if needed.
+}
+
+func (s *mutableStateSuite) TestAddWorkflowExecutionStartedEvent_StoresPropagatedNexusSerializationContext() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(1)
+
+	expected := &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:                        &commonpb.WorkflowType{Name: "test-workflow"},
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: "test-queue"},
+				WorkflowRunTimeout:                  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout:                 durationpb.New(1 * time.Second),
+				PropagatedNexusSerializationContext: expected,
+			},
+		},
+	)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), expected, s.mutableState.GetExecutionInfo().PropagatedNexusSerializationContext)
 }
 
 func (s *mutableStateSuite) TestTotalEntitiesCount() {

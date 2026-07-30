@@ -178,6 +178,11 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 	prevRunID := uuid.NewString()
 	firstRunID := uuid.NewString()
 	originalRunID := uuid.NewString()
+	propagatedNexusSerializationContext := &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
 
 	request := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId: testNamespaceID.String(),
@@ -216,12 +221,13 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 			Identity:                 testIdentity,
 			RequestId:                testRequestID,
 			// WorkflowIdReusePolicy: not used for event generation
-			RetryPolicy:      testRetryPolicy,
-			CronSchedule:     testCronSchedule,
-			Memo:             testMemo,
-			SearchAttributes: testSearchAttributes,
-			Header:           testHeader,
-			Links:            []*commonpb.Link{testLink},
+			RetryPolicy:                         testRetryPolicy,
+			CronSchedule:                        testCronSchedule,
+			Memo:                                testMemo,
+			SearchAttributes:                    testSearchAttributes,
+			Header:                              testHeader,
+			Links:                               []*commonpb.Link{testLink},
+			PropagatedNexusSerializationContext: propagatedNexusSerializationContext,
 		},
 	}
 
@@ -282,6 +288,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 						WorkflowId: testRootWorkflowID,
 						RunId:      testRootRunID,
 					},
+					PropagatedNexusSerializationContext: propagatedNexusSerializationContext,
 				},
 			},
 		},

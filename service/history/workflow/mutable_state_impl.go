@@ -2750,11 +2750,12 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		Memo:                     command.Memo,
 		SearchAttributes:         command.SearchAttributes,
 		// No need to request eager execution here (for now)
-		RequestEagerExecution: false,
-		CompletionCallbacks:   completionCallbacks,
-		Links:                 links,
-		Priority:              previousExecutionInfo.Priority,
-		TimeSkippingConfig:    tsc,
+		RequestEagerExecution:               false,
+		CompletionCallbacks:                 completionCallbacks,
+		Links:                               links,
+		Priority:                            previousExecutionInfo.Priority,
+		TimeSkippingConfig:                  tsc,
+		PropagatedNexusSerializationContext: previousExecutionInfo.PropagatedNexusSerializationContext,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -2998,6 +2999,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
+	ms.executionInfo.PropagatedNexusSerializationContext = event.PropagatedNexusSerializationContext
 
 	ms.approximateSize -= ms.executionState.Size()
 	ms.executionState.FirstExecutionRunId = event.GetFirstExecutionRunId()
@@ -5622,7 +5624,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		return serviceerror.NewInternalf("Update ID %s is already present in mutable state", updateID)
 	}
-	ui := persistencespb.UpdateInfo{Value: admission}
+	ui := persistencespb.UpdateInfo{
+		Value:                               admission,
+		PropagatedNexusSerializationContext: attrs.Request.PropagatedNexusSerializationContext,
+	}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
@@ -5684,11 +5689,18 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	// in a reset/conflict resolution scenario where there is no `acceptedRequest` since the previously written
 	// UpdateAdmitted event already contains the Update payload.
 	updateID := attrs.GetProtocolInstanceId()
+	var propagatedNexusSerializationContext *commonpb.PropagatedNexusSerializationContext
+	if attrs.AcceptedRequest != nil {
+		propagatedNexusSerializationContext = attrs.AcceptedRequest.PropagatedNexusSerializationContext
+	}
 	var sizeDelta int
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		sizeBefore := ui.Size()
 		ui.Value = &persistencespb.UpdateInfo_Acceptance{
 			Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
+		}
+		if ui.PropagatedNexusSerializationContext == nil {
+			ui.PropagatedNexusSerializationContext = propagatedNexusSerializationContext
 		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
@@ -5696,6 +5708,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 			Value: &persistencespb.UpdateInfo_Acceptance{
 				Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 			},
+			PropagatedNexusSerializationContext: propagatedNexusSerializationContext,
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
 		ms.executionInfo.UpdateCount++

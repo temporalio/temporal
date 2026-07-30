@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/metrics"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -46,12 +47,13 @@ type (
 		//    so we don't *need* to load the request into the Registry.
 		// 3. Furthermore, it is possible that many UpdateAdmitted events were created after a Reset or during conflict
 		//    resolution. In that situation, we *must not* attempt to load all the payloads into the Registry.
-		request         *anypb.Any // of type *updatepb.Request
-		acceptedEventID int64
-		onComplete      func()
-		checkLimits     func(*updatepb.Request) error
-		instrumentation *instrumentation
-		admittedTime    time.Time
+		request                             *anypb.Any // of type *updatepb.Request
+		acceptedEventID                     int64
+		propagatedNexusSerializationContext *commonpb.PropagatedNexusSerializationContext
+		onComplete                          func()
+		checkLimits                         func(*updatepb.Request) error
+		instrumentation                     *instrumentation
+		admittedTime                        time.Time
 		// pendingCallbacks buffers AttachCallbacks requests that arrive while
 		// the Update is in stateSent. Flushed to the event store in onAcceptanceMsg.
 		// Cleared on rejection, abort, or rollback. In-memory only; lost on lock release.
@@ -322,7 +324,11 @@ func (u *Update) Admit(
 	eventStore EventStore, // Will be useful for durable admitted.
 ) error {
 	if u.state != stateCreated {
-		return nil
+		return commonnexus.ValidatePropagatedSerializationContext(
+			u.propagatedNexusSerializationContext,
+			req.PropagatedNexusSerializationContext,
+			"update",
+		)
 	}
 	if err := u.checkLimits(req); err != nil {
 		// Remove the update from the registry immediately.
@@ -332,6 +338,7 @@ func (u *Update) Admit(
 	if err := validateRequestMsg(u.id, req); err != nil {
 		return err
 	}
+	u.propagatedNexusSerializationContext = req.PropagatedNexusSerializationContext
 	if !eventStore.CanAddEvent() {
 		// There shouldn't be any waiters before Update is admitted (this func returns).
 		// Call abort to seal the Update.

@@ -498,6 +498,82 @@ func (s *WorkflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
 	s.Equal(common.ErrContextTimeoutTooShort, err)
 }
 
+func (s *WorkflowHandlerSuite) TestPollWorkflowTaskQueue_ForwardsPropagatedNexusSerializationContext() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	propagatedContext := &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	request := &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.testNamespace.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "workflow-queue"},
+		Identity:  "worker",
+	}
+	namespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id:   s.testNamespaceID.String(),
+			Name: s.testNamespace.String(),
+		},
+		nil,
+		"",
+	)
+
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.testNamespace).Return(namespaceEntry, nil)
+	s.mockMatchingClient.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *matchingservice.PollWorkflowTaskQueueRequest, _ ...any) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+			s.Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+			return &matchingservice.PollWorkflowTaskQueueResponse{
+				WorkflowExecution:                   &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: "run-id"},
+				PropagatedNexusSerializationContext: propagatedContext,
+			}, nil
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), common.MinLongPollTimeout+time.Second)
+	defer cancel()
+
+	resp, err := wh.PollWorkflowTaskQueue(ctx, request)
+	s.NoError(err)
+	s.ProtoEqual(propagatedContext, resp.PropagatedNexusSerializationContext)
+}
+
+func (s *WorkflowHandlerSuite) TestPollActivityTaskQueue_ForwardsPropagatedNexusSerializationContext() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	propagatedContext := &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	request := &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.testNamespace.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "activity-queue"},
+		Identity:  "worker",
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil)
+	s.mockMatchingClient.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *matchingservice.PollActivityTaskQueueRequest, _ ...any) (*matchingservice.PollActivityTaskQueueResponse, error) {
+			s.Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+			return &matchingservice.PollActivityTaskQueueResponse{
+				WorkflowExecution:                   &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: "run-id"},
+				PropagatedNexusSerializationContext: propagatedContext,
+			}, nil
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), common.MinLongPollTimeout+time.Second)
+	defer cancel()
+
+	resp, err := wh.PollActivityTaskQueue(ctx, request)
+	s.NoError(err)
+	s.ProtoEqual(propagatedContext, resp.PropagatedNexusSerializationContext)
+}
+
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNotSet() {
 	config := s.newConfig()
 	config.RPS = dc.GetIntPropertyFn(10)

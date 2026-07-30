@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
@@ -78,10 +79,11 @@ type creationParams struct {
 // workflow task and to recover head-of-chain identity for legacy workflows missing
 // WorkflowExecutionState.first_execution_run_id.
 type mutableStateInfo struct {
-	branchToken         []byte
-	lastEventID         int64
-	workflowTask        *historyi.WorkflowTaskInfo
-	firstExecutionRunID string
+	branchToken                         []byte
+	lastEventID                         int64
+	workflowTask                        *historyi.WorkflowTaskInfo
+	firstExecutionRunID                 string
+	propagatedNexusSerializationContext *commonpb.PropagatedNexusSerializationContext
 }
 
 // NewStarter creates a new starter, fails if getting the active namespace fails.
@@ -228,6 +230,7 @@ func (s *Starter) Invoke(
 		creationParams.runID, // brand-new chain: first == current run
 		creationParams.workflowTaskInfo,
 		extractHistoryEvents(creationParams.workflowEventBatches),
+		s.request.StartRequest.PropagatedNexusSerializationContext,
 	)
 	return resp, StartNew, err
 }
@@ -338,6 +341,17 @@ func (s *Starter) handleConflict(
 	request := s.request.StartRequest
 	currentWorkflowRequestIDs := currentWorkflowConditionFailed.RequestIDs
 	if requestIDInfo, ok := currentWorkflowRequestIDs[request.GetRequestId()]; ok {
+		mutableStateInfo, err := s.getMutableStateInfo(ctx, currentWorkflowConditionFailed.RunID)
+		if err != nil {
+			return nil, StartErr, err
+		}
+		if err := commonnexus.ValidatePropagatedSerializationContext(
+			mutableStateInfo.propagatedNexusSerializationContext,
+			request.PropagatedNexusSerializationContext,
+			"workflow",
+		); err != nil {
+			return nil, StartErr, err
+		}
 		metrics.StartWorkflowRequestDeduped.With(s.getMetricsHandler()).Record(1)
 
 		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -377,6 +391,7 @@ func (s *Starter) handleConflict(
 		creationParams.runID, // brand-new chain after replacing current
 		creationParams.workflowTaskInfo,
 		extractHistoryEvents(creationParams.workflowEventBatches),
+		s.request.StartRequest.PropagatedNexusSerializationContext,
 	)
 	return resp, startOutcome, err
 }
@@ -535,7 +550,13 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		if err != nil {
 			return nil, StartErr, err
 		}
-		resp, err := s.generateResponse(newRunID, newRunID, mutableStateInfo.workflowTask, events)
+		resp, err := s.generateResponse(
+			newRunID,
+			newRunID,
+			mutableStateInfo.workflowTask,
+			events,
+			mutableStateInfo.propagatedNexusSerializationContext,
+		)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
 		// Exit and retry again from the top.
@@ -592,7 +613,13 @@ func (s *Starter) respondToRetriedRequest(
 		return nil, err
 	}
 
-	return s.generateResponse(runID, firstExecutionRunID, mutableStateInfo.workflowTask, events)
+	return s.generateResponse(
+		runID,
+		firstExecutionRunID,
+		mutableStateInfo.workflowTask,
+		events,
+		mutableStateInfo.propagatedNexusSerializationContext,
+	)
 }
 
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
@@ -643,10 +670,11 @@ func extractMutableStateInfo(ctx context.Context, mutableState historyi.MutableS
 	}
 
 	return &mutableStateInfo{
-		branchToken:         branchToken,
-		lastEventID:         mutableState.GetNextEventID() - 1,
-		workflowTask:        &workflowTask,
-		firstExecutionRunID: firstRunID,
+		branchToken:                         branchToken,
+		lastEventID:                         mutableState.GetNextEventID() - 1,
+		workflowTask:                        &workflowTask,
+		firstExecutionRunID:                 firstRunID,
+		propagatedNexusSerializationContext: mutableState.GetExecutionInfo().PropagatedNexusSerializationContext,
 	}, nil
 }
 
@@ -682,11 +710,22 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 	currentWorkflowStartTime time.Time,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
+	mutableStateInfo, err := s.getMutableStateInfo(ctx, workflowKey.RunID)
+	if err != nil {
+		return nil, StartErr, err
+	}
+	if err := commonnexus.ValidatePropagatedSerializationContext(
+		mutableStateInfo.propagatedNexusSerializationContext,
+		s.request.StartRequest.PropagatedNexusSerializationContext,
+		"workflow",
+	); err != nil {
+		return nil, StartErr, err
+	}
+
 	// Default response link is for the started event. If there is OnConflictOptions set, and it's
 	// attaching the request ID, then the response link will be a request ID reference.
 	responseLink := s.generateStartedEventRefLink(currentWorkflowConditionFailed.RunID)
 
-	var err error
 	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
 	if onConflictOptions != nil {
 		requestID := ""
@@ -788,6 +827,7 @@ func (s *Starter) generateResponse(
 	firstExecutionRunID string,
 	workflowTaskInfo *historyi.WorkflowTaskInfo,
 	historyEvents []*historypb.HistoryEvent,
+	propagatedNexusSerializationContext *commonpb.PropagatedNexusSerializationContext,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	shardCtx := s.shardContext
 	tokenSerializer := s.tokenSerializer
@@ -837,14 +877,15 @@ func (s *Starter) generateResponse(
 			WorkflowType:      request.GetWorkflowType(),
 			// TODO: consider getting the ID from mutable state, this was not done to avoid adding more complexity to
 			// the code to plumb that value through.
-			PreviousStartedEventId:     0,
-			StartedEventId:             workflowTaskInfo.StartedEventID,
-			Attempt:                    workflowTaskInfo.Attempt,
-			History:                    &historypb.History{Events: historyEvents},
-			NextPageToken:              nil,
-			WorkflowExecutionTaskQueue: workflowTaskInfo.TaskQueue,
-			ScheduledTime:              timestamppb.New(workflowTaskInfo.ScheduledTime),
-			StartedTime:                timestamppb.New(workflowTaskInfo.StartedTime),
+			PreviousStartedEventId:              0,
+			StartedEventId:                      workflowTaskInfo.StartedEventID,
+			Attempt:                             workflowTaskInfo.Attempt,
+			History:                             &historypb.History{Events: historyEvents},
+			NextPageToken:                       nil,
+			WorkflowExecutionTaskQueue:          workflowTaskInfo.TaskQueue,
+			ScheduledTime:                       timestamppb.New(workflowTaskInfo.ScheduledTime),
+			StartedTime:                         timestamppb.New(workflowTaskInfo.StartedTime),
+			PropagatedNexusSerializationContext: propagatedNexusSerializationContext,
 		},
 	}, nil
 }

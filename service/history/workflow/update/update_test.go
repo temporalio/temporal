@@ -1597,3 +1597,35 @@ func TestAttachCallbacks(t *testing.T) {
 		require.Equal(t, tv.RequestID(), (*capturedOptions)[0].AttachedRequestId)
 	})
 }
+
+func TestSendPreservesPropagatedNexusSerializationContext(t *testing.T) {
+	tv := testvars.New(t)
+	effects := &effect.Buffer{}
+	upd := update.New(tv.UpdateID())
+	newRequest := func(operation string) *updatepb.Request {
+		return &updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input: &updatepb.Input{Name: "handler"},
+			PropagatedNexusSerializationContext: &commonpb.PropagatedNexusSerializationContext{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: operation,
+			},
+		}
+	}
+	request := newRequest("operation")
+
+	require.NoError(t, upd.Admit(request, mockEventStore{Controller: effects}))
+	effects.Apply(t.Context())
+
+	require.NoError(t, upd.Admit(newRequest("operation"), nil))
+	var failedPrecondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, upd.Admit(newRequest("other-operation"), nil), &failedPrecondition)
+
+	message := upd.Send(false, &protocolpb.Message_EventId{EventId: testSequencingEventID})
+	require.NotNil(t, message)
+	sentRequest := UnmarshalAny[*updatepb.Request](t, message.GetBody())
+	require.Equal(t, request.PropagatedNexusSerializationContext.Endpoint, sentRequest.PropagatedNexusSerializationContext.Endpoint)
+	require.Equal(t, request.PropagatedNexusSerializationContext.Service, sentRequest.PropagatedNexusSerializationContext.Service)
+	require.Equal(t, request.PropagatedNexusSerializationContext.Operation, sentRequest.PropagatedNexusSerializationContext.Operation)
+}

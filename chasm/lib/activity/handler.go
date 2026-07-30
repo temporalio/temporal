@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 )
 
 var (
@@ -127,29 +128,54 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	onConflict := frontendReq.GetOnConflictOptions()
 	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
 	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
-	if !result.Created && (attachCallbacks || attachLinks) {
-		requestID := frontendReq.GetRequestId()
+	if !result.Created {
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
-		_, _, err := chasm.UpdateComponent(
-			ctx,
-			ref,
-			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
-				if attachCallbacks {
-					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+		if attachCallbacks || attachLinks {
+			requestID := frontendReq.GetRequestId()
+			_, _, err := chasm.UpdateComponent(
+				ctx,
+				ref,
+				func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
+					if err := commonnexus.ValidatePropagatedSerializationContext(
+						a.propagatedNexusSerializationContext(ctx),
+						frontendReq.PropagatedNexusSerializationContext,
+						"activity when using ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING",
+					); err != nil {
 						return nil, err
 					}
-				}
-				if attachLinks {
-					if err := a.attachLinks(ctx, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
-						return nil, err
+					if attachCallbacks {
+						if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+							return nil, err
+						}
 					}
-				}
-				return nil, nil
-			},
-			nil,
-		)
-		if err != nil {
-			return nil, err
+					if attachLinks {
+						if err := a.attachLinks(ctx, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
+							return nil, err
+						}
+					}
+					return nil, nil
+				},
+				nil,
+			)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			_, err := chasm.ReadComponent(
+				ctx,
+				ref,
+				func(a *Activity, ctx chasm.Context, _ any) (struct{}, error) {
+					return struct{}{}, commonnexus.ValidatePropagatedSerializationContext(
+						a.propagatedNexusSerializationContext(ctx),
+						frontendReq.PropagatedNexusSerializationContext,
+						"activity when using ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING",
+					)
+				},
+				nil,
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 

@@ -953,6 +953,101 @@ func TestNewStandaloneActivity_UserMetadataDualWrite(t *testing.T) {
 	require.Same(t, md, activity.RequestData.Get(ctx).GetUserMetadata()) //nolint:staticcheck // exercising legacy field
 }
 
+func TestNewStandaloneActivity_PersistsPropagatedNexusSerializationContext(t *testing.T) {
+	propagatedContext := &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+		},
+	}
+
+	activity, err := NewStandaloneActivity(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:                           "ns",
+		ActivityId:                          "act",
+		ActivityType:                        &commonpb.ActivityType{Name: "T"},
+		TaskQueue:                           &taskqueuepb.TaskQueue{Name: "Q"},
+		RequestId:                           "req-id",
+		PropagatedNexusSerializationContext: propagatedContext,
+	})
+	require.NoError(t, err)
+	require.Same(t, propagatedContext, activity.RequestData.Get(ctx).PropagatedNexusSerializationContext)
+}
+
+func TestGenerateRecordActivityTaskStartedResponse_IncludesPropagatedNexusSerializationContext(t *testing.T) {
+	propagatedContext := &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "ns", BusinessID: "act", RunID: "run"}
+			},
+		},
+	}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType: &commonpb.ActivityType{Name: "T"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "Q"},
+			ScheduleTime: timestamppb.New(time.Unix(0, 0)),
+		},
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			Count:       1,
+			StartedTime: timestamppb.New(time.Unix(10, 0)),
+		}),
+		LastHeartbeat: chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{}),
+		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
+			PropagatedNexusSerializationContext: propagatedContext,
+		}),
+	}
+
+	resp, err := activity.GenerateRecordActivityTaskStartedResponse(ctx, "test-namespace")
+	require.NoError(t, err)
+	require.Same(t, propagatedContext, resp.PropagatedNexusSerializationContext)
+}
+
+func TestBuildActivityExecutionInfo_IncludesPropagatedNexusSerializationContext(t *testing.T) {
+	propagatedContext := &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "ns", BusinessID: "act", RunID: "run"}
+			},
+			HandleExecutionInfo: func() chasm.ExecutionInfo {
+				return chasm.ExecutionInfo{ApproximateStateSize: 123, StateTransitionCount: 7}
+			},
+		},
+	}
+	visibility := chasm.NewVisibilityWithData(ctx, nil, nil)
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType: &commonpb.ActivityType{Name: "T"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "Q"},
+			Status:       activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			ScheduleTime: timestamppb.New(time.Unix(0, 0)),
+		},
+		LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
+		LastHeartbeat: chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{}),
+		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
+			PropagatedNexusSerializationContext: propagatedContext,
+		}),
+		Visibility: chasm.NewComponentField(ctx, visibility),
+	}
+
+	info := activity.buildActivityExecutionInfo(ctx, &workflowservice.DescribeActivityExecutionRequest{})
+	require.Same(t, propagatedContext, info.PropagatedNexusSerializationContext)
+}
+
 func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *testing.T) {
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{

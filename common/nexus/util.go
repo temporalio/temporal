@@ -6,7 +6,10 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	commonpb "go.temporal.io/api/common/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/proto"
 )
 
 // FormatDuration converts a duration into a string representation in millisecond resolution.
@@ -44,4 +47,18 @@ func ConvertLinksFromProto(links []*nexuspb.Link) []nexus.Link {
 		}
 	}
 	return result
+}
+
+func ValidatePropagatedSerializationContext(
+	existing *commonpb.PropagatedNexusSerializationContext,
+	requested *commonpb.PropagatedNexusSerializationContext,
+	resource string,
+) error {
+	if proto.Equal(existing, requested) {
+		return nil
+	}
+	return serviceerror.NewFailedPreconditionf(
+		"propagated nexus serialization context must match the existing %s",
+		resource,
+	)
 }

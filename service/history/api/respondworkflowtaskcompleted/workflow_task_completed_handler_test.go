@@ -19,6 +19,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -630,6 +631,11 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 	}
 
 	expectedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
+	propagatedContext := &commonpb.PropagatedNexusSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
 
 	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	ms.EXPECT().GetActivityByActivityID(activityID).Return(ai, true)
@@ -638,8 +644,9 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 		ai, scheduledEventID, gomock.Any(), "test-identity", gomock.Any(), nil, nil, "/_sys/worker-commands/test-ns/key1", expectedClock,
 	).Return(&historypb.HistoryEvent{EventId: 7}, nil)
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: "test-namespace-id",
-		WorkflowId:  "test-workflow-id",
+		NamespaceId:                         "test-namespace-id",
+		WorkflowId:                          "test-workflow-id",
+		PropagatedNexusSerializationContext: propagatedContext,
 	})
 	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: "test-run-id",
@@ -672,6 +679,11 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 	mutation, err := handler.handlePostCommandEagerExecuteActivity(context.Background(), attr)
 	require.NoError(t, err)
 	require.NotNil(t, mutation)
+
+	resp := &historyservice.RespondWorkflowTaskCompletedResponse{}
+	require.NoError(t, mutation(resp))
+	require.Len(t, resp.GetActivityTasks(), 1)
+	require.Same(t, propagatedContext, resp.GetActivityTasks()[0].PropagatedNexusSerializationContext)
 }
 
 func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {

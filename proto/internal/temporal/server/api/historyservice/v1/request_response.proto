@@ -301,6 +301,7 @@ message RecordWorkflowTaskStartedResponse {
   //          as raw_history_bytes (field 21) will be the only field used.
   temporal.api.history.v1.History raw_history = 20 [deprecated = true];
   repeated bytes raw_history_bytes = 21;
+  temporal.api.common.v1.PropagatedNexusSerializationContext propagated_nexus_serialization_context = 22;
 }
 
 // RecordWorkflowTaskStartedResponseWithRawHistory is wire-compatible with RecordWorkflowTaskStartedResponse.
@@ -345,6 +346,7 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
   // instead of a proto-decoded History. This avoids matching service having to decode history.
   repeated bytes raw_history = 20 [deprecated = true];
   repeated bytes raw_history_bytes = 21;
+  temporal.api.common.v1.PropagatedNexusSerializationContext propagated_nexus_serialization_context = 22;
 }
 
 message RecordActivityTaskStartedRequest {
@@ -392,6 +394,7 @@ message RecordActivityTaskStartedResponse {
   int64 start_version = 12;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 13;
+  temporal.api.common.v1.PropagatedNexusSerializationContext propagated_nexus_serialization_context = 14;
 }
 
 message RespondWorkflowTaskCompletedRequest {

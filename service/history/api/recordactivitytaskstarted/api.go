@@ -141,10 +141,12 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, err
 	}
 
+	executionInfo := mutableState.GetExecutionInfo()
 	response := &historyservice.RecordActivityTaskStartedResponse{
-		ScheduledEvent:              scheduledEvent,
-		CurrentAttemptScheduledTime: ai.ScheduledTime,
-		Priority:                    priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority),
+		ScheduledEvent:                      scheduledEvent,
+		CurrentAttemptScheduledTime:         ai.ScheduledTime,
+		Priority:                            priorities.Merge(executionInfo.Priority, ai.Priority),
+		PropagatedNexusSerializationContext: executionInfo.PropagatedNexusSerializationContext,
 	}
 
 	if ai.StartedEventId != common.EmptyEventID {

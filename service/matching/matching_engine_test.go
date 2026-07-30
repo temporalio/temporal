@@ -2143,6 +2143,11 @@ func (s *matchingEngineSuite) TestCreatePollActivityTaskQueueResponse_ActivityAt
 			scheduledEventID := int64(10)
 			attempt := int32(1)
 			taskStamp := int32(17)
+			propagatedContext := &commonpb.PropagatedNexusSerializationContext{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "operation",
+			}
 
 			task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
 				NamespaceId:      namespaceID,
@@ -2155,7 +2160,8 @@ func (s *matchingEngineSuite) TestCreatePollActivityTaskQueueResponse_ActivityAt
 			}, nil, 0, nil)
 
 			resp := s.matchingEngine.createPollActivityTaskQueueResponse(task, &historyservice.RecordActivityTaskStartedResponse{
-				Attempt: attempt,
+				Attempt:                             attempt,
+				PropagatedNexusSerializationContext: propagatedContext,
 				ScheduledEvent: &historypb.HistoryEvent{
 					EventId: scheduledEventID,
 					Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
@@ -2178,6 +2184,7 @@ func (s *matchingEngineSuite) TestCreatePollActivityTaskQueueResponse_ActivityAt
 			s.Equal(attempt, token.GetAttempt())
 			s.Equal(tc.componentRef, token.GetComponentRef())
 			s.Equal(tc.wantActivityTaskStamp, token.GetActivityAttemptStamp())
+			protorequire.ProtoEqual(s.T(), propagatedContext, resp.PropagatedNexusSerializationContext)
 		})
 	}
 }
@@ -6096,6 +6103,11 @@ func TestConvertPollWorkflowTaskQueueResponse_FieldMapping(t *testing.T) {
 				{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 			},
 		},
+		PropagatedNexusSerializationContext: &commonpb.PropagatedNexusSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		},
 	}
 
 	result, err := engine.convertPollWorkflowTaskQueueResponse(inputResp, "test-namespace")
@@ -6117,6 +6129,7 @@ func TestConvertPollWorkflowTaskQueueResponse_FieldMapping(t *testing.T) {
 	assert.Equal(t, inputResp.BranchToken, result.BranchToken)
 	assert.Equal(t, inputResp.NextPageToken, result.NextPageToken)
 	assert.Equal(t, inputResp.History.Events[0].EventId, result.History.Events[0].EventId)
+	protorequire.ProtoEqual(t, inputResp.PropagatedNexusSerializationContext, result.PropagatedNexusSerializationContext)
 }
 
 func TestGetHistoryForQueryTask(t *testing.T) {

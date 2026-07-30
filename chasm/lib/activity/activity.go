@@ -223,8 +223,9 @@ func NewStandaloneActivity(
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
-			Input:  request.Input,
-			Header: request.Header,
+			Input:                               request.Input,
+			Header:                              request.Header,
+			PropagatedNexusSerializationContext: request.PropagatedNexusSerializationContext,
 			// Dual-write user_metadata to the legacy ActivityRequestData field so that a
 			// rolled-back binary (which only reads from here) keeps showing it. The
 			// authoritative copy lives on ChasmComponentAttributes.user_metadata; this
@@ -306,14 +307,15 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	links := ctx.Links(a)
 
 	return &historyservice.RecordActivityTaskStartedResponse{
-		StartedTime:                 attempt.GetStartedTime(),
-		Attempt:                     attempt.GetCount(),
-		Priority:                    a.GetPriority(),
-		RetryPolicy:                 a.GetRetryPolicy(),
-		ActivityRunId:               key.RunID,
-		WorkflowNamespace:           namespace,
-		HeartbeatDetails:            lastHeartbeat.GetDetails(),
-		CurrentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
+		StartedTime:                         attempt.GetStartedTime(),
+		Attempt:                             attempt.GetCount(),
+		Priority:                            a.GetPriority(),
+		RetryPolicy:                         a.GetRetryPolicy(),
+		ActivityRunId:                       key.RunID,
+		WorkflowNamespace:                   namespace,
+		HeartbeatDetails:                    lastHeartbeat.GetDetails(),
+		CurrentAttemptScheduledTime:         a.dispatchTimeForAttempt(attempt),
+		PropagatedNexusSerializationContext: requestData.PropagatedNexusSerializationContext,
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 			EventTime: a.GetScheduleTime(),
@@ -464,6 +466,12 @@ func (a *Activity) effectiveUserMetadata(ctx chasm.Context) *sdkpb.UserMetadata 
 		return md
 	}
 	return a.RequestData.Get(ctx).GetUserMetadata() //nolint:staticcheck // deprecated, read-only fallback
+}
+
+func (a *Activity) propagatedNexusSerializationContext(
+	ctx chasm.Context,
+) *commonpb.PropagatedNexusSerializationContext {
+	return a.RequestData.Get(ctx).PropagatedNexusSerializationContext
 }
 
 // attachLinks records the given links on the activity keyed by requestID. Duplicates
@@ -1720,41 +1728,42 @@ func (a *Activity) buildActivityExecutionInfo(
 	}
 
 	info := &apiactivitypb.ActivityExecutionInfo{
-		ActivityId:              key.BusinessID,
-		ActivityType:            a.GetActivityType(),
-		Attempt:                 attempt.GetCount(),
-		CanceledReason:          a.CancelState.GetReason(),
-		CloseTime:               closeTime,
-		CurrentRetryInterval:    a.currentRetryInterval(ctx, attempt),
-		ExecutionDuration:       executionDuration,
-		ExecutionTime:           timestamppb.New(a.firstDispatchTime()),
-		ExpirationTime:          expirationTime,
-		Header:                  requestData.GetHeader(),
-		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
-		Links:                   ctx.Links(a),
-		TotalHeartbeatCount:     heartbeat.GetTotalHeartbeatCount(),
-		LastAttemptCompleteTime: attempt.GetCompleteTime(),
-		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
-		LastStartedTime:         attempt.GetStartedTime(),
-		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
-		SdkName:                 attempt.GetSdkName(),
-		SdkVersion:              attempt.GetSdkVersion(),
-		NextAttemptScheduleTime: a.nextAttemptDispatchTime(ctx, attempt),
-		Priority:                a.GetPriority(),
-		RetryPolicy:             a.GetRetryPolicy(),
-		RunId:                   key.RunID,
-		RunState:                runState,
-		ScheduleTime:            a.GetScheduleTime(),
-		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
-		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
-		StartDelay:              a.GetStartDelay(),
-		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
-		StateSizeBytes:          int64(executionInfo.ApproximateStateSize),
-		StateTransitionCount:    executionInfo.StateTransitionCount,
-		SearchAttributes:        sa,
-		Status:                  status,
-		TaskQueue:               a.GetTaskQueue().GetName(),
-		UserMetadata:            a.effectiveUserMetadata(ctx),
+		ActivityId:                          key.BusinessID,
+		ActivityType:                        a.GetActivityType(),
+		Attempt:                             attempt.GetCount(),
+		CanceledReason:                      a.CancelState.GetReason(),
+		CloseTime:                           closeTime,
+		CurrentRetryInterval:                a.currentRetryInterval(ctx, attempt),
+		ExecutionDuration:                   executionDuration,
+		ExecutionTime:                       timestamppb.New(a.firstDispatchTime()),
+		ExpirationTime:                      expirationTime,
+		Header:                              requestData.GetHeader(),
+		HeartbeatTimeout:                    a.GetHeartbeatTimeout(),
+		Links:                               ctx.Links(a),
+		TotalHeartbeatCount:                 heartbeat.GetTotalHeartbeatCount(),
+		LastAttemptCompleteTime:             attempt.GetCompleteTime(),
+		LastHeartbeatTime:                   heartbeat.GetRecordedTime(),
+		LastStartedTime:                     attempt.GetStartedTime(),
+		LastWorkerIdentity:                  attempt.GetLastWorkerIdentity(),
+		SdkName:                             attempt.GetSdkName(),
+		SdkVersion:                          attempt.GetSdkVersion(),
+		NextAttemptScheduleTime:             a.nextAttemptDispatchTime(ctx, attempt),
+		Priority:                            a.GetPriority(),
+		RetryPolicy:                         a.GetRetryPolicy(),
+		RunId:                               key.RunID,
+		RunState:                            runState,
+		ScheduleTime:                        a.GetScheduleTime(),
+		ScheduleToCloseTimeout:              a.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout:              a.GetScheduleToStartTimeout(),
+		StartDelay:                          a.GetStartDelay(),
+		StartToCloseTimeout:                 a.GetStartToCloseTimeout(),
+		StateSizeBytes:                      int64(executionInfo.ApproximateStateSize),
+		StateTransitionCount:                executionInfo.StateTransitionCount,
+		SearchAttributes:                    sa,
+		Status:                              status,
+		TaskQueue:                           a.GetTaskQueue().GetName(),
+		UserMetadata:                        a.effectiveUserMetadata(ctx),
+		PropagatedNexusSerializationContext: a.propagatedNexusSerializationContext(ctx),
 	}
 	if request.GetIncludeHeartbeatDetails() {
 		info.HeartbeatDetails = heartbeat.GetDetails()
