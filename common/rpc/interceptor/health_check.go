@@ -236,6 +236,9 @@ func (s *healthSignalAggregatorImpl) LatencyQuantileByGroup(groupName string, qu
 	return s.signals.LatencyQuantileByGroup(groupName, quantile)
 }
 
+// NOTE: as of right now, this is just using the original error ratio instead of the
+// signals overall one. this is fine for now and will be removed once we know signals
+// is good to go
 func (s *healthSignalAggregatorImpl) ErrorRatio() (float64, bool) {
 	if !s.aggregatorEnabled() {
 		s.logger.Debug("health signal aggregator is disabled")
