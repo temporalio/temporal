@@ -35,6 +35,12 @@ var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	`Toggles standalone Nexus operation functionality on the server.`,
 )
 
+var EnableNexusCallbacks = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.enableNexusCallbacks",
+	false,
+	`Allows attaching Nexus completion callbacks to standalone Nexus operation executions.`,
+)
+
 var EnableChasmWorkflowOperations = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableChasmWorkflowOperations",
 	false,
@@ -243,6 +249,7 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 type Config struct {
 	Enabled                                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableNexusCallbacks                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumHistoryShards                           int32
@@ -275,6 +282,7 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 	return &Config{
 		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
+		EnableNexusCallbacks:               EnableNexusCallbacks.Get(dc),
 		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,

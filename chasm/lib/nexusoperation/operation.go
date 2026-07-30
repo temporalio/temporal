@@ -3,23 +3,30 @@ package nexusoperation
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	apinexusoperationpb "go.temporal.io/api/nexusoperation/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -40,6 +47,7 @@ var _ chasm.RootComponent = (*Operation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
 var _ chasm.VisibilitySearchAttributesProvider = (*Operation)(nil)
 var _ chasm.NexusCompletionHandler = (*Operation)(nil)
+var _ callback.CompletionSource = (*Operation)(nil)
 
 // ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
 var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancellation already requested")
@@ -99,6 +107,14 @@ type Operation struct {
 	Cancellation chasm.Field[*Cancellation]
 	Outcome      chasm.Field[*nexusoperationpb.OperationOutcome]
 	Visibility   chasm.Field[*chasm.Visibility]
+
+	// Callbacks holds completion callbacks to be invoked once this standalone operation reaches a terminal
+	// state. Nil for workflow-backed operations, as the calling workflow owns its own callbacks.
+	//
+	// TODO(chrsmith): Look into this. If the SANO is backed by a workflow, we'd still want the SANO
+	// UI to display the worker callbacks. So I'm not sure we want to maintain those as a separate
+	// list.
+	Callbacks chasm.Map[string, *callback.Callback]
 }
 
 // NewOperation creates a new Operation component with the given persisted state.
@@ -133,10 +149,30 @@ func newStandaloneOperation(
 		frontendReq.GetSearchAttributes().GetIndexedFields(),
 		nil,
 	))
+	if err := op.addCompletionCallbacks(
+		ctx,
+		frontendReq.GetRequestId(),
+		frontendReq.GetCompletionCallbacks(),
+		maxCallbacksFromContext(ctx),
+	); err != nil {
+		return nil, err
+	}
 	if err := TransitionScheduled.Apply(op, ctx, EventScheduled{}); err != nil {
 		return nil, err
 	}
 	return op, nil
+}
+
+// maxCallbacksFromContext reads the per-namespace completion callback limit from the component context
+// values registered by the library. Fails closed (rejecting all callbacks) if the context is missing.
+func maxCallbacksFromContext(ctx chasm.Context) int {
+	opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext)
+	if !ok {
+		softassert.Fail(ctx.Logger(), "operation context missing")
+		return 0
+	}
+	nsName := ctx.NamespaceEntry().Name().String()
+	return opCtx.MaxCallbacksPerExecution(nsName)
 }
 
 // LifecycleState maps the operation's status to a CHASM lifecycle state.
@@ -390,7 +426,7 @@ func (o *Operation) resolveUnsuccessfully(ctx chasm.MutableContext, failure *fai
 
 	// NextAttemptScheduleTime is only valid in BACKING_OFF; clear on close
 	o.NextAttemptScheduleTime = nil
-	return nil
+	return o.scheduleCompletionCallbacks(ctx)
 }
 
 func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperationpb.OperationOutcome {
@@ -400,6 +436,175 @@ func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperation
 	outcome := &nexusoperationpb.OperationOutcome{}
 	o.Outcome = chasm.NewDataField(ctx, outcome)
 	return outcome
+}
+
+// addCompletionCallbacks converts the API callbacks on a start request into CHASM callback components and
+// attaches them to the operation in STANDBY state. They stay in STANDBY until the operation reaches a
+// terminal state, at which point scheduleCompletionCallbacks releases them for delivery.
+//
+// Callbacks are keyed by requestID plus their position within the request, so re-attaching the same
+// request (a client retry, or a retried on_conflict_options attach) overwrites rather than duplicates.
+//
+// Only the Nexus callback variant is supported; that is enforced up front by the frontend
+// (see validateCompletionCallbacks) and re-checked here because the CHASM callback component has no
+// representation for any other variant.
+func (o *Operation) addCompletionCallbacks(
+	ctx chasm.MutableContext,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	maxCallbacks int,
+) error {
+	if len(completionCallbacks) == 0 {
+		return nil
+	}
+	if o.isClosed() {
+		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed nexus operation")
+	}
+
+	currentCount := len(o.Callbacks)
+	if len(completionCallbacks)+currentCount > maxCallbacks {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to a nexus operation (%d callbacks already attached)",
+			maxCallbacks,
+			currentCount,
+		)
+	}
+
+	if o.Callbacks == nil {
+		o.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+	}
+
+	registrationTime := timestamppb.New(ctx.Now(o))
+	for idx, cb := range completionCallbacks {
+		// TODO: Why do we need to check the variant here?
+		// Us only supporting Nexus callbacks should be verified earlier, in frontend.go
+		// via the enableNexusCallbacks config option. (And the validation step should
+		// reject any other, unknown variants of callbacks.)
+		// TODO: Add unit tests that correctly bail if trying to spawn SANOs with bogus callbacks.
+		variant, ok := cb.GetVariant().(*commonpb.Callback_Nexus_)
+		if !ok {
+			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", cb.GetVariant())
+		}
+		chasmCB := &callbackspb.Callback{
+			Links: cb.GetLinks(),
+			Variant: &callbackspb.Callback_Nexus_{
+				Nexus: &callbackspb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			},
+		}
+		id := fmt.Sprintf("%s-%d", requestID, idx)
+		callbackObj := callback.NewCallback(requestID, registrationTime, &callbackspb.CallbackState{}, chasmCB)
+		o.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
+	}
+	return nil
+}
+
+// scheduleCompletionCallbacks releases every STANDBY completion callback for delivery. Called from each
+// terminal transition. Workflow-backed operations never carry callbacks of their own, so this is a no-op
+// for them.
+func (o *Operation) scheduleCompletionCallbacks(ctx chasm.MutableContext) error {
+	return callback.ScheduleStandbyCallbacks(ctx, o.Callbacks)
+}
+
+// GetNexusCompletion returns the operation's completion data in the format required by the Nexus callback
+// invocation. Implements callback.CompletionSource.
+func (o *Operation) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {
+	if !o.isClosed() {
+		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("nexus operation has not completed yet")
+	}
+
+	key := ctx.ExecutionKey()
+	backLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+		Namespace:   ctx.NamespaceEntry().Name().String(),
+		OperationId: key.BusinessID,
+		RunId:       key.RunID,
+	})
+
+	opts := nexusrpc.CompleteOperationOptions{
+		StartTime: o.GetScheduledTime().AsTime(),
+		CloseTime: ctx.ExecutionInfo().CloseTime,
+		Links:     []nexus.Link{backLink},
+	}
+
+	result, failure := o.outcome(ctx)
+	if o.Status == nexusoperationpb.OPERATION_STATUS_SUCCEEDED {
+		opts.Result = result
+		return opts, nil
+	}
+	if failure == nil {
+		return nexusrpc.CompleteOperationOptions{},
+			serviceerror.NewInternalf("nexus operation in status %v has no outcome", o.Status)
+	}
+
+	state := nexus.OperationStateFailed
+	message := "operation failed"
+	if o.Status == nexusoperationpb.OPERATION_STATUS_CANCELED {
+		state = nexus.OperationStateCanceled
+		message = "operation canceled"
+	}
+
+	nf, err := commonnexus.TemporalFailureToNexusFailure(failure)
+	if err != nil {
+		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("failed to convert failure: %v", err)
+	}
+	opErr := &nexus.OperationError{
+		State:   state,
+		Message: message,
+		Cause:   &nexus.FailureError{Failure: nf},
+	}
+	if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+		return nexusrpc.CompleteOperationOptions{}, err
+	}
+	opts.Error = opErr
+	return opts, nil
+}
+
+// buildCompletionCallbackInfos projects the attached completion callbacks onto the API surface for the
+// describe response.
+func (o *Operation) buildCompletionCallbackInfos(ctx chasm.Context) ([]*apinexusoperationpb.CallbackInfo, error) {
+	if len(o.Callbacks) == 0 {
+		return nil, nil
+	}
+
+	// Iterate in key order so that the response ordering is stable across calls, since ranging over the
+	// underlying map is not.
+	infos := make([]*apinexusoperationpb.CallbackInfo, 0, len(o.Callbacks))
+	for _, id := range slices.Sorted(maps.Keys(o.Callbacks)) {
+		cb := o.Callbacks[id].Get(ctx)
+
+		cbSpec, err := cb.ToAPICallback()
+		if err != nil {
+			return nil, err
+		}
+		state, err := cb.APIState()
+		if err != nil {
+			return nil, err
+		}
+
+		infos = append(infos, &apinexusoperationpb.CallbackInfo{
+			Trigger: &apinexusoperationpb.CallbackInfo_Trigger{
+				Variant: &apinexusoperationpb.CallbackInfo_Trigger_OperationCompleted{
+					OperationCompleted: &apinexusoperationpb.CallbackInfo_OperationCompleted{},
+				},
+			},
+			// This outlives the CHASM transaction, so clone every proto sourced from the persisted state.
+			// TODO: There has to be some existing method in the `callback` package, right?
+			// We shouldn't be duplicating all this here in the `nexusoperation` package.
+			Info: &callbackpb.CallbackInfo{
+				Callback:                cbSpec,
+				RegistrationTime:        common.CloneProto(cb.RegistrationTime),
+				State:                   state,
+				Attempt:                 cb.Attempt,
+				LastAttemptCompleteTime: common.CloneProto(cb.LastAttemptCompleteTime),
+				LastAttemptFailure:      common.CloneProto(cb.LastAttemptFailure),
+				NextAttemptScheduleTime: common.CloneProto(cb.NextAttemptScheduleTime),
+				Outcome:                 cb.Outcome(ctx),
+			},
+		})
+	}
+	return infos, nil
 }
 
 func (o *Operation) Terminate(
@@ -438,10 +643,16 @@ func (o *Operation) buildDescribeResponse(
 		return nil, err
 	}
 
+	callbackInfos, err := o.buildCompletionCallbackInfos(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	resp := &workflowservice.DescribeNexusOperationExecutionResponse{
-		RunId:         ctx.ExecutionKey().RunID,
-		Info:          o.buildExecutionInfo(ctx),
-		LongPollToken: token,
+		RunId:               ctx.ExecutionKey().RunID,
+		Info:                o.buildExecutionInfo(ctx),
+		LongPollToken:       token,
+		CompletionCallbacks: callbackInfos,
 	}
 	if req.GetFrontendRequest().GetIncludeInput() {
 		resp.Input = o.RequestData.Get(ctx).GetInput()

@@ -175,6 +175,57 @@ func validateAndNormalizeStartRequest(
 	if req.GetIdConflictPolicy() == enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_UNSPECIFIED {
 		req.IdConflictPolicy = enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_FAIL
 	}
+	if err := validateCompletionCallbacks(req, config); err != nil {
+		return err
+	}
+	return validateOnConflictOptions(req)
+}
+
+// validateCompletionCallbacks checks that the request's completion callbacks are permitted for the
+// namespace and use a variant that standalone Nexus operations can persist. Callback contents (count,
+// URL length, endpoint allowlist, header size) are validated separately by callback.Validator, which
+// needs the RPC context.
+func validateCompletionCallbacks(req *workflowservice.StartNexusOperationExecutionRequest, config *Config) error {
+	cbs := req.GetCompletionCallbacks()
+	if len(cbs) == 0 {
+		return nil
+	}
+	if !config.EnableNexusCallbacks(req.GetNamespace()) {
+		return serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
+	}
+	for i, cb := range cbs {
+		if _, ok := cb.GetVariant().(*commonpb.Callback_Nexus_); !ok {
+			return serviceerror.NewInvalidArgumentf(
+				"completion_callbacks[%d]: unsupported callback variant: %T", i, cb.GetVariant())
+		}
+	}
+	return nil
+}
+
+// validateOnConflictOptions validates the on_conflict_options of a start request:
+//   - attach_links is not supported: StartNexusOperationExecutionRequest has no links field, so there is
+//     nothing to attach. Reject rather than silently drop the caller's intent.
+//   - attach_completion_callbacks requires attach_request_id. A completion callback is recorded against
+//     the request ID (see Operation.addCompletionCallbacks, which keys callbacks by request ID).
+//   - attach_request_id requires at least one completion callback, since attaching a request ID is only
+//     meaningful alongside something to attach.
+func validateOnConflictOptions(req *workflowservice.StartNexusOperationExecutionRequest) error {
+	onConflictOptions := req.GetOnConflictOptions()
+	if onConflictOptions == nil {
+		return nil
+	}
+	if onConflictOptions.GetAttachLinks() {
+		return serviceerror.NewUnimplemented(
+			"on_conflict_options: attach_links is not supported for Nexus operation executions")
+	}
+	if onConflictOptions.GetAttachCompletionCallbacks() && !onConflictOptions.GetAttachRequestId() {
+		return serviceerror.NewInvalidArgument(
+			"on_conflict_options: attach_completion_callbacks requires attach_request_id to be set")
+	}
+	if onConflictOptions.GetAttachRequestId() && len(req.GetCompletionCallbacks()) == 0 {
+		return serviceerror.NewInvalidArgument(
+			"on_conflict_options: attach_request_id requires at least one completion callback")
+	}
 	return nil
 }
 

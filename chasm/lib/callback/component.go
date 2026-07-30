@@ -8,6 +8,7 @@ import (
 
 	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -177,6 +178,26 @@ func (c *Callback) Outcome(ctx chasm.Context) *callbackpb.CallbackOutcome {
 		}
 	default:
 		return nil
+	}
+}
+
+// APIState maps the callback's internal status onto the state reported on the API surface.
+func (c *Callback) APIState() (enumspb.CallbackState, error) {
+	switch c.Status {
+	case callbackspb.CALLBACK_STATUS_STANDBY:
+		return enumspb.CALLBACK_STATE_STANDBY, nil
+	case callbackspb.CALLBACK_STATUS_SCHEDULED:
+		return enumspb.CALLBACK_STATE_SCHEDULED, nil
+	case callbackspb.CALLBACK_STATUS_BACKING_OFF:
+		return enumspb.CALLBACK_STATE_BACKING_OFF, nil
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		return enumspb.CALLBACK_STATE_FAILED, nil
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return enumspb.CALLBACK_STATE_SUCCEEDED, nil
+	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternal("callback with UNSPECIFIED state")
+	default:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternalf("unknown callback state: %v", c.Status)
 	}
 }
 

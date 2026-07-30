@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/grpc"
@@ -26,18 +27,23 @@ var OperationContextKey = operationContextKeyType{}
 // OperationContext holds dependencies injected into the chasm.Context for use by Operation methods.
 type OperationContext struct {
 	MetricTagConfig dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	// TODO: Add comment about why this is needed. When do we need to enforce this
+	// that isn't part of the `frontend.go` validation step?
+	MaxCallbacksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 // componentOnlyLibrary registers just the components without task executors or gRPC handlers.
 // Used in the frontend to enable component ref serialization.
 type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
-	metricTagConfig dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	metricTagConfig          dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	maxCallbacksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func newComponentOnlyLibrary(dc *dynamicconfig.Collection) *componentOnlyLibrary {
 	return &componentOnlyLibrary{
-		metricTagConfig: MetricTagConfiguration.Get(dc),
+		metricTagConfig:          MetricTagConfiguration.Get(dc),
+		maxCallbacksPerExecution: callback.MaxPerExecution.Get(dc),
 	}
 }
 
@@ -59,7 +65,8 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 			chasm.WithBusinessIDAlias("OperationId"),
 			chasm.WithContextValues(map[any]any{
 				OperationContextKey: &OperationContext{
-					MetricTagConfig: l.metricTagConfig,
+					MetricTagConfig:          l.metricTagConfig,
+					MaxCallbacksPerExecution: l.maxCallbacksPerExecution,
 				},
 			}),
 		),

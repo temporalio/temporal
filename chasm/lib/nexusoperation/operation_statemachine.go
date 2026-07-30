@@ -190,8 +190,8 @@ var TransitionSucceeded = chasm.NewTransition(
 		}
 
 		o.emitOnSucceededMetrics(ctx, closeTime)
-		// Terminal state - no tasks to emit.
-		return nil
+		// Terminal state - the only tasks to emit are the completion callback invocations.
+		return o.scheduleCompletionCallbacks(ctx)
 	},
 )
 

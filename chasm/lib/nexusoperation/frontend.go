@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -41,6 +42,7 @@ type frontendHandler struct {
 	endpointRegistry  commonnexus.EndpointRegistry
 	saMapperProvider  searchattribute.MapperProvider
 	saValidator       *searchattribute.Validator
+	callbackValidator callback.Validator
 }
 
 func NewFrontendHandler(
@@ -51,6 +53,7 @@ func NewFrontendHandler(
 	endpointRegistry commonnexus.EndpointRegistry,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
+	callbackValidator callback.Validator,
 ) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
@@ -60,6 +63,7 @@ func NewFrontendHandler(
 		endpointRegistry:  endpointRegistry,
 		saMapperProvider:  saMapperProvider,
 		saValidator:       saValidator,
+		callbackValidator: callbackValidator,
 	}
 }
 
@@ -78,6 +82,13 @@ func (h *frontendHandler) StartNexusOperationExecution(
 
 	if err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator); err != nil {
 		return nil, err
+	}
+
+	// Validates callback count, and their contents.
+	if cbs := req.GetCompletionCallbacks(); len(cbs) > 0 {
+		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
+			return nil, err
+		}
 	}
 
 	// Verify the endpoint exists before creating the operation.

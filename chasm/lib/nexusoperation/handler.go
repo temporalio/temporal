@@ -63,12 +63,58 @@ func (h *handler) StartNexusOperation(
 		return nil, err
 	}
 
+	if !result.Created {
+		if err := h.applyOnConflictOptions(ctx, result.ExecutionKey, frontendReq); err != nil {
+			return nil, err
+		}
+	}
+
 	return &nexusoperationpb.StartNexusOperationResponse{
 		FrontendResponse: &workflowservice.StartNexusOperationExecutionResponse{
 			RunId:   result.ExecutionKey.RunID,
 			Started: result.Created,
 		},
 	}, nil
+}
+
+// applyOnConflictOptions applies the request's on_conflict_options to an operation that was already
+// running when the start request arrived, which happens when the request resolved to
+// NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING. Callers only reach here for a request that did not
+// create the operation; a request that did create it applies its own options as part of that same
+// transaction (see newStandaloneOperation).
+//
+// New conflict options belong here: add a should-apply guard for the option, widen the early return to
+// "no option asked for anything", and apply it inside the existing transaction so that a request setting
+// several options still costs one write.
+//
+// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports
+// BusinessIDConflictPolicyFail in the updateFn path.
+func (h *handler) applyOnConflictOptions(
+	ctx context.Context,
+	key chasm.ExecutionKey,
+	req *workflowservice.StartNexusOperationExecutionRequest,
+) error {
+	// TODO: Make this easier to read, e.g.
+	// conflictOpts := req.GetOnConflictOptions()
+	// if conflictOpts.MergeCallbacks() && len(cbs) > 0 { ... }
+	// TODO: Address the fact that a RequestID is required to attach new callbacks.
+	// TODO: Address the fact that maybe(?) merging request ID isn't valid?
+	// TODO: Address the fact that there are no links to merge.
+	cbs := req.GetCompletionCallbacks()
+	if !req.GetOnConflictOptions().GetAttachCompletionCallbacks() || len(cbs) == 0 {
+		return nil
+	}
+
+	requestID := req.GetRequestId()
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Operation](key),
+		func(o *Operation, ctx chasm.MutableContext, _ any) (any, error) {
+			return nil, o.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacksFromContext(ctx))
+		},
+		nil,
+	)
+	return err
 }
 
 // DescribeNexusOperation queries current operation state, optionally as a long-poll that waits
@@ -274,6 +320,7 @@ func (h *handler) DeleteNexusOperation(
 
 	return &nexusoperationpb.DeleteNexusOperationResponse{}, nil
 }
+
 func idReusePolicyFromProto(p enumspb.NexusOperationIdReusePolicy) chasm.BusinessIDReusePolicy {
 	switch p {
 	case enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
