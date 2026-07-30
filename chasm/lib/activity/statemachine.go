@@ -248,11 +248,6 @@ var TransitionFailed = chasm.NewTransition(
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetFailedRequest()
 
-			if details := req.GetLastHeartbeatDetails(); details != nil {
-				heartbeat := a.getOrCreateLastHeartbeat(ctx)
-				heartbeat.Details = details
-				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
-			}
 			attempt := a.LastAttempt.Get(ctx)
 			attempt.LastWorkerIdentity = req.GetIdentity()
 

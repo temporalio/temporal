@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/await"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -49,6 +51,10 @@ type activityConfig struct {
 
 // activityInput is what both SAA and WFA send, so a worker sees the same input either way.
 const activityInput = "Input"
+
+// activityHeartbeatDetails is the checkpoint payload a driver attaches to RespondActivityTaskFailed when
+// the event sets HasHeartbeatDetails; the server stores it as the activity's last heartbeat progress.
+var activityHeartbeatDetails = payloads.EncodeString("heartbeat details")
 
 // timerProcessorMaxShift is the floor the timer queue puts on a task's fire time: it will not fire one
 // earlier than now + this.
@@ -127,6 +133,7 @@ type activityInfo struct {
 	Attempt                    int32
 	CurrentRetryInterval       time.Duration
 	NextAttemptScheduleTimeSet bool
+	LastHeartbeatDetails       []byte
 }
 
 // activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
@@ -320,4 +327,15 @@ func awaitActivityDispatchDelay(
 		t.Errorf("%s: the activity stopped being in progress before the driver observed its delayed dispatch becoming due; last observed: %+v",
 			e, details)
 	}
+}
+
+func activityMarshalPayloads(p *commonpb.Payloads) []byte {
+	if p == nil {
+		return nil
+	}
+	b, err := p.Marshal()
+	if err != nil {
+		panic("marshaling payloads failed: " + err.Error())
+	}
+	return b
 }

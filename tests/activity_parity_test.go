@@ -371,3 +371,29 @@ func (s *activityParityTestSuite) TestCompleteByID() {
 		})
 	}
 }
+
+// When a worker fails an attempt it can send a final checkpoint payload to be stored as the last
+// heartbeat details. This must be persisted for a retryable failure.
+func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFailure() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 2}
+
+	trace := []model.Event{model.Poll, {Type: model.RespondFailedType, Retryable: true, HasHeartbeatDetails: true}}
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.NotEmpty(t,
+			newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		d := newSAADriver(t, env, cfg)
+		require.NotEmpty(t,
+			d.driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+
+		// For SAA we additionally confirm that it's persisted even if the failure is terminal. WFA
+		// drops the pending activity from MS at this point.
+		terminal := []model.Event{model.Poll, {Type: model.RespondFailedType, Retryable: false, HasHeartbeatDetails: true}}
+		require.NotEmpty(t,
+			d.driveTrace(t, terminal).activityInfo(t).LastHeartbeatDetails)
+	})
+}

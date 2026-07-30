@@ -242,6 +242,7 @@ func wfaActivityInfo(p *workflowpb.PendingActivityInfo) activityInfo {
 		Attempt:                    p.GetAttempt(),
 		CurrentRetryInterval:       p.GetCurrentRetryInterval().AsDuration().Round(time.Second),
 		NextAttemptScheduleTimeSet: p.GetNextAttemptScheduleTime() != nil,
+		LastHeartbeatDetails:       activityMarshalPayloads(p.GetHeartbeatDetails()),
 	}
 }
 
@@ -277,9 +278,13 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 		})
 		return err
 	case model.RespondFailedType:
-		_, err := fc.RespondActivityTaskFailed(a.d.ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		req := &workflowservice.RespondActivityTaskFailedRequest{
 			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
-		})
+		}
+		if e.HasHeartbeatDetails {
+			req.LastHeartbeatDetails = activityHeartbeatDetails
+		}
+		_, err := fc.RespondActivityTaskFailed(a.d.ctx, req)
 		return err
 	case model.RespondCanceledType:
 		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{
