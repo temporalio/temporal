@@ -935,6 +935,7 @@ func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing
 	_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
 		FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
 			ActivityId: "test-activity-id",
+			RequestId:  "update-request-id",
 			ActivityOptions: &apiactivitypb.ActivityOptions{
 				HeartbeatTimeout: durationpb.New(2 * time.Minute),
 			},
@@ -945,6 +946,219 @@ func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing
 
 	require.Equal(t, originalStamp+1, attempt.GetStamp())
 	require.Equal(t, originalStartedStamp, attempt.GetStartedStamp())
+}
+
+func TestHandleUnpauseRequestedRequestID(t *testing.T) {
+	t.Run("deduplicates latest request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				LastUnpauseRequestId:   "unpause-request-id",
+				ScheduleToStartTimeout: durationpb.New(time.Minute),
+			},
+			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3}),
+		}
+
+		_, err := activity.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{
+				RequestId: "unpause-request-id",
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, activity.GetStatus())
+		require.Equal(t, int32(3), activity.LastAttempt.Get(ctx).GetCount())
+	})
+
+	t.Run("records successful no-op request ID", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			},
+		}
+
+		_, err := activity.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{
+				RequestId: "unpause-request-id",
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "unpause-request-id", activity.GetLastUnpauseRequestId())
+	})
+
+	t.Run("does not record failed request ID", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status:               activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+				LastUnpauseRequestId: "previous-unpause-request-id",
+			},
+		}
+
+		_, err := activity.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{
+				RequestId: "failed-unpause-request-id",
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, "previous-unpause-request-id", activity.GetLastUnpauseRequestId())
+	})
+}
+
+func TestHandleResetRequestID(t *testing.T) {
+	t.Run("deduplicates latest request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType:       &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:             activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				LastResetRequestId: "reset-request-id",
+			},
+			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3}),
+		}
+
+		_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+			FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
+				RequestId: "reset-request-id",
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, int32(3), activity.LastAttempt.Get(ctx).GetCount())
+	})
+
+	t.Run("records successful request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:       activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			},
+			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3}),
+		}
+
+		_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+			FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
+				RequestId: "reset-request-id",
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "reset-request-id", activity.GetLastResetRequestId())
+	})
+
+	t.Run("does not record failed request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType:       &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:             activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				LastResetRequestId: "previous-reset-request-id",
+			},
+		}
+
+		_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+			FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
+				RequestId: "failed-reset-request-id",
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, "previous-reset-request-id", activity.GetLastResetRequestId())
+	})
+}
+
+func TestUpdateActivityExecutionOptionsRequestID(t *testing.T) {
+	t.Run("deduplicates latest request ID", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status:                     activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+				TaskQueue:                  &taskqueuepb.TaskQueue{Name: "current-task-queue"},
+				LastUpdateOptionsRequestId: "update-request-id",
+			},
+		}
+
+		resp, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+			FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+				RequestId: "update-request-id",
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "current-task-queue", resp.GetFrontendResponse().GetActivityOptions().GetTaskQueue().GetName())
+	})
+
+	t.Run("records successful request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+				ScheduleToStartTimeout: durationpb.New(2 * time.Minute),
+				StartToCloseTimeout:    durationpb.New(3 * time.Minute),
+				HeartbeatTimeout:       durationpb.New(time.Minute),
+			},
+			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+				Count:        1,
+				Stamp:        7,
+				StartedStamp: 7,
+			}),
+			Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+		}
+
+		_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+			FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+				RequestId: "update-request-id",
+				ActivityOptions: &apiactivitypb.ActivityOptions{
+					HeartbeatTimeout: durationpb.New(2 * time.Minute),
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "update-request-id", activity.GetLastUpdateOptionsRequestId())
+	})
+
+	t.Run("does not record failed request ID", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status:                     activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+				LastUpdateOptionsRequestId: "previous-update-request-id",
+			},
+		}
+
+		_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+			FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+				RequestId: "failed-update-request-id",
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, "previous-update-request-id", activity.GetLastUpdateOptionsRequestId())
+	})
+}
+
+func newOperatorCommandTestContext(t *testing.T) *chasm.MockMutableContext {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+	return &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+				config: &Config{
+					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+				},
+				namespaceRegistry: nsRegistry,
+			}),
+		},
+	}
 }
 
 func TestContextMetadata(t *testing.T) {
@@ -1434,10 +1648,12 @@ func TestUpdateActivityExecutionOptions_RestoreOriginal_RejectsMissingOriginalOp
 		FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
 			ActivityId:      "act",
 			RestoreOriginal: true,
+			RequestId:       "failed-update-request-id",
 		},
 	})
 
 	require.Error(t, err)
+	require.Empty(t, activity.GetLastUpdateOptionsRequestId())
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
 	require.Equal(t, 30*time.Second, activity.GetScheduleToCloseTimeout().AsDuration())
 	require.Equal(t, 10*time.Second, activity.GetStartToCloseTimeout().AsDuration())
@@ -1469,9 +1685,11 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 		FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
 			ActivityId:             "act",
 			RestoreOriginalOptions: true,
+			RequestId:              "failed-reset-request-id",
 		},
 	})
 
 	require.Error(t, err)
+	require.Empty(t, activity.GetLastResetRequestId())
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
 }

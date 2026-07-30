@@ -484,6 +484,37 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
 		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
 	})
+
+	t.Run("UnpauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, maxIDLengthLimit)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("ResetActivityExecution", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, maxIDLengthLimit)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("UpdateActivityExecutionOptions", func(t *testing.T) {
+		req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+			ActivityId:      defaultActivityID,
+			RestoreOriginal: true,
+		}
+		err := validateUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
 }
 
 func validateUUID(s string) error {
@@ -540,6 +571,37 @@ func TestRequestIDTooLong(t *testing.T) {
 			RequestId:  tooLong,
 		}
 		err := validateAndNormalizePauseActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("UnpauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, maxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("ResetActivityExecution", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, maxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("UpdateActivityExecutionOptions", func(t *testing.T) {
+		req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+			ActivityId:      defaultActivityID,
+			RestoreOriginal: true,
+			RequestId:       tooLong,
+		}
+		err := validateUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})

@@ -308,8 +308,14 @@ type ActivityState struct {
 	// non-running activity (SCHEDULED / PAUSED) the restore is applied immediately and this flag is
 	// not set. Reset while in CANCEL_REQUESTED or RESET_REQUESTED is rejected.
 	ResetRestoreOptions bool `protobuf:"varint,20,opt,name=reset_restore_options,json=resetRestoreOptions,proto3" json:"reset_restore_options,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Used to de-dupe unpause requests.
+	LastUnpauseRequestId string `protobuf:"bytes,21,opt,name=last_unpause_request_id,json=lastUnpauseRequestId,proto3" json:"last_unpause_request_id,omitempty"`
+	// Used to de-dupe reset requests.
+	LastResetRequestId string `protobuf:"bytes,22,opt,name=last_reset_request_id,json=lastResetRequestId,proto3" json:"last_reset_request_id,omitempty"`
+	// Used to de-dupe update requests.
+	LastUpdateOptionsRequestId string `protobuf:"bytes,23,opt,name=last_update_options_request_id,json=lastUpdateOptionsRequestId,proto3" json:"last_update_options_request_id,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ActivityState) Reset() {
@@ -473,6 +479,27 @@ func (x *ActivityState) GetResetRestoreOptions() bool {
 		return x.ResetRestoreOptions
 	}
 	return false
+}
+
+func (x *ActivityState) GetLastUnpauseRequestId() string {
+	if x != nil {
+		return x.LastUnpauseRequestId
+	}
+	return ""
+}
+
+func (x *ActivityState) GetLastResetRequestId() string {
+	if x != nil {
+		return x.LastResetRequestId
+	}
+	return ""
+}
+
+func (x *ActivityState) GetLastUpdateOptionsRequestId() string {
+	if x != nil {
+		return x.LastUpdateOptionsRequestId
+	}
+	return ""
 }
 
 type ActivityCancelState struct {
@@ -1198,7 +1225,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xc8\v\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xf6\f\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
 	"\n" +
@@ -1221,7 +1248,10 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x10last_pause_state\x18\x10 \x01(\v2?.temporal.server.chasm.lib.activity.proto.v1.ActivityPauseStateR\x0elastPauseState\x12*\n" +
 	"\x11reset_keep_paused\x18\x12 \x01(\bR\x0fresetKeepPaused\x12W\n" +
 	"\x1afirst_attempt_started_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\x17firstAttemptStartedTime\x122\n" +
-	"\x15reset_restore_options\x18\x14 \x01(\bR\x13resetRestoreOptions\"\xa7\x01\n" +
+	"\x15reset_restore_options\x18\x14 \x01(\bR\x13resetRestoreOptions\x125\n" +
+	"\x17last_unpause_request_id\x18\x15 \x01(\tR\x14lastUnpauseRequestId\x121\n" +
+	"\x15last_reset_request_id\x18\x16 \x01(\tR\x12lastResetRequestId\x12B\n" +
+	"\x1elast_update_options_request_id\x18\x17 \x01(\tR\x1alastUpdateOptionsRequestId\"\xa7\x01\n" +
 	"\x13ActivityCancelState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +

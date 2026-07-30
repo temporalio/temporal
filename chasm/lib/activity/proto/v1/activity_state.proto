@@ -146,6 +146,15 @@ message ActivityState {
   // non-running activity (SCHEDULED / PAUSED) the restore is applied immediately and this flag is
   // not set. Reset while in CANCEL_REQUESTED or RESET_REQUESTED is rejected.
   bool reset_restore_options = 20;
+
+  // Used to de-dupe unpause requests.
+  string last_unpause_request_id = 21;
+
+  // Used to de-dupe reset requests.
+  string last_reset_request_id = 22;
+
+  // Used to de-dupe update requests.
+  string last_update_options_request_id = 23;
 }
 
 message ActivityCancelState {

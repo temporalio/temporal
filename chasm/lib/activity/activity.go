@@ -687,6 +687,12 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	ctx chasm.MutableContext,
 	req *activitypb.UpdateActivityExecutionOptionsRequest,
 ) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	requestID := frontendReq.GetRequestId()
+	if requestID != "" && requestID == a.GetLastUpdateOptionsRequestId() {
+		return a.updateActivityExecutionOptionsResponse(), nil
+	}
+
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
@@ -697,8 +703,6 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		return nil, serviceerror.NewFailedPreconditionf("Cannot update options for activity in state %s", a.Status.String())
 	default:
 	}
-
-	frontendReq := req.GetFrontendRequest()
 
 	if frontendReq.GetRestoreOriginal() {
 		if err := validateOriginalOptionsRestorable(a.GetOriginalOptions()); err != nil {
@@ -776,6 +780,13 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	}
 	a.emitOnUpdateOptionsMetrics(metricsHandler)
 
+	if requestID != "" {
+		a.LastUpdateOptionsRequestId = requestID
+	}
+	return a.updateActivityExecutionOptionsResponse(), nil
+}
+
+func (a *Activity) updateActivityExecutionOptionsResponse() *activitypb.UpdateActivityExecutionOptionsResponse {
 	return &activitypb.UpdateActivityExecutionOptionsResponse{
 		FrontendResponse: &workflowservice.UpdateActivityExecutionOptionsResponse{
 			ActivityOptions: &apiactivitypb.ActivityOptions{
@@ -789,7 +800,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 				StartDelay:             a.GetStartDelay(),
 			},
 		},
-	}, nil
+	}
 }
 
 // shouldRecalculateCurrentRetryInterval reports whether the pending retry's CurrentRetryInterval
@@ -984,10 +995,19 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activitypb.UnpauseActivityExecutionRequest) (
 	*activitypb.UnpauseActivityExecutionResponse, error,
 ) {
+	frontendReq := req.GetFrontendRequest()
+	requestID := frontendReq.GetRequestId()
+	if requestID != "" && requestID == a.GetLastUnpauseRequestId() {
+		return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	}
+
 	if a.isTerminal() {
 		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
 	}
 	if !a.isPaused() {
+		if requestID != "" {
+			a.LastUnpauseRequestId = requestID
+		}
 		return &activitypb.UnpauseActivityExecutionResponse{}, nil
 	}
 
@@ -996,7 +1016,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 		return nil, err
 	}
 
-	event := unpauseEvent{req: req.GetFrontendRequest(), metricsHandler: metricsHandler}
+	event := unpauseEvent{req: frontendReq, metricsHandler: metricsHandler}
 	switch a.GetStatus() {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
 		if err := TransitionUnpaused.Apply(a, ctx, event); err != nil {
@@ -1010,6 +1030,9 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 		a.ResetKeepPaused = false
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
+	}
+	if requestID != "" {
+		a.LastUnpauseRequestId = requestID
 	}
 	a.emitOnUnpausedMetrics(metricsHandler)
 	return &activitypb.UnpauseActivityExecutionResponse{}, nil
@@ -1137,8 +1160,15 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 // takes effect on the new attempt 1.
 //
 // For CANCEL_REQUESTED activities: rejected with FailedPrecondition; cancel takes precedence.
-func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
+func (a *Activity) handleReset(
+	ctx chasm.MutableContext,
+	req *activitypb.ResetActivityExecutionRequest,
+) (*activitypb.ResetActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
+	requestID := frontendReq.GetRequestId()
+	if requestID != "" && requestID == a.GetLastResetRequestId() {
+		return &activitypb.ResetActivityExecutionResponse{}, nil
+	}
 
 	if frontendReq.GetRestoreOriginalOptions() {
 		if err := validateOriginalOptionsRestorable(a.GetOriginalOptions()); err != nil {
@@ -1151,6 +1181,7 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		return nil, err
 	}
 
+	var resp *activitypb.ResetActivityExecutionResponse
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending cancellation")
@@ -1160,24 +1191,32 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		// TODO (dan): define desired behavior and implement
 		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending reset")
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
-		return a.deferResetWhileRunning(ctx, frontendReq, metricsHandler)
+		resp, err = a.deferResetWhileRunning(ctx, frontendReq, metricsHandler)
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
 		// No worker is running; restore takes effect immediately.
 		if frontendReq.GetRestoreOriginalOptions() {
 			a.restoreOriginalOptions(ctx)
 		}
 		if frontendReq.GetKeepPaused() {
-			return a.resetKeepPaused(ctx, metricsHandler)
+			resp, err = a.resetKeepPaused(ctx, metricsHandler)
+			break
 		}
 		// No keepPaused: perform an immediate reset. restoreOriginalOptions (if requested) already
 		// ran above, so skip it in resetImmediately to avoid restoring twice.
-		return a.resetImmediately(ctx, frontendReq, metricsHandler, false)
+		resp, err = a.resetImmediately(ctx, frontendReq, metricsHandler, false)
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
-		return a.resetImmediately(ctx, frontendReq, metricsHandler, frontendReq.GetRestoreOriginalOptions())
+		resp, err = a.resetImmediately(ctx, frontendReq, metricsHandler, frontendReq.GetRestoreOriginalOptions())
 	default:
 		// Terminal or unspecified state.
 		return nil, serviceerror.NewFailedPrecondition("activity execution is not running")
 	}
+	if err != nil {
+		return nil, err
+	}
+	if requestID != "" {
+		a.LastResetRequestId = requestID
+	}
+	return resp, nil
 }
 
 // deferResetWhileRunning defers reset mutations (option restore, heartbeat details clear,
