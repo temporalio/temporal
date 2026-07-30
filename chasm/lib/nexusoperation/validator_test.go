@@ -22,6 +22,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+const errInvalidRunID = "run_id is not a valid UUID"
+
 func newTestValidator(config *Config) *validator {
 	return newValidator(config, log.NewNoopLogger(), nil, nil)
 }
@@ -409,7 +411,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "long_poll_token - requires run_id",
@@ -505,7 +507,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -583,7 +585,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
 				r.RunId = "not-a-valid-uuid"
 			},
-			errMsg: "invalid run id: must be a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -656,7 +658,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -729,7 +731,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "wait_stage - normalizes UNSPECIFIED to CLOSED",
