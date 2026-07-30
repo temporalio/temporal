@@ -81,7 +81,13 @@ const (
 	// Lower bound for the deadline in which buffered actions are dropped.
 	startWorkflowMinDeadline = 5 * time.Second
 
-	// Upper bound on how many times starting an individual buffered action should be retried.
+	// InvokerMaxStartAttempts is the maximum number of StartWorkflowExecution
+	// RPCs issued for an individual buffered action, counting the first call.
+	// Attempt numbers are 1-based: recordProcessBufferResult readies a start at
+	// Attempt 1, and each retryable failure increments it. The bound is
+	// therefore inclusive - a start is refused locally (and dropped) only once
+	// its Attempt exceeds this value - so a value of 10 permits ten start RPCs,
+	// i.e. the initial call plus nine retries.
 	InvokerMaxStartAttempts = 10 // TODO - dial this up/remove it
 )
 
@@ -622,7 +628,9 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 ) error {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
-	if start.Attempt >= InvokerMaxStartAttempts {
+	// Inclusive bound: Attempt is 1-based, so the attempt numbered
+	// InvokerMaxStartAttempts is the last one that gets an RPC.
+	if start.Attempt > InvokerMaxStartAttempts {
 		return errRetryLimitExceeded
 	}
 

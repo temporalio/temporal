@@ -7,10 +7,10 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	schedulescommon "go.temporal.io/server/common/schedules"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -219,7 +219,7 @@ func (b *BackfillerTaskHandler) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
-	workflowID := schedulescommon.GenerateWorkflowID(scheduler.WorkflowID(), now)
+	workflowID := schedulerinternal.GenerateWorkflowID(scheduler.WorkflowID(), now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
@@ -255,11 +255,18 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 		}
 	}
 
-	// Prevents a division by 0.
-	backfillerCount = max(1, backfillerCount)
+	return backfillerBufferCapacity(
+		len(invoker.GetBufferedStarts()),
+		recentActionCount,
+		tweakables.MaxBufferSize,
+		tweakables.GeneratorBufferReserveSize,
+		backfillerCount,
+	), nil
+}
 
-	// Give half the available buffer to backfillers, distributed evenly, minus
-	// Generator reserve space.
-	pending := max(0, len(invoker.GetBufferedStarts())-recentActionCount)
-	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-pending-tweakables.GeneratorBufferReserveSize), nil
+func backfillerBufferCapacity(bufferedCount, retainedActionCount, maxBufferSize, generatorReserve, backfillerCount int) int {
+	backfillerCount = max(1, backfillerCount)
+	pending := max(0, bufferedCount-retainedActionCount)
+	available := max(0, (maxBufferSize/2)-pending-generatorReserve)
+	return available / backfillerCount
 }

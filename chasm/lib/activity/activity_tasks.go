@@ -187,7 +187,12 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.StartToCloseTimeoutTask,
 ) error {
-	retryState, err := activity.tryReschedule(ctx, true, 0, createStartToCloseTimeoutFailure())
+	retryState, err := activity.tryReschedule(
+		ctx,
+		activity.timeoutRetryable(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		0,
+		createStartToCloseTimeoutFailure(),
+	)
 	if err != nil {
 		return err
 	}
@@ -266,7 +271,12 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.HeartbeatTimeoutTask,
 ) error {
-	retryState, err := activity.tryReschedule(ctx, true, 0, createHeartbeatTimeoutFailure())
+	retryState, err := activity.tryReschedule(
+		ctx,
+		activity.timeoutRetryable(enumspb.TIMEOUT_TYPE_HEARTBEAT),
+		0,
+		createHeartbeatTimeoutFailure(),
+	)
 	if err != nil {
 		return err
 	}

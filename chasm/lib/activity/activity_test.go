@@ -155,6 +155,10 @@ func TestHandleStarted(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	testRequestID := "test-request-id"
 	testStamp := int32(1)
+	// startedTime is the StartedTime set on an in-progress attempt during setup. The idempotent
+	// retry cases assert the response echoes it, rather than testTime (the mocked now) that a fresh
+	// transition would stamp, proving no new transition occurred.
+	startedTime := timestamppb.New(testTime.Add(-1 * time.Minute))
 
 	testCases := []struct {
 		name           string
@@ -186,6 +190,56 @@ func TestHandleStarted(t *testing.T) {
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
 				require.Equal(t, int32(1), response.Attempt)
 				require.NoError(t, err)
+			},
+		},
+		{
+			name:           "idempotent retry - cancel requested",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			attemptStamp:   testStamp,
+			requestStamp:   testStamp,
+			startRequestID: testRequestID,
+			requestID:      testRequestID,
+			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int32(1), response.Attempt)
+				require.Equal(t, startedTime, response.StartedTime)
+			},
+		},
+		{
+			name:           "error - cancel requested with different request ID",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			attemptStamp:   testStamp,
+			requestStamp:   testStamp,
+			startRequestID: "different-request-id",
+			requestID:      testRequestID,
+			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
+				require.ErrorAs(t, err, new(*serviceerrors.ObsoleteMatchingTask))
+			},
+		},
+		{
+			name:           "idempotent retry - pause requested",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+			attemptStamp:   testStamp,
+			requestStamp:   testStamp,
+			startRequestID: testRequestID,
+			requestID:      testRequestID,
+			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int32(1), response.Attempt)
+				require.Equal(t, startedTime, response.StartedTime)
+			},
+		},
+		{
+			name:           "idempotent retry - reset requested",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			attemptStamp:   testStamp,
+			requestStamp:   testStamp,
+			startRequestID: testRequestID,
+			requestID:      testRequestID,
+			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int32(1), response.Attempt)
+				require.Equal(t, startedTime, response.StartedTime)
 			},
 		},
 		{
@@ -242,8 +296,9 @@ func TestHandleStarted(t *testing.T) {
 				Stamp:          tc.attemptStamp,
 				StartRequestId: tc.startRequestID,
 			}
-			if tc.activityStatus == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED {
-				attemptState.StartedTime = timestamppb.New(testTime.Add(-1 * time.Minute))
+			// A recorded start request ID means this attempt was previously started.
+			if tc.startRequestID != "" {
+				attemptState.StartedTime = startedTime
 			}
 
 			// Determine heartbeat timeout based on test case
@@ -653,13 +708,12 @@ func TestActivityTaskTokenAttemptStampRejectsTokenFromBeforeAttemptReset(t *test
 	require.NoError(t, err)
 }
 
-func TestActivityTaskTokenWithoutAttemptStampAcceptedForCurrentRetryAttempt(t *testing.T) {
+func TestActivityTaskTokenLegacyStampCompatibility(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	const (
 		namespaceID = "test-namespace-id"
 		activityID  = "test-activity-id"
 		runID       = "test-run-id"
-		attempt     = int32(2)
 	)
 
 	componentRef, err := (&persistencespb.ChasmComponentRef{
@@ -682,32 +736,69 @@ func TestActivityTaskTokenWithoutAttemptStampAcceptedForCurrentRetryAttempt(t *t
 		},
 	}
 
-	act := &Activity{
-		ActivityState: &activitypb.ActivityState{
-			Status:           activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			HeartbeatTimeout: durationpb.New(0),
+	testCases := []struct {
+		name         string
+		attempt      int32
+		tokenStamp   int32
+		currentStamp int32
+		startedStamp int32
+	}{
+		{
+			name:         "token from Matching without attempt stamp",
+			attempt:      2,
+			currentStamp: 11,
+			startedStamp: 8,
 		},
-		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
-			Count:        attempt,
-			Stamp:        11,
-			StartedStamp: 8,
-		}),
-	}
-	token := &tokenspb.Task{
-		NamespaceId:  namespaceID,
-		Attempt:      attempt,
-		ComponentRef: componentRef,
-	}
-	req := &historyservice.RecordActivityTaskHeartbeatRequest{
-		NamespaceId:      namespaceID,
-		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{},
+		{
+			name:         "token and state without attempt stamps",
+			attempt:      1,
+			currentStamp: 7,
+		},
+		{
+			name:         "state from History without StartedStamp persistence",
+			attempt:      1,
+			tokenStamp:   7,
+			currentStamp: 7,
+		},
+		{
+			name:         "state from History without StartedStamp persistence after options update",
+			attempt:      1,
+			tokenStamp:   7,
+			currentStamp: 8,
+		},
 	}
 
-	_, err = act.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
-		Token:   token,
-		Request: req,
-	})
-	require.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status:           activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+					HeartbeatTimeout: durationpb.New(0),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+					Count:        tc.attempt,
+					Stamp:        tc.currentStamp,
+					StartedStamp: tc.startedStamp,
+				}),
+			}
+			token := &tokenspb.Task{
+				NamespaceId:          namespaceID,
+				Attempt:              tc.attempt,
+				ComponentRef:         componentRef,
+				ActivityAttemptStamp: tc.tokenStamp,
+			}
+			req := &historyservice.RecordActivityTaskHeartbeatRequest{
+				NamespaceId:      namespaceID,
+				HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{},
+			}
+
+			_, heartbeatErr := act.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+				Token:   token,
+				Request: req,
+			})
+			require.NoError(t, heartbeatErr)
+		})
+	}
 }
 
 func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing.T) {

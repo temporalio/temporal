@@ -131,11 +131,6 @@ for signal / start / signal with start API if namespace is not active`,
 		false,
 		`ForceNamespaceSelectedAPIAutoForwarding forces selective (whitelist) API forwarding for the namespace when true, overriding all-apis-forwarding policy for that namespace`,
 	)
-	EnableNamespaceHandoverWait = NewNamespaceBoolSetting(
-		"system.enableNamespaceHandoverWait",
-		false,
-		`EnableNamespaceHandoverWait whether waiting for namespace replication state update before serve the request`,
-	)
 	TransactionSizeLimit = NewGlobalIntSetting(
 		"system.transactionSizeLimit",
 		primitives.DefaultTransactionSizeLimit,
@@ -1568,11 +1563,6 @@ scoped by namespace and/or task queue.`,
 		StaticGradualChange(false),
 		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
 	)
-	MatchingEnableMigration = NewTaskQueueBoolSetting(
-		"matching.enableMigration",
-		true,
-		`Allows migration between v1 and v2 (fairness) task backlogs.`,
-	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
 		5,
@@ -1656,14 +1646,6 @@ default as namespace cardinality can be high and this requires a metrics collect
 		ConvertSimplePartitionScalerSettings,
 		SimplePartitionScalerSettings{},
 		`Settings for simple partition scaler.`,
-	)
-
-	MatchingForceReadTasksOnWrite = NewTaskQueueBoolSetting(
-		"matching.forceReadTasksOnWrite",
-		false,
-		`When true and the fair task reader detects a stuck state (atEnd=false, loadedTasks=0, no
-read goroutine running), the write path calls maybeReadTasksLocked to attempt to unblock it.
-This is a diagnostic flag — the root cause of the stuck state is still under investigation.`,
 	)
 
 	// Worker registry settings
@@ -1799,11 +1781,25 @@ See DynamicRateLimitingParams comments for more details.`,
 		`EnableWorkflowTaskCompletionPagination enables the pagination of RespondWorkflowTaskCompleted requests.
 		When false, paginated requests (the ones with intermediate_page set to true) are rejected.`,
 	)
+	WorkflowTaskCompletionBufferTotalSizeLimit = NewGlobalIntSetting(
+		"history.workflowTaskCompletionBufferTotalSizeLimit",
+		1024*1024*1024,
+		`WorkflowTaskCompletionBufferTotalSizeLimit is the process wide limit in bytes on the total
+		size of buffers allocated for in-flight pages of RespondWorkflowTaskCompleted requests. A page that would push
+		the total over this limit is rejected. Setting to 0 disables the limit.`,
+	)
 	WorkflowTaskCompletionBufferSizeLimit = NewNamespaceIntSetting(
 		"history.workflowTaskCompletionBufferSizeLimit",
 		40*1024*1024,
 		`WorkflowTaskCompletionBufferSizeLimit is the limit in bytes on the total
 		size of buffered pages in paginated RespondWorkflowTaskCompleted requests for a single workflow task.`,
+	)
+	WorkflowTaskCompletionBufferNamespaceRatio = NewNamespaceFloatSetting(
+		"history.workflowTaskCompletionBufferNamespaceRatio",
+		0.5,
+		`WorkflowTaskCompletionBufferNamespaceRatio is the fraction of the process-wide pagination buffer
+		limit (WorkflowTaskCompletionBufferTotalSizeLimit) that a single namespace may hold at once, so one
+		namespace cannot exhaust the whole process budget.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
@@ -3106,6 +3102,13 @@ Requires service restart to take effect.`,
 		true,
 		"Use real chasm tree implementation instead of the noop one",
 	)
+	EnableCHASMSkipPersistence = NewNamespaceBoolSetting(
+		"history.enableCHASMSkipPersistence",
+		false,
+		`EnableCHASMSkipPersistence controls whether CHASM CloseTransaction omits nodes whose serialized data is unchanged.
+This optimization should only be enabled after every cluster that may receive CHASM replication supports invalidating
+hydrated ancestor components when applying child-node mutations.`,
+	)
 
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
 		"history.chasmMaxInMemoryPureTasks",
@@ -3216,7 +3219,7 @@ but existing callbacks will still be processed and fired.`,
 
 	EnableVersionReactivationSignals = NewGlobalBoolSetting(
 		"history.enableVersionReactivationSignals",
-		false,
+		true,
 		`EnableVersionReactivationSignals controls whether reactivation signals are sent to version workflows
 		when workflows are pinned to a potentially DRAINED/INACTIVE version. Set to false to disable signals
 		globally if load becomes problematic.`,
