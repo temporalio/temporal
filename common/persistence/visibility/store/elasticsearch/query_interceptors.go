@@ -105,8 +105,9 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	case query.FieldNameGroupBy:
 		if !query.IsGroupByFieldAllowed(fieldName) {
 			return "", query.NewConverterError(
-				"%s: 'GROUP BY' clause is not supported for this search attribute",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				query.NotSupportedErrMessage,
+				name,
 			)
 		}
 		// Grouping by TemporalNamespaceDivision is meaningful only across all

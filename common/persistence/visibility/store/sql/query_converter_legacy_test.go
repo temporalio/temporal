@@ -132,8 +132,9 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			input:  "GROUP BY WorkflowType",
 			output: nil,
 			err: query.NewConverterError(
-				"%s: 'GROUP BY' clause is not supported for this search attribute",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				query.NotSupportedErrMessage,
+				"WorkflowType",
 			),
 		},
 		{

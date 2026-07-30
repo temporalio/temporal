@@ -247,8 +247,9 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 		}
 		if !query.IsGroupByFieldAllowed(colName.fieldName) {
 			return query.NewConverterError(
-				"%s: 'GROUP BY' clause is not supported for this search attribute",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				query.NotSupportedErrMessage,
+				colName.alias,
 			)
 		}
 	}

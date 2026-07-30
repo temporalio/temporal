@@ -1158,7 +1158,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 	// and LowCardinalityKeyword fields
 	request.Query = "GROUP BY WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
-	s.ErrorContains(err, "'GROUP BY' clause is not supported for this search attribute")
+	s.ErrorContains(err, "'GROUP BY' clause is not supported for search attribute WorkflowType")
 	s.Nil(resp)
 }
 

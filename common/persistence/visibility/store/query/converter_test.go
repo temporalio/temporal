@@ -521,8 +521,9 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 			name: "fail not supported group by field",
 			in:   "select * from t group by RunId",
 			err: fmt.Sprintf(
-				"%s: 'GROUP BY' clause is not supported for this search attribute",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				NotSupportedErrMessage,
+				"RunId",
 			),
 		},
 

@@ -282,8 +282,9 @@ func (c *QueryConverter[ExprT]) convertSelectStmt(
 		}
 		if !IsGroupByFieldAllowed(colName.FieldName) {
 			return nil, NewConverterError(
-				"%s: 'GROUP BY' clause is not supported for this search attribute",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				NotSupportedErrMessage,
+				colName.Alias,
 			)
 		}
 		res.GroupBy = append(res.GroupBy, colName)
