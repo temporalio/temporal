@@ -475,7 +475,7 @@ var supportedActivityOptionsUpdatePaths = map[string]struct{}{
 }
 
 //nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
-func validateUpdateActivityExecutionOptionsRequest(
+func validateAndNormalizeUpdateOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
 	maxIDLengthLimit int,
@@ -785,9 +785,6 @@ func validateAndNormalizeUnpauseActivityExecutionRequest(
 }
 
 func validateAndNormalizeRequestID(requestID *string, maxIDLengthLimit int) error {
-	if requestID == nil {
-		return serviceerror.NewInvalidArgument("RequestId is nil")
-	}
 	if *requestID == "" {
 		*requestID = uuid.NewString()
 	}

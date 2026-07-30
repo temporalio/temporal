@@ -953,12 +953,6 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activitypb.PauseActivityExecutionRequest) (
 	*activitypb.PauseActivityExecutionResponse, error,
 ) {
-	if a.isTerminal() {
-		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
-	}
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
-		return nil, serviceerror.NewFailedPrecondition("cannot pause an activity with a pending cancellation")
-	}
 	// Deduplicate a replay of a request that already paused this activity, even if the
 	// activity has since been unpaused. Without this check, a delayed replay of an old
 	// Pause request would silently re-pause an activity that a later Unpause resumed.
@@ -967,6 +961,12 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 		return &activitypb.PauseActivityExecutionResponse{}, nil
 	}
 
+	if a.isTerminal() {
+		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+	}
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return nil, serviceerror.NewFailedPrecondition("cannot pause an activity with a pending cancellation")
+	}
 	if a.isPaused() {
 		return nil, serviceerror.NewFailedPrecondition("activity is already paused")
 	}
@@ -1199,11 +1199,11 @@ func (a *Activity) handleReset(
 		}
 		if frontendReq.GetKeepPaused() {
 			resp, err = a.resetKeepPaused(ctx, metricsHandler)
-			break
+		} else {
+			// No keepPaused: perform an immediate reset. restoreOriginalOptions (if requested) already
+			// ran above, so skip it in resetImmediately to avoid restoring twice.
+			resp, err = a.resetImmediately(ctx, frontendReq, metricsHandler, false)
 		}
-		// No keepPaused: perform an immediate reset. restoreOriginalOptions (if requested) already
-		// ran above, so skip it in resetImmediately to avoid restoring twice.
-		resp, err = a.resetImmediately(ctx, frontendReq, metricsHandler, false)
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
 		resp, err = a.resetImmediately(ctx, frontendReq, metricsHandler, frontendReq.GetRestoreOriginalOptions())
 	default:

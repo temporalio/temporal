@@ -209,7 +209,7 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 			RestoreOriginal: true,
 		}
 		validateTwice(t, req, func() error {
-			return validateUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, defaultMaxIDLengthLimit)
+			return validateAndNormalizeUpdateOptionsRequest(req, getDefaultRetrySettings, defaultMaxIDLengthLimit)
 		})
 	})
 }

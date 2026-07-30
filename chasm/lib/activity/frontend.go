@@ -555,7 +555,7 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 		return nil, ErrStandaloneActivityOperatorCommandsDisabled
 	}
 
-	if err := validateUpdateActivityExecutionOptionsRequest(
+	if err := validateAndNormalizeUpdateOptionsRequest(
 		req,
 		h.config.DefaultActivityRetryPolicy,
 		h.config.MaxIDLengthLimit(),
