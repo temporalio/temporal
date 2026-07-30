@@ -59,18 +59,30 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		"historyservice latency", true))
 
 	for _, settings := range h.config.HealthRPCLatencyPercentiles().PercentileSettings {
+		latency, found := h.historyHealthSignal.LatencyQuantile(settings.Percentile)
+		if !found {
+			continue
+		}
+
 		checks = append(checks, errorIfOverThreshold(
 			healthcheck.CheckTypeRPCLatency+fmt.Sprintf("_P%0.2f", 100.0*settings.Percentile),
-			h.historyHealthSignal.LatencyQuantile(settings.Percentile),
+			latency,
 			float64(settings.Threshold.Milliseconds()),
 			fmt.Sprintf("historyservice percentile latency (P%0.2f < %d, enforced: %t)", 100.0*settings.Percentile, settings.Threshold.Milliseconds(), settings.Enforced),
 			settings.Enforced,
 		))
 	}
 
-	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypeRPCErrorRatio,
-		h.historyHealthSignal.ErrorRatio(), h.config.HealthRPCErrorRatio(),
-		"historyservice error ratio", true))
+	errRatio, found := h.historyHealthSignal.ErrorRatio()
+	if found {
+		checks = append(checks, errorIfOverThreshold(
+			healthcheck.CheckTypeRPCErrorRatio,
+			errRatio,
+			h.config.HealthRPCErrorRatio(),
+			"historyservice error ratio",
+			true, // enforced
+		))
+	}
 
 	// TODO: Remove AverageLatency check once Latency is used by default.
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceLatency,
