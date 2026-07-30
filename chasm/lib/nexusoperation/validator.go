@@ -160,12 +160,7 @@ func (v *validator) validateAndNormalizeDeleteRequest(req *workflowservice.Delet
 	if err := v.validateOperationID(req.GetOperationId()); err != nil {
 		return err
 	}
-	if req.GetRunId() != "" {
-		if err := uuid.Validate(req.GetRunId()); err != nil {
-			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
-		}
-	}
-	return nil
+	return v.validateRunID(req.GetRunId())
 }
 
 // validateCancelOrTerminateRequest validates the fields the cancel and terminate requests have in
