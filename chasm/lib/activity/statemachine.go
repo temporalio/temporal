@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -184,9 +185,13 @@ type completeEvent struct {
 	metricsHandler metrics.Handler
 }
 
-// TransitionCompleted transitions to Completed status.
+// TransitionCompleted transitions to Completed status. SCHEDULED and PAUSED are included because
+// RespondActivityTaskCompletedById can force-complete an activity that has no attempt in
+// progress, mirroring workflow-activity behavior.
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
@@ -197,7 +202,16 @@ var TransitionCompleted = chasm.NewTransition(
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetCompleteRequest()
 
+			attemptWasStarted := a.hasAttemptInProgress()
 			attempt := a.LastAttempt.Get(ctx)
+			if !attemptWasStarted {
+				// RespondActivityTaskCompletedById can complete an activity when no attempt is in
+				// progress.
+				attempt.StartedTime = timestamppb.New(ctx.Now(a))
+				if a.FirstAttemptStartedTime == nil {
+					a.FirstAttemptStartedTime = attempt.StartedTime
+				}
+			}
 			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
 			attempt.LastWorkerIdentity = req.GetIdentity()
 			outcome := a.Outcome.Get(ctx)
@@ -207,7 +221,7 @@ var TransitionCompleted = chasm.NewTransition(
 				},
 			}
 
-			a.emitOnCompletedMetrics(ctx, event.metricsHandler)
+			a.emitOnCompletedMetrics(ctx, event.metricsHandler, attemptWasStarted)
 
 			return nil
 		})
@@ -358,6 +372,7 @@ var TransitionCanceled = chasm.NewTransition(
 type timeoutEvent struct {
 	metricsHandler metrics.Handler
 	timeoutType    enumspb.TimeoutType
+	retryState     enumspb.RetryState
 	fromStatus     activitypb.ActivityExecutionStatus
 }
 
@@ -380,7 +395,11 @@ var TransitionTimedOut = chasm.NewTransition(
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-				err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
+				err = a.recordScheduleToStartOrCloseTimeoutFailure(
+					ctx,
+					timeoutType,
+					fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
+				)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
 				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
@@ -394,6 +413,15 @@ var TransitionTimedOut = chasm.NewTransition(
 			}
 			if err != nil {
 				return err
+			}
+			if event.retryState == enumspb.RETRY_STATE_TIMEOUT {
+				if err := a.recordScheduleToStartOrCloseTimeoutFailure(
+					ctx,
+					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+					common.FailureReasonActivityRetryScheduleToCloseTimeout,
+				); err != nil {
+					return err
+				}
 			}
 
 			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)

@@ -173,12 +173,14 @@ func IgnoreErrors(errorsToExclude []error) func(error) bool {
 // initial duration, coefficient, and current attempt number.
 type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration
 
-// ExponentialBackoffAlgorithm calculates the backoff duration using exponential algorithm.
-// The result is initInterval * (backoffCoefficient ^ (currentAttempt - 1)).
-// If the calculation overflows int64, it returns the maximum possible duration. A negative result will also never be returned.
+// ExponentialBackoffAlgorithm calculates the backoff duration as `initInterval * (backoffCoefficient ^ (currentAttempt - 1))`.
+// The result is clamped to [0, math.MaxInt64].
 func ExponentialBackoffAlgorithm(initInterval *durationpb.Duration, backoffCoefficient float64, currentAttempt int32) time.Duration {
 	result := float64(initInterval.AsDuration().Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))
-	return time.Duration(max(0, min(int64(result), math.MaxInt64)))
+	if result >= float64(math.MaxInt64) {
+		return time.Duration(math.MaxInt64)
+	}
+	return time.Duration(max(0, int64(result)))
 }
 
 // MakeBackoffAlgorithm creates a BackoffCalculatorAlgorithmFunc that returns a fixed delay if requestedDelay is non-nil,

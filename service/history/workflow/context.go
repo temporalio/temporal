@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -51,6 +52,9 @@ type (
 		// pagination of RespondWorkflowTaskCompleted requests; nil when no
 		// pagination is in progress
 		taskCompletionBuffer *TaskCompletionBuffer
+		// paginationLimiter enforces the process-wide and per-namespace limits on the
+		// total size of all in-flight pagination buffers. nil is treated as "no limit".
+		paginationLimiter *limiter.KeyedBytesLimiter
 	}
 
 	// workflowTaskIdentity identifies a specific workflow task attempt
@@ -64,8 +68,9 @@ type (
 	// pagination of RespondWorkflowTaskCompleted requests.
 	TaskCompletionBuffer struct {
 		pages     map[int32][]*commandpb.Command // page_number (0-based) -> commands
-		totalSize int64                          // cumulative buffered bytes
+		totalSize int64                          // cumulative size of buffered commands
 		identity  workflowTaskIdentity           // the workflow task this buffer belongs to
+		namespace string                         // namespace name
 	}
 )
 
@@ -80,6 +85,10 @@ const maxWorkflowTaskCompletionPages int32 = 1024
 // pagination and the handler fails the workflow task
 var ErrTaskCompletionBufferSizeExceeded = errors.New("workflow task completion buffer size exceeds the per-workflow limit")
 
+// NewContext builds a workflow context. paginationLimiter enforces the process-wide and
+// per-namespace pagination buffer limits; it is only needed for cached contexts
+// that buffer paginated RespondWorkflowTaskCompleted requests, so transient contexts
+// (replication, reset, new-run creation) pass nil, which disables the limit.
 func NewContext(
 	config *configs.Config,
 	workflowKey definition.WorkflowKey,
@@ -87,6 +96,7 @@ func NewContext(
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
+	paginationLimiter *limiter.KeyedBytesLimiter,
 ) *ContextImpl {
 	tags := func() []tag.Tag {
 		return []tag.Tag{
@@ -96,13 +106,14 @@ func NewContext(
 		}
 	}
 	contextImpl := &ContextImpl{
-		workflowKey:     workflowKey,
-		archetypeID:     archetypeID,
-		logger:          log.NewLazyLogger(logger, tags),
-		throttledLogger: log.NewLazyLogger(throttledLogger, tags),
-		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
-		config:          config,
-		lock:            locks.NewPrioritySemaphore(1),
+		workflowKey:       workflowKey,
+		archetypeID:       archetypeID,
+		logger:            log.NewLazyLogger(logger, tags),
+		throttledLogger:   log.NewLazyLogger(throttledLogger, tags),
+		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		config:            config,
+		lock:              locks.NewPrioritySemaphore(1),
+		paginationLimiter: paginationLimiter,
 	}
 	softassert.That(
 		contextImpl.throttledLogger,
@@ -145,10 +156,15 @@ func (c *ContextImpl) Clear() {
 	c.clearTaskCompletionBuffer()
 }
 
-// clearTaskCompletionBuffer drops the in-progress buffer
+// clearTaskCompletionBuffer drops the in-progress buffer and returns its reserved
+// bytes to the limiter
 func (c *ContextImpl) clearTaskCompletionBuffer() {
 	if c.taskCompletionBuffer == nil {
 		return
+	}
+	if c.paginationLimiter != nil {
+		used := c.paginationLimiter.Release(c.taskCompletionBuffer.namespace, c.taskCompletionBuffer.totalSize)
+		metrics.WorkflowTaskCompletionBufferInflightBytes.With(c.metricsHandler).Record(float64(used))
 	}
 	c.taskCompletionBuffer = nil
 }
@@ -199,6 +215,7 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 		c.clearTaskCompletionBuffer()
 		return err
 	}
+	nsName := c.MutableState.GetNamespaceEntry().Name().String()
 	// The request's token supplies schedID/attempt; the version comes from the started
 	// workflow task
 	identity := workflowTaskIdentity{schedID: schedID, attempt: attempt, version: c.startedWorkflowTaskIdentity().version}
@@ -208,8 +225,9 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 	}
 	if c.taskCompletionBuffer == nil {
 		c.taskCompletionBuffer = &TaskCompletionBuffer{
-			pages:    make(map[int32][]*commandpb.Command),
-			identity: identity,
+			pages:     make(map[int32][]*commandpb.Command),
+			identity:  identity,
+			namespace: nsName,
 		}
 	}
 	// Keep existing page if it is already buffered
@@ -220,11 +238,29 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 	pageBytes := taskCompletionPageBytes(request.Commands)
 
 	// Apply per-workflow task limit
-	nsName := c.MutableState.GetNamespaceEntry().Name().String()
 	perWorkflowLimitBytes := int64(c.config.WorkflowTaskCompletionBufferSizeLimit(nsName))
 	if perWorkflowLimitBytes > 0 && c.taskCompletionBuffer.totalSize+pageBytes > perWorkflowLimitBytes {
 		c.clearTaskCompletionBuffer()
 		return ErrTaskCompletionBufferSizeExceeded
+	}
+
+	// Apply the process-wide limit and its per-namespace share so one
+	// namespace cannot exhaust the whole process budget.
+	if c.paginationLimiter != nil {
+		processLimit := int64(c.config.WorkflowTaskCompletionBufferTotalSizeLimit())
+		nsRatio := c.config.WorkflowTaskCompletionBufferNamespaceRatio(nsName)
+		nsLimit := int64(nsRatio * float64(processLimit))
+		ok, used := c.paginationLimiter.TryReserve(nsName, pageBytes, processLimit, nsLimit)
+		if !ok {
+			// BufferLost makes the SDK resend from page 0, so retaining the
+			// partial buffer buys. Clear it to release the reserved bytes back
+			// to the budget.
+			c.clearTaskCompletionBuffer()
+			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
+			return serviceerror.NewWorkflowTaskCompletionBufferLostf(
+				"workflow task completion buffer memory limit reached while buffering page %d", request.GetPageNumber())
+		}
+		metrics.WorkflowTaskCompletionBufferInflightBytes.With(c.metricsHandler).Record(float64(used))
 	}
 
 	c.taskCompletionBuffer.pages[request.GetPageNumber()] = request.Commands
