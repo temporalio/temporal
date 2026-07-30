@@ -54,12 +54,9 @@ func newValidator(
 func (v *validator) validateAndNormalizeStartRequest(req *workflowservice.StartNexusOperationExecutionRequest) error {
 	ns := req.GetNamespace()
 
-	requestID, err := v.normalizeRequestID(req.GetRequestId())
-	if err != nil {
+	if err := v.normalizeRequestID(&req.RequestId); err != nil {
 		return err
 	}
-	req.RequestId = requestID
-
 	if err := v.validateOperationID(req.GetOperationId()); err != nil {
 		return err
 	}
@@ -137,22 +134,16 @@ func (v *validator) validateAndNormalizePollRequest(req *workflowservice.PollNex
 }
 
 func (v *validator) validateAndNormalizeCancelRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest) error {
-	requestID, err := v.normalizeRequestID(req.GetRequestId())
-	if err != nil {
+	if err := v.normalizeRequestID(&req.RequestId); err != nil {
 		return err
 	}
-	req.RequestId = requestID
-
 	return v.validateCancelOrTerminateRequest(req)
 }
 
 func (v *validator) validateAndNormalizeTerminateRequest(req *workflowservice.TerminateNexusOperationExecutionRequest) error {
-	requestID, err := v.normalizeRequestID(req.GetRequestId())
-	if err != nil {
+	if err := v.normalizeRequestID(&req.RequestId); err != nil {
 		return err
 	}
-	req.RequestId = requestID
-
 	return v.validateCancelOrTerminateRequest(req)
 }
 
@@ -240,8 +231,6 @@ func (v *validator) validateAndCapTimeouts(req *workflowservice.StartNexusOperat
 	return nil
 }
 
-// validateInput checks the operation input against the namespace payload size limit, logging a
-// warning when it exceeds the (lower) warning threshold.
 func (v *validator) validateInput(req *workflowservice.StartNexusOperationExecutionRequest) error {
 	ns := req.GetNamespace()
 	inputSize := req.GetInput().Size()
@@ -322,13 +311,13 @@ func (v *validator) normalizeIDPolicies(req *workflowservice.StartNexusOperation
 	}
 }
 
-// normalizeRequestID generates a request ID when the caller didn't provide one, and otherwise
-// validates the one it did.
-func (v *validator) normalizeRequestID(requestID string) (string, error) {
-	if requestID == "" {
-		return uuid.NewString(), nil
+// normalizeRequestID validates the request ID, or sets it to a UUID if empty.
+func (v *validator) normalizeRequestID(requestID *string) error {
+	if *requestID == "" {
+		*requestID = uuid.NewString()
+		return nil
 	}
-	return requestID, v.validateIDLength("request_id", requestID)
+	return v.validateIDLength("request_id", *requestID)
 }
 
 func (v *validator) validateOperationID(operationID string) error {
