@@ -301,10 +301,6 @@ func RecordActivityCompletionMetrics(
 		metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
 	}
 
-	if completion.Status == ActivityStatusUnknown {
-		return
-	}
-
 	switch completion.Status {
 	case ActivityStatusFailed:
 		metrics.ActivityTaskFail.With(metricsHandler).Record(1)

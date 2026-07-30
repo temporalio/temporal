@@ -584,7 +584,7 @@ func (s *workflowSuite) expectTerminalFailureMetricsRecorded(uc UsecaseConfig, s
 
 func expectedWorkerDeploymentMetricTags(
 	options *deploymentpb.WorkerDeploymentOptions,
-) (metrics.Tag, metrics.Tag) {
+) (deploymentNameTag metrics.Tag, buildIDTag metrics.Tag) {
 	deploymentName := ""
 	buildID := ""
 	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED {
