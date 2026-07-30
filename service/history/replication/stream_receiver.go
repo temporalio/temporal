@@ -149,6 +149,13 @@ func (r *StreamReceiverImpl) Start() {
 		r.Stop,
 		r.logger,
 	)
+	go maxLifetimeMonitor(
+		r.Config.ReplicationStreamMaxLifetime,
+		r.Config.ReplicationStreamMaxLifetimeJitter,
+		r.shutdownChan,
+		r.Stop,
+		r.logger,
+	)
 	r.logger.Info("StreamReceiver started.")
 }
 
