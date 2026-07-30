@@ -86,18 +86,22 @@ func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (invocable, error) {
+	// Only the Nexus variant is invocable. The Worker variant can be persisted and described (see
+	// FromAPICallback) but delivering to a worker is not implemented yet, so it fails the task as
+	// unprocessable rather than retrying forever. Checked before resolving the completion source, since
+	// there is no point building a completion we cannot deliver.
+	callback := c.GetCallback().GetNexus()
+	if callback == nil {
+		return nil, queueserrors.NewUnprocessableTaskError(
+			fmt.Sprintf("unprocessable callback variant: %T", c.GetCallback().GetVariant()),
+		)
+	}
+
 	target := c.CompletionSource.Get(ctx)
 
 	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
 	if err != nil {
 		return nil, err
-	}
-
-	callback := c.GetCallback().GetNexus()
-	if callback == nil {
-		return nil, queueserrors.NewUnprocessableTaskError(
-			fmt.Sprintf("unprocessable callback variant: %v", callback),
-		)
 	}
 
 	if callback.Url == chasm.NexusCompletionHandlerURL {
@@ -181,6 +185,10 @@ func (c *Callback) Outcome(ctx chasm.Context) *callbackpb.CallbackOutcome {
 }
 
 // ToAPICallback converts a CHASM callback to API callback proto.
+//
+// Every variant callbackspb.Callback can hold is convertible, so a callback that was persisted can always
+// be reported back on a describe response, including a Worker callback that this server cannot yet invoke
+// (see loadInvocationArgs).
 func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	// Convert CHASM callback proto to API callback proto
 	chasmCB := c.GetCallback()
@@ -188,8 +196,8 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 		Links: slices.Clone(chasmCB.GetLinks()),
 	}
 
-	// CHASM currently only supports Nexus callbacks
-	if variant, ok := chasmCB.Variant.(*callbackspb.Callback_Nexus_); ok {
+	switch variant := chasmCB.GetVariant().(type) {
+	case *callbackspb.Callback_Nexus_:
 		res.Variant = &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
 				Url:    variant.Nexus.GetUrl(),
@@ -197,10 +205,63 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 			},
 		}
 		return res, nil
+	case *callbackspb.Callback_Worker_:
+		res.Variant = &commonpb.Callback_Worker_{
+			Worker: &commonpb.Callback_Worker{
+				TaskQueueName: variant.Worker.GetTaskQueueName(),
+				Service:       variant.Worker.GetService(),
+				Operation:     variant.Worker.GetOperation(),
+				SourceContext: common.CloneProto(variant.Worker.GetSourceContext()),
+			},
+		}
+		return res, nil
+	default:
+		// Unreachable unless a variant was added to callbackspb.Callback without being handled here.
+		return nil, serviceerror.NewInternalf("unsupported CHASM callback type: %T", variant)
+	}
+}
+
+// FromAPICallback converts an API callback proto into the persisted CHASM representation, and is the
+// inverse of [Callback.ToAPICallback].
+//
+// Only the variants callbackspb.Callback can represent are convertible: a component that persisted
+// anything else could neither be described nor invoked. Frontend validation is the primary gate for that;
+// this returns InvalidArgument for the same reason rather than an internal error, because the only way to
+// reach it is a caller that bypassed that gate.
+//
+// Converting a Worker callback does not mean the server can deliver it. Delivery is unimplemented and
+// loadInvocationArgs rejects it; callers must keep gating on their own feature checks before persisting
+// one.
+//
+// Links, headers and payloads are copied to the same depth [Callback.ToAPICallback] copies them, so the
+// persisted component does not alias the maps and slices owned by the request.
+func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
+	res := &callbackspb.Callback{
+		Links: slices.Clone(cb.GetLinks()),
 	}
 
-	// This should not happen as CHASM only supports Nexus callbacks currently
-	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
+	switch variant := cb.GetVariant().(type) {
+	case *commonpb.Callback_Nexus_:
+		res.Variant = &callbackspb.Callback_Nexus_{
+			Nexus: &callbackspb.Callback_Nexus{
+				Url:    variant.Nexus.GetUrl(),
+				Header: maps.Clone(variant.Nexus.GetHeader()),
+			},
+		}
+		return res, nil
+	case *commonpb.Callback_Worker_:
+		res.Variant = &callbackspb.Callback_Worker_{
+			Worker: &callbackspb.Callback_Worker{
+				TaskQueueName: variant.Worker.GetTaskQueueName(),
+				Service:       variant.Worker.GetService(),
+				Operation:     variant.Worker.GetOperation(),
+				SourceContext: common.CloneProto(variant.Worker.GetSourceContext()),
+			},
+		}
+		return res, nil
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
+	}
 }
 
 // ScheduleStandbyCallbacks transitions all STANDBY callbacks to SCHEDULED state,
