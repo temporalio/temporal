@@ -221,20 +221,10 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	}
 }
 
-// FromAPICallback converts an API callback proto into the persisted CHASM representation, and is the
-// inverse of [Callback.ToAPICallback].
+// FromAPICallback converts an API callback proto into the persisted CHASM representation.
 //
-// Only the variants callbackspb.Callback can represent are convertible: a component that persisted
-// anything else could neither be described nor invoked. Frontend validation is the primary gate for that;
-// this returns InvalidArgument for the same reason rather than an internal error, because the only way to
-// reach it is a caller that bypassed that gate.
-//
-// Converting a Worker callback does not mean the server can deliver it. Delivery is unimplemented and
-// loadInvocationArgs rejects it; callers must keep gating on their own feature checks before persisting
-// one.
-//
-// Links, headers and payloads are copied to the same depth [Callback.ToAPICallback] copies them, so the
-// persisted component does not alias the maps and slices owned by the request.
+// Will error on an unknown variant, meaning a component that persisted some unknown value can neither
+// be described nor invoked.
 func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
 	res := &callbackspb.Callback{
 		Links: slices.Clone(cb.GetLinks()),

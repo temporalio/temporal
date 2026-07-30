@@ -1437,3 +1437,57 @@ func TestMultipleCallbacks(t *testing.T) {
 	require.Equal(t, "boom", outcomes[enumspb.CALLBACK_STATE_FAILED].GetFailure().GetMessage())
 	require.Nil(t, outcomes[enumspb.CALLBACK_STATE_SCHEDULED])
 }
+
+// TestAddCompletionCallbacksVariants pins which variants reach persisted state, now that the conversion
+// is shared with the other libraries via callback.FromAPICallback.
+func TestAddCompletionCallbacksVariants(t *testing.T) {
+	newActivity := func() *Activity {
+		return &Activity{ActivityState: &activitypb.ActivityState{
+			Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		}}
+	}
+
+	t.Run("PersistsNexus", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		a := newActivity()
+
+		require.NoError(t, a.addCompletionCallbacks(ctx, "req-id", []*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:8080/cb"},
+			},
+		}}, 10))
+		require.Len(t, a.Callbacks, 1)
+	})
+
+	// Representable in persisted state but not deliverable. Attaching one is blocked upstream by
+	// callback.Validator, not here; see TestValidateCallbacks/WorkerVariantNotYetSupported.
+	t.Run("PersistsWorker", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		a := newActivity()
+
+		require.NoError(t, a.addCompletionCallbacks(ctx, "req-id", []*commonpb.Callback{{
+			Variant: &commonpb.Callback_Worker_{
+				Worker: &commonpb.Callback_Worker{TaskQueueName: "tq", Service: "svc", Operation: "op"},
+			},
+		}}, 10))
+		require.Len(t, a.Callbacks, 1)
+		require.Equal(t, "svc", a.Callbacks["req-id-0"].Get(ctx).GetCallback().GetWorker().GetService())
+	})
+
+	t.Run("RejectsVariantsWithNoPersistedRepresentation", func(t *testing.T) {
+		for name, cb := range map[string]*commonpb.Callback{
+			"internal": {Variant: &commonpb.Callback_Internal_{Internal: &commonpb.Callback_Internal{}}},
+			"unset":    {},
+		} {
+			t.Run(name, func(t *testing.T) {
+				ctx := &chasm.MockMutableContext{}
+				a := newActivity()
+
+				err := a.addCompletionCallbacks(ctx, "req-id", []*commonpb.Callback{cb}, 10)
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
+				require.Contains(t, err.Error(), "unsupported callback variant")
+			})
+		}
+	})
+}

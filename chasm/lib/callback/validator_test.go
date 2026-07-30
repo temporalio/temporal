@@ -136,6 +136,25 @@ func TestValidateCallbacks(t *testing.T) {
 		require.Contains(t, err.Error(), "unknown callback variant")
 	})
 
+	// The Worker variant is representable in persisted state (see FromAPICallback) but cannot be
+	// delivered yet, so this validator is the gate that keeps one from being attached at all. Asserted
+	// here because the component layer no longer rejects it.
+	t.Run("WorkerVariantNotYetSupported", func(t *testing.T) {
+		cbs := []*commonpb.Callback{
+			{Variant: &commonpb.Callback_Worker_{
+				Worker: &commonpb.Callback_Worker{
+					TaskQueueName: "task-queue",
+					Service:       "HTTPAdapter",
+					Operation:     "DeliverAsWebhook",
+				},
+			}},
+		}
+		err := v.Validate(context.Background(), "ns", cbs)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+		require.Contains(t, err.Error(), "unknown callback variant")
+	})
+
 	t.Run("EmptyCallbacksNoError", func(t *testing.T) {
 		err := v.Validate(context.Background(), "ns", nil)
 		require.NoError(t, err)
