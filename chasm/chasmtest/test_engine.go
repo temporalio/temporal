@@ -40,9 +40,6 @@ type (
 		// allExecutions maps (namespaceID, businessID, runID) to any run, for lookups by specific RunID.
 		allExecutions map[runKey]*execution
 		notifier      *executionNotifier
-		// backendDecorator, when set, customizes each execution's backend right after
-		// construction. See [WithNodeBackendDecorator].
-		backendDecorator func(*chasm.MockNodeBackend)
 	}
 
 	execution struct {
@@ -75,17 +72,6 @@ type (
 func WithTimeSource(ts clock.TimeSource) EngineOption {
 	return func(e *Engine) {
 		e.timeSource = ts
-	}
-}
-
-// WithNodeBackendDecorator lets the caller customize each execution's
-// [chasm.MockNodeBackend] right after it is constructed, e.g. to answer
-// HandleGetNamespaceEntry for components that read namespace-scoped config
-// through the CHASM context (chasmContext.NamespaceEntry() routes straight to
-// the backend, with no default namespace entry supplied otherwise).
-func WithNodeBackendDecorator(decorate func(*chasm.MockNodeBackend)) EngineOption {
-	return func(e *Engine) {
-		e.backendDecorator = decorate
 	}
 }
 
@@ -572,9 +558,6 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			return changed, nil
 		},
 	}
-	if e.backendDecorator != nil {
-		e.backendDecorator(backend)
-	}
 	return &execution{
 		key:     key,
 		backend: backend,
@@ -630,12 +613,6 @@ func (e *Engine) updateComponentInExecution(
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 ) ([]byte, error) {
-	// Resolve the component with the same mutable context used for updateFn (rather
-	// than a separate immutable one), so the resolved node is marked dirty. Otherwise
-	// its valueState never advances to valueStateNeedSyncStructure, syncSubComponents
-	// skips inspecting it for new children on close, and any component updateFn
-	// creates (e.g. a new map entry) never gets a tree node - silently dropping any
-	// immediate pure task it scheduled.
 	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	component, err := execution.node.Component(mutableCtx, ref)
 	if err != nil {
@@ -650,18 +627,7 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	serializedRef, err := mutableCtx.Ref(component)
-	if err != nil {
-		if errors.As(err, new(*serviceerror.NotFound)) {
-			// updateFn may legitimately have deleted the addressed component (e.g. a
-			// completed Backfiller removing itself), in which case there is no new ref
-			// to return even though the transition succeeded. Matches production's
-			// applyUpdateWithLease.
-			return nil, nil
-		}
-		return nil, err
-	}
-	return serializedRef, nil
+	return mutableCtx.Ref(component)
 }
 
 // refForComponent looks up the ComponentRef for a component instance by scanning
