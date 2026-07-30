@@ -12,6 +12,78 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func TestCallbackDestination(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		cb      *callbackspb.Callback
+		want    string
+		wantErr string
+	}{
+		{
+			name: "nexus",
+			cb: &callbackspb.Callback{Variant: &callbackspb.Callback_Nexus_{
+				Nexus: &callbackspb.Callback_Nexus{Url: "http://address:666/path/to/callback?query=string"},
+			}},
+			want: "http://address:666",
+		},
+		{
+			name: "nexus with invalid url",
+			cb: &callbackspb.Callback{Variant: &callbackspb.Callback_Nexus_{
+				Nexus: &callbackspb.Callback_Nexus{Url: "http://invalid url/path"},
+			}},
+			wantErr: "failed to parse URL:",
+		},
+		{
+			name: "worker",
+			cb: &callbackspb.Callback{Variant: &callbackspb.Callback_Worker_{
+				Worker: &callbackspb.Callback_Worker{TaskQueueName: "completions-task-queue"},
+			}},
+			want: "worker://completions-task-queue",
+		},
+		{
+			// A variant this server does not recognize, e.g. one persisted by a newer server.
+			name: "unrecognized variant",
+			cb:   &callbackspb.Callback{},
+			want: "",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := callbackDestination(tc.cb)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				require.Equal(t, tc.want, got)
+			} else {
+				require.Error(t, err)
+				require.ErrorContains(t, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// Scheduling a Worker callback succeeds and routes its invocation task to the target task queue.
+// Invoking it is not implemented yet, so the invocation task itself fails; scheduling must not,
+// since it runs as part of the execution's close transaction.
+func TestTransitionScheduled_Worker(t *testing.T) {
+	cb := &Callback{
+		CallbackState: &callbackspb.CallbackState{
+			Callback: &callbackspb.Callback{
+				Variant: &callbackspb.Callback_Worker_{
+					Worker: &callbackspb.Callback_Worker{TaskQueueName: "completions-task-queue"},
+				},
+			},
+		},
+	}
+	cb.SetStateMachineState(callbackspb.CALLBACK_STATUS_STANDBY)
+
+	mctx := &chasm.MockMutableContext{}
+	require.NoError(t, TransitionScheduled.Apply(cb, mctx, EventScheduled{}))
+
+	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, cb.StateMachineState())
+	require.Len(t, mctx.Tasks, 1)
+	require.IsType(t, &callbackspb.InvocationTask{}, mctx.Tasks[0].Payload)
+	require.Equal(t, "worker://completions-task-queue", mctx.Tasks[0].Attributes.Destination)
+}
+
 func TestValidTransitions(t *testing.T) {
 	// Setup
 	currentTime := time.Now().UTC()
