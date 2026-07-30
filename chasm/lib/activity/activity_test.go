@@ -948,34 +948,33 @@ func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing
 	require.Equal(t, originalStartedStamp, attempt.GetStartedStamp())
 }
 
-func TestHandlePauseRequestedRequestID(t *testing.T) {
-	t.Run("deduplicates before state validation", func(t *testing.T) {
-		for _, status := range []activitypb.ActivityExecutionStatus{
-			activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-			activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		} {
-			t.Run(status.String(), func(t *testing.T) {
-				activity := &Activity{
-					ActivityState: &activitypb.ActivityState{
-						Status: status,
-						LastPauseState: &activitypb.ActivityPauseState{
-							RequestId: "pause-request-id",
-						},
+func TestHandlePauseRequestedDedupBeforeValidation(t *testing.T) {
+	for _, status := range []activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+	} {
+		t.Run(status.String(), func(t *testing.T) {
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status: status,
+					LastPauseState: &activitypb.ActivityPauseState{
+						RequestId: "pause-request-id",
 					},
-				}
+				},
+			}
 
-				_, err := activity.handlePauseRequested(
-					&chasm.MockMutableContext{},
-					&activitypb.PauseActivityExecutionRequest{
-						FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
-							RequestId: "pause-request-id",
-						},
+			_, err := activity.handlePauseRequested(
+				&chasm.MockMutableContext{},
+				&activitypb.PauseActivityExecutionRequest{
+					FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
+						RequestId: "pause-request-id",
 					},
-				)
-				require.NoError(t, err)
-			})
-		}
-	})
+				},
+			)
+			require.NoError(t, err)
+			require.Equal(t, status, activity.GetStatus())
+		})
+	}
 }
 
 func TestHandleUnpauseRequestedRequestID(t *testing.T) {

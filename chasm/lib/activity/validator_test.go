@@ -510,7 +510,7 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 			ActivityId:      defaultActivityID,
 			RestoreOriginal: true,
 		}
-		err := validateAndNormalizeUpdateOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
+		err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
 		require.NoError(t, err)
 		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
 		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
@@ -601,7 +601,7 @@ func TestRequestIDTooLong(t *testing.T) {
 			RestoreOriginal: true,
 			RequestId:       tooLong,
 		}
-		err := validateAndNormalizeUpdateOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
+		err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})

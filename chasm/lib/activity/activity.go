@@ -690,6 +690,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	frontendReq := req.GetFrontendRequest()
 	requestID := frontendReq.GetRequestId()
 	if requestID != "" && requestID == a.GetLastUpdateOptionsRequestId() {
+		// A repeated request ID returns the current options, which may differ from the original response.
 		return a.updateActivityExecutionOptionsResponse(), nil
 	}
 
@@ -1004,6 +1005,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	if a.isTerminal() {
 		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
 	}
+	// TODO(sean): this should be FailedPrecondition, instead of no-op. And remove persisting LastUnpauseRequestId since it fails
 	if !a.isPaused() {
 		if requestID != "" {
 			a.LastUnpauseRequestId = requestID

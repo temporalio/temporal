@@ -12212,6 +12212,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		require.NoError(t, err)
 	})
 
+	// TODO(sean): unpause should fail instead of no-op. Tailor to expect request ID not save on failedprecondition.
 	// Record a no-op unpause, pause the activity, then retry the same unpause request ID. The retry
 	// must not undo the later pause.
 	t.Run("DuplicateRequestIDDoesNotUndoLaterPause", func(t *testing.T) {

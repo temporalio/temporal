@@ -289,8 +289,7 @@ type ActivityState struct {
 	ScheduleToCloseStamp int32 `protobuf:"varint,15,opt,name=schedule_to_close_stamp,json=scheduleToCloseStamp,proto3" json:"schedule_to_close_stamp,omitempty"`
 	// The most recent pause request, if the activity has ever been paused. Like cancel_state and
 	// terminate_state this is never cleared; unlike them it may be non-current (the activity may have
-	// since been unpaused), hence the "last" prefix. No logic gates on this field — it is descriptive
-	// metadata only.
+	// since been unpaused), hence the "last" prefix. Its request_id is used to de-dupe pause requests.
 	LastPauseState *ActivityPauseState `protobuf:"bytes,16,opt,name=last_pause_state,json=lastPauseState,proto3" json:"last_pause_state,omitempty"`
 	// Set when a reset is requested with keep_paused=true on a paused (PAUSE_REQUESTED) activity, so
 	// that when the worker yields the activity lands back in PAUSED rather than SCHEDULED. Consumed
