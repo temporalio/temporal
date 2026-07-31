@@ -1100,24 +1100,23 @@ func reapplyEvents(
 			}
 		default:
 			// Nexus operations (and other state-machine-backed components) can be backed by either the HSM tree or the
-			// CHASM tree, and both coexist on the same mutable state. Reset must rebuild the op regardless of which
-			// framework owns it.
-			// TODO(follow-up): the completion-token resolution path (HSM StateMachineRef vs CHASM
-			// ComponentRef) also needs the same fallback; see the completion handler in nexusoperation.
+			// CHASM tree, and both coexist on the same mutable state. An op missing from the HSM tree is skipped
+			// rather than looked up in CHASM; see cherryPickHSMEvent.
 			outcome, err := cherryPickHSMEvent(mutableState, stateMachineRegistry, event, resetReapplyExcludeTypes)
 			if err != nil {
 				return reappliedEvents, err
 			}
 			if outcome == cherryPickFallback {
-				// HSM doesn't own this op (unknown type, or component not in the HSM tree): try the CHASM tree.
+				// HSM doesn't define this event type: try the CHASM tree.
 				outcome, err = cherryPickChasmEvent(ctx, mutableState, chasmWorkflowRegistry, event, resetReapplyExcludeTypes)
 				if err != nil {
 					return reappliedEvents, err
 				}
 			}
 			if outcome != cherryPickApplied {
-				// Either skipped (recognized but not cherry-pickable) or unhandled by both frameworks.
-				// Only reapply hardcoded events above or ones cherry-picked in HSM or CHASM.
+				// Skipped for one of three reasons: not cherry-pickable, the component is missing from the
+				// HSM tree, or neither framework defines the event type. Only reapply hardcoded events
+				// above or ones cherry-picked in HSM or CHASM.
 				continue
 			}
 			mutableState.AddHistoryEvent(event.EventType, func(he *historypb.HistoryEvent) {
@@ -1143,8 +1142,10 @@ const (
 	// (e.g. excluded by reset-reapply-exclude-types, or not a cherry-pickable transition). The event
 	// must be skipped, NOT routed to the other framework, to avoid double-applying.
 	cherryPickSkipped
-	// cherryPickFallback: this framework doesn't own the op (unknown event type, or the component is
-	// not in this tree). The caller should try the other framework.
+	// cherryPickFallback: this framework doesn't define the event type, so the caller should try the
+	// other framework. A component missing from this framework's tree is skipped, not a fallback.
+	// HSM and CHASM define the same event types today, so this outcome only ever reaches CHASM's
+	// registry lookup, never its cherry-pick.
 	cherryPickFallback
 )
 
@@ -1163,8 +1164,11 @@ func cherryPickHSMEvent(
 	if err := def.CherryPick(mutableState.HSM(), event, resetReapplyExcludeTypes); err != nil {
 		switch {
 		case errors.Is(err, hsm.ErrStateMachineNotFound):
-			// The op isn't in the HSM tree. It may live in the CHASM tree instead, so fall back.
-			return cherryPickFallback, nil
+			// The op isn't in the HSM tree. On the replication reapply path it is usually in no tree at
+			// all: unlike reset, the batch is not guaranteed to share a prefix with the surviving branch,
+			// so events for operations that only existed on the discarded branch are normal. Skip rather
+			// than fall back to CHASM, whose NotFound for a missing op aborts the whole batch.
+			return cherryPickSkipped, nil
 		case errors.Is(err, hsm.ErrNotCherryPickable), errors.Is(err, hsm.ErrInvalidTransition):
 			// Recognized by HSM but intentionally not cherry-pickable here; skip without falling back.
 			return cherryPickSkipped, nil
@@ -1176,8 +1180,11 @@ func cherryPickHSMEvent(
 }
 
 // cherryPickChasmEvent attempts to cherry-pick an event against the CHASM workflow tree. It mirrors cherryPickHSMEvent.
-// As the last framework tried, an event type it doesn't define is skipped (nothing left to fall back to), and a
-// CHASM-defined event on a workflow without CHASM enabled returns an error rather than being silently dropped.
+// As the last framework tried, an event type it doesn't define is skipped: there is nothing left to fall back to.
+//
+// HSM and CHASM register the same Nexus event types, and cherryPickHSMEvent no longer falls back when a component is
+// missing from the HSM tree, so callers only reach the registry lookup below. Everything past it, including the
+// ChasmEnabled check, is unreachable until some CHASM library defines an event type HSM does not.
 func cherryPickChasmEvent(
 	ctx context.Context,
 	mutableState historyi.MutableState,
