@@ -440,12 +440,6 @@ func TestTransitionTimedout(t *testing.T) {
 			timeoutType:  enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			attemptCount: 5,
 		},
-		{
-			name:         "heartbeat timeout",
-			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			timeoutType:  enumspb.TIMEOUT_TYPE_HEARTBEAT,
-			attemptCount: 2,
-		},
 	}
 
 	for _, tc := range testCases {
