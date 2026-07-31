@@ -15,7 +15,7 @@ import (
 
 func TestFromAPICallback(t *testing.T) {
 	// Set of API Callback variants to test.
-	var apiCallbackVariants = map[string]struct {
+	apiCallbackVariants := map[string]struct {
 		callback *commonpb.Callback
 		// Whether CHASM can persist this variant. Persistable variants must round trip.
 		persistable bool
@@ -62,7 +62,7 @@ func TestFromAPICallback(t *testing.T) {
 			if !tc.persistable {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
-				require.Contains(t, err.Error(), "unsupported callback variant")
+				require.ErrorContains(t, err, "unsupported callback variant")
 				return
 			}
 			require.NoError(t, err)
@@ -117,8 +117,8 @@ func TestFromAPICallback(t *testing.T) {
 				require.NotNil(t, gotLinks[1].GetNexusOperationCallback())
 
 				// Verify that a deep copy was used. (Different references.)
-				require.True(t, links[0] != gotLinks[0])
-				require.True(t, links[1] != gotLinks[1])
+				require.NotSame(t, links[0], gotLinks[0])
+				require.NotSame(t, links[1], gotLinks[1])
 			})
 		}
 	})
@@ -134,7 +134,7 @@ func TestToAPICallbackUnsupportedVariant(t *testing.T) {
 	_, err := cb.ToAPICallback()
 	var internalErr *serviceerror.Internal
 	require.ErrorAs(t, err, &internalErr)
-	require.Contains(t, err.Error(), "unsupported CHASM callback type")
+	require.ErrorContains(t, err, "unsupported CHASM callback type")
 }
 
 // Asserts that CHASM Callbacks do not support the new Worker callback variant.
@@ -152,10 +152,12 @@ func TestWorkerCallbacksNotSupported(t *testing.T) {
 			Callback: chasmCB,
 		},
 	}
+	// The bare mock has no controller, so loadInvocationArgs must reject the variant
+	// before it touches the context.
 	_, err = cb.loadInvocationArgs(&chasm.MockMutableContext{}, nil)
 
 	var unprocessableErr *queueserrors.UnprocessableTaskError
 	require.ErrorAs(t, err, &unprocessableErr)
-	require.Contains(t, err.Error(), "unprocessable callback variant")
-	require.Contains(t, err.Error(), "Callback_Worker_")
+	require.ErrorContains(t, err, "unprocessable callback variant")
+	require.ErrorContains(t, err, "Callback_Worker_")
 }
