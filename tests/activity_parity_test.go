@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -39,6 +40,12 @@ func newActivityParityEnv(t *testing.T) *testcore.TestEnv {
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
+}
+
+func assertActivityTaskNotCancelRequested(t *testing.T, err error) {
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgumentErr)
+	require.Equal(t, consts.ErrActivityTaskNotCancelRequested.Error(), invalidArgumentErr.Message)
 }
 
 // nextRetryDelayOverride is a worker-supplied next_retry_delay, distinct from
@@ -340,21 +347,32 @@ func (s *activityParityTestSuite) TestCancel() {
 func (s *activityParityTestSuite) TestRespondCanceledWithoutRequest() {
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 1}
-	assertNotCancelRequested := func(t *testing.T, err error) {
-		var invalidArgumentErr *serviceerror.InvalidArgument
-		require.ErrorAs(t, err, &invalidArgumentErr)
-		require.Equal(t, "unable to mark activity as canceled without activity being request canceled first", invalidArgumentErr.Message)
-	}
 
 	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 		t := s.T()
 		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
-		assertNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
+		assertActivityTaskNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
 	})
 	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 		t := s.T()
 		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
-		assertNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
+		assertActivityTaskNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
+	})
+}
+
+func (s *activityParityTestSuite) TestRespondCanceledByIDWithoutRequest() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 1}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertActivityTaskNotCancelRequested(t, handle.respondCanceledByID())
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertActivityTaskNotCancelRequested(t, handle.respondCanceledByID())
 	})
 }
 

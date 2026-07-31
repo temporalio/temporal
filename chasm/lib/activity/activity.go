@@ -647,7 +647,7 @@ func (a *Activity) HandleCanceled(
 	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId(), false); err != nil {
 		return nil, err
 	}
-	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+	if !TransitionCanceled.Possible(a) {
 		return nil, consts.ErrActivityTaskNotCancelRequested
 	}
 

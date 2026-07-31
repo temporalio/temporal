@@ -206,6 +206,19 @@ func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
 	}
 }
 
+func (a *saaHandle) respondCanceledByID() error {
+	_, err := a.d.env.FrontendClient().RespondActivityTaskCanceledById(
+		a.d.ctx,
+		&workflowservice.RespondActivityTaskCanceledByIdRequest{
+			Namespace:  a.d.env.Namespace().String(),
+			ActivityId: a.activityID,
+			RunId:      a.runID,
+			Identity:   a.d.env.Tv().WorkerIdentity(),
+		},
+	)
+	return err
+}
+
 // rpc performs the frontend RPC for a non-Poll, non-timer event and returns its error.
 func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	fc := a.d.env.FrontendClient()
