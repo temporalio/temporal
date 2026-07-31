@@ -120,6 +120,16 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
+	if result.Created {
+		emitPayloadSizeMetric(
+			h.metricsHandler.WithTags(
+				metrics.NamespaceTag(frontendReq.GetNamespace()),
+				metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedScope),
+			),
+			frontendReq.GetInput().Size(),
+		)
+	}
+
 	// Apply on_conflict_options to an existing activity.
 	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
 	cbs := frontendReq.GetCompletionCallbacks()

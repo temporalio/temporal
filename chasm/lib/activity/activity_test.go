@@ -615,6 +615,98 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 	}
 }
 
+func TestRecordHeartbeatMetrics(t *testing.T) {
+	const (
+		namespaceID   = "test-namespace-id"
+		namespaceName = "test-namespace"
+		activityID    = "test-activity-id"
+		runID         = "test-run-id"
+		attempt       = int32(1)
+	)
+	componentRef, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: namespaceID,
+		BusinessId:  activityID,
+		RunId:       runID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name       string
+		details    *commonpb.Payloads
+		hasDetails string
+	}{
+		{name: "without details", hasDetails: "false"},
+		{
+			name: "with details",
+			details: &commonpb.Payloads{Payloads: []*commonpb.Payload{{
+				Data: []byte("heartbeat details"),
+			}}},
+			hasDetails: "true",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleExecutionKey: func() chasm.ExecutionKey {
+						return chasm.ExecutionKey{
+							NamespaceID: namespaceID,
+							BusinessID:  activityID,
+							RunID:       runID,
+						}
+					},
+					HandleMetricsHandler: func() metrics.Handler {
+						return captureHandler.WithTags(metrics.NamespaceTag(namespaceName))
+					},
+				},
+			}
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status:           activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+					HeartbeatTimeout: durationpb.New(0),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: attempt}),
+			}
+			_, err := act.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+				Token: &tokenspb.Task{
+					NamespaceId:  namespaceID,
+					Attempt:      attempt,
+					ComponentRef: componentRef,
+				},
+				Request: &historyservice.RecordActivityTaskHeartbeatRequest{
+					NamespaceId: namespaceID,
+					HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
+						Details: tc.details,
+					},
+				},
+			})
+			require.NoError(t, err)
+
+			snapshot := capture.Snapshot()
+			heartbeatCount := snapshot[metrics.ActivityHeartbeatCount.Name()]
+			require.Len(t, heartbeatCount, 1)
+			require.Equal(t, int64(1), heartbeatCount[0].Value)
+			require.Equal(t, namespaceName, heartbeatCount[0].Tags["namespace"])
+			require.Equal(t, metrics.HistoryRecordActivityTaskHeartbeatScope, heartbeatCount[0].Tags["operation"])
+			require.Equal(t, tc.hasDetails, heartbeatCount[0].Tags["has_details"])
+
+			payloadSize := snapshot[metrics.ActivityPayloadSize.Name()]
+			if tc.details == nil {
+				require.Empty(t, payloadSize)
+			} else {
+				require.Len(t, payloadSize, 1)
+				require.Equal(t, int64(tc.details.Size()), payloadSize[0].Value)
+				require.Equal(t, namespaceName, payloadSize[0].Tags["namespace"])
+				require.Equal(t, metrics.HistoryRecordActivityTaskHeartbeatScope, payloadSize[0].Tags["operation"])
+			}
+		})
+	}
+}
+
 func TestActivityTaskTokenAttemptStampRejectsTokenFromBeforeAttemptReset(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	const (
