@@ -13,10 +13,13 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
@@ -36,6 +39,26 @@ var (
 	defaultScheduleToStartTimeout = 2 * time.Minute
 	defaultStartToCloseTimeout    = 3 * time.Minute
 )
+
+// defaultFailureSizeLimit is the retained-failure size limit used by transition tests.
+const defaultFailureSizeLimit = 1024
+
+// injectActivityContext adds the dependencies that state transitions read off the chasm context:
+// the activityContext (dynamic config) and the namespace entry. A nil config gets the defaults.
+func injectActivityContext(t *testing.T, ctx *chasm.MockMutableContext, config *Config) {
+	if config == nil {
+		config = &Config{}
+	}
+	if config.MutableStateActivityFailureSizeLimit == nil {
+		config.MutableStateActivityFailureSizeLimit = dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit)
+	}
+	ctx.GoCtx = context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{config: config})
+	ctx.HandleNamespaceEntry = func() *namespace.Namespace {
+		return namespace.NewLocalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Name: "test-namespace"}, nil, "test-cluster",
+		)
+	}
+}
 
 func TestTransitionScheduled(t *testing.T) {
 	testCases := []struct {
@@ -276,6 +299,7 @@ func TestTransitionRescheduled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
 			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			injectActivityContext(t, ctx, nil)
 			attemptState := &activitypb.ActivityAttemptState{Count: tc.startingAttemptCount}
 			outcome := &activitypb.ActivityOutcome{}
 
@@ -991,6 +1015,7 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
 			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			injectActivityContext(t, ctx, nil)
 			attemptState := &activitypb.ActivityAttemptState{
 				Count:       3,
 				StartedTime: timestamppb.New(defaultTime),

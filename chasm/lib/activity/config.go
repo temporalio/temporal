@@ -58,6 +58,7 @@ type Config struct {
 	LongPollTimeout                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                         dynamicconfig.IntPropertyFn
 	MaxCallbacksPerExecution                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureSizeLimit     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy               dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	StartDelayEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -75,6 +76,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		LongPollBuffer:                           LongPollBuffer.Get(dc),
 		LongPollTimeout:                          LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
+		MutableStateActivityFailureSizeLimit:     dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
 		StartDelayEnabled:                        StartDelayEnabled.Get(dc),
 		MaxCallbacksPerExecution:                 callback.MaxPerExecution.Get(dc),
 		VisibilityMaxPageSize:                    dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),

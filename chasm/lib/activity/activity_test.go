@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -17,12 +18,14 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -1850,4 +1853,166 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 	require.Error(t, err)
 	require.Empty(t, activity.GetLastResetRequestId())
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
+}
+
+// oversizedActivityFailure returns an application failure whose details push it past the retained
+// failure size limit, mirroring the failure used by the workflow activity truncation tests.
+func oversizedActivityFailure(t *testing.T) *failurepb.Failure {
+	activityFailure := &failurepb.Failure{
+		Message: "activity failure with large details",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "application-failure-type",
+			NonRetryable: false,
+			Details: &commonpb.Payloads{
+				Payloads: []*commonpb.Payload{
+					{
+						Data: make([]byte, defaultFailureSizeLimit*2),
+					},
+				},
+			},
+		}},
+	}
+	require.Greater(t, activityFailure.Size(), defaultFailureSizeLimit)
+	return activityFailure
+}
+
+func TestRecordFailedAttempt_TruncatesRetryableFailure(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	injectActivityContext(t, ctx, nil)
+
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			RetryPolicy:  defaultRetryPolicy,
+			Status:       activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+	}
+	activityFailure := oversizedActivityFailure(t)
+
+	err := activity.recordFailedAttempt(
+		ctx,
+		time.Second,
+		activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY,
+		activityFailure,
+		defaultTime,
+		false,
+	)
+	require.NoError(t, err)
+
+	retainedFailure := attemptState.GetLastFailureDetails().GetFailure()
+	require.LessOrEqual(t, retainedFailure.Size(), defaultFailureSizeLimit)
+	require.Equal(t, common.FailureReasonFailureExceedsLimit, retainedFailure.GetMessage())
+	require.NotNil(t, retainedFailure.GetServerFailureInfo())
+	require.Equal(t, activityFailure.GetMessage(), retainedFailure.GetCause().GetMessage())
+	require.Equal(t, "application-failure-type", retainedFailure.GetCause().GetApplicationFailureInfo().GetType())
+	require.Nil(t, retainedFailure.GetCause().GetApplicationFailureInfo().GetDetails())
+}
+
+func TestRecordFailedAttempt_KeepsFailureWithinLimit(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	injectActivityContext(t, ctx, nil)
+
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			RetryPolicy:  defaultRetryPolicy,
+			Status:       activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+	}
+	activityFailure := &failurepb.Failure{
+		Message: "activity failure",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type: "application-failure-type",
+		}},
+	}
+	require.LessOrEqual(t, activityFailure.Size(), defaultFailureSizeLimit)
+
+	err := activity.recordFailedAttempt(
+		ctx,
+		time.Second,
+		activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY,
+		activityFailure,
+		defaultTime,
+		false,
+	)
+	require.NoError(t, err)
+
+	protorequire.ProtoEqual(t, activityFailure, attemptState.GetLastFailureDetails().GetFailure())
+}
+
+// A failure recorded on the final attempt is the failure reported back to the caller, so it is kept
+// intact even when it exceeds the retained failure size limit.
+func TestRecordFailedAttempt_KeepsTerminalFailureUntruncated(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	injectActivityContext(t, ctx, nil)
+
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			RetryPolicy:  defaultRetryPolicy,
+			Status:       activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+	}
+	activityFailure := oversizedActivityFailure(t)
+
+	err := activity.recordFailedAttempt(
+		ctx,
+		0,
+		activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED,
+		activityFailure,
+		defaultTime,
+		true,
+	)
+	require.NoError(t, err)
+
+	protorequire.ProtoEqual(t, activityFailure, attemptState.GetLastFailureDetails().GetFailure())
+}
+
+func TestTransitionRescheduled_TruncatesRetainedFailure(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	injectActivityContext(t, ctx, nil)
+
+	attemptState := &activitypb.ActivityAttemptState{
+		Count:       1,
+		StartedTime: timestamppb.New(defaultTime),
+	}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:            &commonpb.ActivityType{Name: "test-activity-type"},
+			RetryPolicy:             defaultRetryPolicy,
+			ScheduleToCloseTimeout:  durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout:  durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:     durationpb.New(defaultStartToCloseTimeout),
+			Status:                  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			TaskQueue:               &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			FirstAttemptStartedTime: timestamppb.New(defaultTime),
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+	activityFailure := oversizedActivityFailure(t)
+
+	err := TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
+		retryInterval: time.Second,
+		failure:       activityFailure,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, int32(2), attemptState.GetCount())
+	retainedFailure := attemptState.GetLastFailureDetails().GetFailure()
+	require.LessOrEqual(t, retainedFailure.Size(), defaultFailureSizeLimit)
+	require.Equal(t, common.FailureReasonFailureExceedsLimit, retainedFailure.GetMessage())
+	require.Equal(t, activityFailure.GetMessage(), retainedFailure.GetCause().GetMessage())
 }
