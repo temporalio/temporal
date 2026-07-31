@@ -47,15 +47,9 @@ var Module = fx.Module(
 
 var FrontendModule = fx.Module(
 	"chasm.lib.nexusoperation.frontend",
-	fx.Provide(configProvider),
 	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
-	fx.Provide(newComponentOnlyLibrary),
-	fx.Invoke(func(l *componentOnlyLibrary, registry *chasm.Registry) error {
-		// Frontend needs to register the component in order to serialize ComponentRefs, but doesn't
-		// need task handlers.
-		return registry.Register(l)
-	}),
+	ValidatorModule,
 )
 
 func register(
