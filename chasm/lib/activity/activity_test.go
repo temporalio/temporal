@@ -561,7 +561,7 @@ func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
 			},
 		})
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
-		require.EqualError(t, err, "activity is in terminal state Terminated")
+		require.EqualError(t, err, "activity is in non-pausable state Terminated")
 		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 	})
 }
