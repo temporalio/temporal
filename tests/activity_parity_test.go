@@ -7,21 +7,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	commandpb "go.temporal.io/api/command/v1"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type activityParityTestSuite struct {
@@ -343,126 +338,26 @@ func (s *activityParityTestSuite) TestCancel() {
 }
 
 func (s *activityParityTestSuite) TestCompleteByID_BeforeAnyWorkerStarts() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.CompleteByID}
+	cfg := activityConfig{MaxAttempts: 1}
+
 	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := env.Tv()
-
-		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:           uuid.NewString(),
-			Namespace:           env.Namespace().String(),
-			WorkflowId:          tv.WorkflowID(),
-			WorkflowType:        tv.WorkflowType(),
-			TaskQueue:           tv.TaskQueue(),
-			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-			Identity:            tv.WorkerIdentity(),
-		})
-		s.NoError(err)
-
-		// Schedule the activity, but no poller ever calls PollActivityTaskQueue for it, so it
-		// remains Scheduled indefinitely.
-		_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Commands: []*commandpb.Command{{
-						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             tv.ActivityID(),
-								ActivityType:           tv.ActivityType(),
-								TaskQueue:              tv.TaskQueue(),
-								Input:                  payloads.EncodeString("input"),
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								StartToCloseTimeout:    durationpb.New(time.Minute),
-							},
-						},
-					}},
-				}, nil
-			})
-		s.NoError(err)
-
-		_, err = env.FrontendClient().RespondActivityTaskCompletedById(s.Context(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
-			Namespace:  env.Namespace().String(),
-			WorkflowId: tv.WorkflowID(),
-			RunId:      we.GetRunId(),
-			ActivityId: tv.ActivityID(),
-			Result:     payloads.EncodeString("result"),
-			Identity:   tv.WorkerIdentity(),
-		})
-		s.NoError(err, "force-completing a scheduled (never-started) workflow activity by ID must succeed")
-
-		// Drain the resulting workflow task and complete the workflow to confirm the completion
-		// was actually applied, not just accepted and dropped.
-		_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Commands: []*commandpb.Command{{
-						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-								Result: payloads.EncodeString("done"),
-							},
-						},
-					}},
-				}, nil
-			})
-		s.NoError(err)
-
-		descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: we.GetRunId()},
-		})
-		s.NoError(err)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().GetStatus())
+		t := s.T()
+		require.Equal(t,
+			enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+			newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t),
+		)
 	})
 
 	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		env := testcore.NewEnv(s.T(),
-			testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-			testcore.WithDynamicConfig(activity.Enabled, true),
+		t := s.T()
+		activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
+		require.Equal(t,
+			enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+			activity.terminalStatus(t),
 		)
-		tv := env.Tv()
-
-		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
-			Namespace:           env.Namespace().String(),
-			ActivityId:          tv.ActivityID(),
-			ActivityType:        tv.ActivityType(),
-			Identity:            tv.WorkerIdentity(),
-			Input:               payloads.EncodeString("input"),
-			TaskQueue:           tv.TaskQueue(),
-			StartToCloseTimeout: durationpb.New(time.Minute),
-			RequestId:           uuid.NewString(),
-		})
-		s.NoError(err)
-		s.True(startResp.GetStarted())
-
-		// No poller ever calls PollActivityTaskQueue for it, so it remains Scheduled indefinitely.
-		descBefore, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: tv.ActivityID(),
-			RunId:      startResp.GetRunId(),
-		})
-		s.NoError(err)
-		s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, descBefore.GetInfo().GetRunState())
-
-		_, err = env.FrontendClient().RespondActivityTaskCompletedById(s.Context(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
-			Namespace:  env.Namespace().String(),
-			RunId:      startResp.GetRunId(),
-			ActivityId: tv.ActivityID(),
-			Result:     payloads.EncodeString("result"),
-			Identity:   tv.WorkerIdentity(),
-		})
-		s.NoError(err, "force-completing a scheduled (never-started) standalone activity by ID must succeed, matching workflow-activity behavior")
-
-		descAfter, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:      env.Namespace().String(),
-			ActivityId:     tv.ActivityID(),
-			RunId:          startResp.GetRunId(),
-			IncludeOutcome: true,
-		})
-		s.NoError(err)
-		s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descAfter.GetInfo().GetStatus())
-		s.NotNil(descAfter.GetInfo().GetLastStartedTime(),
+		require.NotNil(t, activity.describe(t).GetInfo().GetLastStartedTime(),
 			"a force-completed activity must still record a started time, even though no worker ever started it")
 	})
 }
@@ -471,145 +366,21 @@ func (s *activityParityTestSuite) TestCompleteByID_BeforeAnyWorkerStarts() {
 // the activity is Paused (a never-started activity that had a pause requested before any worker
 // picked it up) — Paused has no attempt in progress, just like Scheduled.
 func (s *activityParityTestSuite) TestCompleteByID_WhilePaused() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Pause, model.CompleteByID}
+	cfg := activityConfig{MaxAttempts: 1}
+	const expected = enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+
 	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := env.Tv()
-
-		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
-			RequestId:           uuid.NewString(),
-			Namespace:           env.Namespace().String(),
-			WorkflowId:          tv.WorkflowID(),
-			WorkflowType:        tv.WorkflowType(),
-			TaskQueue:           tv.TaskQueue(),
-			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-			Identity:            tv.WorkerIdentity(),
-		})
-		s.NoError(err)
-
-		// Schedule the activity, but no poller ever calls PollActivityTaskQueue for it, so it
-		// remains Scheduled indefinitely.
-		_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Commands: []*commandpb.Command{{
-						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-								ActivityId:             tv.ActivityID(),
-								ActivityType:           tv.ActivityType(),
-								TaskQueue:              tv.TaskQueue(),
-								Input:                  payloads.EncodeString("input"),
-								ScheduleToCloseTimeout: durationpb.New(time.Minute),
-								StartToCloseTimeout:    durationpb.New(time.Minute),
-							},
-						},
-					}},
-				}, nil
-			})
-		s.NoError(err)
-
-		_, err = env.FrontendClient().PauseActivity(s.Context(), &workflowservice.PauseActivityRequest{
-			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
-			Activity:  &workflowservice.PauseActivityRequest_Id{Id: tv.ActivityID()},
-			Identity:  tv.WorkerIdentity(),
-			RequestId: uuid.NewString(),
-		})
-		s.NoError(err)
-
-		_, err = env.FrontendClient().RespondActivityTaskCompletedById(s.Context(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
-			Namespace:  env.Namespace().String(),
-			WorkflowId: tv.WorkflowID(),
-			RunId:      we.GetRunId(),
-			ActivityId: tv.ActivityID(),
-			Result:     payloads.EncodeString("result"),
-			Identity:   tv.WorkerIdentity(),
-		})
-		s.NoError(err, "force-completing a paused (never-started) workflow activity by ID must succeed")
-
-		// Drain the resulting workflow task and complete the workflow to confirm the completion
-		// was actually applied, not just accepted and dropped.
-		_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Commands: []*commandpb.Command{{
-						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-							CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-								Result: payloads.EncodeString("done"),
-							},
-						},
-					}},
-				}, nil
-			})
-		s.NoError(err)
-
-		descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: we.GetRunId()},
-		})
-		s.NoError(err)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().GetStatus())
+		t := s.T()
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
 	})
 
 	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		env := testcore.NewEnv(s.T(),
-			testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-			testcore.WithDynamicConfig(activity.Enabled, true),
-			testcore.WithDynamicConfig(activity.EnableStandaloneActivityOperatorCommands, true),
-		)
-		tv := env.Tv()
-
-		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
-			Namespace:           env.Namespace().String(),
-			ActivityId:          tv.ActivityID(),
-			ActivityType:        tv.ActivityType(),
-			Identity:            tv.WorkerIdentity(),
-			Input:               payloads.EncodeString("input"),
-			TaskQueue:           tv.TaskQueue(),
-			StartToCloseTimeout: durationpb.New(time.Minute),
-			RequestId:           uuid.NewString(),
-		})
-		s.NoError(err)
-		s.True(startResp.GetStarted())
-
-		// No poller ever calls PollActivityTaskQueue for it, so it remains Scheduled until paused.
-		_, err = env.FrontendClient().PauseActivityExecution(s.Context(), &workflowservice.PauseActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: tv.ActivityID(),
-			RunId:      startResp.GetRunId(),
-			Identity:   tv.WorkerIdentity(),
-			Reason:     "test-pause",
-		})
-		s.NoError(err)
-
-		descBefore, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: tv.ActivityID(),
-			RunId:      startResp.GetRunId(),
-		})
-		s.NoError(err)
-		s.Equal(enumspb.PENDING_ACTIVITY_STATE_PAUSED, descBefore.GetInfo().GetRunState())
-
-		_, err = env.FrontendClient().RespondActivityTaskCompletedById(s.Context(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
-			Namespace:  env.Namespace().String(),
-			RunId:      startResp.GetRunId(),
-			ActivityId: tv.ActivityID(),
-			Result:     payloads.EncodeString("result"),
-			Identity:   tv.WorkerIdentity(),
-		})
-		s.NoError(err, "force-completing a paused (never-started) standalone activity by ID must succeed, matching workflow-activity behavior")
-
-		descAfter, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:      env.Namespace().String(),
-			ActivityId:     tv.ActivityID(),
-			RunId:          startResp.GetRunId(),
-			IncludeOutcome: true,
-		})
-		s.NoError(err)
-		s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descAfter.GetInfo().GetStatus())
-		s.NotNil(descAfter.GetInfo().GetLastStartedTime(),
+		t := s.T()
+		activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
+		require.Equal(t, expected, activity.terminalStatus(t))
+		require.NotNil(t, activity.describe(t).GetInfo().GetLastStartedTime(),
 			"a force-completed activity must still record a started time, even though no worker ever started it")
 	})
 }
