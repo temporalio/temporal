@@ -579,7 +579,6 @@ func TestTransitionTimedOutRetryWindowExhaustedChainsPriorFailure(t *testing.T) 
 				timeoutType:    timeoutType,
 				retryState:     enumspb.RETRY_STATE_TIMEOUT,
 				metricsHandler: metrics.NoopMetricsHandler,
-				fromStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			}))
 
 			// The caller sees ScheduleToClose as the terminal timeout, with the application failure
