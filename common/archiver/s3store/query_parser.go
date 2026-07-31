@@ -129,10 +129,10 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			return err
 		}
 		if op != "=" {
-			return fmt.Errorf("only operation = is support for %s", WorkflowType)
+			return fmt.Errorf("only operation = is support for %s", colNameStr)
 		}
 		if parsedQuery.workflowType != nil {
-			return fmt.Errorf("can not query %s multiple times", WorkflowType)
+			return fmt.Errorf("can not query %s multiple times", colNameStr)
 		}
 		parsedQuery.workflowType = new(val)
 	case WorkflowID:
