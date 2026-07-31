@@ -8537,6 +8537,42 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		}
 	})
 
+	// Apply an update, terminate the activity, then retry the same request ID. The retry must be
+	// deduplicated before terminal-state validation.
+	t.Run("DuplicateRequestIDSucceeds", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		updateReq := &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			RequestId:  "update-request-id",
+			ActivityOptions: &activitypb.ActivityOptions{
+				HeartbeatTimeout: durationpb.New(30 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
+		}
+
+		_, err := env.FrontendClient().UpdateActivityExecutionOptions(ctx, updateReq)
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			RequestId:  "terminate-request-id",
+		})
+		require.NoError(t, err)
+
+		updateResp, err := env.FrontendClient().UpdateActivityExecutionOptions(ctx, updateReq)
+		require.NoError(t, err)
+		require.Equal(t, 30*time.Second,
+			updateResp.GetActivityOptions().GetHeartbeatTimeout().AsDuration())
+	})
+
 	t.Run("ChangeRetryInterval", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
@@ -12176,6 +12212,45 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		require.NoError(t, err)
 	})
 
+	// TODO(sean): unpause should fail instead of no-op. Tailor to expect request ID not save on failedprecondition.
+	// Record a no-op unpause, pause the activity, then retry the same unpause request ID. The retry
+	// must not undo the later pause.
+	t.Run("DuplicateRequestIDDoesNotUndoLaterPause", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		unpauseReq := &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			RequestId:  "unpause-request-id",
+		}
+
+		_, err := env.FrontendClient().UnpauseActivityExecution(ctx, unpauseReq)
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			RequestId:  "pause-request-id",
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, unpauseReq)
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
+	})
+
 	t.Run("UnpauseWithResetAttempts", func(t *testing.T) {
 		ctx := testcore.NewContext()
 
@@ -12754,6 +12829,37 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			require.Equal(c, state, desc.GetInfo().GetRunState())
 		}, 5*time.Second, 100*time.Millisecond)
 	}
+
+	// Reset while scheduled, start the reset attempt, then retry the same request ID. The retry
+	// must not transition the started activity to RESET_REQUESTED, which heartbeat would report.
+	t.Run("DuplicateRequestIDWhileStartedIsNoOp", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		resetReq := &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			RequestId:  "reset-request-id",
+		}
+
+		_, err := env.FrontendClient().ResetActivityExecution(ctx, resetReq)
+		require.NoError(t, err)
+
+		pollResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, startResp.GetRunId())
+
+		_, err = env.FrontendClient().ResetActivityExecution(ctx, resetReq)
+		require.NoError(t, err)
+
+		heartbeatResp, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.GetTaskToken(),
+		})
+		require.NoError(t, err)
+		require.False(t, heartbeatResp.GetActivityReset())
+	})
 
 	t.Run("AfterRetry", func(t *testing.T) {
 		// Start activity, let it fail twice (attempt 3 backing off with long interval),

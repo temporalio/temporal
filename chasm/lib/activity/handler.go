@@ -413,6 +413,7 @@ func (h *handler) PauseActivityExecution(ctx context.Context, req *activitypb.Pa
 func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.UnpauseActivityExecutionRequest) (*activitypb.UnpauseActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	if frontendReq.GetWorkflowId() != "" {
+		// TODO: Forward the request ID once workflow activity unpause supports idempotency.
 		_, err := h.historyHandler.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
 			NamespaceId: req.GetNamespaceId(),
 			FrontendRequest: &workflowservice.UnpauseActivityRequest{
@@ -450,6 +451,7 @@ func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.
 func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	if frontendReq.GetWorkflowId() != "" {
+		// TODO: Forward the request ID once workflow activity reset supports idempotency.
 		_, err := h.historyHandler.ResetActivity(ctx, &historyservice.ResetActivityRequest{
 			NamespaceId: req.GetNamespaceId(),
 			FrontendRequest: &workflowservice.ResetActivityRequest{
@@ -492,6 +494,7 @@ func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.Re
 func (h *handler) UpdateActivityExecutionOptions(ctx context.Context, req *activitypb.UpdateActivityExecutionOptionsRequest) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	if frontendReq.GetWorkflowId() != "" {
+		// TODO: Forward the request ID once workflow activity options updates support idempotency.
 		resp, err := h.historyHandler.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
 			NamespaceId: req.GetNamespaceId(),
 			UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
