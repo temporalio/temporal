@@ -170,6 +170,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":                     3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ValidateWorkerDeploymentVersionComputeConfig": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                                  3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                               3,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkers":                                 3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.
@@ -216,9 +219,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListClosedWorkflowExecutions":   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
-		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkers":                   1,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":        1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CountNexusOperationExecutions":  1,
