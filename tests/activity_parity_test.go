@@ -337,50 +337,37 @@ func (s *activityParityTestSuite) TestCancel() {
 	})
 }
 
-func (s *activityParityTestSuite) TestCompleteByID_BeforeAnyWorkerStarts() {
-	env := newActivityParityEnv(s.T())
-	trace := []model.Event{model.CompleteByID}
+// TestCompleteByID tests force-completing an activity by ID.
+func (s *activityParityTestSuite) TestCompleteByID() {
+	type testCase struct {
+		name  string
+		trace []model.Event
+	}
 	cfg := activityConfig{MaxAttempts: 1}
-
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t,
-			enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-			newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t),
-		)
-	})
-
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
-		require.Equal(t,
-			enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-			activity.terminalStatus(t),
-		)
-		require.NotNil(t, activity.describe(t).GetInfo().GetLastStartedTime(),
-			"a force-completed activity must still record a started time, even though no worker ever started it")
-	})
-}
-
-// TestCompleteByID_WhilePaused asserts that force-completing an activity by ID also works while
-// the activity is Paused (a never-started activity that had a pause requested before any worker
-// picked it up) — Paused has no attempt in progress, just like Scheduled.
-func (s *activityParityTestSuite) TestCompleteByID_WhilePaused() {
-	env := newActivityParityEnv(s.T())
-	trace := []model.Event{model.Pause, model.CompleteByID}
-	cfg := activityConfig{MaxAttempts: 1}
-	const expected = enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
-
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
-	})
-
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
-		require.Equal(t, expected, activity.terminalStatus(t))
-		require.NotNil(t, activity.describe(t).GetInfo().GetLastStartedTime(),
-			"a force-completed activity must still record a started time, even though no worker ever started it")
-	})
+	testCases := []testCase{
+		{
+			name:  "BeforeStarted",
+			trace: []model.Event{model.CompleteByID},
+		},
+		{
+			name:  "WhilePaused",
+			trace: []model.Event{model.Pause, model.CompleteByID},
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func(s *activityParityTestSuite) {
+			env := newActivityParityEnv(s.T())
+			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, newWFADriver(t, env, cfg).driveTrace(t, tc.trace).terminalStatus(t))
+			})
+			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				activity := newSAADriver(t, env, cfg).driveTrace(t, tc.trace)
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.terminalStatus(t))
+				require.NotNil(t, activity.describe(t).GetInfo().GetLastStartedTime(),
+					"a force-completed activity must still record a started time, even though no worker ever started it")
+			})
+		})
+	}
 }
