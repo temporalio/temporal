@@ -170,7 +170,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":                     3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ValidateWorkerDeploymentVersionComputeConfig": 3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                                 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                                  3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                               3,
 		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkers":                                 3,
 
