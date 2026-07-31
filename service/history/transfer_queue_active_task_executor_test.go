@@ -2620,11 +2620,126 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		rootExecutionInfo,
 		nil,
 	)).Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("msg", "", ""))
+	// Orphaned-child replacement is opt-in, so this request carries no zombify intent and records
+	// StartChildExecutionFailed(WORKFLOW_ALREADY_EXISTS) exactly as it did before that feature.
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestCanZombifyConflictingChild() {
+	const childWorkflowID = "child-workflow"
+	childInfo := &persistencespb.ChildExecutionInfo{
+		InitiatedEventId:  75,
+		StartedWorkflowId: childWorkflowID,
+	}
+
+	testCases := []struct {
+		name            string
+		enabled         bool
+		reusePolicy     enumspb.WorkflowIdReusePolicy
+		pendingChildren map[int64]*persistencespb.ChildExecutionInfo
+		expected        bool
+	}{
+		{
+			name:            "disabled",
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
+		},
+		{
+			name:            "allow duplicate",
+			enabled:         true,
+			reusePolicy:     enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
+			expected:        true,
+		},
+		{
+			name:            "unspecified reuse policy",
+			enabled:         true,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
+			expected:        true,
+		},
+		{
+			name:            "reject duplicate",
+			enabled:         true,
+			reusePolicy:     enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
+		},
+		{
+			name:            "allow duplicate failed only",
+			enabled:         true,
+			reusePolicy:     enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
+		},
+		{
+			name:        "another accepted child uses the workflow ID",
+			enabled:     true,
+			reusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{
+				72: {InitiatedEventId: 72, StartedWorkflowId: childWorkflowID},
+				75: childInfo,
+			},
+		},
+		{
+			name:        "other accepted children use different workflow IDs",
+			enabled:     true,
+			reusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{
+				72: {InitiatedEventId: 72, StartedWorkflowId: "other-child"},
+				75: childInfo,
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.mockShard.GetConfig().EnableOrphanedChildWorkflowReclaim = func(string) bool {
+				return tc.enabled
+			}
+			mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				NamespaceId: "parent-namespace",
+				WorkflowId:  "parent-workflow",
+			}).AnyTimes()
+			mutableState.EXPECT().GetPendingChildExecutionInfos().Return(tc.pendingChildren).AnyTimes()
+			attributes := &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
+				WorkflowIdReusePolicy: tc.reusePolicy,
+			}
+
+			s.Equal(tc.expected, s.transferQueueActiveTaskExecutor.canZombifyConflictingChild(
+				mutableState,
+				childInfo,
+				attributes,
+				tests.Namespace,
+			))
+		})
+	}
+
+	s.Run("child workflow ID collides with parent", func() {
+		s.mockShard.GetConfig().EnableOrphanedChildWorkflowReclaim = func(string) bool { return true }
+		mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+		mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+			NamespaceId: "same-namespace",
+			WorkflowId:  "same-workflow",
+		})
+		selfChild := &persistencespb.ChildExecutionInfo{
+			InitiatedEventId:  75,
+			Namespace:         tests.Namespace.String(),
+			StartedWorkflowId: "same-workflow",
+		}
+		attributes := &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
+			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		}
+
+		s.False(s.transferQueueActiveTaskExecutor.canZombifyConflictingChild(
+			mutableState,
+			selfChild,
+			attributes,
+			tests.Namespace,
+		))
+	})
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure_InvalidVersioningOverride() {
