@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -477,6 +476,19 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			},
 		},
 		{
+			name: "AttemptTimeoutRetryPreventedByScheduleToClose",
+			cfg: activityConfig{
+				RetryInterval:   activityLongDuration,
+				StartToClose:    activityShortTimeout,
+				ScheduleToClose: time.Hour,
+			},
+			trace: []model.Event{model.Poll},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				retryState: enumspb.RETRY_STATE_TIMEOUT,
+			},
+		},
+		{
 			name:  "CancelRequestedBeforeAttemptTimeout",
 			cfg:   activityConfig{MaxAttempts: 1},
 			trace: []model.Event{model.Poll, model.RequestCancel, model.StartToCloseElapses},
@@ -506,39 +518,4 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			})
 		})
 	}
-
-	s.Run("AttemptTimeoutRetryPreventedByScheduleToClose", func(s *activityParityTestSuite) {
-		t := s.T()
-		cfg := activityConfig{
-			RetryInterval:   activityLongDuration,
-			StartToClose:    activityShortTimeout,
-			ScheduleToClose: time.Hour,
-		}
-		expected := activityTerminalOutcome{
-			status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-			retryState: enumspb.RETRY_STATE_TIMEOUT,
-		}
-
-		t.Run("WorkflowActivity", func(t *testing.T) {
-			a := newWFADriver(t, env, cfg).start(t, cfg)
-			a.driveEvent(t, model.Poll)
-			// WFA reports schedule-to-close when an attempt timeout leaves too little time for a
-			// retry. The one-hour deadline ensures the schedule-to-close timer cannot be the cause.
-			await.Require(a.driverState().ctx, t, func(t *await.T) {
-				reported := a.timeoutInfo(t)
-				t.Require().Truef(
-					reported.terminal && reported.timeout == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-					"activity reports timeout %s at attempt %d (terminal=%v)",
-					reported.timeout,
-					reported.attempt,
-					reported.terminal,
-				)
-			}, cfg.StartToClose+activityDriverTimerMargin, activityDriverPollInterval)
-			require.Equal(t, expected, a.terminalOutcome(t))
-		})
-		t.Run("StandaloneActivity", func(t *testing.T) {
-			trace := []model.Event{model.Poll, model.StartToCloseElapses}
-			require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
-		})
-	})
 }

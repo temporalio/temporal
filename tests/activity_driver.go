@@ -283,17 +283,15 @@ func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event) {
 // does not within (window + margin).
 func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadline time.Time) {
 	state := a.driverState()
+	want := timeoutType(e)
+	var got activityTimeoutInfo
 	await.Require(state.ctx, t, func(t *await.T) {
-		got := a.timeoutInfo(t)
-		t.Require().Truef(got.reportsTimeout(e, state.startedAttempt),
-			"%s: activity reports timeout %s at attempt %d (terminal=%v) after timeout event %s on attempt %d",
-			e, got.timeout, got.attempt, got.terminal, timeoutType(e), state.startedAttempt)
+		got = a.timeoutInfo(t)
+		fired := got.timeout == want && (got.terminal || got.attempt > state.startedAttempt)
+		t.Require().Truef(fired,
+			"%s: activity reports timeout %s at attempt %d (terminal=%v), want %s after attempt %d",
+			e, got.timeout, got.attempt, got.terminal, want, state.startedAttempt)
 	}, max(0, time.Until(deadline)), activityDriverPollInterval)
-}
-
-func (i activityTimeoutInfo) reportsTimeout(e model.Event, startedAttempt int32) bool {
-	attemptEnded := i.terminal || i.attempt > startedAttempt
-	return i.timeout == timeoutType(e) && attemptEnded
 }
 
 // awaitActivityDispatchDelay waits until the server no longer reports a future dispatch deadline.
