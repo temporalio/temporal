@@ -1,12 +1,14 @@
 package replication
 
 import (
+	"fmt"
 	"math"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -23,17 +25,20 @@ type replicationReaderGroup struct {
 	shardContext   historyi.ShardContext
 	clientShardKey ClusterShardKey
 	tieredEnabled  bool
+	logger         log.Logger
 }
 
 func newReplicationReaderGroup(
 	shardContext historyi.ShardContext,
 	clientShardKey ClusterShardKey,
 	tieredEnabled bool,
+	logger log.Logger,
 ) *replicationReaderGroup {
 	return &replicationReaderGroup{
 		shardContext:   shardContext,
 		clientShardKey: clientShardKey,
 		tieredEnabled:  tieredEnabled,
+		logger:         logger,
 	}
 }
 
@@ -53,10 +58,12 @@ func (r *replicationReaderGroup) CatchupBeginWatermark(
 ) int64 {
 	queueState, ok := r.shardContext.GetQueueState(tasks.CategoryReplication)
 	if !ok {
+		r.logger.Debug("StreamSender queueState not found")
 		return catchupEnd
 	}
 	readerState, ok := queueState.ReaderStates[r.ReaderID()]
 	if !ok {
+		r.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", r.ReaderID()))
 		return catchupEnd
 	}
 	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes), true)].Range.InclusiveMin.TaskId
@@ -82,15 +89,20 @@ func (r *replicationReaderGroup) BuildReaderState(
 
 // FailoverWatermark returns the task ID and timestamp for UpdateRemoteReaderInfo.
 // In tiered mode, the high-priority watermark is used since that lane carries live traffic.
+// It validates the priority fields itself so callers need not run BuildReaderState first.
 func (r *replicationReaderGroup) FailoverWatermark(
 	attr *replicationspb.SyncReplicationState,
-) (int64, time.Time) {
+) (int64, time.Time, error) {
 	if r.tieredEnabled {
-		return attr.HighPriorityState.InclusiveLowWatermark - 1,
-			attr.HighPriorityState.InclusiveLowWatermarkTime.AsTime()
+		high := attr.GetHighPriorityState()
+		if high == nil {
+			return 0, time.Time{}, NewStreamError("ReplicationReaderGroup: missing high priority state in tiered mode", nil)
+		}
+		return high.InclusiveLowWatermark - 1,
+			high.InclusiveLowWatermarkTime.AsTime(), nil
 	}
 	return attr.GetInclusiveLowWatermark() - 1,
-		attr.GetInclusiveLowWatermarkTime().AsTime()
+		attr.GetInclusiveLowWatermarkTime().AsTime(), nil
 }
 
 // priorityScopeIndex maps a priority to its index within QueueReaderState.Scopes.

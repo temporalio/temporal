@@ -188,7 +188,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_ReaderGroupEquivalence(
 		}
 
 		legacyState, legacyTaskID := run(nil)
-		groupState, groupTaskID := run(newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered))
+		groupState, groupTaskID := run(newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, log.NewNoopLogger()))
 		s.True(proto.Equal(legacyState, groupState),
 			"tiered=%v: reader group persisted %v, legacy persisted %v", tiered, groupState, legacyState)
 		s.Equal(legacyTaskID, groupTaskID)

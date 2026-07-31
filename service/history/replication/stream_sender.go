@@ -106,7 +106,7 @@ func NewStreamSender(
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
 		isTieredStackEnabled:    tieredStackEnabled,
-		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey, tieredStackEnabled),
+		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey, tieredStackEnabled, logger),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
 	}
@@ -262,13 +262,16 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		if err != nil {
 			return err
 		}
+		taskID, ts, err := s.readerGroup.FailoverWatermark(attr)
+		if err != nil {
+			return err
+		}
 		if s.isTieredStackEnabled {
 			s.flowController.RefreshReceiverFlowControlInfo(attr)
 		}
 		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, readerState); err != nil {
 			return err
 		}
-		taskID, ts := s.readerGroup.FailoverWatermark(attr)
 		return s.shardContext.UpdateRemoteReaderInfo(readerID, taskID, ts)
 	}
 
@@ -435,11 +438,12 @@ func newReaderGroupIfEnabled(
 	shardContext historyi.ShardContext,
 	clientShardKey ClusterShardKey,
 	tieredStackEnabled bool,
+	logger log.Logger,
 ) *replicationReaderGroup {
 	if !config.EnableReplicationReaderGroup() {
 		return nil
 	}
-	return newReplicationReaderGroup(shardContext, clientShardKey, tieredStackEnabled)
+	return newReplicationReaderGroup(shardContext, clientShardKey, tieredStackEnabled, logger)
 }
 
 func (s *StreamSenderImpl) sendLive(

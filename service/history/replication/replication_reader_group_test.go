@@ -10,6 +10,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/log"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -51,7 +52,7 @@ func (s *replicationReaderGroupSuite) TearDownTest() {
 }
 
 func (s *replicationReaderGroupSuite) newGroup(tiered bool) *replicationReaderGroup {
-	return newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered)
+	return newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, log.NewNoopLogger())
 }
 
 // ReaderID
@@ -182,9 +183,19 @@ func (s *replicationReaderGroupSuite) TestFailoverWatermark_Tiered_UsesHighPrior
 		},
 		LowPriorityState: &replicationspb.ReplicationState{InclusiveLowWatermark: 400},
 	}
-	taskID, gotTS := g.FailoverWatermark(attr)
+	taskID, gotTS, err := g.FailoverWatermark(attr)
+	s.NoError(err)
 	s.Equal(int64(299), taskID)
 	s.Equal(ts, gotTS)
+}
+
+func (s *replicationReaderGroupSuite) TestFailoverWatermark_Tiered_MissingHighPriority_Error() {
+	g := s.newGroup(true)
+	attr := &replicationspb.SyncReplicationState{
+		LowPriorityState: &replicationspb.ReplicationState{InclusiveLowWatermark: 400},
+	}
+	_, _, err := g.FailoverWatermark(attr)
+	s.Error(err)
 }
 
 func (s *replicationReaderGroupSuite) TestFailoverWatermark_SingleStack_UsesOverall() {
@@ -194,7 +205,8 @@ func (s *replicationReaderGroupSuite) TestFailoverWatermark_SingleStack_UsesOver
 		InclusiveLowWatermark:     150,
 		InclusiveLowWatermarkTime: timestamppb.New(ts),
 	}
-	taskID, gotTS := g.FailoverWatermark(attr)
+	taskID, gotTS, err := g.FailoverWatermark(attr)
+	s.NoError(err)
 	s.Equal(int64(149), taskID)
 	s.Equal(ts, gotTS)
 }
