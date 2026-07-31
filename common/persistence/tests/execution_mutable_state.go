@@ -49,10 +49,9 @@ type (
 		HistoryBranchUtil p.HistoryBranchUtil
 		Logger            log.Logger
 
-		// MutableStateTableCounts reports surviving row counts per table that SQL
-		// uses to persist a WorkflowMutableState's sub-collections. SQL entrypoints
-		// wire it from the raw DB; nil on Cassandra, where these live as columns on
-		// the executions row and can't be queried alone.
+		// MutableStateTableCounts reports per-table surviving row counts for a run's
+		// mutable-state sub-collections. Wired from the raw DB by SQL entrypoints;
+		// nil on Cassandra, where these live as columns on the executions row.
 		MutableStateTableCounts func(ctx context.Context, shardID int32, namespaceID, workflowID, runID string) (map[string]int, error)
 
 		Ctx    context.Context

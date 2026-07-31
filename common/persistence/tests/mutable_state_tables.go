@@ -7,12 +7,10 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-// sqlMutableStateTableCounts reports surviving row counts per table that SQL uses
-// to persist a WorkflowMutableState's sub-collections, so delete assertions can
-// detect orphaned rows (e.g. chasm_node_maps). Omits the anchor executions row
-// (verified via GetWorkflowExecution) and the current_executions /
-// current_chasm_executions pointers, which DeleteCurrentWorkflowExecution clears
-// rather than DeleteWorkflowExecution.
+// sqlMutableStateTableCounts reports per-table surviving row counts for a
+// WorkflowMutableState's sub-collections, so delete assertions can spot orphans.
+// Omits the executions anchor (covered by GetWorkflowExecution) and the current_*
+// pointers (cleared by DeleteCurrentWorkflowExecution, not DeleteWorkflowExecution).
 func sqlMutableStateTableCounts(
 	db sqlplugin.DB,
 ) func(ctx context.Context, shardID int32, namespaceID, workflowID, runID string) (map[string]int, error) {
