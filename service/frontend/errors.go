@@ -45,6 +45,7 @@ var (
 	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
 	errBatchJobIDNotSet                                   = serviceerror.NewInvalidArgument("JobId is not set on request.")
 	errScheduleIDNotSet                                   = serviceerror.NewInvalidArgument("ScheduleId is not set on request.")
+	errSchedulePatchNotSet                                = serviceerror.NewInvalidArgument("Patch is not set on request.")
 	errIdentityNotSet                                     = serviceerror.NewInvalidArgument("Identity is not set on request.")
 	errMigrationTargetNotSet                              = serviceerror.NewInvalidArgument("Target is not set on request.")
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
@@ -93,6 +94,7 @@ var (
 	errUnableToDeleteClusterInfo                      = "Unable to delete cluster info with error: %v."
 	errUnableToGetNamespaceInfoMessage                = "Unable to get namespace %v info with error: %v"
 	errUnableToCreateFrontendClientMessage            = "Unable to create frontend client with error: %v."
+	errUnableToCreateOperatorClientMessage            = "Unable to create operator client with error: %v."
 	errTooManySearchAttributesMessage                 = "Unable to create search attributes: cannot have more than %d search attribute of type %s."
 
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
@@ -112,4 +114,7 @@ var (
 	errWorkerVersioningWorkflowAPIsNotAllowed = serviceerror.NewPermissionDenied("Worker versioning in workflow progress APIs is disabled on this namespace.", "")
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
+
+	errWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("The Time-Skipping feature is not enabled for namespace.")
+	errTimeSkippingFastForwardIDNotSet = serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward_id must be set")
 )

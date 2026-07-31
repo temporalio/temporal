@@ -316,21 +316,59 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 }
 
 func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
-	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
-	// Also in TestCreateWorkerDeployment_MaxDeploymentsLimit
-	s.T().Skip() // Need to separate this test so other tests do not create deployment in the same NS
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxDeployments, 1),
+	)
+	testNamespace := env.Namespace()
 
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.MatchingMaxDeployments, 1))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
 
-	// First deployment version should be fine
-	go s.pollFromDeployment(env, env.Tv())
-	s.ensureCreateVersionInDeployment(env, env.Tv())
+	// the first deployment version should be fine
+	go func() {
+		_, _ = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace:         testNamespace.String(),
+			TaskQueue:         env.Tv().TaskQueue(),
+			Identity:          "random",
+			DeploymentOptions: env.Tv().WorkerDeploymentOptions(true),
+		})
+	}()
 
-	// wait for all existing deployments to show up in visibility
-	s.validateWorkerDeploymentCount(env, &workflowservice.ListWorkerDeploymentsRequest{Namespace: env.Namespace().String()}, 1)
+	// ensure the version is created in deployment
+	//nolint:forbidigo // this is a legacy EventuallyWithT as present in many of these tests, I'm not adding it I'm just changing the namespace field
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		res, _ := env.FrontendClient().DescribeWorkerDeployment(ctx,
+			&workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      testNamespace.String(),
+				DeploymentName: env.Tv().DeploymentSeries(),
+			})
 
-	// pollers of the second deployment version should be rejected
-	s.pollFromDeploymentExpectFail(env, env.Tv().WithDeploymentSeriesNumber(2), "reached maximum deployments in namespace (1)")
+		found := false
+		if res != nil {
+			for _, vs := range res.GetWorkerDeploymentInfo().GetVersionSummaries() {
+				if vs.GetDeploymentVersion().GetDeploymentName() == env.Tv().DeploymentSeries() &&
+					vs.GetDeploymentVersion().GetBuildId() == env.Tv().BuildID() {
+					found = true
+				}
+			}
+		}
+		a.True(found)
+	}, 1*time.Minute, 100*time.Millisecond)
+
+	// pollers of the second deployment should be rejected with a clear error message
+	_, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: testNamespace.String(),
+		TaskQueue: env.Tv().TaskQueue(),
+		Identity:  env.Tv().ClientIdentity(),
+		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			BuildId:              env.Tv().BuildID(),
+			DeploymentName:       env.Tv().DeploymentSeries() + "-2",
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+		},
+	})
+	s.Error(err)
+	s.Equal("reached maximum worker deployments in namespace (1)", err.Error())
 }
 
 func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted() {
@@ -1870,6 +1908,57 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 			LastModifierIdentity: env.Tv().ClientIdentity(),
 		},
 	})
+}
+
+// TestSetCurrentVersion_Unversioned_AllowNoPollers tests unsetting current version with allowNoPollers=true
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_AllowNoPollers() {
+	env := s.newTestEnv()
+	currentVars := env.Tv().WithBuildIDNumber(1)
+
+	go s.pollFromDeployment(env, currentVars)
+	s.ensureCreateVersionInDeployment(env, currentVars)
+
+	// set current version
+	s.setCurrentVersion(env, currentVars, true, "")
+	env.waitForTaskQueueVersioningInfo(s, env.Tv().TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
+
+	// unset current version with allowNoPollers=true - this should work even though buildId is empty
+	s.setCurrentVersionUnversionedOption(env, currentVars, true, true, true, true, "")
+	env.waitForTaskQueueVersioningInfo(s, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+
+	// verify deployment state
+	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      env.Namespace().String(),
+		DeploymentName: currentVars.DeploymentSeries(),
+	})
+	s.NoError(err)
+	var emptyVersion *deploymentpb.WorkerDeploymentVersion
+	s.Equal(emptyVersion, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
+}
+
+// TestSetRampingVersion_Unset_AllowNoPollers tests unsetting ramping version with allowNoPollers=true
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unset_AllowNoPollers() {
+	env := s.newTestEnv()
+	tv := env.Tv().WithBuildIDNumber(1)
+
+	go s.pollFromDeployment(env, tv)
+	s.ensureCreateVersionInDeployment(env, tv)
+
+	// set ramping version
+	s.setAndVerifyRampingVersion(env, tv, false, 50, true, "")
+
+	// unset ramping version with allowNoPollers=true - this should work even though buildId is empty
+	s.setAndVerifyRampingVersionUnversionedOption(env, tv, false, true, 0, true, true, true, "")
+	env.waitForTaskQueueVersioningInfo(s, tv.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+
+	// verify deployment state
+	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      env.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	var emptyVersion *deploymentpb.WorkerDeploymentVersion
+	s.Equal(emptyVersion, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
 }
 
 // Should see that the current version of the task queue becomes unversioned, and the unversioned ramping version of the task queue is removed
@@ -3832,7 +3921,7 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_MaxDeploymentsLimit()
 	s.Error(err)
 	var resourceExhausted *serviceerror.ResourceExhausted
 	s.ErrorAs(err, &resourceExhausted)
-	s.Contains(resourceExhausted.Message, "reached maximum deployments in namespace")
+	s.Contains(resourceExhausted.Message, "reached maximum worker deployments in namespace")
 	s.Equal(enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhausted.Scope)
 	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS, resourceExhausted.Cause)
 }
