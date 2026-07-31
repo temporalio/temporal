@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 )
 
-func (s *activityParityTestSuite) TestWFASAAMetricsParity() {
+func (s *activityParityTestSuite) TestMetrics() {
 	type activityMetric struct {
 		name             string
 		compared         bool
