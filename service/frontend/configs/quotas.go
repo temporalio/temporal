@@ -36,11 +36,12 @@ var (
 	// they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		// These methods here are long-running because they block until there is a task available.
-		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":             1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":             1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionTimeSkipping": 1,
 
 		// Long-running if activity outcome is not already available
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
@@ -199,6 +200,8 @@ var (
 		// Treat these as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
 		PollWorkflowHistoryAPIName:   5,
 		PollActivityExecutionAPIName: 5,
+		// Test-support long-poll; not required for the service to function, so it yields to production traffic.
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionTimeSkipping": 5,
 		// Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 5,
 		OpenAPIV2APIName: 5,
