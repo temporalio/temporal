@@ -778,24 +778,20 @@ func TestScheduler_Describe_ResolvesCatchupWindowFromTweakables(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		window   time.Duration
+		window   *durationpb.Duration
 		expected time.Duration
 	}{
-		{name: "unset", expected: tweakables.DefaultCatchupWindow},
-		{name: "zero", window: 0, expected: tweakables.DefaultCatchupWindow},
-		{name: "negative", window: -time.Second, expected: tweakables.DefaultCatchupWindow},
-		{name: "below minimum", window: time.Minute, expected: tweakables.MinCatchupWindow},
-		{name: "above minimum", window: time.Hour, expected: time.Hour},
+		{name: "unset", window: nil, expected: tweakables.DefaultCatchupWindow},
+		{name: "zero", window: durationpb.New(0), expected: tweakables.DefaultCatchupWindow},
+		{name: "negative", window: durationpb.New(-time.Second), expected: tweakables.DefaultCatchupWindow},
+		{name: "below minimum", window: durationpb.New(time.Minute), expected: tweakables.MinCatchupWindow},
+		{name: "above minimum", window: durationpb.New(time.Hour), expected: time.Hour},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			sched, ctx, _ := setupSchedulerForTest(t)
-			if tc.name == "unset" {
-				sched.Schedule.Policies.CatchupWindow = nil
-			} else {
-				sched.Schedule.Policies.CatchupWindow = durationpb.New(tc.window)
-			}
+			sched.Schedule.Policies.CatchupWindow = tc.window
 			persistedWindow := sched.Schedule.Policies.CatchupWindow
 
 			resp, err := sched.Describe(
