@@ -143,21 +143,12 @@ func (c *Callback) saveResult(
 	}
 }
 
-// deepLinkCopy performs a deep copy of the Link protos.
-func deepLinkCopy(links []*commonpb.Link) []*commonpb.Link {
-	c := make([]*commonpb.Link, len(links))
-	for i := range links {
-		c[i] = common.CloneProto(links[i])
-	}
-	return c
-}
-
 // ToAPICallback converts a CHASM callback to API callback proto.
 func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	// Convert CHASM callback proto to API callback proto
 	chasmCB := c.GetCallback()
 	res := &commonpb.Callback{
-		Links: deepLinkCopy(chasmCB.GetLinks()),
+		Links: common.CloneProtoSlice(chasmCB.GetLinks()),
 	}
 
 	switch variant := chasmCB.GetVariant().(type) {
@@ -187,7 +178,7 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 // FromAPICallback converts an API callback into a CHASM callback proto.
 func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
 	res := &callbackspb.Callback{
-		Links: deepLinkCopy(cb.GetLinks()),
+		Links: common.CloneProtoSlice(cb.GetLinks()),
 	}
 
 	switch variant := cb.GetVariant().(type) {
@@ -200,6 +191,9 @@ func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
 		}
 		return res, nil
 	case *commonpb.Callback_Worker_:
+		// Worker callbacks can be converted and persisted, but will fail at runtime.
+		// These will be rejected via the callback.Validator, which will allow them
+		// through once the server-side support is implemented.
 		res.Variant = &callbackspb.Callback_Worker_{
 			Worker: &callbackspb.Callback_Worker{
 				TaskQueueName: variant.Worker.GetTaskQueueName(),

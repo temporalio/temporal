@@ -9868,6 +9868,64 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 
+	// Confirm that SAA fails with unsupported callback variants.
+	t.Run("RejectNonNexusCallbacks", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		tests := []struct {
+			Name     string
+			Callback *commonpb.Callback
+		}{
+			{
+				"worker",
+				&commonpb.Callback{
+					Links: []*commonpb.Link{
+						{
+							Variant: &commonpb.Link_NexusOperationCallback_{
+								NexusOperationCallback: &commonpb.Link_NexusOperationCallback{},
+							},
+						},
+					},
+					Variant: &commonpb.Callback_Worker_{
+						Worker: &commonpb.Callback_Worker{
+							TaskQueueName: "completions-task-queue",
+							Service:       "HTTPAdapter",
+							Operation:     "DeliverAsWebhook",
+						},
+					},
+				},
+			},
+			{
+				"nil",
+				&commonpb.Callback{},
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.Name, func(t *testing.T) {
+				resp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+					Namespace:    env.Namespace().String(),
+					ActivityId:   activityID,
+					ActivityType: env.Tv().ActivityType(),
+					Identity:     env.Tv().WorkerIdentity(),
+					Input:        defaultInput,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: taskQueue,
+					},
+					StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+					RequestId:           env.Tv().Any().String(),
+					CompletionCallbacks: []*commonpb.Callback{test.Callback},
+				})
+
+				require.Nil(t, resp)
+
+				var unimplementedErr *serviceerror.Unimplemented
+				require.ErrorAs(t, err, &unimplementedErr)
+				require.ErrorContains(t, err, "unknown callback variant")
+			})
+		}
+	})
+
 	t.Run("AcceptedOnStart", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
