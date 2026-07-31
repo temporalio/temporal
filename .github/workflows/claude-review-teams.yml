@@ -226,11 +226,15 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
           path: pr-head
+          persist-credentials: false
+          allow-unsafe-pr-checkout: true
       - name: Claude PR review
         uses: anthropics/claude-code-action@v1
         with:
