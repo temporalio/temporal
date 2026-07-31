@@ -62,7 +62,7 @@ func TestCreateScheduler_InitialPauseState(t *testing.T) {
 			patch:      &schedulepb.SchedulePatch{Pause: "maintenance"},
 			wantPaused: true,
 			wantNotes:  "maintenance",
-			wantToken:  legacyscheduler.InitialConflictToken + 1,
+			wantToken:  legacyscheduler.InitialConflictToken,
 		},
 		{
 			name:          "unpause",
@@ -70,7 +70,7 @@ func TestCreateScheduler_InitialPauseState(t *testing.T) {
 			patch:         &schedulepb.SchedulePatch{Unpause: "resume"},
 			wantPaused:    false,
 			wantNotes:     "resume",
-			wantToken:     legacyscheduler.InitialConflictToken + 1,
+			wantToken:     legacyscheduler.InitialConflictToken,
 		},
 	}
 

@@ -147,9 +147,7 @@ func NewScheduler(
 	}
 	sched.setNullableFields()
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
-	for range sched.applyPausePatch(ctx, patch) {
-		sched.updateConflictToken()
-	}
+	sched.applyPausePatch(ctx, patch)
 
 	invoker := NewInvoker(ctx)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
@@ -223,26 +221,20 @@ func (s *Scheduler) setNullableFields() {
 	}
 }
 
-// applyPausePatch applies the pause-related fields from a patch and returns
-// the number of state transitions applied.
-func (s *Scheduler) applyPausePatch(ctx chasm.MutableContext, patch *schedulepb.SchedulePatch) int {
+func (s *Scheduler) applyPausePatch(ctx chasm.MutableContext, patch *schedulepb.SchedulePatch) {
 	if patch == nil {
-		return 0
+		return
 	}
-	transitions := 0
 	if patch.Pause != "" {
 		s.Schedule.State.Paused = true
 		s.Schedule.State.Notes = patch.Pause
 		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("paused via API: %s", patch.Pause))
-		transitions++
 	}
 	if patch.Unpause != "" {
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = patch.Unpause
 		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("unpaused via API: %s", patch.Unpause))
-		transitions++
 	}
-	return transitions
 }
 
 // handlePatch creates backfillers to fulfill the given patch request.
