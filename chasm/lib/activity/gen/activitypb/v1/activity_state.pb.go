@@ -307,11 +307,11 @@ type ActivityState struct {
 	// non-running activity (SCHEDULED / PAUSED) the restore is applied immediately and this flag is
 	// not set. Reset while in CANCEL_REQUESTED or RESET_REQUESTED is rejected.
 	ResetRestoreOptions bool `protobuf:"varint,20,opt,name=reset_restore_options,json=resetRestoreOptions,proto3" json:"reset_restore_options,omitempty"`
-	// Used to de-dupe the most recent successful unpause request, including no-ops.
+	// Used to de-dupe unpause requests.
 	LastUnpauseRequestId string `protobuf:"bytes,21,opt,name=last_unpause_request_id,json=lastUnpauseRequestId,proto3" json:"last_unpause_request_id,omitempty"`
-	// Used to de-dupe the most recent successful reset request.
+	// Used to de-dupe reset requests.
 	LastResetRequestId string `protobuf:"bytes,22,opt,name=last_reset_request_id,json=lastResetRequestId,proto3" json:"last_reset_request_id,omitempty"`
-	// Used to de-dupe the most recent successful update request.
+	// Used to de-dupe update requests.
 	LastUpdateOptionsRequestId string `protobuf:"bytes,23,opt,name=last_update_options_request_id,json=lastUpdateOptionsRequestId,proto3" json:"last_update_options_request_id,omitempty"`
 	unknownFields              protoimpl.UnknownFields
 	sizeCache                  protoimpl.SizeCache
