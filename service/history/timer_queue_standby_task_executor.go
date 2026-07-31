@@ -249,7 +249,7 @@ func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 
 		// the fast-forward this timer task is associated with is still valid and has not been reached so keep waiting
 		if ffi != nil &&
-			transitionhistory.Compare(ffi.GetLastUpdateVersionedTransition(), timerTask.VersionedTransition) == 0 &&
+			transitionhistory.Compare(tsi.GetFastForwardInfoLastUpdateVersionedTransition(), timerTask.VersionedTransition) == 0 &&
 			!ffi.GetHasReached() {
 			return &struct{}{}, nil
 		}
