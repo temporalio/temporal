@@ -1373,19 +1373,25 @@ func (a *Activity) tryReschedule(
 	overridingRetryInterval time.Duration,
 	failure *failurepb.Failure,
 ) (enumspb.RetryState, error) {
-	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
-	if !resetRequested && a.GetRetryPolicy() == nil {
+	status := a.GetStatus()
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		event := rescheduleEvent{failure: failure}
+		if a.ResetKeepPaused {
+			return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
+		}
+		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
+	}
+	if a.GetRetryPolicy() == nil {
 		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
 	}
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
 	}
 	retryState, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
 	if !failureRetryable {
 		retryState = enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
-	// A pending reset request is always honored, regardless of retryability or the should retry result.
-	if !resetRequested && retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 		return retryState, nil
 	}
 	retryIntervalSource := activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
@@ -1393,14 +1399,9 @@ func (a *Activity) tryReschedule(
 		retryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE
 	}
 	event := rescheduleEvent{retryInterval: retryInterval, retryIntervalSource: retryIntervalSource, failure: failure}
-	switch a.GetStatus() {
+	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
-	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		if a.ResetKeepPaused {
-			return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
-		}
-		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
 	default:
 		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionRescheduled.Apply(a, ctx, event)
 	}
@@ -1408,9 +1409,7 @@ func (a *Activity) tryReschedule(
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (enumspb.RetryState, time.Duration) {
 	if !TransitionRescheduled.Possible(a) &&
-		!TransitionAttemptFailedWhilePauseRequested.Possible(a) &&
-		!TransitionResetAttemptFailedToScheduled.Possible(a) &&
-		!TransitionResetAttemptFailedToPaused.Possible(a) {
+		!TransitionAttemptFailedWhilePauseRequested.Possible(a) {
 		return enumspb.RETRY_STATE_UNSPECIFIED, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)
