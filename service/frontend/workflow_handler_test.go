@@ -5262,6 +5262,36 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 	})
 }
 
+func (s *WorkflowHandlerSuite) TestUpdateSchedule_ValidationAndErrors() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	// Note: a nil request is only reachable from direct in-process callers. Standard
+	// gRPC transport always decodes into a non-nil (possibly empty) request message.
+	s.Run("nil request should return error", func() {
+		resp, err := wh.UpdateSchedule(ctx, nil)
+		s.Nil(resp)
+		s.Equal(errRequestNotSet, err)
+	})
+
+	s.Run("schedules disabled should return error", func() {
+		disabledConfig := s.newConfig()
+		disabledConfig.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(false)
+		disabledWh := s.getWorkflowHandler(disabledConfig)
+
+		request := &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+		}
+
+		resp, err := disabledWh.UpdateSchedule(ctx, request)
+		s.Nil(resp)
+		s.Equal(errSchedulesNotAllowed, err)
+	})
+}
+
 func (s *WorkflowHandlerSuite) TestUpdateTaskQueueConfig_Validation() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
