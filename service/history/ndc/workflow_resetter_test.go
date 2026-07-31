@@ -2009,11 +2009,13 @@ func (l fakeChasmLibrary) CommandHandlers() map[enumspb.CommandType]chasmworkflo
 
 func (l fakeChasmLibrary) EventDefinitions() []chasmworkflow.EventDefinition { return l.defs }
 
-func newChasmRegistryWithEvent(eventType enumspb.EventType, cherryPickErr error) *chasmworkflow.Registry {
+// newChasmRegistryWithEvent registers a single fake definition. chasmworkflow.Registry.Register
+// dedupes by Go type, so one fakeChasmEventDefinition per registry is the limit.
+func (s *workflowResetterSuite) newChasmRegistryWithEvent(eventType enumspb.EventType, cherryPickErr error) *chasmworkflow.Registry {
 	reg := chasmworkflow.NewRegistry()
-	_ = reg.Register(fakeChasmLibrary{defs: []chasmworkflow.EventDefinition{
+	s.Require().NoError(reg.Register(fakeChasmLibrary{defs: []chasmworkflow.EventDefinition{
 		&fakeChasmEventDefinition{eventType: eventType, cherryPickErr: cherryPickErr},
-	}})
+	}}))
 	return reg
 }
 
@@ -2041,14 +2043,14 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 		{
 			// A CHASM-defined event on a workflow without CHASM enabled is an error, not a silent skip.
 			name:        "chasm disabled is an error",
-			registry:    newChasmRegistryWithEvent(eventType, nil),
+			registry:    s.newChasmRegistryWithEvent(eventType, nil),
 			setupMock:   func(ms *historyi.MockMutableState) { ms.EXPECT().ChasmEnabled().Return(false) },
 			wantOutcome: cherryPickSkipped,
 			wantErrMsg:  "CHASM is not enabled for this workflow",
 		},
 		{
 			name:     "component lookup error is skipped",
-			registry: newChasmRegistryWithEvent(eventType, nil),
+			registry: s.newChasmRegistryWithEvent(eventType, nil),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
 				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, cherryPickErr)
@@ -2058,7 +2060,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 		},
 		{
 			name:     "not-cherry-pickable is skipped without error",
-			registry: newChasmRegistryWithEvent(eventType, chasmworkflow.ErrEventNotCherryPickable),
+			registry: s.newChasmRegistryWithEvent(eventType, chasmworkflow.ErrEventNotCherryPickable),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
 				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
@@ -2067,7 +2069,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 		},
 		{
 			name:     "cherry-pick error is skipped and surfaced",
-			registry: newChasmRegistryWithEvent(eventType, cherryPickErr),
+			registry: s.newChasmRegistryWithEvent(eventType, cherryPickErr),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
 				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
@@ -2077,7 +2079,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 		},
 		{
 			name:     "owned by chasm is applied",
-			registry: newChasmRegistryWithEvent(eventType, nil),
+			registry: s.newChasmRegistryWithEvent(eventType, nil),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
 				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
@@ -2118,7 +2120,7 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMToChasmFallback() {
 		ms.EXPECT().AddHistoryEvent(eventType, gomock.Any()).Return(&historypb.HistoryEvent{})
 
 		applied, err := reapplyEvents(
-			context.Background(), ms, nil, smReg, newChasmRegistryWithEvent(eventType, nil),
+			context.Background(), ms, nil, smReg, s.newChasmRegistryWithEvent(eventType, nil),
 			[]*historypb.HistoryEvent{event}, nil, "", true,
 		)
 		s.NoError(err)
@@ -2135,6 +2137,43 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMToChasmFallback() {
 		s.NoError(err)
 		s.Empty(applied)
 	})
+}
+
+// TestReapplyEventsHSMNotFoundDoesNotConsultChasm pins that an operation HSM reports as missing is
+// skipped outright, even though CHASM defines the same event type and would apply it. Falling back to
+// CHASM is what regressed replication reapply: a replicated batch is not guaranteed to share a prefix
+// with the surviving branch, so events for operations that only existed on a discarded branch are
+// normal, and CHASM answers those with a NotFound that aborts the entire batch.
+func (s *workflowResetterSuite) TestReapplyEventsHSMNotFoundDoesNotConsultChasm() {
+	const eventType = enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
+
+	// Both paths reach this branch. Replication carries events for operations that only existed on a
+	// discarded branch; reset reaches it when resetting to a point before the operation was scheduled,
+	// because ScheduledEventDefinition.CherryPick never rebuilds the operation into the new tree.
+	for _, tc := range []struct {
+		name    string
+		isReset bool
+	}{
+		{name: "replication", isReset: false},
+		{name: "reset", isReset: true},
+	} {
+		s.Run(tc.name, func() {
+			ms := historyi.NewMockMutableState(s.controller)
+			ms.EXPECT().HSM().Return(nil).AnyTimes()
+			// No ChasmEnabled expectation on purpose: cherryPickChasmEvent calls it as soon as the
+			// registry recognizes the event type, so consulting CHASM fails on an unexpected call.
+
+			applied, err := reapplyEvents(
+				context.Background(), ms, nil,
+				newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound),
+				s.newChasmRegistryWithEvent(eventType, nil),
+				[]*historypb.HistoryEvent{{EventId: 5, EventType: eventType}}, nil, "", tc.isReset,
+			)
+
+			s.NoError(err, "a missing operation must not surface as an error")
+			s.Empty(applied, "the event must be skipped, not applied")
+		})
+	}
 }
 
 // fakeHSMEventDefinition is an hsm.EventDefinition whose CherryPick returns a configurable error, letting tests drive
@@ -2175,10 +2214,10 @@ func (s *workflowResetterSuite) TestCherryPickHSMEvent() {
 			wantOutcome: cherryPickFallback,
 		},
 		{
-			name:        "state machine not found falls back",
+			name:        "state machine not found is skipped without falling back",
 			registry:    newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound),
 			expectHSM:   true,
-			wantOutcome: cherryPickFallback,
+			wantOutcome: cherryPickSkipped,
 		},
 		{
 			name:        "not-cherry-pickable is skipped without error",

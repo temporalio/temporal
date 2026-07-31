@@ -1232,6 +1232,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	s.Empty(hist[wftCompletedIdx].Links)
 	wftCompletedEventID := hist[wftCompletedIdx].EventId
 
+	// Reset reapply of a Nexus completion is HSM-only: cherryPickHSMEvent skips an operation missing
+	// from the HSM tree rather than falling back to CHASM.
+	if chasmEnabled {
+		return
+	}
+
 	// Reset the workflow and check that the completion event has been reapplied.
 	resp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
