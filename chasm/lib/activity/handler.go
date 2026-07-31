@@ -88,12 +88,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				return nil, err
 			}
 
-			metricsHandler := newActivity.baseMetricsHandler(
-				mutableContext,
-				metrics.HistoryRecordActivityTaskStartedScope,
-			)
-			emitPayloadSizeMetric(metricsHandler, request.GetInput().Size())
-
 			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
 				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
 					return nil, err
@@ -124,6 +118,16 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		}
 
 		return nil, err
+	}
+
+	if result.Created {
+		emitPayloadSizeMetric(
+			h.metricsHandler.WithTags(
+				metrics.NamespaceTag(frontendReq.GetNamespace()),
+				metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedScope),
+			),
+			frontendReq.GetInput().Size(),
+		)
 	}
 
 	// Apply on_conflict_options to an existing activity.
