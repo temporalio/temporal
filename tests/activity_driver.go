@@ -53,8 +53,9 @@ type activityConfig struct {
 const activityInput = "Input"
 
 // activityHeartbeatDetails is the checkpoint payload a driver attaches to RespondActivityTaskFailed when
-// the event sets HasHeartbeatDetails; the server stores it as the activity's last heartbeat progress.
-var activityHeartbeatDetails = payloads.EncodeString("heartbeat details")
+// the event sets HasHeartbeatDetails; the server stores it as the activity's last heartbeat progress. It
+// differs from the model.Heartbeat payload so assertions can tell which source was persisted.
+var activityHeartbeatDetails = payloads.EncodeString("failure checkpoint details")
 
 // timerProcessorMaxShift is the floor the timer queue puts on a task's fire time: it will not fire one
 // earlier than now + this.

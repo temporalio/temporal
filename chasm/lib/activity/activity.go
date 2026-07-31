@@ -608,6 +608,7 @@ func (a *Activity) HandleFailed(
 		heartbeat := a.getOrCreateLastHeartbeat(ctx)
 		heartbeat.Details = details
 		heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
+		heartbeat.TotalHeartbeatCount++
 		a.emitHeartbeatMetrics(ctx, details)
 	}
 

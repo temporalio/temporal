@@ -726,7 +726,6 @@ func TestTransitionFailed(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	attemptState := &activitypb.ActivityAttemptState{Count: 1}
-	heartbeatState := &activitypb.ActivityHeartbeatState{}
 	outcome := &activitypb.ActivityOutcome{}
 
 	activity := &Activity{
@@ -739,9 +738,8 @@ func TestTransitionFailed(t *testing.T) {
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
-		LastAttempt:   chasm.NewDataField(ctx, attemptState),
-		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
-		Outcome:       chasm.NewDataField(ctx, outcome),
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
 	failure := &failurepb.Failure{
