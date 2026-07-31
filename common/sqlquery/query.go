@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -37,6 +39,28 @@ func ExtractStringValue(s string) (string, error) {
 		return s[1 : len(s)-1], nil
 	}
 	return "", fmt.Errorf("value %s is not a string value", s)
+}
+
+// ConvertStatusStr converts a workflow execution status filter value to its enum
+// representation. Both the status name and its numeric value are accepted.
+func ConvertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error) {
+	statusStr = strings.ToLower(strings.TrimSpace(statusStr))
+	switch statusStr {
+	case "completed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, nil
+	case "failed", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, nil
+	case "canceled", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, nil
+	case "terminated", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, nil
+	case "continuedasnew", "continued_as_new", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, nil
+	case "timedout", "timed_out", convert.Int32ToString(int32(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)):
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, nil
+	default:
+		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
+	}
 }
 
 func ExtractIntValue(s string) (int, error) {

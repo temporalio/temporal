@@ -41,8 +41,13 @@ Supported column names are
 - StartTime *Date*
 - CloseTime *Date*
 - SearchPrecision *String - Day, Hour, Minute, Second*
+- ExecutionStatus *String - Completed, Failed, Canceled, Terminated, ContinuedAsNew, TimedOut*
 
 WorkflowId or WorkflowTypeName is required. If filtering on date use StartTime or CloseTime in combination with SearchPrecision.
+
+ExecutionStatus is not part of the S3 key, so it is matched after records are read rather than
+narrowing the keys scanned. A page may therefore return fewer than the requested number of records
+while still reporting a next page token.
 
 Searching for a record will be done in times in the UTC timezone
 

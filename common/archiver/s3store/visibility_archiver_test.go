@@ -631,6 +631,68 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	s.Equal(ei, executions[2])
 }
 
+func (s *visibilityArchiverSuite) TestArchiveAndQuery_ExecutionStatusFilter() {
+	visibilityArchiver := s.newTestVisibilityArchiver()
+	URI, err := archiver.NewURI(testBucketURI + "/archive-and-query-status")
+	s.NoError(err)
+
+	records := []*archiverspb.VisibilityRecord{
+		{
+			NamespaceId:      testNamespaceID,
+			Namespace:        testNamespace,
+			WorkflowId:       testWorkflowID,
+			RunId:            testRunID + "-failed",
+			WorkflowTypeName: testWorkflowTypeName,
+			StartTime:        timestamp.UnixOrZeroTimePtr(1),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(int64(time.Hour)),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			HistoryLength:    101,
+		},
+		{
+			NamespaceId:      testNamespaceID,
+			Namespace:        testNamespace,
+			WorkflowId:       testWorkflowID,
+			RunId:            testRunID + "-completed",
+			WorkflowTypeName: testWorkflowTypeName,
+			StartTime:        timestamp.UnixOrZeroTimePtr(1),
+			CloseTime:        timestamp.UnixOrZeroTimePtr(int64(2 * time.Hour)),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			HistoryLength:    101,
+		},
+	}
+	for _, record := range records {
+		s.NoError(visibilityArchiver.Archive(context.Background(), URI, record))
+	}
+
+	mockParser := NewMockQueryParser(s.controller)
+	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
+		workflowID: new(testWorkflowID),
+		status:     new(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
+	}, nil).AnyTimes()
+	visibilityArchiver.queryParser = mockParser
+
+	request := &archiver.QueryVisibilityRequest{
+		NamespaceID: testNamespaceID,
+		PageSize:    10,
+		Query:       "parsed by mockParser",
+	}
+	executions := []*workflowpb.WorkflowExecutionInfo{}
+	first := true
+	for first || request.NextPageToken != nil {
+		response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap())
+		s.NoError(err)
+		s.NotNil(response)
+		executions = append(executions, response.Executions...)
+		request.NextPageToken = response.NextPageToken
+		first = false
+	}
+
+	// only the COMPLETED record matches; the FAILED one is filtered out
+	s.Len(executions, 1)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, executions[0].Status)
+	s.Equal(testRunID+"-completed", executions[0].Execution.RunId)
+}
+
 func (s *visibilityArchiverSuite) setupVisibilityDirectory() {
 	s.visibilityRecords = []*archiverspb.VisibilityRecord{
 		{

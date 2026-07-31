@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/sqlquery"
 )
 
@@ -26,6 +27,7 @@ type (
 		closeTime       time.Time
 		searchPrecision *string
 		runID           *string
+		status          *enumspb.WorkflowExecutionStatus
 		emptyResult     bool
 	}
 )
@@ -38,6 +40,8 @@ const (
 	CloseTime       = "CloseTime"
 	StartTime       = "StartTime"
 	SearchPrecision = "SearchPrecision"
+	// Field name can't be just "Status" because it is reserved keyword in MySQL parser.
+	ExecutionStatus = "ExecutionStatus"
 )
 
 // Precision specific values
@@ -175,6 +179,24 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			return nil
 		}
 		parsedQuery.workflowType = new(val)
+	case ExecutionStatus:
+		val, err := sqlquery.ExtractStringValue(valStr)
+		if err != nil {
+			// if failed to extract string value, it means user input close status as a number
+			val = valStr
+		}
+		if op != "=" {
+			return fmt.Errorf("only operation = is support for %s", ExecutionStatus)
+		}
+		status, err := sqlquery.ConvertStatusStr(val)
+		if err != nil {
+			return err
+		}
+		if parsedQuery.status != nil && *parsedQuery.status != status {
+			parsedQuery.emptyResult = true
+			return nil
+		}
+		parsedQuery.status = &status
 	case SearchPrecision:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {

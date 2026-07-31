@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 type queryParserSuite struct {
@@ -22,6 +23,73 @@ func TestQueryParserSuite(t *testing.T) {
 func (s *queryParserSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.parser = NewQueryParser()
+}
+
+func (s *queryParserSuite) TestParseExecutionStatus() {
+	const commonQueryPart = "WorkflowId = \"random workflowID\" and "
+
+	testCases := []struct {
+		query       string
+		expectErr   bool
+		parsedQuery *parsedQuery
+	}{
+		{
+			query:     commonQueryPart + "ExecutionStatus = \"Completed\"",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
+			},
+		},
+		{
+			query:     commonQueryPart + "ExecutionStatus = 'failed'",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+			},
+		},
+		{
+			query:     commonQueryPart + "ExecutionStatus = 'TIMED_OUT'",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT),
+			},
+		},
+		{
+			query:     commonQueryPart + "ExecutionStatus = 4",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED),
+			},
+		},
+		{
+			// no ExecutionStatus filter leaves the field unset
+			query:       "WorkflowId = \"random workflowID\"",
+			expectErr:   false,
+			parsedQuery: &parsedQuery{},
+		},
+		{
+			query:     commonQueryPart + "ExecutionStatus = \"unknown\"",
+			expectErr: true,
+		},
+		{
+			query:     commonQueryPart + "ExecutionStatus > \"Failed\"",
+			expectErr: true,
+		},
+		{
+			query:     commonQueryPart + "ExecutionStatus = 'Failed' and ExecutionStatus = 'Completed'",
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		parsedQuery, err := s.parser.Parse(tc.query)
+		if tc.expectErr {
+			s.Error(err)
+			continue
+		}
+		s.NoError(err)
+		s.Equal(tc.parsedQuery.status, parsedQuery.status)
+	}
 }
 
 func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {

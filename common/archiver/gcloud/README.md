@@ -54,8 +54,13 @@ Supported column names are
 - StartTime *Date*
 - CloseTime *Date*
 - SearchPrecision *String - Day, Hour, Minute, Second*
+- ExecutionStatus *String - Completed, Failed, Canceled, Terminated, ContinuedAsNew, TimedOut*
 
 One of these fields are required, StartTime or CloseTime and they are mutually exclusive and also SearchPrecision.
+
+ExecutionStatus is not part of the object name, so it is matched after records are read rather than
+narrowing the objects scanned. A page may therefore return fewer than the requested number of records
+while still reporting a next page token.
 
 Searching for a record will be done in times in the UTC timezone
 
