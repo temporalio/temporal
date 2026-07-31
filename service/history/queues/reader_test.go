@@ -260,7 +260,7 @@ func (s *readerSuite) TestAppendSlices_RaceWithLockedMutation() {
 	const iterations = 10000
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			reader.Lock()
 			if e := reader.slices.Front(); e != nil {
 				reader.slices.MoveToBack(e)
@@ -269,7 +269,7 @@ func (s *readerSuite) TestAppendSlices_RaceWithLockedMutation() {
 		}
 	})
 	wg.Go(func() {
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			reader.AppendSlices(emptyIncoming)
 		}
 	})
