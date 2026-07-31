@@ -1789,6 +1789,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
 		LastStartedTime:         attempt.GetStartedTime(),
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
+		LastDeploymentVersion:   attempt.GetLastDeploymentVersion(),
 		SdkName:                 attempt.GetSdkName(),
 		SdkVersion:              attempt.GetSdkVersion(),
 		NextAttemptScheduleTime: a.nextAttemptDispatchTime(ctx, attempt),
