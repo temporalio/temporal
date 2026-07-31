@@ -435,13 +435,13 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 
-	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.Activity.EnableStandaloneActivityOperatorCommands = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
 	})
 	s.Require().NoError(err)
-	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 }
 
