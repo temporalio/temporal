@@ -59,6 +59,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -645,6 +646,9 @@ func (a *Activity) HandleCanceled(
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId(), false); err != nil {
 		return nil, err
+	}
+	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return nil, consts.ErrActivityTaskNotCancelRequested
 	}
 
 	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)

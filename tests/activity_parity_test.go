@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
@@ -333,6 +334,27 @@ func (s *activityParityTestSuite) TestCancel() {
 		t := s.T()
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 			newSAADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
+	})
+}
+
+func (s *activityParityTestSuite) TestRespondCanceledWithoutRequest() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 1}
+	assertNotCancelRequested := func(t *testing.T, err error) {
+		var invalidArgumentErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgumentErr)
+		require.Equal(t, "unable to mark activity as canceled without activity being request canceled first", invalidArgumentErr.Message)
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
 	})
 }
 

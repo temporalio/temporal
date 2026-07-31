@@ -1771,6 +1771,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	env := s.newTestEnv()
 	t := s.T()
+	ctx := s.Context()
 
 	t.Run("ByToken", func(t *testing.T) {
 
@@ -1992,29 +1993,51 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	})
 
 	t.Run("FailsIfNeverRequested", func(t *testing.T) {
-
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
-		runID := startResp.RunId
-
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
-
-		details := &commonpb.Payloads{
-			Payloads: []*commonpb.Payload{
-				payload.EncodeString("Canceled Details"),
+		testCases := []struct {
+			name    string
+			respond func(activityID, runID string, taskToken []byte) error
+		}{
+			{
+				name: "ByToken",
+				respond: func(_, _ string, taskToken []byte) error {
+					_, err := env.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+						Namespace: env.Namespace().String(),
+						TaskToken: taskToken,
+						Details:   payloads.EncodeString("Canceled Details"),
+						Identity:  "new-worker",
+					})
+					return err
+				},
+			},
+			{
+				name: "ByID",
+				respond: func(activityID, runID string, _ []byte) error {
+					_, err := env.FrontendClient().RespondActivityTaskCanceledById(ctx, &workflowservice.RespondActivityTaskCanceledByIdRequest{
+						Namespace:  env.Namespace().String(),
+						ActivityId: activityID,
+						RunId:      runID,
+						Details:    payloads.EncodeString("Canceled Details"),
+						Identity:   "new-worker",
+					})
+					return err
+				},
 			},
 		}
 
-		_, err := env.FrontendClient().RespondActivityTaskCanceled(s.Context(), &workflowservice.RespondActivityTaskCanceledRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
-			Details:   details,
-			Identity:  "new-worker",
-		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				activityID := testcore.RandomizeStr(t.Name())
+				taskQueue := testcore.RandomizeStr(t.Name())
+
+				startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+				pollTaskResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, startResp.RunId)
+
+				err := tc.respond(activityID, startResp.RunId, pollTaskResp.TaskToken)
+				var invalidArgumentErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgumentErr)
+				require.Equal(t, "unable to mark activity as canceled without activity being request canceled first", invalidArgumentErr.Message)
+			})
+		}
 	})
 
 	t.Run("DuplicateRequestIDSucceeds", func(t *testing.T) {
