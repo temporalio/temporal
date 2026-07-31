@@ -181,13 +181,18 @@ var TransitionStarted = chasm.NewTransition(
 )
 
 type completeEvent struct {
-	req            *historyservice.RespondActivityTaskCompletedRequest
-	metricsHandler metrics.Handler
+	req             *historyservice.RespondActivityTaskCompletedRequest
+	baseHandler     metrics.Handler
+	enrichedHandler metrics.Handler
 }
 
-// TransitionCompleted transitions to Completed status.
+// TransitionCompleted transitions to Completed status. SCHEDULED and PAUSED are included because
+// RespondActivityTaskCompletedById can force-complete an activity that has no attempt in
+// progress, mirroring workflow-activity behavior.
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
@@ -198,7 +203,16 @@ var TransitionCompleted = chasm.NewTransition(
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetCompleteRequest()
 
+			attemptWasStarted := a.hasAttemptInProgress()
 			attempt := a.LastAttempt.Get(ctx)
+			if !attemptWasStarted {
+				// RespondActivityTaskCompletedById can complete an activity when no attempt is in
+				// progress.
+				attempt.StartedTime = timestamppb.New(ctx.Now(a))
+				if a.FirstAttemptStartedTime == nil {
+					a.FirstAttemptStartedTime = attempt.StartedTime
+				}
+			}
 			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
 			attempt.LastWorkerIdentity = req.GetIdentity()
 			outcome := a.Outcome.Get(ctx)
@@ -208,7 +222,7 @@ var TransitionCompleted = chasm.NewTransition(
 				},
 			}
 
-			a.emitOnCompletedMetrics(ctx, event.metricsHandler)
+			a.emitOnCompletedMetrics(ctx, event.baseHandler, event.enrichedHandler, req.GetResult(), attemptWasStarted)
 
 			return nil
 		})
@@ -216,8 +230,9 @@ var TransitionCompleted = chasm.NewTransition(
 )
 
 type failedEvent struct {
-	req            *historyservice.RespondActivityTaskFailedRequest
-	metricsHandler metrics.Handler
+	req             *historyservice.RespondActivityTaskFailedRequest
+	baseHandler     metrics.Handler
+	enrichedHandler metrics.Handler
 }
 
 // TransitionFailed transitions to Failed status.
@@ -245,7 +260,7 @@ var TransitionFailed = chasm.NewTransition(
 				return err
 			}
 
-			a.emitOnFailedMetrics(ctx, event.metricsHandler)
+			a.emitOnFailedMetrics(ctx, event.baseHandler, event.enrichedHandler, req.GetFailure())
 
 			return nil
 		})
@@ -360,7 +375,6 @@ type timeoutEvent struct {
 	metricsHandler metrics.Handler
 	timeoutType    enumspb.TimeoutType
 	retryState     enumspb.RetryState
-	fromStatus     activitypb.ActivityExecutionStatus
 }
 
 // TransitionTimedOut transitions to TimedOut status.
@@ -411,7 +425,7 @@ var TransitionTimedOut = chasm.NewTransition(
 				}
 			}
 
-			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
+			a.emitOnTimedOutMetrics(event.metricsHandler, timeoutType)
 
 			return nil
 		})
@@ -498,8 +512,8 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 )
 
 type resetEvent struct {
-	resetTime time.Time
-	handler   metrics.Handler
+	resetTime      time.Time
+	metricsHandler metrics.Handler
 }
 
 // TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to

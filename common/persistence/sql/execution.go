@@ -636,6 +636,15 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 		if err != nil {
 			return fmt.Errorf("failed to execute DeleteAllFromSignalsRequestedSets: %w", err)
 		}
+		_, err = tx.DeleteAllFromChasmNodeMaps(ctx, sqlplugin.ChasmNodeMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromChasmNodeMaps: %w", err)
+		}
 		_, err = tx.DeleteFromBufferedEvents(ctx, sqlplugin.BufferedEventsFilter{
 			ShardID:     request.ShardID,
 			NamespaceID: namespaceID,
