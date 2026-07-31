@@ -124,8 +124,7 @@ message ActivityState {
 
   // The most recent pause request, if the activity has ever been paused. Like cancel_state and
   // terminate_state this is never cleared; unlike them it may be non-current (the activity may have
-  // since been unpaused), hence the "last" prefix. No logic gates on this field — it is descriptive
-  // metadata only.
+  // since been unpaused), hence the "last" prefix. Its request_id is used to de-dupe pause requests.
   ActivityPauseState last_pause_state = 16;
 
   // Set when a reset is requested with keep_paused=true on a paused (PAUSE_REQUESTED) activity, so
@@ -146,6 +145,15 @@ message ActivityState {
   // non-running activity (SCHEDULED / PAUSED) the restore is applied immediately and this flag is
   // not set. Reset while in CANCEL_REQUESTED or RESET_REQUESTED is rejected.
   bool reset_restore_options = 20;
+
+  // Used to de-dupe unpause requests.
+  string last_unpause_request_id = 21;
+
+  // Used to de-dupe reset requests.
+  string last_reset_request_id = 22;
+
+  // Used to de-dupe update requests.
+  string last_update_options_request_id = 23;
 }
 
 message ActivityCancelState {
