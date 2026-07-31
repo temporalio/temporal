@@ -17,6 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+const errInvalidRunID = "run_id is not a valid UUID"
+
 // cancelOrTerminateRequest is the subset of the cancel and terminate requests that are validated the same way.
 type cancelOrTerminateRequest interface {
 	GetNamespace() string
@@ -333,7 +335,7 @@ func (v *validator) validateRunID(runID string) error {
 		return nil
 	}
 	if err := uuid.Validate(runID); err != nil {
-		return serviceerror.NewInvalidArgument("run_id is not a valid UUID")
+		return serviceerror.NewInvalidArgument(errInvalidRunID)
 	}
 	return nil
 }

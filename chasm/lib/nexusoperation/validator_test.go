@@ -22,8 +22,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-const errInvalidRunID = "run_id is not a valid UUID"
-
 func newTestValidator(config *Config) *validator {
 	return newValidator(config, log.NewNoopLogger(), nil, nil)
 }
