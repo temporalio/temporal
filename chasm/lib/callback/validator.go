@@ -75,6 +75,9 @@ func (v *validator) Validate(_ context.Context, namespaceName string, cbs []*com
 			}
 			variant.Nexus.Header = lowerCaseHeaders
 		case *commonpb.Callback_Internal_:
+			// Internal callbacks are server-generated, so there is nothing to validate.
+			// CHASM has no Internal variant, so FromAPICallback rejects them with
+			// InvalidArgument when the execution is backed by CHASM.
 			continue
 		default:
 			return serviceerror.NewUnimplemented(fmt.Sprintf("unknown callback variant: %T", variant))

@@ -136,6 +136,24 @@ func TestValidateCallbacks(t *testing.T) {
 		require.Contains(t, err.Error(), "unknown callback variant")
 	})
 
+	// Confirm that Worker-variant callbacks are rejected by the callback.Validator,
+	// preventing them from being accepted.
+	t.Run("WorkerVariantNotSupported", func(t *testing.T) {
+		cbs := []*commonpb.Callback{
+			{Variant: &commonpb.Callback_Worker_{
+				Worker: &commonpb.Callback_Worker{
+					TaskQueueName: "completions-task-queue",
+					Service:       "HTTPAdapter",
+					Operation:     "DeliverAsWebhook",
+				},
+			}},
+		}
+		err := v.Validate(context.Background(), "ns", cbs)
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+		require.Contains(t, err.Error(), "unknown callback variant")
+	})
+
 	t.Run("EmptyCallbacksNoError", func(t *testing.T) {
 		err := v.Validate(context.Background(), "ns", nil)
 		require.NoError(t, err)
