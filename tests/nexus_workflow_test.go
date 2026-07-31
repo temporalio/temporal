@@ -1205,12 +1205,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	s.Empty(hist[wftCompletedIdx].Links)
 	wftCompletedEventID := hist[wftCompletedIdx].EventId
 
-	// Reset reapply of a Nexus completion is HSM-only: cherryPickHSMEvent skips an operation missing
-	// from the HSM tree rather than falling back to CHASM.
-	if chasmEnabled {
-		return
-	}
-
 	// Reset the workflow and check that the completion event has been reapplied.
 	resp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
@@ -1222,7 +1216,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	s.NoError(err)
 
 	resetHist1 := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
-	s.RequireHistoryEvent(resetHist1, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	if chasmEnabled {
+		// Reset reapply is HSM-only, so a CHASM-owned operation's completion is not reapplied, though
+		// the reset itself must still succeed. Becomes RequireHistoryEvent on both rails once
+		// https://github.com/temporalio/temporal/issues/11384 is fixed.
+		s.RequireNoHistoryEvent(resetHist1, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	} else {
+		s.RequireHistoryEvent(resetHist1, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	}
 
 	// Reset the workflow again to the same point with enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS option
 	// and verify that the completion event has been excluded.

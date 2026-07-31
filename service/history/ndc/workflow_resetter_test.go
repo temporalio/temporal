@@ -2141,39 +2141,27 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMToChasmFallback() {
 
 // TestReapplyEventsHSMNotFoundDoesNotConsultChasm pins that an operation HSM reports as missing is
 // skipped outright, even though CHASM defines the same event type and would apply it. Falling back to
-// CHASM is what regressed replication reapply: a replicated batch is not guaranteed to share a prefix
-// with the surviving branch, so events for operations that only existed on a discarded branch are
-// normal, and CHASM answers those with a NotFound that aborts the entire batch.
+// CHASM is what regressed replication reapply; see https://github.com/temporalio/temporal/issues/11384.
 func (s *workflowResetterSuite) TestReapplyEventsHSMNotFoundDoesNotConsultChasm() {
 	const eventType = enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
 
-	// Both paths reach this branch. Replication carries events for operations that only existed on a
-	// discarded branch; reset reaches it when resetting to a point before the operation was scheduled,
-	// because ScheduledEventDefinition.CherryPick never rebuilds the operation into the new tree.
-	for _, tc := range []struct {
-		name    string
-		isReset bool
-	}{
-		{name: "replication", isReset: false},
-		{name: "reset", isReset: true},
-	} {
-		s.Run(tc.name, func() {
-			ms := historyi.NewMockMutableState(s.controller)
-			ms.EXPECT().HSM().Return(nil).AnyTimes()
-			// No ChasmEnabled expectation on purpose: cherryPickChasmEvent calls it as soon as the
-			// registry recognizes the event type, so consulting CHASM fails on an unexpected call.
+	// Both reset and replication reach this branch, and one case covers both: reapplyEvents reads
+	// isReset only in the hardcoded CancelRequested and Terminated cases, which a Nexus event never
+	// reaches.
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().HSM().Return(nil).AnyTimes()
+	// No ChasmEnabled expectation on purpose: cherryPickChasmEvent calls it as soon as the registry
+	// recognizes the event type, so consulting CHASM fails on an unexpected call.
 
-			applied, err := reapplyEvents(
-				context.Background(), ms, nil,
-				newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound),
-				s.newChasmRegistryWithEvent(eventType, nil),
-				[]*historypb.HistoryEvent{{EventId: 5, EventType: eventType}}, nil, "", tc.isReset,
-			)
+	applied, err := reapplyEvents(
+		context.Background(), ms, nil,
+		newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound),
+		s.newChasmRegistryWithEvent(eventType, nil),
+		[]*historypb.HistoryEvent{{EventId: 5, EventType: eventType}}, nil, "", false,
+	)
 
-			s.NoError(err, "a missing operation must not surface as an error")
-			s.Empty(applied, "the event must be skipped, not applied")
-		})
-	}
+	s.NoError(err, "a missing operation must not surface as an error")
+	s.Empty(applied, "the event must be skipped, not applied")
 }
 
 // fakeHSMEventDefinition is an hsm.EventDefinition whose CherryPick returns a configurable error, letting tests drive
