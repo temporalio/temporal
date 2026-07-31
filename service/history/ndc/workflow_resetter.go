@@ -1144,8 +1144,6 @@ const (
 	cherryPickSkipped
 	// cherryPickFallback: this framework doesn't define the event type, so the caller should try the
 	// other framework. A component missing from this framework's tree is skipped, not a fallback.
-	// HSM and CHASM define the same event types today, so this outcome only ever reaches CHASM's
-	// registry lookup, never its cherry-pick.
 	cherryPickFallback
 )
 
@@ -1164,10 +1162,10 @@ func cherryPickHSMEvent(
 	if err := def.CherryPick(mutableState.HSM(), event, resetReapplyExcludeTypes); err != nil {
 		switch {
 		case errors.Is(err, hsm.ErrStateMachineNotFound):
-			// The op isn't in the HSM tree. On the replication reapply path it is usually in no tree at
-			// all: unlike reset, the batch is not guaranteed to share a prefix with the surviving branch,
-			// so events for operations that only existed on the discarded branch are normal. Skip rather
-			// than fall back to CHASM, whose NotFound for a missing op aborts the whole batch.
+			// The op isn't in the HSM tree. Skip rather than falling back to CHASM: on the replication
+			// path the op is usually in no tree at all, and CHASM's NotFound for a missing op would abort
+			// the whole batch. The cost is that reset reapply drops completions for CHASM-owned ops.
+			// See https://github.com/temporalio/temporal/issues/11384.
 			return cherryPickSkipped, nil
 		case errors.Is(err, hsm.ErrNotCherryPickable), errors.Is(err, hsm.ErrInvalidTransition):
 			// Recognized by HSM but intentionally not cherry-pickable here; skip without falling back.
@@ -1184,7 +1182,7 @@ func cherryPickHSMEvent(
 //
 // HSM and CHASM register the same Nexus event types, and cherryPickHSMEvent no longer falls back when a component is
 // missing from the HSM tree, so callers only reach the registry lookup below. Everything past it, including the
-// ChasmEnabled check, is unreachable until some CHASM library defines an event type HSM does not.
+// ChasmEnabled check, is unreachable until https://github.com/temporalio/temporal/issues/11384 is fixed.
 func cherryPickChasmEvent(
 	ctx context.Context,
 	mutableState historyi.MutableState,
