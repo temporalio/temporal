@@ -12565,7 +12565,10 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 	})
 
 	// Issuing Unpause on a CANCEL_REQUESTED activity is a no-op.
-	t.Run("UnpauseWhileCancelRequested", func(t *testing.T) {
+	// UnpauseWhileCancelRequestedFails: unpausing a CANCEL_REQUESTED activity must be rejected with
+	// FailedPrecondition — cancellation takes precedence, matching Pause's and Reset's existing
+	// rejection of the same state (see PauseWhileCancelRequested).
+	t.Run("UnpauseWhileCancelRequestedFails", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
@@ -12606,14 +12609,15 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		require.True(t, hbResp.GetCancelRequested())
 		require.False(t, hbResp.GetActivityPaused())
 
-		// Unpause is a no-op: status stays CANCEL_REQUESTED.
+		// Unpause must be rejected — cannot unpause an activity with a pending cancellation.
 		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   "test-identity",
 		})
-		require.NoError(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -12622,14 +12626,14 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, descResp.GetInfo().GetRunState(),
-			"unpause of a CANCEL_REQUESTED activity must be a no-op")
+			"rejected unpause must not disturb the pending cancellation")
 
 		hbResp2, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollResp.TaskToken,
 		})
 		require.NoError(t, err)
-		require.True(t, hbResp2.GetCancelRequested(), "cancel must remain after unpause")
+		require.True(t, hbResp2.GetCancelRequested(), "cancel must remain after the rejected unpause")
 		require.False(t, hbResp2.GetActivityPaused(), "pause flag must remain cleared")
 	})
 
