@@ -1969,11 +1969,6 @@ func (a *Activity) validateActivityTaskToken(
 	return nil
 }
 
-// Metrics about data carried by activity tasks use the base handler plus operation. Metrics about
-// the activity lifecycle additionally use task queue, activity type, workflow type, and versioning
-// behavior. Per-record tags such as timeout_type and has_details are added when recording the
-// metric.
-
 // baseMetricsHandler adds only the operation tag.
 func (a *Activity) baseMetricsHandler(ctx chasm.Context, operation string) metrics.Handler {
 	return ctx.MetricsHandler().WithTags(metrics.OperationTag(operation))
