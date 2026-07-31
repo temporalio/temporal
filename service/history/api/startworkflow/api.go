@@ -10,6 +10,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
@@ -463,21 +464,30 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	// previously created workflow context.
 	newRunID := primitives.NewUUID().String()
 
-	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
-		s.shardContext,
-		workflowKey,
-		s.namespace,
-		newRunID,
-		currentWorkflowConditionFailed.State,
-		currentWorkflowConditionFailed.Status,
-		currentWorkflowConditionFailed.RequestIDs,
-		currentWorkflowConditionFailed.FirstExecutionRunID,
-		s.request.StartRequest.GetWorkflowIdReusePolicy(),
-		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
-		currentWorkflowStartTime,
-		s.request.ParentExecutionInfo,
-		s.request.ChildWorkflowOnly,
-	)
+	var currentExecutionUpdateAction api.UpdateWorkflowActionFunc
+	var err error
+	if s.shouldZombifyConflictingChild(currentWorkflowConditionFailed.State) {
+		currentExecutionUpdateAction = api.ZombifyConflictingChildAction(
+			s.request.ParentExecutionInfo,
+			s.shardContext.GetLogger(),
+		)
+	} else {
+		currentExecutionUpdateAction, err = api.ResolveDuplicateWorkflowID(
+			s.shardContext,
+			workflowKey,
+			s.namespace,
+			newRunID,
+			currentWorkflowConditionFailed.State,
+			currentWorkflowConditionFailed.Status,
+			currentWorkflowConditionFailed.RequestIDs,
+			currentWorkflowConditionFailed.FirstExecutionRunID,
+			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+			s.request.StartRequest.GetWorkflowIdConflictPolicy(),
+			currentWorkflowStartTime,
+			s.request.ParentExecutionInfo,
+			s.request.ChildWorkflowOnly,
+		)
+	}
 
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):
@@ -562,6 +572,20 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	default:
 		return nil, StartErr, err
 	}
+}
+
+func (s *Starter) shouldZombifyConflictingChild(currentState enumsspb.WorkflowExecutionState) bool {
+	if !s.request.GetZombifyConflictingChild() ||
+		s.request.StartRequest.GetWorkflowIdConflictPolicy() != enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
+		return false
+	}
+	reusePolicy := s.request.StartRequest.GetWorkflowIdReusePolicy()
+	if reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
+		reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
+		return false
+	}
+	return currentState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+		currentState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 }
 
 // respondToRetriedRequest provides a response in case a start request is retried.

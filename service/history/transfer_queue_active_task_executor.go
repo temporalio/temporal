@@ -1092,35 +1092,47 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		},
 	}
 
-	childRunID, childClock, err := t.startChildWorkflow(
-		ctx,
-		task,
-		parentNamespaceName,
-		targetNamespaceName,
-		namespace.ID(targetNamespaceID),
-		childInfo.CreateRequestId,
-		attributes,
-		sourceVersionStamp,
-		rootExecutionInfo,
-		inheritedBuildID,
-		initiatedEvent.GetUserMetadata(),
-		shouldTerminateAndStartChild,
-		inheritedVersioningOverride,
-		inheritedPinnedVersion,
-		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
-		inheritedAutoUpgradeInfo,
-	)
+	childPriority := priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority)
+	startParams := &startChildWorkflowParams{
+		task:                        task,
+		parentNamespaceName:         parentNamespaceName,
+		targetNamespaceName:         targetNamespaceName,
+		targetNamespaceID:           namespace.ID(targetNamespaceID),
+		requestID:                   childInfo.CreateRequestId,
+		attributes:                  attributes,
+		sourceVersionStamp:          sourceVersionStamp,
+		rootExecutionInfo:           rootExecutionInfo,
+		inheritedBuildID:            inheritedBuildID,
+		userMetadata:                initiatedEvent.GetUserMetadata(),
+		inheritedVersioningOverride: inheritedVersioningOverride,
+		inheritedPinnedVersion:      inheritedPinnedVersion,
+		priority:                    childPriority,
+		inheritedAutoUpgradeInfo:    inheritedAutoUpgradeInfo,
+	}
+	startOptions := startChildWorkflowOptions{
+		terminateExisting: shouldTerminateAndStartChild,
+	}
+	if shouldTerminateAndStartChild {
+		startOptions.reusePolicyOverride = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	} else {
+		startOptions.zombifyConflictingChild = t.canZombifyConflictingChild(
+			mutableState,
+			childInfo,
+			attributes,
+			parentNamespaceName,
+		)
+	}
+
+	childRunID, childClock, err := t.startChildWorkflow(ctx, startParams, startOptions)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
 		var failedCause enumspb.StartChildWorkflowExecutionFailedCause
 		if versioningOverride != nil && worker_versioning.IsPinnedVersionNotInTaskQueueError(err) {
 			// TODO(Shivam): Revisit this string-based classification and consider a typed error if more callers need it.
 			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_INVALID_VERSIONING_OVERRIDE
+		} else if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
+			return err
 		} else {
-			if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
-				// for retryable error just return
-				return err
-			}
 			switch err.(type) {
 			case *serviceerror.WorkflowExecutionAlreadyStarted:
 				failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS
@@ -1174,6 +1186,43 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}, parentClock, childClock)
 }
 
+// canZombifyConflictingChild allows a conflicting child run to be zombified only when
+//  1. the feature is enabled
+//  2. the reuse policy permits a new run
+//  3. the child workflow ID does not identify the parent workflow in the same namespace
+//  4. no other pending child on the parent's accepted branch uses the same workflow ID.
+func (t *transferQueueActiveTaskExecutor) canZombifyConflictingChild(
+	mutableState historyi.MutableState,
+	childInfo *persistencespb.ChildExecutionInfo,
+	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
+	parentNamespaceName namespace.Name,
+) bool {
+	if !t.config.EnableOrphanedChildWorkflowReclaim(parentNamespaceName.String()) {
+		return false
+	}
+	reusePolicy := attributes.GetWorkflowIdReusePolicy()
+	if reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
+		reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
+		return false
+	}
+	executionInfo := mutableState.GetExecutionInfo()
+	childNamespaceMatchesParent := childInfo.GetNamespaceId() == executionInfo.GetNamespaceId()
+	if childInfo.GetNamespaceId() == "" {
+		childNamespaceMatchesParent = childInfo.GetNamespace() == parentNamespaceName.String()
+	}
+	if childNamespaceMatchesParent &&
+		childInfo.GetStartedWorkflowId() == executionInfo.GetWorkflowId() {
+		return false
+	}
+	for initiatedEventID, pendingChild := range mutableState.GetPendingChildExecutionInfos() {
+		if initiatedEventID != childInfo.GetInitiatedEventId() &&
+			pendingChild.GetStartedWorkflowId() == childInfo.GetStartedWorkflowId() {
+			return false
+		}
+	}
+	return true
+}
+
 // verifyChildWorkflow describes the childWorkflowID and identifies its parent. It then checks if the current run was derived from that parent by comparing the OriginalRunID value.
 // It returns the child's runID if the checks pass. Empty runID is returned if the check doesn't pass.
 func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
@@ -1210,8 +1259,12 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	}
 
 	childsParentRunID := response.WorkflowExecutionInfo.ParentExecution.RunId
-	// Check if the child's parent was the base run for the current run.
-	if childsParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId {
+	// Check if the child's parent was the base run for the current run, or is the current run itself.
+	// The latter matters for reset runs: OriginalExecutionRunId points to the pre-reset run, so a child
+	// of the current reset run would otherwise fall through and try to re-acquire the context we already
+	// hold (deadlock). Recognizing the current run id here avoids that.
+	if childsParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId ||
+		childsParentRunID == mutableState.GetWorkflowKey().RunID {
 		return response.WorkflowExecutionInfo.Execution.RunId, response.WorkflowExecutionInfo.FirstRunId, nil
 	}
 
@@ -1242,6 +1295,29 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	}
 
 	return "", "", nil
+}
+
+type startChildWorkflowParams struct {
+	task                        *tasks.StartChildExecutionTask
+	parentNamespaceName         namespace.Name
+	targetNamespaceName         namespace.Name
+	targetNamespaceID           namespace.ID
+	requestID                   string
+	attributes                  *historypb.StartChildWorkflowExecutionInitiatedEventAttributes
+	sourceVersionStamp          *commonpb.WorkerVersionStamp
+	rootExecutionInfo           *workflowspb.RootExecutionInfo
+	inheritedBuildID            string
+	userMetadata                *sdkpb.UserMetadata
+	inheritedVersioningOverride *workflowpb.VersioningOverride
+	inheritedPinnedVersion      *deploymentpb.WorkerDeploymentVersion
+	priority                    *commonpb.Priority
+	inheritedAutoUpgradeInfo    *deploymentpb.InheritedAutoUpgradeInfo
+}
+
+type startChildWorkflowOptions struct {
+	terminateExisting       bool
+	zombifyConflictingChild bool
+	reusePolicyOverride     enumspb.WorkflowIdReusePolicy
 }
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
@@ -1673,90 +1749,81 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecution(
 
 func (t *transferQueueActiveTaskExecutor) startChildWorkflow(
 	ctx context.Context,
-	task *tasks.StartChildExecutionTask,
-	namespace namespace.Name,
-	targetNamespace namespace.Name,
-	targetNamespaceID namespace.ID,
-	childRequestID string,
-	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
-	sourceVersionStamp *commonpb.WorkerVersionStamp,
-	rootExecutionInfo *workflowspb.RootExecutionInfo,
-	inheritedBuildId string,
-	userMetadata *sdkpb.UserMetadata,
-	shouldTerminateAndStartChild bool,
-	inheritedVersioningOverride *workflowpb.VersioningOverride,
-	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
-	priority *commonpb.Priority,
-	inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo,
+	params *startChildWorkflowParams,
+	options startChildWorkflowOptions,
 ) (string, *clockspb.VectorClock, error) {
-	versioningOverride := inheritedVersioningOverride
-	if attributes.GetVersioningOverride() != nil {
-		versioningOverride = attributes.GetVersioningOverride()
+	versioningOverride := params.inheritedVersioningOverride
+	if params.attributes.GetVersioningOverride() != nil {
+		versioningOverride = params.attributes.GetVersioningOverride()
 	}
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                targetNamespace.String(),
-		WorkflowId:               attributes.WorkflowId,
-		WorkflowType:             attributes.WorkflowType,
-		TaskQueue:                attributes.TaskQueue,
-		Input:                    attributes.Input,
-		Header:                   attributes.Header,
-		WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
-		WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
-		WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
+		Namespace:                params.targetNamespaceName.String(),
+		WorkflowId:               params.attributes.WorkflowId,
+		WorkflowType:             params.attributes.WorkflowType,
+		TaskQueue:                params.attributes.TaskQueue,
+		Input:                    params.attributes.Input,
+		Header:                   params.attributes.Header,
+		WorkflowExecutionTimeout: params.attributes.WorkflowExecutionTimeout,
+		WorkflowRunTimeout:       params.attributes.WorkflowRunTimeout,
+		WorkflowTaskTimeout:      params.attributes.WorkflowTaskTimeout,
 
 		// Use the same request ID to dedupe StartWorkflowExecution calls
-		RequestId:                childRequestID,
-		WorkflowIdReusePolicy:    attributes.WorkflowIdReusePolicy,
+		RequestId:                params.requestID,
+		WorkflowIdReusePolicy:    params.attributes.WorkflowIdReusePolicy,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		RetryPolicy:              attributes.RetryPolicy,
-		CronSchedule:             attributes.CronSchedule,
-		Memo:                     attributes.Memo,
-		SearchAttributes:         attributes.SearchAttributes,
-		UserMetadata:             userMetadata,
+		RetryPolicy:              params.attributes.RetryPolicy,
+		CronSchedule:             params.attributes.CronSchedule,
+		Memo:                     params.attributes.Memo,
+		SearchAttributes:         params.attributes.SearchAttributes,
+		UserMetadata:             params.userMetadata,
 		VersioningOverride:       versioningOverride,
-		Priority:                 priority,
-		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
+		Priority:                 params.priority,
+		TimeSkippingConfig:       params.attributes.GetTimeSkippingConfig(),
+	}
+	if options.reusePolicyOverride != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED {
+		startRequest.WorkflowIdReusePolicy = options.reusePolicyOverride
 	}
 
-	statePropagation := attributes.GetTimeSkippingStatePropagation()
+	statePropagation := params.attributes.GetTimeSkippingStatePropagation()
 	nowForExpirationAndBackoff := workflow.AdjustNowWithTimeSkipping(
 		t.shardContext.GetTimeSource().Now(),
 		statePropagation,
 	)
 
 	request := common.CreateHistoryStartWorkflowRequest(
-		targetNamespaceID.String(),
+		params.targetNamespaceID.String(),
 		startRequest,
 		&workflowspb.ParentExecutionInfo{
-			NamespaceId: task.NamespaceID,
-			Namespace:   namespace.String(),
+			NamespaceId: params.task.NamespaceID,
+			Namespace:   params.parentNamespaceName.String(),
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: task.WorkflowID,
-				RunId:      task.RunID,
+				WorkflowId: params.task.WorkflowID,
+				RunId:      params.task.RunID,
 			},
-			InitiatedId:      task.InitiatedEventID,
-			InitiatedVersion: task.Version,
-			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
+			InitiatedId:      params.task.InitiatedEventID,
+			InitiatedVersion: params.task.Version,
+			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), params.task.TaskID),
 		},
-		rootExecutionInfo,
+		params.rootExecutionInfo,
 		nowForExpirationAndBackoff,
 	)
 
-	request.SourceVersionStamp = sourceVersionStamp
-	request.InheritedBuildId = inheritedBuildId
-	request.InheritedPinnedVersion = inheritedPinnedVersion
+	request.SourceVersionStamp = params.sourceVersionStamp
+	request.InheritedBuildId = params.inheritedBuildID
+	request.InheritedPinnedVersion = params.inheritedPinnedVersion
 	request.TimeSkippingStatePropagation = statePropagation
 
 	// Only set the AutoUpgrade info if the Pinned version is not set.
 	if request.InheritedPinnedVersion == nil {
-		request.InheritedAutoUpgradeInfo = inheritedAutoUpgradeInfo
+		request.InheritedAutoUpgradeInfo = params.inheritedAutoUpgradeInfo
 	}
 
-	if shouldTerminateAndStartChild {
-		request.StartRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	if options.terminateExisting {
 		request.StartRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
 		request.ChildWorkflowOnly = true
+	} else {
+		request.ZombifyConflictingChild = options.zombifyConflictingChild
 	}
 
 	response, err := t.historyRawClient.StartWorkflowExecution(ctx, request)

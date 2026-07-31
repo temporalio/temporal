@@ -63,6 +63,9 @@ type Config struct {
 	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxAutoResetPoints            dynamicconfig.IntPropertyFnWithNamespaceFilter
 
+	// Child workflow related settings.
+	EnableOrphanedChildWorkflowReclaim dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	// HistoryCache settings
 	// Change of these configs require shard restart
 	HistoryCacheLimitSizeBased                 bool
@@ -493,6 +496,7 @@ func NewConfig(
 		ShutdownDrainDuration:                dynamicconfig.HistoryShutdownDrainDuration.Get(dc),
 		StartupMembershipJoinDelay:           dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
 		AllowResetWithPendingChildren:        dynamicconfig.AllowResetWithPendingChildren.Get(dc),
+		EnableOrphanedChildWorkflowReclaim:   dynamicconfig.EnableOrphanedChildWorkflowReclaim.Get(dc),
 		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 

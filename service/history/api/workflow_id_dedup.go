@@ -11,6 +11,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
@@ -233,6 +235,86 @@ func terminateWorkflowAction(
 			nil, // No links necessary.
 		)
 	}, nil
+}
+
+// ZombifyConflictingChildAction validates and marks the conflicting child as a zombie while holding
+// its lock. The replacement is then created in the same transaction.
+func ZombifyConflictingChildAction(
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	logger log.Logger,
+) UpdateWorkflowActionFunc {
+	return func(workflowLease WorkflowLease) (*UpdateWorkflowAction, error) {
+		mutableState := workflowLease.GetMutableState()
+		if err := validateOrphanedChild(mutableState, parentExecutionInfo); err != nil {
+			if !errors.Is(err, consts.ErrWorkflowCompleted) {
+				logger.Warn(
+					"Unable to zombify conflicting child workflow.",
+					tag.WorkflowNamespaceID(mutableState.GetWorkflowKey().NamespaceID),
+					tag.WorkflowID(mutableState.GetWorkflowKey().WorkflowID),
+					tag.WorkflowRunID(mutableState.GetWorkflowKey().RunID),
+					tag.Error(err),
+				)
+			}
+			return nil, err
+		}
+
+		if _, err := mutableState.UpdateWorkflowStateStatus(
+			enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		); err != nil {
+			return nil, err
+		}
+
+		logger.Info(
+			"Zombified conflicting child workflow.",
+			tag.WorkflowNamespaceID(mutableState.GetWorkflowKey().NamespaceID),
+			tag.WorkflowID(mutableState.GetWorkflowKey().WorkflowID),
+			tag.WorkflowRunID(mutableState.GetWorkflowKey().RunID),
+		)
+		// Reuse same post-action as a termination: no workflow task, and in-flight Workflow Updates must be
+		// aborted because a zombie run will never make progress again.
+		return UpdateWorkflowTerminate, nil
+	}
+}
+
+// validateOrphanedChild allows a conflicting child run to be zombified only when
+//  1. the child is still open
+//  2. parent execution metadata is present
+//  3. the parent namespace ID, workflow ID, and run ID match the requesting parent
+//  4. the child's initiated event ID/version tuple differs from the reissued initiation.
+func validateOrphanedChild(
+	mutableState historyi.MutableState,
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+) error {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+
+	executionState := mutableState.GetExecutionState()
+	alreadyStartedErr := func() error {
+		return generateWorkflowAlreadyStartedError(
+			"Workflow execution is already running. WorkflowId: %v, RunId: %v.",
+			executionState.GetRequestIds(),
+			mutableState.GetWorkflowKey(),
+			executionState.GetFirstExecutionRunId(),
+		)
+	}
+	if parentExecutionInfo == nil {
+		return alreadyStartedErr()
+	}
+
+	executionInfo := mutableState.GetExecutionInfo()
+	if executionInfo.GetParentNamespaceId() != parentExecutionInfo.GetNamespaceId() ||
+		executionInfo.GetParentWorkflowId() != parentExecutionInfo.GetExecution().GetWorkflowId() ||
+		executionInfo.GetParentRunId() != parentExecutionInfo.GetExecution().GetRunId() {
+		return alreadyStartedErr()
+	}
+
+	if executionInfo.GetParentInitiatedId() == parentExecutionInfo.GetInitiatedId() &&
+		executionInfo.GetParentInitiatedVersion() == parentExecutionInfo.GetInitiatedVersion() {
+		return alreadyStartedErr()
+	}
+	return nil
 }
 
 func generateWorkflowAlreadyStartedError(
