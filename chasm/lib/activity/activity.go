@@ -688,13 +688,13 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	req *activitypb.UpdateActivityExecutionOptionsRequest,
 ) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
 	frontendReq := req.GetFrontendRequest()
-	if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
-		return nil, serviceerror.NewFailedPrecondition("cannot update options while a reset is pending")
-	}
 	requestID := frontendReq.GetRequestId()
 	if requestID != "" && requestID == a.GetLastUpdateOptionsRequestId() {
 		// A repeated request ID returns the current options, which may differ from the original response.
 		return a.updateActivityExecutionOptionsResponse(), nil
+	}
+	if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		return nil, serviceerror.NewFailedPrecondition("cannot update options while a reset is pending")
 	}
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
