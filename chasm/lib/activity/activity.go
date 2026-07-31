@@ -612,14 +612,8 @@ func (a *Activity) HandleFailed(
 		a.emitHeartbeatMetrics(ctx, details)
 	}
 
-	appFailure := failure.GetApplicationFailureInfo()
-	// A nil failure is treated as retryable for parity with WFA (see service/history/workflow/retry.go:isRetryable).
-	isRetryable := failure == nil ||
-		(appFailure != nil &&
-			!appFailure.GetNonRetryable() &&
-			!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType()))
-
-	retryState, err := a.tryReschedule(ctx, isRetryable, appFailure.GetNextRetryDelay().AsDuration(), failure)
+	nextRetryDelay := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration()
+	retryState, err := a.tryReschedule(ctx, a.isRetryableFailure(failure), nextRetryDelay, failure)
 	if err != nil {
 		return nil, err
 	}
@@ -639,6 +633,24 @@ func (a *Activity) HandleFailed(
 	}
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
+}
+
+// isRetryableFailure reports whether a worker-reported activity failure should be retried. A nil
+// (omitted) failure is retryable, matching workflow activities (see
+// service/history/workflow/retry.go:isRetryable). Any other failure is retryable only when it is an
+// application failure that neither marks itself non-retryable nor names an error type the retry
+// policy lists as non-retryable.
+func (a *Activity) isRetryableFailure(failure *failurepb.Failure) bool {
+	if failure == nil {
+		return true
+	}
+	appFailure := failure.GetApplicationFailureInfo()
+	if appFailure == nil {
+		return false
+	}
+	isMarkedNonRetryable := appFailure.GetNonRetryable()
+	isNonRetryableType := slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
+	return !isMarkedNonRetryable && !isNonRetryableType
 }
 
 // HandleCanceled updates the activity on activity canceled.
