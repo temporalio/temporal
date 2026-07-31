@@ -403,7 +403,7 @@ func TestGeneratorTask_CatchupWindowResolvesNonPositiveToDefault(t *testing.T) {
 			} else {
 				require.Less(t, len(invoker.BufferedStarts), 5,
 					"a below-min window is clamped to MinCatchupWindow and should drop older actions")
-				require.Greater(t, sched.Info.MissedCatchupWindow, int64(0),
+				require.Positive(t, sched.Info.MissedCatchupWindow,
 					"actions older than the enforced window should be counted as missed")
 			}
 		})
