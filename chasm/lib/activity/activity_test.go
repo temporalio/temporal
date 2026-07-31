@@ -437,6 +437,135 @@ func TestActivityTerminate(t *testing.T) {
 	}
 }
 
+func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
+	t.Run("CancellationAfterCanceled", func(t *testing.T) {
+		const requestID = "cancel-request-id"
+
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+				CancelState: &activitypb.ActivityCancelState{
+					RequestId: requestID,
+				},
+			},
+		}
+
+		_, err := activity.handleCancellationRequested(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+			FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{
+				RequestId: requestID,
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
+	})
+
+	t.Run("NewCancellationAfterCanceled", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+				CancelState: &activitypb.ActivityCancelState{
+					RequestId: "original-request-id",
+				},
+			},
+		}
+
+		_, err := activity.handleCancellationRequested(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+			FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{
+				RequestId: "new-request-id",
+			},
+		})
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.EqualError(t, err, "activity is in terminal state Canceled")
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
+	})
+
+	t.Run("TerminationAfterTerminated", func(t *testing.T) {
+		const requestID = "terminate-request-id"
+
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+				TerminateState: &activitypb.ActivityTerminateState{
+					RequestId: requestID,
+				},
+			},
+		}
+
+		_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{
+			RequestID: requestID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	})
+
+	t.Run("NewTerminationAfterTerminated", func(t *testing.T) {
+		const requestID = "terminate-request-id"
+
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+				TerminateState: &activitypb.ActivityTerminateState{
+					RequestId: requestID,
+				},
+			},
+		}
+
+		_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{
+			RequestID: "new-request-id",
+		})
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.EqualError(t, err, "already terminated with request ID "+requestID)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	})
+
+	t.Run("PauseAfterTerminated", func(t *testing.T) {
+		const requestID = "pause-request-id"
+
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+				LastPauseState: &activitypb.ActivityPauseState{
+					RequestId: requestID,
+				},
+			},
+		}
+
+		_, err := activity.handlePauseRequested(ctx, &activitypb.PauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
+				RequestId: requestID,
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	})
+
+	t.Run("NewPauseAfterTerminated", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+				LastPauseState: &activitypb.ActivityPauseState{
+					RequestId: "pause-request-id",
+				},
+			},
+		}
+
+		_, err := activity.handlePauseRequested(ctx, &activitypb.PauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
+				RequestId: "new-request-id",
+			},
+		})
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.EqualError(t, err, "activity is in non-pausable state Terminated")
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	})
+}
+
 // Check that we do not emit a StartToCloseLatency metric when cancelling an activity that has no
 // attempt in progress. Cancelling a SCHEDULED or PAUSED activity transitions straight to Canceled,
 // and the status captured before the CancelRequested transition must be forwarded so that the
