@@ -167,6 +167,7 @@ func TestHandleStarted(t *testing.T) {
 		requestStamp   int32
 		startRequestID string
 		requestID      string
+		metricSamples  int
 		checkOutcome   func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error)
 	}{
 		{
@@ -175,6 +176,7 @@ func TestHandleStarted(t *testing.T) {
 			attemptStamp:   testStamp,
 			requestStamp:   testStamp,
 			requestID:      testRequestID,
+			metricSamples:  1,
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
 				require.Equal(t, int32(1), response.Attempt)
 				require.NoError(t, err)
@@ -277,16 +279,32 @@ func TestHandleStarted(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			metricsHandler := metricstest.NewCaptureHandler()
+			metricCapture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(metricCapture)
+			namespaceEntry := namespace.NewLocalNamespaceForTest(
+				&persistencespb.NamespaceInfo{Id: "test-namespace-id", Name: "test-namespace"},
+				&persistencespb.NamespaceConfig{},
+				"active-cluster",
+			)
 			// Setup mock context
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return testTime },
 					HandleExecutionKey: func() chasm.ExecutionKey {
 						return chasm.ExecutionKey{
-							BusinessID: "test-activity-id",
-							RunID:      "test-run-id",
+							NamespaceID: "test-namespace-id",
+							BusinessID:  "test-activity-id",
+							RunID:       "test-run-id",
 						}
 					},
+					HandleNamespaceEntry: func() *namespace.Namespace { return namespaceEntry },
+					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+						config: &Config{
+							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+						},
+					}),
 				},
 			}
 
@@ -342,6 +360,11 @@ func TestHandleStarted(t *testing.T) {
 			response, err := activity.HandleStarted(ctx, request)
 
 			tc.checkOutcome(t, response, err)
+			recordings := metricCapture.Snapshot()[metrics.TaskScheduleToStartLatency.Name()]
+			require.Len(t, recordings, tc.metricSamples)
+			if tc.metricSamples > 0 {
+				require.Equal(t, 30*time.Second, recordings[0].Value)
+			}
 		})
 	}
 }

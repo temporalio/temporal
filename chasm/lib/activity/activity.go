@@ -286,13 +286,32 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 	if lastAttempt.GetStamp() != request.GetStamp() {
 		return nil, serviceerrors.NewObsoleteMatchingTask("activity attempt stamp mismatch")
 	}
+	dispatchTime := a.dispatchTimeForAttempt(lastAttempt)
 	if err := TransitionStarted.Apply(a, ctx, request); err != nil {
 		if errors.Is(err, chasm.ErrInvalidTransition) {
 			return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
 		}
 		return nil, err
 	}
+	metrics.TaskScheduleToStartLatency.With(a.taskScheduleToStartMetricsHandler(ctx)).Record(
+		lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
+	)
 	return a.GenerateRecordActivityTaskStartedResponse(ctx, request.GetPollRequest().GetNamespace())
+}
+
+func (a *Activity) taskScheduleToStartMetricsHandler(ctx chasm.Context) metrics.Handler {
+	actCtx := activityContextFromChasm(ctx)
+	namespaceEntry := ctx.NamespaceEntry()
+	namespaceName := namespaceEntry.Name().String()
+	taskQueue := a.GetTaskQueue().GetName()
+	return metrics.GetPerTaskQueuePartitionTypeScope(
+		a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskStartedScope),
+		namespaceName,
+		tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), taskQueue).
+			TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).
+			RootPartition(),
+		actCtx.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+	)
 }
 
 // GenerateRecordActivityTaskStartedResponse generates the response for HandleStarted.
