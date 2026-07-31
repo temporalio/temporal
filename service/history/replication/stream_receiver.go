@@ -346,7 +346,7 @@ func (r *StreamReceiverImpl) ackMessage(
 
 	var pauseHighNamespaceIDs []string
 	if receiverMode == ReceiverModeTieredStack {
-		pauseHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs()
+		pauseHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
@@ -435,10 +435,10 @@ func (r *StreamReceiverImpl) processMessages(
 		if priority == enumsspb.TASK_PRIORITY_HIGH {
 			// Isolation acts on HIGH (live) traffic: feed the throttler every HIGH task,
 			// including tier-lane tasks, so an isolated namespace stays observable and is
-			// released once its HIGH rate drops.
+			// released once its HIGH rate drops. Load is scoped to the local shard.
 			for _, task := range convertedTasks {
 				if nsID := task.ReplicationTask().GetRawTaskInfo().GetNamespaceId(); nsID != "" {
-					r.NamespaceThrottler.RecordTask(nsID)
+					r.NamespaceThrottler.RecordTask(r.clientShardKey.ShardID, nsID)
 				}
 			}
 		}

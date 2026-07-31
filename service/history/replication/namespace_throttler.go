@@ -5,16 +5,23 @@ package replication
 // reported namespace IDs travel back to the sender in SyncReplicationState acks
 // (pause_high_namespace_ids), which isolates those namespaces' live replication onto
 // dedicated throttled lanes so they cannot stall the default lane.
+//
+// Load and throttle decisions can be scoped to the receiver's local shard: a namespace
+// overwhelming one shard's lane is not necessarily throttled on others, letting it
+// keep full speed on lower-traffic shards. The throttler is shared across all stream
+// receivers on this host, so implementations must be safe for concurrent use.
 type NamespaceThrottler interface {
-	// RecordTask records an incoming HIGH-priority task for the given namespace.
-	RecordTask(namespaceID string)
-	// ThrottledNamespaceIDs returns the namespace IDs that exceeded the throttle
-	// threshold in the current observation window and resets the window.
-	ThrottledNamespaceIDs() []string
+	// RecordTask records an incoming HIGH-priority task for the given namespace on
+	// the given local shard.
+	RecordTask(shardID int32, namespaceID string)
+	// ThrottledNamespaceIDs returns the namespace IDs the throttler currently
+	// considers overwhelming on the given local shard. How that is decided
+	// (thresholds, windows, decay) is internal to the implementation.
+	ThrottledNamespaceIDs(shardID int32) []string
 }
 
 // NoopNamespaceThrottler is the default implementation which never throttles.
 type NoopNamespaceThrottler struct{}
 
-func (NoopNamespaceThrottler) RecordTask(_ string)             {}
-func (NoopNamespaceThrottler) ThrottledNamespaceIDs() []string { return nil }
+func (NoopNamespaceThrottler) RecordTask(_ int32, _ string)           {}
+func (NoopNamespaceThrottler) ThrottledNamespaceIDs(_ int32) []string { return nil }
