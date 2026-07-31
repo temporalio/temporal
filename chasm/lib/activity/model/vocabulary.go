@@ -1,0 +1,121 @@
+// Package model is an implementation-independent vocabulary for specifying a sequence of events (a
+// 'trace') in the lifetime of an activity. Drivers exist that can realize these events for both
+// Standalone Activity and Workflow Activity.
+package model
+
+import "fmt"
+
+// EventType enumerates the events a driver can realize.
+type EventType int
+
+const (
+	// RPC events
+	PollType EventType = iota
+	HeartbeatType
+	RespondCompletedType
+	RespondFailedType
+	RespondCanceledType
+	RequestCancelType
+	TerminateType
+	PauseType
+	UnpauseType
+	ResetType
+	UpdateOptionsType
+
+	// Timer events
+
+	// Timeout task timers elapsing (a timer may or may not have actually fired)
+	ScheduleToStartElapsesType
+	ScheduleToCloseElapsesType
+	StartToCloseElapsesType
+	HeartbeatElapsesType
+
+	// Dispatch-delay timers elapsing. On elapse the delayed dispatch becomes available.
+	StartDelayElapsesType
+	BackoffElapsesType
+)
+
+// Event carries the variant flags that affect the outcome.
+type Event struct {
+	Type EventType
+
+	Retryable  bool // RespondFailed: the failure is retryable. Whether it actually retries also depends on the retry policy.
+	KeepPaused bool // Reset: a paused activity stays paused across the reset.
+}
+
+// Canonical Event values for the variants frequently used in traces
+var (
+	Poll                   = Event{Type: PollType}
+	Heartbeat              = Event{Type: HeartbeatType}
+	Complete               = Event{Type: RespondCompletedType}
+	FailRetryably          = Event{Type: RespondFailedType, Retryable: true}
+	FailNonRetryably       = Event{Type: RespondFailedType, Retryable: false}
+	RespondCanceled        = Event{Type: RespondCanceledType}
+	RequestCancel          = Event{Type: RequestCancelType}
+	Terminate              = Event{Type: TerminateType}
+	Pause                  = Event{Type: PauseType}
+	ResetKeepPaused        = Event{Type: ResetType, KeepPaused: true}
+	Unpause                = Event{Type: UnpauseType}
+	Reset                  = Event{Type: ResetType}
+	UpdateOptions          = Event{Type: UpdateOptionsType}
+	StartToCloseElapses    = Event{Type: StartToCloseElapsesType}
+	ScheduleToCloseElapses = Event{Type: ScheduleToCloseElapsesType}
+	ScheduleToStartElapses = Event{Type: ScheduleToStartElapsesType}
+	HeartbeatElapses       = Event{Type: HeartbeatElapsesType}
+	StartDelayElapses      = Event{Type: StartDelayElapsesType}
+	BackoffElapses         = Event{Type: BackoffElapsesType}
+)
+
+// String is a label for an event type.
+func (t EventType) String() string {
+	switch t {
+	case PollType:
+		return "Poll"
+	case HeartbeatType:
+		return "Heartbeat"
+	case RespondCompletedType:
+		return "RespondCompleted"
+	case RespondFailedType:
+		return "RespondFailed"
+	case RespondCanceledType:
+		return "RespondCanceled"
+	case RequestCancelType:
+		return "RequestCancel"
+	case TerminateType:
+		return "Terminate"
+	case PauseType:
+		return "Pause"
+	case UnpauseType:
+		return "Unpause"
+	case ResetType:
+		return "Reset"
+	case UpdateOptionsType:
+		return "UpdateOptions"
+	case ScheduleToStartElapsesType:
+		return "ScheduleToStartElapses"
+	case ScheduleToCloseElapsesType:
+		return "ScheduleToCloseElapses"
+	case StartToCloseElapsesType:
+		return "StartToCloseElapses"
+	case HeartbeatElapsesType:
+		return "HeartbeatElapses"
+	case StartDelayElapsesType:
+		return "StartDelayElapses"
+	case BackoffElapsesType:
+		return "BackoffElapses"
+	default:
+		return fmt.Sprintf("EventType(%d)", int(t))
+	}
+}
+
+// String is a label for an event; it includes flags that affect its outcome.
+func (e Event) String() string {
+	switch e.Type {
+	case RespondFailedType:
+		return fmt.Sprintf("%s[retryable=%v]", e.Type.String(), e.Retryable)
+	case ResetType:
+		return fmt.Sprintf("%s[keepPaused=%v]", e.Type.String(), e.KeepPaused)
+	default:
+		return e.Type.String()
+	}
+}

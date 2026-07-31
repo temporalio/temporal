@@ -398,6 +398,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+	s.Equal(int64(40*1024*1024), resp.NamespaceInfo.Limits.WorkflowTaskCompletionSizeLimitError)
 
 	// Second call: Override the default value of dynamic configs.
 	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
@@ -415,6 +416,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.WorkerCommandsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.PollerAutoscalingAutoEnroll = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.EnableWorkflowTaskCompletionPagination = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.WorkflowTaskCompletionBufferSizeLimit = dc.GetIntPropertyFnFilteredByNamespace(4096)
 
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
@@ -434,6 +436,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+	s.Equal(int64(4096), resp.NamespaceInfo.Limits.WorkflowTaskCompletionSizeLimitError)
 
 	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.Activity.EnableStandaloneActivityOperatorCommands = dc.GetBoolPropertyFnFilteredByNamespace(true)

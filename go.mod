@@ -48,9 +48,9 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
-	github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7
+	github.com/temporalio/ringpop-go v0.1.0
 	github.com/temporalio/sqlparser v0.0.0-20260722001706-17d16cfe1da5
-	github.com/temporalio/tchannel-go v1.22.1-0.20260129151045-8706a1ab5f61
+	github.com/temporalio/tchannel-go v1.22.1
 	github.com/tidwall/btree v1.8.1
 	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.17
@@ -66,9 +66,9 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.44.0
-	go.temporal.io/api v1.63.4-0.20260723165907-8335003978d3
+	go.temporal.io/api v1.63.5-0.20260730203810-e7387ebd980e
 	go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee
-	go.temporal.io/sdk v1.41.1
+	go.temporal.io/sdk v1.44.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0

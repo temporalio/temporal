@@ -500,6 +500,101 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 	s.NoError(err)
 }
 
+func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBranch_NewRunNotFound() {
+	// Case 4: the verify's transition is on a NON-current branch (e.g. a losing multi-cluster
+	// CAN-conflict branch) whose events have reconciled to the current (winner) branch, but the
+	// successor (NewRunId) has not replicated here yet. This must recover by resending the new run
+	// via SyncState — NOT dead-letter as DataLoss (that is reserved for the current-branch case).
+	taskNextEvent := int64(10)
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
+		SourceTaskId: s.taskID,
+		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
+			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
+				NamespaceId: s.namespaceID,
+				WorkflowId:  s.workflowID,
+				RunId:       s.runID,
+				NextEventId: taskNextEvent,
+				NewRunId:    s.newRunID,
+				EventVersionHistory: []*historyspb.VersionHistoryItem{
+					{
+						EventId: 9,
+						Version: 1,
+					},
+				},
+				ArchetypeId: chasm.WorkflowArchetypeID,
+			},
+		},
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: 1,
+			TransitionCount:          4,
+		},
+	}
+	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
+		uuid.NewString(), true, nil,
+	).AnyTimes()
+
+	mu := historyi.NewMockMutableState(s.controller)
+	mu.EXPECT().CloneToProto().Return(
+		&persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{NamespaceFailoverVersion: 1, TransitionCount: 3},
+					{NamespaceFailoverVersion: 3, TransitionCount: 6},
+				},
+				VersionHistories: &historyspb.VersionHistories{
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: []byte{1, 2, 3},
+							Items: []*historyspb.VersionHistoryItem{
+								{
+									EventId: 5,
+									Version: 1,
+								},
+								{
+									EventId: 10,
+									Version: 3,
+								},
+							},
+						},
+						{
+							BranchToken: []byte{1, 2, 3, 4},
+							Items: []*historyspb.VersionHistoryItem{
+								{
+									EventId: 10,
+									Version: 1,
+								},
+							},
+						},
+					},
+				},
+			},
+			NextEventId: taskNextEvent,
+		},
+	).AnyTimes()
+
+	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
+	s.mockGetMutableState(s.namespaceID, s.workflowID, s.newRunID, nil, serviceerror.NewNotFound("workflow not found"))
+
+	task := NewExecutableVerifyVersionedTransitionTask(
+		s.toolBox,
+		s.taskID,
+		time.Now(),
+		s.sourceClusterName,
+		s.sourceShardKey,
+		replicationTask,
+	)
+	task.ExecutableTask = s.executableTask
+
+	err := task.Execute()
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
+	// The resend targets the NEW run, so its own replication path re-pulls and applies it.
+	s.Equal(s.newRunID, err.(*serviceerrors.SyncState).RunId)
+}
+
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBranch_NotUpToDate() {
 	taskNextEvent := int64(10)
 	replicationTask := &replicationspb.ReplicationTask{

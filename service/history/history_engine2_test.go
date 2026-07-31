@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -192,17 +193,18 @@ func (s *engine2Suite) SetupTest() {
 	s.mockWorkflowStateReplicator = ndc.NewMockWorkflowStateReplicator(s.controller)
 
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		logger:             s.logger,
-		throttledLogger:    s.logger,
-		metricsHandler:     metrics.NoopMetricsHandler,
-		tokenSerializer:    tasktoken.NewSerializer(),
-		config:             s.config,
-		timeSource:         s.mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		currentClusterName:  s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:        s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		logger:              s.logger,
+		throttledLogger:     s.logger,
+		metricsHandler:      metrics.NoopMetricsHandler,
+		tokenSerializer:     tasktoken.NewSerializer(),
+		config:              s.config,
+		timeSource:          s.mockShard.GetTimeSource(),
+		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockArchivalProcessor.Category():    s.mockArchivalProcessor,
 			s.mockTxProcessor.Category():          s.mockTxProcessor,
