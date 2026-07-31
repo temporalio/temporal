@@ -715,6 +715,11 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	default:
 	}
 
+	if a.ResetRestoreOptions {
+		return nil, serviceerror.NewFailedPrecondition(
+			"cannot update options while a deferred Reset(RestoreOriginalOptions) is pending")
+	}
+
 	if frontendReq.GetRestoreOriginal() {
 		if err := validateOriginalOptionsRestorable(a.GetOriginalOptions()); err != nil {
 			return nil, err
@@ -1035,8 +1040,6 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
-	case a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		a.ResetShouldPause = false
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
 	}
