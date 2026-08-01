@@ -83,7 +83,7 @@ func (s *ChildWorkflowForceFailoverSuite) SetupSuite() {
 	clusterConfigs[0].WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	// Replacing an orphaned child suppresses an existing workflow, so it ships opt-in.
 	clusterConfigs[0].DynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableOrphanedChildWorkflowReclaim.Key(): true,
+		dynamicconfig.EnableOrphanedChildWorkflowReplacement.Key(): true,
 	}
 
 	s.controller = gomock.NewController(s.T())
