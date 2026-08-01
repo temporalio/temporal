@@ -422,11 +422,9 @@ func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.
 					WorkflowId: frontendReq.GetWorkflowId(),
 					RunId:      frontendReq.GetRunId(),
 				},
-				Activity:       &workflowservice.UnpauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
-				Jitter:         frontendReq.GetJitter(),
-				ResetAttempts:  frontendReq.GetResetAttempts(),
-				ResetHeartbeat: frontendReq.GetResetHeartbeat(),
-				Identity:       frontendReq.GetIdentity(),
+				Activity: &workflowservice.UnpauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				Jitter:   frontendReq.GetJitter(),
+				Identity: frontendReq.GetIdentity(),
 			},
 		})
 		if err != nil {
