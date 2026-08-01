@@ -3,6 +3,7 @@ package tests
 // SAA <-> WFA parity tests
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -82,6 +84,101 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 		t := s.T()
 		testTimeoutWhileAttemptInProgress(t, model.HeartbeatElapses)
 	})
+}
+
+// A terminal timeout must chain the application failure that drove its retries as its Cause, so an SDK
+// can expose the real failure.
+func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
+	env := newActivityParityEnv(s.T())
+
+	assertCausePreserved := func(
+		t *testing.T,
+		cfg activityConfig,
+		trace []model.Event,
+	) {
+		const message = "the terminal timeout must chain the underlying application failure as its Cause"
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			activity := newWFADriver(t, env, cfg).driveTrace(t, trace)
+			timeout, ok := errors.AsType[*temporal.TimeoutError](activity.run.Get(activity.d.ctx, nil))
+			require.True(t, ok)
+			appErr, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap())
+			require.True(t, ok)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalStatus(t), message)
+			require.Equal(t, "TestFailure", appErr.Type(), message)
+			require.Equal(t, "test failure", appErr.Message(), message)
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
+			cause := activity.describe(t).GetOutcome().GetFailure().GetCause()
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalStatus(t), message)
+			require.Equal(t, "TestFailure", cause.GetApplicationFailureInfo().GetType(), message)
+			require.Equal(t, "test failure", cause.GetMessage(), message)
+		})
+	}
+
+	s.Run("StartToClose", func(s *activityParityTestSuite) {
+		assertCausePreserved(s.T(), activityConfig{MaxAttempts: 2},
+			[]model.Event{
+				model.Poll,
+				model.FailRetryably,
+				model.BackoffElapses,
+				model.Poll,
+				model.StartToCloseElapses,
+			},
+		)
+	})
+	s.Run("Heartbeat", func(s *activityParityTestSuite) {
+		assertCausePreserved(s.T(), activityConfig{MaxAttempts: 2},
+			[]model.Event{
+				model.Poll,
+				model.FailRetryably,
+				model.BackoffElapses,
+				model.Poll,
+				model.HeartbeatElapses,
+			},
+		)
+	})
+	s.Run("ScheduleToClose", func(s *activityParityTestSuite) {
+		assertCausePreserved(s.T(), activityConfig{},
+			[]model.Event{
+				model.Poll,
+				model.FailRetryably,
+				model.ScheduleToCloseElapses,
+			},
+		)
+	})
+}
+
+// A retried timeout replaces the prior attempt's failure instead of chaining it, keeping the stored
+// failure bounded across retries.
+func (s *activityParityTestSuite) TestRetriedTimeoutDoesNotChainPriorFailure() {
+	env := newActivityParityEnv(s.T())
+	for _, timeout := range []model.Event{model.StartToCloseElapses, model.HeartbeatElapses} {
+		s.Run(timeout.Type.String(), func(s *activityParityTestSuite) {
+			cfg := activityConfig{MaxAttempts: 3}
+			trace := []model.Event{
+				model.Poll,
+				model.FailRetryably,
+				model.BackoffElapses,
+				model.Poll,
+				timeout,
+			}
+			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				activity := newWFADriver(t, env, cfg).driveTrace(t, trace)
+				lastFailure := activity.pendingActivityInfo(t).GetLastFailure()
+				s.Require().NotNil(lastFailure)
+				s.Require().Nil(lastFailure.GetCause())
+			})
+			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
+				lastFailure := activity.describe(t).GetInfo().GetLastFailure()
+				s.Require().NotNil(lastFailure)
+				s.Require().Nil(lastFailure.GetCause())
+			})
+		})
+	}
 }
 
 // current_retry_interval and next_attempt_schedule_time are reported while a retry is backing off

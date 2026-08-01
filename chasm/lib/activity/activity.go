@@ -1294,9 +1294,11 @@ func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(
 	ctx chasm.MutableContext,
 	timeoutType enumspb.TimeoutType,
 	message string,
+	cause *failurepb.Failure,
 ) error {
 	failure := &failurepb.Failure{
 		Message: message,
+		Cause:   cause,
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 				TimeoutType:          timeoutType,
