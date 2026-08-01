@@ -574,6 +574,13 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	}
 }
 
+// shouldZombifyConflictingChild routes a duplicate start to the atomic zombify action only when
+//  1. the parent explicitly requests orphaned-child recovery
+//  2. the conflict policy would otherwise fail the start
+//  3. the reuse policy permits a new run
+//  4. the current execution is still open according to the persistence snapshot.
+//
+// The action revalidates the execution under the child lock before zombifying it.
 func (s *Starter) shouldZombifyConflictingChild(currentState enumsspb.WorkflowExecutionState) bool {
 	if !s.request.GetZombifyConflictingChild() ||
 		s.request.StartRequest.GetWorkflowIdConflictPolicy() != enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {

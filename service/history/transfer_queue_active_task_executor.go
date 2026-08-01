@@ -1112,9 +1112,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	startOptions := startChildWorkflowOptions{
 		terminateExisting: shouldTerminateAndStartChild,
 	}
-	if shouldTerminateAndStartChild {
-		startOptions.reusePolicyOverride = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
-	} else {
+	if !shouldTerminateAndStartChild {
 		startOptions.zombifyConflictingChild = t.canZombifyConflictingChild(
 			mutableState,
 			childInfo,
@@ -1130,9 +1128,11 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		if versioningOverride != nil && worker_versioning.IsPinnedVersionNotInTaskQueueError(err) {
 			// TODO(Shivam): Revisit this string-based classification and consider a typed error if more callers need it.
 			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_INVALID_VERSIONING_OVERRIDE
-		} else if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
-			return err
 		} else {
+			if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
+				// for retryable error just return
+				return err
+			}
 			switch err.(type) {
 			case *serviceerror.WorkflowExecutionAlreadyStarted:
 				failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS
@@ -1197,7 +1197,7 @@ func (t *transferQueueActiveTaskExecutor) canZombifyConflictingChild(
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	parentNamespaceName namespace.Name,
 ) bool {
-	if !t.config.EnableOrphanedChildWorkflowReclaim(parentNamespaceName.String()) {
+	if !t.config.EnableOrphanedChildWorkflowReplacement(parentNamespaceName.String()) {
 		return false
 	}
 	reusePolicy := attributes.GetWorkflowIdReusePolicy()
@@ -1317,7 +1317,6 @@ type startChildWorkflowParams struct {
 type startChildWorkflowOptions struct {
 	terminateExisting       bool
 	zombifyConflictingChild bool
-	reusePolicyOverride     enumspb.WorkflowIdReusePolicy
 }
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
@@ -1781,10 +1780,6 @@ func (t *transferQueueActiveTaskExecutor) startChildWorkflow(
 		Priority:                 params.priority,
 		TimeSkippingConfig:       params.attributes.GetTimeSkippingConfig(),
 	}
-	if options.reusePolicyOverride != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED {
-		startRequest.WorkflowIdReusePolicy = options.reusePolicyOverride
-	}
-
 	statePropagation := params.attributes.GetTimeSkippingStatePropagation()
 	nowForExpirationAndBackoff := workflow.AdjustNowWithTimeSkipping(
 		t.shardContext.GetTimeSource().Now(),
@@ -1820,6 +1815,7 @@ func (t *transferQueueActiveTaskExecutor) startChildWorkflow(
 	}
 
 	if options.terminateExisting {
+		request.StartRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 		request.StartRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
 		request.ChildWorkflowOnly = true
 	} else {

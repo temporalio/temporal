@@ -63,8 +63,7 @@ type Config struct {
 	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxAutoResetPoints            dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	// Child workflow related settings.
-	EnableOrphanedChildWorkflowReclaim dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableOrphanedChildWorkflowReplacement dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -481,24 +480,24 @@ func NewConfig(
 		EnableSeparateReplicationEnableFlag:           dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
 		HistoryReplicationDLQV2:                       dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
 
-		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
-		NamespaceRPS:                         dynamicconfig.HistoryNamespaceRPS.Get(dc),
-		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
-		MaxIDLengthLimit:                     dynamicconfig.MaxIDLengthLimit.Get(dc),
-		PersistenceMaxQPS:                    dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),
-		PersistenceGlobalMaxQPS:              dynamicconfig.HistoryPersistenceGlobalMaxQPS.Get(dc),
-		PersistenceNamespaceMaxQPS:           dynamicconfig.HistoryPersistenceNamespaceMaxQPS.Get(dc),
-		PersistenceGlobalNamespaceMaxQPS:     dynamicconfig.HistoryPersistenceGlobalNamespaceMaxQPS.Get(dc),
-		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS.Get(dc),
-		PersistenceDynamicRateLimitingParams: dynamicconfig.HistoryPersistenceDynamicRateLimitingParams.Get(dc),
-		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
-		AlignMembershipChange:                dynamicconfig.HistoryAlignMembershipChange.Get(dc),
-		ShutdownDrainDuration:                dynamicconfig.HistoryShutdownDrainDuration.Get(dc),
-		StartupMembershipJoinDelay:           dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
-		AllowResetWithPendingChildren:        dynamicconfig.AllowResetWithPendingChildren.Get(dc),
-		EnableOrphanedChildWorkflowReclaim:   dynamicconfig.EnableOrphanedChildWorkflowReclaim.Get(dc),
-		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
-		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
+		RPS:                                    dynamicconfig.HistoryRPS.Get(dc),
+		NamespaceRPS:                           dynamicconfig.HistoryNamespaceRPS.Get(dc),
+		OperatorRPSRatio:                       dynamicconfig.OperatorRPSRatio.Get(dc),
+		MaxIDLengthLimit:                       dynamicconfig.MaxIDLengthLimit.Get(dc),
+		PersistenceMaxQPS:                      dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),
+		PersistenceGlobalMaxQPS:                dynamicconfig.HistoryPersistenceGlobalMaxQPS.Get(dc),
+		PersistenceNamespaceMaxQPS:             dynamicconfig.HistoryPersistenceNamespaceMaxQPS.Get(dc),
+		PersistenceGlobalNamespaceMaxQPS:       dynamicconfig.HistoryPersistenceGlobalNamespaceMaxQPS.Get(dc),
+		PersistencePerShardNamespaceMaxQPS:     dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS.Get(dc),
+		PersistenceDynamicRateLimitingParams:   dynamicconfig.HistoryPersistenceDynamicRateLimitingParams.Get(dc),
+		PersistenceQPSBurstRatio:               dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		AlignMembershipChange:                  dynamicconfig.HistoryAlignMembershipChange.Get(dc),
+		ShutdownDrainDuration:                  dynamicconfig.HistoryShutdownDrainDuration.Get(dc),
+		StartupMembershipJoinDelay:             dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
+		AllowResetWithPendingChildren:          dynamicconfig.AllowResetWithPendingChildren.Get(dc),
+		EnableOrphanedChildWorkflowReplacement: dynamicconfig.EnableOrphanedChildWorkflowReplacement.Get(dc),
+		MaxAutoResetPoints:                     dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
+		DefaultWorkflowTaskTimeout:             dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 
 		MaxLocalParentWorkflowVerificationDuration: dynamicconfig.MaxLocalParentWorkflowVerificationDuration.Get(dc),
 

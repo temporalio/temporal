@@ -2695,7 +2695,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCanZombifyConflictingChild() 
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			s.mockShard.GetConfig().EnableOrphanedChildWorkflowReclaim = func(string) bool {
+			s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool {
 				return tc.enabled
 			}
 			mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
@@ -2718,7 +2718,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCanZombifyConflictingChild() 
 	}
 
 	s.Run("child workflow ID collides with parent", func() {
-		s.mockShard.GetConfig().EnableOrphanedChildWorkflowReclaim = func(string) bool { return true }
+		s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool { return true }
 		mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
 		mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 			NamespaceId: "same-namespace",
