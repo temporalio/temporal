@@ -2,6 +2,7 @@ package cassandra
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	p "go.temporal.io/server/common/persistence"
@@ -11,6 +12,10 @@ import (
 const (
 	// Not much of a need to make this configurable, we're just reading some strings
 	listTaskQueueNamesByBuildIdPageSize = 100
+	// maxTaskQueuesByBuildIdResults caps the number of task queues returned per build ID.
+	// All backends (Cassandra/ScyllaDB, MySQL, PostgreSQL, SQLite) enforce this same limit.
+	// CONSIDER(persistence): surface truncation to the caller via the API.
+	maxTaskQueuesByBuildIdResults = 10000
 
 	templateUpdateTaskQueueUserDataQuery = `UPDATE task_queue_user_data SET
 		data = ?,
@@ -172,36 +177,44 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 }
 
 func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.GetTaskQueuesByBuildIdRequest) ([]string, error) {
-	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
-	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
+	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx).Idempotent(true)
 
 	var taskQueues []string
-	row := make(map[string]any)
+	var pageToken []byte
 
-	for {
+	for len(taskQueues) < maxTaskQueuesByBuildIdResults {
+		iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).PageState(pageToken).Iter()
+
+		row := make(map[string]any)
 		for iter.MapScan(row) {
 			taskQueueRaw, ok := row["task_queue_name"]
 			if !ok {
-				return nil, newFieldNotFoundError("task_queue_name", row)
+				return nil, errors.Join(newFieldNotFoundError("task_queue_name", row), iter.Close())
 			}
 			taskQueue, ok := taskQueueRaw.(string)
 			if !ok {
 				var stringType string
-				return nil, newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row)
+				return nil, errors.Join(newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row), iter.Close())
 			}
 
 			taskQueues = append(taskQueues, taskQueue)
 
-			row = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
+			if len(taskQueues) >= maxTaskQueuesByBuildIdResults {
+				break
+			}
+
+			row = make(map[string]any) // Reinitialize map as MapScan fails on reuse
 		}
-		if len(iter.PageState()) == 0 {
+
+		pageToken = iter.PageState()
+		if err := iter.Close(); err != nil {
+			return nil, gocql.ConvertError("GetTaskQueuesByBuildId", err)
+		}
+		if len(pageToken) == 0 {
 			break
 		}
 	}
 
-	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("GetTaskQueuesByBuildId", err)
-	}
 	return taskQueues, nil
 }
 
