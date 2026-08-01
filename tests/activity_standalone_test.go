@@ -11387,9 +11387,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
 
-	// UpdateWhileCancelRequested: updating options on a STARTED activity that has a pending cancel
-	// (CANCEL_REQUESTED) is allowed — the worker is still running and the update applies to it.
-	t.Run("UpdateWhileCancelRequested", func(t *testing.T) {
+	// UpdateWhileCancelRequestedFails: updating options is refused once a cancel is pending.
+	t.Run("UpdateWhileCancelRequestedFails", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
@@ -11415,7 +11414,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			ActivityOptions: &activitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(15 * time.Second)},
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
 		})
-		require.NoError(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -11423,8 +11423,10 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			RunId:      runID,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 15*time.Second, descResp.GetInfo().GetHeartbeatTimeout().AsDuration(),
-			"update should apply to the running attempt even with a pending cancel")
+		require.NotEqual(t, 15*time.Second, descResp.GetInfo().GetHeartbeatTimeout().AsDuration(),
+			"a refused update must not apply")
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, descResp.GetInfo().GetRunState(),
+			"a refused update must not disturb the pending cancellation")
 	})
 
 	// TerminateWhilePaused: design doc says PAUSED + terminate → TERMINATED.
@@ -14489,12 +14491,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		}, 10*time.Second, 200*time.Millisecond)
 	})
 
-	// UpdateOptionsPreservesTimeoutsWhileResetRequested: UpdateActivityExecutionOptions bumps the
-	// attempt stamp, which invalidates all attempt-scoped timeout tasks. The handler must re-emit
-	// fresh StartToClose and Heartbeat timeout tasks for RESET_REQUESTED activities, otherwise the
-	// running worker is left with no server-side timeout enforcement (only the long
-	// ScheduleToCloseTimeout would eventually catch a hung worker).
-	t.Run("UpdateOptionsPreservesTimeoutsWhileResetRequested", func(t *testing.T) {
+	// UpdateOptionsWhileResetRequestedFails: updating options is refused once a reset is pending.
+	t.Run("UpdateOptionsWhileResetRequestedFails", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
 		defer cancel()
 		activityID := testcore.RandomizeStr(t.Name())
@@ -14532,9 +14530,6 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Update StartToCloseTimeout to 1s. The handler bumps the attempt stamp (invalidating the
-		// old 1-minute timeout task) and must re-emit a fresh 1-second timeout task that fires
-		// while the activity is RESET_REQUESTED.
 		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -14544,18 +14539,18 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
 		})
-		require.NoError(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 
-		// New StartToCloseTimeout fires → retry consumes reset-request → SCHEDULED at attempt 1.
-		await.Require(ctx, t, func(c *await.T) {
-			dr, dErr := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  env.Namespace().String(),
-				ActivityId: activityID,
-			})
-			require.NoError(c, dErr)
-			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, dr.GetInfo().GetRunState())
-			require.EqualValues(c, 1, dr.GetInfo().GetAttempt())
-		}, 10*time.Second, 200*time.Millisecond)
+		// The refused update leaves the original 1-minute StartToCloseTimeout and the pending reset in
+		// place, so the activity stays RESET_REQUESTED until the worker yields.
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, time.Minute, descResp.GetInfo().GetStartToCloseTimeout().AsDuration())
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, descResp.GetInfo().GetRunState())
 	})
 
 	t.Run("Jitter", func(t *testing.T) {
