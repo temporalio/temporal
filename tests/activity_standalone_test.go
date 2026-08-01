@@ -11,6 +11,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -9886,6 +9887,52 @@ func (env *standaloneActivityEnv) runNexusCompletionHTTPServer(t *testing.T, h *
 	return srv.URL
 }
 
+// awaitCallbackInfoWhere polls DescribeActivityExecution until the activity's single completion
+// callback satisfies check, and returns that CallbackInfo.
+func (env *standaloneActivityEnv) awaitCallbackInfoWhere(
+	ctx context.Context,
+	t *testing.T,
+	activityID string,
+	check func(c *await.T, cbInfo *callbackpb.CallbackInfo),
+) *callbackpb.CallbackInfo {
+	t.Helper()
+
+	var cbInfo *callbackpb.CallbackInfo
+	awaitFn := func(c *await.T) {
+		descResp, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(c, err)
+		require.Len(c, descResp.GetCallbacks(), 1)
+		cbInfo = descResp.GetCallbacks()[0].GetInfo()
+		require.NotNil(c, cbInfo)
+		check(c, cbInfo)
+	}
+
+	const (
+		timeout      = 10 * time.Second
+		pollInterval = 100 * time.Millisecond
+	)
+	await.Require(ctx, t, awaitFn, timeout, pollInterval)
+	return cbInfo
+}
+
+// awaitCallbackInfo polls until the activity's single completion callback reaches wantState.
+func (env *standaloneActivityEnv) awaitCallbackInfo(
+	ctx context.Context,
+	t *testing.T,
+	activityID string,
+	wantState enumspb.CallbackState,
+) *callbackpb.CallbackInfo {
+	t.Helper()
+
+	return env.awaitCallbackInfoWhere(ctx, t, activityID, func(c *await.T, cbInfo *callbackpb.CallbackInfo) {
+		require.Equal(c, wantState, cbInfo.GetState())
+	})
+}
+
+// Tests verifying that completion callbacks attached to standalone Activities get triggered.
 func (s *standaloneActivityTestSuite) TestCallbacks() {
 	env := s.newTestEnv()
 	t := s.T()
@@ -10034,6 +10081,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.Equal(t, callbackURL, cbInfo.GetInfo().GetCallback().GetNexus().GetUrl())
 		require.Equal(t, enumspb.CALLBACK_STATE_STANDBY, cbInfo.GetInfo().GetState())
 		require.NotNil(t, cbInfo.GetInfo().GetRegistrationTime())
+		// Confirm there is no outcome, because the callback hasn't been triggered.
+		require.Nil(t, cbInfo.GetInfo().GetOutcome())
 	})
 
 	t.Run("ExceedsMaxCallbacksLimit", func(t *testing.T) {
@@ -10136,6 +10185,10 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+
+		// Wait for the callback to complete and verify.
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
 	})
 
 	t.Run("FailsWithCallbacks", func(t *testing.T) {
@@ -10210,6 +10263,11 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+
+		// Wait for the callback to complete and verify.
+		// The Activity may have failed, but the callback reporting the failure should be successful.
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
 	})
 
 	t.Run("TerminatedWithCallbacks", func(t *testing.T) {
@@ -10285,6 +10343,10 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+
+		// Wait for the callback to complete and verify.
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
 	})
 
 	t.Run("CanceledWithCallbacks", func(t *testing.T) {
@@ -10365,6 +10427,10 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
+
+		// Wait for the callback to complete and verify.
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
 	})
 
 	// This test covers the timeout callback path using schedule-to-start, but the callback behavior
@@ -10428,6 +10494,10 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+
+		// Wait for the callback to complete and verify.
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
 	})
 }
 

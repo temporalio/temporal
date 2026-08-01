@@ -19,7 +19,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
@@ -595,8 +594,8 @@ func buildCallbackInfoFromChasm(
 // buildChasmCallbackInfo converts a single CHASM callback to API CallbackInfo format.
 // Returns nil if the callback should not be included in the response.
 func buildChasmCallbackInfo(
-	ctx context.Context,
-	namespaceID string,
+	_ context.Context,
+	_ string,
 	cb *chasmcallback.Callback,
 	trigger *workflowpb.CallbackInfo_Trigger,
 	circuitBreakerState func(destination string) bool,
@@ -607,27 +606,16 @@ func buildChasmCallbackInfo(
 		return nil, nil
 	}
 
+	// The workflow.CallbackInfo proto forks the fields from callback.CallbackInfo
+	// rather than embedding it (unlike activity.CallbackInfo). There is some drift
+	// between the two, e.g. workflow.CallbackInfo does not contain the outcome.
 	cbSpec, err := cb.ToAPICallback()
 	if err != nil {
 		return nil, err
 	}
-
-	var state enumspb.CallbackState
-	switch cb.Status {
-	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
-		return nil, serviceerror.NewInternal("callback with UNSPECIFIED state")
-	case callbackspb.CALLBACK_STATUS_STANDBY:
-		state = enumspb.CALLBACK_STATE_STANDBY
-	case callbackspb.CALLBACK_STATUS_SCHEDULED:
-		state = enumspb.CALLBACK_STATE_SCHEDULED
-	case callbackspb.CALLBACK_STATUS_BACKING_OFF:
-		state = enumspb.CALLBACK_STATE_BACKING_OFF
-	case callbackspb.CALLBACK_STATUS_FAILED:
-		state = enumspb.CALLBACK_STATE_FAILED
-	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
-		state = enumspb.CALLBACK_STATE_SUCCEEDED
-	default:
-		return nil, serviceerror.NewInternalf("unknown callback state: %v", cb.Status)
+	state, err := cb.APIState()
+	if err != nil {
+		return nil, err
 	}
 
 	blockedReason := ""

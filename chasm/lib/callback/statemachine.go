@@ -8,6 +8,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -94,7 +95,8 @@ var TransitionFailed = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_FAILED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventFailed) error {
 		cb.recordAttempt(event.Time)
-		cb.LastAttemptFailure = &failurepb.Failure{
+
+		failure := &failurepb.Failure{
 			Message: event.Err.Error(),
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
@@ -102,6 +104,8 @@ var TransitionFailed = chasm.NewTransition(
 				},
 			},
 		}
+		cb.LastAttemptFailure = failure
+		cb.TerminalFailure = chasm.NewDataField(ctx, common.CloneProto(failure))
 		return nil
 	},
 )
