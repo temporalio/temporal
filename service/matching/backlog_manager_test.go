@@ -573,18 +573,18 @@ func (s *BacklogManagerTestSuite) TestGCResumesAfterAckDuringInFlightGC() {
 			CreateTime: timestamp.TimeNowPtrUtc(),
 		}))
 	}
-	s.Eventually(func() bool { return s.capturedTasksLen() == taskCount },
+	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == taskCount },
 		5*time.Second, 10*time.Millisecond)
 	tasks := s.capturedTasks()
 
 	// Ack the first task normally and let its gc pass settle, so gc starts caught up.
 	tasks[0].finish(taskFinishResult{consumedToken: true})
-	s.Eventually(func() bool {
+	await.RequireTrue(s.T(), func() bool {
 		tr.lock.Lock()
 		defer tr.lock.Unlock()
 		return !tr.inGC && tr.gcAckLevel == tr.ackLevel
 	}, 5*time.Second, 10*time.Millisecond)
-	s.EqualValues(taskCount-1, s.taskMgr.getTaskCount(queue))
+	s.Equal(taskCount-1, s.taskMgr.getTaskCount(queue))
 
 	// Now hold a gc pass open and ack the rest. Each of those acks advances the ack level but
 	// skips its own gc.
@@ -605,7 +605,7 @@ func (s *BacklogManagerTestSuite) TestGCResumesAfterAckDuringInFlightGC() {
 	// tasks acked in the meantime.
 	tr.doGC(inFlightAckLevel)
 
-	s.Eventually(func() bool { return s.taskMgr.getTaskCount(queue) == 0 },
+	await.RequireTruef(s.T(), func() bool { return s.taskMgr.getTaskCount(queue) == 0 },
 		5*time.Second, 10*time.Millisecond,
 		"gc should resume for tasks acked during the in-flight pass")
 }
