@@ -530,6 +530,11 @@ func (tr *priTaskReader) doGC(ackLevel int64) {
 	if wasComplete {
 		tr.gcAckLevel = ackLevel
 	}
+	// Tasks acked while this pass was running skipped their own gc because inGC was set,
+	// and gc is only otherwise triggered by completeTask. Re-check here so that the tail
+	// doesn't sit undeleted until the next task completes. shouldGCLocked still applies
+	// the batch size and interval limits, so this doesn't change gc pacing.
+	tr.maybeGCLocked()
 }
 
 func (tr *priTaskReader) doGCAt(ackLevel int64) (bool, error) {
