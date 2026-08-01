@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -453,7 +454,7 @@ func TestScheduleCHASM(t *testing.T) {
 func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
-	ctx := chasmContextFactory(t.Context())
+	ctx := chasmContextFactory(testcontext.For(t))
 	sid := testcore.RandomizeStr("sched-catchup-window-desc")
 	schedule := &schedulepb.Schedule{
 		Spec:     intervalSpec(noOpInterval),
@@ -476,17 +477,18 @@ func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {
 
 	updates := []struct {
 		name     string
-		window   time.Duration
+		window   *durationpb.Duration
 		expected time.Duration
 	}{
-		{name: "zero", expected: chasmscheduler.DefaultTweakables.DefaultCatchupWindow},
-		{name: "negative", window: -time.Second, expected: chasmscheduler.DefaultTweakables.DefaultCatchupWindow},
-		{name: "below minimum", window: time.Second, expected: chasmscheduler.DefaultTweakables.MinCatchupWindow},
-		{name: "above minimum", window: time.Hour, expected: time.Hour},
+		{name: "unset", expected: chasmscheduler.DefaultTweakables.DefaultCatchupWindow},
+		{name: "zero", window: durationpb.New(0), expected: chasmscheduler.DefaultTweakables.DefaultCatchupWindow},
+		{name: "negative", window: durationpb.New(-time.Second), expected: chasmscheduler.DefaultTweakables.DefaultCatchupWindow},
+		{name: "below minimum", window: durationpb.New(time.Second), expected: chasmscheduler.DefaultTweakables.MinCatchupWindow},
+		{name: "above minimum", window: durationpb.New(time.Hour), expected: time.Hour},
 	}
 	for _, tc := range updates {
 		t.Run(tc.name, func(t *testing.T) {
-			schedule.Policies.CatchupWindow = durationpb.New(tc.window)
+			schedule.Policies.CatchupWindow = tc.window
 			_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
 				Namespace:  s.Namespace().String(),
 				ScheduleId: sid,
