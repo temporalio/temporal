@@ -411,7 +411,10 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 		trace    []model.Event
 		expected activityTerminalOutcome
 	}{
+		// Terminal status FAILED
 		{
+			// Terminal status FAILED; there were no more retries due to non-retryable failure from
+			// worker, despite a second attempt being available.
 			name:  "NonRetryableFailure",
 			cfg:   activityConfig{MaxAttempts: 2},
 			trace: []model.Event{model.Poll, model.FailNonRetryably},
@@ -421,6 +424,8 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			},
 		},
 		{
+			// Terminal status FAILED; there were no more retries due to retries exhausted, despite
+			// retryable failure from worker.
 			name:  "MaximumAttemptsReachedAfterFailure",
 			cfg:   activityConfig{MaxAttempts: 1},
 			trace: []model.Event{model.Poll, model.FailRetryably},
@@ -430,6 +435,9 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			},
 		},
 		{
+			// Terminal status FAILED; there were no more retries due to timeout: the retry backoff
+			// would run past the schedule-to-close deadline, so server times it out without
+			// waiting.
 			name: "FailureRetryPreventedByScheduleToClose",
 			cfg: activityConfig{
 				RetryInterval:   activityLongDuration,
@@ -442,6 +450,8 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			},
 		},
 		{
+			// Terminal status FAILED; there were no more retries due to cancel-requested; retries
+			// are also exhausted, but cancellation has precedence as the reason.
 			name:  "CancelRequestedBeforeFailure",
 			cfg:   activityConfig{MaxAttempts: 1},
 			trace: []model.Event{model.Poll, model.RequestCancel, model.FailRetryably},
@@ -450,7 +460,10 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 				retryState: enumspb.RETRY_STATE_CANCEL_REQUESTED,
 			},
 		},
+		// Terminal status TIMED_OUT
 		{
+			// Terminal status TIMED_OUT; there were no more retries due to timeout, because no
+			// worker polled hence schedule-to-start timeout.
 			name:  "ScheduleToStartTimeout",
 			trace: []model.Event{model.ScheduleToStartElapses},
 			expected: activityTerminalOutcome{
@@ -459,6 +472,8 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			},
 		},
 		{
+			// Terminal status TIMED_OUT; there were no more retries due to timeout, because worker
+			// held on to attempt until schedule-to-close fired.
 			name:  "ScheduleToCloseTimeout",
 			trace: []model.Event{model.Poll, model.ScheduleToCloseElapses},
 			expected: activityTerminalOutcome{
@@ -467,6 +482,8 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			},
 		},
 		{
+			// Terminal status TIMED_OUT; there were no more retries due to retries exhausted,
+			// despite the start-to-close timeout being retryable.
 			name:  "MaximumAttemptsReachedAfterAttemptTimeout",
 			cfg:   activityConfig{MaxAttempts: 1},
 			trace: []model.Event{model.Poll, model.StartToCloseElapses},
@@ -476,6 +493,9 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			},
 		},
 		{
+			// Similar to FailureRetryPreventedByScheduleToClose, but we cause it to terminate in
+			// TIMED_OUT by letting start-to-close elapse (we can't use an explicit
+			// model.StartToCloseElapses in the trace because the two drivers see it differently)
 			name: "AttemptTimeoutRetryPreventedByScheduleToClose",
 			cfg: activityConfig{
 				RetryInterval:   activityLongDuration,
@@ -489,6 +509,9 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			},
 		},
 		{
+			// Terminal status TIMED_OUT; there were no more retries due to cancellation pending
+			// when the start-to-close deadline elapsed. Retries are also exhausted, but
+			// cancellation has precedence as the reason.
 			name:  "CancelRequestedBeforeAttemptTimeout",
 			cfg:   activityConfig{MaxAttempts: 1},
 			trace: []model.Event{model.Poll, model.RequestCancel, model.StartToCloseElapses},
@@ -498,6 +521,10 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			},
 		},
 		{
+			// Terminal status TIMED_OUT; there were no more retries due to cancellation pending
+			// when the schedule-to-close deadline elapses. No MaxAttempts is needed here, unlike
+			// the previous case (CancelRequestedBeforeAttemptTimeout): a schedule-to-close timeout
+			// closes the activity without consulting the retry policy at all.
 			name:  "CancelRequestedBeforeScheduleToCloseTimeout",
 			trace: []model.Event{model.Poll, model.RequestCancel, model.ScheduleToCloseElapses},
 			expected: activityTerminalOutcome{
