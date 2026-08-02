@@ -353,9 +353,9 @@ func (s *activityParityTestSuite) TestCompleteByID() {
 			trace: []model.Event{model.Pause, model.CompleteByID},
 		},
 	}
+	env := newActivityParityEnv(s.T())
 	for _, tc := range testCases {
 		s.Run(tc.name, func(s *activityParityTestSuite) {
-			env := newActivityParityEnv(s.T())
 			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 				t := s.T()
 				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, newWFADriver(t, env, cfg).driveTrace(t, tc.trace).terminalStatus(t))
