@@ -237,7 +237,13 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 		return conn
 	}
 	conn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
-	d.remoteFrontendGRPCConns[rpcAddress] = conn
+	// dial() only returns nil after calling logger.Fatal, which terminates the
+	// process. Avoid caching a nil connection in case that ever changes (e.g.
+	// under a non-fatal test logger), which would otherwise permanently wedge
+	// this address.
+	if conn != nil {
+		d.remoteFrontendGRPCConns[rpcAddress] = conn
+	}
 	return conn
 }
 
