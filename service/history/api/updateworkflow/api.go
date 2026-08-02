@@ -341,6 +341,8 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 			tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
 			tag.WorkflowID(u.wfKey.WorkflowID),
 			tag.WorkflowRunID(u.wfKey.RunID),
+			tag.WorkflowTaskQueueName(u.taskQueue.GetName()),
+			tag.WorkflowScheduledEventID(u.scheduledEventID),
 			tag.Error(err))
 	}
 	if err != nil {
