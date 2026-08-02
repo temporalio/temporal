@@ -11,11 +11,17 @@ type EventType int
 const (
 	// RPC events
 	PollType EventType = iota
+	HeartbeatType
+	RespondCompletedType
+	RespondCompletedByIDType
 	RespondFailedType
 	RespondCanceledType
 	RequestCancelType
+	TerminateType
 	PauseType
+	UnpauseType
 	ResetType
+	UpdateOptionsType
 
 	// Timer events
 
@@ -41,11 +47,19 @@ type Event struct {
 // Canonical Event values for the variants frequently used in traces
 var (
 	Poll                   = Event{Type: PollType}
+	Heartbeat              = Event{Type: HeartbeatType}
+	Complete               = Event{Type: RespondCompletedType}
+	CompleteByID           = Event{Type: RespondCompletedByIDType}
 	FailRetryably          = Event{Type: RespondFailedType, Retryable: true}
+	FailNonRetryably       = Event{Type: RespondFailedType, Retryable: false}
 	RespondCanceled        = Event{Type: RespondCanceledType}
 	RequestCancel          = Event{Type: RequestCancelType}
+	Terminate              = Event{Type: TerminateType}
 	Pause                  = Event{Type: PauseType}
 	ResetKeepPaused        = Event{Type: ResetType, KeepPaused: true}
+	Unpause                = Event{Type: UnpauseType}
+	Reset                  = Event{Type: ResetType}
+	UpdateOptions          = Event{Type: UpdateOptionsType}
 	StartToCloseElapses    = Event{Type: StartToCloseElapsesType}
 	ScheduleToCloseElapses = Event{Type: ScheduleToCloseElapsesType}
 	ScheduleToStartElapses = Event{Type: ScheduleToStartElapsesType}
@@ -59,16 +73,28 @@ func (t EventType) String() string {
 	switch t {
 	case PollType:
 		return "Poll"
+	case HeartbeatType:
+		return "Heartbeat"
+	case RespondCompletedType:
+		return "RespondCompleted"
+	case RespondCompletedByIDType:
+		return "RespondCompletedByID"
 	case RespondFailedType:
 		return "RespondFailed"
 	case RespondCanceledType:
 		return "RespondCanceled"
 	case RequestCancelType:
 		return "RequestCancel"
+	case TerminateType:
+		return "Terminate"
 	case PauseType:
 		return "Pause"
+	case UnpauseType:
+		return "Unpause"
 	case ResetType:
 		return "Reset"
+	case UpdateOptionsType:
+		return "UpdateOptions"
 	case ScheduleToStartElapsesType:
 		return "ScheduleToStartElapses"
 	case ScheduleToCloseElapsesType:

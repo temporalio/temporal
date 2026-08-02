@@ -181,8 +181,9 @@ var TransitionStarted = chasm.NewTransition(
 )
 
 type completeEvent struct {
-	req            *historyservice.RespondActivityTaskCompletedRequest
-	metricsHandler metrics.Handler
+	req             *historyservice.RespondActivityTaskCompletedRequest
+	baseHandler     metrics.Handler
+	enrichedHandler metrics.Handler
 }
 
 // TransitionCompleted transitions to Completed status. SCHEDULED and PAUSED are included because
@@ -221,7 +222,7 @@ var TransitionCompleted = chasm.NewTransition(
 				},
 			}
 
-			a.emitOnCompletedMetrics(ctx, event.metricsHandler, attemptWasStarted)
+			a.emitOnCompletedMetrics(ctx, event.baseHandler, event.enrichedHandler, req.GetResult(), attemptWasStarted)
 
 			return nil
 		})
@@ -229,8 +230,9 @@ var TransitionCompleted = chasm.NewTransition(
 )
 
 type failedEvent struct {
-	req            *historyservice.RespondActivityTaskFailedRequest
-	metricsHandler metrics.Handler
+	req             *historyservice.RespondActivityTaskFailedRequest
+	baseHandler     metrics.Handler
+	enrichedHandler metrics.Handler
 }
 
 // TransitionFailed transitions to Failed status.
@@ -258,7 +260,7 @@ var TransitionFailed = chasm.NewTransition(
 				return err
 			}
 
-			a.emitOnFailedMetrics(ctx, event.metricsHandler)
+			a.emitOnFailedMetrics(ctx, event.baseHandler, event.enrichedHandler, req.GetFailure())
 
 			return nil
 		})
@@ -373,7 +375,6 @@ type timeoutEvent struct {
 	metricsHandler metrics.Handler
 	timeoutType    enumspb.TimeoutType
 	retryState     enumspb.RetryState
-	fromStatus     activitypb.ActivityExecutionStatus
 }
 
 // TransitionTimedOut transitions to TimedOut status.
@@ -391,6 +392,7 @@ var TransitionTimedOut = chasm.NewTransition(
 		timeoutType := event.timeoutType
 
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			priorAttemptFailure := a.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure()
 			var err error
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -399,14 +401,17 @@ var TransitionTimedOut = chasm.NewTransition(
 					ctx,
 					timeoutType,
 					fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
+					priorAttemptFailure,
 				)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
 				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
+				failure.Cause = priorAttemptFailure
 				err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
 			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 				failure := createHeartbeatTimeoutFailure()
 				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
+				failure.Cause = priorAttemptFailure
 				err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
 			default:
 				err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
@@ -419,12 +424,13 @@ var TransitionTimedOut = chasm.NewTransition(
 					ctx,
 					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 					common.FailureReasonActivityRetryScheduleToCloseTimeout,
+					priorAttemptFailure,
 				); err != nil {
 					return err
 				}
 			}
 
-			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
+			a.emitOnTimedOutMetrics(event.metricsHandler, timeoutType)
 
 			return nil
 		})
@@ -511,8 +517,8 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 )
 
 type resetEvent struct {
-	resetTime time.Time
-	handler   metrics.Handler
+	resetTime      time.Time
+	metricsHandler metrics.Handler
 }
 
 // TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to

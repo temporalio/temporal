@@ -3198,9 +3198,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.Priority = event.Priority
 
 	if tsc, stateProp := event.GetTimeSkippingConfig(), event.GetTimeSkippingStatePropagation(); tsc != nil || stateProp.GetInitialSkippedDuration().AsDuration() > 0 {
-		if err := ms.initTimeSkippingInfo(tsc, stateProp); err != nil {
-			return err
-		}
+		ms.initTimeSkippingInfo(tsc, stateProp)
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -5950,13 +5948,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		tsc := attributes.GetTimeSkippingConfig()
 		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
 		if tsi == nil {
-			if err := ms.initTimeSkippingInfo(tsc, nil); err != nil {
-				return err
-			}
+			ms.initTimeSkippingInfo(tsc, nil)
 		} else {
-			if err := ms.updateTimeSkippingInfo(tsc); err != nil {
-				return err
-			}
+			ms.updateTimeSkippingInfo(tsc)
 		}
 	}
 
