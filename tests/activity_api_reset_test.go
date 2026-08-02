@@ -424,15 +424,26 @@ func requirePayload(t require.TestingT, expected string, pls *commonpb.Payloads)
 	require.Equal(t, expected, actual)
 }
 
+// TestActivityReset_HeartbeatDetails covers the default: a reset rewinds the attempt count but
+// keeps the heartbeat checkpoint. That is reset_heartbeat unset on the legacy API, and the only
+// behavior of the execution API, which has no such flag.
 func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
-	// Latest reported heartbeat on activity should be available throughout workflow execution or until activity succeeds.
-	// The legacy API clears it only when reset is called with the "reset-heartbeat" flag; the execution API
-	// has no such flag and always keeps it.
-	// 1. Start workflow with single activity
-	// 2. First invocation of activity sets heartbeat details and fails upon request.
-	// 3. Second invocation triggers waits to be triggered, and then send new heartbeat until requested to finish.
-	// 6. Once workflow completes -- we're done.
+	s.runResetHeartbeatDetails(false, true)
+}
 
+// TestActivityReset_HeartbeatDetailsWithResetHeartbeatFlag covers the opt-in clear, which only the
+// legacy API can express.
+func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetailsWithResetHeartbeatFlag() {
+	if s.apiName != "legacy-api" {
+		s.T().Skip("only the legacy ResetActivity API has a reset_heartbeat flag")
+	}
+	s.runResetHeartbeatDetails(true, false)
+}
+
+// runResetHeartbeatDetails runs an activity that heartbeats "first", resets it mid-attempt, then
+// lets that attempt fail so the reset lands on the retry, and checks whether the checkpoint
+// survived. The retried attempt heartbeats "second" to show heartbeating still works afterwards.
+func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbeat, expectPreserved bool) {
 	activityCompleteCh := make(chan struct{})
 	var activityIteration atomic.Int32
 	var activityShouldBreak atomic.Bool
@@ -471,7 +482,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 	s.SdkWorker().RegisterActivity(activityFn)
 	s.SdkWorker().RegisterWorkflow(workflowFn)
 
-	wfId := "functional-test-heartbeat-details-after-reset"
+	wfId := testcore.RandomizeStr("wfid-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 wfId,
 		TaskQueue:          s.TaskQueue(),
@@ -495,8 +506,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 		require.Equal(t, int32(0), activityIteration.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
-	// reset the activity, with heartbeats
-	s.NoError(s.resetFn(ctx, workflowRun.GetID(), activityId, true, false))
+	s.NoError(s.resetFn(ctx, workflowRun.GetID(), activityId, resetHeartbeat, false))
 
 	activityIteration.Store(1)
 	activityShouldBreak.Store(true)
@@ -509,8 +519,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 		ap := description.PendingActivities[0]
 
 		require.Equal(t, int32(2), ap.Attempt)
-		if s.apiName == "execution-api" {
-			// ResetActivityExecution has no reset_heartbeat flag: it always keeps the checkpoint.
+		if expectPreserved {
 			requirePayload(t, "first", ap.GetHeartbeatDetails())
 		} else {
 			require.Nil(t, ap.HeartbeatDetails)
