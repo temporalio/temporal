@@ -13,6 +13,7 @@ const (
 	PollType EventType = iota
 	HeartbeatType
 	RespondCompletedType
+	RespondCompletedByIDType
 	RespondFailedType
 	RespondCanceledType
 	RequestCancelType
@@ -48,6 +49,7 @@ var (
 	Poll                   = Event{Type: PollType}
 	Heartbeat              = Event{Type: HeartbeatType}
 	Complete               = Event{Type: RespondCompletedType}
+	CompleteByID           = Event{Type: RespondCompletedByIDType}
 	FailRetryably          = Event{Type: RespondFailedType, Retryable: true}
 	FailNonRetryably       = Event{Type: RespondFailedType, Retryable: false}
 	RespondCanceled        = Event{Type: RespondCanceledType}
@@ -75,6 +77,8 @@ func (t EventType) String() string {
 		return "Heartbeat"
 	case RespondCompletedType:
 		return "RespondCompleted"
+	case RespondCompletedByIDType:
+		return "RespondCompletedByID"
 	case RespondFailedType:
 		return "RespondFailed"
 	case RespondCanceledType:

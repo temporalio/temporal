@@ -270,6 +270,12 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 			Result: payloads.EncodeString("result"),
 		})
 		return err
+	case model.RespondCompletedByIDType:
+		_, err := fc.RespondActivityTaskCompletedById(a.d.ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+			Namespace: ns, WorkflowId: a.workflowID, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
+			Result: payloads.EncodeString("result"),
+		})
+		return err
 	case model.RespondFailedType:
 		_, err := fc.RespondActivityTaskFailed(a.d.ctx, &workflowservice.RespondActivityTaskFailedRequest{
 			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
