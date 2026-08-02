@@ -426,7 +426,8 @@ func requirePayload(t require.TestingT, expected string, pls *commonpb.Payloads)
 
 func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 	// Latest reported heartbeat on activity should be available throughout workflow execution or until activity succeeds.
-	// If activity was reset with "reset-heartbeat" flag, when returned heartbeat details should be nil.
+	// The legacy API clears it only when reset is called with the "reset-heartbeat" flag; the execution API
+	// has no such flag and always keeps it.
 	// 1. Start workflow with single activity
 	// 2. First invocation of activity sets heartbeat details and fails upon request.
 	// 3. Second invocation triggers waits to be triggered, and then send new heartbeat until requested to finish.
@@ -508,8 +509,12 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 		ap := description.PendingActivities[0]
 
 		require.Equal(t, int32(2), ap.Attempt)
-		// make sure heartbeat was reset
-		require.Nil(t, ap.HeartbeatDetails)
+		if s.apiName == "execution-api" {
+			// ResetActivityExecution has no reset_heartbeat flag: it always keeps the checkpoint.
+			requirePayload(t, "first", ap.GetHeartbeatDetails())
+		} else {
+			require.Nil(t, ap.HeartbeatDetails)
+		}
 		require.Equal(t, int32(1), activityIteration.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 

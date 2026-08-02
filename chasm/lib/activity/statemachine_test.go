@@ -1023,7 +1023,7 @@ func TestTransitionCanceled(t *testing.T) {
 	}
 }
 
-func TestTransitionResetClearsHeartbeat(t *testing.T) {
+func TestTransitionResetPreservesHeartbeat(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	attemptState := &activitypb.ActivityAttemptState{Count: 2}
@@ -1050,11 +1050,11 @@ func TestTransitionResetClearsHeartbeat(t *testing.T) {
 
 	err := TransitionReset.Apply(act, ctx, resetEvent{resetTime: defaultTime, metricsHandler: metrics.NoopMetricsHandler})
 	require.NoError(t, err)
-	require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
-	require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
+	protorequire.ProtoEqual(t, payloads.EncodeString("heartbeat-details"), act.LastHeartbeat.Get(ctx).GetDetails())
+	require.Equal(t, timestamppb.New(defaultTime), act.LastHeartbeat.Get(ctx).GetRecordedTime())
 }
 
-func TestDeferredResetClearsHeartbeat(t *testing.T) {
+func TestDeferredResetPreservesHeartbeat(t *testing.T) {
 	testCases := []struct {
 		name              string
 		transition        chasm.Transition[activitypb.ActivityExecutionStatus, *Activity, rescheduleEvent]
@@ -1114,8 +1114,8 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 			require.Equal(t, tc.expectedStatus, act.Status)
 			require.Equal(t, int32(1), attemptState.Count)
 			require.Nil(t, attemptState.GetCurrentRetryInterval())
-			require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
-			require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
+			protorequire.ProtoEqual(t, payloads.EncodeString("heartbeat-details"), act.LastHeartbeat.Get(ctx).GetDetails())
+			require.Equal(t, timestamppb.New(defaultTime), act.LastHeartbeat.Get(ctx).GetRecordedTime())
 			require.Len(t, ctx.Tasks, tc.expectedTaskCount)
 		})
 	}
