@@ -458,8 +458,8 @@ func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.Re
 					WorkflowId: frontendReq.GetWorkflowId(),
 					RunId:      frontendReq.GetRunId(),
 				},
-				Activity:               &workflowservice.ResetActivityRequest_Id{Id: frontendReq.GetActivityId()},
-				ResetHeartbeat:         true,
+				Activity: &workflowservice.ResetActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				// ResetActivityExecution has no reset_heartbeat flag and keeps the checkpoint.
 				RestoreOriginalOptions: frontendReq.GetRestoreOriginalOptions(),
 				KeepPaused:             frontendReq.GetKeepPaused(),
 				Jitter:                 frontendReq.GetJitter(),

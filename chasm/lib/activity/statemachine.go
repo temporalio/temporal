@@ -585,7 +585,6 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 		attempt := a.LastAttempt.Get(ctx)
 		a.ResetShouldPause = false
 		a.applyDeferredOptionRestore(ctx)
-		a.clearHeartbeatDetails(ctx)
 		attempt.Count = 1
 		attempt.Stamp++
 		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false); err != nil {
@@ -614,7 +613,6 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 
 		a.ResetShouldPause = false
 		a.applyDeferredOptionRestore(ctx)
-		a.clearHeartbeatDetails(ctx)
 
 		attempt.Count = 1
 		attempt.Stamp++
