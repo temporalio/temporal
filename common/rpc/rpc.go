@@ -62,9 +62,10 @@ type RPCFactory struct {
 	// remoteFrontendGRPCConns caches connections created by
 	// CreateRemoteFrontendGRPCConnection, keyed by rpcAddress, so that repeated
 	// calls for the same remote cluster reuse a connection instead of leaking
-	// one per call.
-	remoteFrontendGRPCConnsLock sync.Mutex
-	remoteFrontendGRPCConns     map[string]*grpc.ClientConn
+	// one per call. A sync.Map is used instead of a mutex-guarded map so that
+	// lookups for one rpcAddress never block on dialing (or on the TLS config
+	// provider's disk I/O) for a different, unrelated rpcAddress.
+	remoteFrontendGRPCConns sync.Map // map[string]*grpc.ClientConn
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -110,7 +111,6 @@ func NewFactory(
 		authHeaderName:           authHeaderName,
 		requireRemoteClusterAuth: requireRemoteClusterAuth,
 		monitor:                  monitor,
-		remoteFrontendGRPCConns:  make(map[string]*grpc.ClientConn),
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
@@ -230,21 +230,28 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 // calls to rpcAddress, dialing and caching one on first use. Connections are reused for
 // the lifetime of the process rather than being re-dialed on every call.
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
-	d.remoteFrontendGRPCConnsLock.Lock()
-	defer d.remoteFrontendGRPCConnsLock.Unlock()
-
-	if conn, ok := d.remoteFrontendGRPCConns[rpcAddress]; ok {
-		return conn
+	if conn, ok := d.remoteFrontendGRPCConns.Load(rpcAddress); ok {
+		return conn.(*grpc.ClientConn)
 	}
+
 	conn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
 	// dial() only returns nil after calling logger.Fatal, which terminates the
 	// process. Avoid caching a nil connection in case that ever changes (e.g.
 	// under a non-fatal test logger), which would otherwise permanently wedge
 	// this address.
-	if conn != nil {
-		d.remoteFrontendGRPCConns[rpcAddress] = conn
+	if conn == nil {
+		return nil
 	}
-	return conn
+
+	// Dialing happens outside of any lock, so two goroutines can race to dial
+	// the same rpcAddress concurrently. LoadOrStore resolves the race: the
+	// loser closes its redundant connection and both callers converge on the
+	// same cached one.
+	actual, loaded := d.remoteFrontendGRPCConns.LoadOrStore(rpcAddress, conn)
+	if loaded {
+		_ = conn.Close()
+	}
+	return actual.(*grpc.ClientConn)
 }
 
 func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
@@ -254,6 +261,7 @@ func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.C
 		hostname, _, err2 := net.SplitHostPort(rpcAddress)
 		if err2 != nil {
 			d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err2))
+			return nil
 		}
 		tlsClientConfig, err = d.tlsFactory.GetRemoteClusterClientConfig(hostname)
 		if err != nil {

@@ -40,7 +40,11 @@ func TestCreateRemoteFrontendGRPCConnection_CachedPerAddress(t *testing.T) {
 	})
 }
 
-func TestCreateRemoteFrontendGRPCConnection_ConcurrentSameAddressDialsOnce(t *testing.T) {
+// TestCreateRemoteFrontendGRPCConnection_ConcurrentSameAddressConverges verifies that
+// concurrent first-time callers for the same rpcAddress all end up sharing one cached
+// connection, even though the LoadOrStore-based cache allows redundant concurrent dials
+// (the losing dials are closed rather than serialized behind a lock).
+func TestCreateRemoteFrontendGRPCConnection_ConcurrentSameAddressConverges(t *testing.T) {
 	f := NewFactory(nil, primitives.FrontendService, log.NewNoopLogger(),
 		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil)
 
@@ -57,7 +61,7 @@ func TestCreateRemoteFrontendGRPCConnection_ConcurrentSameAddressDialsOnce(t *te
 	wg.Wait()
 
 	for i := 1; i < goroutines; i++ {
-		require.Same(t, conns[0], conns[i], "expected all concurrent callers to observe the same cached connection")
+		require.Same(t, conns[0], conns[i], "expected all concurrent callers to converge on the same cached connection")
 	}
 	t.Cleanup(func() { _ = conns[0].Close() })
 }
