@@ -908,14 +908,19 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	newReqID := req.GetRequestId()
 	existingReqID := a.GetCancelState().GetRequestId()
 
-	// If already in cancel requested state, fail if request ID is different, else no-op
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
-		if existingReqID != newReqID {
-			return nil, serviceerror.NewFailedPrecondition(
-				fmt.Sprintf("cancellation already requested with request ID %s", existingReqID))
-		}
-
+	// Deduplicate first because a retry may arrive after the activity transitions to Canceled.
+	if newReqID != "" && existingReqID == newReqID {
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
+	}
+
+	if a.isTerminal() {
+		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+	}
+
+	// Reject a second cancellation request with a different request ID.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return nil, serviceerror.NewFailedPrecondition(
+			fmt.Sprintf("cancellation already requested with request ID %s", existingReqID))
 	}
 
 	hasAttemptInProgress := a.hasAttemptInProgress()
@@ -1289,9 +1294,11 @@ func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(
 	ctx chasm.MutableContext,
 	timeoutType enumspb.TimeoutType,
 	message string,
+	cause *failurepb.Failure,
 ) error {
 	failure := &failurepb.Failure{
 		Message: message,
+		Cause:   cause,
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 				TimeoutType:          timeoutType,
