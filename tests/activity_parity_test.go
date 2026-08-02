@@ -336,7 +336,8 @@ func (s *activityParityTestSuite) TestCancel() {
 	})
 }
 
-// TestCompleteByID tests force-completing an activity by ID.
+// Force-completing an activity by ID must work whenever no attempt is in progress: while Scheduled
+// and never started, and while Paused before any worker picked it up.
 func (s *activityParityTestSuite) TestCompleteByID() {
 	type testCase struct {
 		name  string
