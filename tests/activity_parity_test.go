@@ -362,9 +362,9 @@ func (s *activityParityTestSuite) TestCompleteByID() {
 			})
 			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 				t := s.T()
-				activity := newSAADriver(t, env, cfg).driveTrace(t, tc.trace)
-				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.terminalStatus(t))
-				require.NotNil(t, activity.describe(t).GetInfo().GetLastStartedTime(),
+				a := newSAADriver(t, env, cfg).driveTrace(t, tc.trace)
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminalStatus(t))
+				require.NotNil(t, a.describe(t).GetInfo().GetLastStartedTime(),
 					"a force-completed activity must still record a started time, even though no worker ever started it")
 			})
 		})
