@@ -267,19 +267,23 @@ func recordActivityTaskStarted(
 		return nil, rejectCodeUndefined, err
 	}
 
-	scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
-	metrics.TaskScheduleToStartLatency.With(
-		metrics.GetPerTaskQueuePartitionTypeScope(
-			taggedMetrics,
-			namespaceName,
-			// passing the root partition all the time as we don't care about partition ID in this metric
-			tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(),
-				ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
-			shardContext.GetConfig().BreakdownMetricsByTaskQueue(namespaceName,
-				ai.GetTaskQueue(),
-				enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-		),
-	).Record(scheduleToStartLatency)
+	// A schedule time is always known for an attempt that a worker has started; skip the metric
+	// rather than report a latency measured from the zero time.
+	if ai.GetScheduledTime() != nil {
+		scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
+		metrics.TaskScheduleToStartLatency.With(
+			metrics.GetPerTaskQueuePartitionTypeScope(
+				taggedMetrics,
+				namespaceName,
+				// passing the root partition all the time as we don't care about partition ID in this metric
+				tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(),
+					ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
+				shardContext.GetConfig().BreakdownMetricsByTaskQueue(namespaceName,
+					ai.GetTaskQueue(),
+					enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+			),
+		).Record(scheduleToStartLatency)
+	}
 
 	response.Clock = clock
 

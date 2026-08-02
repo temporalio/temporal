@@ -293,9 +293,11 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		}
 		return nil, err
 	}
-	metrics.TaskScheduleToStartLatency.With(a.taskScheduleToStartMetricsHandler(ctx)).Record(
-		lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
-	)
+	if dispatchTime != nil {
+		metrics.TaskScheduleToStartLatency.With(a.taskScheduleToStartMetricsHandler(ctx)).Record(
+			lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
+		)
+	}
 	return a.GenerateRecordActivityTaskStartedResponse(ctx, request.GetPollRequest().GetNamespace())
 }
 
