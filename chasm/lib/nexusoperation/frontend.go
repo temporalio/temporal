@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -49,13 +50,14 @@ func NewFrontendHandler(
 	endpointRegistry commonnexus.EndpointRegistry,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
+	callbackValidator callback.Validator,
 ) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
 		config:            config,
 		namespaceRegistry: namespaceRegistry,
 		endpointRegistry:  endpointRegistry,
-		validator:         newValidator(config, logger, saMapperProvider, saValidator),
+		validator:         newValidator(config, logger, saMapperProvider, saValidator, callbackValidator),
 	}
 }
 
@@ -72,7 +74,7 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeStartRequest(req); err != nil {
+	if err := h.validator.validateAndNormalizeStartRequest(ctx, req); err != nil {
 		return nil, err
 	}
 

@@ -6,6 +6,7 @@ import (
 	"text/template"
 	"time"
 
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
@@ -33,6 +34,12 @@ var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableStandalone",
 	false,
 	`Toggles standalone Nexus operation functionality on the server.`,
+)
+
+var EnableNexusCallbacks = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.enableNexusCallbacks",
+	false,
+	`Allows attaching Nexus completion callbacks to standalone Nexus operation executions.`,
 )
 
 var EnableChasmWorkflowOperations = dynamicconfig.NewNamespaceBoolSetting(
@@ -243,6 +250,8 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 type Config struct {
 	Enabled                                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableNexusCallbacks                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumHistoryShards                           int32
@@ -275,6 +284,8 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 	return &Config{
 		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
+		EnableNexusCallbacks:               EnableNexusCallbacks.Get(dc),
+		MaxCallbacksPerExecution:           callback.MaxPerExecution.Get(dc),
 		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
