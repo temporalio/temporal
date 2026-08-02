@@ -44,7 +44,7 @@ type Callback struct {
 func NewCallback(
 	requestID string,
 	registrationTime *timestamppb.Timestamp,
-	state *callbackspb.CallbackState,
+	_ *callbackspb.CallbackState,
 	cb *callbackspb.Callback,
 ) *Callback {
 	return &Callback{
