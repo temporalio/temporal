@@ -215,7 +215,7 @@ func (s *activityParityTestSuite) TestNilFailureExhaustedClosesWithConsumableOut
 	trace := []model.Event{model.Poll, model.FailWithoutFailure}
 
 	h := newSAADriver(t, env, cfg).driveTrace(t, trace)
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, h.terminalStatus(t))
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, h.terminalOutcome(t).status)
 	require.NotNil(t, h.describe(t).GetOutcome().GetFailure(),
 		"a standalone activity that failed without worker-supplied details must still expose a terminal failure")
 }
