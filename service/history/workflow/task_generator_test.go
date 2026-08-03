@@ -1591,6 +1591,118 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 	}
 }
 
+// TestTaskGeneratorImpl_GenerateTimeSkippingFastForwardTimerTask covers the method the task
+// refresher calls directly on a full refresh, where the per-component helpers cover every other
+// timer family. Unlike RegenerateTimerTasksForTimeSkipping it is not gated on accumulated skip.
+func TestTaskGeneratorImpl_GenerateTimeSkippingFastForwardTimerTask(t *testing.T) {
+	t.Parallel()
+
+	fastForwardTarget := time.Now().UTC().Add(2 * time.Hour)
+	fastForwardVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 42, TransitionCount: 7}
+	const archetypeID = uint32(7)
+
+	pendingFastForward := func(accumulated time.Duration) *persistencespb.TimeSkippingInfo {
+		return &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)},
+			},
+			AccumulatedSkippedDuration: durationpb.New(accumulated),
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(fastForwardTarget),
+			},
+			FastForwardInfoLastUpdateVersionedTransition: fastForwardVT,
+		}
+	}
+
+	for _, tc := range []struct {
+		name     string
+		tsi      *persistencespb.TimeSkippingInfo
+		wantTask bool
+	}{
+		{
+			name:     "PendingFastForward/Emits",
+			tsi:      pendingFastForward(time.Hour),
+			wantTask: true,
+		},
+		{
+			// The refresher path must not lose the wake-up before the first skip, which is
+			// why this method deliberately omits the parent's accumulated-skip early return.
+			name:     "ZeroAccumulatedSkip/StillEmits",
+			tsi:      pendingFastForward(0),
+			wantTask: true,
+		},
+		{
+			name:     "NoTimeSkippingInfo/NoTask",
+			tsi:      nil,
+			wantTask: false,
+		},
+		{
+			name: "AlreadyReached/NoTask",
+			tsi: func() *persistencespb.TimeSkippingInfo {
+				tsi := pendingFastForward(time.Hour)
+				tsi.FastForwardInfo.HasReached = true
+				return tsi
+			}(),
+			wantTask: false,
+		},
+		{
+			name: "Disabled/NoTask",
+			tsi: func() *persistencespb.TimeSkippingInfo {
+				tsi := pendingFastForward(time.Hour)
+				tsi.Config.Enabled = false
+				return tsi
+			}(),
+			wantTask: false,
+		},
+		{
+			name: "NoFastForwardInfo/NoTask",
+			tsi: func() *persistencespb.TimeSkippingInfo {
+				tsi := pendingFastForward(time.Hour)
+				tsi.FastForwardInfo = nil
+				return tsi
+			}(),
+			wantTask: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: tc.tsi,
+			}).AnyTimes()
+			mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			mockChasmTree := historyi.NewMockChasmTree(ctrl)
+			mockChasmTree.EXPECT().ArchetypeID().Return(archetypeID).AnyTimes()
+			mutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
+
+			var captured []tasks.Task
+			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+				captured = append(captured, ts...)
+			}).AnyTimes()
+
+			taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
+			require.NoError(t, taskGenerator.GenerateTimeSkippingFastForwardTimerTask())
+
+			if !tc.wantTask {
+				require.Empty(t, captured)
+				return
+			}
+
+			require.Len(t, captured, 1)
+			task, ok := captured[0].(*tasks.TimeSkippingTimerTask)
+			require.True(t, ok, "expected *tasks.TimeSkippingTimerTask, got %T", captured[0])
+			require.Equal(t, tests.WorkflowKey, task.WorkflowKey)
+			require.Equal(t, fastForwardTarget, task.VisibilityTimestamp)
+			protorequire.ProtoEqual(t, fastForwardVT, task.VersionedTransition)
+			require.Equal(t, archetypeID, task.ArchetypeID)
+			require.Equal(t, int64(0), task.TaskID, "TaskID must be zero (set by shard)")
+		})
+	}
+}
+
 // TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer covers step (4)
 // of RegenerateTimerTasksForTimeSkipping: the backoff-timer regeneration that supports
 // start-with-delay, cron, retry, and CaN-with-backoff.
