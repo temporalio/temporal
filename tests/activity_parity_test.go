@@ -422,7 +422,7 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 2}
 
-	trace := []model.Event{model.Poll, {Type: model.RespondFailedType, Retryable: true, HasHeartbeatDetails: true}}
+	trace := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}
 	expected := activityMarshalPayloads(activityHeartbeatDetails)
 	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 		t := s.T()
@@ -437,7 +437,7 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 
 		// For SAA we additionally confirm that it's persisted even if the failure is terminal. WFA
 		// drops the pending activity from MS at this point.
-		terminal := []model.Event{model.Poll, {Type: model.RespondFailedType, Retryable: false, HasHeartbeatDetails: true}}
+		terminal := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: false}, HasHeartbeatDetails: true}}
 		require.Equal(t, expected,
 			d.driveTrace(t, terminal).activityInfo(t).LastHeartbeatDetails)
 	})
