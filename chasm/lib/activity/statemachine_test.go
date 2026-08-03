@@ -382,9 +382,7 @@ func TestTransitionStarted(t *testing.T) {
 	require.Equal(t, headers.ClientNameGoSDK, attemptState.SdkName)
 	require.Equal(t, temporal.SDKVersion, attemptState.SdkVersion)
 
-	// Verify last deployment version
 	deploymentVersion := attemptState.GetLastDeploymentVersion()
-	require.NotNil(t, deploymentVersion)
 	require.Equal(t, "test-deployment", deploymentVersion.GetDeploymentName())
 	require.Equal(t, "test-build-1", deploymentVersion.GetBuildId())
 
