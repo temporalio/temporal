@@ -77,6 +77,7 @@ func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
 					},
 				},
 			}
+			injectActivityContext(t, ctx) // needed for last test case
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
 					Status:                 tc.status,
