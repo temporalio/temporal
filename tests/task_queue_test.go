@@ -423,25 +423,17 @@ func (s *TaskQueueSuite) TestDescribeTaskQueue_RateLimitingActive() {
 
 	// Poll DescribeTaskQueue until RateLimitingActive is true.
 	// The rate limit is 1 RPS with 10 tasks, so rate limiting should kick in quickly.
-	s.Eventually(func() bool {
+	s.AwaitTruef(func() bool {
 		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     &taskqueuepb.TaskQueue{Name: activityTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-			ApiMode:       enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 			ReportStats:   true,
 		})
 		if err != nil {
 			return false
 		}
-		for _, typeInfo := range resp.GetVersionsInfo() {
-			for _, info := range typeInfo.GetTypesInfo() {
-				if info.GetStats().GetRateLimitingActive() {
-					return true
-				}
-			}
-		}
-		return false
+		return resp.GetStats().GetRateLimitingActive()
 	}, 10*time.Second, 200*time.Millisecond, "DescribeTaskQueue should report RateLimitingActive=true when rate limiting is active")
 }
 
