@@ -636,10 +636,8 @@ func (a *Activity) HandleFailed(
 }
 
 // isRetryableFailure reports whether a worker-reported activity failure should be retried. A nil
-// (omitted) failure is retryable, matching workflow activities (see
-// service/history/workflow/retry.go:isRetryable). Any other failure is retryable only when it is an
-// application failure that neither marks itself non-retryable nor names an error type the retry
-// policy lists as non-retryable.
+// failure is retryable. Only application failures are otherwise  retryable, unless the failure
+// marks itself non-retryable or its error type is listed in the retry policy's non-retryable types.
 func (a *Activity) isRetryableFailure(failure *failurepb.Failure) bool {
 	if failure == nil {
 		return true

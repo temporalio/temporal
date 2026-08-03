@@ -72,7 +72,7 @@ func (s *activityParityTestSuite) TestMetrics() {
 		{name: "TerminalTimeout", trace: []model.Event{model.Poll, model.StartToCloseElapses}, cfg: activityConfig{MaxAttempts: 1, StartToClose: activityShortTimeout}, anchor: metrics.ActivityTimeout.Name()},
 		{name: "RetryableTimeout", trace: []model.Event{model.Poll, model.StartToCloseElapses}, cfg: activityConfig{MaxAttempts: 2, StartToClose: activityShortTimeout}, anchor: metrics.ActivityTaskTimeout.Name()},
 		{name: "RetryableTaskFailure", trace: []model.Event{model.Poll, model.FailRetryably}, cfg: activityConfig{MaxAttempts: 2}},
-		{name: "RetryableTaskFailureWithHeartbeatDetails", trace: []model.Event{model.Poll, {Type: model.RespondFailedType, Retryable: true, HasHeartbeatDetails: true}}, cfg: activityConfig{MaxAttempts: 2}},
+		{name: "RetryableTaskFailureWithHeartbeatDetails", trace: []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}, cfg: activityConfig{MaxAttempts: 2}},
 		{name: "Heartbeat", trace: []model.Event{model.Poll, model.Heartbeat}, cfg: activityConfig{MaxAttempts: 1}},
 		{name: "Pause", trace: []model.Event{model.Poll, model.Pause}, cfg: activityConfig{MaxAttempts: 1}},
 		{name: "Unpause", trace: []model.Event{model.Poll, model.Pause, model.Unpause}, cfg: activityConfig{MaxAttempts: 1}},

@@ -45,8 +45,7 @@ type Event struct {
 	Failure             *Failure // RespondFailed: the failure to send, or nil to respond with no failure at all (as a worker may). A nil failure is retryable.
 }
 
-// Failure specifies the failure a RespondFailed event sends. Its zero value is the default failure
-// used now; a nil *Failure on the event means the worker responds with no failure at all.
+// Failure specifies the failure a RespondFailed event sends.
 type Failure struct {
 	Retryable bool // whether the failure is retryable. Whether it actually retries also depends on the retry policy.
 }
@@ -125,9 +124,9 @@ func (e Event) String() string {
 	switch e.Type {
 	case RespondFailedType:
 		if e.Failure == nil {
-			return fmt.Sprintf("%s[omitted]", e.Type.String())
+			return fmt.Sprintf("%s[failureOmitted,heartbeatDetails=%v]", e.Type.String(), e.HasHeartbeatDetails)
 		}
-		return fmt.Sprintf("%s[retryable=%v]", e.Type.String(), e.Failure.Retryable)
+		return fmt.Sprintf("%s[retryable=%v,heartbeatDetails=%v]", e.Type.String(), e.Failure.Retryable, e.HasHeartbeatDetails)
 	case ResetType:
 		return fmt.Sprintf("%s[keepPaused=%v]", e.Type.String(), e.KeepPaused)
 	default:
