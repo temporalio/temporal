@@ -602,7 +602,16 @@ func (a *Activity) HandleFailed(
 	if err != nil {
 		return nil, err
 	}
-	failure := event.Request.GetFailedRequest().GetFailure()
+	failedRequest := event.Request.GetFailedRequest()
+	failure := failedRequest.GetFailure()
+
+	if details := failedRequest.GetLastHeartbeatDetails(); details != nil {
+		heartbeat := a.getOrCreateLastHeartbeat(ctx)
+		heartbeat.Details = details
+		heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
+		heartbeat.TotalHeartbeatCount++
+		a.emitHeartbeatMetrics(ctx, details)
+	}
 
 	appFailure := failure.GetApplicationFailureInfo()
 	isRetryable := appFailure != nil &&
@@ -621,6 +630,7 @@ func (a *Activity) HandleFailed(
 
 	if err := TransitionFailed.Apply(a, ctx, failedEvent{
 		req:             event.Request,
+		retryState:      retryState,
 		baseHandler:     baseHandler,
 		enrichedHandler: enrichedHandler,
 	}); err != nil {
@@ -1032,7 +1042,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 			return nil, err
 		}
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		a.ResetKeepPaused = false
+		a.ResetShouldPause = false
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
 	}
@@ -1048,7 +1058,7 @@ func (a *Activity) isPaused() bool {
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return true
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		return a.GetResetKeepPaused()
+		return a.GetResetShouldPause()
 	default:
 		return false
 	}
@@ -1244,7 +1254,7 @@ func (a *Activity) deferResetWhileRunning(
 	}
 	// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
 	// yields the activity lands back in PAUSED rather than SCHEDULED.
-	a.ResetKeepPaused = keepPaused && pauseRequested
+	a.ResetShouldPause = keepPaused && pauseRequested
 	if err := TransitionResetRequested.Apply(a, ctx, nil); err != nil {
 		return nil, err
 	}
@@ -1295,9 +1305,11 @@ func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(
 	ctx chasm.MutableContext,
 	timeoutType enumspb.TimeoutType,
 	message string,
+	cause *failurepb.Failure,
 ) error {
 	failure := &failurepb.Failure{
 		Message: message,
+		Cause:   cause,
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 				TimeoutType:          timeoutType,
@@ -1384,13 +1396,25 @@ func (a *Activity) tryReschedule(
 	overridingRetryInterval time.Duration,
 	failure *failurepb.Failure,
 ) (enumspb.RetryState, error) {
+	status := a.GetStatus()
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		event := rescheduleEvent{failure: failure}
+		if a.ResetShouldPause {
+			return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
+		}
+		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
+	}
+	if a.GetRetryPolicy() == nil {
+		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
+	}
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
+	}
 	retryState, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
 	if !failureRetryable {
 		retryState = enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
-	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
-	// A pending reset request is always honored, regardless of retryability or the should retry result.
-	if !resetRequested && retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 		return retryState, nil
 	}
 	retryIntervalSource := activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
@@ -1398,14 +1422,9 @@ func (a *Activity) tryReschedule(
 		retryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE
 	}
 	event := rescheduleEvent{retryInterval: retryInterval, retryIntervalSource: retryIntervalSource, failure: failure}
-	switch a.GetStatus() {
+	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
-	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		if a.ResetKeepPaused {
-			return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
-		}
-		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
 	default:
 		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionRescheduled.Apply(a, ctx, event)
 	}
@@ -1413,9 +1432,7 @@ func (a *Activity) tryReschedule(
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (enumspb.RetryState, time.Duration) {
 	if !TransitionRescheduled.Possible(a) &&
-		!TransitionAttemptFailedWhilePauseRequested.Possible(a) &&
-		!TransitionResetAttemptFailedToScheduled.Possible(a) &&
-		!TransitionResetAttemptFailedToPaused.Possible(a) {
+		!TransitionAttemptFailedWhilePauseRequested.Possible(a) {
 		return enumspb.RETRY_STATE_UNSPECIFIED, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)
@@ -1683,13 +1700,7 @@ func (a *Activity) RecordHeartbeat(
 			},
 		)
 	}
-	detailsSize := details.Size()
-	metricsHandler := a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskHeartbeatScope)
-	emitPayloadSizeMetric(metricsHandler, detailsSize)
-	metrics.ActivityHeartbeatCount.With(metricsHandler).Record(
-		1,
-		metrics.StringTag("has_details", strconv.FormatBool(detailsSize > 0)),
-	)
+	a.emitHeartbeatMetrics(ctx, details)
 
 	response := &historyservice.RecordActivityTaskHeartbeatResponse{}
 	switch a.Status {
@@ -1956,7 +1967,8 @@ func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOu
 	}
 	if failure := a.terminalFailure(ctx); failure != nil {
 		return &apiactivitypb.ActivityExecutionOutcome{
-			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
+			Value:      &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
+			RetryState: activityOutcome.GetRetryState(),
 		}
 	}
 	return nil
@@ -2078,6 +2090,17 @@ func emitPayloadSizeMetric(metricsHandler metrics.Handler, size int) {
 	if size > 0 {
 		metrics.ActivityPayloadSize.With(metricsHandler).Record(int64(size))
 	}
+}
+
+// emitHeartbeatMetrics records the heartbeat count and payload size for heartbeat details.
+func (a *Activity) emitHeartbeatMetrics(ctx chasm.Context, details *commonpb.Payloads) {
+	metricsHandler := a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskHeartbeatScope)
+	detailsSize := details.Size()
+	emitPayloadSizeMetric(metricsHandler, detailsSize)
+	metrics.ActivityHeartbeatCount.With(metricsHandler).Record(
+		1,
+		metrics.StringTag("has_details", strconv.FormatBool(detailsSize > 0)),
+	)
 }
 
 func (a *Activity) emitOnCompletedMetrics(

@@ -13,6 +13,7 @@ const (
 	PollType EventType = iota
 	HeartbeatType
 	RespondCompletedType
+	RespondCompletedByIDType
 	RespondFailedType
 	RespondCanceledType
 	RequestCancelType
@@ -39,8 +40,9 @@ const (
 type Event struct {
 	Type EventType
 
-	Retryable  bool // RespondFailed: the failure is retryable. Whether it actually retries also depends on the retry policy.
-	KeepPaused bool // Reset: a paused activity stays paused across the reset.
+	Retryable           bool // RespondFailed: the failure is retryable. Whether it actually retries also depends on the retry policy.
+	KeepPaused          bool // Reset: a paused activity stays paused across the reset.
+	HasHeartbeatDetails bool // RespondFailed: attach last_heartbeat_details, to be stored as the activity's heartbeat progress.
 }
 
 // Canonical Event values for the variants frequently used in traces
@@ -48,6 +50,7 @@ var (
 	Poll                   = Event{Type: PollType}
 	Heartbeat              = Event{Type: HeartbeatType}
 	Complete               = Event{Type: RespondCompletedType}
+	CompleteByID           = Event{Type: RespondCompletedByIDType}
 	FailRetryably          = Event{Type: RespondFailedType, Retryable: true}
 	FailNonRetryably       = Event{Type: RespondFailedType, Retryable: false}
 	RespondCanceled        = Event{Type: RespondCanceledType}
@@ -75,6 +78,8 @@ func (t EventType) String() string {
 		return "Heartbeat"
 	case RespondCompletedType:
 		return "RespondCompleted"
+	case RespondCompletedByIDType:
+		return "RespondCompletedByID"
 	case RespondFailedType:
 		return "RespondFailed"
 	case RespondCanceledType:
@@ -112,7 +117,7 @@ func (t EventType) String() string {
 func (e Event) String() string {
 	switch e.Type {
 	case RespondFailedType:
-		return fmt.Sprintf("%s[retryable=%v]", e.Type.String(), e.Retryable)
+		return fmt.Sprintf("%s[retryable=%v,heartbeatDetails=%v]", e.Type.String(), e.Retryable, e.HasHeartbeatDetails)
 	case ResetType:
 		return fmt.Sprintf("%s[keepPaused=%v]", e.Type.String(), e.KeepPaused)
 	default:

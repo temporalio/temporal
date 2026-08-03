@@ -115,7 +115,6 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
-	cluster.OverrideDynamicConfig(s.T(), activity.StartDelayEnabled, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
 }
@@ -3415,6 +3414,7 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 	require.NoError(t, err)
 	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, pollActivityResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected ScheduleToCloseTimeout but is %s", pollActivityResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	require.Equal(t, enumspb.RETRY_STATE_TIMEOUT, pollActivityResp.GetOutcome().GetRetryState())
 
 	describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:  env.Namespace().String(),
@@ -3529,6 +3529,8 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 
 	require.NotNil(t, describeResp3.GetOutcome().GetFailure())
 	protorequire.ProtoEqual(t, failure, describeResp3.GetOutcome().GetFailure())
+	// The attempt timed out, but no retry followed because MaximumAttempts was reached.
+	require.Equal(t, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, describeResp3.GetOutcome().GetRetryState())
 	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected StartToCloseTimeout but is %s", describeResp3.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
@@ -3580,6 +3582,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout_WhileCancelRequest
 	require.Equal(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"activity in CANCEL_REQUESTED should still time out via START_TO_CLOSE")
+	require.Equal(t, enumspb.RETRY_STATE_CANCEL_REQUESTED, pollOutcome.GetOutcome().GetRetryState())
 }
 
 // TestScheduleToStartTimeout tests that a schedule-to-start timeout is recorded after the activity is
@@ -3631,6 +3634,7 @@ func (s *standaloneActivityTestSuite) TestScheduleToStartTimeout() {
 	require.NotNil(t, describeResp.GetInfo().GetCloseTime())
 	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected ScheduleToStartTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	require.Equal(t, enumspb.RETRY_STATE_TIMEOUT, describeResp.GetOutcome().GetRetryState())
 }
 
 func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
@@ -4123,6 +4127,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 				outcomeValidator: func(t *testing.T, response *workflowservice.DescribeActivityExecutionResponse) {
 					protorequire.ProtoEqual(t, defaultResult, response.GetOutcome().GetResult())
 					require.Nil(t, response.GetOutcome().GetFailure())
+					require.Equal(t, enumspb.RETRY_STATE_UNSPECIFIED, response.GetOutcome().GetRetryState())
 				},
 			},
 			{
@@ -4140,6 +4145,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 				outcomeValidator: func(t *testing.T, response *workflowservice.DescribeActivityExecutionResponse) {
 					protorequire.ProtoEqual(t, defaultFailure, response.GetOutcome().GetFailure())
 					require.Nil(t, response.GetOutcome().GetResult())
+					require.Equal(t, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, response.GetOutcome().GetRetryState())
 				},
 			},
 			{
@@ -4158,6 +4164,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 					require.NotNil(t, response.GetOutcome().GetFailure())
 					require.NotNil(t, response.GetOutcome().GetFailure().GetTerminatedFailureInfo())
 					require.Nil(t, response.GetOutcome().GetResult())
+					require.Equal(t, enumspb.RETRY_STATE_UNSPECIFIED, response.GetOutcome().GetRetryState())
 				},
 			},
 		}
@@ -4593,6 +4600,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			},
 			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
 				protorequire.ProtoEqual(t, defaultResult, response.GetOutcome().GetResult())
+				require.Equal(t, enumspb.RETRY_STATE_UNSPECIFIED, response.GetOutcome().GetRetryState())
 			},
 		},
 		{
@@ -4629,6 +4637,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
 				require.NotNil(t, response.GetOutcome().GetFailure())
 				require.NotNil(t, response.GetOutcome().GetFailure().GetCanceledFailureInfo())
+				require.Equal(t, enumspb.RETRY_STATE_UNSPECIFIED, response.GetOutcome().GetRetryState())
 			},
 		},
 		{
@@ -4645,6 +4654,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
 				require.NotNil(t, response.GetOutcome().GetFailure())
 				require.NotNil(t, response.GetOutcome().GetFailure().GetTerminatedFailureInfo())
+				require.Equal(t, enumspb.RETRY_STATE_UNSPECIFIED, response.GetOutcome().GetRetryState())
 			},
 		},
 	}
@@ -13661,7 +13671,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 	t.Run("StartedWithPauseStateKeepPausedFalse", func(t *testing.T) {
 		// PAUSE_REQUESTED activity (STARTED status), reset with keepPaused=false.
-		// Reset is deferred; without ResetKeepPaused the next retry dispatches instead of pausing.
+		// Reset is deferred; without ResetShouldPause the next retry dispatches instead of pausing.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -13676,7 +13686,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		pauseActivity(ctx, t, activityID, startResp.GetRunId())
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED)
 
-		// Reset with keepPaused=false — deferred; ResetKeepPaused stays false so dispatch isn't blocked.
+		// Reset with keepPaused=false — deferred; ResetShouldPause stays false so dispatch isn't blocked.
 		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -13708,7 +13718,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 	t.Run("StartedWithPauseStateKeepPausedTrue", func(t *testing.T) {
 		// PAUSE_REQUESTED activity (STARTED status), reset with keepPaused=true.
-		// Reset is deferred; ResetKeepPaused is set so after the retry the activity stays paused.
+		// Reset is deferred; ResetShouldPause is set so after the retry the activity stays paused.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -13723,7 +13733,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		pauseActivity(ctx, t, activityID, startResp.GetRunId())
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED)
 
-		// Reset with keepPaused=true — deferred; ResetKeepPaused should be set.
+		// Reset with keepPaused=true — deferred; ResetShouldPause should be set.
 		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
