@@ -1879,8 +1879,8 @@ func TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	info := resp.FrontendResponse.GetInfo()
-	require.NotNil(t, info.GetLastDeploymentVersion())
-	require.Equal(t, "test-deployment", info.GetLastDeploymentVersion().GetDeploymentName())
-	require.Equal(t, "test-build-1", info.GetLastDeploymentVersion().GetBuildId())
+	protorequire.ProtoEqual(t, &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-1",
+	}, resp.FrontendResponse.GetInfo().GetLastDeploymentVersion())
 }
