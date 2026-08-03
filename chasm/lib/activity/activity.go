@@ -293,7 +293,27 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		}
 		return nil, err
 	}
+	if dispatchTime := a.dispatchTimeForAttempt(lastAttempt); dispatchTime != nil {
+		metrics.TaskScheduleToStartLatency.With(a.taskScheduleToStartMetricsHandler(ctx)).Record(
+			lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
+		)
+	}
 	return a.GenerateRecordActivityTaskStartedResponse(ctx, request.GetPollRequest().GetNamespace())
+}
+
+func (a *Activity) taskScheduleToStartMetricsHandler(ctx chasm.Context) metrics.Handler {
+	actCtx := activityContextFromChasm(ctx)
+	namespaceEntry := ctx.NamespaceEntry()
+	namespaceName := namespaceEntry.Name().String()
+	taskQueue := a.GetTaskQueue().GetName()
+	return metrics.GetPerTaskQueuePartitionTypeScope(
+		a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskStartedScope),
+		namespaceName,
+		tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), taskQueue).
+			TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).
+			RootPartition(),
+		actCtx.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+	)
 }
 
 // GenerateRecordActivityTaskStartedResponse generates the response for HandleStarted.
