@@ -551,7 +551,7 @@ func TestRequestIDTooLong(t *testing.T) {
 			RetryPolicy:         &commonpb.RetryPolicy{},
 			RequestId:           tooLong,
 		}
-		err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, defaultMaxUserMetadataSummarySize, defaultMaxUserMetadataDetailsSize, h.logger, h.saMapperProvider, h.saValidator)
+		err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -633,7 +633,7 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, defaultMaxUserMetadataSummarySize, defaultMaxUserMetadataDetailsSize, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -653,7 +653,7 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, defaultMaxUserMetadataSummarySize, defaultMaxUserMetadataDetailsSize, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -680,7 +680,7 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		func(ns string) int { return payloadSize },
 		defaultMaxIDLengthLimit,
 	)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, defaultMaxUserMetadataSummarySize, defaultMaxUserMetadataDetailsSize, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	require.NoError(t, err)
 }
 
@@ -699,13 +699,13 @@ func TestValidateStandaloneUserMetadata(t *testing.T) {
 			name:         "summary exceeds size limit",
 			metadata:     &sdkpb.UserMetadata{Summary: summary},
 			summaryLimit: summary.Size() - 1,
-			detailsLimit: details.Size(),
+			detailsLimit: details.Size() + 1000,
 			errContains:  "user_metadata.summary exceeds size limit",
 		},
 		{
 			name:         "details exceeds size limit",
 			metadata:     &sdkpb.UserMetadata{Details: details},
-			summaryLimit: summary.Size(),
+			summaryLimit: summary.Size() + 1000,
 			detailsLimit: details.Size() - 1,
 			errContains:  "user_metadata.details exceeds size limit",
 		},
@@ -719,22 +719,31 @@ func TestValidateStandaloneUserMetadata(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			req := &workflowservice.StartActivityExecutionRequest{
-				Namespace:    defaultNamespaceID,
-				ActivityId:   defaultActivityID,
-				UserMetadata: test.metadata,
+			h := &frontendHandler{
+				config: &Config{
+					BlobSizeLimitError:         defaultBlobSizeLimitError,
+					BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+					DefaultActivityRetryPolicy: getDefaultRetrySettings,
+					MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+					MaxUserMetadataSummarySize: func(string) int { return test.summaryLimit },
+					MaxUserMetadataDetailsSize: func(string) int { return test.detailsLimit },
+				},
+				linkValidator: newLinkValidator(
+					defaultMaxLinksPerRequest,
+					func(string) int { return 2000 },
+					defaultLinkMaxSize,
+				),
+				logger: log.NewNoopLogger(),
 			}
-			err := validateAndNormalizeStartRequest(
-				req,
-				defaultMaxIDLengthLimit,
-				defaultBlobSizeLimitError,
-				defaultBlobSizeLimitWarn,
-				func(string) int { return test.summaryLimit },
-				func(string) int { return test.detailsLimit },
-				log.NewNoopLogger(),
-				nil,
-				nil,
-			)
+			req := &workflowservice.StartActivityExecutionRequest{
+				Namespace:           defaultNamespaceID,
+				ActivityId:          defaultActivityID,
+				ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+				StartToCloseTimeout: durationpb.New(10 * time.Second),
+				UserMetadata:        test.metadata,
+			}
+			_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
 			if test.errContains == "" {
 				require.NoError(t, err)
 				return
@@ -760,7 +769,7 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, defaultMaxUserMetadataSummarySize, defaultMaxUserMetadataDetailsSize, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)
