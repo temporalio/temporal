@@ -42,6 +42,12 @@ var EnableNexusCallbacks = dynamicconfig.NewNamespaceBoolSetting(
 	`Allows attaching Nexus completion callbacks to standalone Nexus operation executions.`,
 )
 
+var EnableWorkerCallbacks = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.enableWorkerCallbacks",
+	false,
+	`Allows attaching Worker completion callbacks to standalone Nexus operation executions.`,
+)
+
 var EnableChasmWorkflowOperations = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableChasmWorkflowOperations",
 	false,
@@ -251,6 +257,7 @@ type Config struct {
 	Enabled                                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableNexusCallbacks                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkerCallbacks                      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -282,34 +289,35 @@ type Config struct {
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
-		Enabled:                            Enabled.Get(dc),
-		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
-		EnableNexusCallbacks:               EnableNexusCallbacks.Get(dc),
-		MaxCallbacksPerExecution:           callback.MaxPerExecution.Get(dc),
-		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
+		Enabled:                                    Enabled.Get(dc),
+		EnableChasm:                                dynamicconfig.EnableChasm.Get(dc),
+		EnableNexusCallbacks:                       EnableNexusCallbacks.Get(dc),
+		EnableWorkerCallbacks:                      EnableWorkerCallbacks.Get(dc),
+		MaxCallbacksPerExecution:                   callback.MaxPerExecution.Get(dc),
+		EnableChasmNexusWorkflowOperations:         EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: ChasmWorkflowOperationsRolloutPercent.Get(dc),
-		NumHistoryShards:                   cfg.NumHistoryShards,
-		LongPollBuffer:                     LongPollBuffer.Get(dc),
-		LongPollTimeout:                    LongPollTimeout.Get(dc),
-		RequestTimeout:                     RequestTimeout.Get(dc),
-		MinRequestTimeout:                  MinRequestTimeout.Get(dc),
-		MaxConcurrentOperationsPerWorkflow: MaxConcurrentOperationsPerWorkflow.Get(dc),
-		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
-		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),
-		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),
-		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
-		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
-		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
-		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
-		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),
-		MaxUserMetadataSummarySize:         dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
-		MaxUserMetadataDetailsSize:         dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
-		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
-		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
-		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
-		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
-		MaxReasonLength:                    MaxReasonLength.Get(dc),
-		RetryPolicy:                        RetryPolicy.Get(dc),
+		NumHistoryShards:                           cfg.NumHistoryShards,
+		LongPollBuffer:                             LongPollBuffer.Get(dc),
+		LongPollTimeout:                            LongPollTimeout.Get(dc),
+		RequestTimeout:                             RequestTimeout.Get(dc),
+		MinRequestTimeout:                          MinRequestTimeout.Get(dc),
+		MaxConcurrentOperationsPerWorkflow:         MaxConcurrentOperationsPerWorkflow.Get(dc),
+		MaxServiceNameLength:                       MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:                     MaxOperationNameLength.Get(dc),
+		MaxOperationTokenLength:                    MaxOperationTokenLength.Get(dc),
+		MaxOperationHeaderSize:                     MaxOperationHeaderSize.Get(dc),
+		DisallowedOperationHeaders:                 DisallowedOperationHeaders.Get(dc),
+		MaxOperationScheduleToCloseTimeout:         MaxOperationScheduleToCloseTimeout.Get(dc),
+		PayloadSizeLimit:                           dynamicconfig.BlobSizeLimitError.Get(dc),
+		PayloadSizeLimitWarn:                       dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MaxUserMetadataSummarySize:                 dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
+		MaxUserMetadataDetailsSize:                 dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
+		CallbackURLTemplate:                        CallbackURLTemplate.Get(dc),
+		UseSystemCallbackURL:                       UseSystemCallbackURL.Get(dc),
+		UseNewFailureWireFormat:                    UseNewFailureWireFormat.Get(dc),
+		VisibilityMaxPageSize:                      dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		MaxIDLengthLimit:                           dynamicconfig.MaxIDLengthLimit.Get(dc),
+		MaxReasonLength:                            MaxReasonLength.Get(dc),
+		RetryPolicy:                                RetryPolicy.Get(dc),
 	}
 }

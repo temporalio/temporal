@@ -13,6 +13,10 @@ import (
 
 // Validator validates completion callbacks attached to executions (workflows and standalone activities).
 type Validator interface {
+	// TODO(chrsmith): This doesn't accept Worker-variant callbacks.
+	// Refactor this interface such that callers can define the acceptable times of callbacks,
+	// as centeralize the configuration enforcement for worker callbacks. (e.g.
+	// using the namespace's max source context payload size, etc.)
 	Validate(ctx context.Context, namespaceName string, cbs []*commonpb.Callback) error
 }
 

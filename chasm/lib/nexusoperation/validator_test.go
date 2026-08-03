@@ -54,6 +54,18 @@ func testNexusCallback(url string) *commonpb.Callback {
 	}
 }
 
+func testWorkerCallback(taskQueue string) *commonpb.Callback {
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_Worker_{
+			Worker: &commonpb.Callback_Worker{
+				TaskQueueName: taskQueue,
+				Service:       "service",
+				Operation:     "operation",
+			},
+		},
+	}
+}
+
 func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
@@ -85,6 +97,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
 		EnableNexusCallbacks:               func(string) bool { return true },
+		EnableWorkerCallbacks:              func(string) bool { return true },
+		MaxCallbacksPerExecution:           func(string) int { return 10 },
 	}
 
 	for _, tc := range []struct {
@@ -364,7 +378,13 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "completion_callbacks - rejects a non-nexus variant",
+			name: "completion_callbacks - accepts the worker variant",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{testWorkerCallback("task-queue")}
+			},
+		},
+		{
+			name: "completion_callbacks - rejects an unsupported variant",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.CompletionCallbacks = []*commonpb.Callback{{
 					Variant: &commonpb.Callback_Internal_{
@@ -854,8 +874,20 @@ func TestValidateAndNormalizeCompletionCallbacks(t *testing.T) {
 			CompletionCallbacks: cbs,
 		}
 	}
-	enabled := newTestValidator(&Config{EnableNexusCallbacks: func(string) bool { return true }})
-	disabled := newTestValidator(&Config{EnableNexusCallbacks: func(string) bool { return false }})
+	callbackConfig := func(nexusEnabled, workerEnabled bool) *Config {
+		return &Config{
+			EnableNexusCallbacks:     func(string) bool { return nexusEnabled },
+			EnableWorkerCallbacks:    func(string) bool { return workerEnabled },
+			MaxCallbacksPerExecution: func(string) int { return 2 },
+			MaxIDLengthLimit:         func() int { return 50 },
+			MaxServiceNameLength:     func(string) int { return 10 },
+			MaxOperationNameLength:   func(string) int { return 10 },
+			PayloadSizeLimit:         func(string) int { return 20 },
+		}
+	}
+	enabled := newTestValidator(callbackConfig(true, true))
+	nexusDisabled := newTestValidator(callbackConfig(false, true))
+	workerDisabled := newTestValidator(callbackConfig(true, false))
 
 	t.Run("NoCallbacksSkipsTheEnabledCheck", func(t *testing.T) {
 		// The namespace flag must not be consulted when no callbacks were requested, so that existing
@@ -872,11 +904,20 @@ func TestValidateAndNormalizeCompletionCallbacks(t *testing.T) {
 	})
 
 	t.Run("Disabled", func(t *testing.T) {
-		err := disabled.validateAndNormalizeCompletionCallbacks(
+		err := nexusDisabled.validateAndNormalizeCompletionCallbacks(
 			context.Background(), newReq(testNexusCallback("http://localhost/cb")))
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "completion callbacks are not enabled for this namespace")
+	})
+
+	t.Run("TooManyCallbacks", func(t *testing.T) {
+		// The limit covers every variant, not just the ones the shared callback validator sees.
+		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(
+			testWorkerCallback("tq1"), testWorkerCallback("tq2"), testWorkerCallback("tq3")))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "cannot attach more than 2 callbacks to an execution")
 	})
 
 	t.Run("RejectsInternalVariant", func(t *testing.T) {
@@ -890,17 +931,80 @@ func TestValidateAndNormalizeCompletionCallbacks(t *testing.T) {
 		require.Contains(t, err.Error(), "completion_callbacks[0]: unsupported callback variant")
 	})
 
-	t.Run("RejectsWorkerVariant", func(t *testing.T) {
-		// Worker callbacks are a newer API addition that standalone Nexus operations do not support yet.
-		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(
+	t.Run("AcceptsWorkerVariant", func(t *testing.T) {
+		require.NoError(t, enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(
 			testNexusCallback("http://localhost/cb"),
-			&commonpb.Callback{
-				Variant: &commonpb.Callback_Worker_{Worker: &commonpb.Callback_Worker{}},
-			},
-		))
+			testWorkerCallback("task-queue"),
+		)))
+	})
+
+	t.Run("WorkerVariantDisabled", func(t *testing.T) {
+		// The two variants are gated independently: Nexus callbacks stay allowed here.
+		require.NoError(t, workerDisabled.validateAndNormalizeCompletionCallbacks(
+			context.Background(), newReq(testNexusCallback("http://localhost/cb"))))
+
+		err := workerDisabled.validateAndNormalizeCompletionCallbacks(
+			context.Background(), newReq(testWorkerCallback("task-queue")))
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
-		require.Contains(t, err.Error(), "completion_callbacks[1]: unsupported callback variant")
+		require.Contains(t, err.Error(), "worker completion callbacks are not enabled for this namespace")
+	})
+
+	t.Run("WorkerVariantFields", func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			mutate func(*commonpb.Callback_Worker)
+			errMsg string
+		}{
+			{
+				name:   "task_queue_name is required",
+				mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = "" },
+				errMsg: "completion_callbacks[1].worker.task_queue_name is required",
+			},
+			{
+				name:   "task_queue_name length",
+				mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = strings.Repeat("x", 51) },
+				errMsg: "completion_callbacks[1].worker.task_queue_name exceeds length limit",
+			},
+			{
+				name:   "service is required",
+				mutate: func(w *commonpb.Callback_Worker) { w.Service = "" },
+				errMsg: "completion_callbacks[1].worker.service is required",
+			},
+			{
+				name:   "service length",
+				mutate: func(w *commonpb.Callback_Worker) { w.Service = strings.Repeat("x", 11) },
+				errMsg: "completion_callbacks[1].worker.service exceeds length limit",
+			},
+			{
+				name:   "operation is required",
+				mutate: func(w *commonpb.Callback_Worker) { w.Operation = "" },
+				errMsg: "completion_callbacks[1].worker.operation is required",
+			},
+			{
+				name:   "operation length",
+				mutate: func(w *commonpb.Callback_Worker) { w.Operation = strings.Repeat("x", 11) },
+				errMsg: "completion_callbacks[1].worker.operation exceeds length limit",
+			},
+			{
+				name: "source_context size",
+				mutate: func(w *commonpb.Callback_Worker) {
+					w.SourceContext = &commonpb.Payload{Data: []byte(strings.Repeat("x", 21))}
+				},
+				errMsg: "completion_callbacks[1].worker.source_context exceeds size limit",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				cb := testWorkerCallback("task-queue")
+				tc.mutate(cb.GetWorker())
+				// Prefixed with an unrelated callback to confirm the index in the error message.
+				err := enabled.validateAndNormalizeCompletionCallbacks(
+					context.Background(), newReq(testNexusCallback("http://localhost/cb"), cb))
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
+				require.Contains(t, err.Error(), tc.errMsg)
+			})
+		}
 	})
 
 	t.Run("RejectsUnsetVariant", func(t *testing.T) {

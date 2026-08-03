@@ -381,6 +381,10 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 			require.Equal(t, testWorkerTaskQueue, dispatched.GetTaskQueue().GetName())
 			require.Equal(t, enumspb.TASK_QUEUE_KIND_NORMAL, dispatched.GetTaskQueue().GetKind())
 
+			// The worker is asked to answer with Temporal failures, which is what
+			// classifyDispatchResult relies on to tell a failed operation from a failed delivery.
+			require.True(t, dispatched.GetRequest().GetCapabilities().GetTemporalFailureResponses())
+
 			start := dispatched.GetRequest().GetStartOperation()
 			require.Equal(t, testWorkerService, start.GetService())
 			require.Equal(t, testWorkerOperation, start.GetOperation())

@@ -423,6 +423,9 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
 			return nil, err
 		}
+		if err := h.callbackValidator.VerifyOnlySupportedKinds(cbs, callback.CallbackKindNexus, callback.CallbackKindInternal); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := h.linkValidator.ValidateRequest(req.GetNamespace(), req.GetLinks()); err != nil {
