@@ -1042,21 +1042,21 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 	testCases := []struct {
 		name              string
 		transition        chasm.Transition[activitypb.ActivityExecutionStatus, *Activity, rescheduleEvent]
-		resetKeepPaused   bool
+		resetShouldPause  bool
 		expectedStatus    activitypb.ActivityExecutionStatus
 		expectedTaskCount int
 	}{
 		{
 			name:              "scheduled",
 			transition:        TransitionResetAttemptFailedToScheduled,
-			resetKeepPaused:   false,
+			resetShouldPause:  false,
 			expectedStatus:    activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 			expectedTaskCount: 1,
 		},
 		{
 			name:              "paused",
 			transition:        TransitionResetAttemptFailedToPaused,
-			resetKeepPaused:   true,
+			resetShouldPause:  true,
 			expectedStatus:    activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 			expectedTaskCount: 0,
 		},
@@ -1086,7 +1086,7 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 					ScheduleTime:            timestamppb.New(defaultTime),
 					FirstAttemptStartedTime: timestamppb.New(defaultTime),
 					TaskQueue:               &taskqueuepb.TaskQueue{Name: "test-task-queue"},
-					ResetKeepPaused:         tc.resetKeepPaused,
+					ResetShouldPause:        tc.resetShouldPause,
 				},
 				LastAttempt:   chasm.NewDataField(ctx, attemptState),
 				LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),

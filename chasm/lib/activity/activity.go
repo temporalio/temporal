@@ -1041,7 +1041,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 			return nil, err
 		}
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		a.ResetKeepPaused = false
+		a.ResetShouldPause = false
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
 	}
@@ -1057,7 +1057,7 @@ func (a *Activity) isPaused() bool {
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return true
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		return a.GetResetKeepPaused()
+		return a.GetResetShouldPause()
 	default:
 		return false
 	}
@@ -1253,7 +1253,7 @@ func (a *Activity) deferResetWhileRunning(
 	}
 	// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
 	// yields the activity lands back in PAUSED rather than SCHEDULED.
-	a.ResetKeepPaused = keepPaused && pauseRequested
+	a.ResetShouldPause = keepPaused && pauseRequested
 	if err := TransitionResetRequested.Apply(a, ctx, nil); err != nil {
 		return nil, err
 	}
@@ -1376,7 +1376,7 @@ func (a *Activity) tryReschedule(
 	status := a.GetStatus()
 	if status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
 		event := rescheduleEvent{failure: failure}
-		if a.ResetKeepPaused {
+		if a.ResetShouldPause {
 			return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
 		}
 		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)

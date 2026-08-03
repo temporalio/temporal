@@ -13575,7 +13575,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 	t.Run("StartedWithPauseStateKeepPausedFalse", func(t *testing.T) {
 		// PAUSE_REQUESTED activity (STARTED status), reset with keepPaused=false.
-		// Reset is deferred; without ResetKeepPaused the next retry dispatches instead of pausing.
+		// Reset is deferred; without ResetShouldPause the next retry dispatches instead of pausing.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -13590,7 +13590,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		pauseActivity(ctx, t, activityID, startResp.GetRunId())
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED)
 
-		// Reset with keepPaused=false — deferred; ResetKeepPaused stays false so dispatch isn't blocked.
+		// Reset with keepPaused=false — deferred; ResetShouldPause stays false so dispatch isn't blocked.
 		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -13622,7 +13622,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 	t.Run("StartedWithPauseStateKeepPausedTrue", func(t *testing.T) {
 		// PAUSE_REQUESTED activity (STARTED status), reset with keepPaused=true.
-		// Reset is deferred; ResetKeepPaused is set so after the retry the activity stays paused.
+		// Reset is deferred; ResetShouldPause is set so after the retry the activity stays paused.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -13637,7 +13637,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		pauseActivity(ctx, t, activityID, startResp.GetRunId())
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED)
 
-		// Reset with keepPaused=true — deferred; ResetKeepPaused should be set.
+		// Reset with keepPaused=true — deferred; ResetShouldPause should be set.
 		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
