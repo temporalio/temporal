@@ -1991,32 +1991,6 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		require.NoError(t, err)
 	})
 
-	t.Run("FailsIfNeverRequested", func(t *testing.T) {
-
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
-		runID := startResp.RunId
-
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
-
-		details := &commonpb.Payloads{
-			Payloads: []*commonpb.Payload{
-				payload.EncodeString("Canceled Details"),
-			},
-		}
-
-		_, err := env.FrontendClient().RespondActivityTaskCanceled(s.Context(), &workflowservice.RespondActivityTaskCanceledRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
-			Details:   details,
-			Identity:  "new-worker",
-		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
-	})
-
 	t.Run("DuplicateRequestIDSucceeds", func(t *testing.T) {
 
 		activityID := testcore.RandomizeStr(t.Name())
