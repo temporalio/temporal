@@ -40,17 +40,14 @@ var (
 	defaultStartToCloseTimeout    = 3 * time.Minute
 )
 
-// defaultFailureSizeLimit is the retained-failure size limit used by transition tests.
+// defaultFailureSizeLimit is the retained-failure size limit used by tests in this package.
 const defaultFailureSizeLimit = 1024
 
-// injectActivityContext adds the dependencies that state transitions read off the chasm context:
-// the activityContext (dynamic config) and the namespace entry. A nil config gets the defaults.
-func injectActivityContext(t *testing.T, ctx *chasm.MockMutableContext, config *Config) {
-	if config == nil {
-		config = &Config{}
-	}
-	if config.MutableStateActivityFailureSizeLimit == nil {
-		config.MutableStateActivityFailureSizeLimit = dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit)
+// injectActivityContext adds the dependencies that Activity methods read off the chasm context:
+// the activityContext (dynamic config) and the namespace entry.
+func injectActivityContext(t *testing.T, ctx *chasm.MockMutableContext) {
+	config := &Config{
+		MutableStateActivityFailureSizeLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit),
 	}
 	ctx.GoCtx = context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{config: config})
 	ctx.HandleNamespaceEntry = func() *namespace.Namespace {
