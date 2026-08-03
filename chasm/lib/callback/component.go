@@ -86,21 +86,35 @@ func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (invocable, error) {
-	// Only Nexus-variant callbacks are supported.
-	callback := c.GetCallback().GetNexus()
-	if callback == nil {
+	// Reject unknown/unsupported callback variants.
+	switch c.GetCallback().GetVariant().(type) {
+	case *callbackspb.Callback_Nexus_, *callbackspb.Callback_Worker_:
+	default:
 		return nil, queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("unprocessable callback variant: %T", c.GetCallback().GetVariant()),
 		)
 	}
 
+	// Get the parent CHASM object's Nexus result to be delivered.
 	target := c.CompletionSource.Get(ctx)
 	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
 	if err != nil {
 		return nil, err
 	}
 
-	if callback.Url == chasm.NexusCompletionHandlerURL {
+	// Invoke Worker-variant callbacks.
+	if worker := c.GetCallback().GetWorker(); worker != nil {
+		return invocableWorker{
+			callback:   worker,
+			completion: completion,
+			requestID:  c.RequestId,
+			attempt:    c.Attempt,
+		}, nil
+	}
+
+	// Invoke Nexus-variant callbacks.
+	callback := c.GetCallback().GetNexus()
+	if callback.GetUrl() == chasm.NexusCompletionHandlerURL {
 		return invocableInternal{
 			callback:   callback,
 			attempt:    c.Attempt,
