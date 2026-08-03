@@ -101,14 +101,14 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 			require.True(t, ok)
 			appErr, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap())
 			require.True(t, ok)
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalStatus(t), message)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalOutcome(t).status, message)
 			require.Equal(t, "TestFailure", appErr.Type(), message)
 			require.Equal(t, "test failure", appErr.Message(), message)
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
 			activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
 			cause := activity.describe(t).GetOutcome().GetFailure().GetCause()
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalStatus(t), message)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalOutcome(t).status, message)
 			require.Equal(t, "TestFailure", cause.GetApplicationFailureInfo().GetType(), message)
 			require.Equal(t, "test failure", cause.GetMessage(), message)
 		})
@@ -362,12 +362,12 @@ func (s *activityParityTestSuite) TestCompleteByID() {
 		s.Run(tc.name, func(s *activityParityTestSuite) {
 			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 				t := s.T()
-				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, newWFADriver(t, env, cfg).driveTrace(t, tc.trace).terminalStatus(t))
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, newWFADriver(t, env, cfg).driveTrace(t, tc.trace).terminalOutcome(t).status)
 			})
 			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 				t := s.T()
 				a := newSAADriver(t, env, cfg).driveTrace(t, tc.trace)
-				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminalStatus(t))
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminalOutcome(t).status)
 				require.NotNil(t, a.describe(t).GetInfo().GetLastStartedTime(),
 					"a force-completed activity must still record a started time, even though no worker ever started it")
 			})
