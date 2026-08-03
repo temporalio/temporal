@@ -2733,7 +2733,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	declinedTargetVersionUpgrade := computeDeclinedTargetVersionUpgrade(previousExecutionInfo, inheritedPinnedVersion != nil)
 
-	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo)
+	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo.GetTimeSkippingInfo())
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
 		Namespace:                ms.namespaceEntry.Name().String(),
@@ -6352,7 +6352,7 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	childTSC, childTSStateProp := propagateTimeSkippingToChild(ms.executionInfo)
+	childTSC, childTSStateProp := propagateTimeSkippingToOtherExecution(ms.GetExecutionInfo().GetTimeSkippingInfo())
 	event, batchID := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
