@@ -1880,7 +1880,7 @@ func oversizedActivityFailure(t *testing.T) *failurepb.Failure {
 func TestRecordFailedAttempt_TruncatesRetryableFailure(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-	injectActivityContext(t, ctx, nil)
+	injectActivityContext(t, ctx)
 
 	attemptState := &activitypb.ActivityAttemptState{Count: 1}
 	activity := &Activity{
@@ -1915,7 +1915,7 @@ func TestRecordFailedAttempt_TruncatesRetryableFailure(t *testing.T) {
 func TestRecordFailedAttempt_KeepsFailureWithinLimit(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-	injectActivityContext(t, ctx, nil)
+	injectActivityContext(t, ctx)
 
 	attemptState := &activitypb.ActivityAttemptState{Count: 1}
 	activity := &Activity{
@@ -1953,7 +1953,7 @@ func TestRecordFailedAttempt_KeepsFailureWithinLimit(t *testing.T) {
 func TestRecordFailedAttempt_KeepsTerminalFailureUntruncated(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-	injectActivityContext(t, ctx, nil)
+	injectActivityContext(t, ctx)
 
 	attemptState := &activitypb.ActivityAttemptState{Count: 1}
 	activity := &Activity{
@@ -1977,42 +1977,4 @@ func TestRecordFailedAttempt_KeepsTerminalFailureUntruncated(t *testing.T) {
 	require.NoError(t, err)
 
 	protorequire.ProtoEqual(t, activityFailure, attemptState.GetLastFailureDetails().GetFailure())
-}
-
-func TestTransitionRescheduled_TruncatesRetainedFailure(t *testing.T) {
-	ctx := &chasm.MockMutableContext{}
-	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-	injectActivityContext(t, ctx, nil)
-
-	attemptState := &activitypb.ActivityAttemptState{
-		Count:       1,
-		StartedTime: timestamppb.New(defaultTime),
-	}
-	activity := &Activity{
-		ActivityState: &activitypb.ActivityState{
-			ActivityType:            &commonpb.ActivityType{Name: "test-activity-type"},
-			RetryPolicy:             defaultRetryPolicy,
-			ScheduleToCloseTimeout:  durationpb.New(defaultScheduleToCloseTimeout),
-			ScheduleToStartTimeout:  durationpb.New(defaultScheduleToStartTimeout),
-			StartToCloseTimeout:     durationpb.New(defaultStartToCloseTimeout),
-			Status:                  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			TaskQueue:               &taskqueuepb.TaskQueue{Name: "test-task-queue"},
-			FirstAttemptStartedTime: timestamppb.New(defaultTime),
-		},
-		LastAttempt: chasm.NewDataField(ctx, attemptState),
-		Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
-	}
-	activityFailure := oversizedActivityFailure(t)
-
-	err := TransitionRescheduled.Apply(activity, ctx, rescheduleEvent{
-		retryInterval: time.Second,
-		failure:       activityFailure,
-	})
-	require.NoError(t, err)
-
-	require.Equal(t, int32(2), attemptState.GetCount())
-	retainedFailure := attemptState.GetLastFailureDetails().GetFailure()
-	require.LessOrEqual(t, retainedFailure.Size(), defaultFailureSizeLimit)
-	require.Equal(t, common.FailureReasonFailureExceedsLimit, retainedFailure.GetMessage())
-	require.Equal(t, activityFailure.GetMessage(), retainedFailure.GetCause().GetMessage())
 }

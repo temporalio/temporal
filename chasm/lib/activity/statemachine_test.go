@@ -296,7 +296,7 @@ func TestTransitionRescheduled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
 			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-			injectActivityContext(t, ctx, nil)
+			injectActivityContext(t, ctx)
 			attemptState := &activitypb.ActivityAttemptState{Count: tc.startingAttemptCount}
 			outcome := &activitypb.ActivityOutcome{}
 
@@ -1012,7 +1012,7 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
 			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-			injectActivityContext(t, ctx, nil)
+			injectActivityContext(t, ctx)
 			attemptState := &activitypb.ActivityAttemptState{
 				Count:       3,
 				StartedTime: timestamppb.New(defaultTime),
