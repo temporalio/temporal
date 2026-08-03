@@ -23,9 +23,9 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-// newCallbackTestEnv builds an env with standalone Nexus operations and their completion callbacks
-// enabled, and with the callback address allowlist opened up so that a local httptest server is a
-// valid callback target.
+// newCallbackTestEnv builds an env with standalone Nexus operations and their Nexus-variant completion
+// callbacks enabled, and with the callback address allowlist opened up so that a local httptest server
+// is a valid callback target. Worker-variant callbacks have their own flag and their own test file.
 func (s *NexusStandaloneTestSuite) newCallbackTestEnv() *NexusTestEnv {
 	env := s.newTestEnv(testcore.WithDynamicConfig(nexusoperation.EnableNexusCallbacks, true))
 	env.OverrideDynamicConfig(
@@ -291,14 +291,9 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 
 		endpointName := env.createRandomExternalNexusServer(s.Context(), t, nexustest.Handler{})
 
+		// The Worker variant is supported too, but under its own namespace flag. See
+		// nexus_standalone_callbacks_worker_test.go.
 		for name, cb := range map[string]*commonpb.Callback{
-			// Worker callbacks are a newer API addition that standalone Nexus operations, like
-			// standalone activities, do not support yet.
-			"worker": {Variant: &commonpb.Callback_Worker_{Worker: &commonpb.Callback_Worker{
-				TaskQueueName: "completions-task-queue",
-				Service:       "HTTPAdapter",
-				Operation:     "DeliverAsWebhook",
-			}}},
 			"internal": {Variant: &commonpb.Callback_Internal_{Internal: &commonpb.Callback_Internal{
 				Data: []byte("data"),
 			}}},

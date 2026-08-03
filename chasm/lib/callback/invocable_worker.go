@@ -124,6 +124,11 @@ func (n invocableWorker) buildDispatchRequest(ns *namespace.Namespace) (*matchin
 		},
 		Request: &nexuspb.Request{
 			Header: map[string]string{},
+			// The invoker here is the server itself, which always understands Temporal failures. Without
+			// this, workers answer with the legacy wire format, whose operation errors and handler errors
+			// classifyDispatchResult cannot tell apart from a delivery failure - so a terminally failed
+			// completion would be retried forever.
+			Capabilities: &nexuspb.Request_Capabilities{TemporalFailureResponses: true},
 			Variant: &nexuspb.Request_StartOperation{
 				StartOperation: &nexuspb.StartOperationRequest{
 					Service:   n.callback.GetService(),
