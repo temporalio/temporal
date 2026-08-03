@@ -126,7 +126,7 @@ func NewStreamSender(
 		config:                  config,
 		isTieredStackEnabled:    tieredStackEnabled,
 		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey, tieredStackEnabled, logger),
-		isolation:               newIsolationManagerIfEnabled(config, shardContext, clientShardKey, isolationEnabled, throttledTierCount),
+		isolation:               newIsolationManagerIfEnabled(config, shardContext, clientShardKey, isolationEnabled, throttledTierCount, logger),
 		tierRateLimiters:        newTierRateLimiters(config, isolationEnabled, throttledTierCount),
 		activeLaneSends:         make(map[string]int),
 		flowController:          NewSenderFlowController(config, logger),
@@ -553,11 +553,16 @@ func newReaderGroupIfEnabled(
 // (re)start it reconstructs member lanes from the persisted reader state, so
 // throttled namespaces stay isolated across reconnects (e.g. history deploys)
 // instead of bursting back onto the shared lane.
-func newIsolationManagerIfEnabled(config *configs.Config, shardContext historyi.ShardContext, clientShardKey ClusterShardKey, enabled bool, tierCount int) *isolationManager {
+func newIsolationManagerIfEnabled(config *configs.Config, shardContext historyi.ShardContext, clientShardKey ClusterShardKey, enabled bool, tierCount int, logger log.Logger) *isolationManager {
 	if !enabled {
 		return nil
 	}
-	defaultCursor, restored := reconstructIsolationState(shardContext, clientShardKey)
+	defaultCursor, restored, err := reconstructIsolationState(shardContext, clientShardKey)
+	if err != nil {
+		// Fall back to zero state: throttled namespaces burst back onto the shared
+		// lane (the reconnect backstop) rather than blocking stream startup.
+		logger.Error("Failed to parse isolation state, starting with no restored lanes", tag.Error(err))
+	}
 	return newIsolationManagerWithState(
 		tierCount,
 		config.ReplicationStreamSenderTierDemotionCycles(),
@@ -571,18 +576,18 @@ func newIsolationManagerIfEnabled(config *configs.Config, shardContext historyi.
 // reconstructIsolationState reads the persisted replication reader state and
 // extracts the shared-HIGH resume cursor and the member lanes. Returns zero state
 // when nothing is persisted (fresh shard).
-func reconstructIsolationState(shardContext historyi.ShardContext, clientShardKey ClusterShardKey) (int64, []restoredMember) {
+func reconstructIsolationState(shardContext historyi.ShardContext, clientShardKey ClusterShardKey) (int64, []restoredMember, error) {
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
 		int64(clientShardKey.ClusterID),
 		clientShardKey.ShardID,
 	)
 	queueState, ok := shardContext.GetQueueState(tasks.CategoryReplication)
 	if !ok {
-		return 0, nil
+		return 0, nil, nil
 	}
 	readerState, ok := queueState.ReaderStates[readerID]
 	if !ok {
-		return 0, nil
+		return 0, nil, nil
 	}
 	return parseIsolationState(readerState)
 }
