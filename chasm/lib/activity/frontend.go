@@ -420,10 +420,12 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		if !h.config.EnableCallbacks(req.GetNamespace()) {
 			return nil, serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
 		}
-		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
+		// Checked before Validate so an unsupported variant is reported as such, rather than as a
+		// bad field on a callback this execution type could never deliver.
+		if err := h.callbackValidator.VerifyOnlySupportedKinds(cbs, callback.CallbackKindNexus, callback.CallbackKindInternal); err != nil {
 			return nil, err
 		}
-		if err := h.callbackValidator.VerifyOnlySupportedKinds(cbs, callback.CallbackKindNexus, callback.CallbackKindInternal); err != nil {
+		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
 			return nil, err
 		}
 	}

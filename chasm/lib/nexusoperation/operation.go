@@ -13,7 +13,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
-	apinexusoperationpb "go.temporal.io/api/nexusoperation/v1"
+	apinexusoperationpb "go.temporal.io/api/nexusoperation/v1" //nolint:importas
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"

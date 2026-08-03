@@ -678,6 +678,13 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
+		// Worker callbacks are delivered by the standalone Nexus operation machinery only. Checked
+		// before Validate so an unsupported variant is reported as such, rather than as a bad field.
+		if err := wh.callbackValidator.VerifyOnlySupportedKinds(
+			cbs, callback.CallbackKindNexus, callback.CallbackKindInternal,
+		); err != nil {
+			return nil, err
+		}
 		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
 			return nil, err
 		}

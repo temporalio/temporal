@@ -9,7 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
-	notificationpb "go.temporal.io/api/notificationservice/v1"
+	"go.temporal.io/api/notificationservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
@@ -79,6 +79,7 @@ func (n invocableWorker) Invoke(
 	)
 
 	// Attempt to dispatch the Nexus task synchronously.
+	// nolint:forbidigo // Wall-clock latency of an outgoing RPC; component time does not measure it.
 	startTime := time.Now()
 	resp, rpcErr := h.matchingClient.DispatchNexusTask(ctx, request)
 	result, outcome := n.classifyDispatchResult(ctx, logger, resp, rpcErr)
@@ -124,10 +125,9 @@ func (n invocableWorker) buildDispatchRequest(ns *namespace.Namespace) (*matchin
 		},
 		Request: &nexuspb.Request{
 			Header: map[string]string{},
-			// The invoker here is the server itself, which always understands Temporal failures. Without
-			// this, workers answer with the legacy wire format, whose operation errors and handler errors
-			// classifyDispatchResult cannot tell apart from a delivery failure - so a terminally failed
-			// completion would be retried forever.
+			// The invoker here is the server itself, which always understands Temporal failures. Asking
+			// for them keeps a failure's message and stack trace intact; a worker too old to notice this
+			// field answers in the legacy wire format, which classifyDispatchResult also handles.
 			Capabilities: &nexuspb.Request_Capabilities{TemporalFailureResponses: true},
 			Variant: &nexuspb.Request_StartOperation{
 				StartOperation: &nexuspb.StartOperationRequest{
@@ -145,14 +145,14 @@ func (n invocableWorker) buildDispatchRequest(ns *namespace.Namespace) (*matchin
 
 // buildOnCompleteRequest builds the input delivered to the worker's completion handler from the source
 // operation's outcome and the context the callback was registered with.
-func (n invocableWorker) buildOnCompleteRequest() (*notificationpb.OnCompleteRequest, error) {
-	outcome := &notificationpb.OnCompleteRequest_Outcome{}
+func (n invocableWorker) buildOnCompleteRequest() (*notificationservice.OnCompleteRequest, error) {
+	outcome := &notificationservice.OnCompleteRequest_Outcome{}
 	if n.completion.Error != nil {
 		failure, err := nexusToTemporalFailure(n.completion.Error)
 		if err != nil {
 			return nil, err
 		}
-		outcome.Result = &notificationpb.OnCompleteRequest_Outcome_Failure{Failure: failure}
+		outcome.Result = &notificationservice.OnCompleteRequest_Outcome_Failure{Failure: failure}
 	} else {
 		// A successful operation may legitimately have no result, in which case the success variant is
 		// still set, just without payloads.
@@ -164,10 +164,10 @@ func (n invocableWorker) buildOnCompleteRequest() (*notificationpb.OnCompleteReq
 			}
 			payloads = &commonpb.Payloads{Payloads: []*commonpb.Payload{p}}
 		}
-		outcome.Result = &notificationpb.OnCompleteRequest_Outcome_Success{Success: payloads}
+		outcome.Result = &notificationservice.OnCompleteRequest_Outcome_Success{Success: payloads}
 	}
 
-	return &notificationpb.OnCompleteRequest{
+	return &notificationservice.OnCompleteRequest{
 		Outcome:       outcome,
 		SourceContext: n.callback.GetSourceContext(),
 	}, nil
@@ -197,7 +197,8 @@ func (n invocableWorker) classifyDispatchResult(
 		return invocationResultOK{}, "success"
 	}
 
-	if startOperationFailed(resp) {
+	if outcome, ok := resp.GetOutcome().(*matchingservice.DispatchNexusTaskResponse_Response); ok &&
+		commonnexus.StartOperationResponseFailed(outcome.Response.GetStartOperation()) {
 		// The worker received the completion but its operation failed. That outcome is the handler's
 		// answer, not a delivery problem, so the callback fails permanently instead of retrying.
 		logger.Error("Worker callback operation failed", tag.Error(err))
@@ -212,15 +213,4 @@ func (n invocableWorker) classifyDispatchResult(
 		return invocationResultRetry{err}, outcomeTag(callCtx, err)
 	}
 	return invocationResultFail{err}, outcomeTag(callCtx, err)
-}
-
-// startOperationFailed reports whether the worker handled the task and failed the operation, as opposed to
-// failing to handle the task at all.
-func startOperationFailed(resp *matchingservice.DispatchNexusTaskResponse) bool {
-	outcome, ok := resp.GetOutcome().(*matchingservice.DispatchNexusTaskResponse_Response)
-	if !ok {
-		return false
-	}
-	_, failed := outcome.Response.GetStartOperation().GetVariant().(*nexuspb.StartOperationResponse_Failure)
-	return failed
 }

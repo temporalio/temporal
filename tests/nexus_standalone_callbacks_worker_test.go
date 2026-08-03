@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexusoperationpb "go.temporal.io/api/nexusoperation/v1"
 	"go.temporal.io/api/notificationservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -338,6 +339,129 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacks()
 		s.awaitCallbackInfos(env, operationID, 2, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
+	s.Run("DeliveredToEveryTaskQueue", func(s *NexusStandaloneTestSuite) {
+		// Each callback is delivered independently, to the task queue it names.
+		env := s.newWorkerCallbackTestEnv()
+		t := s.T()
+
+		firstTaskQueue := testcore.RandomizeStr(t.Name() + "-1")
+		secondTaskQueue := testcore.RandomizeStr(t.Name() + "-2")
+		firstHandler := s.startWorkerCallbackHandler(env, firstTaskQueue, nil)
+		secondHandler := s.startWorkerCallbackHandler(env, secondTaskQueue, nil)
+		endpointName := env.createRandomExternalNexusServer(s.Context(), t, syncNexusHandler("operation-result"))
+
+		operationID := testvars.New(t).Any().String()
+		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+			CompletionCallbacks: []*commonpb.Callback{
+				workerCompletionCallback(firstTaskQueue, payload.EncodeString("first")),
+				workerCompletionCallback(secondTaskQueue, payload.EncodeString("second")),
+			},
+		})
+		s.NoError(err)
+
+		first := s.awaitWorkerCallbackDeliveries(firstHandler, 1)
+		second := s.awaitWorkerCallbackDeliveries(secondHandler, 1)
+		// Each handler sees the source context of its own callback, not the other's.
+		protorequire.ProtoEqual(t, payload.EncodeString("first"), first[0].GetSourceContext())
+		protorequire.ProtoEqual(t, payload.EncodeString("second"), second[0].GetSourceContext())
+
+		s.awaitCallbackInfos(env, operationID, 2, enumspb.CALLBACK_STATE_SUCCEEDED)
+	})
+
+	s.Run("DeliveredOnTerminate", func(s *NexusStandaloneTestSuite) {
+		// Termination closes the operation from the outside; the callback fires for it like any other
+		// terminal state.
+		env := s.newWorkerCallbackTestEnv()
+		t := s.T()
+
+		taskQueue := testcore.RandomizeStr(t.Name())
+		handler := s.startWorkerCallbackHandler(env, taskQueue, nil)
+		endpointName := env.createRandomExternalNexusServer(s.Context(), t, asyncNexusHandler())
+
+		operationID := testvars.New(t).Any().String()
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			CompletionCallbacks: []*commonpb.Callback{workerCompletionCallback(taskQueue, nil)},
+		})
+		s.NoError(err)
+
+		// The operation stays STARTED until it is terminated, so nothing is delivered before then.
+		s.awaitCallbackInfos(env, operationID, 1, enumspb.CALLBACK_STATE_STANDBY)
+		s.Empty(handler.deliveries())
+
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: operationID,
+			RunId:       startResp.GetRunId(),
+			Identity:    "test-identity",
+			Reason:      "terminated by the test",
+		})
+		s.NoError(err)
+
+		deliveries := s.awaitWorkerCallbackDeliveries(handler, 1)
+		s.Nil(deliveries[0].GetOutcome().GetSuccess())
+		s.Require().NotNil(deliveries[0].GetOutcome().GetFailure())
+		s.Contains(deliveries[0].GetOutcome().GetFailure().GetMessage(), "terminated by the test")
+
+		s.awaitCallbackInfos(env, operationID, 1, enumspb.CALLBACK_STATE_SUCCEEDED)
+	})
+
+	s.Run("AttachedOnConflict", func(s *NexusStandaloneTestSuite) {
+		// A worker callback can also be attached to an operation that is already running.
+		env := s.newWorkerCallbackTestEnv()
+		t := s.T()
+
+		firstTaskQueue := testcore.RandomizeStr(t.Name() + "-1")
+		secondTaskQueue := testcore.RandomizeStr(t.Name() + "-2")
+		firstHandler := s.startWorkerCallbackHandler(env, firstTaskQueue, nil)
+		secondHandler := s.startWorkerCallbackHandler(env, secondTaskQueue, nil)
+		endpointName := env.createRandomExternalNexusServer(s.Context(), t, asyncNexusHandler())
+
+		operationID := testvars.New(t).Any().String()
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "first-request",
+			CompletionCallbacks: []*commonpb.Callback{workerCompletionCallback(firstTaskQueue, nil)},
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		attachResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "second-request",
+			CompletionCallbacks: []*commonpb.Callback{workerCompletionCallback(secondTaskQueue, nil)},
+			IdConflictPolicy:    enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		})
+		s.NoError(err)
+		s.False(attachResp.GetStarted(), "the second request must not have created an operation")
+
+		infos := s.awaitCallbackInfos(env, operationID, 2, enumspb.CALLBACK_STATE_STANDBY)
+		s.Equal(firstTaskQueue, infos[0].GetInfo().GetCallback().GetWorker().GetTaskQueueName())
+		s.Equal(secondTaskQueue, infos[1].GetInfo().GetCallback().GetWorker().GetTaskQueueName())
+
+		// Both are released together when the operation closes, including the one attached later.
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: operationID,
+			RunId:       startResp.GetRunId(),
+			Reason:      "terminated by the test",
+		})
+		s.NoError(err)
+
+		s.awaitWorkerCallbackDeliveries(firstHandler, 1)
+		s.awaitWorkerCallbackDeliveries(secondHandler, 1)
+		s.awaitCallbackInfos(env, operationID, 2, enumspb.CALLBACK_STATE_SUCCEEDED)
+	})
+
 	s.Run("RejectsIncompleteCallbacks", func(s *NexusStandaloneTestSuite) {
 		env := s.newWorkerCallbackTestEnv()
 		endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{})
@@ -374,6 +498,20 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacksDi
 		})
 		var invalidArgErr *serviceerror.InvalidArgument
 		s.ErrorAs(err, &invalidArgErr)
+		s.ErrorContains(err, "worker completion callbacks are not enabled for this namespace")
+	})
+
+	s.Run("OnConflictAttachWorkerCallbackFails", func(s *NexusStandaloneTestSuite) {
+		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         testvars.New(s.T()).Any().String(),
+			Endpoint:            endpointName,
+			CompletionCallbacks: []*commonpb.Callback{workerCompletionCallback("completions-task-queue", nil)},
+			IdConflictPolicy:    enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		})
 		s.ErrorContains(err, "worker completion callbacks are not enabled for this namespace")
 	})
 

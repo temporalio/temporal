@@ -149,8 +149,8 @@ func newInvocationTaskTest(
 // readCallbackState runs assert against the persisted callback state, so that assertions see what the task
 // handler committed rather than the in-memory component it was handed.
 func readCallbackState(
-	t *testing.T,
 	engineCtx context.Context,
+	t *testing.T,
 	ref chasm.ComponentRef,
 	assert func(chasm.Context, *Callback),
 ) {
@@ -308,7 +308,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			)
 
 			// Verify outcome by reading component state directly.
-			readCallbackState(t, engineCtx, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
+			readCallbackState(engineCtx, t, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
 				tc.assertOutcome(t, chasmCtx, c, executeErr)
 			})
 		})

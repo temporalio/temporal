@@ -12,7 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
-	notificationpb "go.temporal.io/api/notificationservice/v1"
+	"go.temporal.io/api/notificationservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/chasm"
@@ -207,6 +207,75 @@ func TestExecuteInvocationTaskWorker_Outcomes(t *testing.T) {
 			},
 		},
 		{
+			// A worker too old to answer with Temporal failures reports the same verdict as
+			// "operation-failed" through the legacy wire format. It is still an answer, not a
+			// delivery problem, so the callback must not retry it.
+			name: "legacy-operation-failed",
+			response: startOperationResponse(&nexuspb.StartOperationResponse{
+				// nolint:staticcheck // Exercising the deprecated wire format on purpose.
+				Variant: &nexuspb.StartOperationResponse_OperationError{
+					OperationError: &nexuspb.UnsuccessfulOperationError{
+						OperationState: string(nexus.OperationStateFailed),
+						Failure:        &nexuspb.Failure{Message: "handler rejected the completion"},
+					},
+				},
+			}),
+			expectedMetricOutcome: "operation-failed",
+			assertOutcome: func(t *testing.T, ctx chasm.Context, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+
+				terminalFailure, ok := cb.TerminalFailure.TryGet(ctx)
+				require.True(t, ok)
+				require.Contains(t, terminalFailure.GetMessage(), "handler rejected the completion")
+			},
+		},
+		{
+			// Same for a handler error: the legacy format carries the retry behavior, so a retryable
+			// one still backs off instead of being read as an unknown outcome.
+			name: "legacy-retryable-handler-error",
+			response: &matchingservice.DispatchNexusTaskResponse{
+				// nolint:staticcheck // Exercising the deprecated wire format on purpose.
+				Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{
+					HandlerError: &nexuspb.HandlerError{
+						ErrorType:     string(nexus.HandlerErrorTypeInternal),
+						RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE,
+						Failure:       &nexuspb.Failure{Message: "worker said no"},
+					},
+				},
+			},
+			expectedMetricOutcome: "handler-error:INTERNAL",
+			assertOutcome: func(t *testing.T, ctx chasm.Context, cb *Callback, err error) {
+				var destDownErr *queueserrors.DestinationDownError
+				require.ErrorAs(t, err, &destDownErr)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+
+				_, hasTerminalFailure := cb.TerminalFailure.TryGet(ctx)
+				require.False(t, hasTerminalFailure)
+			},
+		},
+		{
+			name: "legacy-non-retryable-handler-error",
+			response: &matchingservice.DispatchNexusTaskResponse{
+				// nolint:staticcheck // Exercising the deprecated wire format on purpose.
+				Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{
+					HandlerError: &nexuspb.HandlerError{
+						ErrorType:     string(nexus.HandlerErrorTypeBadRequest),
+						RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE,
+						Failure:       &nexuspb.Failure{Message: "malformed completion"},
+					},
+				},
+			},
+			expectedMetricOutcome: "handler-error:BAD_REQUEST",
+			assertOutcome: func(t *testing.T, ctx chasm.Context, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+
+				_, ok := cb.TerminalFailure.TryGet(ctx)
+				require.True(t, ok)
+			},
+		},
+		{
 			name:                  "retryable-rpc-error",
 			responseErr:           status.Error(codes.Unavailable, "matching unavailable"),
 			expectedMetricOutcome: "unknown-error",
@@ -278,7 +347,7 @@ func TestExecuteInvocationTaskWorker_Outcomes(t *testing.T) {
 				&callbackspb.InvocationTask{Attempt: 0},
 			)
 
-			readCallbackState(t, engineCtx, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
+			readCallbackState(engineCtx, t, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
 				tc.assertOutcome(t, chasmCtx, c, executeErr)
 			})
 		})
@@ -296,7 +365,7 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		completion nexusrpc.CompleteOperationOptions
-		assertOn   func(*testing.T, *notificationpb.OnCompleteRequest)
+		assertOn   func(*testing.T, *notificationservice.OnCompleteRequest)
 	}{
 		{
 			name: "successful-completion",
@@ -304,7 +373,7 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 				Result: &commonpb.Payload{Data: []byte("result-data")},
 				Links:  []nexus.Link{sourceLink},
 			},
-			assertOn: func(t *testing.T, req *notificationpb.OnCompleteRequest) {
+			assertOn: func(t *testing.T, req *notificationservice.OnCompleteRequest) {
 				payloads := req.GetOutcome().GetSuccess().GetPayloads()
 				require.Len(t, payloads, 1)
 				require.Equal(t, []byte("result-data"), payloads[0].GetData())
@@ -317,7 +386,7 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 			completion: nexusrpc.CompleteOperationOptions{
 				Links: []nexus.Link{sourceLink},
 			},
-			assertOn: func(t *testing.T, req *notificationpb.OnCompleteRequest) {
+			assertOn: func(t *testing.T, req *notificationservice.OnCompleteRequest) {
 				require.NotNil(t, req.GetOutcome())
 				require.Nil(t, req.GetOutcome().GetFailure())
 				require.Empty(t, req.GetOutcome().GetSuccess().GetPayloads())
@@ -332,7 +401,7 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 				},
 				Links: []nexus.Link{sourceLink},
 			},
-			assertOn: func(t *testing.T, req *notificationpb.OnCompleteRequest) {
+			assertOn: func(t *testing.T, req *notificationservice.OnCompleteRequest) {
 				require.Nil(t, req.GetOutcome().GetSuccess())
 				// The operation error is unwrapped; the handler receives the underlying cause.
 				require.Equal(t, "operation failed", req.GetOutcome().GetFailure().GetMessage())
@@ -395,7 +464,7 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 			require.Len(t, start.GetLinks(), 1)
 			require.Equal(t, sourceLink.URL.String(), start.GetLinks()[0].GetUrl())
 
-			var onComplete notificationpb.OnCompleteRequest
+			var onComplete notificationservice.OnCompleteRequest
 			require.NoError(t, payload.Decode(start.GetPayload(), &onComplete))
 			protorequire.ProtoEqual(t, &commonpb.Payload{Data: []byte("source-context")}, onComplete.GetSourceContext())
 			tc.assertOn(t, &onComplete)
