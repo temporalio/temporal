@@ -2,12 +2,10 @@ package nexusoperation
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/google/uuid"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
@@ -342,79 +340,28 @@ func (v *validator) validateAndNormalizeCompletionCallbacks(
 	}
 	ns := req.GetNamespace()
 
-	// The count is enforced here rather than left to the callback validator below, which is only
-	// handed the Nexus-variant subset.
-	if limit := v.config.MaxCallbacksPerExecution(ns); len(cbs) > limit {
-		return serviceerror.NewInvalidArgumentf("cannot attach more than %d callbacks to an execution", limit)
+	// Standalone Nexus operations are the only execution type that can deliver a Worker callback.
+	if err := v.callbackValidator.VerifyOnlySupportedKinds(
+		cbs, callback.CallbackKindNexus, callback.CallbackKindWorker,
+	); err != nil {
+		return err
 	}
-
-	// TODO(chrsmith): This needs to be refactored, pushing the validation into callback.Validator,
-	// rather than needing to have this awkward one-off codepath.
-
-	// Validate the structure of all callbacks.
-	nexusCbs := make([]*commonpb.Callback, 0, len(cbs))
-	for i, cb := range cbs {
-		switch variant := cb.GetVariant().(type) {
-		case *commonpb.Callback_Nexus_:
+	for _, cb := range cbs {
+		switch callback.KindOf(cb) {
+		case callback.CallbackKindNexus:
 			if !v.config.EnableNexusCallbacks(ns) {
 				return serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
 			}
-			nexusCbs = append(nexusCbs, cb)
-		case *commonpb.Callback_Worker_:
+		case callback.CallbackKindWorker:
 			if !v.config.EnableWorkerCallbacks(ns) {
 				return serviceerror.NewInvalidArgument("worker completion callbacks are not enabled for this namespace")
 			}
-			if err := v.validateWorkerCallback(ns, i, variant.Worker); err != nil {
-				return err
-			}
 		default:
-			return serviceerror.NewInvalidArgumentf(
-				"completion_callbacks[%d]: unsupported callback variant: %T", i, cb.GetVariant())
+			// Unreachable: VerifyOnlySupportedKinds above rejected every other kind.
 		}
 	}
 
-	if len(nexusCbs) == 0 {
-		return nil
-	}
-	// The shared callback validator only understands the Nexus variant; Worker callbacks are
-	// validated above.
-	return v.callbackValidator.Validate(ctx, ns, nexusCbs)
-}
-
-// validateWorkerCallback checks a Worker-variant completion callback. The task queue, service, and
-// operation together address the handler the completion is delivered to, so all three are required:
-// without them the callback has nowhere to go, and no delivery attempt would change that.
-func (v *validator) validateWorkerCallback(ns string, idx int, cb *commonpb.Callback_Worker) error {
-	field := func(name string) string {
-		return fmt.Sprintf("completion_callbacks[%d].worker.%s", idx, name)
-	}
-	if cb.GetTaskQueueName() == "" {
-		return serviceerror.NewInvalidArgumentf("%s is required", field("task_queue_name"))
-	}
-	if err := v.validateIDLength(field("task_queue_name"), cb.GetTaskQueueName()); err != nil {
-		return err
-	}
-	if cb.GetService() == "" {
-		return serviceerror.NewInvalidArgumentf("%s is required", field("service"))
-	}
-	if limit := v.config.MaxServiceNameLength(ns); len(cb.GetService()) > limit {
-		return serviceerror.NewInvalidArgumentf("%s exceeds length limit. Length=%d Limit=%d",
-			field("service"), len(cb.GetService()), limit)
-	}
-	if cb.GetOperation() == "" {
-		return serviceerror.NewInvalidArgumentf("%s is required", field("operation"))
-	}
-	if limit := v.config.MaxOperationNameLength(ns); len(cb.GetOperation()) > limit {
-		return serviceerror.NewInvalidArgumentf("%s exceeds length limit. Length=%d Limit=%d",
-			field("operation"), len(cb.GetOperation()), limit)
-	}
-	// The source context is opaque user data that the server carries to the handler, so it is bounded
-	// by the same payload limit as the operation's own input.
-	if size := cb.GetSourceContext().Size(); size > v.config.PayloadSizeLimit(ns) {
-		return serviceerror.NewInvalidArgumentf("%s exceeds size limit. Length=%d Limit=%d",
-			field("source_context"), size, v.config.PayloadSizeLimit(ns))
-	}
-	return nil
+	return v.callbackValidator.Validate(ctx, ns, cbs)
 }
 
 // validateOnConflictOptions validates the on_conflict_options of a start request:

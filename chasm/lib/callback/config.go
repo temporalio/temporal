@@ -20,6 +20,20 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
 )
 
+var WorkerNameMaxLength = dynamicconfig.NewNamespaceIntSetting(
+	"callback.worker.maxNameLength",
+	1000,
+	`The maximum allowed length of the task queue, service, and operation names that address the
+handler of a Worker completion callback. Uses Go's len() function to determine the length.`,
+)
+
+var WorkerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
+	"callback.worker.maxSourceContextSize",
+	32768,
+	`The maximum allowed size, in bytes, of the opaque source context attached to a Worker completion
+callback. The server carries this payload to the callback's handler untouched.`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"callback.request.timeout",
 	time.Second*10,

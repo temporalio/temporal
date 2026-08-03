@@ -173,18 +173,20 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	healthInterceptor := interceptor.NewHealthInterceptor()
 	healthInterceptor.SetHealthy(true)
-	cbValidator := callback.NewValidator(
-		func(string) int { return 2000 },
-		config.CallbackURLMaxLength,
-		config.CallbackHeaderMaxSize,
-		func(string) callback.AddressMatchRules {
+	cbValidator := callback.NewValidator(callback.ValidatorConfig{
+		MaxPerExecution: func(string) int { return 2000 },
+		URLMaxLength:    config.CallbackURLMaxLength,
+		HeaderMaxSize:   config.CallbackHeaderMaxSize,
+		EndpointRules: func(string) callback.AddressMatchRules {
 			return callback.AddressMatchRules{
 				Rules: []callback.AddressMatchRule{
 					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
 				},
 			}
 		},
-	)
+		WorkerNameMaxLength:        func(string) int { return 1000 },
+		WorkerSourceContextMaxSize: func(string) int { return 32768 },
+	})
 	saValidator := searchattribute.NewValidator(
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesMapperProvider(),
@@ -1110,9 +1112,10 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 
 // Assert that Workflows can only accept Nexus-variant callbacks. (Or Internal.)
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallback() {
-	tests := []struct {
+	testCases := []struct {
 		Name     string
 		Callback *commonpb.Callback
+		ErrMsg   string
 	}{
 		{
 			"worker",
@@ -1125,19 +1128,22 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 					},
 				},
 			},
+			// A well-formed callback of a kind only standalone Nexus operations can deliver.
+			"worker callbacks are not supported for this execution type",
 		},
 		{
 			"nil variant",
 			&commonpb.Callback{},
+			"unknown callback variant",
 		},
 	}
 
-	for _, test := range tests {
+	for _, test := range testCases {
 		s.Run(test.Name, func() {
 			var unimplementedErr *serviceerror.Unimplemented
 			_, err := s.startWorkflowWithCallbacks([]*commonpb.Callback{test.Callback})
 			s.ErrorAs(err, &unimplementedErr)
-			s.ErrorContains(err, "unknown callback variant")
+			s.ErrorContains(err, test.ErrMsg)
 		})
 	}
 }

@@ -7,11 +7,9 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	apinexusoperationpb "go.temporal.io/api/nexusoperation/v1"
+	nexusoperationpb "go.temporal.io/api/nexusoperation/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/callback"
@@ -85,20 +83,20 @@ func (s *NexusStandaloneTestSuite) awaitCallbackInfos(
 	operationID string,
 	wantCount int,
 	wantState enumspb.CallbackState,
-) []*apinexusoperationpb.CallbackInfo {
+) []*nexusoperationpb.CallbackInfo {
 	s.T().Helper()
 
-	var infos []*apinexusoperationpb.CallbackInfo
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	var infos []*nexusoperationpb.CallbackInfo
+	s.Await(func(s *NexusStandaloneTestSuite) {
 		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: operationID,
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 		infos = descResp.GetCompletionCallbacks()
-		require.Len(t, infos, wantCount)
+		s.Len(infos, wantCount)
 		for _, info := range infos {
-			require.Equal(t, wantState, info.GetInfo().GetState())
+			s.Equal(wantState, info.GetInfo().GetState())
 		}
 	}, 15*time.Second, 100*time.Millisecond)
 	return infos
@@ -266,7 +264,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 			RequestId:           "second-request",
 			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb2")},
 			IdConflictPolicy:    enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
-			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
 				AttachRequestId:           true,
 				AttachCompletionCallbacks: true,
 			},
@@ -293,21 +291,31 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 
 		// The Worker variant is supported too, but under its own namespace flag. See
 		// nexus_standalone_callbacks_worker_test.go.
-		for name, cb := range map[string]*commonpb.Callback{
-			"internal": {Variant: &commonpb.Callback_Internal_{Internal: &commonpb.Callback_Internal{
-				Data: []byte("data"),
-			}}},
-			"unset": {},
+		for name, tc := range map[string]struct {
+			callback *commonpb.Callback
+			errMsg   string
+		}{
+			// Internal callbacks are a known kind, just not one a Nexus operation can deliver.
+			"internal": {
+				callback: &commonpb.Callback{Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{Data: []byte("data")},
+				}},
+				errMsg: "internal callbacks are not supported for this execution type",
+			},
+			"unset": {
+				callback: &commonpb.Callback{},
+				errMsg:   "unknown callback variant",
+			},
 		} {
 			s.Run(name, func(s *NexusStandaloneTestSuite) {
 				_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 					OperationId:         testvars.New(s.T()).Any().String(),
 					Endpoint:            endpointName,
-					CompletionCallbacks: []*commonpb.Callback{cb},
+					CompletionCallbacks: []*commonpb.Callback{tc.callback},
 				})
-				var invalidArgErr *serviceerror.InvalidArgument
-				s.ErrorAs(err, &invalidArgErr)
-				s.ErrorContains(err, "unsupported callback variant")
+				var unimplementedErr *serviceerror.Unimplemented
+				s.ErrorAs(err, &unimplementedErr)
+				s.ErrorContains(err, tc.errMsg)
 			})
 		}
 	})
@@ -318,7 +326,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 			OperationId:         testvars.New(s.T()).Any().String(),
 			Endpoint:            env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{}),
 			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb")},
-			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
 				AttachRequestId:           true,
 				AttachCompletionCallbacks: true,
 				AttachLinks:               true,
@@ -353,7 +361,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacksDisabled
 			Endpoint:            endpointName,
 			CompletionCallbacks: cbs,
 			IdConflictPolicy:    enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
-			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
 				AttachRequestId:           true,
 				AttachCompletionCallbacks: true,
 			},

@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -10,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	apinexusoperationpb "go.temporal.io/api/nexusoperation/v1"
+	apinexusoperationpb "go.temporal.io/api/nexusoperation/v1" //nolint:importas
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -32,18 +33,20 @@ func newTestValidator(config *Config) *validator {
 
 // Returns a callback.Validator that accepts any well-formed callback.
 func newTestCallbackValidator() callback.Validator {
-	return callback.NewValidator(
-		func(string) int { return 10 },
-		func(string) int { return 1000 },
-		func(string) int { return 4096 },
-		func(string) callback.AddressMatchRules {
+	return callback.NewValidator(callback.ValidatorConfig{
+		MaxPerExecution: func(string) int { return 10 },
+		URLMaxLength:    func(string) int { return 1000 },
+		HeaderMaxSize:   func(string) int { return 4096 },
+		EndpointRules: func(string) callback.AddressMatchRules {
 			return callback.AddressMatchRules{
 				Rules: []callback.AddressMatchRule{
 					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
 				},
 			}
 		},
-	)
+		WorkerNameMaxLength:        func(string) int { return 1000 },
+		WorkerSourceContextMaxSize: func(string) int { return 4096 },
+	})
 }
 
 func testNexusCallback(url string) *commonpb.Callback {
@@ -105,7 +108,9 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		name   string
 		mutate func(*workflowservice.StartNexusOperationExecutionRequest)
 		errMsg string
-		check  func(*testing.T, *workflowservice.StartNexusOperationExecutionRequest)
+		// unimplemented expects an Unimplemented error rather than the usual InvalidArgument.
+		unimplemented bool
+		check         func(*testing.T, *workflowservice.StartNexusOperationExecutionRequest)
 	}{
 		{
 			name: "valid request",
@@ -392,7 +397,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 					},
 				}}
 			},
-			errMsg: "completion_callbacks[0]: unsupported callback variant",
+			errMsg:        "completion_callbacks[0]: internal callbacks are not supported",
+			unimplemented: true,
 		},
 		{
 			name: "on_conflict_options - attach_completion_callbacks requires attach_request_id",
@@ -425,8 +431,16 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			err := newValidator(config, log.NewNoopLogger(), nil, saValidator, newTestCallbackValidator()).
 				validateAndNormalizeStartRequest(context.Background(), req)
 			if tc.errMsg != "" {
-				var invalidArgErr *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgErr)
+				require.Error(t, err)
+				if tc.unimplemented {
+					// A callback variant this execution type can never deliver, as opposed to a
+					// malformed request.
+					var unimplementedErr *serviceerror.Unimplemented
+					require.ErrorAs(t, err, &unimplementedErr)
+				} else {
+					var invalidArgErr *serviceerror.InvalidArgument
+					require.ErrorAs(t, err, &invalidArgErr)
+				}
 				require.Contains(t, err.Error(), tc.errMsg)
 			} else {
 				require.NoError(t, err)
@@ -874,15 +888,11 @@ func TestValidateAndNormalizeCompletionCallbacks(t *testing.T) {
 			CompletionCallbacks: cbs,
 		}
 	}
+	// Only the enablement flags are read here; every limit is enforced by the callback validator.
 	callbackConfig := func(nexusEnabled, workerEnabled bool) *Config {
 		return &Config{
-			EnableNexusCallbacks:     func(string) bool { return nexusEnabled },
-			EnableWorkerCallbacks:    func(string) bool { return workerEnabled },
-			MaxCallbacksPerExecution: func(string) int { return 2 },
-			MaxIDLengthLimit:         func() int { return 50 },
-			MaxServiceNameLength:     func(string) int { return 10 },
-			MaxOperationNameLength:   func(string) int { return 10 },
-			PayloadSizeLimit:         func(string) int { return 20 },
+			EnableNexusCallbacks:  func(string) bool { return nexusEnabled },
+			EnableWorkerCallbacks: func(string) bool { return workerEnabled },
 		}
 	}
 	enabled := newTestValidator(callbackConfig(true, true))
@@ -912,23 +922,27 @@ func TestValidateAndNormalizeCompletionCallbacks(t *testing.T) {
 	})
 
 	t.Run("TooManyCallbacks", func(t *testing.T) {
-		// The limit covers every variant, not just the ones the shared callback validator sees.
-		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(
-			testWorkerCallback("tq1"), testWorkerCallback("tq2"), testWorkerCallback("tq3")))
+		// The count limit is the callback validator's, and it covers every variant.
+		cbs := make([]*commonpb.Callback, 11)
+		for i := range cbs {
+			cbs[i] = testWorkerCallback(fmt.Sprintf("tq%d", i))
+		}
+		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(cbs...))
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
-		require.Contains(t, err.Error(), "cannot attach more than 2 callbacks to an execution")
+		require.Contains(t, err.Error(), "cannot attach more than 10 callbacks to an execution")
 	})
 
 	t.Run("RejectsInternalVariant", func(t *testing.T) {
+		// Internal callbacks are server-generated for workflows; a Nexus operation cannot deliver one.
 		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(&commonpb.Callback{
 			Variant: &commonpb.Callback_Internal_{
 				Internal: &commonpb.Callback_Internal{Data: []byte("data")},
 			},
 		}))
-		var invalidArgErr *serviceerror.InvalidArgument
-		require.ErrorAs(t, err, &invalidArgErr)
-		require.Contains(t, err.Error(), "completion_callbacks[0]: unsupported callback variant")
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+		require.Contains(t, err.Error(), "completion_callbacks[0]: internal callbacks are not supported")
 	})
 
 	t.Run("AcceptsWorkerVariant", func(t *testing.T) {
@@ -950,69 +964,12 @@ func TestValidateAndNormalizeCompletionCallbacks(t *testing.T) {
 		require.Contains(t, err.Error(), "worker completion callbacks are not enabled for this namespace")
 	})
 
-	t.Run("WorkerVariantFields", func(t *testing.T) {
-		for _, tc := range []struct {
-			name   string
-			mutate func(*commonpb.Callback_Worker)
-			errMsg string
-		}{
-			{
-				name:   "task_queue_name is required",
-				mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = "" },
-				errMsg: "completion_callbacks[1].worker.task_queue_name is required",
-			},
-			{
-				name:   "task_queue_name length",
-				mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = strings.Repeat("x", 51) },
-				errMsg: "completion_callbacks[1].worker.task_queue_name exceeds length limit",
-			},
-			{
-				name:   "service is required",
-				mutate: func(w *commonpb.Callback_Worker) { w.Service = "" },
-				errMsg: "completion_callbacks[1].worker.service is required",
-			},
-			{
-				name:   "service length",
-				mutate: func(w *commonpb.Callback_Worker) { w.Service = strings.Repeat("x", 11) },
-				errMsg: "completion_callbacks[1].worker.service exceeds length limit",
-			},
-			{
-				name:   "operation is required",
-				mutate: func(w *commonpb.Callback_Worker) { w.Operation = "" },
-				errMsg: "completion_callbacks[1].worker.operation is required",
-			},
-			{
-				name:   "operation length",
-				mutate: func(w *commonpb.Callback_Worker) { w.Operation = strings.Repeat("x", 11) },
-				errMsg: "completion_callbacks[1].worker.operation exceeds length limit",
-			},
-			{
-				name: "source_context size",
-				mutate: func(w *commonpb.Callback_Worker) {
-					w.SourceContext = &commonpb.Payload{Data: []byte(strings.Repeat("x", 21))}
-				},
-				errMsg: "completion_callbacks[1].worker.source_context exceeds size limit",
-			},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				cb := testWorkerCallback("task-queue")
-				tc.mutate(cb.GetWorker())
-				// Prefixed with an unrelated callback to confirm the index in the error message.
-				err := enabled.validateAndNormalizeCompletionCallbacks(
-					context.Background(), newReq(testNexusCallback("http://localhost/cb"), cb))
-				var invalidArgErr *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgErr)
-				require.Contains(t, err.Error(), tc.errMsg)
-			})
-		}
-	})
-
 	t.Run("RejectsUnsetVariant", func(t *testing.T) {
 		err := enabled.validateAndNormalizeCompletionCallbacks(
 			context.Background(), newReq(&commonpb.Callback{}))
-		var invalidArgErr *serviceerror.InvalidArgument
-		require.ErrorAs(t, err, &invalidArgErr)
-		require.Contains(t, err.Error(), "completion_callbacks[0]: unsupported callback variant")
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+		require.Contains(t, err.Error(), "completion_callbacks[0]: unknown callback variant")
 	})
 
 	t.Run("DelegatesToTheCallbackValidator", func(t *testing.T) {
@@ -1021,6 +978,14 @@ func TestValidateAndNormalizeCompletionCallbacks(t *testing.T) {
 		cb.GetNexus().Header = map[string]string{"Some-Key": "value"}
 		require.NoError(t, enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(cb)))
 		require.Equal(t, map[string]string{"some-key": "value"}, cb.GetNexus().GetHeader())
+
+		// Worker-variant fields are the delegate's job too; see TestValidateWorkerCallback for the
+		// full matrix.
+		badWorker := testWorkerCallback("")
+		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(badWorker))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "completion_callbacks[0].worker.task_queue_name is required")
 	})
 }
 
