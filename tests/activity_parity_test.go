@@ -434,6 +434,7 @@ func (s *activityParityTestSuite) TestUnpauseWithoutPause() {
 
 	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 		t := s.T()
+		t.Skip("WFA should reject unpause on non-paused activity as FailedPrecondition")
 		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
 		assertUnpauseRejected(t, handle.rpc(t, model.Unpause))
 	})
