@@ -59,6 +59,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -647,6 +648,9 @@ func (a *Activity) HandleCanceled(
 	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId(), false); err != nil {
 		return nil, err
 	}
+	if !TransitionCanceled.Possible(a) {
+		return nil, consts.ErrActivityTaskNotCancelRequested
+	}
 
 	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 	if err != nil {
@@ -1071,14 +1075,6 @@ func (a *Activity) unpause(
 	dispatchTime := a.unpauseDispatchTime(ctx, event)
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 
-	if event.req.GetResetAttempts() {
-		attempt.Count = 1
-		attempt.CurrentRetryInterval = nil
-		attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
-	}
-	if event.req.GetResetHeartbeat() {
-		a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
-	}
 	attempt.Stamp++
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
@@ -1099,10 +1095,7 @@ func (a *Activity) unpauseDispatchTime(ctx chasm.MutableContext, event unpauseEv
 		unpauseTime = unpauseTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	}
 	dispatchTime := a.dispatchTimeRespectingStartDelay(unpauseTime)
-	var retryDispatchTime *timestamppb.Timestamp
-	if !event.req.GetResetAttempts() {
-		retryDispatchTime = dispatchTimeForRetry(a.LastAttempt.Get(ctx))
-	}
+	retryDispatchTime := dispatchTimeForRetry(a.LastAttempt.Get(ctx))
 	if retryDispatchTime != nil && retryDispatchTime.AsTime().After(dispatchTime) {
 		return retryDispatchTime.AsTime()
 	}
