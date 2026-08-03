@@ -58,6 +58,8 @@ type (
 		// paginationLimiter enforces the process-wide and per-namespace limits on the
 		// total size of all in-flight pagination buffers. nil is treated as "no limit".
 		paginationLimiter *limiter.KeyedBytesLimiter
+
+		verifyRunIDUniqueness bool
 	}
 
 	// workflowTaskIdentity identifies a specific workflow task attempt
@@ -94,10 +96,11 @@ type (
 	// ExecutionTransactionPayload contains the persistence payload produced by closing
 	// an update-with-new transaction.
 	ExecutionTransactionPayload struct {
-		ExecutionMutation    *persistence.WorkflowMutation
-		ExecutionEvents      []*persistence.WorkflowEvents
-		NewExecutionSnapshot *persistence.WorkflowSnapshot
-		NewExecutionEvents   []*persistence.WorkflowEvents
+		ExecutionMutation                 *persistence.WorkflowMutation
+		ExecutionEvents                   []*persistence.WorkflowEvents
+		NewExecutionSnapshot              *persistence.WorkflowSnapshot
+		NewExecutionEvents                []*persistence.WorkflowEvents
+		NewExecutionVerifyRunIDUniqueness bool
 	}
 )
 
@@ -505,6 +508,14 @@ func (c *ContextImpl) PersistWorkflowEvents(
 	return PersistWorkflowEvents(ctx, shardContext, workflowEventsSlice...)
 }
 
+func (c *ContextImpl) SetVerifyRunIDUniqueness(verify bool) {
+	c.verifyRunIDUniqueness = verify
+}
+
+func (c *ContextImpl) VerifyRunIDUniqueness() bool {
+	return c.verifyRunIDUniqueness
+}
+
 func (c *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -548,6 +559,8 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		ArchetypeID: c.archetypeID,
+
+		VerifyRunIDUniqueness: c.verifyRunIDUniqueness,
 
 		NewWorkflowSnapshot: *newWorkflow,
 		NewWorkflowEvents:   newWorkflowEvents,
@@ -997,6 +1010,7 @@ func (c *ContextImpl) closeMutableStateTransaction(
 		if err != nil {
 			return nil, err
 		}
+		payload.NewExecutionVerifyRunIDUniqueness = payload.NewExecutionSnapshot != nil && newContext.VerifyRunIDUniqueness()
 	}
 	return payload, nil
 }
@@ -1051,6 +1065,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		MutableStateFailoverVersion(newMutableState),
 		payload.NewExecutionSnapshot,
 		payload.NewExecutionEvents,
+		payload.NewExecutionVerifyRunIDUniqueness,
 		c.MutableState.IsWorkflow(),
 	); err != nil {
 		return err
