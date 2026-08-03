@@ -60,6 +60,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -293,7 +294,27 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		}
 		return nil, err
 	}
+	if dispatchTime := a.dispatchTimeForAttempt(lastAttempt); dispatchTime != nil {
+		metrics.TaskScheduleToStartLatency.With(a.taskScheduleToStartMetricsHandler(ctx)).Record(
+			lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
+		)
+	}
 	return a.GenerateRecordActivityTaskStartedResponse(ctx, request.GetPollRequest().GetNamespace())
+}
+
+func (a *Activity) taskScheduleToStartMetricsHandler(ctx chasm.Context) metrics.Handler {
+	actCtx := activityContextFromChasm(ctx)
+	namespaceEntry := ctx.NamespaceEntry()
+	namespaceName := namespaceEntry.Name().String()
+	taskQueue := a.GetTaskQueue().GetName()
+	return metrics.GetPerTaskQueuePartitionTypeScope(
+		a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskStartedScope),
+		namespaceName,
+		tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), taskQueue).
+			TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).
+			RootPartition(),
+		actCtx.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+	)
 }
 
 // GenerateRecordActivityTaskStartedResponse generates the response for HandleStarted.
@@ -613,12 +634,8 @@ func (a *Activity) HandleFailed(
 		a.emitHeartbeatMetrics(ctx, details)
 	}
 
-	appFailure := failure.GetApplicationFailureInfo()
-	isRetryable := appFailure != nil &&
-		!appFailure.GetNonRetryable() &&
-		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
-
-	retryState, err := a.tryReschedule(ctx, isRetryable, appFailure.GetNextRetryDelay().AsDuration(), failure)
+	nextRetryDelay := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration()
+	retryState, err := a.tryReschedule(ctx, a.isRetryableFailure(failure), nextRetryDelay, failure)
 	if err != nil {
 		return nil, err
 	}
@@ -640,6 +657,22 @@ func (a *Activity) HandleFailed(
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
 
+// isRetryableFailure reports whether a worker-reported activity failure should be retried. A nil
+// failure is retryable. Only application failures are otherwise  retryable, unless the failure
+// marks itself non-retryable or its error type is listed in the retry policy's non-retryable types.
+func (a *Activity) isRetryableFailure(failure *failurepb.Failure) bool {
+	if failure == nil {
+		return true
+	}
+	appFailure := failure.GetApplicationFailureInfo()
+	if appFailure == nil {
+		return false
+	}
+	isMarkedNonRetryable := appFailure.GetNonRetryable()
+	isNonRetryableType := slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
+	return !isMarkedNonRetryable && !isNonRetryableType
+}
+
 // HandleCanceled updates the activity on activity canceled.
 func (a *Activity) HandleCanceled(
 	ctx chasm.MutableContext,
@@ -647,6 +680,9 @@ func (a *Activity) HandleCanceled(
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId(), false); err != nil {
 		return nil, err
+	}
+	if !TransitionCanceled.Possible(a) {
+		return nil, consts.ErrActivityTaskNotCancelRequested
 	}
 
 	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
@@ -709,6 +745,8 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
@@ -1072,14 +1110,6 @@ func (a *Activity) unpause(
 	dispatchTime := a.unpauseDispatchTime(ctx, event)
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 
-	if event.req.GetResetAttempts() {
-		attempt.Count = 1
-		attempt.CurrentRetryInterval = nil
-		attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
-	}
-	if event.req.GetResetHeartbeat() {
-		a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
-	}
 	attempt.Stamp++
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
@@ -1100,10 +1130,7 @@ func (a *Activity) unpauseDispatchTime(ctx chasm.MutableContext, event unpauseEv
 		unpauseTime = unpauseTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	}
 	dispatchTime := a.dispatchTimeRespectingStartDelay(unpauseTime)
-	var retryDispatchTime *timestamppb.Timestamp
-	if !event.req.GetResetAttempts() {
-		retryDispatchTime = dispatchTimeForRetry(a.LastAttempt.Get(ctx))
-	}
+	retryDispatchTime := dispatchTimeForRetry(a.LastAttempt.Get(ctx))
 	if retryDispatchTime != nil && retryDispatchTime.AsTime().After(dispatchTime) {
 		return retryDispatchTime.AsTime()
 	}

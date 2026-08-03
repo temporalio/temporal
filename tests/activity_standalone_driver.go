@@ -215,6 +215,19 @@ func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
 	}
 }
 
+func (a *saaHandle) respondCanceledByID() error {
+	_, err := a.d.env.FrontendClient().RespondActivityTaskCanceledById(
+		a.d.ctx,
+		&workflowservice.RespondActivityTaskCanceledByIdRequest{
+			Namespace:  a.d.env.Namespace().String(),
+			ActivityId: a.activityID,
+			RunId:      a.runID,
+			Identity:   a.d.env.Tv().WorkerIdentity(),
+		},
+	)
+	return err
+}
+
 // rpc performs the frontend RPC for a non-Poll, non-timer event and returns its error.
 func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	fc := a.d.env.FrontendClient()
@@ -239,7 +252,7 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 		return err
 	case model.RespondFailedType:
 		req := &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay, a.cfg.LargeFailure),
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: respondFailedFailure(e, a.cfg.NextRetryDelay, a.cfg.LargeFailure),
 		}
 		if e.HasHeartbeatDetails {
 			req.LastHeartbeatDetails = activityHeartbeatDetails
