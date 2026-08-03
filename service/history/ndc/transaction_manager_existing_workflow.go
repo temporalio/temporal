@@ -96,18 +96,13 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		return err
 	}
 	if currentRunID == "" {
-		// The current execution record is missing. A run is never without a current record in normal
-		// operation (it is written atomically with the run), so this can only be a deletion: delete
-		// replication removed the current record because the workflow is being deleted. Therefore:
-		//   - closed target: persist via bypass-current. Do NOT re-insert a current record or recreate
-		//     any carried successor - that would resurrect a deleted workflow. The current record is
-		//     re-established elsewhere: a new/reset run replicates as its own run and creates its current
-		//     record via the new-workflow path, never here.
-		//   - running target: only the chain tail can be running, and retention deletes only closed
-		//     chains, so a non-current run is never running - a running run here is an anomaly -> error.
-		//
-		// A carried newWorkflow only ever comes from continue-as-new/cron/retry (never reset) and is
-		// never persisted on this path, so release the stub if present.
+		// The current execution record is missing. It is written atomically with the run, so this only
+		// happens when delete replication removed it (the workflow is being deleted) - we must never
+		// re-create anything here (that would resurrect a deleted workflow):
+		//   - closed target: bypass-current, leaving the current record missing (it is re-established only
+		//     by the new/reset run replicating as its own run).
+		//   - running target: a non-current run is never running, so this is an anomaly -> error.
+		// The carried newWorkflow (continue-as-new/cron/retry only) is never persisted here, so release it.
 		if newWorkflow != nil {
 			newWorkflow.GetReleaseFn()(nil)
 		}

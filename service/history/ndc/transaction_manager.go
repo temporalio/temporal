@@ -69,12 +69,6 @@ import (
 // conflict resolve path + suppress current
 // 1. update from zombie to current & suppress current							-> nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
 // 2. update from zombie to current & new created as current & suppress current	-> nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
-
-// missing current record path (current execution record was deleted, current run ID is ""); the
-// current record is only ever removed by deletion, so:
-//   - closed target -> bypass-current (nDCTransactionPolicyUpdateAsZombie / nDCTransactionPolicyConflictResolveAsZombie);
-//     the current record is left missing and re-established only by the new/reset run's own replication
-//   - running target -> error (a non-current run is never running, so a missing current here is an anomaly)
 type nDCTransactionPolicy int
 
 const (
