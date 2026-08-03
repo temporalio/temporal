@@ -174,6 +174,7 @@ func (o *Operation) RequestCancel(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.CancellationState,
 ) error {
+	// A cancel retry can arrive after the operation closed, so dedupe before rejecting terminal states.
 	existingCancellation, cancellationRequested := o.Cancellation.TryGet(ctx)
 	if cancellationRequested &&
 		existingCancellation.GetRequestId() == req.GetRequestId() {
