@@ -31,11 +31,13 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -1197,7 +1199,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
 
 		for _, tc := range testcases {
 			s.Run(tc.name+" "+tcReset.name, func() {
-				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, chasmworkflow.NewRegistry(), tc.events, nil, "", tcReset.isReset)
+				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, chasmworkflow.NewRegistry(), tc.events, nil, "", tcReset.isReset, s.logger)
 				s.NoError(err)
 			})
 		}
@@ -1264,7 +1266,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithNoPendingChildren() {
 
 		for _, tc := range testCases {
 			s.Run(tc.name+" "+tcReset.name, func() {
-				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, chasmworkflow.NewRegistry(), tc.events, nil, "", tcReset.isReset)
+				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, chasmworkflow.NewRegistry(), tc.events, nil, "", tcReset.isReset, s.logger)
 				s.NoError(err)
 			})
 		}
@@ -1499,7 +1501,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				}
 			}
 
-			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", tc.isReset)
+			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", tc.isReset, s.logger)
 			s.NoError(err)
 
 			s.Equal(tc.expected, appliedEvents)
@@ -1570,7 +1572,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
 		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  {},
 	}
-	reappliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, excludes, "", false)
+	reappliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, excludes, "", false, s.logger)
 	s.Empty(reappliedEvents)
 	s.NoError(err)
 
@@ -1596,7 +1598,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 		},
 	}
 	events = append(events, event7, event8)
-	reappliedEvents, err = reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, excludes, "", true)
+	reappliedEvents, err = reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, excludes, "", true, s.logger)
 	s.Empty(reappliedEvents)
 	s.NoError(err)
 }
@@ -1891,7 +1893,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 			events := []*historypb.HistoryEvent{event}
 
 			// Call reapplyEvents and expect an error
-			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", true)
+			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", true, s.logger)
 			s.Error(err)
 			s.Contains(err.Error(), tc.expectedErrorContains)
 			s.Empty(appliedEvents)
@@ -1939,7 +1941,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 	events := []*historypb.HistoryEvent{event}
 
 	// Call reapplyEvents - should skip the event (no error, no applied events)
-	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", true)
+	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", true, s.logger)
 	s.NoError(err)
 	s.Empty(appliedEvents) // Event should be skipped
 }
@@ -1977,7 +1979,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_WithTim
 		attr.GetWorkflowUpdateOptions(),
 	).Return(&historypb.HistoryEvent{}, nil)
 
-	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), []*historypb.HistoryEvent{event}, nil, "", true)
+	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), []*historypb.HistoryEvent{event}, nil, "", true, s.logger)
 	s.NoError(err)
 	s.Len(appliedEvents, 1)
 }
@@ -2121,7 +2123,7 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMToChasmFallback() {
 
 		applied, err := reapplyEvents(
 			context.Background(), ms, nil, smReg, s.newChasmRegistryWithEvent(eventType, nil),
-			[]*historypb.HistoryEvent{event}, nil, "", true,
+			[]*historypb.HistoryEvent{event}, nil, "", true, s.logger,
 		)
 		s.NoError(err)
 		s.Equal([]*historypb.HistoryEvent{event}, applied)
@@ -2132,7 +2134,7 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMToChasmFallback() {
 
 		applied, err := reapplyEvents(
 			context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(),
-			[]*historypb.HistoryEvent{event}, nil, "", true,
+			[]*historypb.HistoryEvent{event}, nil, "", true, s.logger,
 		)
 		s.NoError(err)
 		s.Empty(applied)
@@ -2150,6 +2152,7 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMNotFoundDoesNotConsultChasm(
 	// reaches.
 	ms := historyi.NewMockMutableState(s.controller)
 	ms.EXPECT().HSM().Return(nil).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 	// No ChasmEnabled expectation on purpose: cherryPickChasmEvent calls it as soon as the registry
 	// recognizes the event type, so consulting CHASM fails on an unexpected call.
 
@@ -2157,7 +2160,7 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMNotFoundDoesNotConsultChasm(
 		context.Background(), ms, nil,
 		newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound),
 		s.newChasmRegistryWithEvent(eventType, nil),
-		[]*historypb.HistoryEvent{{EventId: 5, EventType: eventType}}, nil, "", false,
+		[]*historypb.HistoryEvent{{EventId: 5, EventType: eventType}}, nil, "", false, s.logger,
 	)
 
 	s.NoError(err, "a missing operation must not surface as an error")
@@ -2186,15 +2189,20 @@ func newHSMRegistryWithEvent(eventType enumspb.EventType, cherryPickErr error) *
 
 func (s *workflowResetterSuite) TestCherryPickHSMEvent() {
 	const eventType = enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
-	event := &historypb.HistoryEvent{EventType: eventType}
+	event := &historypb.HistoryEvent{EventId: 5, EventType: eventType}
 	cherryPickErr := errors.New("cherry-pick failed")
+	workflowKey := definition.NewWorkflowKey("test-namespace-id", "test-workflow-id", "test-run-id")
+	warnLevel, debugLevel := testlogger.Warn, testlogger.Debug
 
 	testCases := []struct {
 		name        string
 		registry    *hsm.Registry
 		expectHSM   bool
+		isReset     bool
 		wantOutcome cherryPickOutcome
 		wantErr     error
+		// wantSkipLog, when set, is the level the missing-component log line must be emitted at.
+		wantSkipLog *testlogger.Level
 	}{
 		{
 			name:        "event type unknown to hsm falls back",
@@ -2202,10 +2210,19 @@ func (s *workflowResetterSuite) TestCherryPickHSMEvent() {
 			wantOutcome: cherryPickFallback,
 		},
 		{
-			name:        "state machine not found is skipped without falling back",
+			name:        "state machine not found on the reset path warns",
+			registry:    newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound),
+			expectHSM:   true,
+			isReset:     true,
+			wantOutcome: cherryPickSkipped,
+			wantSkipLog: &warnLevel,
+		},
+		{
+			name:        "state machine not found on the replication path only logs at debug",
 			registry:    newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound),
 			expectHSM:   true,
 			wantOutcome: cherryPickSkipped,
+			wantSkipLog: &debugLevel,
 		},
 		{
 			name:        "not-cherry-pickable is skipped without error",
@@ -2241,13 +2258,25 @@ func (s *workflowResetterSuite) TestCherryPickHSMEvent() {
 				ms.EXPECT().HSM().Return(nil)
 			}
 
-			outcome, err := cherryPickHSMEvent(ms, tc.registry, event, nil)
+			logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+			var skipLog *testlogger.Expectation
+			if tc.wantSkipLog != nil {
+				// Pin the run ID too: the log line is only actionable if it identifies the workflow.
+				ms.EXPECT().GetWorkflowKey().Return(workflowKey)
+				skipLog = logger.Expect(*tc.wantSkipLog, "state machine not found in HSM tree",
+					tag.WorkflowRunID(workflowKey.RunID))
+			}
+
+			outcome, err := cherryPickHSMEvent(ms, tc.registry, event, nil, tc.isReset, logger)
 
 			s.Equal(tc.wantOutcome, outcome)
 			if tc.wantErr != nil {
 				s.ErrorIs(err, tc.wantErr)
 			} else {
 				s.NoError(err)
+			}
+			if skipLog != nil {
+				s.True(skipLog.Matched(), "expected the skipped-operation line at the %v level", *tc.wantSkipLog)
 			}
 		})
 	}

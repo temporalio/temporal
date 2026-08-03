@@ -921,6 +921,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 		resetReapplyExcludeTypes,
 		"",
 		true,
+		r.logger,
 	)
 }
 
@@ -934,6 +935,7 @@ func reapplyEvents(
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 	runIdForDeduplication string,
 	isReset bool,
+	logger log.Logger,
 ) ([]*historypb.HistoryEvent, error) {
 	// TODO (dan): This implementation is the result of unifying two previous implementations, one of which did
 	// deduplication. Can we always/never do this deduplication, or must it be decided by the caller?
@@ -1102,7 +1104,7 @@ func reapplyEvents(
 			// Nexus operations (and other state-machine-backed components) can be backed by either the HSM tree or the
 			// CHASM tree, and both coexist on the same mutable state. An op missing from the HSM tree is skipped
 			// rather than looked up in CHASM; see cherryPickHSMEvent.
-			outcome, err := cherryPickHSMEvent(mutableState, stateMachineRegistry, event, resetReapplyExcludeTypes)
+			outcome, err := cherryPickHSMEvent(mutableState, stateMachineRegistry, event, resetReapplyExcludeTypes, isReset, logger)
 			if err != nil {
 				return reappliedEvents, err
 			}
@@ -1153,6 +1155,8 @@ func cherryPickHSMEvent(
 	stateMachineRegistry *hsm.Registry,
 	event *historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	isReset bool,
+	logger log.Logger,
 ) (cherryPickOutcome, error) {
 	def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
 	if !ok {
@@ -1166,6 +1170,7 @@ func cherryPickHSMEvent(
 			// path the op is usually in no tree at all, and CHASM's NotFound for a missing op would abort
 			// the whole batch. The cost is that reset reapply drops completions for CHASM-owned ops.
 			// See https://github.com/temporalio/temporal/issues/11384.
+			logSkippedOperation(mutableState, event, isReset, logger)
 			return cherryPickSkipped, nil
 		case errors.Is(err, hsm.ErrNotCherryPickable), errors.Is(err, hsm.ErrInvalidTransition):
 			// Recognized by HSM but intentionally not cherry-pickable here; skip without falling back.
@@ -1175,6 +1180,32 @@ func cherryPickHSMEvent(
 		}
 	}
 	return cherryPickApplied, nil
+}
+
+// logSkippedOperation records an event that reapply dropped because its component is missing from the HSM tree.
+//
+// The level differs by path because the same condition means different things. On the reset path a missing component
+// means a completion is silently dropped from the reset run, which is user-visible and worth a warning. On the
+// replication path the op is usually in no tree at all, so the skip is routine and stays at debug to keep from
+// drowning out the reset case.
+func logSkippedOperation(
+	mutableState historyi.MutableState,
+	event *historypb.HistoryEvent,
+	isReset bool,
+	logger log.Logger,
+) {
+	logAtLevel := logger.Debug
+	if isReset {
+		logAtLevel = logger.Warn
+	}
+	workflowKey := mutableState.GetWorkflowKey()
+	logAtLevel("skipping reapply of event: state machine not found in HSM tree",
+		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+		tag.WorkflowID(workflowKey.WorkflowID),
+		tag.WorkflowRunID(workflowKey.RunID),
+		tag.WorkflowEventID(event.GetEventId()),
+		tag.NewStringerTag("wf-history-event-type", event.GetEventType()),
+	)
 }
 
 // cherryPickChasmEvent attempts to cherry-pick an event against the CHASM workflow tree. It mirrors cherryPickHSMEvent.
