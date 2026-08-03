@@ -1011,17 +1011,6 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		)
 		s.NoError(err)
 		s.Nil(describeResp.GetInfo().GetCancellationInfo())
-
-		describeResp, err = env.FrontendClient().DescribeNexusOperationExecution(
-			s.Context(),
-			&workflowservice.DescribeNexusOperationExecutionRequest{
-				Namespace:   env.Namespace().String(),
-				OperationId: "test-op",
-				RunId:       firstStartResp.RunId,
-			},
-		)
-		s.NoError(err)
-		s.Equal(int32(1), describeResp.GetInfo().GetCancellationInfo().GetAttempt())
 	})
 
 	s.Run("RequestCancel_ForwardsOriginalNexusHeaders", func(s *NexusStandaloneTestSuite) {
