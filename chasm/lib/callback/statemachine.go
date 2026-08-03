@@ -13,6 +13,28 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// callbackDestination returns the "destination" the callback is targeting. This value is used for the
+// outbound queue's rate limits and circuit breaking. e.g. for Nexus deliveries its the target URL's
+// hostname. For Worker callbacks, it's the target task queue.
+func callbackDestination(cb *callbackspb.Callback) (string, error) {
+	switch variant := cb.GetVariant().(type) {
+	case *callbackspb.Callback_Nexus_:
+		u, err := url.Parse(variant.Nexus.GetUrl())
+		if err != nil {
+			return "", fmt.Errorf("failed to parse URL: %v: %w", cb, err)
+		}
+		return u.Scheme + "://" + u.Host, nil
+	case *callbackspb.Callback_Worker_:
+		// Use a new "worker" scheme to avoid colliding with any other type of callback variant.
+		return "worker://" + variant.Worker.GetTaskQueueName(), nil
+	default:
+		// A variant this server doesn't recognize gets no destination rather than an error: failing
+		// here would fail the transition that closes the execution hosting the callback, whereas the
+		// invocation task is rejected as unprocessable once it runs.
+		return "", nil
+	}
+}
+
 // EventScheduled is triggered when the callback is meant to be scheduled for the first time - when its Trigger
 // condition is met.
 type EventScheduled struct{}
@@ -21,11 +43,11 @@ var TransitionScheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_STANDBY},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventScheduled) error {
-		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
+		destination, err := callbackDestination(cb.Callback)
 		if err != nil {
-			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+			return err
 		}
-		ctx.AddTask(cb, chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host}, &callbackspb.InvocationTask{})
+		ctx.AddTask(cb, chasm.TaskAttributes{Destination: destination}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )
@@ -38,13 +60,13 @@ var TransitionRescheduled = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		u, err := url.Parse(cb.Callback.GetNexus().Url)
+		destination, err := callbackDestination(cb.Callback)
 		if err != nil {
-			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+			return err
 		}
 		ctx.AddTask(
 			cb,
-			chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host},
+			chasm.TaskAttributes{Destination: destination},
 			&callbackspb.InvocationTask{Attempt: cb.Attempt},
 		)
 		return nil
