@@ -175,8 +175,8 @@ func (o *Operation) RequestCancel(
 	req *nexusoperationpb.CancellationState,
 ) error {
 	// A cancel retry can arrive after the operation closed, so dedupe before rejecting terminal states.
-	existingCancellation, cancellationRequested := o.Cancellation.TryGet(ctx)
-	if cancellationRequested &&
+	existingCancellation, hasCanceled := o.Cancellation.TryGet(ctx)
+	if hasCanceled &&
 		existingCancellation.GetRequestId() == req.GetRequestId() {
 		return nil
 	}
@@ -185,7 +185,7 @@ func (o *Operation) RequestCancel(
 		return ErrOperationAlreadyCompleted
 	}
 
-	if cancellationRequested {
+	if hasCanceled {
 		existingReqID := existingCancellation.GetRequestId()
 		return fmt.Errorf("%w with request ID %s", ErrCancellationAlreadyRequested, existingReqID)
 	}

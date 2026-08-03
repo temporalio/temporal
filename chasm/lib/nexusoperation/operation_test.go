@@ -42,6 +42,7 @@ func TestRequestCancelDeduplicationAfterTerminalState(t *testing.T) {
 	}
 
 	t.Run("same request", func(t *testing.T) {
+		// With the same RequestId, the cancellation is idempotent, and returns a successful response.
 		op, ctx := newCanceledOperation()
 
 		err := op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
@@ -53,6 +54,7 @@ func TestRequestCancelDeduplicationAfterTerminalState(t *testing.T) {
 	})
 
 	t.Run("new request", func(t *testing.T) {
+		// With a new RequestId, the operation now fails. It is already completed.
 		op, ctx := newCanceledOperation()
 
 		err := op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
