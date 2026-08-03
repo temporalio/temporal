@@ -1742,6 +1742,7 @@ func cloneTaskQueueStats(in *taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueS
 		ApproximateBacklogAge:   durationpb.New(age.AsDuration()),
 		TasksAddRate:            in.GetTasksAddRate(),
 		TasksDispatchRate:       in.GetTasksDispatchRate(),
+		RateLimitingActive:      in.GetRateLimitingActive(),
 	}
 }
 
@@ -1800,12 +1801,14 @@ func splitTaskQueueStatsByRampPercentage(
 		ApproximateBacklogAge:   currentAge,
 		TasksAddRate:            in.GetTasksAddRate() - rampAddRate,
 		TasksDispatchRate:       in.GetTasksDispatchRate() - rampDispatchRate,
+		RateLimitingActive:      in.GetRateLimitingActive(),
 	}
 	rampShare = &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: rampCount,
 		ApproximateBacklogAge:   rampAge,
 		TasksAddRate:            rampAddRate,
 		TasksDispatchRate:       rampDispatchRate,
+		RateLimitingActive:      in.GetRateLimitingActive(),
 	}
 	return currentShare, rampShare
 }
