@@ -40,6 +40,10 @@ type HandoverTracker interface {
 
 // HandoverTrackerParams contains the dependencies needed to construct a HandoverTracker.
 type HandoverTrackerParams struct {
+	// ShardID identifies the shard this tracker belongs to. Each shard builds its own
+	// tracker, so implementations that log or emit telemetry need it to attribute an
+	// observation to a specific shard; the default OSS tracker does not use it.
+	ShardID                 int32
 	ClusterMetadata         cluster.Metadata
 	GetMaxReplicationTaskID func() int64
 	ErrorByStateFn          func() error

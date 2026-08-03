@@ -2137,6 +2137,7 @@ func newContext(
 		},
 	)
 	shardContext.handoverTracker = handoverTrackerFactory(HandoverTrackerParams{
+		ShardID:                 shardID,
 		ClusterMetadata:         clusterMetadata,
 		GetMaxReplicationTaskID: shardContext.getMaxReplicationTaskID,
 		ErrorByStateFn:          shardContext.errorByState,
