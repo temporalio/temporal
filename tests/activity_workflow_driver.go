@@ -283,7 +283,7 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 		return err
 	case model.RespondFailedType:
 		req := &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay, a.cfg.LargeFailure),
 		}
 		if e.HasHeartbeatDetails {
 			req.LastHeartbeatDetails = activityHeartbeatDetails

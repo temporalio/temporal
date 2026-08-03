@@ -5,6 +5,7 @@ package tests
 import (
 	"cmp"
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,7 @@ type activityConfig struct {
 	MaxRetryInterval       time.Duration // RetryPolicy MaximumInterval; 0 => RetryInterval
 	NextRetryDelay         time.Duration // ApplicationFailureInfo.NextRetryDelay sent with RespondFailed
 	NonRetryableErrorTypes []string      // RetryPolicy NonRetryableErrorTypes
+	LargeFailure           bool          // RespondFailed sends a failure exceeding activityFailureSizeLimit
 
 	StartToClose     time.Duration // 0 => activityLongDuration, so it does not fire
 	ScheduleToClose  time.Duration // 0 = unset
@@ -221,13 +223,24 @@ func isDispatchDelayEvent(et model.EventType) bool {
 	return et == model.StartDelayElapsesType || et == model.BackoffElapsesType
 }
 
-func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Failure {
+// activityFailureSizeLimit is used to truncate larger retryable failure message.
+var activityFailureSizeLimit = dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(
+	dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))("")
+
+// activityLargeFailureMessage is an example large message which may get truncated.
+var activityLargeFailureMessage = strings.Repeat("x", 2*activityFailureSizeLimit)
+
+func activityFailure(retryable bool, nextRetryDelay time.Duration, largeFailure bool) *failurepb.Failure {
 	info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !retryable}
 	if nextRetryDelay > 0 {
 		info.NextRetryDelay = durationpb.New(nextRetryDelay)
 	}
+	message := "test failure"
+	if largeFailure {
+		message = activityLargeFailureMessage
+	}
 	return &failurepb.Failure{
-		Message:     "test failure",
+		Message:     message,
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: info},
 	}
 }
