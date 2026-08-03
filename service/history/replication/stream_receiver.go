@@ -132,8 +132,9 @@ func NewStreamReceiver(
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
 	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
 		return &FlowControlSignal{
-			// Include the throttled-tier trackers: isolation splits the HIGH lane, so
-			// flow control protects against total HIGH backlog (default lane + tiers).
+			// Include the isolated per-namespace lane trackers: isolation splits the
+			// HIGH lane, so flow control protects against total HIGH backlog (default
+			// lane + member lanes).
 			taskTrackingCount:  receiver.highFamilyTrackingCount(),
 			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
 		}
@@ -357,9 +358,9 @@ func (r *StreamReceiverImpl) ackMessage(
 				LowPriorityState:          lowPriorityWatermark,
 				PauseHighNamespaceIds:     pauseHighNamespaceIDs,
 				IsolatedLaneStates:        isolatedLaneStates,
-				// Advertise that this receiver routes throttled_lane_id-tagged messages,
-				// so the sender may safely emit tier traffic to it. Isolation only applies
-				// to the tiered stack.
+				// Advertise that this receiver routes isolated_namespace_id-tagged
+				// messages, so the sender may safely emit lane traffic to it.
+				// Isolation only applies to the tiered stack.
 				SupportsNamespaceIsolation: receiverMode == ReceiverModeTieredStack,
 			},
 		},
@@ -434,8 +435,8 @@ func (r *StreamReceiverImpl) processMessages(
 
 		if priority == enumsspb.TASK_PRIORITY_HIGH {
 			// Isolation acts on HIGH (live) traffic: feed the throttler every HIGH task,
-			// including tier-lane tasks, so an isolated namespace stays observable and is
-			// released once its HIGH rate drops. Load is scoped to the local shard.
+			// including isolated-lane tasks, so an isolated namespace stays observable
+			// and is released once its HIGH rate drops. Load is scoped to the local shard.
 			for _, task := range convertedTasks {
 				if nsID := task.ReplicationTask().GetRawTaskInfo().GetNamespaceId(); nsID != "" {
 					r.NamespaceThrottler.RecordTask(r.clientShardKey.ShardID, nsID)
