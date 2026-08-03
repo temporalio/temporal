@@ -104,6 +104,8 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
 			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
 			DefaultActivityRetryPolicy: getDefaultRetrySettings,
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
 		linkValidator: newLinkValidator(
 			defaultMaxLinksPerRequest,

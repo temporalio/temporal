@@ -7,6 +7,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
@@ -368,6 +369,8 @@ func validateAndNormalizeStartRequest(
 	maxIDLengthLimit int,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	maxUserMetadataSummarySize dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	maxUserMetadataDetailsSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
@@ -396,6 +399,14 @@ func validateAndNormalizeStartRequest(
 		req.GetNamespace()); err != nil {
 		return serviceerror.NewInvalidArgument("input exceeds length limit")
 	}
+	if err := validateUserMetadata(
+		req.GetNamespace(),
+		req.GetUserMetadata(),
+		maxUserMetadataSummarySize,
+		maxUserMetadataDetailsSize,
+	); err != nil {
+		return err
+	}
 
 	if req.GetSearchAttributes() != nil {
 		if err := validateAndNormalizeSearchAttributes(req, saMapperProvider, saValidator); err != nil {
@@ -403,6 +414,25 @@ func validateAndNormalizeStartRequest(
 		}
 	}
 
+	return nil
+}
+
+func validateUserMetadata(
+	namespaceName string,
+	metadata *sdkpb.UserMetadata,
+	maxSummarySize dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	maxDetailsSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
+) error {
+	summarySize := metadata.GetSummary().Size()
+	if limit := maxSummarySize(namespaceName); summarySize > limit {
+		return serviceerror.NewInvalidArgumentf(
+			"user_metadata.summary exceeds size limit. Length=%d Limit=%d", summarySize, limit)
+	}
+	detailsSize := metadata.GetDetails().Size()
+	if limit := maxDetailsSize(namespaceName); detailsSize > limit {
+		return serviceerror.NewInvalidArgumentf(
+			"user_metadata.details exceeds size limit. Length=%d Limit=%d", detailsSize, limit)
+	}
 	return nil
 }
 

@@ -408,6 +408,8 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
 		h.config.BlobSizeLimitWarn,
+		h.config.MaxUserMetadataSummarySize,
+		h.config.MaxUserMetadataDetailsSize,
 		h.logger,
 		h.saMapperProvider,
 		h.saValidator,
