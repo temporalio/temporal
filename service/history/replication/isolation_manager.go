@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"sync"
@@ -185,7 +186,9 @@ func (m *isolationManager) Reconcile(throttled []string, highAcked int64, member
 	// 2. Split newly-throttled namespaces onto their own lanes, floored at the HIGH
 	//    acked watermark so the lane starts from an already-applied point (no gap).
 	//    The isolated set is capped so membership metadata cannot grow without bound.
-	for ns := range throttledSet {
+	//    Iterate the receiver-reported order rather than the set so that when the cap
+	//    bites, which namespaces get lanes is deterministic.
+	for _, ns := range throttled {
 		if _, exists := m.members[ns]; exists {
 			continue
 		}
@@ -196,13 +199,19 @@ func (m *isolationManager) Reconcile(throttled []string, highAcked int64, member
 		// emitting it now would retire the NEW lane's receiver-side tracking.
 		m.retired = slices.DeleteFunc(m.retired, func(retired string) bool { return retired == ns })
 		m.nextGeneration++
-		m.members[ns] = &isolatedMember{
+		st := &isolatedMember{
 			generation:      m.nextGeneration,
 			tier:            1,
 			scope:           namespaceScope(ns, highAcked),
 			cursor:          highAcked,
 			throttledStreak: 1,
 		}
+		// The receiver may already report a watermark for the lane it expects (e.g.
+		// right after a restore); don't wait an extra ack cycle to anchor on it.
+		if acked, ok := memberAcked[ns]; ok {
+			st.acked = acked
+		}
+		m.members[ns] = st
 	}
 }
 
@@ -224,12 +233,19 @@ func (m *isolationManager) DefaultFilter() func(task tasks.Task) bool {
 	if len(m.members) == 0 {
 		return nil
 	}
-	excluded := make([]string, 0, len(m.members))
-	for ns := range m.members {
-		excluded = append(excluded, ns)
-	}
-	predicate := predicates.Not[tasks.Task](tasks.NewNamespacePredicate(excluded))
+	predicate := predicates.Not[tasks.Task](tasks.NewNamespacePredicate(m.sortedMembers()))
 	return predicate.Test
+}
+
+// sortedMembers returns the isolated namespaces in sorted order so filters and
+// persisted state are deterministic across calls. Caller must hold m.mu.
+func (m *isolationManager) sortedMembers() []string {
+	out := make([]string, 0, len(m.members))
+	for ns := range m.members {
+		out = append(out, ns)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // memberSnapshot is a consistent view of one member lane for its tier's send loop.
@@ -346,17 +362,15 @@ func (m *isolationManager) BuildReaderState(attr *replicationspb.SyncReplication
 		))
 	}
 
+	sorted := m.sortedMembers()
 	sharedHighPredicate := predicates.Universal[tasks.Task]()
-	if len(m.members) > 0 {
-		excluded := make([]string, 0, len(m.members))
-		for ns := range m.members {
-			excluded = append(excluded, ns)
-		}
-		sharedHighPredicate = predicates.Not[tasks.Task](tasks.NewNamespacePredicate(excluded))
+	if len(sorted) > 0 {
+		sharedHighPredicate = predicates.Not[tasks.Task](tasks.NewNamespacePredicate(sorted))
 	}
 	overallMin := attr.GetInclusiveLowWatermark()
-	memberScopes := make([]*persistencespb.QueueSliceScope, 0, len(m.members))
-	for ns, st := range m.members {
+	memberScopes := make([]*persistencespb.QueueSliceScope, 0, len(sorted))
+	for _, ns := range sorted {
+		st := m.members[ns]
 		// Resume from the lane's applied watermark; a lane with no ack yet resumes
 		// from its floor.
 		resume := max(st.floor(), st.acked)
@@ -390,18 +404,21 @@ func (m *isolationManager) MemberResumeFloor() int64 {
 }
 
 // parseIsolationState extracts the shared-HIGH resume cursor and the member lanes
-// from a persisted reader state. Pure; the inverse of BuildReaderState.
-func parseIsolationState(readerState *persistencespb.QueueReaderState) (int64, []restoredMember) {
+// from a persisted reader state. Pure; the inverse of BuildReaderState. Scopes 3+
+// must all be single-namespace member lanes; anything else means the state was not
+// written by this codec, so it is rejected rather than silently dropped — a dropped
+// member would lift the scope-0 cleanup clamp over its unsent window.
+func parseIsolationState(readerState *persistencespb.QueueReaderState) (int64, []restoredMember, error) {
 	if len(readerState.Scopes) < 3 {
-		return 0, nil
+		return 0, nil, nil
 	}
 	defaultCursor := readerState.Scopes[1].GetRange().GetInclusiveMin().GetTaskId()
 	var restored []restoredMember
-	for _, persistedScope := range readerState.Scopes[3:] {
+	for i, persistedScope := range readerState.Scopes[3:] {
 		scope := queues.FromPersistenceScope(persistedScope)
 		nsPredicate, ok := scope.Predicate.(*tasks.NamespacePredicate)
 		if !ok || len(nsPredicate.NamespaceIDs) != 1 {
-			continue
+			return 0, nil, fmt.Errorf("isolation member scope %d has unexpected predicate %T", i+3, scope.Predicate)
 		}
 		for ns := range nsPredicate.NamespaceIDs {
 			restored = append(restored, restoredMember{
@@ -410,5 +427,5 @@ func parseIsolationState(readerState *persistencespb.QueueReaderState) (int64, [
 			})
 		}
 	}
-	return defaultCursor, restored
+	return defaultCursor, restored, nil
 }
