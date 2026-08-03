@@ -326,6 +326,8 @@ var TransitionCancelRequested = chasm.NewTransition(
 			Reason:      req.GetReason(),
 			RequestTime: timestamppb.New(ctx.Now(a)),
 		}
+		// Cancel takes precedence over a pending reset so clear the flag
+		a.ResetRestoreOptions = false
 
 		return nil
 	},
