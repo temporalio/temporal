@@ -1,7 +1,10 @@
 package replication
 
 import (
+	"fmt"
+	"math"
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,6 +12,8 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/predicates"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -128,38 +133,19 @@ func (s *isolationManagerSuite) TestSplit_CapLimitsIsolatedNamespaces() {
 	m := newIsolationManager(2, 5, 1, 2)
 	m.AdvanceDefaultCursor(100)
 
+	// Splits follow the receiver-reported order, so c loses the race for the last slot.
 	s.rc(m, 100, "a", "b", "c")
-	isolated := 0
-	var offender string
-	for _, ns := range []string{"a", "b", "c"} {
-		if m.NamespaceTier(ns) != 0 {
-			isolated++
-		} else {
-			offender = ns
-		}
-	}
-	s.Equal(2, isolated) // third stays on the shared lane
-	s.True(admits(m.DefaultFilter(), offender, 200))
+	s.Equal(1, m.NamespaceTier("a"))
+	s.Equal(1, m.NamespaceTier("b"))
+	s.Equal(0, m.NamespaceTier("c")) // over the cap: stays on the shared lane
+	s.True(admits(m.DefaultFilter(), "c", 200))
 
-	// A member graduates, freeing a slot; the remaining offender is then isolated.
-	var calm string
-	for _, ns := range []string{"a", "b", "c"} {
-		if ns != offender {
-			calm = ns
-			break
-		}
-	}
-	remaining := []string{offender}
-	for _, ns := range []string{"a", "b", "c"} {
-		if ns != calm && ns != offender {
-			remaining = append(remaining, ns)
-		}
-	}
-	// calm is no longer throttled, and its lane has applied up to the shared cursor.
-	m.Reconcile(remaining, 100, map[string]int64{calm: 100})
-	s.Equal(0, m.NamespaceTier(calm))
-	s.Equal(1, m.NamespaceTier(offender))
-	s.Equal([]string{calm}, m.PopRetired())
+	// a graduates (calm, lane applied up to the shared cursor), freeing a slot;
+	// the remaining offender is then isolated.
+	m.Reconcile([]string{"b", "c"}, 100, map[string]int64{"a": 100})
+	s.Equal(0, m.NamespaceTier("a"))
+	s.Equal(1, m.NamespaceTier("c"))
+	s.Equal([]string{"a"}, m.PopRetired())
 }
 
 func (s *isolationManagerSuite) TestDemotion_IsARateClassChange() {
@@ -358,7 +344,8 @@ func (s *isolationManagerSuite) TestPersistenceRoundTrip() {
 	s.Equal(int64(6000), readerState.Scopes[1].Range.InclusiveMin.TaskId)
 	s.Equal(enumsspb.PREDICATE_TYPE_UNIVERSAL, readerState.Scopes[2].Predicate.PredicateType)
 
-	defaultCursor, restored := parseIsolationState(readerState)
+	defaultCursor, restored, err := parseIsolationState(readerState)
+	s.NoError(err)
 	s.Equal(int64(6000), defaultCursor)
 	s.Len(restored, 2)
 	byNS := map[string]int64{}
@@ -381,6 +368,51 @@ func (s *isolationManagerSuite) TestPersistenceRoundTrip() {
 	s.True(admits(rebuilt.DefaultFilter(), "healthy", 9999))
 }
 
+// A lane watermark reported in the same ack that splits the namespace anchors the
+// new member immediately (e.g. a restored lane the receiver is still tracking),
+// rather than waiting an extra ack cycle.
+func (s *isolationManagerSuite) TestSplit_ConsumesReportedWatermark() {
+	m := newIsolationManager(2, 5, 1, 0)
+	m.AdvanceDefaultCursor(100)
+
+	m.Reconcile([]string{"a"}, 80, map[string]int64{"a": 95})
+	attr := &replicationspb.SyncReplicationState{
+		InclusiveLowWatermark: 80,
+		HighPriorityState:     &replicationspb.ReplicationState{InclusiveLowWatermark: 80},
+		LowPriorityState:      &replicationspb.ReplicationState{InclusiveLowWatermark: 80},
+	}
+	state := m.BuildReaderState(attr)
+	s.Equal(int64(95), state.Scopes[3].GetRange().GetInclusiveMin().GetTaskId())
+}
+
+// The recv loop reconciles while tier send loops snapshot members and advance
+// cursors; drive both concurrently so the race detector verifies the locking.
+func (s *isolationManagerSuite) TestConcurrentReconcileAndAdvance() {
+	m := newIsolationManager(3, 2, 2, 0)
+	attr := &replicationspb.SyncReplicationState{
+		InclusiveLowWatermark: 1,
+		HighPriorityState:     &replicationspb.ReplicationState{InclusiveLowWatermark: 1},
+		LowPriorityState:      &replicationspb.ReplicationState{InclusiveLowWatermark: 1},
+	}
+	var wg sync.WaitGroup
+	for g := 0; g < 4; g++ {
+		wg.Go(func() {
+			ns := fmt.Sprintf("ns-%d", g)
+			for i := int64(1); i <= 50; i++ {
+				m.Reconcile([]string{ns}, i*10, map[string]int64{ns: i * 10})
+				for _, snap := range m.TierMemberSnapshots(m.NamespaceTier(ns)) {
+					m.AdvanceMemberCursor(snap.namespaceID, snap.generation, snap.cursor+10)
+				}
+				m.AdvanceDefaultCursor(i * 10)
+				_ = m.DefaultFilter()
+				_ = m.PopRetired()
+				_ = m.BuildReaderState(attr)
+			}
+		})
+	}
+	wg.Wait()
+}
+
 func (s *isolationManagerSuite) TestParseIsolationState_LegacyScopesIgnored() {
 	// A 3-scope state (no isolation) restores no members.
 	m := newIsolationManager(2, 5, 1, 0)
@@ -390,7 +422,28 @@ func (s *isolationManagerSuite) TestParseIsolationState_LegacyScopesIgnored() {
 		LowPriorityState:      &replicationspb.ReplicationState{InclusiveLowWatermark: 150},
 	})
 	s.Len(readerState.Scopes, 3)
-	defaultCursor, restored := parseIsolationState(readerState)
+	defaultCursor, restored, err := parseIsolationState(readerState)
+	s.NoError(err)
 	s.Equal(int64(200), defaultCursor)
 	s.Empty(restored)
+}
+
+// A scope 3+ that is not a single-namespace member lane was not written by this
+// codec; reject it rather than silently dropping a member (which would lift the
+// scope-0 cleanup clamp over its unsent window).
+func (s *isolationManagerSuite) TestParseIsolationState_MalformedScopeError() {
+	m := newIsolationManager(2, 5, 1, 0)
+	readerState := m.BuildReaderState(&replicationspb.SyncReplicationState{
+		InclusiveLowWatermark: 100,
+		HighPriorityState:     &replicationspb.ReplicationState{InclusiveLowWatermark: 200},
+		LowPriorityState:      &replicationspb.ReplicationState{InclusiveLowWatermark: 150},
+	})
+	universalScope := queues.ToPersistenceScope(queues.NewScope(
+		queues.NewRange(tasks.NewImmediateKey(50), tasks.NewImmediateKey(math.MaxInt64)),
+		predicates.Universal[tasks.Task](),
+	))
+	readerState.Scopes = append(readerState.Scopes, universalScope)
+
+	_, _, err := parseIsolationState(readerState)
+	s.ErrorContains(err, "unexpected predicate")
 }
