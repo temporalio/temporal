@@ -59,7 +59,6 @@ func newStandaloneActivityBatchEnvWithBatchOperations(t *testing.T, enabled bool
 	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableCallbacks, nsValues(true))
-	cluster.OverrideDynamicConfig(t, activity.StartDelayEnabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities, nsValues(enabled))
 	return env
 }
