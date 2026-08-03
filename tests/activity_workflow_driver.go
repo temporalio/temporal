@@ -259,6 +259,20 @@ func (a *wfaHandle) waitForCancelRequested(t testing.TB) {
 	}, activityDriverTimeout, activityDriverPollInterval)
 }
 
+func (a *wfaHandle) respondCanceledByID() error {
+	_, err := a.d.env.FrontendClient().RespondActivityTaskCanceledById(
+		a.d.ctx,
+		&workflowservice.RespondActivityTaskCanceledByIdRequest{
+			Namespace:  a.d.env.Namespace().String(),
+			WorkflowId: a.workflowID,
+			ActivityId: a.activityID,
+			RunId:      a.runID,
+			Identity:   a.d.env.Tv().WorkerIdentity(),
+		},
+	)
+	return err
+}
+
 // rpc performs the frontend RPC for a non-Poll, non-timer event and returns its error.
 func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 	fc := a.d.env.FrontendClient()
@@ -283,7 +297,7 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 		return err
 	case model.RespondFailedType:
 		req := &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
 		}
 		if e.HasHeartbeatDetails {
 			req.LastHeartbeatDetails = activityHeartbeatDetails

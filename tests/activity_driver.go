@@ -221,6 +221,15 @@ func isDispatchDelayEvent(et model.EventType) bool {
 	return et == model.StartDelayElapsesType || et == model.BackoffElapsesType
 }
 
+// respondFailedFailure is the Failure a RespondFailed event carries, or nil when the event omits it
+// (modeling a worker that calls RespondActivityTaskFailed without a Failure).
+func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurepb.Failure {
+	if e.Failure == nil {
+		return nil
+	}
+	return activityFailure(e.Failure.Retryable, nextRetryDelay)
+}
+
 func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Failure {
 	info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !retryable}
 	if nextRetryDelay > 0 {

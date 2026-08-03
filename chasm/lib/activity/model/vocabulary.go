@@ -40,9 +40,14 @@ const (
 type Event struct {
 	Type EventType
 
-	Retryable           bool // RespondFailed: the failure is retryable. Whether it actually retries also depends on the retry policy.
-	KeepPaused          bool // Reset: a paused activity stays paused across the reset.
-	HasHeartbeatDetails bool // RespondFailed: attach last_heartbeat_details, to be stored as the activity's heartbeat progress.
+	KeepPaused          bool     // Reset: a paused activity stays paused across the reset.
+	HasHeartbeatDetails bool     // RespondFailed: attach last_heartbeat_details, to be stored as the activity's heartbeat progress.
+	Failure             *Failure // RespondFailed: the failure to send, or nil to respond with no failure at all (as a worker may). A nil failure is retryable.
+}
+
+// Failure specifies the failure a RespondFailed event sends.
+type Failure struct {
+	Retryable bool // whether the failure is retryable. Whether it actually retries also depends on the retry policy.
 }
 
 // Canonical Event values for the variants frequently used in traces
@@ -51,8 +56,9 @@ var (
 	Heartbeat              = Event{Type: HeartbeatType}
 	Complete               = Event{Type: RespondCompletedType}
 	CompleteByID           = Event{Type: RespondCompletedByIDType}
-	FailRetryably          = Event{Type: RespondFailedType, Retryable: true}
-	FailNonRetryably       = Event{Type: RespondFailedType, Retryable: false}
+	FailRetryably          = Event{Type: RespondFailedType, Failure: &Failure{Retryable: true}}
+	FailNonRetryably       = Event{Type: RespondFailedType, Failure: &Failure{Retryable: false}}
+	FailWithoutFailure     = Event{Type: RespondFailedType}
 	RespondCanceled        = Event{Type: RespondCanceledType}
 	RequestCancel          = Event{Type: RequestCancelType}
 	Terminate              = Event{Type: TerminateType}
@@ -117,7 +123,10 @@ func (t EventType) String() string {
 func (e Event) String() string {
 	switch e.Type {
 	case RespondFailedType:
-		return fmt.Sprintf("%s[retryable=%v,heartbeatDetails=%v]", e.Type.String(), e.Retryable, e.HasHeartbeatDetails)
+		if e.Failure == nil {
+			return fmt.Sprintf("%s[failureOmitted,heartbeatDetails=%v]", e.Type.String(), e.HasHeartbeatDetails)
+		}
+		return fmt.Sprintf("%s[retryable=%v,heartbeatDetails=%v]", e.Type.String(), e.Failure.Retryable, e.HasHeartbeatDetails)
 	case ResetType:
 		return fmt.Sprintf("%s[keepPaused=%v]", e.Type.String(), e.KeepPaused)
 	default:
