@@ -1374,7 +1374,7 @@ func (a *Activity) recordFailedAttempt(
 // retries, mirroring MutableStateImpl.truncateRetryableActivityFailure for workflow activities.
 func truncateRetryableFailure(ctx chasm.Context, attemptFailure *failurepb.Failure) *failurepb.Failure {
 	actCtx := activityContextFromChasm(ctx)
-	sizeLimit := actCtx.config.MutableStateActivityFailureSizeLimit(ctx.NamespaceEntry().Name().String())
+	sizeLimit := actCtx.config.MutableStateActivityFailureSizeLimitError(ctx.NamespaceEntry().Name().String())
 	if attemptFailure.Size() <= sizeLimit {
 		return attemptFailure
 	}

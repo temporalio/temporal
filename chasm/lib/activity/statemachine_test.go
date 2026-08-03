@@ -17,8 +17,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -49,7 +49,7 @@ const defaultFailureSizeLimit = 1024
 // the activityContext (dynamic config) and the namespace entry.
 func injectActivityContext(t *testing.T, ctx *chasm.MockMutableContext) {
 	config := &Config{
-		MutableStateActivityFailureSizeLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit),
+		MutableStateActivityFailureSizeLimitError: dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit),
 	}
 	ctx.GoCtx = context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{config: config})
 	ctx.HandleNamespaceEntry = func() *namespace.Namespace {
