@@ -489,9 +489,9 @@ func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
 		return nil
 	}
 
-	// On a full refresh the per-component helpers regenerate timers with correct virtual
-	// time conversion, and there is no need to do a full time-skipping task regen.
 	if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) == 0 {
+		// On a full refresh the per-component helpers regenerate timers with correct virtual
+		// time conversion. Full time-skipping task regeneration is not necessary.
 		return taskGenerator.GenerateTimeSkippingFastForwardTimerTask()
 	}
 	if transitionhistory.Compare(
@@ -500,7 +500,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
 	) < 0 {
 		return nil
 	}
-
 	return taskGenerator.RegenerateTimerTasksForTimeSkipping()
 }
 
