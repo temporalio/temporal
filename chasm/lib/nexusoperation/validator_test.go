@@ -1,6 +1,8 @@
 package nexusoperation
 
 import (
+	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -8,10 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	apinexusoperationpb "go.temporal.io/api/nexusoperation/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -23,7 +27,31 @@ import (
 )
 
 func newTestValidator(config *Config) *validator {
-	return newValidator(config, log.NewNoopLogger(), nil, nil)
+	return newValidator(config, log.NewNoopLogger(), nil, nil, newTestCallbackValidator())
+}
+
+// Returns a callback.Validator that accepts any well-formed callback.
+func newTestCallbackValidator() callback.Validator {
+	return callback.NewValidator(
+		func(string) int { return 10 },
+		func(string) int { return 1000 },
+		func(string) int { return 4096 },
+		func(string) callback.AddressMatchRules {
+			return callback.AddressMatchRules{
+				Rules: []callback.AddressMatchRule{
+					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
+				},
+			}
+		},
+	)
+}
+
+func testNexusCallback(url string) *commonpb.Callback {
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{Url: url},
+		},
+	}
 }
 
 func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
@@ -56,6 +84,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		MaxOperationHeaderSize:             func(string) int { return 10 },
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
+		EnableNexusCallbacks:               func(string) bool { return true },
 	}
 
 	for _, tc := range []struct {
@@ -328,6 +357,33 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			},
 			errMsg: "exceeds size limit",
 		},
+		{
+			name: "completion_callbacks - accepts the nexus variant",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{testNexusCallback("http://localhost/cb")}
+			},
+		},
+		{
+			name: "completion_callbacks - rejects a non-nexus variant",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Internal_{
+						Internal: &commonpb.Callback_Internal{Data: []byte("data")},
+					},
+				}}
+			},
+			errMsg: "completion_callbacks[0]: unsupported callback variant",
+		},
+		{
+			name: "on_conflict_options - attach_completion_callbacks requires attach_request_id",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{testNexusCallback("http://localhost/cb")}
+				r.OnConflictOptions = &apinexusoperationpb.OnConflictOptions{
+					AttachCompletionCallbacks: true,
+				}
+			},
+			errMsg: "attach_completion_callbacks requires attach_request_id",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := &workflowservice.StartNexusOperationExecutionRequest{
@@ -346,8 +402,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(req)
 			}
-			err := newValidator(config, log.NewNoopLogger(), nil, saValidator).
-				validateAndNormalizeStartRequest(req)
+			err := newValidator(config, log.NewNoopLogger(), nil, saValidator, newTestCallbackValidator()).
+				validateAndNormalizeStartRequest(context.Background(), req)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -787,4 +843,163 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateAndNormalizeCompletionCallbacks(t *testing.T) {
+	t.Parallel()
+
+	newReq := func(cbs ...*commonpb.Callback) *workflowservice.StartNexusOperationExecutionRequest {
+		return &workflowservice.StartNexusOperationExecutionRequest{
+			Namespace:           "default",
+			CompletionCallbacks: cbs,
+		}
+	}
+	enabled := newTestValidator(&Config{EnableNexusCallbacks: func(string) bool { return true }})
+	disabled := newTestValidator(&Config{EnableNexusCallbacks: func(string) bool { return false }})
+
+	t.Run("NoCallbacksSkipsTheEnabledCheck", func(t *testing.T) {
+		// The namespace flag must not be consulted when no callbacks were requested, so that existing
+		// callers are unaffected by it. A nil getter would panic if it were.
+		require.NoError(t, newTestValidator(&Config{}).
+			validateAndNormalizeCompletionCallbacks(context.Background(), newReq()))
+	})
+
+	t.Run("Enabled", func(t *testing.T) {
+		require.NoError(t, enabled.validateAndNormalizeCompletionCallbacks(
+			context.Background(),
+			newReq(testNexusCallback("http://localhost/cb"), testNexusCallback("http://localhost/cb2")),
+		))
+	})
+
+	t.Run("Disabled", func(t *testing.T) {
+		err := disabled.validateAndNormalizeCompletionCallbacks(
+			context.Background(), newReq(testNexusCallback("http://localhost/cb")))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "completion callbacks are not enabled for this namespace")
+	})
+
+	t.Run("RejectsInternalVariant", func(t *testing.T) {
+		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(&commonpb.Callback{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{Data: []byte("data")},
+			},
+		}))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "completion_callbacks[0]: unsupported callback variant")
+	})
+
+	t.Run("RejectsWorkerVariant", func(t *testing.T) {
+		// Worker callbacks are a newer API addition that standalone Nexus operations do not support yet.
+		err := enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(
+			testNexusCallback("http://localhost/cb"),
+			&commonpb.Callback{
+				Variant: &commonpb.Callback_Worker_{Worker: &commonpb.Callback_Worker{}},
+			},
+		))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "completion_callbacks[1]: unsupported callback variant")
+	})
+
+	t.Run("RejectsUnsetVariant", func(t *testing.T) {
+		err := enabled.validateAndNormalizeCompletionCallbacks(
+			context.Background(), newReq(&commonpb.Callback{}))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "completion_callbacks[0]: unsupported callback variant")
+	})
+
+	t.Run("DelegatesToTheCallbackValidator", func(t *testing.T) {
+		// The delegate lower-cases the callback headers in place.
+		cb := testNexusCallback("http://localhost/cb")
+		cb.GetNexus().Header = map[string]string{"Some-Key": "value"}
+		require.NoError(t, enabled.validateAndNormalizeCompletionCallbacks(context.Background(), newReq(cb)))
+		require.Equal(t, map[string]string{"some-key": "value"}, cb.GetNexus().GetHeader())
+	})
+}
+
+func TestValidateOnConflictOptions(t *testing.T) {
+	t.Parallel()
+
+	// on_conflict_options validation is config-independent.
+	v := newTestValidator(&Config{})
+	cb := testNexusCallback("http://localhost/cb")
+
+	t.Run("Unset", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{}))
+	})
+
+	t.Run("Empty", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{},
+		}))
+	})
+
+	t.Run("AttachRequestIdAndCallbacksWithCallback", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{cb},
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		}))
+	})
+
+	t.Run("AttachRequestIdOnlyWithCallback", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{cb},
+			OnConflictOptions:   &apinexusoperationpb.OnConflictOptions{AttachRequestId: true},
+		}))
+	})
+
+	t.Run("AttachCallbacksWithoutAttachRequestId", func(t *testing.T) {
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{cb},
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
+				AttachCompletionCallbacks: true,
+			},
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "attach_completion_callbacks requires attach_request_id")
+	})
+
+	t.Run("AttachRequestIdWithoutCallback", func(t *testing.T) {
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{AttachRequestId: true},
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "attach_request_id requires at least one completion callback")
+	})
+
+	t.Run("AttachRequestIdAndCallbacksWithoutCallbackProvided", func(t *testing.T) {
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "attach_request_id requires at least one completion callback")
+	})
+
+	t.Run("AttachLinksIsUnimplemented", func(t *testing.T) {
+		// StartNexusOperationExecutionRequest carries no links, so honoring attach_links is impossible.
+		// Reject loudly rather than silently dropping the caller's intent.
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{cb},
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+				AttachLinks:               true,
+			},
+		})
+		var unimplementedErr *serviceerror.Unimplemented
+		require.ErrorAs(t, err, &unimplementedErr)
+		require.Contains(t, err.Error(), "attach_links is not supported")
+	})
 }
