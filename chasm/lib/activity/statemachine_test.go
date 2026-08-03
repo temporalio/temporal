@@ -726,7 +726,6 @@ func TestTransitionFailed(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	attemptState := &activitypb.ActivityAttemptState{Count: 1}
-	heartbeatState := &activitypb.ActivityHeartbeatState{}
 	outcome := &activitypb.ActivityOutcome{}
 
 	activity := &Activity{
@@ -739,12 +738,10 @@ func TestTransitionFailed(t *testing.T) {
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
-		LastAttempt:   chasm.NewDataField(ctx, attemptState),
-		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
-		Outcome:       chasm.NewDataField(ctx, outcome),
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
-	heartbeatDetails := payloads.EncodeString("Heartbeat")
 	failure := &failurepb.Failure{
 		Message: "Failed Activity",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
@@ -779,9 +776,8 @@ func TestTransitionFailed(t *testing.T) {
 
 	req := &historyservice.RespondActivityTaskFailedRequest{
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
-			Failure:              failure,
-			LastHeartbeatDetails: heartbeatDetails,
-			Identity:             "worker",
+			Failure:  failure,
+			Identity: "worker",
 		},
 	}
 
@@ -796,8 +792,6 @@ func TestTransitionFailed(t *testing.T) {
 	require.EqualValues(t, 1, attemptState.Count)
 	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
 	require.NotNil(t, attemptState.GetCompleteTime())
-	protorequire.ProtoEqual(t, heartbeatDetails, heartbeatState.GetDetails())
-	require.NotNil(t, heartbeatState.GetRecordedTime())
 	protorequire.ProtoEqual(t, failure, attemptState.GetLastFailureDetails().GetFailure())
 	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
 	require.Nil(t, outcome.GetFailed())

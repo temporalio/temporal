@@ -601,7 +601,16 @@ func (a *Activity) HandleFailed(
 	if err != nil {
 		return nil, err
 	}
-	failure := event.Request.GetFailedRequest().GetFailure()
+	failedRequest := event.Request.GetFailedRequest()
+	failure := failedRequest.GetFailure()
+
+	if details := failedRequest.GetLastHeartbeatDetails(); details != nil {
+		heartbeat := a.getOrCreateLastHeartbeat(ctx)
+		heartbeat.Details = details
+		heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
+		heartbeat.TotalHeartbeatCount++
+		a.emitHeartbeatMetrics(ctx, details)
+	}
 
 	appFailure := failure.GetApplicationFailureInfo()
 	isRetryable := appFailure != nil &&
@@ -1662,13 +1671,7 @@ func (a *Activity) RecordHeartbeat(
 			},
 		)
 	}
-	detailsSize := details.Size()
-	metricsHandler := a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskHeartbeatScope)
-	emitPayloadSizeMetric(metricsHandler, detailsSize)
-	metrics.ActivityHeartbeatCount.With(metricsHandler).Record(
-		1,
-		metrics.StringTag("has_details", strconv.FormatBool(detailsSize > 0)),
-	)
+	a.emitHeartbeatMetrics(ctx, details)
 
 	response := &historyservice.RecordActivityTaskHeartbeatResponse{}
 	switch a.Status {
@@ -2057,6 +2060,17 @@ func emitPayloadSizeMetric(metricsHandler metrics.Handler, size int) {
 	if size > 0 {
 		metrics.ActivityPayloadSize.With(metricsHandler).Record(int64(size))
 	}
+}
+
+// emitHeartbeatMetrics records the heartbeat count and payload size for heartbeat details.
+func (a *Activity) emitHeartbeatMetrics(ctx chasm.Context, details *commonpb.Payloads) {
+	metricsHandler := a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskHeartbeatScope)
+	detailsSize := details.Size()
+	emitPayloadSizeMetric(metricsHandler, detailsSize)
+	metrics.ActivityHeartbeatCount.With(metricsHandler).Record(
+		1,
+		metrics.StringTag("has_details", strconv.FormatBool(detailsSize > 0)),
+	)
 }
 
 func (a *Activity) emitOnCompletedMetrics(
