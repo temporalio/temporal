@@ -479,7 +479,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	executionState := mutableState.GetExecutionState()
-	// todo: pausing shouldn't stop task regen
 	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING &&
 		executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil
@@ -489,7 +488,12 @@ func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
 	if tsi == nil {
 		return nil
 	}
-	// todo: should regen only when virtual time changes
+
+	if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) == 0 {
+		// On a full refresh the per-component helpers regenerate timers with correct virtual
+		// time conversion. Full time-skipping task regeneration is not necessary.
+		return taskGenerator.GenerateTimeSkippingFastForwardTimerTask()
+	}
 	if transitionhistory.Compare(
 		tsi.GetLastUpdateVersionedTransition(),
 		minVersionedTransition,
