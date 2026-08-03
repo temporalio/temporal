@@ -89,9 +89,9 @@ func (mr *MockTransactionMockRecorder) SetWorkflowExecution(ctx, archetypeID, wo
 }
 
 // UpdateWorkflowExecution mocks base method.
-func (m *MockTransaction) UpdateWorkflowExecution(ctx context.Context, updateMode persistence.UpdateWorkflowMode, archetypeID chasm.ArchetypeID, currentWorkflowFailoverVersion int64, currentWorkflowMutation *persistence.WorkflowMutation, currentWorkflowEventsSeq []*persistence.WorkflowEvents, newWorkflowFailoverVersion *int64, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents, isWorkflow bool) (int64, int64, error) {
+func (m *MockTransaction) UpdateWorkflowExecution(ctx context.Context, updateMode persistence.UpdateWorkflowMode, archetypeID chasm.ArchetypeID, currentWorkflowFailoverVersion int64, currentWorkflowMutation *persistence.WorkflowMutation, currentWorkflowEventsSeq []*persistence.WorkflowEvents, newWorkflowFailoverVersion *int64, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents, verifyRunIDUniqueness, isWorkflow bool) (int64, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", ctx, updateMode, archetypeID, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, isWorkflow)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", ctx, updateMode, archetypeID, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, verifyRunIDUniqueness, isWorkflow)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(int64)
 	ret2, _ := ret[2].(error)
@@ -99,7 +99,7 @@ func (m *MockTransaction) UpdateWorkflowExecution(ctx context.Context, updateMod
 }
 
 // UpdateWorkflowExecution indicates an expected call of UpdateWorkflowExecution.
-func (mr *MockTransactionMockRecorder) UpdateWorkflowExecution(ctx, updateMode, archetypeID, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, isWorkflow any) *gomock.Call {
+func (mr *MockTransactionMockRecorder) UpdateWorkflowExecution(ctx, updateMode, archetypeID, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, verifyRunIDUniqueness, isWorkflow any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).UpdateWorkflowExecution), ctx, updateMode, archetypeID, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, isWorkflow)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).UpdateWorkflowExecution), ctx, updateMode, archetypeID, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, verifyRunIDUniqueness, isWorkflow)
 }

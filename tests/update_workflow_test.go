@@ -5842,6 +5842,53 @@ func (s *UpdateWithStartSuite) TestReturnUpdateInFlightLimitError() {
 	}
 }
 
+// TestRunIDDedup_TerminateExisting asserts Update-with-Start is gated out of run ID derivation
+// (allowDerivedRunID) and does not self-deadlock on terminate-existing.
+func (s *UpdateWithStartSuite) TestRunIDDedup_TerminateExisting() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+	tv := env.Tv()
+
+	firstReq := s.updateWithStartReq(env, tv)
+	firstReq.RequestId = "first-req-" + tv.WorkflowID()
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), firstReq)
+	s.NoError(err)
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.NoError(err)
+
+	startReq := s.updateWithStartReq(env, tv)
+	startReq.RequestId = "uws-req-" + tv.WorkflowID()
+	startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	updateReq := updateWorkflowRequest(env, tv,
+		&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	uwsCh := s.sendUpdateWithStart(env, startReq, updateReq)
+
+	go func() {
+		_, _ = env.TaskPoller().PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				if len(task.Messages) == 0 {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+				}
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: env.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+				}, nil
+			})
+	}()
+
+	select {
+	case uwsRes := <-uwsCh:
+		s.NoError(uwsRes.err)
+		startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+		requireStartedAndRunning(s.T(), startResp)
+
+		derived := runIDDedupDerivedRunID(env, tv.WorkflowID(), startReq.RequestId)
+		s.NotEqual(derived, startResp.RunId)
+	case <-time.After(15 * time.Second):
+		s.FailNow("update-with-start did not return within 15s - deadlock on the derived run ID")
+	}
+}
+
 func (s *WorkflowUpdateSuite) clearUpdateRegistryAndAbortPendingUpdates(env *testcore.TestEnv, tv *testvars.TestVars) {
 	s.closeShard(env, tv.WorkflowID())
 }

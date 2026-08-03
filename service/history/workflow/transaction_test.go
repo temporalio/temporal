@@ -148,7 +148,8 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 		new(int64(0)),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
-		true, // isWorkflow
+		false, // verifyRunIDUniqueness
+		true,  // isWorkflow
 	)
 	s.Equal(timeoutErr, err)
 }
@@ -248,7 +249,8 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 				nil,
 				nil,
 				nil,
-				true, // isWorkflow
+				false, // verifyRunIDUniqueness
+				true,  // isWorkflow
 			)
 			s.Require().NoError(err)
 

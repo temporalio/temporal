@@ -647,6 +647,7 @@ func lockAndCheckExecution(
 		if nextEventID != condition {
 			return &p.WorkflowConditionFailedError{
 				Msg:             fmt.Sprintf("lockAndCheckExecution failed. Next_event_id was %v when it should have been %v.", nextEventID, condition),
+				RunID:           runID.String(),
 				NextEventID:     nextEventID,
 				DBRecordVersion: version,
 			}
@@ -656,6 +657,7 @@ func lockAndCheckExecution(
 		if version != dbRecordVersion {
 			return &p.WorkflowConditionFailedError{
 				Msg:             fmt.Sprintf("lockAndCheckExecution failed. DBRecordVersion expected: %v, actually %v.", dbRecordVersion, version),
+				RunID:           runID.String(),
 				NextEventID:     nextEventID,
 				DBRecordVersion: version,
 			}
@@ -1175,6 +1177,7 @@ func (m *sqlExecutionStore) createExecution(
 		if m.DB.IsDupEntryError(err) {
 			return &p.WorkflowConditionFailedError{
 				Msg:             fmt.Sprintf("Workflow execution already running. WorkflowId: %v", workflowID),
+				RunID:           executionState.GetRunId(),
 				NextEventID:     0,
 				DBRecordVersion: 0,
 			}

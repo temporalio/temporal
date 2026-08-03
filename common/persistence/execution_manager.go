@@ -149,6 +149,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		PreviousRunID:            request.PreviousRunID,
 		PreviousLastWriteVersion: request.PreviousLastWriteVersion,
 		ArchetypeID:              archetypeID,
+		VerifyRunIDUniqueness:    request.VerifyRunIDUniqueness,
 		NewWorkflowSnapshot:      *serializedNewWorkflowSnapshot,
 		NewWorkflowNewEvents:     newWorkflowNewEvents,
 	}
@@ -237,6 +238,8 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		Mode: request.Mode,
 
 		ArchetypeID: archetypeID,
+
+		VerifyRunIDUniqueness: request.VerifyRunIDUniqueness,
 
 		UpdateWorkflowMutation:  *serializedWorkflowMutation,
 		UpdateWorkflowNewEvents: updateWorkflowNewEvents,
