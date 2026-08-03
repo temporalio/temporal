@@ -1096,17 +1096,16 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	// (3) fast-forward timer — regenerate when configured so its real-time
 	// VisibilityTimestamp tracks the new accumulated skip.
 	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi.GetConfig().GetEnabled() {
-		fastForward := tsi.GetFastForwardInfo()
-		if fastForward != nil && !fastForward.GetHasReached() {
-			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
-				// TaskID is set by shard
-				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: fastForward.GetTargetTime().AsTime(),
-				VersionedTransition: tsi.GetFastForwardInfoLastUpdateVersionedTransition(),
-				ArchetypeID:         r.mutableState.ChasmTree().ArchetypeID(),
-			})
-		}
+	util := NewTimeSkippingInfoUtil(tsi)
+	if util.HasPendingFastForward() {
+		ff := tsi.GetFastForwardInfo()
+		r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: ff.GetTargetTime().AsTime(),
+			VersionedTransition: tsi.GetFastForwardInfoLastUpdateVersionedTransition(),
+			ArchetypeID:         r.mutableState.ChasmTree().ArchetypeID(),
+		})
 	}
 
 	// (4) start delays (start-with-delay, cron, retry in CAN, etc).
@@ -1152,6 +1151,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		}
 	}
 
-	// todo@time-skipping: ChasmTaskPure is not supported yet.
+	// Generic StateMachineTimerTask (nexus HSM), WorkflowTaskTimeoutTask, and ActivityTimeoutTask
+	// are treated as a part of in-flight nexus operation and won't be regenerated.
 	return nil
 }
