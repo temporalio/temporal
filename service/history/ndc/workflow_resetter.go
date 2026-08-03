@@ -406,6 +406,7 @@ func (r *workflowResetterImpl) persistToDB(
 			nil,
 			nil,
 			nil,
+			false, // verifyRunIDUniqueness: no new run in this update
 			baseWorkflow.GetMutableState().IsWorkflow(),
 		); err != nil {
 			return err
@@ -452,6 +453,8 @@ func (r *workflowResetterImpl) persistToDB(
 			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
+			// verifyRunIDUniqueness: reset must keep a random run ID; a derived one would collide with the base run.
+			false,
 			currentWorkflow.GetMutableState().IsWorkflow(),
 		); err != nil {
 			return err

@@ -130,7 +130,10 @@ type (
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record
 	WorkflowConditionFailedError struct {
-		Msg             string
+		Msg string
+		// RunID is the run that the store refused to write. Required for EnableCrossRunRequestIDDedup: one
+		// request can write several runs, and callers use it to tell which one failed.
+		RunID           string
 		NextEventID     int64
 		DBRecordVersion int64
 	}
@@ -217,6 +220,10 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
+		// VerifyRunIDUniqueness is set when the run ID was derived rather than randomly generated. The store must
+		// then reject the create with WorkflowConditionFailedError{RunID} if a run with this run ID already exists.
+		VerifyRunIDUniqueness bool
+
 		NewWorkflowSnapshot WorkflowSnapshot
 		NewWorkflowEvents   []*WorkflowEvents
 	}
@@ -234,6 +241,9 @@ type (
 		Mode UpdateWorkflowMode
 
 		ArchetypeID chasm.ArchetypeID
+
+		// VerifyRunIDUniqueness is as on CreateWorkflowExecutionRequest, for NewWorkflowSnapshot only.
+		VerifyRunIDUniqueness bool
 
 		UpdateWorkflowMutation WorkflowMutation
 		UpdateWorkflowEvents   []*WorkflowEvents

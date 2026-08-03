@@ -264,6 +264,7 @@ func extractWorkflowConflictError(
 					requestNextEventID,
 					actualNextEventID,
 				),
+				RunID:           requestRunID,
 				NextEventID:     actualNextEventID,
 				DBRecordVersion: actualDBVersion,
 			}
@@ -277,6 +278,7 @@ func extractWorkflowConflictError(
 				requestDBVersion,
 				actualDBVersion,
 			),
+			RunID:           requestRunID,
 			NextEventID:     actualNextEventID,
 			DBRecordVersion: actualDBVersion,
 		}

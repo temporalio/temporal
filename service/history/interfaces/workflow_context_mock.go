@@ -251,6 +251,18 @@ func (mr *MockWorkflowContextMockRecorder) RefreshTasks(ctx, shardContext any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockWorkflowContext)(nil).RefreshTasks), ctx, shardContext)
 }
 
+// SetVerifyRunIDUniqueness mocks base method.
+func (m *MockWorkflowContext) SetVerifyRunIDUniqueness(verify bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetVerifyRunIDUniqueness", verify)
+}
+
+// SetVerifyRunIDUniqueness indicates an expected call of SetVerifyRunIDUniqueness.
+func (mr *MockWorkflowContextMockRecorder) SetVerifyRunIDUniqueness(verify any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVerifyRunIDUniqueness", reflect.TypeOf((*MockWorkflowContext)(nil).SetVerifyRunIDUniqueness), verify)
+}
+
 // SetWorkflowExecution mocks base method.
 func (m *MockWorkflowContext) SetWorkflowExecution(ctx context.Context, shardContext ShardContext) error {
 	m.ctrl.T.Helper()
@@ -373,4 +385,18 @@ func (m *MockWorkflowContext) UpdateWorkflowExecutionWithNewAsPassive(ctx contex
 func (mr *MockWorkflowContextMockRecorder) UpdateWorkflowExecutionWithNewAsPassive(ctx, shardContext, newContext, newMutableState any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionWithNewAsPassive", reflect.TypeOf((*MockWorkflowContext)(nil).UpdateWorkflowExecutionWithNewAsPassive), ctx, shardContext, newContext, newMutableState)
+}
+
+// VerifyRunIDUniqueness mocks base method.
+func (m *MockWorkflowContext) VerifyRunIDUniqueness() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyRunIDUniqueness")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// VerifyRunIDUniqueness indicates an expected call of VerifyRunIDUniqueness.
+func (mr *MockWorkflowContextMockRecorder) VerifyRunIDUniqueness() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyRunIDUniqueness", reflect.TypeOf((*MockWorkflowContext)(nil).VerifyRunIDUniqueness))
 }

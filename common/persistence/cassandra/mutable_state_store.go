@@ -721,6 +721,21 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 	}()
 
 	if !applied {
+		executionCASConditions := []executionCASCondition{{
+			runID: updateWorkflow.ExecutionState.RunId,
+			// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`
+			// while CAS on `updateWorkflow.DBRecordVersion - 1`
+			dbVersion:   updateWorkflow.DBRecordVersion - 1,
+			nextEventID: updateWorkflow.Condition,
+		}}
+		// Report a new run whose run ID already exists as a conflict on that run.
+		if newWorkflow != nil {
+			executionCASConditions = append(executionCASConditions, executionCASCondition{
+				runID:       newWorkflow.ExecutionState.RunId,
+				dbVersion:   newWorkflow.DBRecordVersion - 1,
+				nextEventID: newWorkflow.Condition,
+			})
+		}
 		return convertErrors(
 			conflictRecord,
 			conflictIter,
@@ -728,13 +743,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			request.ShardID,
 			request.RangeID,
 			updateWorkflow.ExecutionState.RunId,
-			[]executionCASCondition{{
-				runID: updateWorkflow.ExecutionState.RunId,
-				// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`
-				// while CAS on `updateWorkflow.DBRecordVersion - 1`
-				dbVersion:   updateWorkflow.DBRecordVersion - 1,
-				nextEventID: updateWorkflow.Condition,
-			}},
+			executionCASConditions,
 		)
 	}
 	return nil
