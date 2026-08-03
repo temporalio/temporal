@@ -13672,14 +13672,13 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 	// ResetActivityExecution with keep_paused=true can arrive while a worker still owns
 	// the current attempt. The reset itself must remain deferred until that worker
-	// reports back, but a later unpause should clear the request to keep the reset
-	// attempt paused.
-	t.Run("UnpauseClearsKeepPausedButKeepsDeferredReset", func(t *testing.T) {
+	// reports back. An unpause request that arrives in that window is rejected.
+	t.Run("UnpauseWhileResetKeepPausedFails", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		activityID := testcore.RandomizeStr(t.Name())
-		startResp, pollResp1, taskQueue := startAndPollActivity(ctx, t, activityID, &commonpb.RetryPolicy{
+		startResp, pollResp1, _ := startAndPollActivity(ctx, t, activityID, &commonpb.RetryPolicy{
 			InitialInterval:    durationpb.New(time.Second),
 			BackoffCoefficient: 1.0,
 		})
@@ -13696,30 +13695,33 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		unpauseActivity(ctx, t, activityID, startResp.GetRunId())
+		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			Identity:   defaultIdentity,
+		})
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+
+		// The rejected unpause must not disturb the pending keep-paused reset: the activity is
+		// still reported as pause-requested, and the worker still sees the pending reset on
+		// heartbeat.
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
+			describeActivity(ctx, t, activityID, startResp.GetRunId()).GetInfo().GetRunState())
 
 		heartbeatResp, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollResp1.TaskToken,
 		})
 		require.NoError(t, err)
-		require.True(t, heartbeatResp.GetActivityReset(), "reset should remain pending after unpause")
-		require.False(t, heartbeatResp.GetActivityPaused(), "unpause should clear the pending keep-paused reset intent")
+		require.True(t, heartbeatResp.GetActivityReset(), "reset should remain pending after the rejected unpause")
 
 		failAttemptRetryably(ctx, t, pollResp1.TaskToken, 0)
 
-		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
-		defer pollCancel()
-		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
-			Namespace: env.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err, "activity should dispatch after the worker failure applies the pending reset")
-		require.Equal(t, activityID, pollResp2.GetActivityId())
-		require.EqualValues(t, 1, pollResp2.Attempt, "attempt should be reset to 1 after deferred reset")
-
-		completeAttempt(ctx, t, pollResp2.TaskToken)
+		// The deferred reset should land the activity in PAUSED, honoring the keep-paused intent
+		// that survived the rejected unpause.
+		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSED)
 	})
 
 	// startAttemptWithTimeouts starts a SAA with the given per-attempt timeouts and retry policy and
@@ -14489,12 +14491,9 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		}, 10*time.Second, 200*time.Millisecond)
 	})
 
-	// UpdateOptionsPreservesTimeoutsWhileResetRequested: UpdateActivityExecutionOptions bumps the
-	// attempt stamp, which invalidates all attempt-scoped timeout tasks. The handler must re-emit
-	// fresh StartToClose and Heartbeat timeout tasks for RESET_REQUESTED activities, otherwise the
-	// running worker is left with no server-side timeout enforcement (only the long
-	// ScheduleToCloseTimeout would eventually catch a hung worker).
-	t.Run("UpdateOptionsPreservesTimeoutsWhileResetRequested", func(t *testing.T) {
+	// UpdateOptions is rejected while a reset is pending, even when the reset does not restore the
+	// original options.
+	t.Run("UpdateOptionsWhileResetRequestedFails", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
 		defer cancel()
 		activityID := testcore.RandomizeStr(t.Name())
@@ -14532,9 +14531,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Update StartToCloseTimeout to 1s. The handler bumps the attempt stamp (invalidating the
-		// old 1-minute timeout task) and must re-emit a fresh 1-second timeout task that fires
-		// while the activity is RESET_REQUESTED.
+		// A pending reset rejects every option update.
 		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -14544,18 +14541,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
 		})
-		require.NoError(t, err)
-
-		// New StartToCloseTimeout fires → retry consumes reset-request → SCHEDULED at attempt 1.
-		await.Require(ctx, t, func(c *await.T) {
-			dr, dErr := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  env.Namespace().String(),
-				ActivityId: activityID,
-			})
-			require.NoError(c, dErr)
-			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, dr.GetInfo().GetRunState())
-			require.EqualValues(c, 1, dr.GetInfo().GetAttempt())
-		}, 10*time.Second, 200*time.Millisecond)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
 
 	t.Run("Jitter", func(t *testing.T) {

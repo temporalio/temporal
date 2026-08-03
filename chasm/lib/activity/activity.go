@@ -693,8 +693,9 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		// A repeated request ID returns the current options, which may differ from the original response.
 		return a.updateActivityExecutionOptionsResponse(), nil
 	}
-
 	switch a.Status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		return nil, serviceerror.NewFailedPrecondition("cannot update options while a reset is pending")
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
@@ -1021,17 +1022,15 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	}
 
 	event := unpauseEvent{req: frontendReq, metricsHandler: metricsHandler}
-	switch a.GetStatus() {
-	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+	switch {
+	case TransitionUnpaused.Possible(a):
 		if err := TransitionUnpaused.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
-	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+	case TransitionUnpausedWhilePauseRequested.Possible(a):
 		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
-	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		a.ResetKeepPaused = false
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
 	}
@@ -1507,10 +1506,7 @@ func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, a
 }
 
 // reissueRunningAttemptTimers re-emits the StartToClose and Heartbeat timeout tasks for the
-// currently-running attempt, anchored to the attempt's StartedTime. Called from options-update
-// paths after stamp bump so the old tasks are invalidated and replaced with the (possibly
-// updated) timeouts. No-op unless the activity is in a status where a worker holds the task token
-// (STARTED / CANCEL_REQUESTED / PAUSE_REQUESTED / RESET_REQUESTED).
+// currently-running attempt, anchored to the attempt's StartedTime.
 func (a *Activity) reissueRunningAttemptTimers(ctx chasm.MutableContext, attempt *activitypb.ActivityAttemptState) {
 	if !a.hasAttemptInProgress() {
 		return
