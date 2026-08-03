@@ -13,6 +13,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -463,6 +465,81 @@ func indexOfEventType(events []*historypb.HistoryEvent, t enumspb.EventType) int
 	return -1
 }
 
+// TestTimeSkipping_RetentionClearsSkippedWorkflowImmediately checks the retention deadline
+// end-to-end by its observable effect rather than by inspecting a task timestamp.
+//
+// The namespace has retention 0 and archival disabled, so GenerateWorkflowCloseTasks emits a
+// DeleteHistoryEventTask at closeTime + 0. That closeTime is *virtual*: the workflow skips a
+// 1-day user timer before completing, so MutableState.AddTasks must subtract the accumulated
+// skip for the deadline to land at real close time. If it did not, the deadline would sit a day
+// out in wall clock and the execution would still be readable when this test gives up.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_RetentionClearsSkippedWorkflowImmediately() {
+	const skippedTimer = 24 * time.Hour
+
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.RetentionTimerJitterDuration, time.Duration(0)),
+	)
+
+	// NewEnv's namespace has 1 day retention, which cannot be lowered through the frontend.
+	ns := namespace.Name(testcore.RandomizeStr("ts-retention"))
+	_, err := env.RegisterNamespace(ns, 0, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.NoError(err)
+
+	tv := testvars.New(s.T())
+	startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           ns.String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(48 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: startResp.GetRunId()}
+
+	poller := taskpoller.New(s.T(), env.FrontendClient(), ns.String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("timer-1", skippedTimer)},
+		}, nil
+	})
+	s.NoError(err)
+
+	wallStart := time.Now()
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+	s.Less(time.Since(wallStart), 5*time.Minute, "the 1 day timer must be skipped, not waited out")
+
+	// Both mutable state and history events go away: DeleteHistoryEventTask drives the full
+	// execution deletion, so Describe stops resolving and the history read fails too.
+	s.AwaitTruef(func() bool {
+		_, describeErr := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns.String(),
+			Execution: execution,
+		})
+		if describeErr == nil {
+			return false
+		}
+		var notFound *serviceerror.NotFound
+		return errors.As(describeErr, &notFound)
+	}, 60*time.Second, 500*time.Millisecond, "mutable state was not deleted at real close time")
+
+	_, err = env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: ns.String(),
+		Execution: execution,
+	})
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound, "history events must be deleted along with mutable state")
+}
+
 // TestTimeSkipping_TimerAndActivity verifies that when a workflow has both a long user
 // timer and a pending activity, time-skipping is blocked until the activity completes.
 // Once the activity is done and the workflow task is drained, time-skipping fires and
@@ -701,10 +778,6 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip
 // including one parked in retry backoff — blocks time skipping. This is what makes the
 // StateMachineTimerTask (nexus HSM) exclusion in RegenerateTimerTasksForTimeSkipping safe: a skip
 // can never happen while such a timer is live, so a nexus HSM timer can never be left stale by one.
-//
-// isWorkflowSkippable rejects on nexusoperations.MachineCollection(ms.HSM()).Size() > 0 with no
-// retry-backoff exception — unlike activities, where a backing-off activity is a skip *target*
-// (activityPendingRetry). This test pins that asymmetry.
 //
 // Sequence:
 //

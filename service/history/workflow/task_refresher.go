@@ -500,6 +500,7 @@ func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
 	) < 0 {
 		return nil
 	}
+
 	return taskGenerator.RegenerateTimerTasksForTimeSkipping()
 }
 

@@ -1613,9 +1613,6 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 	}
 }
 
-// TestTaskGeneratorImpl_GenerateTimeSkippingFastForwardTimerTask covers the method the task
-// refresher calls directly on a full refresh, where the per-component helpers cover every other
-// timer family. Unlike RegenerateTimerTasksForTimeSkipping it is not gated on accumulated skip.
 func TestTaskGeneratorImpl_GenerateTimeSkippingFastForwardTimerTask(t *testing.T) {
 	t.Parallel()
 

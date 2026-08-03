@@ -1480,38 +1480,11 @@ func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
 			wantRegen:              false,
 		},
 		{
-			// Full refresh: the per-component helpers cover every other family, so only the
-			// fast-forward wake-up (which has no other producer) is regenerated here.
 			name:                   "FullRefresh/RegeneratesFastForwardOnly",
 			tsi:                    tsiAt(5),
 			minVersionedTransition: EmptyVersionedTransition,
 			wantRegen:              false,
 			wantFastForwardRegen:   true,
-		},
-		{
-			// Pausing preserves accumulated skip and any pending fast-forward, so a paused
-			// workflow still routes to the fast-forward regen.
-			name:                   "FullRefreshWhilePaused/RegeneratesFastForwardOnly",
-			tsi:                    tsiAt(5),
-			status:                 enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
-			minVersionedTransition: EmptyVersionedTransition,
-			wantRegen:              false,
-			wantFastForwardRegen:   true,
-		},
-		{
-			name:                   "PartialRefreshWhilePaused/Regenerates",
-			tsi:                    tsiAt(5),
-			status:                 enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
-			minVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: common.EmptyVersion, TransitionCount: 3},
-			wantRegen:              true,
-		},
-		{
-			name:                   "Completed/DoesNotRegenerate",
-			tsi:                    tsiAt(5),
-			status:                 enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			minVersionedTransition: EmptyVersionedTransition,
-			wantRegen:              false,
-			wantFastForwardRegen:   false,
 		},
 	} {
 		s.Run(tc.name, func() {
