@@ -1853,9 +1853,6 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
 }
 
-// TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion ensures that the
-// LastDeploymentVersion from the last attempt is included in the returned
-// ActivityExecutionInfo.
 func TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion(t *testing.T) {
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
@@ -1865,12 +1862,7 @@ func TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion(t *testing.T) {
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
-			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			ActivityType:           &commonpb.ActivityType{Name: "T"},
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: "current-task-queue"},
-			ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
-			StartToCloseTimeout:    durationpb.New(10 * time.Second),
-			OriginalOptions:        nil,
+			Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
 			LastDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
