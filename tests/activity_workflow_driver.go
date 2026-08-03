@@ -205,23 +205,27 @@ func (a *wfaHandle) activityInfo(t require.TestingT) activityInfo {
 	return info
 }
 
-// terminalStatus waits for the activity to reach a terminal state and reports it. A workflow activity's
+// terminalOutcome waits for the activity to reach a terminal state and reports it. A workflow activity's
 // terminal status is not in PendingActivities, so it is read from the workflow-result error's cause.
-func (a *wfaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
+func (a *wfaHandle) terminalOutcome(t require.TestingT) activityTerminalOutcome {
 	err := a.run.Get(a.d.ctx, nil)
 	if err == nil {
-		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+		return activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}
 	}
 	// A canceled activity is returned as a bare CanceledError, not wrapped in an ActivityError.
 	if _, ok := errors.AsType[*temporal.CanceledError](err); ok {
-		return enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
+		return activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED}
 	}
 	var actErr *temporal.ActivityError
 	require.ErrorAs(t, err, &actErr)
-	if _, ok := actErr.Unwrap().(*temporal.TimeoutError); ok {
-		return enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+	outcome := activityTerminalOutcome{
+		status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		retryState: actErr.RetryState(),
 	}
-	return enumspb.ACTIVITY_EXECUTION_STATUS_FAILED
+	if _, ok := actErr.Unwrap().(*temporal.TimeoutError); ok {
+		outcome.status = enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+	}
+	return outcome
 }
 
 // activityInfoIfInProgress returns the shared activity projection and whether the activity still has

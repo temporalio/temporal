@@ -137,6 +137,13 @@ type activityInfo struct {
 	LastHeartbeatDetails       []byte
 }
 
+// activityTerminalOutcome is user-visible terminal activity state projected from SAA's
+// ActivityExecutionOutcome and WFA's workflow result.
+type activityTerminalOutcome struct {
+	status     enumspb.ActivityExecutionStatus
+	retryState enumspb.RetryState
+}
+
 // activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
 // poll for, schedule the activity a workflow owns, close an activity the trace has finished with. A
 // wait for a configured window is bounded by that window plus activityDriverTimerMargin instead.

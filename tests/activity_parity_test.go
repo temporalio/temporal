@@ -59,13 +59,17 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 		}
 
 		t.Run("WorkflowActivity", func(t *testing.T) {
-			require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-				newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t),
+			require.Equalf(t, activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				retryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+			}, newWFADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t),
 				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType(timeout))
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
-			require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-				newSAADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t),
+			require.Equalf(t, activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				retryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+			}, newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t),
 				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType(timeout))
 		})
 	}
@@ -97,14 +101,14 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 			require.True(t, ok)
 			appErr, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap())
 			require.True(t, ok)
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalStatus(t), message)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalOutcome(t).status, message)
 			require.Equal(t, "TestFailure", appErr.Type(), message)
 			require.Equal(t, "test failure", appErr.Message(), message)
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
 			activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
 			cause := activity.describe(t).GetOutcome().GetFailure().GetCause()
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalStatus(t), message)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalOutcome(t).status, message)
 			require.Equal(t, "TestFailure", cause.GetApplicationFailureInfo().GetType(), message)
 			require.Equal(t, "test failure", cause.GetMessage(), message)
 		})
@@ -323,16 +327,15 @@ func (s *activityParityTestSuite) TestCancel() {
 	env := newActivityParityEnv(s.T())
 	trace := []model.Event{model.Poll, model.RequestCancel, model.RespondCanceled}
 	cfg := activityConfig{MaxAttempts: 1}
+	expected := activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED}
 
 	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 		t := s.T()
-		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-			newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
 	})
 	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 		t := s.T()
-		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-			newSAADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t))
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
 	})
 }
 
@@ -359,12 +362,12 @@ func (s *activityParityTestSuite) TestCompleteByID() {
 		s.Run(tc.name, func(s *activityParityTestSuite) {
 			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 				t := s.T()
-				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, newWFADriver(t, env, cfg).driveTrace(t, tc.trace).terminalStatus(t))
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, newWFADriver(t, env, cfg).driveTrace(t, tc.trace).terminalOutcome(t).status)
 			})
 			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 				t := s.T()
 				a := newSAADriver(t, env, cfg).driveTrace(t, tc.trace)
-				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminalStatus(t))
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminalOutcome(t).status)
 				require.NotNil(t, a.describe(t).GetInfo().GetLastStartedTime(),
 					"a force-completed activity must still record a started time, even though no worker ever started it")
 			})
@@ -397,4 +400,149 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 		require.Equal(t, expected,
 			d.driveTrace(t, terminal).activityInfo(t).LastHeartbeatDetails)
 	})
+}
+
+func (s *activityParityTestSuite) TestTerminalRetryState() {
+	env := newActivityParityEnv(s.T())
+
+	testCases := []struct {
+		name     string
+		cfg      activityConfig
+		trace    []model.Event
+		expected activityTerminalOutcome
+	}{
+		// Terminal status FAILED
+		{
+			// Terminal status FAILED; there were no more retries due to non-retryable failure from
+			// worker, despite a second attempt being available.
+			name:  "NonRetryableFailure",
+			cfg:   activityConfig{MaxAttempts: 2},
+			trace: []model.Event{model.Poll, model.FailNonRetryably},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+				retryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+			},
+		},
+		{
+			// Terminal status FAILED; there were no more retries due to retries exhausted, despite
+			// retryable failure from worker.
+			name:  "MaximumAttemptsReachedAfterFailure",
+			cfg:   activityConfig{MaxAttempts: 1},
+			trace: []model.Event{model.Poll, model.FailRetryably},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+				retryState: enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+			},
+		},
+		{
+			// Terminal status FAILED; there were no more retries due to timeout: the retry backoff
+			// would run past the schedule-to-close deadline, so server times it out without
+			// waiting.
+			name: "FailureRetryPreventedByScheduleToClose",
+			cfg: activityConfig{
+				RetryInterval:   activityLongDuration,
+				ScheduleToClose: time.Hour,
+			},
+			trace: []model.Event{model.Poll, model.FailRetryably},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+				retryState: enumspb.RETRY_STATE_TIMEOUT,
+			},
+		},
+		{
+			// Terminal status FAILED; there were no more retries due to cancel-requested; retries
+			// are also exhausted, but cancellation has precedence as the reason.
+			name:  "CancelRequestedBeforeFailure",
+			cfg:   activityConfig{MaxAttempts: 1},
+			trace: []model.Event{model.Poll, model.RequestCancel, model.FailRetryably},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+				retryState: enumspb.RETRY_STATE_CANCEL_REQUESTED,
+			},
+		},
+		// Terminal status TIMED_OUT
+		{
+			// Terminal status TIMED_OUT; there were no more retries due to timeout, because no
+			// worker polled hence schedule-to-start timeout.
+			name:  "ScheduleToStartTimeout",
+			trace: []model.Event{model.ScheduleToStartElapses},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				retryState: enumspb.RETRY_STATE_TIMEOUT,
+			},
+		},
+		{
+			// Terminal status TIMED_OUT; there were no more retries due to timeout, because worker
+			// held on to attempt until schedule-to-close fired.
+			name:  "ScheduleToCloseTimeout",
+			trace: []model.Event{model.Poll, model.ScheduleToCloseElapses},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				retryState: enumspb.RETRY_STATE_TIMEOUT,
+			},
+		},
+		{
+			// Terminal status TIMED_OUT; there were no more retries due to retries exhausted,
+			// despite the start-to-close timeout being retryable.
+			name:  "MaximumAttemptsReachedAfterAttemptTimeout",
+			cfg:   activityConfig{MaxAttempts: 1},
+			trace: []model.Event{model.Poll, model.StartToCloseElapses},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				retryState: enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+			},
+		},
+		{
+			// Similar to FailureRetryPreventedByScheduleToClose, but we cause it to terminate in
+			// TIMED_OUT by letting start-to-close elapse (we can't use an explicit
+			// model.StartToCloseElapses in the trace because the two drivers see it differently)
+			name: "AttemptTimeoutRetryPreventedByScheduleToClose",
+			cfg: activityConfig{
+				RetryInterval:   activityLongDuration,
+				StartToClose:    activityShortTimeout,
+				ScheduleToClose: time.Hour,
+			},
+			trace: []model.Event{model.Poll},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				retryState: enumspb.RETRY_STATE_TIMEOUT,
+			},
+		},
+		{
+			// Terminal status TIMED_OUT; there were no more retries due to cancellation pending
+			// when the start-to-close deadline elapsed. Retries are also exhausted, but
+			// cancellation has precedence as the reason.
+			name:  "CancelRequestedBeforeAttemptTimeout",
+			cfg:   activityConfig{MaxAttempts: 1},
+			trace: []model.Event{model.Poll, model.RequestCancel, model.StartToCloseElapses},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				retryState: enumspb.RETRY_STATE_CANCEL_REQUESTED,
+			},
+		},
+		{
+			// Terminal status TIMED_OUT; there were no more retries due to cancellation pending
+			// when the schedule-to-close deadline elapses. No MaxAttempts is needed here, unlike
+			// the previous case (CancelRequestedBeforeAttemptTimeout): a schedule-to-close timeout
+			// closes the activity without consulting the retry policy at all.
+			name:  "CancelRequestedBeforeScheduleToCloseTimeout",
+			trace: []model.Event{model.Poll, model.RequestCancel, model.ScheduleToCloseElapses},
+			expected: activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				retryState: enumspb.RETRY_STATE_CANCEL_REQUESTED,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func(s *activityParityTestSuite) {
+			t := s.T()
+			t.Run("WorkflowActivity", func(t *testing.T) {
+				require.Equal(t, tc.expected, newWFADriver(t, env, tc.cfg).driveTrace(t, tc.trace).terminalOutcome(t))
+			})
+			t.Run("StandaloneActivity", func(t *testing.T) {
+				require.Equal(t, tc.expected, newSAADriver(t, env, tc.cfg).driveTrace(t, tc.trace).terminalOutcome(t))
+			})
+		})
+	}
 }
