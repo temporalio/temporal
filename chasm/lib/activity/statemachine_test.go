@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
@@ -398,6 +400,7 @@ func TestTransitionTimedout(t *testing.T) {
 		name             string
 		startStatus      activitypb.ActivityExecutionStatus
 		timeoutType      enumspb.TimeoutType
+		retryState       enumspb.RetryState
 		attemptCount     int32
 		heartbeatDetails *commonpb.Payloads
 	}{
@@ -405,18 +408,21 @@ func TestTransitionTimedout(t *testing.T) {
 			name:         "schedule to start timeout, never started",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			retryState:   enumspb.RETRY_STATE_TIMEOUT,
 			attemptCount: 1,
 		},
 		{
 			name:         "schedule to close timeout from scheduled, never started",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			retryState:   enumspb.RETRY_STATE_TIMEOUT,
 			attemptCount: 1,
 		},
 		{
 			name:             "schedule to close timeout from started status with heartbeat details",
 			startStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:      enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			retryState:       enumspb.RETRY_STATE_TIMEOUT,
 			attemptCount:     4,
 			heartbeatDetails: payloads.EncodeString("schedule-to-close-heartbeat"),
 		},
@@ -424,6 +430,7 @@ func TestTransitionTimedout(t *testing.T) {
 			name:             "start to close timeout with heartbeat details",
 			startStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:      enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			retryState:       enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			attemptCount:     5,
 			heartbeatDetails: payloads.EncodeString("start-to-close-heartbeat"),
 		},
@@ -431,6 +438,7 @@ func TestTransitionTimedout(t *testing.T) {
 			name:             "heartbeat timeout with heartbeat details",
 			startStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:      enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			retryState:       enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			attemptCount:     2,
 			heartbeatDetails: payloads.EncodeString("heartbeat-details"),
 		},
@@ -438,18 +446,21 @@ func TestTransitionTimedout(t *testing.T) {
 			name:         "heartbeat timeout without heartbeat details",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			retryState:   enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			attemptCount: 2,
 		},
 		{
 			name:         "schedule to close timeout from started status",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			retryState:   enumspb.RETRY_STATE_TIMEOUT,
 			attemptCount: 4,
 		},
 		{
 			name:         "start to close timeout",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			retryState:   enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			attemptCount: 5,
 		},
 	}
@@ -498,6 +509,7 @@ func TestTransitionTimedout(t *testing.T) {
 
 			event := timeoutEvent{
 				timeoutType:    tc.timeoutType,
+				retryState:     tc.retryState,
 				metricsHandler: metricsHandler,
 			}
 
@@ -514,6 +526,8 @@ func TestTransitionTimedout(t *testing.T) {
 				require.Nil(t, attemptState.GetCompleteTime())
 				outcomeFailure := outcome.GetFailed().GetFailure()
 				require.NotNil(t, outcomeFailure)
+				require.Equal(t, tc.timeoutType, outcomeFailure.GetTimeoutFailureInfo().GetTimeoutType())
+				require.Equal(t, fmt.Sprintf(common.FailureReasonActivityTimeout, tc.timeoutType.String()), outcomeFailure.GetMessage())
 				// The last heartbeat details must be surfaced on the timeout failure so callers can
 				// inspect the activity's last reported progress.
 				protorequire.ProtoEqual(t, tc.heartbeatDetails, outcomeFailure.GetTimeoutFailureInfo().GetLastHeartbeatDetails())
@@ -535,6 +549,8 @@ func TestTransitionTimedout(t *testing.T) {
 				t.Fatalf("unexpected timeout type: %v", tc.timeoutType)
 			}
 
+			require.Equal(t, tc.retryState, outcome.GetRetryState())
+			require.Equal(t, tc.retryState, activity.outcome(ctx).GetRetryState())
 			require.Empty(t, ctx.Tasks)
 		})
 	}
@@ -738,7 +754,6 @@ func TestTransitionFailed(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	attemptState := &activitypb.ActivityAttemptState{Count: 1}
-	heartbeatState := &activitypb.ActivityHeartbeatState{}
 	outcome := &activitypb.ActivityOutcome{}
 
 	activity := &Activity{
@@ -751,12 +766,10 @@ func TestTransitionFailed(t *testing.T) {
 			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 		},
-		LastAttempt:   chasm.NewDataField(ctx, attemptState),
-		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
-		Outcome:       chasm.NewDataField(ctx, outcome),
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
-	heartbeatDetails := payloads.EncodeString("Heartbeat")
 	failure := &failurepb.Failure{
 		Message: "Failed Activity",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
@@ -791,14 +804,14 @@ func TestTransitionFailed(t *testing.T) {
 
 	req := &historyservice.RespondActivityTaskFailedRequest{
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
-			Failure:              failure,
-			LastHeartbeatDetails: heartbeatDetails,
-			Identity:             "worker",
+			Failure:  failure,
+			Identity: "worker",
 		},
 	}
 
 	err := TransitionFailed.Apply(activity, ctx, failedEvent{
 		req:             req,
+		retryState:      enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 		baseHandler:     baseHandler,
 		enrichedHandler: enrichedHandler,
 	})
@@ -808,11 +821,11 @@ func TestTransitionFailed(t *testing.T) {
 	require.EqualValues(t, 1, attemptState.Count)
 	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
 	require.NotNil(t, attemptState.GetCompleteTime())
-	protorequire.ProtoEqual(t, heartbeatDetails, heartbeatState.GetDetails())
-	require.NotNil(t, heartbeatState.GetRecordedTime())
 	protorequire.ProtoEqual(t, failure, attemptState.GetLastFailureDetails().GetFailure())
 	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
 	require.Nil(t, outcome.GetFailed())
+	require.Equal(t, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, outcome.GetRetryState())
+	require.Equal(t, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activity.outcome(ctx).GetRetryState())
 }
 
 func TestTransitionTerminated(t *testing.T) {
@@ -1041,21 +1054,21 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 	testCases := []struct {
 		name              string
 		transition        chasm.Transition[activitypb.ActivityExecutionStatus, *Activity, rescheduleEvent]
-		resetKeepPaused   bool
+		resetShouldPause  bool
 		expectedStatus    activitypb.ActivityExecutionStatus
 		expectedTaskCount int
 	}{
 		{
 			name:              "scheduled",
 			transition:        TransitionResetAttemptFailedToScheduled,
-			resetKeepPaused:   false,
+			resetShouldPause:  false,
 			expectedStatus:    activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 			expectedTaskCount: 1,
 		},
 		{
 			name:              "paused",
 			transition:        TransitionResetAttemptFailedToPaused,
-			resetKeepPaused:   true,
+			resetShouldPause:  true,
 			expectedStatus:    activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 			expectedTaskCount: 0,
 		},
@@ -1085,7 +1098,7 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 					ScheduleTime:            timestamppb.New(defaultTime),
 					FirstAttemptStartedTime: timestamppb.New(defaultTime),
 					TaskQueue:               &taskqueuepb.TaskQueue{Name: "test-task-queue"},
-					ResetKeepPaused:         tc.resetKeepPaused,
+					ResetShouldPause:        tc.resetShouldPause,
 				},
 				LastAttempt:   chasm.NewDataField(ctx, attemptState),
 				LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
