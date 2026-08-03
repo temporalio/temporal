@@ -1153,5 +1153,6 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	// Generic StateMachineTimerTask (nexus HSM), WorkflowTaskTimeoutTask, and ActivityTimeoutTask
 	// are treated as a part of in-flight nexus operation and won't be regenerated.
+	// DeleteHistoryEventTask is not impacted by time skipping, and doesn't need regeneration.
 	return nil
 }

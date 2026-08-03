@@ -489,7 +489,12 @@ func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
 	if tsi == nil {
 		return nil
 	}
-	// todo: should regen only when virtual time changes
+
+	// time-skipping task regen is not needed
+	// when VT is empty as all tasks will be generated with current virtual time conversion.
+	if transitionhistory.Compare(EmptyVersionedTransition, minVersionedTransition) == 0 {
+		return nil
+	}
 	if transitionhistory.Compare(
 		tsi.GetLastUpdateVersionedTransition(),
 		minVersionedTransition,
