@@ -68,11 +68,6 @@ const (
 	// This is similar to SetWorkflowExecution, but UpdateWorkflowExecution with this mode persists the workflow as a mutation,
 	// instead of a snapshot.
 	UpdateWorkflowModeIgnoreCurrent
-	// UpdateWorkflowModeCreateCurrent updates the workflow and inserts a brand-new current record, failing if a current
-	// record already exists. Update-path analogue of CreateWorkflowModeBrandNew. Used by workflow reset when the current
-	// run was deleted (reset-with-deleted-current): it updates the base run and inserts the reset run as the new current in
-	// one atomic transaction, pointing the current record at the new run if one is carried, otherwise the updated run.
-	UpdateWorkflowModeCreateCurrent
 )
 
 // ConflictResolveWorkflowMode conflict resolve mode

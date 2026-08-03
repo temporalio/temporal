@@ -612,12 +612,6 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 
 	currentRecordRunID := d.getCurrentRecordRunID(request.ArchetypeID)
 
-	// requestCurrentRunID is the current run ID the request expects to already be recorded; it is used
-	// only to classify a current-record CAS failure (see convertErrors). CreateCurrent expects NO
-	// current record, so it leaves this empty — any existing current record is then reported as a
-	// CurrentWorkflowConditionFailedError rather than a generic ConditionFailedError.
-	requestCurrentRunID := updateWorkflow.ExecutionState.RunId
-
 	switch request.Mode {
 	case p.UpdateWorkflowModeIgnoreCurrent:
 		// noop
@@ -688,50 +682,6 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			)
 		}
 
-	case p.UpdateWorkflowModeCreateCurrent:
-		// insert a brand-new current record (fail if one exists), pointing at the new run if one is
-		// carried, otherwise at the updated run itself. No current record is expected, so an existing
-		// one is a current-record conflict (see requestCurrentRunID above).
-		requestCurrentRunID = ""
-		if newWorkflow != nil {
-			if namespaceID != newWorkflow.NamespaceID {
-				return serviceerror.NewInternal("UpdateWorkflowExecution: cannot create the new run in a different namespace")
-			}
-			batch.Query(templateCreateCurrentWorkflowExecutionQuery,
-				shardID,
-				rowTypeExecution,
-				namespaceID,
-				workflowID,
-				currentRecordRunID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				newWorkflow.RunID,
-				newWorkflow.ExecutionStateBlob.Data,
-				newWorkflow.ExecutionStateBlob.EncodingType.String(),
-				newWorkflow.LastWriteVersion,
-				newWorkflow.ExecutionState.State,
-			)
-		} else {
-			executionStateDatablob, err := d.serializer.WorkflowExecutionStateToBlob(updateWorkflow.ExecutionState)
-			if err != nil {
-				return err
-			}
-			batch.Query(templateCreateCurrentWorkflowExecutionQuery,
-				shardID,
-				rowTypeExecution,
-				namespaceID,
-				workflowID,
-				currentRecordRunID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				runID,
-				executionStateDatablob.Data,
-				executionStateDatablob.EncodingType.String(),
-				updateWorkflow.LastWriteVersion,
-				updateWorkflow.ExecutionState.State,
-			)
-		}
-
 	default:
 		return serviceerror.NewInternalf("UpdateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
@@ -777,7 +727,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			currentRecordRunID,
 			request.ShardID,
 			request.RangeID,
-			requestCurrentRunID,
+			updateWorkflow.ExecutionState.RunId,
 			[]executionCASCondition{{
 				runID: updateWorkflow.ExecutionState.RunId,
 				// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`

@@ -67,9 +67,8 @@ func ValidateUpdateWorkflowModeState(
 	}
 
 	switch mode {
-	case UpdateWorkflowModeUpdateCurrent, UpdateWorkflowModeCreateCurrent:
-		// update current record (UpdateCurrent CAS's the existing current record, CreateCurrent
-		// inserts a fresh one) — the workflow-state constraints are identical either way
+	case UpdateWorkflowModeUpdateCurrent:
+		// update current record
 		// 1. current workflow only ->
 		//  current workflow cannot be zombie
 		// 2. current workflow & new workflow ->

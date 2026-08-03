@@ -427,60 +427,6 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			return err
 		}
 
-	case p.UpdateWorkflowModeCreateCurrent:
-		// insert a brand-new current record, failing if one already exists (the current record was
-		// deleted and must be re-established); point it at the new run if one is carried, otherwise the
-		// updated run itself
-		currentRow, err := lockCurrentExecutionIfExists(ctx, tx, shardID, namespaceID, workflowID, request.ArchetypeID)
-		if err != nil {
-			return err
-		}
-		if currentRow != nil {
-			return m.extractCurrentWorkflowConflictError(
-				currentRow,
-				fmt.Sprintf(
-					"UpdateWorkflowExecution: CreateCurrent requires no current record. workflow ID: %v, current run ID: %v",
-					workflowID,
-					currentRow.RunID.String(),
-				),
-			)
-		}
-		row := sqlplugin.CurrentExecutionsRow{
-			ShardID:     shardID,
-			NamespaceID: namespaceID,
-			WorkflowID:  workflowID,
-			ArchetypeID: request.ArchetypeID,
-			StartTime:   nil,
-		}
-
-		if newWorkflow != nil {
-			row.CreateRequestID = newWorkflow.ExecutionState.CreateRequestId
-			row.State = newWorkflow.ExecutionState.State
-			row.Status = newWorkflow.ExecutionState.Status
-			row.LastWriteVersion = newWorkflow.LastWriteVersion
-			row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
-			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
-			row.StartTime = getStartTimeFromState(newWorkflow.ExecutionState)
-			row.Data = newWorkflow.ExecutionStateBlob.Data
-			row.DataEncoding = newWorkflow.ExecutionStateBlob.EncodingType.String()
-
-			if !bytes.Equal(namespaceID, row.NamespaceID) {
-				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot create the new run in a different namespace")
-			}
-		} else {
-			row.CreateRequestID = updateWorkflow.ExecutionState.CreateRequestId
-			row.State = updateWorkflow.ExecutionState.State
-			row.Status = updateWorkflow.ExecutionState.Status
-			row.LastWriteVersion = updateWorkflow.LastWriteVersion
-			row.RunID = runID
-			row.StartTime = getStartTimeFromState(updateWorkflow.ExecutionState)
-			row.Data = updateWorkflow.ExecutionStateBlob.Data
-			row.DataEncoding = updateWorkflow.ExecutionStateBlob.EncodingType.String()
-		}
-		if _, err := tx.InsertIntoCurrentExecutions(ctx, &row); err != nil {
-			return serviceerror.NewUnavailablef("UpdateWorkflowExecution: failed to insert into current_executions table. Error: %v", err)
-		}
-
 	default:
 		return serviceerror.NewUnavailablef("UpdateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
