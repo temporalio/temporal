@@ -253,7 +253,18 @@ var TransitionFailed = chasm.NewTransition(
 			attempt := a.LastAttempt.Get(ctx)
 			attempt.LastWorkerIdentity = req.GetIdentity()
 
-			if err := a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, req.GetFailure(), ctx.Now(a), true); err != nil {
+			// A worker may respond failed without a Failure. Synthesize a generic terminal failure so
+			// the closed activity still exposes a consumable outcome; otherwise PollActivityExecution
+			// returns a nil outcome and a client cannot tell the closed activity apart from one that
+			// simply has no result yet, and polls forever. (Workflow activities tolerate a nil failure
+			// because the SDK wraps the failed history event in an ActivityError; a standalone activity
+			// returns the raw outcome with no such wrapper.)
+			failure := req.GetFailure()
+			if failure == nil {
+				failure = &failurepb.Failure{Message: "activity task failed without failure details"}
+			}
+
+			if err := a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true); err != nil {
 				return err
 			}
 

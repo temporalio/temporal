@@ -187,6 +187,47 @@ func (s *activityParityTestSuite) TestRetriedTimeoutDoesNotChainPriorFailure() {
 	}
 }
 
+// A RespondActivityTaskFailed with an omitted Failure is retryable, for parity with workflow
+// activities: rather than closing the activity with no consumable outcome, the server backs it off
+// for another attempt.
+func (s *activityParityTestSuite) TestNilFailureIsRetryable() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	trace := []model.Event{model.Poll, model.FailWithoutFailure}
+	want := activityInfo{
+		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		Attempt:                    2,
+		CurrentRetryInterval:       activityLongDuration,
+		NextAttemptScheduleTimeSet: true,
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, want, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, want, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+	})
+}
+
+// A standalone activity that exhausts its retries after failing without a Failure must still close
+// with a consumable terminal failure. Otherwise PollActivityExecution returns a nil outcome and a
+// client cannot tell the closed activity apart from one that simply has no result yet, so it polls
+// forever. Workflow activities have no equivalent gap because the SDK surfaces an ActivityError even
+// for a nil cause, so this is a standalone-only assertion.
+func (s *activityParityTestSuite) TestNilFailureExhaustedClosesWithConsumableOutcome() {
+	env := newActivityParityEnv(s.T())
+	t := s.T()
+	cfg := activityConfig{MaxAttempts: 1}
+	trace := []model.Event{model.Poll, model.FailWithoutFailure}
+
+	h := newSAADriver(t, env, cfg).driveTrace(t, trace)
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, h.terminalOutcome(t).status)
+	require.NotNil(t, h.describe(t).GetOutcome().GetFailure(),
+		"a standalone activity that failed without worker-supplied details must still expose a terminal failure")
+}
+
 // current_retry_interval and next_attempt_schedule_time are reported while a retry is backing off
 // (before it is dispatched to Matching), and for next_attempt_schedule_time also during start delay
 // (SAA only). Once the attempt is dispatched, or while the activity is paused, both are nil.
@@ -421,7 +462,7 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 2}
 
-	trace := []model.Event{model.Poll, {Type: model.RespondFailedType, Retryable: true, HasHeartbeatDetails: true}}
+	trace := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}
 	expected := activityMarshalPayloads(activityHeartbeatDetails)
 	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 		t := s.T()
@@ -436,7 +477,7 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 
 		// For SAA we additionally confirm that it's persisted even if the failure is terminal. WFA
 		// drops the pending activity from MS at this point.
-		terminal := []model.Event{model.Poll, {Type: model.RespondFailedType, Retryable: false, HasHeartbeatDetails: true}}
+		terminal := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: false}, HasHeartbeatDetails: true}}
 		require.Equal(t, expected,
 			d.driveTrace(t, terminal).activityInfo(t).LastHeartbeatDetails)
 	})
