@@ -25,6 +25,45 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func TestRequestCancelDeduplicationAfterTerminalState(t *testing.T) {
+	const requestID = "cancel-request-id"
+
+	newCanceledOperation := func() (*Operation, *chasm.MockMutableContext) {
+		ctx := &chasm.MockMutableContext{}
+		op := newTestOperation()
+		op.Status = nexusoperationpb.OPERATION_STATUS_CANCELED
+		op.Cancellation = chasm.NewComponentField(
+			ctx,
+			newCancellation(&nexusoperationpb.CancellationState{
+				RequestId: requestID,
+			}),
+		)
+		return op, ctx
+	}
+
+	t.Run("same request", func(t *testing.T) {
+		op, ctx := newCanceledOperation()
+
+		err := op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
+			RequestId: requestID,
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.Status)
+	})
+
+	t.Run("new request", func(t *testing.T) {
+		op, ctx := newCanceledOperation()
+
+		err := op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
+			RequestId: "new-request-id",
+		})
+
+		require.ErrorIs(t, err, ErrOperationAlreadyCompleted)
+		require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.Status)
+	})
+}
+
 func TestIsWaitStageReached(t *testing.T) {
 	t.Parallel()
 

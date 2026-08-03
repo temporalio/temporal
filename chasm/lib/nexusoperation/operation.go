@@ -174,17 +174,19 @@ func (o *Operation) RequestCancel(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.CancellationState,
 ) error {
+	existingCancellation, cancellationRequested := o.Cancellation.TryGet(ctx)
+	if cancellationRequested &&
+		existingCancellation.GetRequestId() == req.GetRequestId() {
+		return nil
+	}
+
 	if !TransitionCanceled.Possible(o) {
 		return ErrOperationAlreadyCompleted
 	}
 
-	if existingCancellation, ok := o.Cancellation.TryGet(ctx); ok {
+	if cancellationRequested {
 		existingReqID := existingCancellation.GetRequestId()
-		newReqID := req.GetRequestId()
-		if existingReqID != newReqID {
-			return fmt.Errorf("%w with request ID %s", ErrCancellationAlreadyRequested, existingReqID)
-		}
-		return nil
+		return fmt.Errorf("%w with request ID %s", ErrCancellationAlreadyRequested, existingReqID)
 	}
 
 	cancel := newCancellation(req)
