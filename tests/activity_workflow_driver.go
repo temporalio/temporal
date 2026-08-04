@@ -307,7 +307,7 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 	case model.RespondFailedByIDType:
 		req := &workflowservice.RespondActivityTaskFailedByIdRequest{
 			Namespace: ns, WorkflowId: a.workflowID, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
-			Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+			Failure: respondFailedFailure(e, a.cfg.NextRetryDelay, a.cfg.LargeFailure),
 		}
 		if e.HasHeartbeatDetails {
 			req.LastHeartbeatDetails = activityHeartbeatDetails
