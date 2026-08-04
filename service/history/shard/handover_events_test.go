@@ -130,7 +130,7 @@ func TestHandoverWatermarkRemovedOnlyWhenTracked(t *testing.T) {
 	lg := &eventCaptureLogger{}
 	tracker := newHandoverEventsTracker(t, lg, 100, nil)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		tracker.UpdateHandoverState(handoverEventsNamespace(enumspb.REPLICATION_STATE_NORMAL), false)
 	}
 

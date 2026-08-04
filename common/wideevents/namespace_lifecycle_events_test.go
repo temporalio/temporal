@@ -113,7 +113,7 @@ func TestEmitHandoverIncompleteTruncates(t *testing.T) {
 	lg := &captureLogger{}
 
 	snapshot := &HandoverLagSnapshot{TotalShards: 4096, NotReadyCount: 4096}
-	for i := 0; i < MaxLaggingShardsInSummary+10; i++ {
+	for i := range MaxLaggingShardsInSummary + 10 {
 		snapshot.AddLaggingShard(int32(i), 1)
 	}
 	require.Len(t, snapshot.LaggingShards, MaxLaggingShardsInSummary)
