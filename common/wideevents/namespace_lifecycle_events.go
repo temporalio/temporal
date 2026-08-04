@@ -6,15 +6,12 @@ import (
 	"time"
 )
 
-// The NamespaceLifecycle phases emitted for namespace handover, and the payload builders for
-// each. A handover cannot complete until every shard's replication watermark has been acked by
-// the target cluster, so the phases below cover both ends of that: the per-shard watermark
-// bookkeeping on the history side, and the wait that blocks on it on the worker side.
-//
-// Phase values are the published contract that queries key on, so they live together here rather
-// than next to their emitters. NamespaceLifecyclePayload.Phase stays a plain string: the
-// vocabulary is deliberately open so out-of-tree emitters can define their own phases without a
-// change to this package.
+// NamespaceLifecycle phases and the payload builders for each. Phase values are the published
+// contract that queries key on, so they live here rather than next to their emitters.
+
+// Namespace handover. A handover cannot complete until every shard's replication watermark has
+// been acked by the target, so these cover both ends of it: the per-shard watermark bookkeeping
+// on the history side, and the wait that blocks on it on the worker side.
 const (
 	PhaseHandoverWatermarkSet     = "shard_handover_watermark_set"
 	PhaseHandoverWatermarkRemoved = "shard_handover_watermark_removed"

@@ -558,7 +558,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 }
 
 // emitHandoverLagSummary reports the shards still behind when the wait ended. The phase and its
-// payload are defined in common/wideevents alongside the rest of the handover events.
+// payload are defined in common/wideevents with the rest of the namespace lifecycle events.
 //
 // WaitHandover never returns on its own while shards are lagging: StartToClose is capped at
 // maximumHandoverTimeoutSeconds with no retry, so the activity is killed from the outside. The
