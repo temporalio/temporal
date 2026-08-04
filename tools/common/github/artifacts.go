@@ -3,10 +3,20 @@ package github
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 )
+
+var fallbackToken struct {
+	sync.Once
+	value string
+	err   error
+}
 
 // Artifact represents a downloadable GitHub Actions artifact.
 type Artifact struct {
@@ -47,15 +57,71 @@ func ListRunArtifacts(ctx context.Context, repo string, runID int64) ([]Artifact
 
 // DownloadArtifact downloads a single GitHub Actions artifact zip file.
 func DownloadArtifact(ctx context.Context, repo string, artifactID int64, outputDir string) (string, error) {
-	zipPath := filepath.Join(outputDir, fmt.Sprintf("artifact-%d.zip", artifactID))
+	path := fmt.Sprintf("/repos/%s/actions/artifacts/%d/zip", repo, artifactID)
+	return downloadArtifact(ctx, defaultAPIClient, path, artifactID, outputDir)
+}
 
-	output, err := commandOutput(ctx, 60*time.Second, "api", fmt.Sprintf("/repos/%s/actions/artifacts/%d/zip", repo, artifactID))
+func apiToken(ctx context.Context) (string, error) {
+	if token := os.Getenv("GH_TOKEN"); token != "" {
+		return token, nil
+	}
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		return token, nil
+	}
+
+	fallbackToken.Do(func() {
+		output, err := commandOutput(ctx, defaultTimeout, "auth", "token")
+		fallbackToken.value = strings.TrimSpace(string(output))
+		fallbackToken.err = err
+	})
+	if fallbackToken.err != nil {
+		return "", fmt.Errorf("failed to get GitHub token: %w", fallbackToken.err)
+	}
+	if fallbackToken.value == "" {
+		return "", fmt.Errorf("GitHub token is empty")
+	}
+	return fallbackToken.value, nil
+}
+
+func downloadArtifact(
+	ctx context.Context,
+	client *apiClient,
+	path string,
+	artifactID int64,
+	outputDir string,
+) (_ string, retErr error) {
+	resp, err := client.get(ctx, path)
 	if err != nil {
 		return "", fmt.Errorf("failed to download artifact %d: %w", artifactID, err)
 	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil && retErr == nil {
+			retErr = fmt.Errorf("failed to close artifact %d response: %w", artifactID, err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return "", fmt.Errorf("failed to download artifact %d: GitHub returned %s: %s", artifactID, resp.Status, strings.TrimSpace(string(body)))
+	}
 
-	if err := os.WriteFile(zipPath, output, 0644); err != nil {
-		return "", fmt.Errorf("failed to write artifact zip %d: %w", artifactID, err)
+	tempFile, err := os.CreateTemp(outputDir, fmt.Sprintf("artifact-%d-*.zip", artifactID))
+	if err != nil {
+		return "", fmt.Errorf("failed to create artifact %d file: %w", artifactID, err)
+	}
+	tempPath := tempFile.Name()
+	defer func() { _ = os.Remove(tempPath) }()
+
+	if _, err := io.Copy(tempFile, resp.Body); err != nil {
+		_ = tempFile.Close()
+		return "", fmt.Errorf("failed to write artifact %d: %w", artifactID, err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close artifact %d file: %w", artifactID, err)
+	}
+
+	zipPath := filepath.Join(outputDir, fmt.Sprintf("artifact-%d.zip", artifactID))
+	if err := os.Rename(tempPath, zipPath); err != nil {
+		return "", fmt.Errorf("failed to finalize artifact %d: %w", artifactID, err)
 	}
 
 	return zipPath, nil

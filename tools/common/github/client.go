@@ -2,7 +2,6 @@ package github
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,14 +12,7 @@ import (
 const defaultTimeout = 30 * time.Second
 
 func getJSON(ctx context.Context, path string, out any) error {
-	output, err := commandOutput(ctx, defaultTimeout, "api", path)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(output, out); err != nil {
-		return fmt.Errorf("failed to parse GitHub response for %s: %w", path, err)
-	}
-	return nil
+	return defaultAPIClient.getJSON(ctx, path, out)
 }
 
 func commandOutput(ctx context.Context, timeout time.Duration, args ...string) ([]byte, error) {

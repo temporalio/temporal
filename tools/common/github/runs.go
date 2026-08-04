@@ -17,7 +17,7 @@ const (
 	ConclusionFailure Conclusion = "failure"
 )
 
-// Run represents a GitHub Actions workflow run returned by the gh CLI.
+// Run represents a GitHub Actions workflow run.
 type Run struct {
 	DatabaseID         int64         `json:"databaseId"`
 	Number             int           `json:"number"`
@@ -128,7 +128,7 @@ type RunListOptions struct {
 	All        bool
 }
 
-// ListRuns retrieves workflow runs through the gh CLI.
+// ListRuns retrieves workflow runs.
 func ListRuns(ctx context.Context, opts RunListOptions) ([]Run, error) {
 	if opts.WorkflowID != 0 {
 		return listWorkflowRuns(ctx, opts)
