@@ -1181,13 +1181,6 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 		{
 			"worker",
 			&commonpb.Callback{
-				Links: []*commonpb.Link{
-					{
-						Variant: &commonpb.Link_NexusOperationCallback_{
-							NexusOperationCallback: &commonpb.Link_NexusOperationCallback{},
-						},
-					},
-				},
 				Variant: &commonpb.Callback_Worker_{
 					Worker: &commonpb.Callback_Worker{
 						TaskQueueName: "completions-task-queue",

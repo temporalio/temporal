@@ -61,16 +61,20 @@ message Callback {
     map<string, string> header = 2;
   }
 
-  // Forked from the definition in the api repo with comments stripped.
+  // Forked from temporal.api.common.v1.Callback.Worker in the api repo, with abbreviated comments.
   message Worker {
+    // Nexus task queue the Temporal worker is listening on.
     string task_queue_name = 1;
+    // Target Nexus service.
     string service = 2;
+    // Target operation.
     string operation = 3;
+    // Arbitrary user-supplied data from the source operation's callsite.
     temporal.api.common.v1.Payload source_context = 4;
   }
 
   reserved 1; // For a generic callback mechanism to be added later.
-  reserved 3; // The Internal variant present in the `api` protos, but not here.
+
   oneof variant {
     Nexus nexus = 2;
     Worker worker = 4;
