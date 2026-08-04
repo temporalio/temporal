@@ -354,6 +354,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_EmitsReplicationTaskWhenWorkf
 	s.True(ok, "task should be *DeleteExecutionReplicationTask")
 	s.Equal(captured.WorkflowID, deleteTask.WorkflowID)
 	s.Equal(captured.NamespaceID, deleteTask.NamespaceID)
+	s.Equal(tests.Version, deleteTask.Version,
+		"task should carry the failover version this cluster is active at")
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflowActiveInOtherCluster() {
