@@ -167,19 +167,17 @@ func (s *activityParityTestSuite) TestSyntheticFailuresHaveRetryParity() {
 			trace := []model.Event{model.Poll, tc.event}
 			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 				t := s.T()
-				outcome := newWFADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t)
-				require.Contains(t, []enumspb.ActivityExecutionStatus{
-					enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
-					enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-				}, outcome.status)
+				require.Equal(t, activityTerminalOutcome{
+					status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+					retryState: enumspb.RETRY_STATE_TIMEOUT,
+				}, newWFADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
 			})
 			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 				t := s.T()
-				outcome := newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t)
-				require.Contains(t, []enumspb.ActivityExecutionStatus{
-					enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
-					enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-				}, outcome.status)
+				require.Equal(t, activityTerminalOutcome{
+					status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+					retryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+				}, newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
 			})
 		})
 	}

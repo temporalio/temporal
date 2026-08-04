@@ -152,7 +152,10 @@ func (e Event) String() string {
 		if e.Failure == nil {
 			return fmt.Sprintf("%s[failureOmitted,heartbeatDetails=%v]", e.Type.String(), e.HasHeartbeatDetails)
 		}
-		return fmt.Sprintf("%s[retryable=%v,heartbeatDetails=%v,failureType=%d]", e.Type.String(), e.Failure.Retryable, e.HasHeartbeatDetails, e.Failure.Type)
+		if e.Failure.Type == ApplicationFailureType || e.Failure.Type == ServerFailureType {
+			return fmt.Sprintf("%s[retryable=%v,heartbeatDetails=%v,failureType=%d]", e.Type.String(), e.Failure.Retryable, e.HasHeartbeatDetails, e.Failure.Type)
+		}
+		return fmt.Sprintf("%s[heartbeatDetails=%v,failureType=%d]", e.Type.String(), e.HasHeartbeatDetails, e.Failure.Type)
 	case ResetType:
 		return fmt.Sprintf("%s[keepPaused=%v]", e.Type.String(), e.KeepPaused)
 	default:
