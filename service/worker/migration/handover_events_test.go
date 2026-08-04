@@ -82,6 +82,7 @@ func TestEmitHandoverLagSummaryNamesLaggingShards(t *testing.T) {
 
 	snapshot := &handoverLagSnapshot{
 		totalShards:              4,
+		readyCount:               2,
 		notReadyCount:            2,
 		missingHandoverInfoCount: 1,
 		maxLaggingTasks:          42,
@@ -99,6 +100,7 @@ func TestEmitHandoverLagSummaryNamesLaggingShards(t *testing.T) {
 
 	d := lg.details(t, 0)
 	require.EqualValues(t, 4, d["total_shards"])
+	require.EqualValues(t, 2, d["ready_count"])
 	require.EqualValues(t, 2, d["not_ready_count"])
 	require.EqualValues(t, 1, d["missing_handover_info_count"])
 	require.EqualValues(t, 42, d["max_lagging_tasks"])
@@ -185,6 +187,7 @@ func TestCheckHandoverOnceSnapshotIsLastPollOnly(t *testing.T) {
 	done, err := a.checkHandoverOnce(context.Background(), req, &snapshot)
 	require.NoError(t, err)
 	require.False(t, done)
+	require.Zero(t, snapshot.readyCount)
 	require.Equal(t, 2, snapshot.notReadyCount)
 	require.Equal(t, 1, snapshot.missingHandoverInfoCount)
 	require.EqualValues(t, 15, snapshot.maxLaggingTasks)
@@ -200,6 +203,7 @@ func TestCheckHandoverOnceSnapshotIsLastPollOnly(t *testing.T) {
 	done, err = a.checkHandoverOnce(context.Background(), req, &snapshot)
 	require.NoError(t, err)
 	require.True(t, done)
+	require.Equal(t, 2, snapshot.readyCount)
 	require.Zero(t, snapshot.notReadyCount)
 	require.Empty(t, snapshot.laggingShards)
 }

@@ -498,6 +498,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		}
 	}
 
+	snapshot.readyCount = readyShardCount
 	snapshot.notReadyCount = notReadyShardCount
 	snapshot.maxLaggingTasks = maxHandoverLag
 	snapshot.maxLaggingTasksShardID = maxHandoverLagShardID

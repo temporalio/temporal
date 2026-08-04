@@ -31,6 +31,7 @@ type laggingShard struct {
 // overwrites it on every poll; WaitHandover emits whatever is left in it when the activity unwinds.
 type handoverLagSnapshot struct {
 	totalShards int
+	readyCount  int
 	// notReadyCount is the true count; laggingShards may be truncated.
 	notReadyCount int
 	// missingHandoverInfoCount is the subset of not-ready shards whose namespace cache has not
@@ -60,6 +61,7 @@ func (a *activities) emitHandoverLagSummary(
 	details := map[string]any{
 		"remote_cluster":              waitRequest.RemoteCluster,
 		"total_shards":                snapshot.totalShards,
+		"ready_count":                 snapshot.readyCount,
 		"not_ready_count":             snapshot.notReadyCount,
 		"missing_handover_info_count": snapshot.missingHandoverInfoCount,
 		"max_lagging_tasks":           snapshot.maxLaggingTasks,
