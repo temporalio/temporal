@@ -1136,8 +1136,6 @@ func (a *Activity) recordPauseState(
 	a.emitOnPausedMetrics(event.metricsHandler)
 }
 
-// clearHeartbeatDetails discards the heartbeat checkpoint, so that the next attempt starts without
-// one rather than resuming from it.
 func (a *Activity) clearHeartbeatDetails(ctx chasm.MutableContext) {
 	if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
 		hb.Details = nil
@@ -1145,8 +1143,6 @@ func (a *Activity) clearHeartbeatDetails(ctx chasm.MutableContext) {
 	}
 }
 
-// reset rewinds the activity to attempt 1, keeping the heartbeat checkpoint so that a long-running
-// activity resumes from it, unless the request asked for the checkpoint to be discarded.
 func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
