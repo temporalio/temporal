@@ -29,11 +29,6 @@ const (
 	WatermarkUpdated = "updated"
 )
 
-// MaxLaggingShardsInSummary caps the per-shard list in HandoverIncomplete so a cluster with
-// thousands of shards cannot produce an unbounded details blob. The true count is always in
-// not_ready_count.
-const MaxLaggingShardsInSummary = 512
-
 // HandoverWatermarkSet reports a shard taking or advancing its replication watermark for a
 // namespace entering handover. pending means the shard was not acquired, so the watermark is a
 // sentinel and replication has not been notified yet.
@@ -89,13 +84,16 @@ type LaggingShard struct {
 	LaggingTasks int64 `json:"lagging_tasks"`
 }
 
-// HandoverLagSnapshot is a point-in-time view of how far each shard is from ready. The waiter
-// overwrites it on every poll and emits whatever is left in it when the wait unwinds, so it
-// describes the final state of the wait rather than an accumulation across polls.
-type HandoverLagSnapshot struct {
+// HandoverIncompleteParams is the field set of one HandoverIncomplete event. The waiter keeps
+// its own running tally and fills this in once, on the way out.
+type HandoverIncompleteParams struct {
+	Namespace     string
+	NamespaceID   string
+	RemoteCluster string
+
 	TotalShards int
 	ReadyCount  int
-	// NotReadyCount is the true count; LaggingShards may be truncated.
+	// NotReadyCount is the true count; LaggingShards may have been truncated by the caller.
 	NotReadyCount int
 	// MissingHandoverInfoCount is the subset of not-ready shards whose namespace cache has not
 	// picked up the handover yet, so they carry no watermark rather than a lagging one.
@@ -103,14 +101,9 @@ type HandoverLagSnapshot struct {
 	MaxLaggingTasks          int64
 	MaxLaggingTasksShardID   int32
 	LaggingShards            []LaggingShard
-}
 
-// AddLaggingShard records a not-ready shard, up to MaxLaggingShardsInSummary of them.
-func (s *HandoverLagSnapshot) AddLaggingShard(shardID int32, laggingTasks int64) {
-	if len(s.LaggingShards) >= MaxLaggingShardsInSummary {
-		return
-	}
-	s.LaggingShards = append(s.LaggingShards, LaggingShard{ShardID: shardID, LaggingTasks: laggingTasks})
+	Elapsed time.Duration
+	ExitErr error
 }
 
 // HandoverIncomplete reports a handover wait that ended with shards still behind. A wait that
@@ -118,34 +111,27 @@ func (s *HandoverLagSnapshot) AddLaggingShard(shardID int32, laggingTasks int64)
 //
 // A not-ready shard with lagging_tasks == 0 is the missing-handover-info case; any other
 // not-ready shard is behind by lagging_tasks.
-func HandoverIncomplete(
-	nsName string,
-	nsID string,
-	remoteCluster string,
-	snapshot *HandoverLagSnapshot,
-	elapsed time.Duration,
-	exitErr error,
-) NamespaceLifecyclePayload {
+func HandoverIncomplete(p HandoverIncompleteParams) NamespaceLifecyclePayload {
 	details := map[string]any{
-		"remote_cluster":              remoteCluster,
-		"total_shards":                snapshot.TotalShards,
-		"ready_count":                 snapshot.ReadyCount,
-		"not_ready_count":             snapshot.NotReadyCount,
-		"missing_handover_info_count": snapshot.MissingHandoverInfoCount,
-		"max_lagging_tasks":           snapshot.MaxLaggingTasks,
-		"max_lagging_tasks_shard_id":  snapshot.MaxLaggingTasksShardID,
-		"lagging_shards":              snapshot.LaggingShards,
-		"lagging_shards_truncated":    snapshot.NotReadyCount > len(snapshot.LaggingShards),
-		"elapsed_seconds":             elapsed.Seconds(),
-		"exit_reason":                 handoverExitReason(exitErr),
+		"remote_cluster":              p.RemoteCluster,
+		"total_shards":                p.TotalShards,
+		"ready_count":                 p.ReadyCount,
+		"not_ready_count":             p.NotReadyCount,
+		"missing_handover_info_count": p.MissingHandoverInfoCount,
+		"max_lagging_tasks":           p.MaxLaggingTasks,
+		"max_lagging_tasks_shard_id":  p.MaxLaggingTasksShardID,
+		"lagging_shards":              p.LaggingShards,
+		"lagging_shards_truncated":    p.NotReadyCount > len(p.LaggingShards),
+		"elapsed_seconds":             p.Elapsed.Seconds(),
+		"exit_reason":                 handoverExitReason(p.ExitErr),
 	}
-	if exitErr != nil {
-		details["exit_error"] = exitErr.Error()
+	if p.ExitErr != nil {
+		details["exit_error"] = p.ExitErr.Error()
 	}
 	return NamespaceLifecyclePayload{
 		Phase:       PhaseHandoverIncomplete,
-		Namespace:   nsName,
-		NamespaceID: nsID,
+		Namespace:   p.Namespace,
+		NamespaceID: p.NamespaceID,
 		Details:     details,
 	}
 }

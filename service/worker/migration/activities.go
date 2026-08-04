@@ -142,6 +142,23 @@ type (
 		isReady      bool
 	}
 
+	// handoverLagSnapshot is a point-in-time view of how far each shard is from ready.
+	// checkHandoverOnce overwrites it on every poll and WaitHandover emits whatever is left in
+	// it when the wait unwinds, so it describes the final state of the wait rather than an
+	// accumulation across polls.
+	handoverLagSnapshot struct {
+		totalShards int
+		readyCount  int
+		// notReadyCount is the true count; laggingShards may be truncated.
+		notReadyCount int
+		// missingHandoverInfoCount is the subset of not-ready shards whose namespace cache has
+		// not picked up the handover yet, so they carry no watermark rather than a lagging one.
+		missingHandoverInfoCount int
+		maxLaggingTasks          int64
+		maxLaggingTasksShardID   int32
+		laggingShards            []wideevents.LaggingShard
+	}
+
 	WorkflowVerifier func(
 		ctx context.Context,
 		request *verifyReplicationTasksRequest,
@@ -165,7 +182,23 @@ const (
 	skipped     verifyStatus = 2
 
 	largeHistoryLength = 1000
+
+	// maxLaggingShardsInSummary caps the per-shard list in the handover lag summary so a cluster
+	// with thousands of shards cannot produce an unbounded details blob. The true count is
+	// always in not_ready_count.
+	maxLaggingShardsInSummary = 512
 )
+
+// addLaggingShard records a not-ready shard, up to maxLaggingShardsInSummary of them.
+func (s *handoverLagSnapshot) addLaggingShard(shardID int32, laggingTasks int64) {
+	if len(s.laggingShards) >= maxLaggingShardsInSummary {
+		return
+	}
+	s.laggingShards = append(s.laggingShards, wideevents.LaggingShard{
+		ShardID:      shardID,
+		LaggingTasks: laggingTasks,
+	})
+}
 
 func (r verifyResult) isVerified() bool {
 	return r.status == verified || r.status == skipped
@@ -385,7 +418,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 
 	// Holds the latest poll's laggards so the summary below can name the shards that were still
 	// behind when the wait ended. Empty on a successful handover, which emits nothing.
-	var snapshot wideevents.HandoverLagSnapshot
+	var snapshot handoverLagSnapshot
 	start := time.Now()
 	defer func() {
 		a.emitHandoverLagSummary(waitRequest, &snapshot, time.Since(start), retErr)
@@ -406,7 +439,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 }
 
 // Check if remote cluster has caught up on all shards on replication tasks
-func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *wideevents.HandoverLagSnapshot) (bool, error) {
+func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *handoverLagSnapshot) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -475,9 +508,9 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 
 	// Overwritten every poll, so what the deferred summary in WaitHandover sees is the final
 	// state of the wait rather than an accumulation across polls.
-	*snapshot = wideevents.HandoverLagSnapshot{
-		TotalShards:              len(localShards),
-		MissingHandoverInfoCount: handoverInfosMissingCount,
+	*snapshot = handoverLagSnapshot{
+		totalShards:              len(localShards),
+		missingHandoverInfoCount: handoverInfosMissingCount,
 	}
 
 	for _, status := range shardStatuses {
@@ -485,7 +518,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			readyShardCount++
 		} else {
 			notReadyShardCount++
-			snapshot.AddLaggingShard(status.shardID, status.laggingTasks)
+			snapshot.addLaggingShard(status.shardID, status.laggingTasks)
 		}
 
 		if status.laggingTasks > maxHandoverLag {
@@ -494,10 +527,10 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		}
 	}
 
-	snapshot.ReadyCount = readyShardCount
-	snapshot.NotReadyCount = notReadyShardCount
-	snapshot.MaxLaggingTasks = maxHandoverLag
-	snapshot.MaxLaggingTasksShardID = maxHandoverLagShardID
+	snapshot.readyCount = readyShardCount
+	snapshot.notReadyCount = notReadyShardCount
+	snapshot.maxLaggingTasks = maxHandoverLag
+	snapshot.maxLaggingTasksShardID = maxHandoverLagShardID
 
 	// emit metrics about how many shards are ready
 	a.MetricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(

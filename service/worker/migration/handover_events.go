@@ -16,21 +16,27 @@ import (
 // GetReplicationStatus fails, and WaitHandover returns — which runs the defer that calls this.
 func (a *activities) emitHandoverLagSummary(
 	waitRequest waitHandoverRequest,
-	snapshot *wideevents.HandoverLagSnapshot,
+	snapshot *handoverLagSnapshot,
 	elapsed time.Duration,
 	exitErr error,
 ) {
-	if snapshot.NotReadyCount == 0 {
+	if snapshot.notReadyCount == 0 {
 		return
 	}
-	wideevents.Emit(a.EventLogger, wideevents.HandoverIncomplete(
-		waitRequest.Namespace,
-		a.namespaceIDForEvent(waitRequest.Namespace),
-		waitRequest.RemoteCluster,
-		snapshot,
-		elapsed,
-		exitErr,
-	))
+	wideevents.Emit(a.EventLogger, wideevents.HandoverIncomplete(wideevents.HandoverIncompleteParams{
+		Namespace:                waitRequest.Namespace,
+		NamespaceID:              a.namespaceIDForEvent(waitRequest.Namespace),
+		RemoteCluster:            waitRequest.RemoteCluster,
+		TotalShards:              snapshot.totalShards,
+		ReadyCount:               snapshot.readyCount,
+		NotReadyCount:            snapshot.notReadyCount,
+		MissingHandoverInfoCount: snapshot.missingHandoverInfoCount,
+		MaxLaggingTasks:          snapshot.maxLaggingTasks,
+		MaxLaggingTasksShardID:   snapshot.maxLaggingTasksShardID,
+		LaggingShards:            snapshot.laggingShards,
+		Elapsed:                  elapsed,
+		ExitErr:                  exitErr,
+	}))
 }
 
 // namespaceIDForEvent resolves the namespace ID so events can be joined on it rather than on the
