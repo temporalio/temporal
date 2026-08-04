@@ -421,20 +421,15 @@ func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperation
 	return outcome
 }
 
-// addCompletionCallbacks creates the child CHASM callback components. They will be in the STANDBY
-// state until this Operation reaches a terminal state.
+// addCompletionCallbacks creates the child CHASM callback components. They stay in STANDBY until this
+// Operation reaches a terminal state.
 //
-// Callbacks are keyed by requestID plus their position within the request, so re-attaching the same
-// request (a client retry, or a retried on_conflict_options attach) is a no-op rather than a duplicate.
-// This is why a request ID is required to be set if there are completion callbacks.
+// Callbacks are keyed by request ID plus their position within the request, so re-attaching the same
+// request is a no-op rather than a duplicate. The idempotency probe runs before the closed check, so a
+// retry still succeeds if the operation closed after the first attach.
 //
-// The idempotency check runs before the closed check, so that a client whose first attach succeeded but
-// whose response was lost still sees success when it retries, even if the operation closed in between.
-// Rejecting that retry would report failure for work that is in fact persisted.
-//
-// maxCallbacks is checked here as well as by the frontend because the two checks cover different things:
-// callback.Validator bounds the callbacks when starting SANOs. This verifies that later callbacks added
-// via on_conflict_options don't exceed the limit.
+// maxCallbacks is re-checked here because callback.Validator only bounds the callbacks on the start
+// request; callbacks added later via on_conflict_options bypass it.
 func (o *Operation) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
