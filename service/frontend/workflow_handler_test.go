@@ -5266,14 +5266,26 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 // carry (10000 years). Anything beyond it fails durationpb's CheckValid.
 const maxProtoDurationSeconds = int64(315576000000)
 
+// newScheduleSpecHandler builds the minimum WorkflowHandler that canonicalizeScheduleSpec
+// needs: a config, a spec builder, and a logger for the non-enforcing path. configure is
+// nil to exercise the shipped dynamic config defaults.
+func newScheduleSpecHandler(configure func(*Config)) *WorkflowHandler {
+	config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
+	if configure != nil {
+		configure(config)
+	}
+	return &WorkflowHandler{
+		config:              config,
+		throttledLogger:     log.NewNoopLogger(),
+		scheduleSpecBuilder: scheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }),
+	}
+}
+
 // Regression test for SCH-057. Malformed interval/phase duration protobufs (mismatched
 // seconds/nanos signs, nanos outside the protobuf range, seconds outside the protobuf
 // range) normalize to Go durations that satisfy the semantic interval checks, so schedule
 // intake used to accept them and persist the invalid wire form verbatim.
-func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_IntervalDurationValidation() {
-	config := s.newConfig()
-	wh := s.getWorkflowHandler(config)
-
+func TestCanonicalizeScheduleSpec_IntervalDurationValidation(t *testing.T) {
 	testCases := []struct {
 		name        string
 		interval    *durationpb.Duration
@@ -5367,7 +5379,8 @@ func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_IntervalDurationVali
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.name, func() {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(nil)
 			schedule := &schedulepb.Schedule{
 				Spec: &schedulepb.ScheduleSpec{
 					Interval: []*schedulepb.IntervalSpec{{
@@ -5379,12 +5392,12 @@ func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_IntervalDurationVali
 
 			err := wh.canonicalizeScheduleSpec(schedule)
 			if tc.errContains == "" {
-				s.NoError(err)
+				require.NoError(t, err)
 				return
 			}
 			var invalidArgument *serviceerror.InvalidArgument
-			s.ErrorAs(err, &invalidArgument)
-			s.Contains(err.Error(), tc.errContains)
+			require.ErrorAs(t, err, &invalidArgument)
+			require.Contains(t, err.Error(), tc.errContains)
 		})
 	}
 }
@@ -5392,7 +5405,7 @@ func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_IntervalDurationVali
 // The duration validation is enforced by default, but operators can turn enforcement off
 // with frontend.enforceScheduleDurationValidation. With it off, a malformed duration is
 // logged and allowed through, and the spec still compiles on its normalized value.
-func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_DurationValidationKillSwitch() {
+func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 	testCases := []struct {
 		name string
 		// configure is nil when the case exercises the shipped default.
@@ -5419,12 +5432,8 @@ func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_DurationValidationKi
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			config := s.newConfig()
-			if tc.configure != nil {
-				tc.configure(config)
-			}
-			wh := s.getWorkflowHandler(config)
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(tc.configure)
 
 			schedule := &schedulepb.Schedule{
 				Spec: &schedulepb.ScheduleSpec{
@@ -5437,13 +5446,13 @@ func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_DurationValidationKi
 			err := wh.canonicalizeScheduleSpec(schedule)
 			if tc.errContains != "" {
 				var invalidArgument *serviceerror.InvalidArgument
-				s.ErrorAs(err, &invalidArgument)
-				s.Contains(err.Error(), tc.errContains)
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Contains(t, err.Error(), tc.errContains)
 				return
 			}
-			s.NoError(err)
+			require.NoError(t, err)
 			// Canonicalization still ran, on the malformed duration's normalized value.
-			s.Equal(2*time.Second-time.Nanosecond,
+			require.Equal(t, 2*time.Second-time.Nanosecond,
 				schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration())
 		})
 	}
