@@ -3959,7 +3959,7 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errIDReusePolicyNotAllowed
 	}
 
-	if err := worker_versioning.ValidateVersioningOverrideStructure(startWorkflow.GetVersioningOverride()); err != nil {
+	if err := worker_versioning.ValidateVersioningOverride(startWorkflow.GetVersioningOverride(), wh.config.MaxIDLengthLimit()); err != nil {
 		return err
 	}
 

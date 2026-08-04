@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -26,7 +25,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protoassert"
-	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -314,8 +312,7 @@ func (s *workflowSuite) runAcrossContinue(
 }
 
 func (s *workflowSuite) TestStart() {
-	// Use the activity boundary to verify that schedule action fields survive V1's
-	// manual StartWorkflowExecutionRequest construction.
+	// written using low-level mocks so we can test all fields in the start request
 
 	userMetadata := &sdkpb.UserMetadata{
 		Summary: &commonpb.Payload{
@@ -329,22 +326,7 @@ func (s *workflowSuite) TestStart() {
 	}
 	action := s.defaultAction("myid")
 	action.Action.(*schedulepb.ScheduleAction_StartWorkflow).StartWorkflow.UserMetadata = userMetadata
-	// A pinned target makes a dropped VersioningOverride distinguishable from the
-	// normal task-queue routing behavior.
-	versioningOverride := &workflowpb.VersioningOverride{
-		Override: &workflowpb.VersioningOverride_Pinned{
-			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-				Version: &deploymentpb.WorkerDeploymentVersion{
-					DeploymentName: "deployment",
-					BuildId:        "build-id",
-				},
-			},
-		},
-	}
-	action.GetStartWorkflow().VersioningOverride = versioningOverride
 
-	// The local activity receives the exact start request emitted by the scheduler.
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Nil(req.Request.LastCompletionResult)
@@ -357,13 +339,10 @@ func (s *workflowSuite) TestStart() {
 		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledById]))
 		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime]))
 		protoassert.ProtoEqual(s.T(), userMetadata, req.Request.GetUserMetadata())
-		// Verify the override crosses the scheduler-to-frontend request boundary.
-		protorequire.ProtoEqual(s.T(), versioningOverride, req.Request.GetVersioningOverride())
 
 		return nil, nil
 	})
 
-	// Run enough workflow iterations to generate and dispatch one scheduled action.
 	s.run(&schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{{

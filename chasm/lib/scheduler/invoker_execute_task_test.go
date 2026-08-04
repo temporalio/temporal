@@ -34,14 +34,18 @@ type invokerExecuteTestEnv struct {
 	mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 }
 
-func newInvokerExecuteTestEnv(t *testing.T) *invokerExecuteTestEnv {
+func newInvokerExecuteTestEnv(t *testing.T, configure ...func(*scheduler.Config)) *invokerExecuteTestEnv {
 	env := newTestEnv(t, withMockEngine())
 
 	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(env.Ctrl)
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(env.Ctrl)
 
+	config := defaultConfig()
+	for _, fn := range configure {
+		fn(config)
+	}
 	handler := scheduler.NewInvokerExecuteTaskHandler(scheduler.InvokerTaskHandlerOptions{
-		Config:         defaultConfig(),
+		Config:         config,
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
 		SpecProcessor:  env.SpecProcessor,
@@ -177,47 +181,80 @@ func TestExecuteTask_Basic(t *testing.T) {
 }
 
 func TestExecuteTask_ForwardsVersioningOverride(t *testing.T) {
-	// The CHASM invoker builds its own frontend request from persisted schedule
-	// state, so exercise that boundary independently from the V1 scheduler.
-	env := newInvokerExecuteTestEnv(t)
-	// A pinned target makes a dropped VersioningOverride distinguishable from the
-	// normal task-queue routing behavior.
-	versioningOverride := &workflowpb.VersioningOverride{
-		Override: &workflowpb.VersioningOverride_Pinned{
-			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
-				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
-				Version: &deploymentpb.WorkerDeploymentVersion{
-					DeploymentName: "deployment",
-					BuildId:        "build-id",
+	tests := map[string]struct {
+		override *workflowpb.VersioningOverride
+		enabled  bool
+	}{
+		"pinned": {
+			enabled: true,
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version: &deploymentpb.WorkerDeploymentVersion{
+							DeploymentName: "deployment",
+							BuildId:        "build-id",
+						},
+					},
 				},
 			},
 		},
+		"one-time": {
+			enabled: true,
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+							DeploymentName: "deployment",
+							BuildId:        "build-id",
+						},
+					},
+				},
+			},
+		},
+		"disabled": {
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+			},
+		},
 	}
-	env.Scheduler.GetSchedule().GetAction().GetStartWorkflow().VersioningOverride = versioningOverride
-	startTime := timestamppb.New(env.TimeSource.Now())
 
-	// Capture the frontend request emitted when the invoker dispatches the buffered start.
-	env.mockFrontendClient.EXPECT().
-		StartWorkflowExecution(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
-			require.True(t, proto.Equal(versioningOverride, request.GetVersioningOverride()))
-			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			env := newInvokerExecuteTestEnv(t, func(config *scheduler.Config) {
+				tweakables := scheduler.DefaultTweakables
+				tweakables.EnableVersioningOverride = test.enabled
+				config.Tweakables = func(string) scheduler.Tweakables { return tweakables }
+			})
+			env.Scheduler.GetSchedule().GetAction().GetStartWorkflow().VersioningOverride = test.override
+			startTime := timestamppb.New(env.TimeSource.Now())
+
+			env.mockFrontendClient.EXPECT().
+				StartWorkflowExecution(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+					var expected *workflowpb.VersioningOverride
+					if test.enabled {
+						expected = test.override
+					}
+					require.True(t, proto.Equal(expected, request.GetVersioningOverride()))
+					return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+				})
+
+			runExecuteTestCase(t, env, &executeTestCase{
+				InitialBufferedStarts: []*schedulespb.BufferedStart{{
+					NominalTime:   startTime,
+					ActualTime:    startTime,
+					DesiredTime:   startTime,
+					RequestId:     "request-id",
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+					Attempt:       1,
+				}},
+				ExpectedBufferedStarts:   1,
+				ExpectedRunningWorkflows: 1,
+				ExpectedActionCount:      1,
+			})
 		})
-
-	// A ready buffered start drives the invoker through its normal dispatch path.
-	runExecuteTestCase(t, env, &executeTestCase{
-		InitialBufferedStarts: []*schedulespb.BufferedStart{{
-			NominalTime:   startTime,
-			ActualTime:    startTime,
-			DesiredTime:   startTime,
-			RequestId:     "request-id",
-			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			Attempt:       1,
-		}},
-		ExpectedBufferedStarts:   1,
-		ExpectedRunningWorkflows: 1,
-		ExpectedActionCount:      1,
-	})
+	}
 }
 
 func TestExecuteTask_DistinctRequestsCanReuseCompletedWorkflowID(t *testing.T) {
