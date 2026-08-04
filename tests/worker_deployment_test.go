@@ -1872,6 +1872,57 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 	})
 }
 
+// TestSetCurrentVersion_Unversioned_AllowNoPollers tests unsetting current version with allowNoPollers=true
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_AllowNoPollers() {
+	env := s.newTestEnv()
+	currentVars := env.Tv().WithBuildIDNumber(1)
+
+	go s.pollFromDeployment(env, currentVars)
+	s.ensureCreateVersionInDeployment(env, currentVars)
+
+	// set current version
+	s.setCurrentVersion(env, currentVars, true, "")
+	env.waitForTaskQueueVersioningInfo(s, env.Tv().TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
+
+	// unset current version with allowNoPollers=true - this should work even though buildId is empty
+	s.setCurrentVersionUnversionedOption(env, currentVars, true, true, true, true, "")
+	env.waitForTaskQueueVersioningInfo(s, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+
+	// verify deployment state
+	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      env.Namespace().String(),
+		DeploymentName: currentVars.DeploymentSeries(),
+	})
+	s.NoError(err)
+	var emptyVersion *deploymentpb.WorkerDeploymentVersion
+	s.Equal(emptyVersion, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
+}
+
+// TestSetRampingVersion_Unset_AllowNoPollers tests unsetting ramping version with allowNoPollers=true
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unset_AllowNoPollers() {
+	env := s.newTestEnv()
+	tv := env.Tv().WithBuildIDNumber(1)
+
+	go s.pollFromDeployment(env, tv)
+	s.ensureCreateVersionInDeployment(env, tv)
+
+	// set ramping version
+	s.setAndVerifyRampingVersion(env, tv, false, 50, true, "")
+
+	// unset ramping version with allowNoPollers=true - this should work even though buildId is empty
+	s.setAndVerifyRampingVersionUnversionedOption(env, tv, false, true, 0, true, true, true, "")
+	env.waitForTaskQueueVersioningInfo(s, tv.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+
+	// verify deployment state
+	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      env.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	var emptyVersion *deploymentpb.WorkerDeploymentVersion
+	s.Equal(emptyVersion, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
+}
+
 // Should see that the current version of the task queue becomes unversioned, and the unversioned ramping version of the task queue is removed
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversionedRamp() {
 	env := s.newTestEnv()

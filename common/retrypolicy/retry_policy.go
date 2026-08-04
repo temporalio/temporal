@@ -1,11 +1,13 @@
 package retrypolicy
 
 import (
+	"slices"
 	"strings"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -18,6 +20,48 @@ const (
 	// e.g. "TemporalTimeout:StartToClose" or "TemporalTimeout:Heartbeat"
 	TimeoutFailureTypePrefix = "TemporalTimeout:"
 )
+
+// IsRetryableFailure reports whether a failure permits a retry under the given non-retryable error
+// types. Canceled, terminated, and schedule-to-start or schedule-to-close timeout failures are not
+// retryable. Nil, wrapper, and unrecognized failures are retryable by default.
+func IsRetryableFailure(failure *failurepb.Failure, nonRetryableTypes []string) bool {
+	if failure == nil {
+		return true
+	}
+
+	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
+		return false
+	}
+
+	if failure.GetTimeoutFailureInfo() != nil {
+		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
+		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+			return !slices.Contains(
+				nonRetryableTypes,
+				TimeoutFailureTypePrefix+timeoutType.String(),
+			)
+		}
+
+		return false
+	}
+
+	if failure.GetServerFailureInfo() != nil {
+		return !failure.GetServerFailureInfo().GetNonRetryable()
+	}
+
+	if failure.GetApplicationFailureInfo() != nil {
+		if failure.GetApplicationFailureInfo().GetNonRetryable() {
+			return false
+		}
+
+		return !slices.Contains(
+			nonRetryableTypes,
+			failure.GetApplicationFailureInfo().GetType(),
+		)
+	}
+	return true
+}
 
 // DefaultRetrySettings indicates what the "default" retry settings
 // are if it is not specified on an Activity or for any unset fields

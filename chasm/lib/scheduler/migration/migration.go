@@ -442,7 +442,16 @@ func splitBufferedStartsForLegacy(
 			StartWorkflowStatus: status,
 		})
 
-		if start.GetCompleted() == nil {
+		// Only export still-running executions that V1 would track in
+		// Info.RunningWorkflows. Modern V1 (version >= DontTrackOverlapping)
+		// intentionally omits ALLOW_ALL runs from RunningWorkflows, since they
+		// don't participate in overlap resolution (see recordAction in the V1
+		// scheduler workflow). Exporting them here would make the rolled-back V1
+		// schedule treat itself as busy and mis-apply SKIP/BUFFER/CANCEL/TERMINATE
+		// to later non-ALLOW_ALL starts. They still appear in RecentActions above,
+		// matching V1.
+		if start.GetCompleted() == nil &&
+			start.GetOverlapPolicy() != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
 			running = append(running, &commonpb.WorkflowExecution{
 				WorkflowId: start.GetWorkflowId(),
 				RunId:      start.GetRunId(),
