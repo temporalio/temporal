@@ -423,6 +423,31 @@ func (s *activityParityTestSuite) TestRespondCanceledByIDWithoutRequest() {
 	})
 }
 
+// Unpausing an activity that was never paused must be rejected with FailedPrecondition on both
+// surfaces. Workflow activities are served by the legacy unpause path, which silently skips a
+// non-paused activity and reports success.
+func (s *activityParityTestSuite) TestUnpauseWithoutPause() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 1}
+
+	assertUnpauseRejected := func(t testing.TB, err error) {
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		t.Skip("WFA should reject unpause on non-paused activity as FailedPrecondition")
+		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertUnpauseRejected(t, handle.rpc(t, model.Unpause))
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertUnpauseRejected(t, handle.rpc(t, model.Unpause))
+	})
+}
+
 // Force-completing an activity by ID must work whenever no attempt is in progress: while Scheduled
 // and never started, and while Paused before any worker picked it up.
 func (s *activityParityTestSuite) TestCompleteByID() {
