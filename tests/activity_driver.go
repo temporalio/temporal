@@ -58,6 +58,9 @@ const activityInput = "Input"
 // differs from the model.Heartbeat payload so assertions can tell which source was persisted.
 var activityHeartbeatDetails = payloads.EncodeString("failure checkpoint details")
 
+// activityRecordedHeartbeatDetails is the checkpoint payload a driver sends for a model.Heartbeat event.
+var activityRecordedHeartbeatDetails = payloads.EncodeString("heartbeat details")
+
 // timerProcessorMaxShift is the floor the timer queue puts on a task's fire time: it will not fire one
 // earlier than now + this.
 var timerProcessorMaxShift = dynamicconfig.TimerProcessorMaxTimeShift.Get(
