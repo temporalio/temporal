@@ -13508,11 +13508,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSED)
 	})
 
-	// UpdateOptions while a Reset(RestoreOriginalOptions) is deferred (worker still running, restore
-	// pending) is rejected outright: the pending restore unconditionally overwrites every option
-	// field from OriginalOptions when it lands (see applyDeferredOptionRestore), so an intervening
-	// UpdateOptions call would silently be reverted rather than take effect. RESET_REQUESTED without
-	// a pending restore still permits updates (see UpdateOptionsPreservesTimeoutsWhileResetRequested).
+	// UpdateOptions is rejected for any RESET_REQUESTED activity, which includes the window while a
+	// Reset(RestoreOriginalOptions) is deferred because the worker is still running.
 	t.Run("UpdateOptionsWhileDeferredRestorePendingFails", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -13545,51 +13542,6 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.ErrorAs(t, err, &failedPreconditionErr)
 
 		completeAttempt(ctx, t, pollResp1.TaskToken)
-	})
-
-	// UpdateOptionsAllowedAfterDeferredRestoreSupersededByCancel: once a cancellation supersedes a
-	// deferred Reset(RestoreOriginalOptions), the restore can never land, so the pending-restore
-	// guard on UpdateOptions must not outlive it — otherwise UpdateOptions would be rejected for the
-	// rest of the activity's life instead of just the window during which the restore was pending.
-	t.Run("UpdateOptionsAllowedAfterDeferredRestoreSupersededByCancel", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		activityID := testcore.RandomizeStr(t.Name())
-		startResp, pollResp1, _ := startAndPollActivity(ctx, t, activityID, &commonpb.RetryPolicy{
-			InitialInterval:    durationpb.New(time.Second),
-			BackoffCoefficient: 1.0,
-		})
-		require.EqualValues(t, 1, pollResp1.Attempt)
-
-		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
-			Namespace:              env.Namespace().String(),
-			ActivityId:             activityID,
-			RunId:                  startResp.GetRunId(),
-			RestoreOriginalOptions: true,
-		})
-		require.NoError(t, err)
-
-		_, err = env.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.GetRunId(),
-			Identity:   defaultIdentity,
-			Reason:     "test-cancel",
-			RequestId:  testcore.RandomizeStr(t.Name()),
-		})
-		require.NoError(t, err)
-
-		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.GetRunId(),
-			ActivityOptions: &activitypb.ActivityOptions{
-				StartToCloseTimeout: durationpb.New(30 * time.Second),
-			},
-			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
-		})
-		require.NoError(t, err, "the superseded restore must not block UpdateOptions once cancel is pending")
 	})
 
 	// startAttemptWithTimeouts starts a SAA with the given per-attempt timeouts and retry policy and
