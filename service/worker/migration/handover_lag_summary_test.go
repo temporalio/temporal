@@ -88,7 +88,7 @@ func TestEmitHandoverLagSummaryNamesLaggingShards(t *testing.T) {
 		missingHandoverInfoCount: 1,
 		maxLaggingTasks:          42,
 		maxLaggingTasksShardID:   3,
-		laggingShards: []wideevents.LaggingShard{
+		laggingShards: []laggingShard{
 			{ShardID: 1, LaggingTasks: 0},
 			{ShardID: 3, LaggingTasks: 42},
 		},
@@ -155,7 +155,7 @@ func TestEmitHandoverLagSummaryTruncates(t *testing.T) {
 
 	snapshot := &handoverLagSnapshot{totalShards: 4096, notReadyCount: 4096}
 	for i := 0; i < maxLaggingShardsInSummary; i++ {
-		snapshot.laggingShards = append(snapshot.laggingShards, wideevents.LaggingShard{ShardID: int32(i), LaggingTasks: 1})
+		snapshot.laggingShards = append(snapshot.laggingShards, laggingShard{ShardID: int32(i), LaggingTasks: 1})
 	}
 	a.emitHandoverLagSummary(lagSummaryTestRequest(), snapshot, time.Second, context.Canceled)
 

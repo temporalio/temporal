@@ -2,6 +2,7 @@ package migration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -142,6 +143,12 @@ type (
 		isReady      bool
 	}
 
+	// laggingShard is one shard that had not caught up when a handover wait ended.
+	laggingShard struct {
+		ShardID      int32 `json:"shard_id"`
+		LaggingTasks int64 `json:"lagging_tasks"`
+	}
+
 	// handoverLagSnapshot is a point-in-time view of how far each shard is from ready.
 	// checkHandoverOnce overwrites it on every poll and WaitHandover emits whatever is left in
 	// it when the wait unwinds, so it describes the final state of the wait rather than an
@@ -156,7 +163,7 @@ type (
 		missingHandoverInfoCount int
 		maxLaggingTasks          int64
 		maxLaggingTasksShardID   int32
-		laggingShards            []wideevents.LaggingShard
+		laggingShards            []laggingShard
 	}
 
 	WorkflowVerifier func(
@@ -194,7 +201,7 @@ func (s *handoverLagSnapshot) addLaggingShard(shardID int32, laggingTasks int64)
 	if len(s.laggingShards) >= maxLaggingShardsInSummary {
 		return
 	}
-	s.laggingShards = append(s.laggingShards, wideevents.LaggingShard{
+	s.laggingShards = append(s.laggingShards, laggingShard{
 		ShardID:      shardID,
 		LaggingTasks: laggingTasks,
 	})
@@ -557,13 +564,16 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	return isReady, nil
 }
 
-// emitHandoverLagSummary reports the shards still behind when the wait ended. The phase and its
-// payload are defined in common/wideevents with the rest of the namespace lifecycle events.
+// emitHandoverLagSummary reports the shards still behind when the wait ended. A wait that
+// succeeds leaves no laggards, so it emits nothing and the happy path is silent.
 //
 // WaitHandover never returns on its own while shards are lagging: StartToClose is capped at
 // maximumHandoverTimeoutSeconds with no retry, so the activity is killed from the outside. The
 // kill reaches this code because the SDK cancels the activity context off the heartbeat, the next
 // GetReplicationStatus fails, and WaitHandover returns — which runs the defer that calls this.
+//
+// A not-ready shard with lagging_tasks == 0 is the missing-handover-info case; any other
+// not-ready shard is behind by lagging_tasks.
 func (a *activities) emitHandoverLagSummary(
 	waitRequest waitHandoverRequest,
 	snapshot *handoverLagSnapshot,
@@ -573,20 +583,45 @@ func (a *activities) emitHandoverLagSummary(
 	if snapshot.notReadyCount == 0 {
 		return
 	}
-	wideevents.Emit(a.EventLogger, wideevents.HandoverIncomplete(wideevents.HandoverIncompleteParams{
-		Namespace:                waitRequest.Namespace,
-		NamespaceID:              a.namespaceIDForEvent(waitRequest.Namespace),
-		RemoteCluster:            waitRequest.RemoteCluster,
-		TotalShards:              snapshot.totalShards,
-		ReadyCount:               snapshot.readyCount,
-		NotReadyCount:            snapshot.notReadyCount,
-		MissingHandoverInfoCount: snapshot.missingHandoverInfoCount,
-		MaxLaggingTasks:          snapshot.maxLaggingTasks,
-		MaxLaggingTasksShardID:   snapshot.maxLaggingTasksShardID,
-		LaggingShards:            snapshot.laggingShards,
-		Elapsed:                  elapsed,
-		ExitErr:                  exitErr,
-	}))
+
+	details := map[string]any{
+		"remote_cluster":              waitRequest.RemoteCluster,
+		"total_shards":                snapshot.totalShards,
+		"ready_count":                 snapshot.readyCount,
+		"not_ready_count":             snapshot.notReadyCount,
+		"missing_handover_info_count": snapshot.missingHandoverInfoCount,
+		"max_lagging_tasks":           snapshot.maxLaggingTasks,
+		"max_lagging_tasks_shard_id":  snapshot.maxLaggingTasksShardID,
+		"lagging_shards":              snapshot.laggingShards,
+		"lagging_shards_truncated":    snapshot.notReadyCount > len(snapshot.laggingShards),
+		"elapsed_seconds":             elapsed.Seconds(),
+		"exit_reason":                 handoverExitReason(exitErr),
+	}
+	if exitErr != nil {
+		details["exit_error"] = exitErr.Error()
+	}
+
+	wideevents.Emit(a.EventLogger, wideevents.NamespaceLifecyclePayload{
+		Phase:       wideevents.PhaseHandoverIncomplete,
+		Namespace:   waitRequest.Namespace,
+		NamespaceID: a.namespaceIDForEvent(waitRequest.Namespace),
+		Details:     details,
+	})
+}
+
+// handoverExitReason separates the wait being killed while shards were still behind from a failed
+// GetReplicationStatus, since the two point at different problems.
+func handoverExitReason(err error) string {
+	switch {
+	case err == nil:
+		return "returned_ready"
+	case errors.Is(err, context.Canceled):
+		return "context_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "deadline_exceeded"
+	default:
+		return "error"
+	}
 }
 
 // namespaceIDForEvent resolves the namespace ID so events can be joined on it rather than on the
