@@ -9887,18 +9887,17 @@ func (env *standaloneActivityEnv) runNexusCompletionHTTPServer(t *testing.T, h *
 	return srv.URL
 }
 
-// awaitCallbackInfoWhere polls DescribeActivityExecution until the activity's single completion
-// callback satisfies check, and returns that CallbackInfo.
-func (env *standaloneActivityEnv) awaitCallbackInfoWhere(
+// awaitCallbackInfo polls DescribeActivityExecution until the activity's single completion
+// callback reaches wantState, and returns that CallbackInfo.
+func (env *standaloneActivityEnv) awaitCallbackInfo(
 	ctx context.Context,
 	t *testing.T,
 	activityID string,
-	check func(c *await.T, cbInfo *callbackpb.CallbackInfo),
+	wantState enumspb.CallbackState,
 ) *callbackpb.CallbackInfo {
 	t.Helper()
-
 	var cbInfo *callbackpb.CallbackInfo
-	awaitFn := func(c *await.T) {
+	await.Require(ctx, t, func(c *await.T) {
 		descResp, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -9907,29 +9906,9 @@ func (env *standaloneActivityEnv) awaitCallbackInfoWhere(
 		require.Len(c, descResp.GetCallbacks(), 1)
 		cbInfo = descResp.GetCallbacks()[0].GetInfo()
 		require.NotNil(c, cbInfo)
-		check(c, cbInfo)
-	}
-
-	const (
-		timeout      = 10 * time.Second
-		pollInterval = 100 * time.Millisecond
-	)
-	await.Require(ctx, t, awaitFn, timeout, pollInterval)
-	return cbInfo
-}
-
-// awaitCallbackInfo polls until the activity's single completion callback reaches wantState.
-func (env *standaloneActivityEnv) awaitCallbackInfo(
-	ctx context.Context,
-	t *testing.T,
-	activityID string,
-	wantState enumspb.CallbackState,
-) *callbackpb.CallbackInfo {
-	t.Helper()
-
-	return env.awaitCallbackInfoWhere(ctx, t, activityID, func(c *await.T, cbInfo *callbackpb.CallbackInfo) {
 		require.Equal(c, wantState, cbInfo.GetState())
-	})
+	}, 10*time.Second, 100*time.Millisecond)
+	return cbInfo
 }
 
 // Tests verifying that completion callbacks attached to standalone Activities get triggered.

@@ -240,12 +240,9 @@ func (c *Callback) ToAPICallbackInfo(ctx chasm.Context) (*callbackpb.CallbackInf
 	return info, nil
 }
 
+// APIState converts the CHASM callback status to the API CallbackState enum.
 func (c *Callback) APIState() (enumspb.CallbackState, error) {
-	const unspecified = enumspb.CALLBACK_STATE_UNSPECIFIED
-
 	switch c.Status {
-	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
-		return unspecified, serviceerror.NewInternal("callback with UNSPECIFIED state")
 	case callbackspb.CALLBACK_STATUS_STANDBY:
 		return enumspb.CALLBACK_STATE_STANDBY, nil
 	case callbackspb.CALLBACK_STATUS_SCHEDULED:
@@ -256,9 +253,10 @@ func (c *Callback) APIState() (enumspb.CallbackState, error) {
 		return enumspb.CALLBACK_STATE_FAILED, nil
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
 		return enumspb.CALLBACK_STATE_SUCCEEDED, nil
+	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternal("callback with UNSPECIFIED state")
 	default:
-		err := serviceerror.NewInternalf("unknown callback state: %v", c.Status)
-		return unspecified, err
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternalf("unknown callback state: %v", c.Status)
 	}
 }
 

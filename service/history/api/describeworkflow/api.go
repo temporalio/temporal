@@ -518,7 +518,7 @@ func buildCallbackInfosFromChasm(
 			Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
 		}
 
-		callbackInfo, err := buildCallbackInfoFromChasm(ctx, namespaceID, callback, trigger, outboundQueueCBPool)
+		callbackInfo, err := buildCallbackInfoFromChasm(namespaceID, callback, trigger, outboundQueueCBPool)
 		if err != nil {
 			logger.Error(
 				"failed to build callback info from CHASM callback",
@@ -549,7 +549,7 @@ func buildCallbackInfosFromChasm(
 				},
 			}
 
-			callbackInfo, err := buildCallbackInfoFromChasm(ctx, namespaceID, callback, trigger, outboundQueueCBPool)
+			callbackInfo, err := buildCallbackInfoFromChasm(namespaceID, callback, trigger, outboundQueueCBPool)
 			if err != nil {
 				logger.Error(
 					"failed to build callback info from CHASM update callback",
@@ -572,7 +572,6 @@ func buildCallbackInfosFromChasm(
 
 // buildCallbackInfoFromChasm converts a single CHASM callback to API format.
 func buildCallbackInfoFromChasm(
-	ctx context.Context,
 	namespaceID namespace.ID,
 	callback *chasmcallback.Callback,
 	trigger *workflowpb.CallbackInfo_Trigger,
@@ -588,14 +587,12 @@ func buildCallbackInfoFromChasm(
 		return cb.State() != gobreaker.StateClosed
 	}
 
-	return buildChasmCallbackInfo(ctx, namespaceID.String(), callback, trigger, circuitBreakerState)
+	return buildChasmCallbackInfo(callback, trigger, circuitBreakerState)
 }
 
 // buildChasmCallbackInfo converts a single CHASM callback to API CallbackInfo format.
 // Returns nil if the callback should not be included in the response.
 func buildChasmCallbackInfo(
-	_ context.Context,
-	_ string,
 	cb *chasmcallback.Callback,
 	trigger *workflowpb.CallbackInfo_Trigger,
 	circuitBreakerState func(destination string) bool,
@@ -629,12 +626,12 @@ func buildChasmCallbackInfo(
 	return &workflowpb.CallbackInfo{
 		Callback:                cbSpec,
 		Trigger:                 trigger,
-		RegistrationTime:        cb.RegistrationTime,
+		RegistrationTime:        common.CloneProto(cb.RegistrationTime),
 		State:                   state,
 		Attempt:                 cb.Attempt,
-		LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
-		LastAttemptFailure:      cb.LastAttemptFailure,
-		NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
+		LastAttemptCompleteTime: common.CloneProto(cb.LastAttemptCompleteTime),
+		LastAttemptFailure:      common.CloneProto(cb.LastAttemptFailure),
+		NextAttemptScheduleTime: common.CloneProto(cb.NextAttemptScheduleTime),
 		BlockedReason:           blockedReason,
 	}, nil
 }
