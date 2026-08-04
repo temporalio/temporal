@@ -2636,10 +2636,11 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCanZombifyConflictingChild() 
 		StartedWorkflowId: childWorkflowID,
 	}
 
+	// Policy checks live in api.validateOrphanedChild, under the conflicting run's lock; see
+	// TestValidateOrphanedChild. This decides only what the parent alone can decide.
 	testCases := []struct {
 		name            string
 		enabled         bool
-		reusePolicy     enumspb.WorkflowIdReusePolicy
 		pendingChildren map[int64]*persistencespb.ChildExecutionInfo
 		expected        bool
 	}{
@@ -2648,43 +2649,22 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCanZombifyConflictingChild() 
 			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
 		},
 		{
-			name:            "allow duplicate",
-			enabled:         true,
-			reusePolicy:     enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
-			expected:        true,
-		},
-		{
-			name:            "unspecified reuse policy",
+			name:            "only this initiation holds the workflow ID",
 			enabled:         true,
 			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
 			expected:        true,
 		},
 		{
-			name:            "reject duplicate",
-			enabled:         true,
-			reusePolicy:     enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
-		},
-		{
-			name:            "allow duplicate failed only",
-			enabled:         true,
-			reusePolicy:     enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
-		},
-		{
-			name:        "another accepted child uses the workflow ID",
-			enabled:     true,
-			reusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			name:    "another accepted child uses the workflow ID",
+			enabled: true,
 			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{
 				72: {InitiatedEventId: 72, StartedWorkflowId: childWorkflowID},
 				75: childInfo,
 			},
 		},
 		{
-			name:        "other accepted children use different workflow IDs",
-			enabled:     true,
-			reusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			name:    "other accepted children use different workflow IDs",
+			enabled: true,
 			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{
 				72: {InitiatedEventId: 72, StartedWorkflowId: "other-child"},
 				75: childInfo,
@@ -2704,19 +2684,17 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCanZombifyConflictingChild() 
 				WorkflowId:  "parent-workflow",
 			}).AnyTimes()
 			mutableState.EXPECT().GetPendingChildExecutionInfos().Return(tc.pendingChildren).AnyTimes()
-			attributes := &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
-				WorkflowIdReusePolicy: tc.reusePolicy,
-			}
 
 			s.Equal(tc.expected, s.transferQueueActiveTaskExecutor.canZombifyConflictingChild(
 				mutableState,
 				childInfo,
-				attributes,
 				tests.Namespace,
 			))
 		})
 	}
 
+	// The parent's lock is held across startChildWorkflow, so the zombify transaction must never be
+	// pointed at the parent itself.
 	s.Run("child workflow ID collides with parent", func() {
 		s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool { return true }
 		mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
@@ -2729,14 +2707,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCanZombifyConflictingChild() 
 			Namespace:         tests.Namespace.String(),
 			StartedWorkflowId: "same-workflow",
 		}
-		attributes := &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
-			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		}
 
 		s.False(s.transferQueueActiveTaskExecutor.canZombifyConflictingChild(
 			mutableState,
 			selfChild,
-			attributes,
 			tests.Namespace,
 		))
 	})

@@ -1116,7 +1116,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		startOptions.zombifyConflictingChild = t.canZombifyConflictingChild(
 			mutableState,
 			childInfo,
-			attributes,
 			parentNamespaceName,
 		)
 	}
@@ -1186,34 +1185,21 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}, parentClock, childClock)
 }
 
-// canZombifyConflictingChild allows a conflicting child run to be zombified only when
-//  1. the feature is enabled
-//  2. the reuse policy permits a new run
-//  3. the child workflow ID does not identify the parent workflow in the same namespace
-//  4. no other pending child on the parent's accepted branch uses the same workflow ID.
+// canZombifyConflictingChild let the parent decide if a collision found by child can be zombified.
 func (t *transferQueueActiveTaskExecutor) canZombifyConflictingChild(
 	mutableState historyi.MutableState,
 	childInfo *persistencespb.ChildExecutionInfo,
-	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	parentNamespaceName namespace.Name,
 ) bool {
 	if !t.config.EnableOrphanedChildWorkflowReplacement(parentNamespaceName.String()) {
 		return false
 	}
-	reusePolicy := attributes.GetWorkflowIdReusePolicy()
-	if reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
-		reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
+	if childInfo.GetStartedWorkflowId() == mutableState.GetExecutionInfo().GetWorkflowId() {
 		return false
 	}
-	executionInfo := mutableState.GetExecutionInfo()
-	childNamespaceMatchesParent := childInfo.GetNamespaceId() == executionInfo.GetNamespaceId()
-	if childInfo.GetNamespaceId() == "" {
-		childNamespaceMatchesParent = childInfo.GetNamespace() == parentNamespaceName.String()
-	}
-	if childNamespaceMatchesParent &&
-		childInfo.GetStartedWorkflowId() == executionInfo.GetWorkflowId() {
-		return false
-	}
+	// A parent that legitimately starts a second child under the same workflow ID
+	// still holds the earlier initiation as a pending child. For this case, we shouldn't
+	// zombify the running child.
 	for initiatedEventID, pendingChild := range mutableState.GetPendingChildExecutionInfos() {
 		if initiatedEventID != childInfo.GetInitiatedEventId() &&
 			pendingChild.GetStartedWorkflowId() == childInfo.GetStartedWorkflowId() {

@@ -109,10 +109,40 @@ func TestZombifyConflictingChildAction(t *testing.T) {
 		parent          *workflowspb.ParentExecutionInfo
 		mutateInfo      func(*persistencespb.WorkflowExecutionInfo)
 		firstRunID      string
+		conflictPolicy  enumspb.WorkflowIdConflictPolicy
+		reusePolicy     enumspb.WorkflowIdReusePolicy
 		expectCompleted bool
 		expectConflict  bool
 	}{
 		{name: "same parent different initiation", running: true, parent: parentExecutionInfo},
+		{
+			name:           "unspecified reuse policy",
+			running:        true,
+			parent:         parentExecutionInfo,
+			reusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED,
+			conflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		},
+		{
+			name:           "reuse policy rejects duplicates",
+			running:        true,
+			parent:         parentExecutionInfo,
+			reusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			expectConflict: true,
+		},
+		{
+			name:           "reuse policy allows failed duplicates only",
+			running:        true,
+			parent:         parentExecutionInfo,
+			reusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
+			expectConflict: true,
+		},
+		{
+			name:           "conflict policy would not fail the start",
+			running:        true,
+			parent:         parentExecutionInfo,
+			conflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+			expectConflict: true,
+		},
 		{
 			name:            "closed child",
 			parent:          parentExecutionInfo,
@@ -198,7 +228,14 @@ func TestZombifyConflictingChildAction(t *testing.T) {
 				).Return(true, nil)
 			}
 
-			action, err := ZombifyConflictingChildAction(tc.parent, log.NewTestLogger())(
+			conflictPolicy := tc.conflictPolicy
+			if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED {
+				// What startChildWorkflow always sends on this path.
+				conflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+			}
+			action, err := ZombifyConflictingChildAction(
+				tc.parent, conflictPolicy, tc.reusePolicy, log.NewTestLogger(),
+			)(
 				NewWorkflowLease(nil, nil, mutableState),
 			)
 			switch {

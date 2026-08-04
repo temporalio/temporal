@@ -466,9 +466,18 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 	var currentExecutionUpdateAction api.UpdateWorkflowActionFunc
 	var err error
-	if s.shouldZombifyConflictingChild(currentWorkflowConditionFailed.State) {
+	currentIsOpen := currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+		currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	if s.request.GetZombifyConflictingChild() && currentIsOpen {
+		// currentIsOpen is routing, not a duplicate of the action's own liveness check: a durably
+		// closed run is not a replaceable orphan and belongs on the reuse-policy path below. Drop it
+		// and a closed child retries the zombify path forever on ErrWorkflowCompleted, which is only
+		// a race signal when the snapshot said open.
+		// TODO: handle orphan closed child run
 		currentExecutionUpdateAction = api.ZombifyConflictingChildAction(
 			s.request.ParentExecutionInfo,
+			s.request.StartRequest.GetWorkflowIdConflictPolicy(),
+			s.request.StartRequest.GetWorkflowIdReusePolicy(),
 			s.shardContext.GetLogger(),
 		)
 	} else {
@@ -572,27 +581,6 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	default:
 		return nil, StartErr, err
 	}
-}
-
-// shouldZombifyConflictingChild routes a duplicate start to the atomic zombify action only when
-//  1. the parent explicitly requests orphaned-child recovery
-//  2. the conflict policy would otherwise fail the start
-//  3. the reuse policy permits a new run
-//  4. the current execution is still open according to the persistence snapshot.
-//
-// The action revalidates the execution under the child lock before zombifying it.
-func (s *Starter) shouldZombifyConflictingChild(currentState enumsspb.WorkflowExecutionState) bool {
-	if !s.request.GetZombifyConflictingChild() ||
-		s.request.StartRequest.GetWorkflowIdConflictPolicy() != enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
-		return false
-	}
-	reusePolicy := s.request.StartRequest.GetWorkflowIdReusePolicy()
-	if reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
-		reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
-		return false
-	}
-	return currentState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
-		currentState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 }
 
 // respondToRetriedRequest provides a response in case a start request is retried.
