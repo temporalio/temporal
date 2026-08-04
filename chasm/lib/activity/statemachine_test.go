@@ -369,6 +369,10 @@ func TestTransitionStarted(t *testing.T) {
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			Identity: "test-worker",
 		},
+		// TODO: change this and serverside once versioning is supported in SAA.
+		// LastDeploymentVersion represents the worker that actually accepted the task,
+		// than when it's scheduled. WFA derives it from PollRequest via
+		// DeploymentFromCapabilities, while this test uses VersionDirective.
 		VersionDirective: &taskqueuespb.TaskVersionDirective{
 			DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
 				DeploymentName: "test-deployment",
