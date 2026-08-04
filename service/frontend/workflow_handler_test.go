@@ -5393,36 +5393,60 @@ func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_IntervalDurationVali
 // with frontend.enforceScheduleDurationValidation. With it off, a malformed duration is
 // logged and allowed through, and the spec still compiles on its normalized value.
 func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_DurationValidationKillSwitch() {
-	malformedSchedule := func() *schedulepb.Schedule {
-		return &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{
-					Interval: &durationpb.Duration{Seconds: 2, Nanos: -1},
-				}},
+	testCases := []struct {
+		name string
+		// configure is nil when the case exercises the shipped default.
+		configure   func(*Config)
+		errContains string
+	}{
+		{
+			name:        "enforced by default",
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name: "enforcement explicitly enabled",
+			configure: func(c *Config) {
+				c.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(true)
 			},
-		}
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name: "enforcement disabled",
+			configure: func(c *Config) {
+				c.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(false)
+			},
+		},
 	}
 
-	s.Run("enforced by default", func() {
-		wh := s.getWorkflowHandler(s.newConfig())
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			config := s.newConfig()
+			if tc.configure != nil {
+				tc.configure(config)
+			}
+			wh := s.getWorkflowHandler(config)
 
-		err := wh.canonicalizeScheduleSpec(malformedSchedule())
-		var invalidArgument *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgument)
-		s.Contains(err.Error(), "interval is not a valid duration")
-	})
+			schedule := &schedulepb.Schedule{
+				Spec: &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{{
+						Interval: &durationpb.Duration{Seconds: 2, Nanos: -1},
+					}},
+				},
+			}
 
-	s.Run("enforcement disabled", func() {
-		config := s.newConfig()
-		config.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(false)
-		wh := s.getWorkflowHandler(config)
-
-		schedule := malformedSchedule()
-		s.NoError(wh.canonicalizeScheduleSpec(schedule))
-		// Canonicalization still ran, on the malformed duration's normalized value.
-		s.Equal(2*time.Second-time.Nanosecond,
-			schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration())
-	})
+			err := wh.canonicalizeScheduleSpec(schedule)
+			if tc.errContains != "" {
+				var invalidArgument *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgument)
+				s.Contains(err.Error(), tc.errContains)
+				return
+			}
+			s.NoError(err)
+			// Canonicalization still ran, on the malformed duration's normalized value.
+			s.Equal(2*time.Second-time.Nanosecond,
+				schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration())
+		})
+	}
 }
 
 // Regression test for SCH-057: CreateSchedule and UpdateSchedule must reject malformed
