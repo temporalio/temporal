@@ -21,7 +21,9 @@ const (
 	TimeoutFailureTypePrefix = "TemporalTimeout:"
 )
 
-// IsRetryableFailure reports whether a failure permits a retry under the given non-retryable error types.
+// IsRetryableFailure reports whether a failure permits a retry under the given non-retryable error
+// types. Canceled, terminated, and schedule-to-start or schedule-to-close timeout failures are not
+// retryable. Nil, wrapper, and unrecognized failures are retryable by default.
 func IsRetryableFailure(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 	if failure == nil {
 		return true

@@ -94,9 +94,7 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 
 // A retryable ServerFailure reported through RespondActivityTaskFailedById must be retried, exactly
 // like a retryable ApplicationFailure. Only the by-ID API accepts a non-application failure (the
-// by-token API rejects one), so this is the surface a ServerFailure reaches the handler through. SAA
-// previously derived retryability from ApplicationFailureInfo alone and closed a ServerFailure
-// terminally, while WFA scheduled another attempt.
+// by-token API rejects one), so this is the path a ServerFailure reaches the handler through.
 func (s *activityParityTestSuite) TestRetryableServerFailureIsRetried() {
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
