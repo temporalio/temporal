@@ -158,7 +158,6 @@ func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientCon
 	}
 
 	if actual, loaded := c.conns.LoadOrStore(addr, cc); loaded {
-		_ = grpcConn.Close()
 		return actual.(clientConnection[C]) // nolint:revive // unchecked-type-assertion
 	}
 	// Lost the race with Close; drop the conn we just cached.
