@@ -287,11 +287,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 		return response, h.convertError(err)
 	}
 
-	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
-		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
-			tag.WorkflowID(taskToken.GetWorkflowId()),
-			tag.ActivityID(taskToken.GetActivityId()))
-	}
+	h.markActivityIDForContextMetadata(ctx, taskToken.GetActivityId(), taskToken.GetWorkflowId())
 
 	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -1860,6 +1856,26 @@ func (h *Handler) PollWorkflowExecutionUpdate(
 	return engine.PollWorkflowExecutionUpdate(ctx, request)
 }
 
+func (h *Handler) PollWorkflowExecutionTimeSkipping(
+	ctx context.Context,
+	request *historyservice.PollWorkflowExecutionTimeSkippingRequest,
+) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetWorkflowExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.PollWorkflowExecutionTimeSkipping(ctx, request)
+}
+
 func (h *Handler) StreamWorkflowReplicationMessages(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 ) (retErr error) {
@@ -2349,6 +2365,23 @@ func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice
 	return response, nil
 }
 
+// markActivityIDForContextMetadata records the activity ID targeted by a request on the context so
+// that mutable state can resolve it to the activity's type and task queue during closeTransaction
+// (see contextutil.ContextMetadataMarkActivityID). activityID is empty when the request targets
+// activities by type or matches all pending activities: such a request can fan out to several
+// activities, which context metadata cannot attribute to a single one, so it is left unmarked and
+// attribution falls back to the workflow.
+func (h *Handler) markActivityIDForContextMetadata(ctx context.Context, activityID string, workflowID string) {
+	if activityID == "" {
+		return
+	}
+	if !contextutil.ContextMetadataMarkActivityID(ctx, activityID) {
+		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
+			tag.WorkflowID(workflowID),
+			tag.ActivityID(activityID))
+	}
+}
+
 func (h *Handler) UpdateActivityOptions(
 	ctx context.Context, request *historyservice.UpdateActivityOptionsRequest,
 ) (*historyservice.UpdateActivityOptionsResponse, error) {
@@ -2357,6 +2390,8 @@ func (h *Handler) UpdateActivityOptions(
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
+
+	h.markActivityIDForContextMetadata(ctx, request.GetUpdateRequest().GetId(), workflowID)
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
@@ -2383,6 +2418,8 @@ func (h *Handler) PauseActivity(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
+	h.markActivityIDForContextMetadata(ctx, request.GetFrontendRequest().GetId(), workflowID)
+
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2408,6 +2445,8 @@ func (h *Handler) UnpauseActivity(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
+	h.markActivityIDForContextMetadata(ctx, request.GetFrontendRequest().GetId(), workflowID)
+
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2432,6 +2471,8 @@ func (h *Handler) ResetActivity(
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
+
+	h.markActivityIDForContextMetadata(ctx, request.GetFrontendRequest().GetId(), workflowID)
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {

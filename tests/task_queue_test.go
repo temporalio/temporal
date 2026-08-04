@@ -380,6 +380,63 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitZero() {
 	s.Empty(runTimes, "No activities should run when API rate limit is 0")
 }
 
+// TestDescribeTaskQueue_RateLimitingActive verifies that the RateLimitingActive field
+// in TaskQueueStats is correctly propagated through DescribeTaskQueue when rate limiting
+// is active on a task queue.
+func (s *TaskQueueSuite) TestDescribeTaskQueue_RateLimitingActive() {
+	const (
+		apiRPS            = 1.0
+		taskCount         = 10
+		activityTaskQueue = "RateLimitTestDescribe"
+		activityName      = "rateLimitedActivity"
+		workerRPS         = 50.0
+		drainTimeout      = 15 * time.Second
+	)
+
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond),
+	)
+
+	var (
+		mu       sync.Mutex
+		runTimes []time.Time
+		wg       sync.WaitGroup
+	)
+
+	_, cancel, activityWorker, wfWorker := s.configureRateLimitAndLaunchWorkflows(
+		env,
+		activityTaskQueue,
+		activityName,
+		taskCount,
+		workerRPS,
+		drainTimeout,
+		&runTimes,
+		&wg,
+		apiRPS,
+		&mu,
+	)
+	defer cancel()
+	defer activityWorker.Stop()
+	defer wfWorker.Stop()
+
+	// Poll DescribeTaskQueue until RateLimitingActive is true.
+	// The rate limit is 1 RPS with 10 tasks, so rate limiting should kick in quickly.
+	s.AwaitTruef(func() bool {
+		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: activityTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportStats:   true,
+		})
+		if err != nil {
+			return false
+		}
+		return resp.GetStats().GetRateLimitingActive()
+	}, 10*time.Second, 200*time.Millisecond, "DescribeTaskQueue should report RateLimitingActive=true when rate limiting is active")
+}
+
 func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	const (
 		workerSetRPS      = 2.0 // Worker rate limit for activities
@@ -1518,6 +1575,43 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	s.NotNil(actResp)
 	s.Empty(actResp.GetTaskToken(), "activity re-poll from shutdown worker should return empty response")
 	s.Less(time.Since(actStart), 2*time.Minute, "activity re-poll should be rejected quickly, not wait for timeout")
+}
+
+func (s *TaskQueueSuite) TestShutdownWorkerIsIdempotent() {
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true))
+
+	tv := testvars.New(s.T())
+	workerInstanceKey := uuid.NewString()
+
+	shutdownReq := &workflowservice.ShutdownWorkerRequest{
+		Namespace:         env.Namespace().String(),
+		StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
+		Identity:          tv.WorkerIdentity(),
+		Reason:            "idempotency test",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         tv.TaskQueue().GetName(),
+	}
+
+	// Call ShutdownWorker three times in a row — all should succeed.
+	for range 3 {
+		_, err := env.FrontendClient().ShutdownWorker(s.Context(), shutdownReq)
+		s.NoError(err)
+	}
+
+	// A poll from this worker should still be rejected after repeated shutdowns.
+	pollStart := time.Now()
+	pollCtx, pollCancel := context.WithTimeout(s.Context(), 5*time.Minute)
+	defer pollCancel()
+	resp, err := env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          tv.WorkerIdentity(),
+		WorkerInstanceKey: workerInstanceKey,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Empty(resp.GetTaskToken(), "poll from shutdown worker should return empty response")
+	s.Less(time.Since(pollStart), 2*time.Minute, "poll should be rejected quickly by shutdown cache")
 }
 
 func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_RootPartition() {

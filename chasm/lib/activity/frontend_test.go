@@ -104,6 +104,8 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
 			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
 			DefaultActivityRetryPolicy: getDefaultRetrySettings,
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
 		linkValidator: newLinkValidator(
 			defaultMaxLinksPerRequest,
@@ -179,6 +181,37 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 		validateTwice(t, req, func() error {
 			return validateAndNormalizeRequestCancelActivityExecutionRequest(
 				req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		})
+	})
+
+	t.Run("unpause/server-generated", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  "test-namespace",
+			ActivityId: "test-activity",
+		}
+		validateTwice(t, req, func() error {
+			return validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		})
+	})
+
+	t.Run("reset/server-generated", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  "test-namespace",
+			ActivityId: "test-activity",
+		}
+		validateTwice(t, req, func() error {
+			return validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		})
+	})
+
+	t.Run("update-options/server-generated", func(t *testing.T) {
+		req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       "test-namespace",
+			ActivityId:      "test-activity",
+			RestoreOriginal: true,
+		}
+		validateTwice(t, req, func() error {
+			return validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, defaultMaxIDLengthLimit)
 		})
 	})
 }
