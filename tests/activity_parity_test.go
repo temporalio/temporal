@@ -9,12 +9,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -38,6 +40,12 @@ func newActivityParityEnv(t *testing.T) *testcore.TestEnv {
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
+}
+
+func assertActivityTaskNotCancelRequested(t *testing.T, err error) {
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgumentErr)
+	require.Equal(t, consts.ErrActivityTaskNotCancelRequested.Error(), invalidArgumentErr.Message)
 }
 
 // nextRetryDelayOverride is a worker-supplied next_retry_delay, distinct from
@@ -177,6 +185,47 @@ func (s *activityParityTestSuite) TestRetriedTimeoutDoesNotChainPriorFailure() {
 			})
 		})
 	}
+}
+
+// A RespondActivityTaskFailed with an omitted Failure is retryable, for parity with workflow
+// activities: rather than closing the activity with no consumable outcome, the server backs it off
+// for another attempt.
+func (s *activityParityTestSuite) TestNilFailureIsRetryable() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	trace := []model.Event{model.Poll, model.FailWithoutFailure}
+	want := activityInfo{
+		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		Attempt:                    2,
+		CurrentRetryInterval:       activityLongDuration,
+		NextAttemptScheduleTimeSet: true,
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, want, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, want, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+	})
+}
+
+// A standalone activity that exhausts its retries after failing without a Failure must still close
+// with a consumable terminal failure. Otherwise PollActivityExecution returns a nil outcome and a
+// client cannot tell the closed activity apart from one that simply has no result yet, so it polls
+// forever. Workflow activities have no equivalent gap because the SDK surfaces an ActivityError even
+// for a nil cause, so this is a standalone-only assertion.
+func (s *activityParityTestSuite) TestNilFailureExhaustedClosesWithConsumableOutcome() {
+	env := newActivityParityEnv(s.T())
+	t := s.T()
+	cfg := activityConfig{MaxAttempts: 1}
+	trace := []model.Event{model.Poll, model.FailWithoutFailure}
+
+	h := newSAADriver(t, env, cfg).driveTrace(t, trace)
+	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, h.terminalOutcome(t).status)
+	require.NotNil(t, h.describe(t).GetOutcome().GetFailure(),
+		"a standalone activity that failed without worker-supplied details must still expose a terminal failure")
 }
 
 // current_retry_interval and next_attempt_schedule_time are reported while a retry is backing off
@@ -339,6 +388,63 @@ func (s *activityParityTestSuite) TestCancel() {
 	})
 }
 
+func (s *activityParityTestSuite) TestRespondCanceledWithoutRequest() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 1}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertActivityTaskNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertActivityTaskNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
+	})
+}
+
+func (s *activityParityTestSuite) TestRespondCanceledByIDWithoutRequest() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 1}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertActivityTaskNotCancelRequested(t, handle.respondCanceledByID())
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertActivityTaskNotCancelRequested(t, handle.respondCanceledByID())
+	})
+}
+
+// Unpausing an activity that was never paused must be rejected with FailedPrecondition on both
+// surfaces. Workflow activities are served by the legacy unpause path, which silently skips a
+// non-paused activity and reports success.
+func (s *activityParityTestSuite) TestUnpauseWithoutPause() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 1}
+
+	assertUnpauseRejected := func(t testing.TB, err error) {
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		t.Skip("WFA should reject unpause on non-paused activity as FailedPrecondition")
+		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertUnpauseRejected(t, handle.rpc(t, model.Unpause))
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
+		assertUnpauseRejected(t, handle.rpc(t, model.Unpause))
+	})
+}
+
 // Force-completing an activity by ID must work whenever no attempt is in progress: while Scheduled
 // and never started, and while Paused before any worker picked it up.
 func (s *activityParityTestSuite) TestCompleteByID() {
@@ -381,7 +487,7 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 2}
 
-	trace := []model.Event{model.Poll, {Type: model.RespondFailedType, Retryable: true, HasHeartbeatDetails: true}}
+	trace := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}
 	expected := activityMarshalPayloads(activityHeartbeatDetails)
 	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 		t := s.T()
@@ -396,7 +502,7 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 
 		// For SAA we additionally confirm that it's persisted even if the failure is terminal. WFA
 		// drops the pending activity from MS at this point.
-		terminal := []model.Event{model.Poll, {Type: model.RespondFailedType, Retryable: false, HasHeartbeatDetails: true}}
+		terminal := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: false}, HasHeartbeatDetails: true}}
 		require.Equal(t, expected,
 			d.driveTrace(t, terminal).activityInfo(t).LastHeartbeatDetails)
 	})

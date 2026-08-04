@@ -2197,3 +2197,54 @@ func TestWorkerCommandsPollTask_VersioningFieldsIgnored(t *testing.T) {
 		})
 	}
 }
+
+func TestCloneTaskQueueStats_PreservesAllFields(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 42,
+		ApproximateBacklogAge:   durationpb.New(5 * time.Minute),
+		TasksAddRate:            10.5,
+		TasksDispatchRate:       8.3,
+		RateLimitingActive:      true,
+	}
+	cloned := cloneTaskQueueStats(original)
+
+	require.Equal(t, original.ApproximateBacklogCount, cloned.ApproximateBacklogCount)
+	require.Equal(t, original.ApproximateBacklogAge.AsDuration(), cloned.ApproximateBacklogAge.AsDuration())
+	require.InDelta(t, original.TasksAddRate, cloned.TasksAddRate, 1e-9)
+	require.InDelta(t, original.TasksDispatchRate, cloned.TasksDispatchRate, 1e-9)
+	require.True(t, cloned.RateLimitingActive)
+}
+
+func TestCloneTaskQueueStats_Nil(t *testing.T) {
+	cloned := cloneTaskQueueStats(nil)
+	require.NotNil(t, cloned)
+	require.False(t, cloned.RateLimitingActive)
+}
+
+func TestSplitTaskQueueStatsByRampPercentage_PreservesRateLimitingActive(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+		ApproximateBacklogAge:   durationpb.New(2 * time.Minute),
+		TasksAddRate:            20,
+		TasksDispatchRate:       15,
+		RateLimitingActive:      true,
+	}
+	currentShare, rampShare := splitTaskQueueStatsByRampPercentage(original, 30)
+
+	require.True(t, currentShare.RateLimitingActive, "currentShare should preserve RateLimitingActive")
+	require.True(t, rampShare.RateLimitingActive, "rampShare should preserve RateLimitingActive")
+}
+
+func TestSplitTaskQueueStatsByRampPercentage_RateLimitingFalse(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+		ApproximateBacklogAge:   durationpb.New(2 * time.Minute),
+		TasksAddRate:            20,
+		TasksDispatchRate:       15,
+		RateLimitingActive:      false,
+	}
+	currentShare, rampShare := splitTaskQueueStatsByRampPercentage(original, 30)
+
+	require.False(t, currentShare.RateLimitingActive)
+	require.False(t, rampShare.RateLimitingActive)
+}
