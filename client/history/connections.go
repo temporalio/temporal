@@ -13,9 +13,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/status"
 )
 
 const evictionCheckInterval = 30 * time.Second
@@ -85,7 +83,7 @@ func (c *connectionPoolImpl[C]) Close() {
 	// Set closed before reaping so a concurrent create can't re-cache a conn.
 	c.conns.Range(func(key, value any) bool {
 		c.conns.Delete(key)
-		if err := value.(clientConnection[C]).grpcConn.Close(); err != nil && status.Code(err) != codes.Canceled {
+		if err := value.(clientConnection[C]).grpcConn.Close(); err != nil {
 			c.logger.Warn("Error closing gRPC connection on shutdown", tag.Error(err))
 		}
 		return true
@@ -141,7 +139,7 @@ func (c *connectionPoolImpl[C]) reapClosableConns(evictAt map[rpcAddress]time.Ti
 			continue
 		}
 		if v, ok := c.conns.LoadAndDelete(addr); ok {
-			if err := v.(clientConnection[C]).grpcConn.Close(); err != nil && status.Code(err) != codes.Canceled {
+			if err := v.(clientConnection[C]).grpcConn.Close(); err != nil {
 				c.logger.Warn("Error closing evicted gRPC connection", tag.Error(err))
 			}
 		}
