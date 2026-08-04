@@ -2144,6 +2144,7 @@ func newContext(
 		NotifyReplicationFn:     shardContext.notifyReplicationQueueProcessor,
 		NamespaceRegistry:       namespaceRegistry,
 		Logger:                  taggedLogger,
+		EventLogger:             eventLogger,
 	})
 	if shardContext.GetConfig().EnableHostLevelEventsCache() {
 		shardContext.eventsCache = eventsCache

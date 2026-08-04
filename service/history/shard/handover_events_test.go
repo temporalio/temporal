@@ -1,0 +1,156 @@
+package shard
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
+	enumspb "go.temporal.io/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
+	commonlog "go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.uber.org/mock/gomock"
+)
+
+const (
+	handoverEventsTestShardID = int32(7)
+	handoverEventsTestNsID    = "deadbeef-0000-0000-0000-000000000001"
+	handoverEventsTestNsName  = "handover-events-test-ns"
+)
+
+// eventCaptureLogger records emitted wide events for assertions.
+type eventCaptureLogger struct {
+	embedded.Logger
+	records []log.Record
+}
+
+func (c *eventCaptureLogger) Emit(_ context.Context, r log.Record) { c.records = append(c.records, r) }
+
+func (c *eventCaptureLogger) Enabled(context.Context, log.EnabledParameters) bool { return true }
+
+// phases returns the phase attribute of every captured record, in order.
+func (c *eventCaptureLogger) phases() []string {
+	out := make([]string, 0, len(c.records))
+	for _, rec := range c.records {
+		out = append(out, recordAttrs(rec)["phase"].AsString())
+	}
+	return out
+}
+
+func recordAttrs(rec log.Record) map[string]log.Value {
+	got := map[string]log.Value{}
+	rec.WalkAttributes(func(kv log.KeyValue) bool {
+		got[kv.Key] = kv.Value
+		return true
+	})
+	return got
+}
+
+// recordDetails decodes the record's details attribute, which wideevents emits as compact JSON.
+func recordDetails(t *testing.T, rec log.Record) map[string]any {
+	t.Helper()
+	var out map[string]any
+	require.NoError(t, json.Unmarshal([]byte(recordAttrs(rec)["details"].AsString()), &out))
+	return out
+}
+
+func newHandoverEventsTracker(t *testing.T, lg log.Logger, maxTaskID int64, stateErr error) *defaultHandoverTracker {
+	t.Helper()
+	clusterMetadata := cluster.NewMockMetadata(gomock.NewController(t))
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	tracker := NewDefaultHandoverTrackerFactory()(HandoverTrackerParams{
+		ShardID:                 handoverEventsTestShardID,
+		ClusterMetadata:         clusterMetadata,
+		GetMaxReplicationTaskID: func() int64 { return maxTaskID },
+		ErrorByStateFn:          func() error { return stateErr },
+		NotifyReplicationFn:     func(int64) {},
+		Logger:                  commonlog.NewNoopLogger(),
+		EventLogger:             lg,
+	})
+	return tracker.(*defaultHandoverTracker)
+}
+
+func handoverEventsNamespace(state enumspb.ReplicationState) *namespace.Namespace {
+	return namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: handoverEventsTestNsID, Name: handoverEventsTestNsName},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName},
+			State:             state,
+		},
+		1,
+	)
+}
+
+func TestHandoverWatermarkEvents(t *testing.T) {
+	lg := &eventCaptureLogger{}
+	tracker := newHandoverEventsTracker(t, lg, 100, nil)
+
+	inHandover := handoverEventsNamespace(enumspb.REPLICATION_STATE_HANDOVER)
+
+	// Taking the watermark emits once.
+	tracker.UpdateHandoverState(inHandover, false)
+	require.Equal(t, []string{phaseHandoverWatermarkSet}, lg.phases())
+
+	d := recordDetails(t, lg.records[0])
+	require.EqualValues(t, handoverEventsTestShardID, d["shard_id"])
+	require.EqualValues(t, 100, d["max_replication_task_id"])
+	require.Equal(t, false, d["pending"])
+	require.Equal(t, watermarkAdded, d["reason"])
+	require.Equal(t, handoverEventsTestNsID, recordAttrs(lg.records[0])["namespace_id"].AsString())
+	require.Equal(t, handoverEventsTestNsName, recordAttrs(lg.records[0])["namespace"].AsString())
+
+	// A repeat notification at the same version is not a mutation, so it emits nothing.
+	tracker.UpdateHandoverState(inHandover, false)
+	require.Len(t, lg.records, 1)
+
+	// A newer notification version advances the watermark.
+	tracker.UpdateHandoverState(inHandover.Clone(namespace.WithNotificationVersion(2)), false)
+	require.Equal(t, []string{phaseHandoverWatermarkSet, phaseHandoverWatermarkSet}, lg.phases())
+	require.Equal(t, watermarkUpdated, recordDetails(t, lg.records[1])["reason"])
+
+	// Leaving handover drops the watermark.
+	tracker.UpdateHandoverState(handoverEventsNamespace(enumspb.REPLICATION_STATE_NORMAL), false)
+	require.Equal(t, phaseHandoverWatermarkRemoved, lg.phases()[2])
+	require.Equal(t, false, recordDetails(t, lg.records[2])["deleted_from_db"])
+}
+
+// The non-handover branch of UpdateHandoverState runs for every namespace notification on every
+// shard. It must only emit when it actually removes a watermark.
+func TestHandoverWatermarkRemovedOnlyWhenTracked(t *testing.T) {
+	lg := &eventCaptureLogger{}
+	tracker := newHandoverEventsTracker(t, lg, 100, nil)
+
+	for i := 0; i < 3; i++ {
+		tracker.UpdateHandoverState(handoverEventsNamespace(enumspb.REPLICATION_STATE_NORMAL), false)
+	}
+
+	require.Empty(t, lg.records)
+}
+
+// An unacquired shard stores the sentinel watermark; acquiring the shard resolves the real task
+// ID, and that resolution is itself a watermark set.
+func TestHandoverWatermarkPendingThenResolved(t *testing.T) {
+	lg := &eventCaptureLogger{}
+	tracker := newHandoverEventsTracker(t, lg, 100, errors.New("shard status unknown"))
+
+	tracker.UpdateHandoverState(handoverEventsNamespace(enumspb.REPLICATION_STATE_HANDOVER), false)
+	require.Len(t, lg.records, 1)
+	require.Equal(t, true, recordDetails(t, lg.records[0])["pending"])
+
+	tracker.ResolvePendingTaskIDs(555)
+	require.Len(t, lg.records, 2)
+
+	d := recordDetails(t, lg.records[1])
+	require.Equal(t, watermarkResolved, d["reason"])
+	require.EqualValues(t, 555, d["max_replication_task_id"])
+	require.Equal(t, false, d["pending"])
+}

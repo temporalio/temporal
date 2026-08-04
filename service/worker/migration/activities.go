@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -123,6 +124,7 @@ type (
 		clientFactory                    serverClient.Factory
 		clientBean                       serverClient.Bean
 		Logger                           log.Logger
+		EventLogger                      otellog.Logger
 		MetricsHandler                   metrics.Handler
 		forceReplicationMetricsHandler   metrics.Handler
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
@@ -380,8 +382,12 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 	// since during handover state namespace has no availability
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(waitRequest.Namespace, headers.CallerTypeAPI, ""))
 
+	// Carries each shard's readiness across polls so the per-shard events emit on transitions
+	// only. See emitShardHandoverReadiness.
+	notReadyShards := make(map[int32]bool)
+
 	for {
-		done, err := a.checkHandoverOnce(ctx, waitRequest)
+		done, err := a.checkHandoverOnce(ctx, waitRequest, notReadyShards)
 		if err != nil {
 			return err
 		}
@@ -395,7 +401,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 }
 
 // Check if remote cluster has caught up on all shards on replication tasks
-func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest) (bool, error) {
+func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, notReadyShards map[int32]bool) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -473,6 +479,8 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			maxHandoverLag = status.laggingTasks
 			maxHandoverLagShardID = status.shardID
 		}
+
+		a.emitShardHandoverReadiness(waitRequest, status, notReadyShards)
 	}
 
 	// emit metrics about how many shards are ready
