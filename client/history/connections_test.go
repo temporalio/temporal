@@ -1,7 +1,6 @@
 package history
 
 import (
-	"sync"
 	"testing"
 	"time"
 
@@ -24,47 +23,17 @@ func newLazyConn(t *testing.T, addr string) *grpc.ClientConn {
 	return conn
 }
 
-// newRaceLosingFactory populates the pool's cache before returning, standing in
-// for another caller that won the race while this one was dialing. That makes
-// getOrCreateClientConn take its "already cached" branch deterministically,
-// without racing goroutines.
-func newRaceLosingFactory(t *testing.T, pool **connectionPoolImpl[grpc.ClientConnInterface]) *common.MockRPCFactory {
+// newSharedConnFactory mimics the RPCFactory internode cache: one connection per
+// host, shared by every pool and re-dialled once it has been shut down.
+func newSharedConnFactory(t *testing.T) *common.MockRPCFactory {
 	factory := common.NewMockRPCFactory(gomock.NewController(t))
 	var conn *grpc.ClientConn
 
 	factory.EXPECT().CreateHistoryGRPCConnection(gomock.Any()).DoAndReturn(
 		func(addr string) *grpc.ClientConn {
-			if conn == nil {
+			if conn == nil || conn.GetState() == connectivity.Shutdown {
 				conn = newLazyConn(t, addr)
 			}
-			(*pool).conns.Store(rpcAddress(addr), clientConnection[grpc.ClientConnInterface]{
-				grpcClient: conn,
-				grpcConn:   conn,
-			})
-			return conn
-		}).AnyTimes()
-
-	return factory
-}
-
-// newSharedConnFactory mimics the RPCFactory internode cache: one connection per
-// host, shared by every pool and re-dialled once it has been shut down.
-func newSharedConnFactory(t *testing.T) *common.MockRPCFactory {
-	factory := common.NewMockRPCFactory(gomock.NewController(t))
-	// gomock runs actions with its own lock released, so callers from several
-	// pools can reach this concurrently.
-	var mu sync.Mutex
-	conns := make(map[string]*grpc.ClientConn)
-
-	factory.EXPECT().CreateHistoryGRPCConnection(gomock.Any()).DoAndReturn(
-		func(addr string) *grpc.ClientConn {
-			mu.Lock()
-			defer mu.Unlock()
-			if conn, ok := conns[addr]; ok && conn.GetState() != connectivity.Shutdown {
-				return conn
-			}
-			conn := newLazyConn(t, addr)
-			conns[addr] = conn
 			return conn
 		}).AnyTimes()
 
@@ -91,9 +60,21 @@ func newTestConnectionPool(t *testing.T, factory RPCFactory) *connectionPoolImpl
 // race holds the very connection the winner stored. Closing it would shut down
 // the connection every sibling pool is using, for no reason.
 func TestConnectionPool_LostCreateRaceKeepsSharedConnUsable(t *testing.T) {
-	var pool *connectionPoolImpl[grpc.ClientConnInterface]
-	pool = newTestConnectionPool(t, newRaceLosingFactory(t, &pool))
+	factory := common.NewMockRPCFactory(gomock.NewController(t))
+	pool := newTestConnectionPool(t, factory)
 	t.Cleanup(pool.Close)
+
+	conn := newLazyConn(t, string(testConnAddr))
+	factory.EXPECT().CreateHistoryGRPCConnection(gomock.Any()).DoAndReturn(
+		func(addr string) *grpc.ClientConn {
+			// Stand in for another caller that won the race while this one was
+			// dialing, so getOrCreateClientConn takes its "already cached" branch.
+			pool.conns.Store(rpcAddress(addr), clientConnection[grpc.ClientConnInterface]{
+				grpcClient: conn,
+				grpcConn:   conn,
+			})
+			return conn
+		}).AnyTimes()
 
 	cc := pool.getOrCreateClientConn(testConnAddr)
 
