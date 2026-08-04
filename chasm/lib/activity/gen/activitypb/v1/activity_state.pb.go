@@ -292,11 +292,10 @@ type ActivityState struct {
 	// terminate_state this is never cleared; unlike them it may be non-current (the activity may have
 	// since been unpaused), hence the "last" prefix. Its request_id is used to de-dupe pause requests.
 	LastPauseState *ActivityPauseState `protobuf:"bytes,16,opt,name=last_pause_state,json=lastPauseState,proto3" json:"last_pause_state,omitempty"`
-	// Set when a reset with reset_heartbeat=true is requested while a worker is running an attempt
-	// (STARTED / PAUSE_REQUESTED). Discarding the heartbeat checkpoint is deferred so that the
-	// in-flight attempt is left undisturbed; it happens when the worker yields and the activity
-	// transitions out of RESET_REQUESTED. For a non-running activity (SCHEDULED / PAUSED) the
-	// checkpoint is discarded immediately and this flag is not set.
+	// Set when a reset with reset_heartbeat=true is requested while a worker is running an attempt.
+	// Consumed when the worker yields and the activity transitions out of RESET_REQUESTED. For an
+	// activity with no attempt in progress the checkpoint is discarded immediately and this flag is
+	// not set.
 	ResetShouldClearHeartbeat bool `protobuf:"varint,17,opt,name=reset_should_clear_heartbeat,json=resetShouldClearHeartbeat,proto3" json:"reset_should_clear_heartbeat,omitempty"`
 	// Set when a reset is requested with keep_paused=true on a paused (PAUSE_REQUESTED) activity, so
 	// that when the worker yields the activity lands back in PAUSED rather than SCHEDULED. Consumed
