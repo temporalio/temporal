@@ -377,17 +377,21 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	return isReady, nil
 }
 
-func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) error {
+func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) (retErr error) {
 	// Use the highest priority caller type for checking handover state
 	// since during handover state namespace has no availability
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(waitRequest.Namespace, headers.CallerTypeAPI, ""))
 
-	// Carries each shard's readiness across polls so the per-shard events emit on transitions
-	// only. See emitShardHandoverReadiness.
-	notReadyShards := make(map[int32]bool)
+	// Holds the latest poll's laggards so the summary below can name the shards that were still
+	// behind when the wait ended. Empty on a successful handover, which emits nothing.
+	var snapshot handoverLagSnapshot
+	start := time.Now()
+	defer func() {
+		a.emitHandoverLagSummary(waitRequest, &snapshot, time.Since(start), retErr)
+	}()
 
 	for {
-		done, err := a.checkHandoverOnce(ctx, waitRequest, notReadyShards)
+		done, err := a.checkHandoverOnce(ctx, waitRequest, &snapshot)
 		if err != nil {
 			return err
 		}
@@ -401,7 +405,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 }
 
 // Check if remote cluster has caught up on all shards on replication tasks
-func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, notReadyShards map[int32]bool) (bool, error) {
+func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *handoverLagSnapshot) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -468,20 +472,35 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		maxHandoverLag        int64
 	)
 
+	// Overwritten every poll, so what the deferred summary in WaitHandover sees is the final
+	// state of the wait rather than an accumulation across polls.
+	*snapshot = handoverLagSnapshot{
+		totalShards:              len(localShards),
+		missingHandoverInfoCount: handoverInfosMissingCount,
+	}
+
 	for _, status := range shardStatuses {
 		if status.isReady {
 			readyShardCount++
 		} else {
 			notReadyShardCount++
+			if len(snapshot.laggingShards) < maxLaggingShardsInSummary {
+				snapshot.laggingShards = append(snapshot.laggingShards, laggingShard{
+					ShardID:      status.shardID,
+					LaggingTasks: status.laggingTasks,
+				})
+			}
 		}
 
 		if status.laggingTasks > maxHandoverLag {
 			maxHandoverLag = status.laggingTasks
 			maxHandoverLagShardID = status.shardID
 		}
-
-		a.emitShardHandoverReadiness(waitRequest, status, notReadyShards)
 	}
+
+	snapshot.notReadyCount = notReadyShardCount
+	snapshot.maxLaggingTasks = maxHandoverLag
+	snapshot.maxLaggingTasksShardID = maxHandoverLagShardID
 
 	// emit metrics about how many shards are ready
 	a.MetricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(
