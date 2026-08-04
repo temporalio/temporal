@@ -93,8 +93,6 @@ func (t *defaultHandoverTracker) UpdateHandoverState(newNs *namespace.Namespace,
 		newNs.ReplicationState("") == enumspb.REPLICATION_STATE_HANDOVER
 
 	if deletedFromDB || !isHandoverNamespace {
-		// Guard on presence: this branch is the common case for every namespace notification,
-		// but only an actual removal is worth an event.
 		if removed, ok := t.handoverNamespaces[nsName]; ok {
 			delete(t.handoverNamespaces, nsName)
 			emitHandoverWatermarkRemoved(t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(), removed, deletedFromDB)
@@ -146,7 +144,6 @@ func (t *defaultHandoverTracker) ResolvePendingTaskIDs(maxReplicationTaskID int6
 	for nsName, handoverInfo := range t.handoverNamespaces {
 		if handoverInfo.MaxReplicationTaskID == PendingMaxReplicationTaskID {
 			handoverInfo.MaxReplicationTaskID = maxReplicationTaskID
-			// No namespace ID here: the tracker is keyed by name and this path has no entry.
 			emitHandoverWatermarkSet(t.eventLogger, t.shardID, nsName.String(), "", handoverInfo, watermarkResolved)
 		}
 	}
