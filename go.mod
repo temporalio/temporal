@@ -47,7 +47,7 @@ require (
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/temporalio/ringpop-go v0.1.0
-	github.com/temporalio/sqlparser v0.0.0-20260721183058-0466b6b405ac
+	github.com/temporalio/sqlparser v0.1.0
 	github.com/temporalio/tchannel-go v1.22.1
 	github.com/tidwall/btree v1.8.1
 	github.com/uber-go/tally/v4 v4.1.17
