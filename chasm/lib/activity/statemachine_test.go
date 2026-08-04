@@ -928,6 +928,22 @@ func TestTransitionCancelRequested(t *testing.T) {
 	require.NotNil(t, cancelState.GetRequestTime())
 }
 
+func TestTransitionCancelRequestedClearsDeferredOptionRestore(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status:              activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			ResetRestoreOptions: true,
+		},
+	}
+
+	err := TransitionCancelRequested.Apply(activity, ctx, &workflowservice.RequestCancelActivityExecutionRequest{})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, activity.Status)
+	require.False(t, activity.ResetRestoreOptions)
+}
+
 func TestTransitionCanceled(t *testing.T) {
 	testCases := []struct {
 		name       string
