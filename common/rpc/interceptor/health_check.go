@@ -55,7 +55,7 @@ type (
 
 		latencyAverage aggregate.MovingWindowAverage
 		errorRatio     aggregate.MovingWindowAverage
-		signals        *health.SignalAggregator
+		healthSignals  *health.SignalAggregator
 
 		logger log.Logger
 	}
@@ -187,7 +187,7 @@ func NewHealthSignalAggregator(
 		percentilesEnabled: percentilesEnabled,
 		latencyAverage:     aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
 		errorRatio:         aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		signals:            signals,
+		healthSignals:      signals,
 	}
 }
 
@@ -200,7 +200,7 @@ func (s *healthSignalAggregatorImpl) Record(rpcMethod string, latency time.Durat
 	s.latencyAverage.Record(latency.Milliseconds())
 
 	if s.percentilesEnabled() {
-		s.signals.Record(rpcMethod, latency, err)
+		s.healthSignals.Record(rpcMethod, latency, err)
 	}
 
 	if isUnhealthyError(err) {
@@ -225,7 +225,7 @@ func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) (float64,
 		return 0, false
 	}
 
-	return s.signals.LatencyQuantile(quantile)
+	return s.healthSignals.LatencyQuantile(quantile)
 }
 
 func (s *healthSignalAggregatorImpl) LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool) {
@@ -234,7 +234,7 @@ func (s *healthSignalAggregatorImpl) LatencyQuantileByGroup(groupName string, qu
 		return 0, false
 	}
 
-	return s.signals.LatencyQuantileByGroup(groupName, quantile)
+	return s.healthSignals.LatencyQuantileByGroup(groupName, quantile)
 }
 
 // NOTE: as of right now, this is just using the original error ratio instead of the
@@ -258,12 +258,12 @@ func (s *healthSignalAggregatorImpl) ErrorRatioByGroup(groupName string) (float6
 		return 0, false
 	}
 
-	return s.signals.ErrorRatioByGroup(groupName)
+	return s.healthSignals.ErrorRatioByGroup(groupName)
 }
 
 // Stop halts the underlying signal aggregator's settings refresh loop.
 func (s *healthSignalAggregatorImpl) Stop() {
-	s.signals.Stop()
+	s.healthSignals.Stop()
 }
 
 func isUnhealthyError(err error) bool {
