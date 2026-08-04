@@ -67,10 +67,11 @@ func (s *ActivityApiResetClientTestSuite) SetupTest() {
 	if s.apiName == "execution-api" {
 		s.resetFn = func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error {
 			_, err := s.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				WorkflowId: wfID,
-				ActivityId: actID,
-				KeepPaused: keepPaused,
+				Namespace:      s.Namespace().String(),
+				WorkflowId:     wfID,
+				ActivityId:     actID,
+				ResetHeartbeat: resetHeartbeat,
+				KeepPaused:     keepPaused,
 			})
 			return err
 		}
@@ -425,18 +426,13 @@ func requirePayload(t require.TestingT, expected string, pls *commonpb.Payloads)
 }
 
 // TestActivityReset_HeartbeatDetails covers the default: a reset rewinds the attempt count but
-// keeps the heartbeat checkpoint. That is reset_heartbeat unset on the legacy API, and the only
-// behavior of the execution API, which has no such flag.
+// keeps the heartbeat checkpoint.
 func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 	s.runResetHeartbeatDetails(false, true)
 }
 
-// TestActivityReset_HeartbeatDetailsWithResetHeartbeatFlag covers the opt-in clear, which only the
-// legacy API can express.
+// TestActivityReset_HeartbeatDetailsWithResetHeartbeatFlag covers the opt-in discard.
 func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetailsWithResetHeartbeatFlag() {
-	if s.apiName != "legacy-api" {
-		s.T().Skip("only the legacy ResetActivity API has a reset_heartbeat flag")
-	}
 	s.runResetHeartbeatDetails(true, false)
 }
 
