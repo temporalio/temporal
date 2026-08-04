@@ -161,7 +161,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 				fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
 					e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition))
 		}
-		return e.verifyNewRunExist(ctx)
+		return e.verifyNewRunExist(ctx, true)
 	}
 
 	// case 2: verify task has newer VersionedTransition, need to sync state
@@ -178,7 +178,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	}
 	// case 3: state transition is on non-current branch, but no event to verify
 	if e.taskAttr.NextEventId == common2.EmptyEventID {
-		return e.verifyNewRunExist(ctx)
+		return e.verifyNewRunExist(ctx, false)
 	}
 
 	if len(e.taskAttr.EventVersionHistory) == 0 {
@@ -200,7 +200,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	}
 	// case 4: event on non-current branch are up-to-date
 	if versionhistory.IsEqualVersionHistoryItem(lcaItem, lastItem) {
-		return e.verifyNewRunExist(ctx)
+		return e.verifyNewRunExist(ctx, false)
 	}
 	// case 5: event on non-current branch are not up-to-date, we need to backfill events
 	startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(targetHistory, lcaItem.EventId+1)
@@ -219,7 +219,15 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	)
 }
 
-func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.Context) error {
+// verifyNewRunExist confirms the continue-as-new successor (NewRunId) is present on this cluster.
+//
+// onCurrentBranch distinguishes the caller. On the current branch (case 1) the successor was created
+// atomically with the parent's CAN transition, which is already applied — so a miss is a genuine gap
+// (created-then-removed / corruption) and remains non-retryable DataLoss so it stays visible. On a
+// non-current branch (cases 3 & 4) the successor may legitimately not be materialized yet (replication
+// lag, or a losing multi-cluster CAN-conflict branch), so we recover by resending it via SyncState
+// rather than dead-lettering.
+func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.Context, onCurrentBranch bool) error {
 	if len(e.taskAttr.NewRunId) == 0 {
 		return nil
 	}
@@ -228,9 +236,24 @@ func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.
 	case nil:
 		return nil
 	case *serviceerror.NotFound:
-		return softassert.UnexpectedDataLoss(e.Logger, "workflow new run not found",
-			fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, newRunId: %v",
-				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NewRunId))
+		if onCurrentBranch {
+			return softassert.UnexpectedDataLoss(e.Logger, "workflow new run not found",
+				fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, newRunId: %v",
+					e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NewRunId))
+		}
+		// Non-current branch: re-pull the new run from the source, mirroring the parent-resend in
+		// Execute (cases 2 & 5) and #7757. SyncState handles every outcome (present->create,
+		// source-missing->cleanup, transient->retry) without dead-lettering; genuinely unrecoverable
+		// cases still DLQ via the bounded retry policy.
+		return serviceerrors.NewSyncState(
+			"new run not replicated yet",
+			e.NamespaceID,
+			e.WorkflowID,
+			e.taskAttr.NewRunId,
+			e.taskAttr.GetArchetypeId(),
+			nil,
+			nil,
+		)
 	default:
 		return err
 	}
