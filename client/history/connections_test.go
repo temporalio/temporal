@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.uber.org/mock/gomock"
@@ -16,38 +17,58 @@ import (
 
 const testConnAddr rpcAddress = "conn-pool-test-host:1234"
 
-// sharedConnFactory mimics the RPCFactory internode cache: every caller asking
-// for the same address gets the same *grpc.ClientConn back.
-type sharedConnFactory struct {
-	mu    sync.Mutex
-	conns map[string]*grpc.ClientConn
-
-	// createDelay widens the window in which concurrent callers are all still
-	// creating, so overlapping creates are exercised reliably.
-	createDelay time.Duration
-}
-
-func newSharedConnFactory() *sharedConnFactory {
-	return &sharedConnFactory{conns: make(map[string]*grpc.ClientConn)}
-}
-
-func (f *sharedConnFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {
-	if f.createDelay > 0 {
-		time.Sleep(f.createDelay)
-	}
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if conn, ok := f.conns[rpcAddress]; ok {
-		return conn
-	}
+func newLazyConn(t *testing.T, addr string) *grpc.ClientConn {
 	// grpc.NewClient is lazy, so this address never has to be reachable.
-	conn, err := grpc.NewClient(rpcAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		panic(err)
-	}
-	f.conns[rpcAddress] = conn
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
 	return conn
+}
+
+// newRaceLosingFactory populates the pool's cache before returning, standing in
+// for another caller that won the race while this one was dialing. That makes
+// getOrCreateClientConn take its "already cached" branch deterministically,
+// without racing goroutines.
+func newRaceLosingFactory(t *testing.T, pool **connectionPoolImpl[grpc.ClientConnInterface]) *common.MockRPCFactory {
+	factory := common.NewMockRPCFactory(gomock.NewController(t))
+	var conn *grpc.ClientConn
+
+	factory.EXPECT().CreateHistoryGRPCConnection(gomock.Any()).DoAndReturn(
+		func(addr string) *grpc.ClientConn {
+			if conn == nil {
+				conn = newLazyConn(t, addr)
+			}
+			(*pool).conns.Store(rpcAddress(addr), clientConnection[grpc.ClientConnInterface]{
+				grpcClient: conn,
+				grpcConn:   conn,
+			})
+			return conn
+		}).AnyTimes()
+
+	return factory
+}
+
+// newSharedConnFactory mimics the RPCFactory internode cache: one connection per
+// host, shared by every pool and re-dialled once it has been shut down.
+func newSharedConnFactory(t *testing.T) *common.MockRPCFactory {
+	factory := common.NewMockRPCFactory(gomock.NewController(t))
+	// gomock runs actions with its own lock released, so callers from several
+	// pools can reach this concurrently.
+	var mu sync.Mutex
+	conns := make(map[string]*grpc.ClientConn)
+
+	factory.EXPECT().CreateHistoryGRPCConnection(gomock.Any()).DoAndReturn(
+		func(addr string) *grpc.ClientConn {
+			mu.Lock()
+			defer mu.Unlock()
+			if conn, ok := conns[addr]; ok && conn.GetState() != connectivity.Shutdown {
+				return conn
+			}
+			conn := newLazyConn(t, addr)
+			conns[addr] = conn
+			return conn
+		}).AnyTimes()
+
+	return factory
 }
 
 func newTestConnectionPool(t *testing.T, factory RPCFactory) *connectionPoolImpl[grpc.ClientConnInterface] {
@@ -66,35 +87,41 @@ func newTestConnectionPool(t *testing.T, factory RPCFactory) *connectionPoolImpl
 	)
 }
 
-// The factory shares one connection per host, so callers that lose the cache
-// race hold the very connection the winner stored. Closing it would leave the
-// pool serving a shut-down connection for the rest of the process, because a
-// cached entry is never revalidated.
-func TestConnectionPool_ConcurrentCreateKeepsSharedConnUsable(t *testing.T) {
-	factory := newSharedConnFactory()
-	factory.createDelay = 50 * time.Millisecond
-	pool := newTestConnectionPool(t, factory)
+// The factory shares one connection per host, so a caller that loses the cache
+// race holds the very connection the winner stored. Closing it would shut down
+// the connection every sibling pool is using, for no reason.
+func TestConnectionPool_LostCreateRaceKeepsSharedConnUsable(t *testing.T) {
+	var pool *connectionPoolImpl[grpc.ClientConnInterface]
+	pool = newTestConnectionPool(t, newRaceLosingFactory(t, &pool))
 	t.Cleanup(pool.Close)
 
-	const callers = 8
-	got := make([]*grpc.ClientConn, callers)
-	var wg sync.WaitGroup
-	wg.Add(callers)
-	for i := range callers {
-		go func() {
-			defer wg.Done()
-			got[i] = pool.getOrCreateClientConn(testConnAddr).grpcConn
-		}()
-	}
-	wg.Wait()
+	cc := pool.getOrCreateClientConn(testConnAddr)
+
+	require.NotEqual(t, connectivity.Shutdown, cc.grpcConn.GetState(),
+		"pool closed the shared connection another caller had already cached")
 
 	v, ok := pool.conns.Load(testConnAddr)
 	require.True(t, ok, "expected a pooled connection")
-	pooled := v.(clientConnection[grpc.ClientConnInterface]).grpcConn
+	require.Same(t, cc.grpcConn, v.(clientConnection[grpc.ClientConnInterface]).grpcConn)
+}
 
-	require.NotEqual(t, connectivity.Shutdown, pooled.GetState(),
-		"pool closed the shared connection it had just cached")
-	for i, conn := range got {
-		require.Same(t, pooled, conn, "caller %d got a different connection", i)
-	}
+// Every history client built on one RPCFactory shares a connection per host, so
+// a pool evicting a departed host closes the connection its siblings still hold.
+// A sibling has to re-dial rather than keep serving the shut-down connection.
+func TestConnectionPool_SiblingPoolRedialsAfterPeerClose(t *testing.T) {
+	factory := newSharedConnFactory(t)
+	poolA := newTestConnectionPool(t, factory)
+	poolB := newTestConnectionPool(t, factory)
+	t.Cleanup(poolA.Close)
+	t.Cleanup(poolB.Close)
+
+	shared := poolA.getOrCreateClientConn(testConnAddr).grpcConn
+	require.Same(t, shared, poolB.getOrCreateClientConn(testConnAddr).grpcConn,
+		"pools built on one factory should share a connection per host")
+
+	// poolA reaps the host after it leaves the ring.
+	require.NoError(t, shared.Close())
+
+	got := poolB.getOrCreateClientConn(testConnAddr).grpcConn
+	require.NotSame(t, shared, got, "poolB kept the connection poolA closed")
 }

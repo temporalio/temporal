@@ -23,11 +23,31 @@ func newCacheTestFactory() *RPCFactory {
 	return NewFactory(nil, "tester", log.NewNoopLogger(), metrics.NoopMetricsHandler, nil, "", "", 0, nil, nil, nil, nil, nil)
 }
 
-func (d *RPCFactory) cachedConn(hostName string) (*grpc.ClientConn, bool) {
-	d.internodeGRPCConnections.RLock()
-	defer d.internodeGRPCConnections.RUnlock()
-	c, ok := d.internodeGRPCConnections.conns[hostName]
+func cachedConn(f *RPCFactory, hostName string) (*grpc.ClientConn, bool) {
+	f.internodeGRPCConnections.RLock()
+	defer f.internodeGRPCConnections.RUnlock()
+	c, ok := f.internodeGRPCConnections.conns[hostName]
 	return c, ok
+}
+
+func cachedConnCount(f *RPCFactory) int {
+	f.internodeGRPCConnections.RLock()
+	defer f.internodeGRPCConnections.RUnlock()
+	return len(f.internodeGRPCConnections.conns)
+}
+
+// dial returns nil after logging Fatal, which a no-op logger does not act on.
+// Caching that nil would make every later lookup dereference it.
+func TestInternodeConnCache_DoesNotCacheFailedDial(t *testing.T) {
+	f := newCacheTestFactory()
+
+	// A control character makes gRPC's target parsing fail, so dial returns nil.
+	const badHost = "cache-test-host-\x7f"
+	require.Nil(t, f.CreateHistoryGRPCConnection(badHost))
+
+	_, cached := cachedConn(f, badHost)
+	require.False(t, cached, "a failed dial must not be cached")
+	require.Nil(t, f.CreateHistoryGRPCConnection(badHost))
 }
 
 func TestInternodeConnCache_SharesConnPerHost(t *testing.T) {
@@ -62,9 +82,9 @@ func TestInternodeConnCache_CleanupRemovesShutdownConns(t *testing.T) {
 
 	f.cleanupInternodeConns()
 
-	_, deadOK := f.cachedConn(hostB)
+	_, deadOK := cachedConn(f, hostB)
 	require.False(t, deadOK, "shut-down connection should be swept")
-	liveConn, liveOK := f.cachedConn(hostA)
+	liveConn, liveOK := cachedConn(f, hostA)
 	require.True(t, liveOK, "live connection should be retained")
 	require.Same(t, live, liveConn)
 }
@@ -73,17 +93,21 @@ func TestInternodeConnCache_ConcurrentCreate(t *testing.T) {
 	f := newCacheTestFactory()
 
 	const n = 32
+	got := make([]*grpc.ClientConn, n)
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for range n {
+	for i := range n {
 		go func() {
 			defer wg.Done()
-			f.CreateHistoryGRPCConnection(hostA)
+			got[i] = f.CreateHistoryGRPCConnection(hostA)
 		}()
 	}
 	wg.Wait()
 
-	f.internodeGRPCConnections.RLock()
-	require.Len(t, f.internodeGRPCConnections.conns, 1)
-	f.internodeGRPCConnections.RUnlock()
+	require.Equal(t, 1, cachedConnCount(f))
+	cached, ok := cachedConn(f, hostA)
+	require.True(t, ok)
+	for i, conn := range got {
+		require.Same(t, cached, conn, "caller %d got a connection the cache discarded", i)
+	}
 }

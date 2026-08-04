@@ -300,6 +300,9 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 	}
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[serviceName]...)
 	newConn := d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
+	if newConn == nil {
+		return nil
+	}
 
 	d.internodeGRPCConnections.Lock()
 	defer d.internodeGRPCConnections.Unlock()
