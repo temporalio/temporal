@@ -5390,6 +5390,42 @@ func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_IntervalDurationVali
 	}
 }
 
+// The duration validation is enforced by default, but operators can turn enforcement off
+// with frontend.enforceScheduleDurationValidation. With it off, a malformed duration is
+// logged and allowed through, and the spec still compiles on its normalized value.
+func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_DurationValidationKillSwitch() {
+	malformedSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: &durationpb.Duration{Seconds: 2, Nanos: -1},
+				}},
+			},
+		}
+	}
+
+	s.Run("enforced by default", func() {
+		wh := s.getWorkflowHandler(s.newConfig())
+
+		err := wh.canonicalizeScheduleSpec(malformedSchedule())
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), "interval is not a valid duration")
+	})
+
+	s.Run("enforcement disabled", func() {
+		config := s.newConfig()
+		config.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(false)
+		wh := s.getWorkflowHandler(config)
+
+		schedule := malformedSchedule()
+		s.NoError(wh.canonicalizeScheduleSpec(schedule))
+		// Canonicalization still ran, on the malformed duration's normalized value.
+		s.Equal(2*time.Second-time.Nanosecond,
+			schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration())
+	})
+}
+
 // Regression test for SCH-057: CreateSchedule and UpdateSchedule must reject malformed
 // interval duration protobufs with InvalidArgument before either the V1 or the CHASM
 // backend is invoked.
