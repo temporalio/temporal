@@ -405,9 +405,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 
 	err = validateAndNormalizeStartRequest(
 		req,
-		h.config.MaxIDLengthLimit(),
-		h.config.BlobSizeLimitError,
-		h.config.BlobSizeLimitWarn,
+		h.config,
 		h.logger,
 		h.saMapperProvider,
 		h.saValidator,
