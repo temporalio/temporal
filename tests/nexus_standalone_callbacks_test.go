@@ -108,8 +108,9 @@ func (s *NexusStandaloneTestSuite) awaitCallbackInfos(
 // operation: that they are delivered when the operation closes, that they are reported by describe,
 // and that unsupported requests are rejected.
 func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
+	env := s.newCallbackTestEnv()
+
 	s.Run("DeliveredOnSuccess", func(s *NexusStandaloneTestSuite) {
-		env := s.newCallbackTestEnv()
 		t := s.T()
 
 		// The handler completes the operation synchronously, so it closes as soon as it is dispatched.
@@ -160,7 +161,6 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 	})
 
 	s.Run("DeliveredOnFailure", func(s *NexusStandaloneTestSuite) {
-		env := s.newCallbackTestEnv()
 		t := s.T()
 
 		endpointName := env.createRandomExternalNexusServer(s.Context(), t, nexustest.Handler{
@@ -204,7 +204,6 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 	})
 
 	s.Run("DescribeReportsStandbyBeforeClose", func(s *NexusStandaloneTestSuite) {
-		env := s.newCallbackTestEnv()
 		t := s.T()
 
 		// The operation stays STARTED, so its callbacks stay in STANDBY.
@@ -238,7 +237,6 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 	})
 
 	s.Run("AttachOnConflict", func(s *NexusStandaloneTestSuite) {
-		env := s.newCallbackTestEnv()
 		t := s.T()
 
 		endpointName := env.createRandomExternalNexusServer(s.Context(), t, nexustest.Handler{
@@ -289,7 +287,6 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 	})
 
 	s.Run("RejectsUnsupportedVariants", func(s *NexusStandaloneTestSuite) {
-		env := s.newCallbackTestEnv()
 		t := s.T()
 
 		endpointName := env.createRandomExternalNexusServer(s.Context(), t, nexustest.Handler{})
@@ -321,8 +318,6 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 	})
 
 	s.Run("RejectsAttachLinks", func(s *NexusStandaloneTestSuite) {
-		env := s.newCallbackTestEnv()
-
 		// The start request carries no links, so attach_links cannot be honored.
 		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId:         testvars.New(s.T()).Any().String(),

@@ -411,18 +411,6 @@ func (a *Activity) addCompletionCallbacks(
 	if len(completionCallbacks) == 0 {
 		return nil
 	}
-	// BUG: StartActivityExecution is not idempotent for a request carrying completion callbacks. If the
-	// first call attaches them but its response is lost, the engine dedups the client's retry on request
-	// ID (ChasmEngine.handleExecutionConflict matches the request ID before consulting the conflict
-	// policy) and routes it back here via the handler's on_conflict_options path. Should the activity have
-	// closed in the meantime, the check below rejects the retry with FailedPrecondition, reporting failure
-	// for callbacks that are in fact persisted and already scheduled for delivery.
-	//
-	// The fix is the one attachLinks already applies a few lines down: probe for callbacks previously
-	// attached by this request ID (they are keyed "<requestID>-<idx>") and return nil before the closed
-	// check. See Operation.addCompletionCallbacks in chasm/lib/nexusoperation for the same fix on
-	// standalone Nexus operations. Note that the handler attaches callbacks before links, so today a
-	// request setting both options loses attachLinks' idempotency too.
 	if a.LifecycleState(ctx).IsClosed() {
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
 	}
