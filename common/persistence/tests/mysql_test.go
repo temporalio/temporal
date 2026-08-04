@@ -50,6 +50,11 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, testData.Cfg, resolver.NewNoopResolver(), testData.Logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
 
 	s := NewExecutionMutableStateSuite(
 		t,
@@ -58,6 +63,7 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 		serialization.NewSerializer(),
 		testData.Logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(t, s)
 }
 
