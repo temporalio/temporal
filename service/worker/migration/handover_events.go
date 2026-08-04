@@ -20,7 +20,7 @@ const phaseHandoverIncomplete = "shard_handover_incomplete"
 
 // maxLaggingShardsInSummary caps the per-shard list so a cluster with thousands of shards cannot
 // produce an unbounded details blob. The true count is always in not_ready_count.
-const maxLaggingShardsInSummary = 64
+const maxLaggingShardsInSummary = 512
 
 type laggingShard struct {
 	ShardID      int32 `json:"shard_id"`
