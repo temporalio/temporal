@@ -5379,13 +5379,12 @@ func (s *WorkflowHandlerSuite) TestCanonicalizeScheduleSpec_IntervalDurationVali
 
 			err := wh.canonicalizeScheduleSpec(schedule)
 			if tc.errContains == "" {
-				assert.NoError(s.T(), err)
+				s.NoError(err)
 				return
 			}
 			var invalidArgument *serviceerror.InvalidArgument
-			if assert.ErrorAs(s.T(), err, &invalidArgument) {
-				assert.Contains(s.T(), err.Error(), tc.errContains)
-			}
+			s.ErrorAs(err, &invalidArgument)
+			s.Contains(err.Error(), tc.errContains)
 		})
 	}
 }
