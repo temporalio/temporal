@@ -60,6 +60,8 @@ type Config struct {
 	MaxCallbacksPerExecution                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy                dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+	MaxUserMetadataDetailsSize                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxUserMetadataSummarySize                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	StartDelayEnabled                         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
@@ -76,9 +78,11 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		LongPollBuffer:                            LongPollBuffer.Get(dc),
 		LongPollTimeout:                           LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
-		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
 		StartDelayEnabled:                         StartDelayEnabled.Get(dc),
 		MaxCallbacksPerExecution:                  callback.MaxPerExecution.Get(dc),
+		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
+		MaxUserMetadataDetailsSize:                dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
+		MaxUserMetadataSummarySize:                dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
 		VisibilityMaxPageSize:                     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}
 }

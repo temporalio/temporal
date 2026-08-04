@@ -635,7 +635,12 @@ func (a *Activity) HandleFailed(
 	}
 
 	nextRetryDelay := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration()
-	retryState, err := a.tryReschedule(ctx, a.isRetryableFailure(failure), nextRetryDelay, failure)
+	retryState, err := a.tryReschedule(
+		ctx,
+		retrypolicy.IsRetryableFailure(failure, a.GetRetryPolicy().GetNonRetryableErrorTypes()),
+		nextRetryDelay,
+		failure,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -655,22 +660,6 @@ func (a *Activity) HandleFailed(
 	}
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
-}
-
-// isRetryableFailure reports whether a worker-reported activity failure should be retried. A nil
-// failure is retryable. Only application failures are otherwise  retryable, unless the failure
-// marks itself non-retryable or its error type is listed in the retry policy's non-retryable types.
-func (a *Activity) isRetryableFailure(failure *failurepb.Failure) bool {
-	if failure == nil {
-		return true
-	}
-	appFailure := failure.GetApplicationFailureInfo()
-	if appFailure == nil {
-		return false
-	}
-	isMarkedNonRetryable := appFailure.GetNonRetryable()
-	isNonRetryableType := slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
-	return !isMarkedNonRetryable && !isNonRetryableType
 }
 
 // HandleCanceled updates the activity on activity canceled.

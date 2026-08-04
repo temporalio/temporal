@@ -2024,9 +2024,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	}
 
 	req := &workflowservice.RespondActivityTaskFailedRequest{
-		TaskToken: token,
-		Failure:   request.GetFailure(),
-		Identity:  request.Identity,
+		TaskToken:            token,
+		Failure:              request.GetFailure(),
+		Identity:             request.Identity,
+		LastHeartbeatDetails: request.GetLastHeartbeatDetails(),
 	}
 
 	_, err = wh.historyClient.RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{

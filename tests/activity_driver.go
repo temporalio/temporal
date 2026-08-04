@@ -5,6 +5,7 @@ package tests
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -236,21 +237,48 @@ func respondFailedFailure(e model.Event, nextRetryDelay time.Duration, largeFail
 	if e.Failure == nil {
 		return nil
 	}
-	return activityFailure(e.Failure.Retryable, nextRetryDelay, largeFailure)
+	switch e.Failure.Type {
+	case model.ApplicationFailureType:
+		info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !e.Failure.Retryable}
+		if nextRetryDelay > 0 {
+			info.NextRetryDelay = durationpb.New(nextRetryDelay)
+		}
+		message := "test failure"
+		if largeFailure {
+			message = activityLargeFailureMessage
+		}
+		return &failurepb.Failure{
+			Message:     message,
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: info},
+		}
+	case model.ServerFailureType:
+		return &failurepb.Failure{
+			Message:     "test server failure",
+			FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: !e.Failure.Retryable}},
+		}
+	case model.StartToCloseTimeoutFailureType:
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	case model.HeartbeatTimeoutFailureType:
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_HEARTBEAT)
+	case model.ScheduleToStartTimeoutFailureType:
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+	case model.ScheduleToCloseTimeoutFailureType:
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	case model.UnknownFailureType:
+		return &failurepb.Failure{Message: "test unknown failure"}
+	default:
+		panic(fmt.Sprintf("unknown failure type: %d", e.Failure.Type))
+	}
 }
 
-func activityFailure(retryable bool, nextRetryDelay time.Duration, largeFailure bool) *failurepb.Failure {
-	info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !retryable}
-	if nextRetryDelay > 0 {
-		info.NextRetryDelay = durationpb.New(nextRetryDelay)
-	}
-	message := "test failure"
-	if largeFailure {
-		message = activityLargeFailureMessage
-	}
+// syntheticTimeoutFailure creates a worker-reported timeout for the by-ID failure RPC,
+// exercising failure classification rather than the server's timeout-task path.
+func syntheticTimeoutFailure(timeoutType enumspb.TimeoutType) *failurepb.Failure {
 	return &failurepb.Failure{
-		Message:     message,
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: info},
+		Message: "test synthetic timeout failure",
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: timeoutType,
+		}},
 	}
 }
 
