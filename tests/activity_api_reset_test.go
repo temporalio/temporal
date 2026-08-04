@@ -478,9 +478,9 @@ func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbea
 	s.SdkWorker().RegisterActivity(activityFn)
 	s.SdkWorker().RegisterWorkflow(workflowFn)
 
-	wfId := testcore.RandomizeStr("wfid-" + s.T().Name())
+	wfID := testcore.RandomizeStr("wfid-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 wfId,
+		ID:                 wfID,
 		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
