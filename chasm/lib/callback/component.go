@@ -191,9 +191,8 @@ func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
 		}
 		return res, nil
 	case *commonpb.Callback_Worker_:
-		// Worker callbacks can be converted and persisted, but will fail at runtime.
-		// These will be rejected via the callback.Validator, which will allow them
-		// through once the server-side support is implemented.
+		// Conversion is supported so worker callbacks can be persisted, but
+		// invoking them is not yet implemented.
 		res.Variant = &callbackspb.Callback_Worker_{
 			Worker: &callbackspb.Callback_Worker{
 				TaskQueueName: variant.Worker.GetTaskQueueName(),
