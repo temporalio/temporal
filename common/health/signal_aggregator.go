@@ -198,19 +198,20 @@ func (s *SignalAggregator) Record(key string, latency time.Duration, err error) 
 	ms := float64(latency.Milliseconds())
 
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	overallLatency := s.latencyByGroup[overallGroupName]
+	groupLatency := s.latencyByKey[key]
+	overallErrRatio := s.errorRatioByGroup[overallGroupName]
+	groupErrRatio := s.errorRatioByKey[key]
+	s.mu.RUnlock()
+
 	if overallLatency != nil {
 		overallLatency.RecordToLatestWindow(ms)
 	}
 
-	groupLatency := s.latencyByKey[key]
 	if groupLatency != nil {
 		groupLatency.RecordToLatestWindow(ms)
 	}
 
-	overallErrRatio := s.errorRatioByGroup[overallGroupName]
 	if overallErrRatio != nil {
 		if unhealthy {
 			overallErrRatio.Record(1)
@@ -219,7 +220,6 @@ func (s *SignalAggregator) Record(key string, latency time.Duration, err error) 
 		}
 	}
 
-	groupErrRatio := s.errorRatioByKey[key]
 	if groupErrRatio != nil {
 		if unhealthy {
 			groupErrRatio.Record(1)
@@ -247,9 +247,9 @@ func (s *SignalAggregator) ErrorRatio() (float64, bool) {
 // an empty tdigest quantile is indistinguishable from a genuinely fast one.
 func (s *SignalAggregator) LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	dist, found := s.latencyByGroup[groupName]
+	s.mu.RUnlock()
+
 	if !found {
 		return 0, false
 	}
@@ -262,9 +262,9 @@ func (s *SignalAggregator) LatencyQuantileByGroup(groupName string, quantile flo
 // ErrorRatioThreshold. As with LatencyQuantileByGroup, an empty bucket reports (0, true).
 func (s *SignalAggregator) ErrorRatioByGroup(groupName string) (float64, bool) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	errRatio, found := s.errorRatioByGroup[groupName]
+	s.mu.RUnlock()
+
 	if !found {
 		return 0, false
 	}
