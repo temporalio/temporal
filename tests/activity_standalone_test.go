@@ -13508,10 +13508,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSED)
 	})
 
-	// UpdateOptions while a Reset(RestoreOriginalOptions) is deferred (worker still running, restore
-	// pending) is rejected outright: the pending restore unconditionally overwrites every option
-	// field from OriginalOptions when it lands (see applyDeferredOptionRestore). UpdateOptions is
-	// also rejected for every RESET_REQUESTED activity, regardless of whether a restore is pending.
+	// UpdateOptions is rejected for any RESET_REQUESTED activity, which includes the window while a
+	// Reset(RestoreOriginalOptions) is deferred because the worker is still running.
 	t.Run("UpdateOptionsWhileDeferredRestorePendingFails", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
