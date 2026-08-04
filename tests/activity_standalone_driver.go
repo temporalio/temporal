@@ -260,10 +260,14 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 		_, err := fc.RespondActivityTaskFailed(a.d.ctx, req)
 		return err
 	case model.RespondFailedByIDType:
-		_, err := fc.RespondActivityTaskFailedById(a.d.ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
+		req := &workflowservice.RespondActivityTaskFailedByIdRequest{
 			Namespace: ns, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
 			Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
-		})
+		}
+		if e.HasHeartbeatDetails {
+			req.LastHeartbeatDetails = activityHeartbeatDetails
+		}
+		_, err := fc.RespondActivityTaskFailedById(a.d.ctx, req)
 		return err
 	case model.RespondCanceledType:
 		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{

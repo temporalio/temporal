@@ -42,7 +42,7 @@ type Event struct {
 	Type EventType
 
 	KeepPaused          bool     // Reset: a paused activity stays paused across the reset.
-	HasHeartbeatDetails bool     // RespondFailed: attach last_heartbeat_details, to be stored as the activity's heartbeat progress.
+	HasHeartbeatDetails bool     // Failure response: attach last_heartbeat_details, to be stored as the activity's heartbeat progress.
 	Failure             *Failure // RespondFailed: the failure to send, or nil to respond with no failure at all (as a worker may). A nil failure is retryable.
 }
 
