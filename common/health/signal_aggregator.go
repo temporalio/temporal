@@ -31,15 +31,12 @@ type SignalAggregator struct {
 	getSettings func() Settings
 	isUnhealthy func(error) bool
 
-	mu sync.RWMutex
-
-	latencyByGroup map[string]stats.TimeWindowedStats
-	latencyByKey   map[string]stats.TimeWindowedStats
-
+	latencyByGroup    map[string]stats.TimeWindowedStats
+	latencyByKey      map[string]stats.TimeWindowedStats
 	errorRatioByGroup map[string]aggregate.MovingWindowAverage
 	errorRatioByKey   map[string]aggregate.MovingWindowAverage
-
-	lastSettings Settings
+	lastSettings      Settings
+	mu                sync.RWMutex
 
 	startOnce sync.Once
 	stopOnce  sync.Once
