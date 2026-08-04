@@ -96,7 +96,10 @@ func (t *defaultHandoverTracker) UpdateHandoverState(newNs *namespace.Namespace,
 	if deletedFromDB || !isHandoverNamespace {
 		if removed, ok := t.handoverNamespaces[nsName]; ok {
 			delete(t.handoverNamespaces, nsName)
-			t.emitWatermarkRemoved(nsName, newNs.ID().String(), removed, deletedFromDB)
+			wideevents.EmitHandoverWatermarkRemoved(
+				t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(),
+				removed.MaxReplicationTaskID, removed.NotificationVersion, deletedFromDB,
+			)
 		}
 		return
 	}
@@ -110,15 +113,22 @@ func (t *defaultHandoverTracker) UpdateHandoverState(newNs *namespace.Namespace,
 		if handover.NotificationVersion < newNs.NotificationVersion() {
 			handover.NotificationVersion = newNs.NotificationVersion()
 			handover.MaxReplicationTaskID = maxReplicationTaskID
-			t.emitWatermarkSet(nsName, newNs.ID().String(), handover, wideevents.WatermarkUpdated)
+			wideevents.EmitHandoverWatermarkSet(
+				t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(),
+				maxReplicationTaskID, handover.NotificationVersion,
+				maxReplicationTaskID == PendingMaxReplicationTaskID, wideevents.WatermarkUpdated,
+			)
 		}
 	} else {
-		handover := &namespaceHandOverInfo{
+		t.handoverNamespaces[nsName] = &namespaceHandOverInfo{
 			NotificationVersion:  newNs.NotificationVersion(),
 			MaxReplicationTaskID: maxReplicationTaskID,
 		}
-		t.handoverNamespaces[nsName] = handover
-		t.emitWatermarkSet(nsName, newNs.ID().String(), handover, wideevents.WatermarkAdded)
+		wideevents.EmitHandoverWatermarkSet(
+			t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(),
+			maxReplicationTaskID, newNs.NotificationVersion(),
+			maxReplicationTaskID == PendingMaxReplicationTaskID, wideevents.WatermarkAdded,
+		)
 	}
 
 	if maxReplicationTaskID != PendingMaxReplicationTaskID {
@@ -147,32 +157,4 @@ func (t *defaultHandoverTracker) ResolvePendingTaskIDs(maxReplicationTaskID int6
 			handoverInfo.MaxReplicationTaskID = maxReplicationTaskID
 		}
 	}
-}
-
-// The two emitters below only unpack the tracker's own state; the payloads live in
-// common/wideevents with the rest of the namespace lifecycle events.
-
-func (t *defaultHandoverTracker) emitWatermarkSet(
-	nsName namespace.Name,
-	nsID string,
-	handover *namespaceHandOverInfo,
-	reason string,
-) {
-	wideevents.EmitHandoverWatermarkSet(
-		t.eventLogger, t.shardID, nsName.String(), nsID,
-		handover.MaxReplicationTaskID, handover.NotificationVersion,
-		handover.MaxReplicationTaskID == PendingMaxReplicationTaskID, reason,
-	)
-}
-
-func (t *defaultHandoverTracker) emitWatermarkRemoved(
-	nsName namespace.Name,
-	nsID string,
-	removed *namespaceHandOverInfo,
-	deletedFromDB bool,
-) {
-	wideevents.EmitHandoverWatermarkRemoved(
-		t.eventLogger, t.shardID, nsName.String(), nsID,
-		removed.MaxReplicationTaskID, removed.NotificationVersion, deletedFromDB,
-	)
 }
