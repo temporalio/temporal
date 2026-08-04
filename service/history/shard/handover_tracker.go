@@ -141,10 +141,9 @@ func (t *defaultHandoverTracker) GetHandoverNamespaces() map[string]*historyserv
 }
 
 func (t *defaultHandoverTracker) ResolvePendingTaskIDs(maxReplicationTaskID int64) {
-	for nsName, handoverInfo := range t.handoverNamespaces {
+	for _, handoverInfo := range t.handoverNamespaces {
 		if handoverInfo.MaxReplicationTaskID == PendingMaxReplicationTaskID {
 			handoverInfo.MaxReplicationTaskID = maxReplicationTaskID
-			emitHandoverWatermarkSet(t.eventLogger, t.shardID, nsName.String(), "", handoverInfo, watermarkResolved)
 		}
 	}
 }

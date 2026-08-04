@@ -18,15 +18,12 @@ const (
 	phaseHandoverWatermarkRemoved = "shard_handover_watermark_removed"
 )
 
-// Reasons for a watermark set, distinguishing the three ways a shard arrives at one.
+// Reasons for a watermark set, distinguishing the two ways a shard arrives at one.
 const (
 	// watermarkAdded: the shard saw this namespace enter handover and took a watermark.
 	watermarkAdded = "added"
 	// watermarkUpdated: a newer namespace notification advanced the watermark.
 	watermarkUpdated = "updated"
-	// watermarkResolved: the shard was unacquired when it took the watermark, so it stored the
-	// PendingMaxReplicationTaskID sentinel; acquiring the shard replaced it with a real task ID.
-	watermarkResolved = "resolved_pending"
 )
 
 func emitHandoverWatermarkSet(

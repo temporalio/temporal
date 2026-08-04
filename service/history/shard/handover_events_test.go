@@ -136,8 +136,8 @@ func TestHandoverWatermarkRemovedOnlyWhenTracked(t *testing.T) {
 	require.Empty(t, lg.records)
 }
 
-// An unacquired shard stores the sentinel watermark; acquiring the shard resolves the real task
-// ID, and that resolution is itself a watermark set.
+// An unacquired shard stores the sentinel watermark, which the set event reports as pending.
+// Acquiring the shard later resolves it in place and emits nothing.
 func TestHandoverWatermarkPendingThenResolved(t *testing.T) {
 	lg := &eventCaptureLogger{}
 	tracker := newHandoverEventsTracker(t, lg, 100, errors.New("shard status unknown"))
@@ -147,10 +147,6 @@ func TestHandoverWatermarkPendingThenResolved(t *testing.T) {
 	require.Equal(t, true, recordDetails(t, lg.records[0])["pending"])
 
 	tracker.ResolvePendingTaskIDs(555)
-	require.Len(t, lg.records, 2)
-
-	d := recordDetails(t, lg.records[1])
-	require.Equal(t, watermarkResolved, d["reason"])
-	require.EqualValues(t, 555, d["max_replication_task_id"])
-	require.Equal(t, false, d["pending"])
+	require.Len(t, lg.records, 1)
+	require.EqualValues(t, 555, tracker.handoverNamespaces[handoverEventsTestNsName].MaxReplicationTaskID)
 }
