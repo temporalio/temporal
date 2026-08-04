@@ -112,9 +112,11 @@ func (*SchedulerCallbacksTask) Descriptor() ([]byte, []int) {
 
 // Buffers actions based on the schedule's specification.
 type GeneratorTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// When set, skip recomputing FutureActionTimes to avoid oscillating visbility.
+	SkipFutureActionTimes bool `protobuf:"varint,1,opt,name=skip_future_action_times,json=skipFutureActionTimes,proto3" json:"skip_future_action_times,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *GeneratorTask) Reset() {
@@ -145,6 +147,13 @@ func (x *GeneratorTask) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GeneratorTask.ProtoReflect.Descriptor instead.
 func (*GeneratorTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GeneratorTask) GetSkipFutureActionTimes() bool {
+	if x != nil {
+		return x.SkipFutureActionTimes
+	}
+	return false
 }
 
 // Processes buffered actions, deciding whether to execute, delay, or discard.
@@ -303,8 +312,9 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc = ""
 	"8temporal/server/chasm/lib/scheduler/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a\x1egoogle/protobuf/duration.proto\"V\n" +
 	"\x11SchedulerIdleTask\x12A\n" +
 	"\x0fidle_time_total\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\ridleTimeTotal\"\x18\n" +
-	"\x16SchedulerCallbacksTask\"\x0f\n" +
-	"\rGeneratorTask\"\x1a\n" +
+	"\x16SchedulerCallbacksTask\"H\n" +
+	"\rGeneratorTask\x127\n" +
+	"\x18skip_future_action_times\x18\x01 \x01(\bR\x15skipFutureActionTimes\"\x1a\n" +
 	"\x18InvokerProcessBufferTask\"\x14\n" +
 	"\x12InvokerExecuteTask\"\x10\n" +
 	"\x0eBackfillerTask\" \n" +
