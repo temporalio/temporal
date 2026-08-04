@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/wideevents"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"google.golang.org/grpc/metadata"
 )
@@ -384,7 +385,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 
 	// Holds the latest poll's laggards so the summary below can name the shards that were still
 	// behind when the wait ended. Empty on a successful handover, which emits nothing.
-	var snapshot handoverLagSnapshot
+	var snapshot wideevents.HandoverLagSnapshot
 	start := time.Now()
 	defer func() {
 		a.emitHandoverLagSummary(waitRequest, &snapshot, time.Since(start), retErr)
@@ -405,7 +406,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 }
 
 // Check if remote cluster has caught up on all shards on replication tasks
-func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *handoverLagSnapshot) (bool, error) {
+func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *wideevents.HandoverLagSnapshot) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -474,9 +475,9 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 
 	// Overwritten every poll, so what the deferred summary in WaitHandover sees is the final
 	// state of the wait rather than an accumulation across polls.
-	*snapshot = handoverLagSnapshot{
-		totalShards:              len(localShards),
-		missingHandoverInfoCount: handoverInfosMissingCount,
+	*snapshot = wideevents.HandoverLagSnapshot{
+		TotalShards:              len(localShards),
+		MissingHandoverInfoCount: handoverInfosMissingCount,
 	}
 
 	for _, status := range shardStatuses {
@@ -484,12 +485,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			readyShardCount++
 		} else {
 			notReadyShardCount++
-			if len(snapshot.laggingShards) < maxLaggingShardsInSummary {
-				snapshot.laggingShards = append(snapshot.laggingShards, laggingShard{
-					ShardID:      status.shardID,
-					LaggingTasks: status.laggingTasks,
-				})
-			}
+			snapshot.AddLaggingShard(status.shardID, status.laggingTasks)
 		}
 
 		if status.laggingTasks > maxHandoverLag {
@@ -498,10 +494,10 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		}
 	}
 
-	snapshot.readyCount = readyShardCount
-	snapshot.notReadyCount = notReadyShardCount
-	snapshot.maxLaggingTasks = maxHandoverLag
-	snapshot.maxLaggingTasksShardID = maxHandoverLagShardID
+	snapshot.ReadyCount = readyShardCount
+	snapshot.NotReadyCount = notReadyShardCount
+	snapshot.MaxLaggingTasks = maxHandoverLag
+	snapshot.MaxLaggingTasksShardID = maxHandoverLagShardID
 
 	// emit metrics about how many shards are ready
 	a.MetricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(

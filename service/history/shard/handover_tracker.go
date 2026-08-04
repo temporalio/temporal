@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/wideevents"
 )
 
 const (
@@ -95,7 +96,10 @@ func (t *defaultHandoverTracker) UpdateHandoverState(newNs *namespace.Namespace,
 	if deletedFromDB || !isHandoverNamespace {
 		if removed, ok := t.handoverNamespaces[nsName]; ok {
 			delete(t.handoverNamespaces, nsName)
-			emitHandoverWatermarkRemoved(t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(), removed, deletedFromDB)
+			wideevents.Emit(t.eventLogger, wideevents.HandoverWatermarkRemoved(
+				t.shardID, nsName.String(), newNs.ID().String(),
+				removed.MaxReplicationTaskID, removed.NotificationVersion, deletedFromDB,
+			))
 		}
 		return
 	}
@@ -109,7 +113,7 @@ func (t *defaultHandoverTracker) UpdateHandoverState(newNs *namespace.Namespace,
 		if handover.NotificationVersion < newNs.NotificationVersion() {
 			handover.NotificationVersion = newNs.NotificationVersion()
 			handover.MaxReplicationTaskID = maxReplicationTaskID
-			emitHandoverWatermarkSet(t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(), handover, watermarkUpdated)
+			t.emitWatermarkSet(nsName, newNs.ID().String(), handover, wideevents.WatermarkUpdated)
 		}
 	} else {
 		handover := &namespaceHandOverInfo{
@@ -117,7 +121,7 @@ func (t *defaultHandoverTracker) UpdateHandoverState(newNs *namespace.Namespace,
 			MaxReplicationTaskID: maxReplicationTaskID,
 		}
 		t.handoverNamespaces[nsName] = handover
-		emitHandoverWatermarkSet(t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(), handover, watermarkAdded)
+		t.emitWatermarkSet(nsName, newNs.ID().String(), handover, wideevents.WatermarkAdded)
 	}
 
 	if maxReplicationTaskID != PendingMaxReplicationTaskID {
@@ -146,4 +150,17 @@ func (t *defaultHandoverTracker) ResolvePendingTaskIDs(maxReplicationTaskID int6
 			handoverInfo.MaxReplicationTaskID = maxReplicationTaskID
 		}
 	}
+}
+
+func (t *defaultHandoverTracker) emitWatermarkSet(
+	nsName namespace.Name,
+	nsID string,
+	handover *namespaceHandOverInfo,
+	reason string,
+) {
+	wideevents.Emit(t.eventLogger, wideevents.HandoverWatermarkSet(
+		t.shardID, nsName.String(), nsID,
+		handover.MaxReplicationTaskID, handover.NotificationVersion,
+		handover.MaxReplicationTaskID == PendingMaxReplicationTaskID, reason,
+	))
 }

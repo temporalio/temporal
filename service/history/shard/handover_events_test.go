@@ -15,6 +15,7 @@ import (
 	commonlog "go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 )
 
@@ -98,13 +99,13 @@ func TestHandoverWatermarkEvents(t *testing.T) {
 
 	// Taking the watermark emits once.
 	tracker.UpdateHandoverState(inHandover, false)
-	require.Equal(t, []string{phaseHandoverWatermarkSet}, lg.phases())
+	require.Equal(t, []string{wideevents.PhaseHandoverWatermarkSet}, lg.phases())
 
 	d := recordDetails(t, lg.records[0])
 	require.EqualValues(t, handoverEventsTestShardID, d["shard_id"])
 	require.EqualValues(t, 100, d["max_replication_task_id"])
 	require.Equal(t, false, d["pending"])
-	require.Equal(t, watermarkAdded, d["reason"])
+	require.Equal(t, wideevents.WatermarkAdded, d["reason"])
 	require.Equal(t, handoverEventsTestNsID, recordAttrs(lg.records[0])["namespace_id"].AsString())
 	require.Equal(t, handoverEventsTestNsName, recordAttrs(lg.records[0])["namespace"].AsString())
 
@@ -114,12 +115,12 @@ func TestHandoverWatermarkEvents(t *testing.T) {
 
 	// A newer notification version advances the watermark.
 	tracker.UpdateHandoverState(inHandover.Clone(namespace.WithNotificationVersion(2)), false)
-	require.Equal(t, []string{phaseHandoverWatermarkSet, phaseHandoverWatermarkSet}, lg.phases())
-	require.Equal(t, watermarkUpdated, recordDetails(t, lg.records[1])["reason"])
+	require.Equal(t, []string{wideevents.PhaseHandoverWatermarkSet, wideevents.PhaseHandoverWatermarkSet}, lg.phases())
+	require.Equal(t, wideevents.WatermarkUpdated, recordDetails(t, lg.records[1])["reason"])
 
 	// Leaving handover drops the watermark.
 	tracker.UpdateHandoverState(handoverEventsNamespace(enumspb.REPLICATION_STATE_NORMAL), false)
-	require.Equal(t, phaseHandoverWatermarkRemoved, lg.phases()[2])
+	require.Equal(t, wideevents.PhaseHandoverWatermarkRemoved, lg.phases()[2])
 	require.Equal(t, false, recordDetails(t, lg.records[2])["deleted_from_db"])
 }
 

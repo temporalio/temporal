@@ -16,6 +16,7 @@ import (
 	commonlog "go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 )
 
@@ -71,7 +72,7 @@ func TestEmitHandoverLagSummarySilentWhenReady(t *testing.T) {
 	lg := &eventCaptureLogger{}
 	a := newLagSummaryTestActivities(t, lg)
 
-	a.emitHandoverLagSummary(lagSummaryTestRequest(), &handoverLagSnapshot{totalShards: 4}, time.Second, nil)
+	a.emitHandoverLagSummary(lagSummaryTestRequest(), &wideevents.HandoverLagSnapshot{TotalShards: 4}, time.Second, nil)
 
 	require.Empty(t, lg.records)
 }
@@ -80,14 +81,14 @@ func TestEmitHandoverLagSummaryNamesLaggingShards(t *testing.T) {
 	lg := &eventCaptureLogger{}
 	a := newLagSummaryTestActivities(t, lg)
 
-	snapshot := &handoverLagSnapshot{
-		totalShards:              4,
-		readyCount:               2,
-		notReadyCount:            2,
-		missingHandoverInfoCount: 1,
-		maxLaggingTasks:          42,
-		maxLaggingTasksShardID:   3,
-		laggingShards: []laggingShard{
+	snapshot := &wideevents.HandoverLagSnapshot{
+		TotalShards:              4,
+		ReadyCount:               2,
+		NotReadyCount:            2,
+		MissingHandoverInfoCount: 1,
+		MaxLaggingTasks:          42,
+		MaxLaggingTasksShardID:   3,
+		LaggingShards: []wideevents.LaggingShard{
 			{ShardID: 1, LaggingTasks: 0},
 			{ShardID: 3, LaggingTasks: 42},
 		},
@@ -95,7 +96,7 @@ func TestEmitHandoverLagSummaryNamesLaggingShards(t *testing.T) {
 	a.emitHandoverLagSummary(lagSummaryTestRequest(), snapshot, 30*time.Second, context.Canceled)
 
 	require.Len(t, lg.records, 1)
-	require.Equal(t, phaseHandoverIncomplete, lg.attrs(lg.records[0])["phase"].AsString())
+	require.Equal(t, wideevents.PhaseHandoverIncomplete, lg.attrs(lg.records[0])["phase"].AsString())
 	require.Equal(t, lagSummaryTestNsID, lg.attrs(lg.records[0])["namespace_id"].AsString())
 
 	d := lg.details(t, 0)
@@ -134,7 +135,7 @@ func TestEmitHandoverLagSummaryExitReason(t *testing.T) {
 
 			a.emitHandoverLagSummary(
 				lagSummaryTestRequest(),
-				&handoverLagSnapshot{totalShards: 1, notReadyCount: 1},
+				&wideevents.HandoverLagSnapshot{TotalShards: 1, NotReadyCount: 1},
 				time.Second,
 				tc.err,
 			)
@@ -152,15 +153,15 @@ func TestEmitHandoverLagSummaryTruncates(t *testing.T) {
 	lg := &eventCaptureLogger{}
 	a := newLagSummaryTestActivities(t, lg)
 
-	snapshot := &handoverLagSnapshot{totalShards: 4096, notReadyCount: 4096}
-	for i := 0; i < maxLaggingShardsInSummary; i++ {
-		snapshot.laggingShards = append(snapshot.laggingShards, laggingShard{ShardID: int32(i), LaggingTasks: 1})
+	snapshot := &wideevents.HandoverLagSnapshot{TotalShards: 4096, NotReadyCount: 4096}
+	for i := 0; i < wideevents.MaxLaggingShardsInSummary; i++ {
+		snapshot.LaggingShards = append(snapshot.LaggingShards, wideevents.LaggingShard{ShardID: int32(i), LaggingTasks: 1})
 	}
 	a.emitHandoverLagSummary(lagSummaryTestRequest(), snapshot, time.Second, context.Canceled)
 
 	d := lg.details(t, 0)
 	require.EqualValues(t, 4096, d["not_ready_count"])
-	require.Len(t, d["lagging_shards"].([]any), maxLaggingShardsInSummary)
+	require.Len(t, d["lagging_shards"].([]any), wideevents.MaxLaggingShardsInSummary)
 	require.Equal(t, true, d["lagging_shards_truncated"])
 }
 
@@ -183,15 +184,15 @@ func TestCheckHandoverOnceSnapshotIsLastPollOnly(t *testing.T) {
 			shardResp(2, "target", 5, nil),
 		), nil)
 
-	var snapshot handoverLagSnapshot
+	var snapshot wideevents.HandoverLagSnapshot
 	done, err := a.checkHandoverOnce(context.Background(), req, &snapshot)
 	require.NoError(t, err)
 	require.False(t, done)
-	require.Zero(t, snapshot.readyCount)
-	require.Equal(t, 2, snapshot.notReadyCount)
-	require.Equal(t, 1, snapshot.missingHandoverInfoCount)
-	require.EqualValues(t, 15, snapshot.maxLaggingTasks)
-	require.Len(t, snapshot.laggingShards, 2)
+	require.Zero(t, snapshot.ReadyCount)
+	require.Equal(t, 2, snapshot.NotReadyCount)
+	require.Equal(t, 1, snapshot.MissingHandoverInfoCount)
+	require.EqualValues(t, 15, snapshot.MaxLaggingTasks)
+	require.Len(t, snapshot.LaggingShards, 2)
 
 	// Poll 2: both caught up. The stale laggards from poll 1 must be gone.
 	historyClient.EXPECT().GetReplicationStatus(gomock.Any(), gomock.Any()).Return(
@@ -203,9 +204,9 @@ func TestCheckHandoverOnceSnapshotIsLastPollOnly(t *testing.T) {
 	done, err = a.checkHandoverOnce(context.Background(), req, &snapshot)
 	require.NoError(t, err)
 	require.True(t, done)
-	require.Equal(t, 2, snapshot.readyCount)
-	require.Zero(t, snapshot.notReadyCount)
-	require.Empty(t, snapshot.laggingShards)
+	require.Equal(t, 2, snapshot.ReadyCount)
+	require.Zero(t, snapshot.NotReadyCount)
+	require.Empty(t, snapshot.LaggingShards)
 }
 
 func replicationStatusResp(shards ...*historyservice.ShardReplicationStatus) *historyservice.GetReplicationStatusResponse {
