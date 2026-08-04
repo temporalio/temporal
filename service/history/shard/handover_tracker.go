@@ -149,46 +149,30 @@ func (t *defaultHandoverTracker) ResolvePendingTaskIDs(maxReplicationTaskID int6
 	}
 }
 
-// emitWatermarkSet reports this shard taking or advancing its replication watermark for a
-// namespace entering handover. pending means the shard was not acquired, so the watermark is the
-// sentinel and replication has not been notified yet.
+// The two emitters below only unpack the tracker's own state; the payloads live in
+// common/wideevents with the rest of the namespace lifecycle events.
+
 func (t *defaultHandoverTracker) emitWatermarkSet(
 	nsName namespace.Name,
 	nsID string,
 	handover *namespaceHandOverInfo,
 	reason string,
 ) {
-	wideevents.Emit(t.eventLogger, wideevents.NamespaceLifecyclePayload{
-		Phase:       wideevents.PhaseHandoverWatermarkSet,
-		Namespace:   nsName.String(),
-		NamespaceID: nsID,
-		Details: map[string]any{
-			"shard_id":                t.shardID,
-			"max_replication_task_id": handover.MaxReplicationTaskID,
-			"notification_version":    handover.NotificationVersion,
-			"pending":                 handover.MaxReplicationTaskID == PendingMaxReplicationTaskID,
-			"reason":                  reason,
-		},
-	})
+	wideevents.EmitHandoverWatermarkSet(
+		t.eventLogger, t.shardID, nsName.String(), nsID,
+		handover.MaxReplicationTaskID, handover.NotificationVersion,
+		handover.MaxReplicationTaskID == PendingMaxReplicationTaskID, reason,
+	)
 }
 
-// emitWatermarkRemoved reports this shard dropping its watermark. deletedFromDB separates a
-// namespace deletion from the normal exit out of the handover replication state.
 func (t *defaultHandoverTracker) emitWatermarkRemoved(
 	nsName namespace.Name,
 	nsID string,
 	removed *namespaceHandOverInfo,
 	deletedFromDB bool,
 ) {
-	wideevents.Emit(t.eventLogger, wideevents.NamespaceLifecyclePayload{
-		Phase:       wideevents.PhaseHandoverWatermarkRemoved,
-		Namespace:   nsName.String(),
-		NamespaceID: nsID,
-		Details: map[string]any{
-			"shard_id":                t.shardID,
-			"max_replication_task_id": removed.MaxReplicationTaskID,
-			"notification_version":    removed.NotificationVersion,
-			"deleted_from_db":         deletedFromDB,
-		},
-	})
+	wideevents.EmitHandoverWatermarkRemoved(
+		t.eventLogger, t.shardID, nsName.String(), nsID,
+		removed.MaxReplicationTaskID, removed.NotificationVersion, deletedFromDB,
+	)
 }

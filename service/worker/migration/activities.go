@@ -2,7 +2,6 @@ package migration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -143,29 +142,6 @@ type (
 		isReady      bool
 	}
 
-	// laggingShard is one shard that had not caught up when a handover wait ended.
-	laggingShard struct {
-		ShardID      int32 `json:"shard_id"`
-		LaggingTasks int64 `json:"lagging_tasks"`
-	}
-
-	// handoverLagSnapshot is a point-in-time view of how far each shard is from ready.
-	// checkHandoverOnce overwrites it on every poll and WaitHandover emits whatever is left in
-	// it when the wait unwinds, so it describes the final state of the wait rather than an
-	// accumulation across polls.
-	handoverLagSnapshot struct {
-		totalShards int
-		readyCount  int
-		// notReadyCount is the true count; laggingShards may be truncated.
-		notReadyCount int
-		// missingHandoverInfoCount is the subset of not-ready shards whose namespace cache has
-		// not picked up the handover yet, so they carry no watermark rather than a lagging one.
-		missingHandoverInfoCount int
-		maxLaggingTasks          int64
-		maxLaggingTasksShardID   int32
-		laggingShards            []laggingShard
-	}
-
 	WorkflowVerifier func(
 		ctx context.Context,
 		request *verifyReplicationTasksRequest,
@@ -189,23 +165,7 @@ const (
 	skipped     verifyStatus = 2
 
 	largeHistoryLength = 1000
-
-	// maxLaggingShardsInSummary caps the per-shard list in the handover lag summary so a cluster
-	// with thousands of shards cannot produce an unbounded details blob. The true count is
-	// always in not_ready_count.
-	maxLaggingShardsInSummary = 512
 )
-
-// addLaggingShard records a not-ready shard, up to maxLaggingShardsInSummary of them.
-func (s *handoverLagSnapshot) addLaggingShard(shardID int32, laggingTasks int64) {
-	if len(s.laggingShards) >= maxLaggingShardsInSummary {
-		return
-	}
-	s.laggingShards = append(s.laggingShards, laggingShard{
-		ShardID:      shardID,
-		LaggingTasks: laggingTasks,
-	})
-}
 
 func (r verifyResult) isVerified() bool {
 	return r.status == verified || r.status == skipped
@@ -425,10 +385,18 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 
 	// Holds the latest poll's laggards so the summary below can name the shards that were still
 	// behind when the wait ended. Empty on a successful handover, which emits nothing.
-	var snapshot handoverLagSnapshot
+	var snapshot wideevents.HandoverLagSnapshot
 	start := time.Now()
 	defer func() {
-		a.emitHandoverLagSummary(waitRequest, &snapshot, time.Since(start), retErr)
+		wideevents.EmitHandoverIncomplete(
+			a.EventLogger,
+			waitRequest.Namespace,
+			a.namespaceIDForEvent(waitRequest.Namespace),
+			waitRequest.RemoteCluster,
+			&snapshot,
+			time.Since(start),
+			retErr,
+		)
 	}()
 
 	for {
@@ -446,7 +414,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 }
 
 // Check if remote cluster has caught up on all shards on replication tasks
-func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *handoverLagSnapshot) (bool, error) {
+func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *wideevents.HandoverLagSnapshot) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -515,9 +483,9 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 
 	// Overwritten every poll, so what the deferred summary in WaitHandover sees is the final
 	// state of the wait rather than an accumulation across polls.
-	*snapshot = handoverLagSnapshot{
-		totalShards:              len(localShards),
-		missingHandoverInfoCount: handoverInfosMissingCount,
+	*snapshot = wideevents.HandoverLagSnapshot{
+		TotalShards:              len(localShards),
+		MissingHandoverInfoCount: handoverInfosMissingCount,
 	}
 
 	for _, status := range shardStatuses {
@@ -525,7 +493,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			readyShardCount++
 		} else {
 			notReadyShardCount++
-			snapshot.addLaggingShard(status.shardID, status.laggingTasks)
+			snapshot.AddLaggingShard(status.shardID, status.laggingTasks)
 		}
 
 		if status.laggingTasks > maxHandoverLag {
@@ -534,10 +502,10 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		}
 	}
 
-	snapshot.readyCount = readyShardCount
-	snapshot.notReadyCount = notReadyShardCount
-	snapshot.maxLaggingTasks = maxHandoverLag
-	snapshot.maxLaggingTasksShardID = maxHandoverLagShardID
+	snapshot.ReadyCount = readyShardCount
+	snapshot.NotReadyCount = notReadyShardCount
+	snapshot.MaxLaggingTasks = maxHandoverLag
+	snapshot.MaxLaggingTasksShardID = maxHandoverLagShardID
 
 	// emit metrics about how many shards are ready
 	a.MetricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(
@@ -562,66 +530,6 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	}
 
 	return isReady, nil
-}
-
-// emitHandoverLagSummary reports the shards still behind when the wait ended. A wait that
-// succeeds leaves no laggards, so it emits nothing and the happy path is silent.
-//
-// WaitHandover never returns on its own while shards are lagging: StartToClose is capped at
-// maximumHandoverTimeoutSeconds with no retry, so the activity is killed from the outside. The
-// kill reaches this code because the SDK cancels the activity context off the heartbeat, the next
-// GetReplicationStatus fails, and WaitHandover returns — which runs the defer that calls this.
-//
-// A not-ready shard with lagging_tasks == 0 is the missing-handover-info case; any other
-// not-ready shard is behind by lagging_tasks.
-func (a *activities) emitHandoverLagSummary(
-	waitRequest waitHandoverRequest,
-	snapshot *handoverLagSnapshot,
-	elapsed time.Duration,
-	exitErr error,
-) {
-	if snapshot.notReadyCount == 0 {
-		return
-	}
-
-	details := map[string]any{
-		"remote_cluster":              waitRequest.RemoteCluster,
-		"total_shards":                snapshot.totalShards,
-		"ready_count":                 snapshot.readyCount,
-		"not_ready_count":             snapshot.notReadyCount,
-		"missing_handover_info_count": snapshot.missingHandoverInfoCount,
-		"max_lagging_tasks":           snapshot.maxLaggingTasks,
-		"max_lagging_tasks_shard_id":  snapshot.maxLaggingTasksShardID,
-		"lagging_shards":              snapshot.laggingShards,
-		"lagging_shards_truncated":    snapshot.notReadyCount > len(snapshot.laggingShards),
-		"elapsed_seconds":             elapsed.Seconds(),
-		"exit_reason":                 handoverExitReason(exitErr),
-	}
-	if exitErr != nil {
-		details["exit_error"] = exitErr.Error()
-	}
-
-	wideevents.Emit(a.EventLogger, wideevents.NamespaceLifecyclePayload{
-		Phase:       wideevents.PhaseHandoverIncomplete,
-		Namespace:   waitRequest.Namespace,
-		NamespaceID: a.namespaceIDForEvent(waitRequest.Namespace),
-		Details:     details,
-	})
-}
-
-// handoverExitReason separates the wait being killed while shards were still behind from a failed
-// GetReplicationStatus, since the two point at different problems.
-func handoverExitReason(err error) string {
-	switch {
-	case err == nil:
-		return "returned_ready"
-	case errors.Is(err, context.Canceled):
-		return "context_canceled"
-	case errors.Is(err, context.DeadlineExceeded):
-		return "deadline_exceeded"
-	default:
-		return "error"
-	}
 }
 
 // namespaceIDForEvent resolves the namespace ID so events can be joined on it rather than on the
