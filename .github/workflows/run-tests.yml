@@ -516,6 +516,34 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           flags: -v
 
+  flaky-report-input:
+    name: Build flaky report input
+    if: always()
+    needs:
+      - unit-test
+      - integration-test
+      - functional-test
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download JUnit reports
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          pattern: junit-xml--${{ github.run_id }}--*--${{ github.run_attempt }}--*
+          path: .testoutput/flaky-report-input
+          merge-multiple: false
+
+      - name: Upload flaky report input
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: flaky-report-input--${{ github.run_id }}--${{ github.run_attempt }}
+          path: .testoutput/flaky-report-input/**/junit.*.xml
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 28
+
   test-status:
     if: always()
     name: Test Status
@@ -524,6 +552,7 @@ jobs:
       - unit-test
       - integration-test
       - functional-test
+      - flaky-report-input
     runs-on: ubuntu-latest
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}
