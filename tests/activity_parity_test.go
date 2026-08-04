@@ -634,8 +634,9 @@ func (s *activityParityTestSuite) TestRetryableFailureTruncation() {
 
 	s.Run("RetryableAttemptFailure", func(s *activityParityTestSuite) {
 		t := s.T()
-		cfg := activityConfig{MaxAttempts: 2, RetryInterval: activityLongDuration, LargeFailure: true}
-		trace := []model.Event{model.Poll, model.FailRetryably}
+		cfg := activityConfig{MaxAttempts: 2, RetryInterval: activityLongDuration}
+		fail := model.Event{Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true, LargeMessage: true}}
+		trace := []model.Event{model.Poll, fail}
 
 		t.Run("WorkflowActivity", func(t *testing.T) {
 			a := newWFADriver(t, env, cfg).driveTrace(t, trace)
@@ -650,8 +651,9 @@ func (s *activityParityTestSuite) TestRetryableFailureTruncation() {
 	// Different than TestTerminalRetryState because earlier failure is trucated but not the final.
 	s.Run("FinalFailure", func(s *activityParityTestSuite) {
 		t := s.T()
-		cfg := activityConfig{MaxAttempts: 2, LargeFailure: true}
-		trace := []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll, model.FailRetryably}
+		cfg := activityConfig{MaxAttempts: 2}
+		fail := model.Event{Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true, LargeMessage: true}}
+		trace := []model.Event{model.Poll, fail, model.BackoffElapses, model.Poll, fail}
 
 		t.Run("WorkflowActivity", func(t *testing.T) {
 			a := newWFADriver(t, env, cfg).driveTrace(t, trace)
