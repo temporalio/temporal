@@ -703,6 +703,7 @@ func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
 	return result
 }
 
+// CloneProtoSlice returns a new slice containing a clone of each individual proto.
 func CloneProtoSlice[T proto.Message](src []T) []T {
 	if src == nil {
 		return nil
