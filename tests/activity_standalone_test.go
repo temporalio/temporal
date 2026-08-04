@@ -13160,11 +13160,12 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 				protorequire.ProtoEqual(t, defaultHeartbeatDetails, pollResp2.GetHeartbeatDetails())
 			}
 
-			// Record a new heartbeat on the new attempt
+			// Record a new heartbeat on the new attempt.
+			resetAttemptHeartbeatDetails := payloads.EncodeString("heartbeat details from the reset attempt")
 			_, err = env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 				Namespace: env.Namespace().String(),
 				TaskToken: pollResp2.TaskToken,
-				Details:   defaultHeartbeatDetails,
+				Details:   resetAttemptHeartbeatDetails,
 				Identity:  defaultIdentity,
 			})
 			require.NoError(t, err)
@@ -13177,7 +13178,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 				IncludeHeartbeatDetails: true,
 			})
 			require.NoError(t, err)
-			require.NotNil(t, desc.GetInfo().GetHeartbeatDetails(), "new heartbeat from reset attempt should be visible")
+			protorequire.ProtoEqual(t, resetAttemptHeartbeatDetails, desc.GetInfo().GetHeartbeatDetails())
 
 			// Complete
 			_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
