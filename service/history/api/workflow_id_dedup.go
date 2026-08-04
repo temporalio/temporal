@@ -241,11 +241,13 @@ func terminateWorkflowAction(
 // its lock. The replacement is then created in the same transaction.
 func ZombifyConflictingChildAction(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	conflictPolicy enumspb.WorkflowIdConflictPolicy,
+	reusePolicy enumspb.WorkflowIdReusePolicy,
 	logger log.Logger,
 ) UpdateWorkflowActionFunc {
 	return func(workflowLease WorkflowLease) (*UpdateWorkflowAction, error) {
 		mutableState := workflowLease.GetMutableState()
-		if err := validateOrphanedChild(mutableState, parentExecutionInfo); err != nil {
+		if err := validateOrphanedChild(mutableState, parentExecutionInfo, conflictPolicy, reusePolicy); err != nil {
 			if !errors.Is(err, consts.ErrWorkflowCompleted) {
 				logger.Warn(
 					"Unable to zombify conflicting child workflow.",
@@ -277,14 +279,18 @@ func ZombifyConflictingChildAction(
 	}
 }
 
-// validateOrphanedChild allows a conflicting child run to be zombified only when
-//  1. the child is still open
-//  2. parent execution metadata is present
-//  3. the parent namespace ID, workflow ID, and run ID match the requesting parent
-//  4. the child's initiated event ID/version tuple differs from the reissued initiation.
+// validateOrphanedChild rejects anything that is not an open child of exactly this parent descending
+// from an initiation other than the one being reissued. It reads live mutable state under the
+// conflicting run's lock, so no check can go stale before the zombify.
+//
+// The policy checks are assertions: startChildWorkflow always sends conflict policy FAIL and the
+// child command's own reuse policy. Rejecting on them matches normal duplicate resolution, which for
+// an open run also returns WorkflowExecutionAlreadyStarted.
 func validateOrphanedChild(
 	mutableState historyi.MutableState,
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	conflictPolicy enumspb.WorkflowIdConflictPolicy,
+	reusePolicy enumspb.WorkflowIdReusePolicy,
 ) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
@@ -298,6 +304,13 @@ func validateOrphanedChild(
 			mutableState.GetWorkflowKey(),
 			executionState.GetFirstExecutionRunId(),
 		)
+	}
+	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
+		return alreadyStartedErr()
+	}
+	if reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
+		reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
+		return alreadyStartedErr()
 	}
 	if parentExecutionInfo == nil {
 		return alreadyStartedErr()

@@ -202,8 +202,8 @@ type StartWorkflowExecutionRequest struct {
 	// WorkflowExecutionStartedEvent.
 	DeclinedTargetVersionUpgrade *v17.DeclinedTargetVersionUpgrade `protobuf:"bytes,17,opt,name=declined_target_version_upgrade,json=declinedTargetVersionUpgrade,proto3" json:"declined_target_version_upgrade,omitempty"`
 	TimeSkippingStatePropagation *v14.TimeSkippingStatePropagation `protobuf:"bytes,19,opt,name=time_skipping_state_propagation,json=timeSkippingStatePropagation,proto3" json:"time_skipping_state_propagation,omitempty"`
-	// Allows a parent retrying an orphaned child start after failover to replace its own open child.
-	// Ownership is verified while holding the conflicting execution's lock.
+	// Set when the parent has established that a conflicting execution can only be its own child, orphaned by an
+	// initiation that lost conflict resolution after a force failover.
 	ZombifyConflictingChild bool `protobuf:"varint,20,opt,name=zombify_conflicting_child,json=zombifyConflictingChild,proto3" json:"zombify_conflicting_child,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
