@@ -224,7 +224,9 @@ func (*InvokerExecuteTask) Descriptor() ([]byte, []int) {
 
 // Buffers actions based on a manually-requested backfill.
 type BackfillerTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Generation used to fence superseded tasks.
+	Generation    int64 `protobuf:"varint,1,opt,name=generation,proto3" json:"generation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -257,6 +259,13 @@ func (x *BackfillerTask) ProtoReflect() protoreflect.Message {
 // Deprecated: Use BackfillerTask.ProtoReflect.Descriptor instead.
 func (*BackfillerTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *BackfillerTask) GetGeneration() int64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
 }
 
 // Triggers migration from CHASM (V2) to workflow-backed (V1) scheduler.
@@ -306,8 +315,11 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc = ""
 	"\x16SchedulerCallbacksTask\"\x0f\n" +
 	"\rGeneratorTask\"\x1a\n" +
 	"\x18InvokerProcessBufferTask\"\x14\n" +
-	"\x12InvokerExecuteTask\"\x10\n" +
-	"\x0eBackfillerTask\" \n" +
+	"\x12InvokerExecuteTask\"0\n" +
+	"\x0eBackfillerTask\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x01 \x01(\x03R\n" +
+	"generation\" \n" +
 	"\x1eSchedulerMigrateToWorkflowTaskBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var (

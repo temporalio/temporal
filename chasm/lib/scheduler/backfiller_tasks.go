@@ -46,26 +46,30 @@ func NewBackfillerTaskHandler(opts BackfillerTaskHandlerOptions) *BackfillerTask
 
 // BackfillerTask invalidation reasons. Limited cardinality for ReasonTag.
 const (
-	backfillerInvalidatedStaleHWM metrics.ReasonString = "stale_hwm"
+	backfillerInvalidatedStaleGeneration metrics.ReasonString = "stale_generation"
 )
 
 func (b *BackfillerTaskHandler) Validate(
 	ctx chasm.Context,
 	backfiller *Backfiller,
-	attrs chasm.TaskInvocation,
-	_ *schedulerpb.BackfillerTask,
+	_ chasm.TaskInvocation,
+	task *schedulerpb.BackfillerTask,
 ) (bool, error) {
 	if backfiller.Scheduler.Get(ctx).WorkflowMigration != nil {
 		return false, nil
 	}
-	valid, err := validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
-	if err != nil {
-		return false, err
+	taskGeneration := task.GetGeneration()
+	currentGeneration := backfiller.GetTaskGeneration()
+	attempt := backfiller.GetAttempt()
+	valid := taskGeneration == currentGeneration && currentGeneration > attempt
+	if taskGeneration == 0 {
+		// An old binary schedules generation-zero tasks and advances only Attempt.
+		valid = currentGeneration == 0 || attempt >= currentGeneration
 	}
 	if !valid {
 		newTaggedMetricsHandler(b.metricsHandler, backfiller.Scheduler.Get(ctx)).
 			Counter(metrics.ScheduleBackfillerTask.Name()).
-			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleHWM))
+			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleGeneration))
 	}
 	return valid, nil
 }
@@ -74,9 +78,14 @@ func (b *BackfillerTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	backfiller *Backfiller,
 	_ chasm.TaskAttributes,
-	_ *schedulerpb.BackfillerTask,
+	task *schedulerpb.BackfillerTask,
 ) error {
 	defer func() { backfiller.Attempt++ }()
+
+	if task.GetGeneration() == 0 {
+		// Restore the fence after a legacy binary scheduled this continuation.
+		backfiller.TaskGeneration = backfiller.Attempt + 1
+	}
 
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)

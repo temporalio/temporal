@@ -101,9 +101,11 @@ message BackfillerState {
   // High water mark.
   google.protobuf.Timestamp last_processed_time = 7;
 
-  // Attempt count, incremented when the buffer is full and the Backfiller
-  // needs to back off before retrying to fill.
+  // Number of successful task executions.
   int64 attempt = 8;
+
+  // Fence shared with the currently scheduled BackfillerTask.
+  int64 task_generation = 9;
 }
 
 // CHASM scheduler retains the payload data for the last completed workflow. Both
