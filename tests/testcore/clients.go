@@ -221,6 +221,12 @@ func (c *clients) close() []error {
 	}
 	c.frontend.conn = nil
 	c.history.conn = nil
+
+	// The matching client owns a connection cache keyed by matching host.
+	if s, ok := c.matching.client.(interface{ Stop() }); ok {
+		s.Stop()
+	}
+
 	return errs
 }
 

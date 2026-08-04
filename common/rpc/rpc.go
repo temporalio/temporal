@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
@@ -56,6 +57,15 @@ type RPCFactory struct {
 	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient func() (*common.FrontendHTTPClient, error)
+	// A OnceValue wrapper for createLocalFrontendGRPCConnection. The local
+	// frontend target is fixed, so one connection serves every caller.
+	localFrontendConn func() *grpc.ClientConn
+
+	// Connections dialed here are retained so Close can release them, otherwise
+	// their gRPC goroutines outlive the factory.
+	connsLock sync.Mutex
+	conns     map[*grpc.ClientConn]struct{}
+	closed    bool
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -101,9 +111,11 @@ func NewFactory(
 		authHeaderName:           authHeaderName,
 		requireRemoteClusterAuth: requireRemoteClusterAuth,
 		monitor:                  monitor,
+		conns:                    make(map[*grpc.ClientConn]struct{}),
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
+	f.localFrontendConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
 	return f
 }
 
@@ -259,8 +271,14 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	return d.dial(rpcAddress, tlsClientConfig, append(additionalDialOptions, keepAliveOption)...)
 }
 
-// CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
+// CreateLocalFrontendGRPCConnection returns the shared connection for internal
+// frontend calls, dialing it on first use. Callers must not close it; the
+// factory owns it and every local frontend client shares it.
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+	return d.localFrontendConn()
+}
+
+func (d *RPCFactory) createLocalFrontendGRPCConnection() *grpc.ClientConn {
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
 
 	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
@@ -296,8 +314,54 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 		return nil
 	}
+	d.trackConn(connection)
 
 	return connection
+}
+
+func (d *RPCFactory) trackConn(conn *grpc.ClientConn) {
+	d.connsLock.Lock()
+	closed := d.closed
+	if !closed {
+		// The history pool and matching cache close their own connections when a
+		// host leaves the ring; without this every host that ever left would stay
+		// reachable from the factory for the lifetime of the process. Reclaiming
+		// is tied to dialing, so a ring that stops churning holds the departed
+		// hosts' closed connections until Close.
+		for tracked := range d.conns {
+			if tracked.GetState() == connectivity.Shutdown {
+				delete(d.conns, tracked)
+			}
+		}
+		d.conns[conn] = struct{}{}
+	}
+	d.connsLock.Unlock()
+
+	if closed {
+		// Nothing else would release a connection dialed after Close.
+		d.closeConn(conn)
+	}
+}
+
+// Close releases every gRPC connection still held by this factory. It is safe
+// to call more than once.
+func (d *RPCFactory) Close() {
+	d.connsLock.Lock()
+	conns := d.conns
+	d.conns = nil
+	d.closed = true
+	d.connsLock.Unlock()
+
+	for conn := range conns {
+		d.closeConn(conn)
+	}
+}
+
+func (d *RPCFactory) closeConn(conn *grpc.ClientConn) {
+	// Canceled means the connection was already closed by its owner.
+	if err := conn.Close(); err != nil && status.Code(err) != codes.Canceled {
+		d.logger.Warn("Failed to close gRPC connection", tag.Error(err))
+	}
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {

@@ -385,6 +385,7 @@ func ArchiverProviderProvider(
 }
 
 func SdkClientFactoryProvider(
+	lc fx.Lifecycle,
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	metricsHandler metrics.Handler,
@@ -396,13 +397,15 @@ func SdkClientFactoryProvider(
 	if err != nil {
 		return nil, err
 	}
-	return sdk.NewClientFactory(
+	factory := sdk.NewClientFactory(
 		frontendURL,
 		frontendTLSConfig,
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
-	), nil
+	)
+	lc.Append(fx.StopHook(factory.Close))
+	return factory, nil
 }
 
 func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {
@@ -421,6 +424,7 @@ func PerServiceDialOptionsProvider(
 }
 
 func RPCFactoryProvider(
+	lc fx.Lifecycle,
 	cfg *config.Config,
 	svcName primitives.ServiceName,
 	logger log.Logger,
@@ -462,6 +466,7 @@ func RPCFactoryProvider(
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
 	logger.Debug(fmt.Sprintf("RPC factory created. enableServerKeepalive: %v, enableClientKeepalive: %v", enableServerKeepalive, enableClientKeepalive))
+	lc.Append(fx.StopHook(factory.Close))
 	return factory, nil
 }
 

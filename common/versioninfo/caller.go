@@ -9,7 +9,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 )
+
+// The only bound on a version check: the request carries no context and Stop does
+// not wait, so a server that withholds a response would otherwise strand the
+// transport's goroutines. Overridden in tests.
+var callTimeout = 30 * time.Second
 
 type Caller struct {
 	Scheme string
@@ -33,7 +39,7 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	if c.Scheme == "https" {
 		tr.TLSClientConfig = &tls.Config{}
 	}
-	client := &http.Client{Transport: tr}
+	client := &http.Client{Transport: tr, Timeout: callTimeout}
 	reqBody, err := json.Marshal(r)
 	if err != nil {
 		return nil, err
@@ -47,10 +53,10 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("bad response code %v", resp.StatusCode)
 	}
-	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
