@@ -688,6 +688,11 @@ func (ms *MutableStateImpl) ChasmEnabled() bool {
 	return !isNoop
 }
 
+func (ms *MutableStateImpl) ChasmSkipPersistenceEnabled() bool {
+	return ms.config.EnableCHASMSkipPersistence != nil &&
+		ms.config.EnableCHASMSkipPersistence(ms.GetNamespaceEntry().Name().String())
+}
+
 // chasmCallbacksEnabled returns true if CHASM callbacks are enabled for this workflow.
 func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 	if !ms.ChasmEnabled() {
@@ -3193,9 +3198,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.Priority = event.Priority
 
 	if tsc, stateProp := event.GetTimeSkippingConfig(), event.GetTimeSkippingStatePropagation(); tsc != nil || stateProp.GetInitialSkippedDuration().AsDuration() > 0 {
-		if err := ms.initTimeSkippingInfo(tsc, stateProp); err != nil {
-			return err
-		}
+		ms.initTimeSkippingInfo(tsc, stateProp)
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -5945,13 +5948,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		tsc := attributes.GetTimeSkippingConfig()
 		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
 		if tsi == nil {
-			if err := ms.initTimeSkippingInfo(tsc, nil); err != nil {
-				return err
-			}
+			ms.initTimeSkippingInfo(tsc, nil)
 		} else {
-			if err := ms.updateTimeSkippingInfo(tsc); err != nil {
-				return err
-			}
+			ms.updateTimeSkippingInfo(tsc)
 		}
 	}
 

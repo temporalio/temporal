@@ -1,7 +1,6 @@
 package matching
 
 import (
-	"container/heap"
 	"context"
 	"sync"
 	"time"
@@ -16,7 +15,6 @@ import (
 )
 
 const (
-	invalidHeapIndex        = -13     // use unusual value to stand out in panics
 	maxPriorityLevels       = 60      // maximum value for priority levels (fits in a bitfield with a few bits reserved)
 	effectivePriorityFactor = 10      // multiply priority level by this to leave room for intermediate levels
 	pollForwarderPriority   = 1000000 // lower than any other priority. must be > maxPriorityLevels*effectivePriorityFactor.
@@ -62,58 +60,68 @@ const (
 // Currently we only use 1 token at a time.
 const maxTokens = 1
 
-type pollerPQ struct {
-	heap []*waitingPoller
+// pollerList is an intrusive doubly-linked list of waiting pollers. Pollers are matched
+// by walking from the head, so the list is kept in the order we want to match them:
+// FIFO (insertion order), except that task forwarders/validators are kept after all
+// local pollers so a task is matched to a local poller in preference to a forwarder.
+//
+// It's intrusive (next/prev live in waitingPoller) so there's no per-poller allocation
+// and removal is O(1) given the poller. There are only ever a handful of forwarders, so
+// keeping them grouped at the tail on insert is cheap.
+type pollerList struct {
+	logger     log.Logger
+	head, tail *waitingPoller
+	count      int
 }
 
-// implements heap.Interface
-func (p *pollerPQ) Len() int {
-	return len(p.heap)
+func (p *pollerList) Len() int {
+	return p.count
 }
 
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Less(i int, j int) bool {
-	a, b := p.heap[i], p.heap[j]
-	// task forwarders/validators have lower priority than local polls
-	aIsForwarder := a.taskForwarderType != notTaskForwarder
-	bIsForwarder := b.taskForwarderType != notTaskForwarder
-	if !aIsForwarder && bIsForwarder {
-		return true
-	} else if aIsForwarder && !bIsForwarder {
-		return false
+func (p *pollerList) Add(poller *waitingPoller) {
+	softassert.That(p.logger, !poller.queued, "adding poller that is already queued")
+	poller.queued = true
+
+	// Insert after the last local poller: at the tail for a forwarder, or just before
+	// the forwarders (which stay grouped at the tail) for a local poller.
+	at := p.tail
+	if poller.taskForwarderType == notTaskForwarder {
+		for at != nil && at.taskForwarderType != notTaskForwarder {
+			at = at.prev
+		}
 	}
-	return a.startTime.Before(b.startTime)
+
+	next := p.head
+	if at != nil {
+		next = at.next
+		at.next = poller
+	} else {
+		p.head = poller
+	}
+	poller.prev, poller.next = at, next
+	if next != nil {
+		next.prev = poller
+	} else {
+		p.tail = poller
+	}
+	p.count++
 }
 
-func (p *pollerPQ) Add(poller *waitingPoller) {
-	heap.Push(p, poller)
-}
-
-func (p *pollerPQ) Remove(poller *waitingPoller) {
-	heap.Remove(p, poller.matchHeapIndex)
-}
-
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Swap(i int, j int) {
-	p.heap[i], p.heap[j] = p.heap[j], p.heap[i]
-	p.heap[i].matchHeapIndex = i
-	p.heap[j].matchHeapIndex = j
-}
-
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Push(x any) {
-	poller := x.(*waitingPoller) // nolint:revive
-	poller.matchHeapIndex = len(p.heap)
-	p.heap = append(p.heap, poller)
-}
-
-// implements heap.Interface, do not call directly
-func (p *pollerPQ) Pop() any {
-	last := len(p.heap) - 1
-	poller := p.heap[last]
-	p.heap = p.heap[:last]
-	poller.matchHeapIndex = invalidHeapIndex
-	return poller
+func (p *pollerList) Remove(poller *waitingPoller) {
+	softassert.That(p.logger, poller.queued, "removing poller that is not queued")
+	if poller.prev != nil {
+		poller.prev.next = poller.next
+	} else {
+		p.head = poller.next
+	}
+	if poller.next != nil {
+		poller.next.prev = poller.prev
+	} else {
+		p.tail = poller.prev
+	}
+	poller.prev, poller.next = nil, nil
+	poller.queued = false
+	p.count--
 }
 
 // taskBTree is a priority-ordered collection of tasks backed by a B-tree.
@@ -161,7 +169,7 @@ func newTaskBTree() taskBTree {
 }
 
 func (b *taskBTree) Add(task *internalTask) {
-	task.matchHeapIndex = 0 // non-negative: signals "in queue"
+	task.queued = true
 	b.tree.Set(task)
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 		b.ages.record(task.event.Data.CreateTime, 1)
@@ -170,7 +178,7 @@ func (b *taskBTree) Add(task *internalTask) {
 
 func (b *taskBTree) Remove(task *internalTask) {
 	b.tree.Delete(task)
-	task.matchHeapIndex = invalidHeapIndex
+	task.queued = false
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 		b.ages.record(task.event.Data.CreateTime, -1)
 	}
@@ -193,7 +201,7 @@ func (b *taskBTree) ForEachTask(pred func(*internalTask) bool, post func(*intern
 	})
 	for _, task := range toRemove {
 		b.tree.Delete(task)
-		task.matchHeapIndex = invalidHeapIndex
+		task.queued = false
 		if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 			b.ages.record(task.event.Data.CreateTime, -1)
 		}
@@ -216,8 +224,8 @@ type matcherData struct {
 	reconsiderForwardTimer resettableTimer
 
 	// waiting pollers and tasks
-	// invariant: all pollers and tasks in these data structures have matchResult == nil
-	pollers pollerPQ
+	// invariant: all pollers and tasks in these data structures have matchResult == nil and queued == true
+	pollers pollerList
 	tasks   taskBTree
 
 	lastPoller time.Time // most recent poll start time
@@ -235,6 +243,7 @@ func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock
 		canForward:       canForward,
 		rateLimitManager: rateLimitManager,
 		onRateLimited:    onRateLimited,
+		pollers:          pollerList{logger: logger},
 		tasks:            newTaskBTree(),
 	}
 }
@@ -264,7 +273,7 @@ func (d *matcherData) RemoveTask(task *internalTask) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	if task.matchHeapIndex >= 0 {
+	if task.queued {
 		d.tasks.Remove(task)
 	}
 }
@@ -334,9 +343,9 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 			defer d.lock.Unlock()
 
 			if poller.matchResult == nil {
-				// if poll was being forwarded, it would be absent from heap even though
-				// matchResult == nil
-				if poller.matchHeapIndex >= 0 {
+				// if poll was being forwarded, it would be absent from the queue even
+				// though matchResult == nil
+				if poller.queued {
 					d.pollers.Remove(poller)
 				}
 				poller.wake(d.logger, &matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
@@ -439,7 +448,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 		}
 
 		var matched *waitingPoller
-		for _, poller := range d.pollers.heap {
+		for poller := d.pollers.head; poller != nil; poller = poller.next {
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
 				// query-only poll only matches with query (but can match poll forwarder)
@@ -603,7 +612,7 @@ func (d *matcherData) TimeSinceLastPoll() time.Duration {
 func (d *matcherData) HasWaitingPoller() bool {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	for _, p := range d.pollers.heap {
+	for p := d.pollers.head; p != nil; p = p.next {
 		if p.taskForwarderType == notTaskForwarder {
 			return true
 		}
@@ -615,9 +624,8 @@ func (d *matcherData) HasWaitingPoller() bool {
 
 type waitableMatchResult struct {
 	// these fields are under matcherData.lock even though they're embedded in other structs
-	matchCond      sync.Cond
-	matchResult    *matchResult
-	matchHeapIndex int // current heap index for easy removal
+	matchCond   sync.Cond
+	matchResult *matchResult
 }
 
 func (w *waitableMatchResult) initMatch(d *matcherData) {
@@ -627,10 +635,10 @@ func (w *waitableMatchResult) initMatch(d *matcherData) {
 
 // call with matcherData.lock held.
 // w.matchResult must be nil (can't call wake twice).
-// w must not be in queues anymore.
+// w must not be queued anymore. We don't assert that here: queued lives on the outer
+// struct now, not w, and callers always Remove (which asserts it) before waking.
 func (w *waitableMatchResult) wake(logger log.Logger, res *matchResult) {
 	softassert.That(logger, w.matchResult == nil, "wake called twice")
-	softassert.That(logger, w.matchHeapIndex < 0, "wake called but still in heap")
 	w.matchResult = res
 	w.matchCond.Signal()
 }

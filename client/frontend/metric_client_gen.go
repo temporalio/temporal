@@ -905,6 +905,20 @@ func (c *metricClient) PollNexusTaskQueue(
 	return c.client.PollNexusTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) PollWorkflowExecutionTimeSkipping(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PollWorkflowExecutionTimeSkippingResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPollWorkflowExecutionTimeSkipping")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollWorkflowExecutionTimeSkipping(ctx, request, opts...)
+}
+
 func (c *metricClient) PollWorkflowExecutionUpdate(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowExecutionUpdateRequest,

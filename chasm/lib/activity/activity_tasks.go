@@ -102,15 +102,15 @@ func (h *scheduleToStartTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToStartTimeoutTask,
 ) error {
-	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
+	metricsHandler, err := activity.enrichedMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
 
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		retryState:     enumspb.RETRY_STATE_TIMEOUT,
 		metricsHandler: metricsHandler,
-		fromStatus:     activity.GetStatus(),
 	}
 
 	return TransitionTimedOut.Apply(activity, ctx, event)
@@ -149,14 +149,19 @@ func (h *scheduleToCloseTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToCloseTimeoutTask,
 ) error {
-	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
+	metricsHandler, err := activity.enrichedMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
+	retryState := enumspb.RETRY_STATE_TIMEOUT
+	if activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		retryState = enumspb.RETRY_STATE_CANCEL_REQUESTED
+	}
+
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		retryState:     retryState,
 		metricsHandler: metricsHandler,
-		fromStatus:     activity.GetStatus(),
 	}
 
 	return TransitionTimedOut.Apply(activity, ctx, event)
@@ -187,18 +192,23 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.StartToCloseTimeoutTask,
 ) error {
-	retryState, err := activity.tryReschedule(ctx, true, 0, createStartToCloseTimeoutFailure())
+	retryState, err := activity.tryReschedule(
+		ctx,
+		activity.timeoutRetryable(enumspb.TIMEOUT_TYPE_START_TO_CLOSE),
+		0,
+		createStartToCloseTimeoutFailure(),
+	)
 	if err != nil {
 		return err
 	}
 
-	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
+	metricsHandler, err := activity.enrichedMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
-		activity.emitOnAttemptTimedOutMetrics(ctx, metricsHandler, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+		activity.emitOnAttemptTimedOutMetrics(metricsHandler, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 
 		return nil
 	}
@@ -207,7 +217,6 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 		timeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		retryState:     retryState,
 		metricsHandler: metricsHandler,
-		fromStatus:     activity.GetStatus(),
 	})
 }
 
@@ -266,18 +275,23 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.HeartbeatTimeoutTask,
 ) error {
-	retryState, err := activity.tryReschedule(ctx, true, 0, createHeartbeatTimeoutFailure())
+	retryState, err := activity.tryReschedule(
+		ctx,
+		activity.timeoutRetryable(enumspb.TIMEOUT_TYPE_HEARTBEAT),
+		0,
+		createHeartbeatTimeoutFailure(),
+	)
 	if err != nil {
 		return err
 	}
 
-	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
+	metricsHandler, err := activity.enrichedMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
-		activity.emitOnAttemptTimedOutMetrics(ctx, metricsHandler, enumspb.TIMEOUT_TYPE_HEARTBEAT)
+		activity.emitOnAttemptTimedOutMetrics(metricsHandler, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 		return nil
 	}
 
@@ -285,6 +299,5 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 		timeoutType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		retryState:     retryState,
 		metricsHandler: metricsHandler,
-		fromStatus:     activity.GetStatus(),
 	})
 }
