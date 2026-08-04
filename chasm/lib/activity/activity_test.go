@@ -1241,8 +1241,8 @@ func TestHandleUnpauseRequestedRequestID(t *testing.T) {
 		require.Equal(t, int32(3), activity.LastAttempt.Get(ctx).GetCount())
 	})
 
-	t.Run("records successful no-op request ID", func(t *testing.T) {
-		ctx := &chasm.MockMutableContext{}
+	t.Run("does not persist request ID when unpause fails", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
 		activity := &Activity{
 			ActivityState: &activitypb.ActivityState{
 				Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
@@ -1254,8 +1254,9 @@ func TestHandleUnpauseRequestedRequestID(t *testing.T) {
 				RequestId: "unpause-request-id",
 			},
 		})
-		require.NoError(t, err)
-		require.Equal(t, "unpause-request-id", activity.GetLastUnpauseRequestId())
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+		require.Empty(t, activity.GetLastUnpauseRequestId(), "a failed unpause must not be recorded for de-dup")
 	})
 
 	t.Run("does not record failed request ID", func(t *testing.T) {
