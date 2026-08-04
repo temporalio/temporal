@@ -36,7 +36,7 @@ func attrValue(rec log.Record, key string) string {
 	return out
 }
 
-// A handover that completes leaves no laggards, so the wait emits nothing at all.
+// A completed handover leaves no laggards, so nothing is emitted.
 func TestEmitHandoverIncompleteSilentWhenReady(t *testing.T) {
 	lg := &captureLogger{}
 
@@ -83,8 +83,7 @@ func TestEmitHandoverIncompleteNamesLaggingShards(t *testing.T) {
 	require.EqualValues(t, 42, shards[1].(map[string]any)["lagging_tasks"])
 }
 
-// A failed status check and a killed wait point at different problems, so they are
-// distinguishable in the event.
+// A killed wait and a failed status check stay distinguishable.
 func TestEmitHandoverIncompleteExitReason(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -109,7 +108,7 @@ func TestEmitHandoverIncompleteExitReason(t *testing.T) {
 	}
 }
 
-// The per-shard list is capped, but the count above it is the true one.
+// The list is capped; not_ready_count stays true.
 func TestEmitHandoverIncompleteTruncates(t *testing.T) {
 	lg := &captureLogger{}
 

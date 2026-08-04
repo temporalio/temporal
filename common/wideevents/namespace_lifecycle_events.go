@@ -8,30 +8,27 @@ import (
 	otellog "go.opentelemetry.io/otel/log"
 )
 
-// The NamespaceLifecycle phases and their emitters. Phase values are the published contract that
-// queries key on, and the details each phase carries is the rest of that contract, so both live
-// here rather than at the call sites.
+// NamespaceLifecycle phases and their emitters. The phase values and the details each carries are
+// the published contract, so both live here rather than at the call sites.
 
-// Namespace handover. A handover cannot complete until every shard's replication watermark has
-// been acked by the target, so these cover both ends of it: the per-shard watermark bookkeeping
-// on the history side, and the wait that blocks on it on the worker side.
+// Namespace handover: the per-shard watermark bookkeeping on the history side, and the wait that
+// blocks on it on the worker side.
 const (
 	PhaseHandoverWatermarkSet     = "shard_handover_watermark_set"
 	PhaseHandoverWatermarkRemoved = "shard_handover_watermark_removed"
 	PhaseHandoverIncomplete       = "shard_handover_incomplete"
 )
 
-// Reasons for a watermark set, distinguishing the two ways a shard arrives at one.
+// Why a shard took or advanced its watermark.
 const (
-	// WatermarkAdded: the shard saw this namespace enter handover and took a watermark.
+	// WatermarkAdded: the namespace entered handover.
 	WatermarkAdded = "added"
-	// WatermarkUpdated: a newer namespace notification advanced the watermark.
+	// WatermarkUpdated: a newer namespace notification advanced it.
 	WatermarkUpdated = "updated"
 )
 
-// EmitHandoverWatermarkSet reports a shard taking or advancing its replication watermark for a
-// namespace entering handover. pending means the shard was not acquired, so the watermark is a
-// sentinel and replication has not been notified yet.
+// EmitHandoverWatermarkSet reports a shard taking or advancing its watermark. pending means the
+// shard was unacquired, so the watermark is a sentinel and replication has not been notified.
 func EmitHandoverWatermarkSet(
 	logger otellog.Logger,
 	shardID int32,
@@ -57,7 +54,7 @@ func EmitHandoverWatermarkSet(
 }
 
 // EmitHandoverWatermarkRemoved reports a shard dropping its watermark. deletedFromDB separates a
-// namespace deletion from the normal exit out of the handover replication state.
+// namespace deletion from a normal exit out of handover.
 func EmitHandoverWatermarkRemoved(
 	logger otellog.Logger,
 	shardID int32,
@@ -80,8 +77,7 @@ func EmitHandoverWatermarkRemoved(
 	})
 }
 
-// MaxLaggingShardsInSummary caps the per-shard list so a cluster with thousands of shards cannot
-// produce an unbounded details blob. NotReadyCount is always the true count.
+// MaxLaggingShardsInSummary caps the per-shard list; NotReadyCount is always the true count.
 const MaxLaggingShardsInSummary = 512
 
 // LaggingShard is one shard that had not caught up when a handover wait ended.
@@ -90,20 +86,27 @@ type LaggingShard struct {
 	LaggingTasks int64 `json:"lagging_tasks"`
 }
 
-// HandoverLagSnapshot is a point-in-time view of how far each shard is from ready. The waiter
-// overwrites it on every poll and emits whatever is left in it when the wait unwinds, so it
-// describes the final state of the wait rather than an accumulation across polls.
+// HandoverLagSnapshot is the latest poll's view of which shards are behind. The waiter replaces it
+// each poll, so it holds the final state of the wait rather than an accumulation.
 type HandoverLagSnapshot struct {
 	TotalShards int
 	ReadyCount  int
 	// NotReadyCount is the true count; LaggingShards is capped.
 	NotReadyCount int
-	// MissingHandoverInfoCount is the subset of not-ready shards whose namespace cache has not
-	// picked up the handover yet, so they carry no watermark rather than a lagging one.
+	// MissingHandoverInfoCount: not-ready shards holding no watermark yet, rather than a lagging one.
 	MissingHandoverInfoCount int
 	MaxLaggingTasks          int64
 	MaxLaggingTasksShardID   int32
 	LaggingShards            []LaggingShard
+}
+
+// NewHandoverLagSnapshot returns an empty snapshot with room for totalShards laggards.
+func NewHandoverLagSnapshot(totalShards, missingHandoverInfoCount int) HandoverLagSnapshot {
+	return HandoverLagSnapshot{
+		TotalShards:              totalShards,
+		MissingHandoverInfoCount: missingHandoverInfoCount,
+		LaggingShards:            make([]LaggingShard, 0, min(totalShards, MaxLaggingShardsInSummary)),
+	}
 }
 
 // AddLaggingShard records a not-ready shard, up to MaxLaggingShardsInSummary of them.
@@ -114,11 +117,10 @@ func (s *HandoverLagSnapshot) AddLaggingShard(shardID int32, laggingTasks int64)
 	s.LaggingShards = append(s.LaggingShards, LaggingShard{ShardID: shardID, LaggingTasks: laggingTasks})
 }
 
-// EmitHandoverIncomplete reports a handover wait that ended with shards still behind. A wait that
-// succeeds leaves no laggards, so this is a no-op and the happy path stays silent.
+// EmitHandoverIncomplete reports a wait that ended with shards still behind. A successful wait
+// leaves no laggards, so this is a no-op and the happy path stays silent.
 //
-// A not-ready shard with lagging_tasks == 0 is the missing-handover-info case; any other
-// not-ready shard is behind by lagging_tasks.
+// lagging_tasks == 0 on a not-ready shard is the missing-handover-info case.
 func EmitHandoverIncomplete(
 	logger otellog.Logger,
 	nsName string,
@@ -157,8 +159,7 @@ func EmitHandoverIncomplete(
 	})
 }
 
-// handoverExitReason separates the wait being killed while shards were still behind from a failed
-// status check, since the two point at different problems.
+// handoverExitReason separates the wait being killed from a failed status check.
 func handoverExitReason(err error) string {
 	switch {
 	case err == nil:

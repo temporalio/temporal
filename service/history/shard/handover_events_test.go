@@ -35,7 +35,7 @@ func (c *eventCaptureLogger) Emit(_ context.Context, r log.Record) { c.records =
 
 func (c *eventCaptureLogger) Enabled(context.Context, log.EnabledParameters) bool { return true }
 
-// phases returns the phase attribute of every captured record, in order.
+// phases returns each record's phase, in order.
 func (c *eventCaptureLogger) phases() []string {
 	out := make([]string, 0, len(c.records))
 	for _, rec := range c.records {
@@ -53,7 +53,7 @@ func recordAttrs(rec log.Record) map[string]log.Value {
 	return got
 }
 
-// recordDetails decodes the record's details attribute, which wideevents emits as compact JSON.
+// recordDetails decodes the details attribute, emitted as compact JSON.
 func recordDetails(t *testing.T, rec log.Record) map[string]any {
 	t.Helper()
 	var out map[string]any
@@ -124,8 +124,8 @@ func TestHandoverWatermarkEvents(t *testing.T) {
 	require.Equal(t, false, recordDetails(t, lg.records[2])["deleted_from_db"])
 }
 
-// The non-handover branch of UpdateHandoverState runs for every namespace notification on every
-// shard. It must only emit when it actually removes a watermark.
+// The non-handover branch runs for every namespace notification on every shard, so it must only
+// emit on a real removal.
 func TestHandoverWatermarkRemovedOnlyWhenTracked(t *testing.T) {
 	lg := &eventCaptureLogger{}
 	tracker := newHandoverEventsTracker(t, lg, 100, nil)
@@ -137,8 +137,7 @@ func TestHandoverWatermarkRemovedOnlyWhenTracked(t *testing.T) {
 	require.Empty(t, lg.records)
 }
 
-// An unacquired shard stores the sentinel watermark, which the set event reports as pending.
-// Acquiring the shard later resolves it in place and emits nothing.
+// An unacquired shard stores the sentinel, reported as pending; resolving it later emits nothing.
 func TestHandoverWatermarkPendingThenResolved(t *testing.T) {
 	lg := &eventCaptureLogger{}
 	tracker := newHandoverEventsTracker(t, lg, 100, errors.New("shard status unknown"))

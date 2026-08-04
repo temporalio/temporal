@@ -15,8 +15,7 @@ import (
 
 const lagSummaryTestNsName = "handover-lag-summary-test-ns"
 
-// checkHandoverOnce overwrites the snapshot every poll, so what the deferred summary sees is the
-// final state of the wait and not an accumulation across polls.
+// checkHandoverOnce resets the snapshot each poll, so the summary sees only the final state.
 func TestCheckHandoverOnceSnapshotIsLastPollOnly(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)

@@ -383,8 +383,9 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 	// since during handover state namespace has no availability
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(waitRequest.Namespace, headers.CallerTypeAPI, ""))
 
-	// Holds the latest poll's laggards so the summary below can name the shards that were still
-	// behind when the wait ended. Empty on a successful handover, which emits nothing.
+	// The wait never returns on its own while shards lag: it is killed from the outside, the SDK
+	// cancels the context off the heartbeat, the next status call fails, and this defer runs.
+	// The snapshot is empty on a successful handover, which emits nothing.
 	var snapshot wideevents.HandoverLagSnapshot
 	start := time.Now()
 	defer func() {
@@ -481,12 +482,8 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		maxHandoverLag        int64
 	)
 
-	// Overwritten every poll, so what the deferred summary in WaitHandover sees is the final
-	// state of the wait rather than an accumulation across polls.
-	*snapshot = wideevents.HandoverLagSnapshot{
-		TotalShards:              len(localShards),
-		MissingHandoverInfoCount: handoverInfosMissingCount,
-	}
+	// Reset each poll so the summary sees the final state, not an accumulation.
+	*snapshot = wideevents.NewHandoverLagSnapshot(len(localShards), handoverInfosMissingCount)
 
 	for _, status := range shardStatuses {
 		if status.isReady {
@@ -532,8 +529,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	return isReady, nil
 }
 
-// namespaceIDForEvent resolves the namespace ID so events can be joined on it rather than on the
-// name. Called once per activity, off the poll path.
+// namespaceIDForEvent lets events join on ID rather than name. Called once per activity.
 func (a *activities) namespaceIDForEvent(name string) string {
 	ns, err := a.NamespaceRegistry.GetNamespace(namespace.Name(name))
 	if err != nil {
