@@ -30,6 +30,19 @@ func newTestAPIClient(server *httptest.Server) *apiClient {
 	}
 }
 
+func TestSetAPIRPS(t *testing.T) {
+	originalRPS := defaultAPIClient.limiter.Limit()
+	t.Cleanup(func() {
+		defaultAPIClient.limiter.SetLimit(originalRPS)
+	})
+
+	require.NoError(t, SetAPIRPS(25))
+	require.Equal(t, rate.Limit(25), defaultAPIClient.limiter.Limit())
+
+	require.ErrorContains(t, SetAPIRPS(0), "must be at least 1")
+	require.Equal(t, rate.Limit(25), defaultAPIClient.limiter.Limit())
+}
+
 func TestAPIClientHonorsRetryAfter(t *testing.T) {
 	requests := 0
 	writeResult := make(chan error, 1)

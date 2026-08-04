@@ -6,8 +6,24 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/tools/common/github"
 )
+
+func TestGenerateCommandRPSFlag(t *testing.T) {
+	app := NewCliApp()
+	command := app.Commands[0]
+	for _, flag := range command.Flags {
+		intFlag, ok := flag.(*cli.IntFlag)
+		if !ok || intFlag.Name != "rps" {
+			continue
+		}
+		require.Equal(t, github.DefaultAPIRPS, intFlag.Value)
+		require.Equal(t, "Maximum GitHub API requests per second", intFlag.Usage)
+		return
+	}
+	t.Fatal("generate command does not define an rps flag")
+}
 
 func TestStreamArtifactJobsEmitsCompletedRunImmediately(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

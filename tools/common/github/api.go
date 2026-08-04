@@ -17,7 +17,7 @@ import (
 
 const (
 	githubAPIURL         = "https://api.github.com"
-	githubAPIRate        = 5
+	DefaultAPIRPS        = 5
 	githubAPIBurst       = 10
 	githubAPIConcurrency = 20
 	githubAPIMaxAttempts = 3
@@ -46,7 +46,7 @@ func newAPIClient() *apiClient {
 	return &apiClient{
 		baseURL:    githubAPIURL,
 		httpClient: &http.Client{Transport: transport},
-		limiter:    rate.NewLimiter(githubAPIRate, githubAPIBurst),
+		limiter:    rate.NewLimiter(DefaultAPIRPS, githubAPIBurst),
 		token:      apiToken,
 		wait:       waitWithContext,
 		now:        time.Now,
@@ -59,6 +59,15 @@ func newAPIClient() *apiClient {
 		maxAttempts:  githubAPIMaxAttempts,
 		requestSlots: make(chan struct{}, githubAPIConcurrency),
 	}
+}
+
+// SetAPIRPS sets the request rate limit for GitHub API requests.
+func SetAPIRPS(rps int) error {
+	if rps < 1 {
+		return fmt.Errorf("GitHub API requests per second must be at least 1")
+	}
+	defaultAPIClient.limiter.SetLimit(rate.Limit(rps))
+	return nil
 }
 
 func (c *apiClient) getJSON(ctx context.Context, path string, out any) (retErr error) {
