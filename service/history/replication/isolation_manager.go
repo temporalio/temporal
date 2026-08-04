@@ -351,6 +351,19 @@ func (m *isolationManager) TierMembers(tier int) []string {
 	return out
 }
 
+// TierMemberCount returns the number of namespaces currently in the given tier.
+func (m *isolationManager) TierMemberCount(tier int) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for _, st := range m.members {
+		if st.tier == tier {
+			count++
+		}
+	}
+	return count
+}
+
 // BuildReaderState builds the persisted reader state: scope 0 = overall min
 // (universal), 1 = shared HIGH (predicate excludes isolated namespaces), 2 = LOW
 // (universal), 3+ = one scope per isolated member (its namespace predicate, resuming

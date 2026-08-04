@@ -336,6 +336,8 @@ func (s *isolationManagerSuite) TestPersistenceRoundTrip() {
 	// b's lane has applied further since restore; its persisted resume point follows.
 	m.Reconcile(nil, 6000, map[string]int64{"b": 2000})
 	s.Len(m.TierMembers(1), 2)
+	s.Equal(2, m.TierMemberCount(1))
+	s.Equal(0, m.TierMemberCount(2))
 
 	readerState := m.BuildReaderState(attr)
 	s.Len(readerState.Scopes, 5) // 3 shared + one per member

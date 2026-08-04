@@ -188,6 +188,88 @@ func (s *streamSenderSuite) TestSendPendingRetirements_OrderedAfterLaneSends() {
 	s.streamSender.isolation = nil
 }
 
+// TestCatchupBeginWatermark_IsolationScopeMapping pins the scope-index mapping for
+// extended reader states (>3 scopes, written by isolation) on the legacy
+// (reader-group-less) path: with an isolation manager present HIGH/LOW resume from
+// their own scopes (the manager reconstructs the member lanes); without one the
+// member scopes are orphaned and HIGH resumes from the overall min to re-cover the
+// undrained tier windows.
+func (s *streamSenderSuite) TestCatchupBeginWatermark_IsolationScopeMapping() {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	makeScope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	state := &persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {Scopes: []*persistencespb.QueueSliceScope{
+				makeScope(100), makeScope(200), makeScope(300), makeScope(150), makeScope(160),
+			}},
+		},
+	}
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(state, true).Times(3)
+
+	s.streamSender.isolation = newIsolationManager(2, 3, 3, 0)
+	s.Equal(int64(200), s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_HIGH, 999))
+	s.Equal(int64(300), s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_LOW, 999))
+
+	s.streamSender.isolation = nil
+	s.Equal(int64(100), s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_HIGH, 999))
+}
+
+// TestIsolationFailoverWatermark_RestoredLaneFloor pins the post-reconnect blind
+// window: receiver lane trackers are per-connection, so a restored member lane is
+// absent from the receiver's report until its first batch lands. Once the receiver
+// has confirmed isolation support, the lane's resume floor must bound failover
+// readiness instead of the HIGH watermark alone.
+func (s *streamSenderSuite) TestIsolationFailoverWatermark_RestoredLaneFloor() {
+	m := newIsolationManagerWithState(2, 3, 3, 0, 200, []restoredMember{{namespaceID: "ns", cursor: 50}})
+	s.streamSender.isolation = m
+	highTime := time.Unix(0, 42).UTC()
+	attr := &replicationspb.SyncReplicationState{
+		HighPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     300,
+			InclusiveLowWatermarkTime: timestamppb.New(highTime),
+		},
+		LowPriorityState: &replicationspb.ReplicationState{InclusiveLowWatermark: 400},
+	}
+
+	// Not confirmed: the shared lane covers the restored lane's window, so HIGH
+	// alone bounds failover readiness.
+	taskID, ts := s.streamSender.isolationFailoverWatermark(attr)
+	s.Equal(int64(299), taskID)
+	s.Equal(highTime, ts)
+
+	// Confirmed but the restored lane has not reported yet: fold its resume floor
+	// (task 50), with an unknown visibility time.
+	s.streamSender.isolationConfirmed.Store(true)
+	taskID, ts = s.streamSender.isolationFailoverWatermark(attr)
+	s.Equal(int64(49), taskID)
+	s.True(ts.IsZero())
+
+	// Once the receiver reports the lane (Reconcile records it first, as on the recv
+	// loop), the lane's own watermark and time drive the fold.
+	laneTime := time.Unix(0, 24).UTC()
+	attr.IsolatedLaneStates = map[string]*replicationspb.ReplicationState{
+		"ns": {InclusiveLowWatermark: 60, InclusiveLowWatermarkTime: timestamppb.New(laneTime)},
+	}
+	m.Reconcile(nil, 300, map[string]int64{"ns": 60})
+	taskID, ts = s.streamSender.isolationFailoverWatermark(attr)
+	s.Equal(int64(59), taskID)
+	s.Equal(laneTime, ts)
+}
+
 // TestRecvSyncReplicationState_ReaderGroupEquivalence pins the PR's core claim: for
 // every ack shape, the reader-group path persists exactly the QueueReaderState and
 // failover watermark the legacy path does.
@@ -235,7 +317,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_ReaderGroupEquivalence(
 		}
 
 		legacyState, legacyTaskID := run(nil)
-		groupState, groupTaskID := run(newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, log.NewNoopLogger()))
+		groupState, groupTaskID := run(newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, false, log.NewNoopLogger()))
 		s.True(proto.Equal(legacyState, groupState),
 			"tiered=%v: reader group persisted %v, legacy persisted %v", tiered, groupState, legacyState)
 		s.Equal(legacyTaskID, groupTaskID)

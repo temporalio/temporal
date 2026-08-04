@@ -125,7 +125,7 @@ func NewStreamSender(
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
 		isTieredStackEnabled:    tieredStackEnabled,
-		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey, tieredStackEnabled, logger),
+		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey, tieredStackEnabled, isolationEnabled, logger),
 		isolation:               newIsolationManagerIfEnabled(config, shardContext, clientShardKey, isolationEnabled, throttledTierCount, logger),
 		tierRateLimiters:        newTierRateLimiters(config, isolationEnabled, throttledTierCount),
 		activeLaneSends:         make(map[string]int),
@@ -323,7 +323,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, s.isolation.BuildReaderState(attr)); err != nil {
 			return err
 		}
-		taskID, ts := isolationFailoverWatermark(attr)
+		taskID, ts := s.isolationFailoverWatermark(attr)
 		return s.shardContext.UpdateRemoteReaderInfo(readerID, taskID, ts)
 	}
 
@@ -532,7 +532,11 @@ func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *pe
 	// stack the reader state is still in the old format, in which case using the overall
 	// low watermark (scope 0) is safe as long as we always guarantee the overall low
 	// watermark is Min(lowPriorityLowWatermark, highPriorityLowWatermark).
-	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes), s.readerGroup != nil)].Range.InclusiveMin.TaskId
+	// Extended states (>3 scopes) only exist when isolation wrote member-lane scopes,
+	// so the isolation manager's presence is what allows reading priority scopes out of
+	// them: without it HIGH has already been mapped to the overall min by the orphaned
+	// scope guard in catchupBeginWatermark.
+	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes), s.isolation != nil)].Range.InclusiveMin.TaskId
 }
 
 func newReaderGroupIfEnabled(
@@ -540,12 +544,13 @@ func newReaderGroupIfEnabled(
 	shardContext historyi.ShardContext,
 	clientShardKey ClusterShardKey,
 	tieredStackEnabled bool,
+	isolationEnabled bool,
 	logger log.Logger,
 ) *replicationReaderGroup {
 	if !config.EnableReplicationReaderGroup() {
 		return nil
 	}
-	return newReplicationReaderGroup(shardContext, clientShardKey, tieredStackEnabled, logger)
+	return newReplicationReaderGroup(shardContext, clientShardKey, tieredStackEnabled, isolationEnabled, logger)
 }
 
 // newIsolationManagerIfEnabled builds the namespace isolation manager when enabled.
@@ -662,7 +667,7 @@ func tierLaneTagValue(tier int) string {
 func (s *StreamSenderImpl) emitTierMetrics() {
 	for tier := 1; tier <= s.isolation.TierCount(); tier++ {
 		metrics.ReplicationStreamSenderThrottledNamespaceCount.With(s.metrics).Record(
-			float64(len(s.isolation.TierMembers(tier))),
+			float64(s.isolation.TierMemberCount(tier)),
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.ReplicationStreamLaneTag(tierLaneTagValue(tier)),
@@ -775,14 +780,28 @@ func (s *StreamSenderImpl) sendPendingRetirements() error {
 // isolationFailoverWatermark returns the watermark for UpdateRemoteReaderInfo with
 // isolation active. The HIGH lane alone no longer bounds all live traffic — an
 // isolated lane can lag hours behind at deep-tier pacing — so failover readiness
-// must fold every isolated lane's applied watermark into the bound.
-func isolationFailoverWatermark(attr *replicationspb.SyncReplicationState) (int64, time.Time) {
+// must fold every isolated lane's applied watermark into the bound. Once the
+// receiver has confirmed isolation support it also folds in the member lanes' resume
+// floor: receiver lane trackers are per-connection and lazily created on lane
+// traffic, so a restored lane is invisible in the receiver's report until its first
+// post-reconnect batch lands, and the floor is the only bound for its unsent window
+// until then. Before confirmation the shared lane honestly covers those windows
+// (catch-up clamps to the floor and admits members), so HIGH alone is correct.
+func (s *StreamSenderImpl) isolationFailoverWatermark(attr *replicationspb.SyncReplicationState) (int64, time.Time) {
 	watermark := attr.HighPriorityState.InclusiveLowWatermark
 	watermarkTime := attr.HighPriorityState.InclusiveLowWatermarkTime.AsTime()
 	for _, laneState := range attr.GetIsolatedLaneStates() {
 		if laneState.GetInclusiveLowWatermark() < watermark {
 			watermark = laneState.GetInclusiveLowWatermark()
 			watermarkTime = laneState.GetInclusiveLowWatermarkTime().AsTime()
+		}
+	}
+	if s.isolationConfirmed.Load() {
+		if floor := s.isolation.MemberResumeFloor(); floor > 0 && floor < watermark {
+			// The floor has no receiver-reported visibility time; pair the
+			// conservative task ID with an unknown (zero) timestamp rather than a
+			// fresher lane's time.
+			return floor - 1, time.Time{}
 		}
 	}
 	return watermark - 1, watermarkTime

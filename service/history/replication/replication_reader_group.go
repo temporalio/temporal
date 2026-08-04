@@ -25,19 +25,26 @@ type replicationReaderGroup struct {
 	shardContext   historyi.ShardContext
 	clientShardKey ClusterShardKey
 	tieredEnabled  bool
-	logger         log.Logger
+	// hasIsolation records whether an isolationManager owns any member-lane scopes
+	// (indexes 3+) in the persisted reader state. Without one, extended scopes are
+	// orphaned (isolation was disabled while a tier lagged) and HIGH must resume
+	// from the overall min so the undrained tier windows are re-covered.
+	hasIsolation bool
+	logger       log.Logger
 }
 
 func newReplicationReaderGroup(
 	shardContext historyi.ShardContext,
 	clientShardKey ClusterShardKey,
 	tieredEnabled bool,
+	hasIsolation bool,
 	logger log.Logger,
 ) *replicationReaderGroup {
 	return &replicationReaderGroup{
 		shardContext:   shardContext,
 		clientShardKey: clientShardKey,
 		tieredEnabled:  tieredEnabled,
+		hasIsolation:   hasIsolation,
 		logger:         logger,
 	}
 }
@@ -65,6 +72,14 @@ func (r *replicationReaderGroup) CatchupBeginWatermark(
 	if !ok {
 		r.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", r.ReaderID()))
 		return catchupEnd
+	}
+	// Orphaned member-lane scopes (>3) with no isolation manager to drain them
+	// (isolation was disabled while a tier lagged): resume HIGH from the overall min
+	// so the undrained tier windows are re-covered once — a rare, bounded, idempotent
+	// re-send. With isolation the manager reconstructs the tier lanes instead, so HIGH
+	// resumes from its own scope.
+	if !r.hasIsolation && priority == enumsspb.TASK_PRIORITY_HIGH && len(readerState.Scopes) > 3 {
+		priority = enumsspb.TASK_PRIORITY_UNSPECIFIED
 	}
 	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes), true)].Range.InclusiveMin.TaskId
 }
