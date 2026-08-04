@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
@@ -365,13 +366,8 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentGeneration(t *testing.T) {
 	require.True(t, successorValid, "the newly-scheduled generation must be valid")
 }
 
-// TestBackfiller_Validate_LegacyContinuation covers a rolling-upgrade handoff.
-// It models an old binary preserving the generation field, incrementing Attempt,
-// and scheduling a generation-zero successor. The new binary must accept that
-// successor once and restore the generation fence when it executes.
-func TestBackfiller_Validate_LegacyContinuation(t *testing.T) {
-	// Create the schedule through the live handler API and let its immediate
-	// Backfiller task produce the first persisted continuation.
+// TestBackfiller_LegacyTaskStartsAtRequestedRange covers a rolling-upgrade handoff.
+func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
 	registry := chasm.NewRegistry(logger)
@@ -388,6 +384,11 @@ func TestBackfiller_Validate_LegacyContinuation(t *testing.T) {
 	})
 
 	now := timeSource.Now()
+	request := &schedulepb.BackfillRequest{
+		StartTime:     timestamppb.New(now.Add(-5000 * defaultInterval)),
+		EndTime:       timestamppb.New(now.Add(-1 * defaultInterval)),
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+	}
 	createHandler := scheduler.NewTestHandler(logger)
 	_, err := createHandler.CreateSchedule(engineCtx, &schedulerpb.CreateScheduleRequest{
 		NamespaceId: namespaceID,
@@ -395,14 +396,7 @@ func TestBackfiller_Validate_LegacyContinuation(t *testing.T) {
 			Namespace:  namespace,
 			ScheduleId: scheduleID,
 			Schedule:   defaultSchedule(),
-			InitialPatch: &schedulepb.SchedulePatch{
-				BackfillRequest: []*schedulepb.BackfillRequest{{
-					StartTime:     timestamppb.New(now.Add(-5000 * defaultInterval)),
-					EndTime:       timestamppb.New(now.Add(-1 * defaultInterval)),
-					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-				}},
-			},
-			RequestId: "req-create",
+			RequestId:  "req-create",
 		},
 	})
 	require.NoError(t, err)
@@ -414,17 +408,35 @@ func TestBackfiller_Validate_LegacyContinuation(t *testing.T) {
 		SpecProcessor:  specProcessor,
 	})
 
-	// Model the old binary successfully processing the generated task. It knows
-	// about Attempt, but preserves the unknown TaskGeneration state field.
+	// Make task N hit capacity before recording progress.
 	var backfiller *scheduler.Backfiller
+	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			invoker := s.Invoker.Get(ctx)
+			for range scheduler.DefaultTweakables.MaxBufferSize {
+				invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
+			}
+			backfiller = s.NewRangeBackfiller(ctx, request)
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
+	require.NotNil(t, backfiller)
+	require.Nil(t, backfiller.GetLastProcessedTime())
+
+	legacyTaskAttrs := chasm.TaskAttributes{ScheduledTime: now}
+
+	// Arrange the persisted state at the handoff boundary directly: Attempt has
+	// advanced past task N+1 and an unnumbered task is ready for the new code.
 	var generation int64
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			s.Invoker.Get(ctx).BufferedStarts = nil
 			for _, field := range s.Backfillers {
 				if candidate, ok := field.TryGet(ctx); ok {
 					backfiller = candidate
 					generation = candidate.GetTaskGeneration()
 					candidate.Attempt++
+					ctx.AddTask(candidate, legacyTaskAttrs, &schedulerpb.BackfillerTask{})
 				}
 			}
 			return struct{}{}, nil
@@ -432,7 +444,7 @@ func TestBackfiller_Validate_LegacyContinuation(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, backfiller)
 
-	// The attempt increment makes the already-processed generated task stale.
+	// The new validator rejects the numbered task and accepts the unnumbered task.
 	currentTask := &schedulerpb.BackfillerTask{Generation: generation}
 	legacyTask := &schedulerpb.BackfillerTask{}
 	var currentValid, legacyValid bool
@@ -451,21 +463,24 @@ func TestBackfiller_Validate_LegacyContinuation(t *testing.T) {
 			return struct{}{}, nil
 		}, struct{}{})
 	require.NoError(t, err)
-	require.False(t, currentValid, "the task processed by the old binary must be stale")
-	require.True(t, legacyValid, "the old binary's continuation must remain executable")
+	require.False(t, currentValid, "the numbered task must be stale")
+	require.True(t, legacyValid, "the unnumbered task must remain executable")
 
-	// Executing the legacy task schedules a generated successor and reestablishes
-	// the invariant that generation is one ahead of the completed attempt count.
-	dropped, err := chasmtest.ExecutePureTask(
-		context.Background(), engine, backfiller, handler, chasm.TaskAttributes{}, legacyTask)
+	// Execute the old task with the new handler through the CHASM lifecycle.
+	executed, err := engine.FirePureTasks(rootRef, now)
 	require.NoError(t, err)
-	require.False(t, dropped)
+	require.Equal(t, 1, executed)
 
-	// The same legacy task cannot execute again after the fence is restored.
+	// With no HWM, processing must start at the requested range rather than the
+	// Unix epoch. Execution also restores the fence for the next numbered task.
 	var attempt, taskGeneration int64
 	var legacyStillValid bool
+	var actualTimes []time.Time
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			for _, start := range s.Invoker.Get(ctx).GetBufferedStarts() {
+				actualTimes = append(actualTimes, start.GetActualTime().AsTime())
+			}
 			for _, field := range s.Backfillers {
 				if candidate, ok := field.TryGet(ctx); ok {
 					attempt = candidate.GetAttempt()
@@ -477,6 +492,11 @@ func TestBackfiller_Validate_LegacyContinuation(t *testing.T) {
 			return struct{}{}, nil
 		}, struct{}{})
 	require.NoError(t, err)
+	require.NotEmpty(t, actualTimes)
+	for _, actualTime := range actualTimes {
+		require.False(t, actualTime.Before(request.GetStartTime().AsTime()),
+			"the old task must not process times before the requested range")
+	}
 	require.Equal(t, attempt+1, taskGeneration)
-	require.False(t, legacyStillValid, "executing the legacy continuation must restore the fence")
+	require.False(t, legacyStillValid, "executing the unnumbered task must restore the fence")
 }
