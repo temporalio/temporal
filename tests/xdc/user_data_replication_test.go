@@ -499,6 +499,152 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	}
 }
 
+// TestUserDataEntriesAreReplicatedOnDemand_Sharded is the
+// sharded-variant duplicate of TestUserDataEntriesAreReplicatedOnDemand.
+// Same intent — confirm that running the force-replication workflow
+// pushes every task-queue user data entry onto the namespace
+// replication queue — but exercised through the sharded workflow
+// (registered name "force-replication-sharded" on
+// MigrationShardedActivityTQ). DisableVerification:true mirrors the
+// legacy test's EnableVerification:false default; TargetClusterName is
+// still set (validation requires it, and the workflow fetches the
+// remote shard count even when there are no execs to replicate) but
+// the inject path is never reached here since this test only exercises
+// the task-queue-user-data side of force-replication.
+func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand_Sharded() {
+	ctx := testcore.NewContext()
+	activeFrontendClient := s.clusters[0].FrontendClient()
+	adminClient := s.clusters[0].AdminClient()
+	numTaskQueues := 10
+
+	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	lastMessageID := replicationResponse.GetMessages().GetLastRetrievedMessageId()
+
+	namespace := s.createNamespaceInCluster0(true)
+	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	s.NoError(err)
+
+	expectedReplicatedTaskQueues := make(map[string]struct{}, numTaskQueues)
+	for i := range numTaskQueues {
+		taskQueue := fmt.Sprintf("v1q%v", i)
+		res, err := activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+			Namespace: namespace,
+			TaskQueue: taskQueue,
+			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
+				AddNewBuildIdInNewDefaultSet: "v0.1",
+			},
+		})
+		s.NoError(err)
+		s.NotNil(res)
+		expectedReplicatedTaskQueues[taskQueue] = struct{}{}
+
+		taskQueue2 := fmt.Sprintf("v2q%v", i)
+		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+			Namespace: namespace,
+			TaskQueue: taskQueue2,
+		})
+		s.NoError(err)
+		s.NotNil(rules)
+
+		rulesRes, err := activeFrontendClient.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+			Namespace:     namespace,
+			TaskQueue:     taskQueue2,
+			ConflictToken: rules.ConflictToken,
+			Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
+				InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
+					Rule: &taskqueuepb.BuildIdAssignmentRule{
+						TargetBuildId: "asdf",
+					},
+				},
+			},
+		})
+		s.NoError(err)
+		s.NotNil(rulesRes)
+		expectedReplicatedTaskQueues[taskQueue2] = struct{}{}
+	}
+
+	// update namespace to cross clusters
+	s.updateNamespaceClusters(namespace, 0, s.clusters)
+
+	// we should see one new namespace task in the replication queue
+	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: lastMessageID,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	lastMessageID = replicationResponse.GetMessages().GetLastRetrievedMessageId()
+	s.Len(replicationResponse.GetMessages().ReplicationTasks, 1)
+	task := replicationResponse.GetMessages().ReplicationTasks[0]
+	s.Equal(namespace, task.GetNamespaceTaskAttributes().GetInfo().GetName())
+
+	// start sharded force-replicate wf
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: primitives.SystemLocalNamespace,
+	})
+	s.NoError(err)
+	run, err := sysClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                 "sharded-force-replication-wf",
+		TaskQueue:          primitives.MigrationShardedActivityTQ,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "force-replication-sharded", migration.ShardedForceReplicationParams{
+		Namespace:           namespace,
+		TargetClusterName:   s.clusters[1].ClusterName(),
+		DisableVerification: true,
+	})
+	s.NoError(err)
+	err = run.Get(ctx, nil)
+	s.NoError(err)
+
+	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: lastMessageID,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+
+	// we should see a user data task for all task queues
+	seenTaskQueues := make(map[string]struct{}, numTaskQueues)
+	for _, task := range replicationResponse.GetMessages().ReplicationTasks {
+		if attrs := task.GetTaskQueueUserDataAttributes(); attrs.GetNamespaceId() == description.GetNamespaceInfo().Id {
+			seenTaskQueues[attrs.GetTaskQueueName()] = struct{}{}
+		}
+	}
+	s.Equal(expectedReplicatedTaskQueues, seenTaskQueues)
+
+	// failover and check on the other side
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	activeFrontendClient = s.clusters[1].FrontendClient()
+	for i := range numTaskQueues {
+		taskQueue := fmt.Sprintf("v1q%v", i)
+
+		get, err := activeFrontendClient.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+			Namespace: namespace,
+			TaskQueue: taskQueue,
+		})
+		s.NoError(err)
+		s.NotNil(get)
+
+		s.NotEmpty(get.MajorVersionSets)
+
+		taskQueue2 := fmt.Sprintf("v2q%v", i)
+		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+			Namespace: namespace,
+			TaskQueue: taskQueue2,
+		})
+		s.NoError(err)
+		s.NotNil(rules)
+		s.NotEmpty(rules.AssignmentRules)
+	}
+}
+
 func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.T().SkipNow() // flaky test
 	ctx := testcore.NewContext()
