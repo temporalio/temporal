@@ -64,6 +64,14 @@ type (
 	namespaceChecker struct {
 		r namespace.Registry
 	}
+
+	// NamespaceRateLimiters holds the three per-category namespace rate limiters that
+	// NamespaceRateLimitInterceptorProvider combines into a single routing rate limiter.
+	NamespaceRateLimiters struct {
+		Execution                    quotas.RequestRateLimiter
+		Visibility                   quotas.RequestRateLimiter
+		NamespaceReplicationInducing quotas.RequestRateLimiter
+	}
 )
 
 var Module = fx.Options(
@@ -93,6 +101,7 @@ var Module = fx.Options(
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
+	fx.Provide(NamespaceRateLimitersProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
@@ -523,14 +532,12 @@ func MaskInternalErrorDetailsInterceptorProvider(
 	)
 }
 
-func NamespaceRateLimitInterceptorProvider(
+func NamespaceRateLimitersProvider(
 	serviceName primitives.ServiceName,
 	serviceConfig *Config,
-	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
-) interceptor.NamespaceRateLimitInterceptor {
+) NamespaceRateLimiters {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	switch serviceName {
@@ -571,31 +578,67 @@ func NamespaceRateLimitInterceptorProvider(
 		},
 		log.With(logger, tag.ComponentNamespaceReplication, tag.ScopeNamespace),
 	).GetQuota
-	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
-		func(req quotas.Request) quotas.RequestRateLimiter {
-			return configs.NewRequestToRateLimiter(
-				quotas.NewNamespaceRateBurst(
-					req.Caller,
-					namespaceRateFn,
-					quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceBurstRatioPerInstance),
-				),
-				quotas.NewNamespaceRateBurst(
-					req.Caller,
-					visibilityRateFn,
-					quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
-				),
-				quotas.NewNamespaceRateBurst(
-					req.Caller,
-					namespaceReplicationInducingRateFn,
-					quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
-				),
-				serviceConfig.OperatorRPSRatio,
-			)
-		},
-	)
+
+	return NamespaceRateLimiters{
+		Execution: quotas.NewNamespaceRequestRateLimiter(
+			func(req quotas.Request) quotas.RequestRateLimiter {
+				return configs.NewExecutionPriorityRateLimiter(
+					quotas.NewNamespaceRateBurst(
+						req.Caller,
+						namespaceRateFn,
+						quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceBurstRatioPerInstance),
+					),
+					serviceConfig.OperatorRPSRatio,
+				)
+			},
+		),
+		Visibility: quotas.NewNamespaceRequestRateLimiter(
+			func(req quotas.Request) quotas.RequestRateLimiter {
+				return configs.NewVisibilityPriorityRateLimiter(
+					quotas.NewNamespaceRateBurst(
+						req.Caller,
+						visibilityRateFn,
+						quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
+					),
+					serviceConfig.OperatorRPSRatio,
+				)
+			},
+		),
+		NamespaceReplicationInducing: quotas.NewNamespaceRequestRateLimiter(
+			func(req quotas.Request) quotas.RequestRateLimiter {
+				return configs.NewNamespaceReplicationInducingAPIPriorityRateLimiter(
+					quotas.NewNamespaceRateBurst(
+						req.Caller,
+						namespaceReplicationInducingRateFn,
+						quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
+					),
+					serviceConfig.OperatorRPSRatio,
+				)
+			},
+		),
+	}
+}
+
+func NamespaceRateLimitInterceptorProvider(
+	namespaceRegistry namespace.Registry,
+	rateLimiters NamespaceRateLimiters,
+	serviceConfig *Config,
+	metricsHandler metrics.Handler,
+) interceptor.NamespaceRateLimitInterceptor {
+	mapping := make(map[string]quotas.RequestRateLimiter)
+	for api := range configs.APIToPriority {
+		mapping[api] = rateLimiters.Execution
+	}
+	for api := range configs.VisibilityAPIToPriority {
+		mapping[api] = rateLimiters.Visibility
+	}
+	for api := range configs.NamespaceReplicationInducingAPIToPriority {
+		mapping[api] = rateLimiters.NamespaceReplicationInducing
+	}
+
 	return interceptor.NewNamespaceRateLimitInterceptor(
 		namespaceRegistry,
-		namespaceRateLimiter,
+		quotas.NewRoutingRateLimiter(mapping),
 		map[string]int{}, // no token overrides
 		configs.PollTaskAPISet,
 		serviceConfig.PollWaitForNamespaceRateLimitToken,

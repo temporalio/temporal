@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -158,14 +159,15 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 
 	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		logger:             s.logger,
-		tokenSerializer:    tasktoken.NewSerializer(),
-		metricsHandler:     s.mockShard.GetMetricsHandler(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		currentClusterName:  s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:        s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		logger:              s.logger,
+		tokenSerializer:     tasktoken.NewSerializer(),
+		metricsHandler:      s.mockShard.GetMetricsHandler(),
+		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
@@ -2417,10 +2419,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 			FastForwardInfo: &persistencespb.FastForwardInfo{
 				TargetTime: target,
 				HasReached: hasReached,
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: version,
-					TransitionCount:          transitionCount,
-				},
+			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: version,
+				TransitionCount:          transitionCount,
 			},
 		}
 	}
@@ -2450,11 +2452,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 		{
 			name: "ConfigDisabled",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config: &commonpb.TimeSkippingConfig{Enabled: false},
-				FastForwardInfo: &persistencespb.FastForwardInfo{
-					TargetTime:                    target,
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
-				},
+				Config:          &commonpb.TimeSkippingConfig{Enabled: false},
+				FastForwardInfo: &persistencespb.FastForwardInfo{TargetTime: target},
+				FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 			},
 			taskVersion:         s.version,
 			taskTransitionCount: 1,

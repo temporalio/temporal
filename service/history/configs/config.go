@@ -317,6 +317,7 @@ type Config struct {
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
+	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
 	ReplicationStreamEventLoopRetryMaxAttempts          dynamicconfig.IntPropertyFn
@@ -633,6 +634,7 @@ func NewConfig(
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
+		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
 		ReplicationStreamEventLoopRetryMaxAttempts:          dynamicconfig.ReplicationStreamEventLoopRetryMaxAttempts.Get(dc),
