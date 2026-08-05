@@ -50,6 +50,7 @@ var Module = fx.Provide(
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
 	PersistenceRateLimiterProvider,
+	TaskReaderRateLimiterProvider,
 	func(serializer serialization.Serializer) TaskSerializer {
 		return serializer
 	},

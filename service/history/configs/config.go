@@ -330,6 +330,8 @@ type Config struct {
 	ReplicationStreamSendEmptyTaskDuration              dynamicconfig.DurationPropertyFn
 	ReplicationEnableRateLimit                          dynamicconfig.BoolPropertyFn
 	ReplicationEnableRateLimitShadowMode                dynamicconfig.BoolPropertyFn
+	ReplicationEnableTaskReaderRateLimit                dynamicconfig.BoolPropertyFn
+	ReplicationTaskReaderBacklogThreshold               dynamicconfig.IntPropertyFn
 	ReplicationStreamReceiverLivenessMultiplier         dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
 	EnableHistoryReplicationRateLimiter                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -645,6 +647,8 @@ func NewConfig(
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
 		ReplicationEnableRateLimit:                          dynamicconfig.ReplicationEnableRateLimit.Get(dc),
 		ReplicationEnableRateLimitShadowMode:                dynamicconfig.ReplicationEnableRateLimitShadowMode.Get(dc),
+		ReplicationEnableTaskReaderRateLimit:                dynamicconfig.ReplicationEnableTaskReaderRateLimit.Get(dc),
+		ReplicationTaskReaderBacklogThreshold:               dynamicconfig.ReplicationTaskReaderBacklogThreshold.Get(dc),
 		ReplicationStreamSendEmptyTaskDuration:              dynamicconfig.ReplicationStreamSendEmptyTaskDuration.Get(dc),
 		ReplicationStreamReceiverLivenessMultiplier:         dynamicconfig.ReplicationStreamReceiverLivenessMultiplier.Get(dc),
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),

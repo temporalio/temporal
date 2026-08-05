@@ -15,11 +15,13 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -66,6 +68,7 @@ type (
 		retryPolicy                          backoff.RetryPolicy
 		namespaceRegistry                    namespace.Registry
 		syncVersionedTransitionTaskConverter *syncVersionedTransitionTaskConverter
+		taskReaderRateLimiter                TaskReaderRateLimiter
 		pageSize                             dynamicconfig.IntPropertyFn
 		maxSkipTaskCount                     dynamicconfig.IntPropertyFn
 
@@ -86,6 +89,11 @@ type (
 	}
 )
 
+const (
+	// replicationTaskReadAPI is the quotas.Request API name for replication task reads.
+	replicationTaskReadAPI = "GetReplicationTasks"
+)
+
 var (
 	errUnknownReplicationTask = serviceerror.NewInternal("unknown replication task")
 )
@@ -97,6 +105,7 @@ func NewAckManager(
 	replicationProgressCache ProgressCache,
 	executionMgr persistence.ExecutionManager,
 	syncStateRetriever SyncStateRetriever,
+	taskReaderRateLimiter TaskReaderRateLimiter,
 	logger log.Logger,
 ) AckManager {
 
@@ -120,6 +129,7 @@ func NewAckManager(
 		retryPolicy:                          retryPolicy,
 		namespaceRegistry:                    shardContext.GetNamespaceRegistry(),
 		syncVersionedTransitionTaskConverter: newSyncVersionedTransitionTaskConverter(shardContext, workflowCache, eventBlobCache, replicationProgressCache, executionMgr, syncStateRetriever, logger),
+		taskReaderRateLimiter:                taskReaderRateLimiter,
 		pageSize:                             config.ReplicatorProcessorFetchTasksBatchSize,
 		maxSkipTaskCount:                     config.ReplicatorProcessorMaxSkipTaskCount,
 
@@ -297,7 +307,7 @@ func (p *ackMgrImpl) getTasks(
 	replicationTasks := make([]*replicationspb.ReplicationTask, 0, p.pageSize())
 	skippedTaskCount := 0
 	lastTaskID := maxTaskID // If no tasks are returned, then it means there are no tasks bellow maxTaskID.
-	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, minTaskID, maxTaskID, p.pageSize()))
+	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, pollingCluster, minTaskID, maxTaskID, p.pageSize()))
 	// iter.HasNext() should be the last check to avoid extra page read in case if replicationTasks is already full.
 	for len(replicationTasks) < p.pageSize() && skippedTaskCount <= p.maxSkipTaskCount() && iter.HasNext() {
 		task, err := iter.Next()
@@ -342,13 +352,70 @@ func (p *ackMgrImpl) getTasks(
 	return replicationTasks, lastTaskID, nil
 }
 
+// throttleTaskRead paces reads that start far enough behind the tip of the queue that they
+// are expected to miss any cache in front of persistence and hit the database. Reads near the
+// tip cost nothing: a caught-up reader never touches the limiter, which is what lets the
+// budget be set low enough to matter during a backlog without affecting healthy replication.
+//
+// Call this with the caller's context, before any per-request timeout is applied, so that
+// time spent waiting doesn't eat into the persistence call's own deadline.
+func (p *ackMgrImpl) throttleTaskRead(
+	ctx context.Context,
+	pollingCluster string,
+	minInclusiveTaskID int64,
+) error {
+	tipTaskID := p.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+	backlogDepth := tipTaskID - minInclusiveTaskID
+	metricsTags := []metrics.Tag{
+		metrics.TargetClusterTag(pollingCluster),
+		metrics.ReplicationTaskPriorityTag(taskReadPriority(ctx)),
+	}
+	metrics.ReplicationTaskReaderBacklogDepth.With(p.metricsHandler).Record(backlogDepth, metricsTags...)
+
+	if backlogDepth <= int64(p.config.ReplicationTaskReaderBacklogThreshold()) {
+		return nil
+	}
+	metrics.ReplicationTaskReaderDBRead.With(p.metricsHandler).Record(1, metricsTags...)
+	if !p.config.ReplicationEnableTaskReaderRateLimit() {
+		return nil
+	}
+
+	startTime := time.Now().UTC()
+	if err := p.taskReaderRateLimiter.Wait(ctx, quotas.NewRequest(
+		replicationTaskReadAPI,
+		taskReaderToken,
+		pollingCluster,
+		headers.GetCallerInfo(ctx).CallerType,
+		0,
+		"",
+	)); err != nil {
+		return err
+	}
+	metrics.ReplicationTaskReaderThrottleLatency.With(p.metricsHandler).Record(time.Since(startTime), metricsTags...)
+	return nil
+}
+
+// taskReadPriority recovers the sender's task priority from the caller info the stream sender
+// puts on the context (see getReplicaitonCallerInfo). A single-stack sender shares the caller
+// type with high priority, which is fine here: the rate limiter treats the two alike.
+func taskReadPriority(ctx context.Context) enumsspb.TaskPriority {
+	if headers.GetCallerInfo(ctx).CallerType == headers.CallerTypePreemptable {
+		return enumsspb.TASK_PRIORITY_LOW
+	}
+	return enumsspb.TASK_PRIORITY_HIGH
+}
+
 func (p *ackMgrImpl) getReplicationTasksFn(
 	ctx context.Context,
+	pollingCluster string,
 	minTaskID int64,
 	maxTaskID int64,
 	batchSize int,
 ) collection.PaginationFn[tasks.Task] {
 	return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+		if err := p.throttleTaskRead(ctx, pollingCluster, minTaskID); err != nil {
+			return nil, nil, err
+		}
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 			ShardID:             p.shardContext.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
@@ -522,6 +589,11 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 	maxExclusiveTaskID int64,
 ) (collection.Iterator[tasks.Task], error) {
 	return collection.NewPagingIterator(func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+		// Throttle on the caller's context, before the per-request timeout below, so that
+		// waiting on the limiter doesn't consume the persistence call's deadline.
+		if err := p.throttleTaskRead(ctx, pollingCluster, minInclusiveTaskID); err != nil {
+			return nil, nil, err
+		}
 		ctx1, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		response, err := p.executionMgr.GetHistoryTasks(ctx1, &persistence.GetHistoryTasksRequest{
@@ -535,7 +607,11 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 		if err != nil {
 			return nil, nil, err
 		}
-		metrics.ReplicationTaskLoadSize.With(p.metricsHandler).Record(int64(len(response.Tasks)))
+		metrics.ReplicationTaskLoadSize.With(p.metricsHandler).Record(
+			int64(len(response.Tasks)),
+			metrics.TargetClusterTag(pollingCluster),
+			metrics.ReplicationTaskPriorityTag(taskReadPriority(ctx)),
+		)
 		return response.Tasks, response.NextPageToken, nil
 	}), nil
 }

@@ -50,6 +50,7 @@ type (
 		ChasmWorkflowRegistry           *chasmworkflow.Registry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
+		TaskReaderRateLimiter           replication.TaskReaderRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
 		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
@@ -92,6 +93,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ChasmWorkflowRegistry,
 		f.OutboundQueueCBPool,
 		f.PersistenceRateLimiter,
+		f.TaskReaderRateLimiter,
 		f.TestHooks,
 		f.ChasmEngine,
 	)

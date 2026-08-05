@@ -16,10 +16,12 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -43,7 +45,8 @@ type (
 		mockClusterMetadata   *cluster.MockMetadata
 		syncStateRetriever    *MockSyncStateRetriever
 
-		mockExecutionMgr *persistence.MockExecutionManager
+		mockExecutionMgr      *persistence.MockExecutionManager
+		mockTaskReaderLimiter *quotas.MockRequestRateLimiter
 
 		logger log.Logger
 
@@ -100,8 +103,12 @@ func (s *ackManagerSuite) SetupTest() {
 	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	replicationProgressCache := NewProgressCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.syncStateRetriever = NewMockSyncStateRetriever(s.controller)
+	// No EXPECT() by default: the task reader rate limit is off unless a test turns it on,
+	// so any call here is a failure.
+	s.mockTaskReaderLimiter = quotas.NewMockRequestRateLimiter(s.controller)
 	s.replicationAckManager = NewAckManager(
-		s.mockShard, workflowCache, nil, replicationProgressCache, s.mockExecutionMgr, s.syncStateRetriever, s.logger,
+		s.mockShard, workflowCache, nil, replicationProgressCache, s.mockExecutionMgr, s.syncStateRetriever,
+		s.mockTaskReaderLimiter, s.logger,
 	).(*ackMgrImpl)
 }
 
@@ -494,6 +501,96 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	s.NotNil(replicationMessages)
 	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize())
 	s.Equal(tasksResponse3.Tasks[len(tasksResponse3.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
+}
+
+// tipTaskID is the exclusive high read watermark, i.e. the point a fully caught-up reader
+// reads from. Reads starting at tipTaskID-n are n task IDs into the backlog.
+func (s *ackManagerSuite) tipTaskID() int64 {
+	return s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+}
+
+func (s *ackManagerSuite) enableTaskReaderRateLimit(backlogThreshold int) {
+	config := s.mockShard.GetConfig()
+	config.ReplicationEnableTaskReaderRateLimit = func() bool { return true }
+	config.ReplicationTaskReaderBacklogThreshold = func() int { return backlogThreshold }
+}
+
+func (s *ackManagerSuite) TestThrottleTaskRead_NearTip_NotCharged() {
+	s.enableTaskReaderRateLimit(100)
+
+	// One task ID behind the tip is well inside the threshold: a caught-up reader must never
+	// touch the limiter. s.mockTaskReaderLimiter has no EXPECT(), so a call fails the test.
+	err := s.replicationAckManager.throttleTaskRead(
+		context.Background(), cluster.TestAlternativeClusterName, s.tipTaskID()-1)
+	s.NoError(err)
+}
+
+func (s *ackManagerSuite) TestThrottleTaskRead_DeepBacklog_Charged() {
+	s.enableTaskReaderRateLimit(100)
+	ctx := headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo)
+
+	s.mockTaskReaderLimiter.EXPECT().Wait(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request quotas.Request) error {
+			// The bucket key is (target cluster, priority) so that one lagging cluster pair
+			// cannot exhaust the budget of the others.
+			s.Equal(cluster.TestAlternativeClusterName, request.Caller)
+			s.Equal(headers.CallerTypePreemptable, request.CallerType)
+			s.Equal(replicationTaskReadAPI, request.API)
+			s.Equal(taskReaderToken, request.Token)
+			return nil
+		})
+
+	err := s.replicationAckManager.throttleTaskRead(ctx, cluster.TestAlternativeClusterName, s.tipTaskID()-1000)
+	s.NoError(err)
+}
+
+func (s *ackManagerSuite) TestThrottleTaskRead_DeepBacklog_GateOff_NotCharged() {
+	config := s.mockShard.GetConfig()
+	config.ReplicationEnableTaskReaderRateLimit = func() bool { return false }
+	config.ReplicationTaskReaderBacklogThreshold = func() int { return 100 }
+
+	// Shadow mode: the read is deep enough to be charged, but with the gate off no throttling
+	// is applied. Metrics are still emitted, which is how the limit gets sized before enabling.
+	err := s.replicationAckManager.throttleTaskRead(
+		context.Background(), cluster.TestAlternativeClusterName, s.tipTaskID()-1000)
+	s.NoError(err)
+}
+
+func (s *ackManagerSuite) TestThrottleTaskRead_LimiterErrorPropagates() {
+	s.enableTaskReaderRateLimit(100)
+	limiterErr := serviceerror.NewUnavailable("limiter context done")
+
+	s.mockTaskReaderLimiter.EXPECT().Wait(gomock.Any(), gomock.Any()).Return(limiterErr)
+
+	err := s.replicationAckManager.throttleTaskRead(
+		context.Background(), cluster.TestAlternativeClusterName, s.tipTaskID()-1000)
+	s.ErrorIs(err, limiterErr)
+}
+
+// A throttled read must still return its full page. sendTasks sends the end watermark
+// unconditionally once the iterator drains, so a short page would advance the receiver's ack
+// level past tasks that were never sent.
+func (s *ackManagerSuite) TestGetReplicationTasksIter_ThrottledReadReturnsFullPage() {
+	s.enableTaskReaderRateLimit(100)
+	minTaskID := s.tipTaskID() - 1000
+	maxTaskID := minTaskID + 100
+	pageSize := s.replicationAckManager.pageSize()
+
+	s.mockTaskReaderLimiter.EXPECT().Wait(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
+		Return(s.getHistoryTasksResponse(pageSize), nil)
+
+	iter, err := s.replicationAckManager.GetReplicationTasksIter(
+		context.Background(), cluster.TestAlternativeClusterName, minTaskID, maxTaskID)
+	s.NoError(err)
+
+	var got []tasks.Task
+	for iter.HasNext() {
+		task, err := iter.Next()
+		s.NoError(err)
+		got = append(got, task)
+	}
+	s.Len(got, pageSize)
 }
 
 func (s *ackManagerSuite) getHistoryTasksResponse(size int) *persistence.GetHistoryTasksResponse {

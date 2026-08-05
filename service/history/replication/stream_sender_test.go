@@ -391,7 +391,7 @@ func (s *streamSenderSuite) TestSendCatchUp_SingleStack() {
 	)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
-		string(s.clientShardKey.ClusterID),
+		s.streamSender.clientClusterName,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
@@ -448,7 +448,7 @@ func (s *streamSenderSuite) TestSendCatchUp_TieredStack_SingleReaderScope() {
 	)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
-		string(s.clientShardKey.ClusterID),
+		s.streamSender.clientClusterName,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil).Times(2)
@@ -540,14 +540,14 @@ func (s *streamSenderSuite) TestSendCatchUp_TieredStack_TieredReaderScope() {
 
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
-		string(s.clientShardKey.ClusterID),
+		s.streamSender.clientClusterName,
 		beginInclusiveWatermarkHighPriority,
 		endExclusiveWatermark,
 	).Return(iter, nil).Times(1)
 
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
-		string(s.clientShardKey.ClusterID),
+		s.streamSender.clientClusterName,
 		beginInclusiveWatermarkLowPriority,
 		endExclusiveWatermark,
 	).Return(iter, nil).Times(1)
@@ -658,13 +658,13 @@ func (s *streamSenderSuite) TestSendLive() {
 	gomock.InOrder(
 		s.historyEngine.EXPECT().GetReplicationTasksIter(
 			gomock.Any(),
-			string(s.clientShardKey.ClusterID),
+			s.streamSender.clientClusterName,
 			watermark0,
 			watermark1,
 		).Return(iter, nil),
 		s.historyEngine.EXPECT().GetReplicationTasksIter(
 			gomock.Any(),
-			string(s.clientShardKey.ClusterID),
+			s.streamSender.clientClusterName,
 			watermark1,
 			watermark2,
 		).Return(iter, nil),
@@ -724,7 +724,7 @@ func (s *streamSenderSuite) TestSendTasks_WithoutTasks() {
 	)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
-		string(s.clientShardKey.ClusterID),
+		s.streamSender.clientClusterName,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
@@ -792,7 +792,7 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
-		string(s.clientShardKey.ClusterID),
+		s.streamSender.clientClusterName,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
@@ -879,7 +879,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_HIGH).Return(nil).Times(1)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
-		string(s.clientShardKey.ClusterID),
+		s.streamSender.clientClusterName,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
@@ -963,7 +963,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_LOW).Return(nil).Times(2)
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
-		string(s.clientShardKey.ClusterID),
+		s.streamSender.clientClusterName,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)

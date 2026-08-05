@@ -2967,6 +2967,16 @@ that task will be sent to DLQ.`,
 		false,
 		`ReplicationEnableRateLimitShadowMode enables shadow mode for replication rate limiter (emit metrics only, no throttling)`,
 	)
+	ReplicationEnableTaskReaderRateLimit = NewGlobalBoolSetting(
+		"history.ReplicationEnableTaskReaderRateLimit",
+		false,
+		`ReplicationEnableTaskReaderRateLimit enables throttling of replication task reads that are expected to miss cache and hit the database. When false, the backlog metrics are still emitted but no throttling is applied.`,
+	)
+	ReplicationTaskReaderBacklogThreshold = NewGlobalIntSetting(
+		"history.ReplicationTaskReaderBacklogThreshold",
+		65536,
+		`ReplicationTaskReaderBacklogThreshold is how far behind the tip of the replication queue (in task IDs) a read must start before it is charged against the task reader rate limiter. Replication task IDs are sparse - they are drawn from the shard's immediate task ID space shared with the other immediate queues - so this is a multiple of the expected read-through cache size, not the cache size itself.`,
+	)
 	ReplicationStreamSenderErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationStreamSenderErrorRetryWait",
 		1*time.Second,

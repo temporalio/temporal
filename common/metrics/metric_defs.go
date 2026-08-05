@@ -1112,6 +1112,15 @@ var (
 	// ReplicationBackfillEventsLatency measures the latency of bringing local events up to the
 	// source cluster's current branch (backfilling history events) during workflow state replication.
 	ReplicationBackfillEventsLatency = NewTimerDef("replication_backfill_events_latency")
+	// ReplicationTaskReaderBacklogDepth is how far behind the tip of the replication queue a task read
+	// started, in task IDs. Reads near the tip are expected to be served from a cache in front of
+	// persistence; deep reads are expected to hit the database.
+	ReplicationTaskReaderBacklogDepth = NewDimensionlessHistogramDef("replication_task_reader_backlog_depth")
+	// ReplicationTaskReaderDBRead counts task reads deep enough into the backlog that they are expected
+	// to miss cache, and are therefore charged against the task reader rate limiter.
+	ReplicationTaskReaderDBRead = NewCounterDef("replication_task_reader_db_read")
+	// ReplicationTaskReaderThrottleLatency is time spent waiting on the task reader rate limiter.
+	ReplicationTaskReaderThrottleLatency = NewTimerDef("replication_task_reader_throttle_latency")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag                             = NewDimensionlessHistogramDef("replication_tasks_lag")

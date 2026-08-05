@@ -492,7 +492,9 @@ func (s *StreamSenderImpl) sendTasks(
 	ctx := headers.SetCallerInfo(s.server.Context(), callerInfo)
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
-		string(s.clientShardKey.ClusterID),
+		// clientClusterName, not clientShardKey.ClusterID: the latter is an int32, so
+		// string() on it yields the rune with that code point rather than the cluster name.
+		s.clientClusterName,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)

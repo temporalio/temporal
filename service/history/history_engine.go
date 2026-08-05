@@ -182,6 +182,7 @@ func NewEngineWithShardContext(
 	chasmWorkflowRegistry *chasmworkflow.Registry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	persistenceRateLimiter quotas.RequestRateLimiter,
+	taskReaderRateLimiter replication.TaskReaderRateLimiter,
 	testHooks testhooks.TestHooks,
 	chasmEngine chasm.Engine,
 ) historyi.Engine {
@@ -258,6 +259,7 @@ func NewEngineWithShardContext(
 			replicationProgressCache,
 			executionManager,
 			syncStateRetriever,
+			taskReaderRateLimiter,
 			logger,
 		)
 		historyEngImpl.nDCHistoryReplicator = ndc.NewHistoryReplicator(
