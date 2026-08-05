@@ -337,8 +337,9 @@ var TransitionCancelRequested = chasm.NewTransition(
 			Reason:      req.GetReason(),
 			RequestTime: timestamppb.New(ctx.Now(a)),
 		}
-		// Cancel takes precedence over a pending reset so clear the flag
+		// Cancel takes precedence over a pending reset so clear its deferred intents
 		a.ResetRestoreOptions = false
+		a.ResetShouldClearHeartbeat = false
 
 		return nil
 	},
@@ -532,6 +533,7 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 )
 
 type resetEvent struct {
+	req            *workflowservice.ResetActivityExecutionRequest
 	resetTime      time.Time
 	metricsHandler metrics.Handler
 }
@@ -585,7 +587,7 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 		attempt := a.LastAttempt.Get(ctx)
 		a.ResetShouldPause = false
 		a.applyDeferredOptionRestore(ctx)
-		a.clearHeartbeatDetails(ctx)
+		a.applyDeferredHeartbeatClear(ctx)
 		attempt.Count = 1
 		attempt.Stamp++
 		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false); err != nil {
@@ -614,7 +616,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 
 		a.ResetShouldPause = false
 		a.applyDeferredOptionRestore(ctx)
-		a.clearHeartbeatDetails(ctx)
+		a.applyDeferredHeartbeatClear(ctx)
 
 		attempt.Count = 1
 		attempt.Stamp++
