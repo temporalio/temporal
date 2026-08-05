@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -768,4 +769,39 @@ func TestScheduler_Describe_DoesNotMutateCachedComponent(t *testing.T) {
 		"Describe must not write the default catch-up window back onto the cached component")
 	require.Nil(t, generator.GetFutureActionTimes(),
 		"Describe must not store computed FutureActionTimes back onto the Generator")
+}
+
+func TestScheduler_Describe_ResolvesCatchupWindowFromTweakables(t *testing.T) {
+	tweakables := scheduler.DefaultTweakables
+	tweakables.DefaultCatchupWindow = 2 * time.Hour
+	tweakables.MinCatchupWindow = 5 * time.Minute
+
+	testCases := []struct {
+		name     string
+		window   *durationpb.Duration
+		expected time.Duration
+	}{
+		{name: "unset", window: nil, expected: tweakables.DefaultCatchupWindow},
+		{name: "zero", window: durationpb.New(0), expected: tweakables.DefaultCatchupWindow},
+		{name: "negative", window: durationpb.New(-time.Second), expected: tweakables.DefaultCatchupWindow},
+		{name: "below minimum", window: durationpb.New(time.Minute), expected: tweakables.MinCatchupWindow},
+		{name: "above minimum", window: durationpb.New(time.Hour), expected: time.Hour},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			sched, ctx, _ := setupSchedulerForTest(t)
+			sched.Schedule.Policies.CatchupWindow = tc.window
+			persistedWindow := sched.Schedule.Policies.CatchupWindow
+
+			resp, err := sched.Describe(
+				scheduler.ContextWithTweakables(ctx, tweakables),
+				&schedulerpb.DescribeScheduleRequest{},
+				newLegacySpecBuilder(0, 0),
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, resp.GetFrontendResponse().GetSchedule().GetPolicies().GetCatchupWindow().AsDuration())
+			require.Same(t, persistedWindow, sched.Schedule.Policies.CatchupWindow)
+		})
+	}
 }

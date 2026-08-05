@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/tools/common/github"
+	"go.temporal.io/server/tools/common/slack"
 )
 
 func TestBuildFailureMessage(t *testing.T) {
@@ -33,26 +34,26 @@ func TestBuildFailureMessage(t *testing.T) {
 		TotalJobs: 5,
 	}
 
-	require.Equal(t, &SlackMessage{
+	require.Equal(t, &slack.Message{
 		Text: "CI Failed on Main",
-		Blocks: []SlackBlock{
+		Blocks: []slack.Block{
 			{
 				Type: "section",
-				Text: &SlackText{
+				Text: &slack.Text{
 					Type: "mrkdwn",
 					Text: ":rotating_light: *CI Failed on Main Branch* :rotating_light:",
 				},
 			},
 			{
 				Type: "section",
-				Text: &SlackText{
+				Text: &slack.Text{
 					Type: "mrkdwn",
 					Text: "*Failures (2):* `TestHistoryWorkflow`, `TestMatchingWorkflow`",
 				},
 			},
 			{
 				Type: "section",
-				Text: &SlackText{
+				Text: &slack.Text{
 					Type: "mrkdwn",
 					Text: "*Failed jobs (2/5):* " +
 						"<https://github.com/temporalio/temporal/actions/runs/123456/job/1|test-job-1>, " +
@@ -61,7 +62,7 @@ func TestBuildFailureMessage(t *testing.T) {
 			},
 			{
 				Type: "section",
-				Text: &SlackText{
+				Text: &slack.Text{
 					Type: "mrkdwn",
 					Text: "<https://github.com/temporalio/temporal/actions/runs/123456|View Run>",
 				},
@@ -108,26 +109,26 @@ func TestSlackMessageStructure(t *testing.T) {
 		TotalJobs: 3,
 	}
 
-	require.Equal(t, &SlackMessage{
+	require.Equal(t, &slack.Message{
 		Text: "CI Failed on Main",
-		Blocks: []SlackBlock{
+		Blocks: []slack.Block{
 			{
 				Type: "section",
-				Text: &SlackText{
+				Text: &slack.Text{
 					Type: "mrkdwn",
 					Text: ":rotating_light: *CI Failed on Main Branch* :rotating_light:",
 				},
 			},
 			{
 				Type: "section",
-				Text: &SlackText{
+				Text: &slack.Text{
 					Type: "mrkdwn",
 					Text: "*Failed jobs (1/3):* <http://example.com/job1|job1>",
 				},
 			},
 			{
 				Type: "section",
-				Text: &SlackText{
+				Text: &slack.Text{
 					Type: "mrkdwn",
 					Text: "<https://github.com/temporalio/temporal/actions/runs/123|View Run>",
 				},
@@ -158,9 +159,9 @@ func TestBuildFailureMessageLimitsFailures(t *testing.T) {
 	msg := BuildFailureMessage(report)
 
 	require.Len(t, msg.Blocks, 4)
-	require.Equal(t, SlackBlock{
+	require.Equal(t, slack.Block{
 		Type: "section",
-		Text: &SlackText{
+		Text: &slack.Text{
 			Type: "mrkdwn",
 			Text: "*Failures (6):* `Test01`, `Test02`, `Test03`, `Test04`, `Test05`",
 		},

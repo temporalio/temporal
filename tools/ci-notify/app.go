@@ -147,7 +147,7 @@ func runAlertCommand(c *cli.Context) error {
 	message := BuildFailureMessage(report)
 
 	logger.Info("Sending Slack notification")
-	if err := SendSlackMessage(slackWebhook, message); err != nil {
+	if err := message.Send(slackWebhook); err != nil {
 		logger.Error("Failed to send Slack message", zap.Error(err))
 		// Don't fail CI if notification fails
 		return nil
@@ -222,7 +222,7 @@ func runDigestCommand(c *cli.Context) error {
 	message := BuildSuccessReportMessage(report)
 
 	logger.Info("Sending Slack notification")
-	if err := SendSlackMessage(slackWebhook, message); err != nil {
+	if err := message.Send(slackWebhook); err != nil {
 		logger.Error("Failed to send Slack message", zap.Error(err))
 		// Don't fail CI if reporting fails
 		return nil
