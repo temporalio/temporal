@@ -101,7 +101,10 @@ message BackfillerState {
   // High water mark.
   google.protobuf.Timestamp last_processed_time = 7;
 
-  // Number of successful task executions.
+  // Number of successfully committed BackfillerTask executions. Starts at zero
+  // and advances after each execution; used as the retry-policy attempt for
+  // backoff. Unlike TaskStamp, it does not identify a particular scheduled
+  // task.
   int64 attempt = 8;
 
   // Monotonic stamp shared with the currently scheduled BackfillerTask. It is

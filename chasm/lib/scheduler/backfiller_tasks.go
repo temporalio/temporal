@@ -67,6 +67,11 @@ func (b *BackfillerTaskHandler) Validate(
 		valid = currentStamp == 0 || attempt >= currentStamp
 	}
 	if !valid {
+		ctx.Logger().Debug("dropping invalid backfiller task",
+			tag.String("backfill-id", backfiller.GetBackfillId()),
+			tag.Int64("task-stamp", taskStamp),
+			tag.Int64("current-stamp", currentStamp),
+			tag.Int64("attempt", attempt))
 		newTaggedMetricsHandler(b.metricsHandler, backfiller.Scheduler.Get(ctx)).
 			Counter(metrics.ScheduleBackfillerTask.Name()).
 			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleStamp))

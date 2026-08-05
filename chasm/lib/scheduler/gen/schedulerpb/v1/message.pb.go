@@ -360,7 +360,10 @@ type BackfillerState struct {
 	BackfillId string `protobuf:"bytes,6,opt,name=backfill_id,json=backfillId,proto3" json:"backfill_id,omitempty"`
 	// High water mark.
 	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
-	// Number of successful task executions.
+	// Number of successfully committed BackfillerTask executions. Starts at zero
+	// and advances after each execution; used as the retry-policy attempt for
+	// backoff. Unlike TaskStamp, it does not identify a particular scheduled
+	// task.
 	Attempt int64 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	// Monotonic stamp shared with the currently scheduled BackfillerTask. It is
 	// advanced when the initial task or an incomplete task's successor is
