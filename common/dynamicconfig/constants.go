@@ -2894,6 +2894,16 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
+		"history.ReplicationStreamReadBufferSize",
+		0,
+		`ReplicationStreamReadBufferSize is the per-shard capacity, in tasks, of the read-through
+buffer over the replication task queue's tip. All replication stream senders on a shard (every
+remote cluster, every priority lane) scan the same queue; the buffer lets those overlapping
+scans share one persistence read, with only readers below the buffered range falling through
+to persistence. The buffer holds slim queue rows (task metadata, not event payloads).
+0 disables the buffer.`,
+	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",
 		100,
