@@ -11372,9 +11372,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
 
-	// UpdateWhileCancelRequested: updating options on a STARTED activity that has a pending cancel
-	// (CANCEL_REQUESTED) is allowed — the worker is still running and the update applies to it.
-	t.Run("UpdateWhileCancelRequested", func(t *testing.T) {
+	// UpdateWhileCancelRequestedFails: updating options is refused once a cancel is pending.
+	t.Run("UpdateWhileCancelRequestedFails", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
@@ -11400,7 +11399,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			ActivityOptions: &activitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(15 * time.Second)},
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
 		})
-		require.NoError(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -11408,8 +11408,10 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			RunId:      runID,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 15*time.Second, descResp.GetInfo().GetHeartbeatTimeout().AsDuration(),
-			"update should apply to the running attempt even with a pending cancel")
+		require.NotEqual(t, 15*time.Second, descResp.GetInfo().GetHeartbeatTimeout().AsDuration(),
+			"a refused update must not apply")
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, descResp.GetInfo().GetRunState(),
+			"a refused update must not disturb the pending cancellation")
 	})
 
 	// TerminateWhilePaused: design doc says PAUSED + terminate → TERMINATED.
@@ -12177,7 +12179,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 			"expected activity to be STARTED after unpause")
 	})
 
-	t.Run("UnpauseIdempotent", func(t *testing.T) {
+	t.Run("UnpauseNonPausedActivityFails", func(t *testing.T) {
 		ctx := testcore.NewContext()
 
 		activityID := testcore.RandomizeStr(t.Name())
@@ -12186,19 +12188,19 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		// Unpause a non-paused activity — should succeed with no error.
+		// An activity must be paused before it can be unpaused.
 		_, err := env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   "test-identity",
 		})
-		require.NoError(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
 
-	// TODO(sean): unpause should fail instead of no-op. Tailor to expect request ID not save on failedprecondition.
-	// Record a no-op unpause, pause the activity, then retry the same unpause request ID. The retry
-	// must not undo the later pause.
+	// Unpause the activity, pause it again, then retry the same unpause request ID. The retry must
+	// not undo the later pause.
 	t.Run("DuplicateRequestIDDoesNotUndoLaterPause", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
@@ -12212,7 +12214,15 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 			RequestId:  "unpause-request-id",
 		}
 
-		_, err := env.FrontendClient().UnpauseActivityExecution(ctx, unpauseReq)
+		_, err := env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			RequestId:  "initial-pause-request-id",
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, unpauseReq)
 		require.NoError(t, err)
 
 		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
@@ -12314,8 +12324,10 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		require.ErrorAs(t, err, &failedPreconditionErr)
 	})
 
-	// Issuing Unpause on a CANCEL_REQUESTED activity is a no-op.
-	t.Run("UnpauseWhileCancelRequested", func(t *testing.T) {
+	// UnpauseWhileCancelRequestedFails: unpausing a CANCEL_REQUESTED activity must be rejected with
+	// FailedPrecondition — cancellation takes precedence, matching Pause's and Reset's existing
+	// rejection of the same state (see PauseWhileCancelRequested).
+	t.Run("UnpauseWhileCancelRequestedFails", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
@@ -12356,14 +12368,15 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		require.True(t, hbResp.GetCancelRequested())
 		require.False(t, hbResp.GetActivityPaused())
 
-		// Unpause is a no-op: status stays CANCEL_REQUESTED.
+		// Unpause must be rejected — cannot unpause an activity with a pending cancellation.
 		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   "test-identity",
 		})
-		require.NoError(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -12372,14 +12385,14 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, descResp.GetInfo().GetRunState(),
-			"unpause of a CANCEL_REQUESTED activity must be a no-op")
+			"rejected unpause must not disturb the pending cancellation")
 
 		hbResp2, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollResp.TaskToken,
 		})
 		require.NoError(t, err)
-		require.True(t, hbResp2.GetCancelRequested(), "cancel must remain after unpause")
+		require.True(t, hbResp2.GetCancelRequested(), "cancel must remain after the rejected unpause")
 		require.False(t, hbResp2.GetActivityPaused(), "pause flag must remain cleared")
 	})
 
@@ -12536,6 +12549,17 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
+		})
+		require.NoError(t, err)
+	}
+
+	resetActivityClearingHeartbeat := func(ctx context.Context, t *testing.T, activityID, runID string) {
+		t.Helper()
+		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:      env.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          runID,
+			ResetHeartbeat: true,
 		})
 		require.NoError(t, err)
 	}
@@ -12989,167 +13013,183 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
-	t.Run("ResetClearsHeartbeatDetails", func(t *testing.T) {
-		// Activity records heartbeats. Reset clears them.
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	// Reset of a SCHEDULED activity: the heartbeat checkpoint is kept by default and discarded only
+	// when reset_heartbeat is set, so the new attempt 1 either resumes from it or starts fresh.
+	for _, resetHeartbeat := range []bool{false, true} {
+		t.Run(fmt.Sprintf("ResetHeartbeatDetails/resetHeartbeat=%v", resetHeartbeat), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
 
-		activityID := testcore.RandomizeStr(t.Name())
-		retryPolicy := &commonpb.RetryPolicy{
-			InitialInterval:    durationpb.New(time.Second),
-			BackoffCoefficient: 1.0,
-		}
-		startResp, pollResp1, taskQueue := startAndPollActivity(ctx, t, activityID, retryPolicy)
+			activityID := testcore.RandomizeStr(t.Name())
+			retryPolicy := &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(time.Second),
+				BackoffCoefficient: 1.0,
+			}
+			startResp, pollResp1, taskQueue := startAndPollActivity(ctx, t, activityID, retryPolicy)
 
-		// Record a heartbeat
-		_, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollResp1.TaskToken,
-			Details:   defaultHeartbeatDetails,
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err)
-
-		// Verify heartbeat is visible in describe
-		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:               env.Namespace().String(),
-			ActivityId:              activityID,
-			RunId:                   startResp.GetRunId(),
-			IncludeHeartbeatDetails: true,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, desc.GetInfo().GetHeartbeatDetails())
-
-		// Fail the attempt with long backoff
-		failAttemptRetryably(ctx, t, pollResp1.TaskToken, 60*time.Second)
-
-		// Wait for SCHEDULED state
-		await.Require(ctx, t, func(c *await.T) {
-			d, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  env.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      startResp.GetRunId(),
+			// Record a heartbeat
+			_, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: pollResp1.TaskToken,
+				Details:   defaultHeartbeatDetails,
+				Identity:  defaultIdentity,
 			})
-			require.NoError(c, err)
-			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, d.GetInfo().GetRunState())
-		}, 5*time.Second, 200*time.Millisecond)
+			require.NoError(t, err)
 
-		// Reset clears recorded heartbeat state.
-		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.GetRunId(),
+			// Verify heartbeat is visible in describe
+			desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:               env.Namespace().String(),
+				ActivityId:              activityID,
+				RunId:                   startResp.GetRunId(),
+				IncludeHeartbeatDetails: true,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, desc.GetInfo().GetHeartbeatDetails())
+
+			// Fail the attempt with long backoff
+			failAttemptRetryably(ctx, t, pollResp1.TaskToken, 60*time.Second)
+
+			// Wait for SCHEDULED state
+			await.Require(ctx, t, func(c *await.T) {
+				d, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      startResp.GetRunId(),
+				})
+				require.NoError(c, err)
+				require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, d.GetInfo().GetRunState())
+			}, 5*time.Second, 200*time.Millisecond)
+
+			if resetHeartbeat {
+				resetActivityClearingHeartbeat(ctx, t, activityID, startResp.GetRunId())
+			} else {
+				resetActivity(ctx, t, activityID, startResp.GetRunId())
+			}
+
+			// Poll — attempt 1, with the checkpoint carried over or discarded
+			pollResp2, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+				Namespace: env.Namespace().String(),
+				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Identity:  defaultIdentity,
+			})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, pollResp2.Attempt)
+			if resetHeartbeat {
+				require.Empty(t, pollResp2.HeartbeatDetails.GetPayloads())
+			} else {
+				protorequire.ProtoEqual(t, defaultHeartbeatDetails, pollResp2.GetHeartbeatDetails())
+			}
+
+			// Complete
+			_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: pollResp2.TaskToken,
+				Result:    defaultResult,
+				Identity:  defaultIdentity,
+			})
+			require.NoError(t, err)
 		})
-		require.NoError(t, err)
+	}
 
-		// Poll — attempt 1, no heartbeat details
-		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-			Namespace: env.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  defaultIdentity,
+	// Reset while the activity is STARTED: both the attempt-count rewind and any discarding of the
+	// heartbeat checkpoint are deferred until the worker yields, leaving the in-flight attempt (and
+	// its checkpoint) undisturbed until then.
+	for _, resetHeartbeat := range []bool{false, true} {
+		t.Run(fmt.Sprintf("ResetHeartbeatDetailsWhileStarted/resetHeartbeat=%v", resetHeartbeat), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			activityID := testcore.RandomizeStr(t.Name())
+			retryPolicy := &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(time.Second),
+				BackoffCoefficient: 1.0,
+			}
+			startResp, pollResp1, taskQueue := startAndPollActivity(ctx, t, activityID, retryPolicy)
+
+			// Record a heartbeat while running
+			_, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: pollResp1.TaskToken,
+				Details:   defaultHeartbeatDetails,
+				Identity:  defaultIdentity,
+			})
+			require.NoError(t, err)
+
+			// Verify heartbeat is visible
+			desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:               env.Namespace().String(),
+				ActivityId:              activityID,
+				RunId:                   startResp.GetRunId(),
+				IncludeHeartbeatDetails: true,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, desc.GetInfo().GetHeartbeatDetails())
+
+			// Reset while STARTED — the reset mutations are deferred.
+			if resetHeartbeat {
+				resetActivityClearingHeartbeat(ctx, t, activityID, startResp.GetRunId())
+			} else {
+				resetActivity(ctx, t, activityID, startResp.GetRunId())
+			}
+
+			// Activity should still be STARTED with heartbeat still visible (reset is deferred)
+			desc, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:               env.Namespace().String(),
+				ActivityId:              activityID,
+				RunId:                   startResp.GetRunId(),
+				IncludeHeartbeatDetails: true,
+			})
+			require.NoError(t, err)
+			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, desc.GetInfo().GetRunState())
+			require.NotNil(t, desc.GetInfo().GetHeartbeatDetails(), "heartbeat should still be visible before the attempt fails")
+
+			// Fail the running attempt — the deferred reset lands in TransitionRescheduled
+			failAttemptRetryably(ctx, t, pollResp1.TaskToken, 0)
+
+			// Poll retry — attempt=1, heartbeat details carried over
+			pollResp2, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+				Namespace: env.Namespace().String(),
+				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Identity:  defaultIdentity,
+			})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, pollResp2.Attempt, "attempt should be reset to 1")
+			if resetHeartbeat {
+				require.Empty(t, pollResp2.HeartbeatDetails.GetPayloads())
+			} else {
+				protorequire.ProtoEqual(t, defaultHeartbeatDetails, pollResp2.GetHeartbeatDetails())
+			}
+
+			// Record a new heartbeat on the new attempt.
+			resetAttemptHeartbeatDetails := payloads.EncodeString("heartbeat details from the reset attempt")
+			_, err = env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: pollResp2.TaskToken,
+				Details:   resetAttemptHeartbeatDetails,
+				Identity:  defaultIdentity,
+			})
+			require.NoError(t, err)
+
+			// Verify new heartbeat is visible in describe
+			desc, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:               env.Namespace().String(),
+				ActivityId:              activityID,
+				RunId:                   startResp.GetRunId(),
+				IncludeHeartbeatDetails: true,
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, resetAttemptHeartbeatDetails, desc.GetInfo().GetHeartbeatDetails())
+
+			// Complete
+			_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: pollResp2.TaskToken,
+				Result:    defaultResult,
+				Identity:  defaultIdentity,
+			})
+			require.NoError(t, err)
 		})
-		require.NoError(t, err)
-		require.EqualValues(t, 1, pollResp2.Attempt)
-		require.Empty(t, pollResp2.HeartbeatDetails.GetPayloads(), "heartbeat details should be cleared after reset")
-
-		// Complete
-		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollResp2.TaskToken,
-			Result:    defaultResult,
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err)
-	})
-
-	t.Run("ResetClearsHeartbeatState", func(t *testing.T) {
-		// Reset while the activity is STARTED.
-		// The heartbeat clear is deferred — it only takes effect on the next retry,
-		// matching the behavior of the workflow activity HeartbeatDetails reset test.
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		activityID := testcore.RandomizeStr(t.Name())
-		retryPolicy := &commonpb.RetryPolicy{
-			InitialInterval:    durationpb.New(time.Second),
-			BackoffCoefficient: 1.0,
-		}
-		startResp, pollResp1, taskQueue := startAndPollActivity(ctx, t, activityID, retryPolicy)
-
-		// Record a heartbeat while running
-		_, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollResp1.TaskToken,
-			Details:   defaultHeartbeatDetails,
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err)
-
-		// Verify heartbeat is visible
-		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:               env.Namespace().String(),
-			ActivityId:              activityID,
-			RunId:                   startResp.GetRunId(),
-			IncludeHeartbeatDetails: true,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, desc.GetInfo().GetHeartbeatDetails())
-
-		// Reset while STARTED — heartbeat clearing is deferred.
-		resetActivity(ctx, t, activityID, startResp.GetRunId())
-
-		// Activity should still be STARTED with heartbeat still visible (reset is deferred)
-		desc, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:               env.Namespace().String(),
-			ActivityId:              activityID,
-			RunId:                   startResp.GetRunId(),
-			IncludeHeartbeatDetails: true,
-		})
-		require.NoError(t, err)
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, desc.GetInfo().GetRunState())
-		require.NotNil(t, desc.GetInfo().GetHeartbeatDetails(), "heartbeat should still be visible before the attempt fails")
-
-		// Fail the running attempt — triggers deferred reset+heartbeat clear in TransitionRescheduled
-		failAttemptRetryably(ctx, t, pollResp1.TaskToken, 0)
-
-		// Poll retry — attempt=1, heartbeat details cleared
-		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-			Namespace: env.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err)
-		require.EqualValues(t, 1, pollResp2.Attempt, "attempt should be reset to 1")
-		require.Empty(t, pollResp2.HeartbeatDetails.GetPayloads(), "heartbeat details should be cleared after deferred reset")
-
-		// Record a new heartbeat on the new attempt
-		_, err = env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollResp2.TaskToken,
-			Details:   defaultHeartbeatDetails,
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err)
-
-		// Verify new heartbeat is visible in describe
-		desc, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:               env.Namespace().String(),
-			ActivityId:              activityID,
-			RunId:                   startResp.GetRunId(),
-			IncludeHeartbeatDetails: true,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, desc.GetInfo().GetHeartbeatDetails(), "new heartbeat from reset attempt should be visible")
-
-		// Complete
-		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollResp2.TaskToken,
-			Result:    defaultResult,
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err)
-	})
+	}
 
 	t.Run("TerminalStateReturnsFailedPrecondition", func(t *testing.T) {
 		// Resetting a completed activity should return FailedPrecondition.
@@ -13441,14 +13481,15 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 	// ResetActivityExecution with keep_paused=true can arrive while a worker still owns
 	// the current attempt. The reset itself must remain deferred until that worker
-	// reports back, but a later unpause should clear the request to keep the reset
-	// attempt paused.
-	t.Run("UnpauseClearsKeepPausedButKeepsDeferredReset", func(t *testing.T) {
+	// reports back. An unpause request that arrives in that window is rejected outright:
+	// RESET_REQUESTED is a niche state permutation the server refuses rather than resolving
+	// ambiguously (e.g. by silently clearing the pending keep-paused intent).
+	t.Run("UnpauseWhileResetKeepPausedFails", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		activityID := testcore.RandomizeStr(t.Name())
-		startResp, pollResp1, taskQueue := startAndPollActivity(ctx, t, activityID, &commonpb.RetryPolicy{
+		startResp, pollResp1, _ := startAndPollActivity(ctx, t, activityID, &commonpb.RetryPolicy{
 			InitialInterval:    durationpb.New(time.Second),
 			BackoffCoefficient: 1.0,
 		})
@@ -13465,30 +13506,69 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		unpauseActivity(ctx, t, activityID, startResp.GetRunId())
+		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			Identity:   defaultIdentity,
+		})
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+
+		// The rejected unpause must not disturb the pending keep-paused reset: the activity is
+		// still reported as pause-requested, and the worker still sees the pending reset on
+		// heartbeat.
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
+			describeActivity(ctx, t, activityID, startResp.GetRunId()).GetInfo().GetRunState())
 
 		heartbeatResp, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollResp1.TaskToken,
 		})
 		require.NoError(t, err)
-		require.True(t, heartbeatResp.GetActivityReset(), "reset should remain pending after unpause")
-		require.False(t, heartbeatResp.GetActivityPaused(), "unpause should clear the pending keep-paused reset intent")
+		require.True(t, heartbeatResp.GetActivityReset(), "reset should remain pending after the rejected unpause")
 
 		failAttemptRetryably(ctx, t, pollResp1.TaskToken, 0)
 
-		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
-		defer pollCancel()
-		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
-			Namespace: env.Namespace().String(),
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err, "activity should dispatch after the worker failure applies the pending reset")
-		require.Equal(t, activityID, pollResp2.GetActivityId())
-		require.EqualValues(t, 1, pollResp2.Attempt, "attempt should be reset to 1 after deferred reset")
+		// The deferred reset should land the activity in PAUSED, honoring the keep-paused intent
+		// that survived the rejected unpause (rather than dispatching a new attempt).
+		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSED)
+	})
 
-		completeAttempt(ctx, t, pollResp2.TaskToken)
+	// UpdateOptions is rejected for any RESET_REQUESTED activity, which includes the window while a
+	// Reset(RestoreOriginalOptions) is deferred because the worker is still running.
+	t.Run("UpdateOptionsWhileDeferredRestorePendingFails", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		startResp, pollResp1, _ := startAndPollActivity(ctx, t, activityID, &commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(time.Second),
+			BackoffCoefficient: 1.0,
+		})
+		require.EqualValues(t, 1, pollResp1.Attempt)
+
+		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.GetRunId(),
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			ActivityOptions: &activitypb.ActivityOptions{
+				StartToCloseTimeout: durationpb.New(30 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
+		})
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+
+		completeAttempt(ctx, t, pollResp1.TaskToken)
 	})
 
 	// startAttemptWithTimeouts starts a SAA with the given per-attempt timeouts and retry policy and
@@ -14258,12 +14338,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		}, 10*time.Second, 200*time.Millisecond)
 	})
 
-	// UpdateOptionsPreservesTimeoutsWhileResetRequested: UpdateActivityExecutionOptions bumps the
-	// attempt stamp, which invalidates all attempt-scoped timeout tasks. The handler must re-emit
-	// fresh StartToClose and Heartbeat timeout tasks for RESET_REQUESTED activities, otherwise the
-	// running worker is left with no server-side timeout enforcement (only the long
-	// ScheduleToCloseTimeout would eventually catch a hung worker).
-	t.Run("UpdateOptionsPreservesTimeoutsWhileResetRequested", func(t *testing.T) {
+	// UpdateOptionsWhileResetRequestedFails: updating options is refused once a reset is pending.
+	t.Run("UpdateOptionsWhileResetRequestedFails", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(testcore.NewContext(), 30*time.Second)
 		defer cancel()
 		activityID := testcore.RandomizeStr(t.Name())
@@ -14301,9 +14377,6 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Update StartToCloseTimeout to 1s. The handler bumps the attempt stamp (invalidating the
-		// old 1-minute timeout task) and must re-emit a fresh 1-second timeout task that fires
-		// while the activity is RESET_REQUESTED.
 		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -14313,18 +14386,18 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
 		})
-		require.NoError(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
 
-		// New StartToCloseTimeout fires → retry consumes reset-request → SCHEDULED at attempt 1.
-		await.Require(ctx, t, func(c *await.T) {
-			dr, dErr := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  env.Namespace().String(),
-				ActivityId: activityID,
-			})
-			require.NoError(c, dErr)
-			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, dr.GetInfo().GetRunState())
-			require.EqualValues(c, 1, dr.GetInfo().GetAttempt())
-		}, 10*time.Second, 200*time.Millisecond)
+		// The refused update leaves the original 1-minute StartToCloseTimeout and the pending reset in
+		// place, so the activity stays RESET_REQUESTED until the worker yields.
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, time.Minute, descResp.GetInfo().GetStartToCloseTimeout().AsDuration())
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, descResp.GetInfo().GetRunState())
 	})
 
 	t.Run("Jitter", func(t *testing.T) {

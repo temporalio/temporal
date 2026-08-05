@@ -7,6 +7,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
@@ -365,13 +366,12 @@ func validateAndNormalizePollActivityExecutionRequest(
 
 func validateAndNormalizeStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
-	maxIDLengthLimit int,
-	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	config *Config,
 	logger log.Logger,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
+	maxIDLengthLimit := config.MaxIDLengthLimit()
 	if len(req.GetRequestId()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
 			len(req.GetRequestId()), maxIDLengthLimit)
@@ -389,12 +389,19 @@ func validateAndNormalizeStartRequest(
 	if err := validateBlobSize(
 		req.GetActivityId(),
 		"StartActivityExecution",
-		blobSizeLimitError,
-		blobSizeLimitWarn,
+		config.BlobSizeLimitError,
+		config.BlobSizeLimitWarn,
 		req.Input.Size(),
 		logger,
 		req.GetNamespace()); err != nil {
 		return serviceerror.NewInvalidArgument("input exceeds length limit")
+	}
+	if err := validateUserMetadata(
+		req.GetNamespace(),
+		req.GetUserMetadata(),
+		config,
+	); err != nil {
+		return err
 	}
 
 	if req.GetSearchAttributes() != nil {
@@ -403,6 +410,24 @@ func validateAndNormalizeStartRequest(
 		}
 	}
 
+	return nil
+}
+
+func validateUserMetadata(
+	namespaceName string,
+	metadata *sdkpb.UserMetadata,
+	config *Config,
+) error {
+	summarySize := metadata.GetSummary().Size()
+	if limit := config.MaxUserMetadataSummarySize(namespaceName); summarySize > limit {
+		return serviceerror.NewInvalidArgumentf(
+			"user_metadata.summary exceeds size limit. Length=%d Limit=%d", summarySize, limit)
+	}
+	detailsSize := metadata.GetDetails().Size()
+	if limit := config.MaxUserMetadataDetailsSize(namespaceName); detailsSize > limit {
+		return serviceerror.NewInvalidArgumentf(
+			"user_metadata.details exceeds size limit. Length=%d Limit=%d", detailsSize, limit)
+	}
 	return nil
 }
 
