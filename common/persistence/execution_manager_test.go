@@ -72,6 +72,7 @@ func TestExecutionManager_DeletesTasksWhenEnabled(t *testing.T) {
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetIntPropertyFn(0),
 		dynamicconfig.GetBoolPropertyFn(true),
 	)
 
@@ -97,6 +98,7 @@ func TestExecutionManager_DoesNotDeleteTasksWhenDisabled(t *testing.T) {
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetIntPropertyFn(0),
 		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
@@ -133,6 +135,7 @@ func TestExecutionManager_DeleteTasksError_DoesNotFailUpdate(t *testing.T) {
 		nil,
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetIntPropertyFn(0),
 		dynamicconfig.GetBoolPropertyFn(true),
 	)
 
@@ -162,6 +165,7 @@ func TestExecutionManager_TrimHistoryBranchSkipped_NonWorkflow(t *testing.T) {
 		// Capture error logs to verify no unexpected errors.
 		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetIntPropertyFn(0),
 		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
@@ -225,6 +229,7 @@ func TestExecutionManager_TrimHistoryBranchSkipped_EmptyBranchToken(t *testing.T
 		// Capture error logs to verify no unexpected errors.
 		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetIntPropertyFn(0),
 		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
