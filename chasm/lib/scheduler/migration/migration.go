@@ -476,8 +476,11 @@ func convertBackfillersCHASMToLegacy(
 	for _, backfiller := range backfillers {
 		if request := backfiller.GetBackfillRequest(); request != nil {
 			backfill := common.CloneProto(request)
-			if backfiller.GetAttempt() > 0 && backfiller.GetLastProcessedTime() != nil {
-				backfill.StartTime = common.CloneProto(backfiller.GetLastProcessedTime())
+			lastProcessed := backfiller.GetLastProcessedTime()
+			if lastProcessed != nil && (lastProcessed.GetSeconds() != 0 || lastProcessed.GetNanos() != 0) {
+				backfill.StartTime = common.CloneProto(lastProcessed)
+			} else {
+				backfill.StartTime = timestamppb.New(request.GetStartTime().AsTime().Add(-time.Millisecond))
 			}
 			ongoing = append(ongoing, backfill)
 			continue
