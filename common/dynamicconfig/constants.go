@@ -1488,6 +1488,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		2,
 		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
 	)
+	// TODO (Shivam): Temporal Cloud sets this to true by default. Change the OSS default to true in v1.33.
+	MatchingEnableWorkerDeploymentVersionDemotionSignal = NewGlobalBoolSetting(
+		"matching.enableWorkerDeploymentVersionDemotionSignal",
+		false,
+		`MatchingEnableWorkerDeploymentVersionDemotionSignal enables signal-based demotion of worker deployment versions.`,
+	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
 		1000,
