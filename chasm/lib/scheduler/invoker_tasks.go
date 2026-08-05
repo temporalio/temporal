@@ -713,7 +713,8 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
 		metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
-			Record(actualStartTime.Sub(desiredTime.AsTime()))
+			Record(actualStartTime.Sub(desiredTime.AsTime()),
+				metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 		// Record total delay from original schedule time, including any overlap policy wait.
 		metricsHandler.
 			Timer(metrics.ScheduleActionE2EDelay.Name()).
