@@ -2362,6 +2362,94 @@ func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Success() {
 	s.NoError(err)
 }
 
+// expectArchivalPageSizeQuery sets up the mocks shared by the archived-visibility
+// page-size tests (namespace enabled for archival + archiver provider) and stubs the
+// visibility archiver's Query to assert the caller-supplied PageSize propagated correctly.
+// It returns a function to build the handler from a config so each test can override config.
+func (s *WorkflowHandlerSuite) expectArchivalPageSizeQuery(expectedPageSize int) {
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{
+			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
+			VisibilityArchivalUri:   testVisibilityArchivalURI,
+		},
+		"",
+	), nil).AnyTimes()
+	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
+	s.mockVisibilityArchiver.EXPECT().Query(gomock.Any(), gomock.Any(), gomock.Cond(func(req *archiver.QueryVisibilityRequest) bool {
+		return req.PageSize == expectedPageSize
+	}), gomock.Any()).Return(&archiver.QueryVisibilityResponse{}, nil)
+	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes("", false)
+}
+
+func (s *WorkflowHandlerSuite) archivedListRequestWithPageSize(pageSize int32) *workflowservice.ListArchivedWorkflowExecutionsRequest {
+	return &workflowservice.ListArchivedWorkflowExecutionsRequest{
+		Namespace: "some random namespace name",
+		PageSize:  pageSize,
+		Query:     "some random query string",
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestListArchivedVisibility_DefaultPageSizeWhenOmitted() {
+	s.expectArchivalPageSizeQuery(1000)
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	resp, err := wh.ListArchivedWorkflowExecutions(context.Background(), s.archivedListRequestWithPageSize(0))
+	s.Require().NoError(err)
+	s.Require().NotNil(resp)
+}
+
+func (s *WorkflowHandlerSuite) TestListArchivedVisibility_UsesExplicitPageSize() {
+	s.expectArchivalPageSizeQuery(500)
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	resp, err := wh.ListArchivedWorkflowExecutions(context.Background(), s.archivedListRequestWithPageSize(500))
+	s.Require().NoError(err)
+	s.Require().NotNil(resp)
+}
+
+func (s *WorkflowHandlerSuite) TestListArchivedVisibility_RejectsPageSizeOverMax() {
+	// The page-size validation runs before the cluster-archival check, so the
+	// handler returns InvalidArgument without ever consulting archival metadata.
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	resp, err := wh.ListArchivedWorkflowExecutions(context.Background(), s.archivedListRequestWithPageSize(100000))
+	s.Require().Nil(resp)
+	s.Require().Error(err)
+	var invalidArgErr *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgErr)
+}
+
+func (s *WorkflowHandlerSuite) TestListArchivedVisibility_PageSizeAtMaxAllowed() {
+	s.expectArchivalPageSizeQuery(10000)
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	resp, err := wh.ListArchivedWorkflowExecutions(context.Background(), s.archivedListRequestWithPageSize(10000))
+	s.Require().NoError(err)
+	s.Require().NotNil(resp)
+}
+
+func (s *WorkflowHandlerSuite) TestListArchivedVisibility_DefaultPageSizeDynamicConfigOverridable() {
+	config := s.newConfig()
+	config.VisibilityArchivalQueryDefaultPageSize = dc.GetIntPropertyFn(250)
+	s.expectArchivalPageSizeQuery(250)
+	wh := s.getWorkflowHandler(config)
+
+	resp, err := wh.ListArchivedWorkflowExecutions(context.Background(), s.archivedListRequestWithPageSize(0))
+	s.Require().NoError(err)
+	s.Require().NotNil(resp)
+}
+
+func (s *WorkflowHandlerSuite) TestListArchivedVisibility_NegativePageSizeUsesDefault() {
+	s.expectArchivalPageSizeQuery(1000)
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	resp, err := wh.ListArchivedWorkflowExecutions(context.Background(), s.archivedListRequestWithPageSize(-1))
+	s.Require().NoError(err)
+	s.Require().NotNil(resp)
+}
+
 func (s *WorkflowHandlerSuite) TestGetSearchAttributes() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
