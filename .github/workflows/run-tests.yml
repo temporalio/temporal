@@ -275,6 +275,28 @@ jobs:
 
       - run: make clean-bins ci-build-misc
 
+  ownership-check:
+    name: Ownership check
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+          check-latest: true
+          cache: true
+
+      # Warn-only for now: surfaces borrowed maps/slices embedded into protobuf
+      # responses. The sink/sanitizer config lives in the Makefile target. To gate
+      # PRs, drop continue-on-error and add "ownership-check" to the test-status
+      # job's needs list.
+      - name: Run ownershipcheck
+        continue-on-error: true
+        run: make lint-ownership
+
   unit-test:
     name: Unit test
     needs: [pre-build, test-setup]
