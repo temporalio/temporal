@@ -143,6 +143,7 @@ func (vsa VisibilitySearchAttributes) Value() (driver.Value, error) {
 type dbRowsIf interface {
 	Next() bool
 	Scan(...any) error
+	Err() error
 	Close() error
 }
 
@@ -186,6 +187,9 @@ func ParseCountGroupByRows(rows dbRowsIf, groupBy []string) ([]VisibilityCountRo
 			GroupValues: groupValues,
 			Count:       countTyped,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return res, nil
 }
