@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -41,7 +39,6 @@ const (
 )
 
 type attempt struct {
-	runner           *runner
 	number           int
 	exitErr          *exec.ExitError
 	junitReport      *junitReport
@@ -49,26 +46,46 @@ type attempt struct {
 }
 
 func (a *attempt) run(ctx context.Context, args []string) (string, error) {
+	args = a.goTestArgs(args)
+	log.Printf("starting test attempt #%d: go test %v", a.number, strings.Join(args, " "))
+
+	cmd := exec.CommandContext(ctx, "go", append([]string{"test"}, args...)...)
+	output := newGoTestJSONOutput()
+	var stderr strings.Builder
+	cmd.Stdout = output
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+	cmd.Stdin = os.Stdin
+
+	err := cmd.Run()
+	stdout := output.finish() + stderr.String()
+	report, reportErr := output.junitReport()
+	if reportErr != nil {
+		return stdout, fmt.Errorf("failed to build junit report from go test output: %w", reportErr)
+	}
+	a.junitReport = report
+	return stdout, err
+}
+
+func (a *attempt) goTestArgs(args []string) []string {
+	args = slices.Clone(args)
+	hasJSON := false
 	for i, arg := range args {
-		if strings.HasPrefix(arg, coverProfileFlag) {
+		switch {
+		case arg == "-json":
+			hasJSON = true
+		case strings.HasPrefix(arg, coverProfileFlag):
+			// Each attempt writes a separate coverage profile for later merging.
 			args[i] = coverProfileFlag + a.coverProfilePath
-		} else if strings.HasPrefix(arg, junitReportFlag) {
-			args[i] = junitReportFlag + a.junitReport.path
+		default:
 		}
 	}
-	log.Printf("starting test attempt #%d: %v %v",
-		a.number, a.runner.gotestsumPath, strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, a.runner.gotestsumPath, args...)
-	var output strings.Builder
-	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &output)
-	cmd.Stdin = os.Stdin
-	err := cmd.Run()
-	return output.String(), err
+	if !hasJSON {
+		args = append([]string{"-json"}, args...)
+	}
+	return args
 }
 
 type runner struct {
-	gotestsumPath    string
 	junitOutputPath  string
 	coverProfilePath string
 	attempts         []*attempt
@@ -91,6 +108,11 @@ func newRunner() *runner {
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
+		// TODO: Remove gotestsumPathFlag once downstream services no longer pass it.
+		if arg == "--" || strings.HasPrefix(arg, gotestsumPathFlag) {
+			continue
+		}
+
 		if strings.HasPrefix(arg, maxAttemptsFlag) {
 			var err error
 			r.maxAttempts, err = strconv.Atoi(strings.Split(arg, "=")[1])
@@ -112,11 +134,6 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 			if r.totalTimeout == 0 {
 				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", totalTimeoutFlag)
 			}
-			continue
-		}
-
-		if strings.HasPrefix(arg, gotestsumPathFlag) {
-			r.gotestsumPath = strings.Split(arg, "=")[1]
 			continue
 		}
 
@@ -145,8 +162,8 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 		if strings.HasPrefix(arg, coverProfileFlag) {
 			r.coverProfilePath = strings.Split(arg, "=")[1]
 		} else if strings.HasPrefix(arg, junitReportFlag) {
-			// --junitfile is used by gotestsum
 			r.junitOutputPath = strings.Split(arg, "=")[1]
+			continue
 		}
 
 		sanitizedArgs = append(sanitizedArgs, arg)
@@ -159,9 +176,6 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 		}
 		if r.junitOutputPath == "" {
 			return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
-		}
-		if r.gotestsumPath == "" {
-			return nil, fmt.Errorf("missing required argument %q", gotestsumPathFlag)
 		}
 	case crashReportCommand:
 		if r.junitOutputPath == "" {
@@ -186,16 +200,13 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 
 func (r *runner) newAttempt() *attempt {
 	a := &attempt{
-		runner: r,
 		number: len(r.attempts) + 1,
 		coverProfilePath: fmt.Sprintf(
 			"%v_%v%v",
 			strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
 			len(r.attempts),
 			codeCoverageExtension),
-		junitReport: &junitReport{
-			path: filepath.Join(os.TempDir(), fmt.Sprintf("temporalio-temporal-%s-junit.xml", uuid.NewString())),
-		},
+		junitReport: &junitReport{},
 	}
 	r.attempts = append(r.attempts, a)
 	return a
@@ -339,16 +350,6 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		if ctx.Err() != nil {
 			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
 			totalTimeoutFired = true
-			// Try to read whatever gotestsum managed to write before it was killed.
-			if readErr := currentAttempt.junitReport.read(); readErr != nil {
-				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
-				// stdout for any "--- FAIL:" lines that completed before the kill.
-				if failedTests := parseFailedTestsFromOutput(stdout); len(failedTests) > 0 {
-					currentAttempt.junitReport = generateReport(failedTests, "total timeout", failureTypeTimeout)
-				}
-				// If no failed tests are found either, the current attempt's report
-				// remains empty and mergeReports will include only prior attempts.
-			}
 			// Without this, a mid-run timeout leaves an empty JUnit and CI shows green.
 			currentAttempt.junitReport.appendSyntheticFailure(
 				"testrunner.TotalTimeout",
@@ -373,15 +374,25 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 			break
 		}
 
-		// All tests were run, parse JUnit XML output.
-		if err = currentAttempt.junitReport.read(); err != nil {
-			log.Fatal(err)
-		}
-
 		// Write intermediate results so they survive if we are killed externally
 		// between attempts (e.g. a GitHub Actions job timeout fires after this
 		// attempt but before the next one completes).
 		r.writeCurrentReport()
+
+		// A package abort can leave both incomplete tests and tests that never
+		// started, so the observed test names are not enough to safely narrow
+		// the rerun. This also applies when a test panic caused the abort.
+		if aborts := currentAttempt.junitReport.failureDetails(failureTypeAborted); len(aborts) > 0 {
+			log.Print("test package aborted; reporting incomplete test results")
+			for _, details := range aborts {
+				log.Printf("%s: %s", failureTypeAborted, packageAbortLogSummary(details))
+			}
+			log.Print("finished reporting incomplete test results")
+			if a < r.maxAttempts {
+				log.Print("retrying with previous attempt's args")
+			}
+			continue
+		}
 
 		// If the run completely successfull, no need to retry.
 		if currentAttempt.exitErr == nil {

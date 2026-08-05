@@ -107,7 +107,10 @@ func TestMergeReports_SingleReport(t *testing.T) {
 
 	suites := report.Suites
 	require.Len(t, suites, 1)
-	require.Equal(t, 2, report.Failures)
+	require.Equal(t, 1, report.Failures)
+	require.Equal(t, len(suites[0].Testcases), report.Tests)
+	require.Equal(t, len(suites[0].Testcases), suites[0].Tests)
+	require.Equal(t, 1, suites[0].Failures)
 
 	testNames := collectTestNames(suites)
 	require.Len(t, testNames, 5)
@@ -143,7 +146,8 @@ func TestMergeReports_MultipleReports(t *testing.T) {
 
 	suites := report.Suites
 	require.Len(t, suites, 2)
-	require.Equal(t, 4, report.Failures)
+	require.Equal(t, 2, report.Failures)
+	require.Equal(t, 6, report.Tests)
 	require.Equal(t, "go.temporal.io/server/tests", suites[0].Name)
 	require.Equal(t, "go.temporal.io/server/tests (retry 1) (final)", suites[1].Name)
 
@@ -180,6 +184,87 @@ func TestMergeReports_IterationSuffixPreserved(t *testing.T) {
 	require.Equal(t, 2, report.Failures)
 }
 
+func TestMergeReports_PreservesParentWithFailureDetails(t *testing.T) {
+	j := &junitReport{Testsuites: junit.Testsuites{
+		Suites: []junit.Testsuite{{
+			Name:     "suite",
+			Disabled: 2,
+			Testcases: []junit.Testcase{
+				{
+					Name: "TestPropagated",
+					Failure: &junit.Result{
+						Data: "=== RUN   TestPropagated\n--- FAIL: TestPropagated (0.01s)\n",
+					},
+				},
+				{
+					Name: "TestPropagated/Child",
+					Failure: &junit.Result{
+						Data: "    child_test.go:10: assertion failed\n--- FAIL: TestPropagated/Child (0.01s)\n",
+					},
+				},
+				{
+					Name: "TestTimedOut",
+					Failure: &junit.Result{
+						Data: "=== RUN   TestTimedOut\n    context.go:130: test exceeded timeout of 1m30s\n--- FAIL: TestTimedOut (0.01s)\n",
+					},
+				},
+				{Name: "TestTimedOut/Child"},
+				{
+					Name:    "TestParentOnlyFailure",
+					Failure: &junit.Result{},
+				},
+				{Name: "TestParentOnlyFailure/Child"},
+				{
+					Name:  "TestError",
+					Error: &junit.Result{},
+				},
+				{
+					Name:    "TestSkipped",
+					Skipped: &junit.Result{},
+				},
+			},
+		}},
+	}}
+
+	report, err := mergeReports([]*junitReport{j})
+	require.NoError(t, err)
+
+	testNames := collectTestNames(report.Suites)
+	require.NotContains(t, testNames, "TestPropagated")
+	require.Contains(t, testNames, "TestPropagated/Child")
+	require.Contains(t, testNames, "TestTimedOut")
+	require.Contains(t, testNames, "TestTimedOut/Child")
+	require.Contains(t, testNames, "TestParentOnlyFailure")
+	require.Contains(t, testNames, "TestParentOnlyFailure/Child")
+	require.Contains(t, testNames, "TestError")
+	require.Contains(t, testNames, "TestSkipped")
+	require.Equal(t, 3, report.Failures)
+	require.Equal(t, 1, report.Errors)
+	require.Equal(t, 1, report.Skipped)
+	require.Equal(t, 2, report.Disabled)
+	require.Equal(t, 7, report.Tests)
+	require.Equal(t, 3, report.Suites[0].Failures)
+	require.Equal(t, 1, report.Suites[0].Errors)
+	require.Equal(t, 1, report.Suites[0].Skipped)
+	require.Equal(t, 2, report.Suites[0].Disabled)
+	require.Equal(t, 7, report.Suites[0].Tests)
+	require.Equal(t, []string{
+		"TestParentOnlyFailure",
+		"TestPropagated/Child",
+		"TestTimedOut",
+	}, report.collectTestCaseFailures())
+
+	var timeoutFailure *junit.Result
+	for _, tc := range report.Suites[0].Testcases {
+		if tc.Name == "TestTimedOut" {
+			timeoutFailure = tc.Failure
+			break
+		}
+	}
+	require.NotNil(t, timeoutFailure)
+	require.Contains(t, timeoutFailure.Data, "test exceeded timeout of 1m30s")
+}
+
 func TestMergeReports_MissingRerun(t *testing.T) {
 	j1 := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
 	j2 := mustReadReportFixture(t, "testdata/junit-empty.xml")
@@ -202,6 +287,42 @@ func TestMergeReports_PreservesAlertFailureMessage(t *testing.T) {
 	require.Len(t, merged.Suites[0].Testcases, 1)
 	require.NotNil(t, merged.Suites[0].Testcases[0].Failure)
 	require.Equal(t, string(failureTypePanic), merged.Suites[0].Testcases[0].Failure.Type)
+}
+
+func TestMergeReports_PreservesTestrunnerFailureType(t *testing.T) {
+	report := &junitReport{}
+	report.appendSyntheticFailure("testrunner.TotalTimeout", failureTypeTimeout, "total timeout")
+
+	merged, err := mergeReports([]*junitReport{report})
+	require.NoError(t, err)
+	require.Len(t, merged.Suites, 1)
+	require.Len(t, merged.Suites[0].Testcases, 1)
+	require.NotNil(t, merged.Suites[0].Testcases[0].Failure)
+	require.Equal(t, string(failureTypeTimeout), merged.Suites[0].Testcases[0].Failure.Type)
+}
+
+func TestMergeReports_SkipsRerunCoverageForAbortedAttempts(t *testing.T) {
+	aborted := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
+	aborted.appendSyntheticFailure("testrunner.PackageAborted", failureTypeAborted, "package aborted")
+	completed := mustReadReportFixture(t, "testdata/junit-empty.xml")
+
+	merged, err := mergeReports([]*junitReport{aborted, completed})
+	require.NoError(t, err)
+	require.Empty(t, merged.reportingErrs)
+}
+
+func TestFailureDetails(t *testing.T) {
+	report := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
+	report.appendSyntheticFailure(
+		"testrunner.PackageAborted",
+		failureTypeAborted,
+		"package example.com/tests aborted; 3 test nodes had no final result, and others may not have started",
+	)
+
+	require.Equal(t, []string{
+		"package example.com/tests aborted; 3 test nodes had no final result, and others may not have started",
+	}, report.failureDetails(failureTypeAborted))
+	require.Empty(t, report.failureDetails(failureTypePanic))
 }
 
 func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *testing.T) {

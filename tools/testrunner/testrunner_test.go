@@ -25,11 +25,10 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, []string{
-			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			// max-attempts has been stripped
-			"--",
+			// --gotestsum-path, --junitfile, and -- have been stripped
 			"-coverprofile=test.cover.out",
 			"baz",
 		}, args)
@@ -41,10 +40,8 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("TotalTimeout", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"--total-timeout=39m",
-			"--",
 			"-timeout=35m",
 			"-coverprofile=test.cover.out",
 		})
@@ -54,54 +51,23 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.Contains(t, args, "-timeout=35m")
 	})
 
-	t.Run("TotalTimeoutNotSetWhenNoGoTestTimeout", func(t *testing.T) {
-		r := newRunner()
-		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
-			"--junitfile=test.xml",
-			"--",
-			"-coverprofile=test.cover.out",
-		})
-		require.NoError(t, err)
-		require.Zero(t, r.totalTimeout)
-	})
-
 	t.Run("TotalTimeoutInvalid", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"--total-timeout=invalid",
-			"--",
 			"-coverprofile=test.cover.out",
 		})
 		require.ErrorContains(t, err, `invalid argument "--total-timeout="`)
 	})
 
-	t.Run("GoTestSumPathMissing", func(t *testing.T) {
-		r := newRunner()
-		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--junitfile=test.xml",
-			"-foo",
-			"bar",
-			// missing:
-			// "--max-attempts=0",
-			"--",
-			"-coverprofile=test.cover.out",
-			"baz",
-		})
-		require.ErrorContains(t, err, `missing required argument "--gotestsum-path="`)
-	})
-
 	t.Run("AttemptsInvalid1", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			"--max-attempts=0", // invalid!
-			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -111,12 +77,10 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("AttemptsInvalid2", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			"--max-attempts=invalid", // invalid!
-			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -131,7 +95,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-foo",
 			"bar",
 			"--max-attempts=3",
-			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -141,12 +104,10 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("CoverprofileMissing", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			"--max-attempts=3",
-			"--",
 			// missing:
 			// "-coverprofile=test.cover.out",
 			"baz",
@@ -198,7 +159,7 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	result := &junitReport{path: out.Name()}
 	require.NoError(t, result.read())
-	require.Equal(t, 2, result.Failures)
+	require.Equal(t, 1, result.Failures)
 	require.Len(t, result.Suites, 1)
 
 	// Simulate attempt 2 also completing. The intermediate write should now
@@ -212,7 +173,7 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	result2 := &junitReport{path: out.Name()}
 	require.NoError(t, result2.read())
-	require.Equal(t, 4, result2.Failures) // 2 from attempt 1 + 2 from attempt 2
+	require.Equal(t, 2, result2.Failures) // 1 from attempt 1 + 1 from attempt 2
 	require.Len(t, result2.Suites, 2)
 }
 

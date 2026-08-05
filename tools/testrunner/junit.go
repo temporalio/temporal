@@ -16,6 +16,7 @@ import (
 // alertsSuiteName is the JUnit suite name used for structural alerts (data
 // races, panics, fatal errors).
 const alertsSuiteName = "ALERTS"
+const testrunnerSuiteName = "testrunner"
 
 const junitAlertDetailsMaxBytes = 64 * 1024
 
@@ -24,6 +25,7 @@ type failureType string
 const (
 	// failureTypeFailed marks a failed assertion.
 	failureTypeFailed   failureType = "Failed"
+	failureTypeAborted  failureType = "ABORTED"
 	failureTypeTimeout  failureType = "TIMEOUT"
 	failureTypeCrash    failureType = "CRASH"
 	failureTypeDataRace failureType = "DATA RACE"
@@ -100,7 +102,7 @@ func (j *junitReport) write() error {
 }
 
 // appendSyntheticFailure adds a failure entry under a "testrunner" suite for
-// events outside any real testcase (e.g. timeout killing gotestsum pre-write).
+// events outside any real testcase (e.g. timeout killing go test mid-run).
 func (j *junitReport) appendSyntheticFailure(name string, kind failureType, detail string) {
 	tc := junit.Testcase{
 		Name:    name,
@@ -108,7 +110,7 @@ func (j *junitReport) appendSyntheticFailure(name string, kind failureType, deta
 	}
 	// Reuse an existing testrunner suite if one is already present.
 	for i := range j.Suites {
-		if j.Suites[i].Name == "testrunner" {
+		if j.Suites[i].Name == testrunnerSuiteName {
 			j.Suites[i].Testcases = append(j.Suites[i].Testcases, tc)
 			j.Suites[i].Failures++
 			j.Suites[i].Tests++
@@ -118,7 +120,7 @@ func (j *junitReport) appendSyntheticFailure(name string, kind failureType, deta
 		}
 	}
 	j.Suites = append(j.Suites, junit.Testsuite{
-		Name:      "testrunner",
+		Name:      testrunnerSuiteName,
 		Failures:  1,
 		Tests:     1,
 		Testcases: []junit.Testcase{tc},
@@ -224,6 +226,45 @@ func (j *junitReport) collectTestCases() map[string]struct{} {
 	return cases
 }
 
+func (j *junitReport) hasFailureType(kind failureType) bool {
+	for _, suite := range j.Suites {
+		for _, tc := range suite.Testcases {
+			if tc.Failure != nil && tc.Failure.Type == string(kind) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (j *junitReport) failureDetails(kind failureType) []string {
+	var details []string
+	for _, suite := range j.Suites {
+		for _, tc := range suite.Testcases {
+			if tc.Failure != nil && tc.Failure.Type == string(kind) {
+				details = append(details, tc.Failure.Data)
+			}
+		}
+	}
+	return details
+}
+
+// missingRerunFailures returns prior-attempt failures that curr failed to
+// re-run. Aborted attempts retry with the same args, so coverage isn't expected.
+func (j *junitReport) missingRerunFailures(curr *junitReport) []string {
+	if j.hasFailureType(failureTypeAborted) || curr.hasFailureType(failureTypeAborted) {
+		return nil
+	}
+	currCases := curr.collectTestCases()
+	var missing []string
+	for _, f := range j.collectTestCaseFailures() {
+		if _, ok := currCases[f]; !ok {
+			missing = append(missing, f)
+		}
+	}
+	return missing
+}
+
 func (j *junitReport) collectTestCaseFailures() []string {
 	var failures []string
 	for _, suite := range j.Suites {
@@ -265,11 +306,6 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 	combined.Name = reports[0].Name
 
 	for i, report := range reports {
-		combined.Tests += report.Tests
-		combined.Errors += report.Errors
-		combined.Failures += report.Failures
-		combined.Skipped += report.Skipped
-		combined.Disabled += report.Disabled
 		combined.Time += report.Time
 
 		// If the report is for a retry ...
@@ -279,16 +315,7 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			if i == len(reports)-1 {
 				suffix += " (final)"
 			}
-			prevFailures := reports[i-1].collectTestCaseFailures()
-			currCases := report.collectTestCases()
-
-			var missing []string
-			for _, f := range prevFailures {
-				if _, ok := currCases[f]; !ok {
-					missing = append(missing, f)
-				}
-			}
-			if len(missing) > 0 {
+			if missing := reports[i-1].missingRerunFailures(report); len(missing) > 0 {
 				reportingErrs = append(reportingErrs, fmt.Errorf(
 					"expected rerun of all failures from previous attempt, missing: %v", missing))
 			}
@@ -302,6 +329,10 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			newSuite := suite // shallow copy
 			newSuite.Name += suffix
 			newSuite.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
+			newSuite.Tests = 0
+			newSuite.Errors = 0
+			newSuite.Failures = 0
+			newSuite.Skipped = 0
 
 			// Sort test cases by name.
 			slices.SortFunc(suite.Testcases, func(a, b junit.Testcase) int {
@@ -311,23 +342,33 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			// Collect test cases.
 			for j := range len(suite.Testcases) {
 				testCase := suite.Testcases[j]
-				// Check if this is a parent test case (ie prefix of next subtest).
-				// Use testCase.Name+"/" to avoid matching iteration suffixes like #01.
-				if j != len(suite.Testcases)-1 && strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name+"/") {
-					// Discard test case parents since they provide no value.
-					continue
-				}
-
-				// Parse failure details from Failure.Data, if present.
-				if testCase.Failure != nil && testCase.Failure.Data != "" {
-					if details := parseFailureDetails(testCase.Failure.Data); details != noFailureDetails {
+				// Parse failure details from Failure.Data, if present. Synthetic
+				// suites (testrunner, ALERTS) already carry curated details, so
+				// leave their Data untouched.
+				hasFailureDetails := testCase.Failure != nil && testCase.Failure.Data != ""
+				if hasFailureDetails && !preservesFailureType(suite.Name) {
+					details := parseFailureDetails(testCase.Failure.Data)
+					hasFailureDetails = details != noFailureDetails
+					if hasFailureDetails {
 						testCase.Failure.Data = details
 					}
 				}
 
+				// Check if this is a parent test case (ie prefix of next subtest).
+				// Use testCase.Name+"/" to avoid matching iteration suffixes like #01.
+				isParent := j != len(suite.Testcases)-1 &&
+					strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name+"/")
+				hasResult := testCase.Failure != nil || testCase.Error != nil
+				if isParent &&
+					!hasFailureDetails &&
+					(!hasResult || hasFailedDescendant(suite.Testcases, j)) {
+					// Discard parent test cases that only propagate a descendant result.
+					continue
+				}
+
 				// Failure.Type carries the canonical kind in merged JUnit.
 				if testCase.Failure != nil {
-					if suite.Name == alertsSuiteName {
+					if preservesFailureType(suite.Name) {
 						if testCase.Failure.Type == "" {
 							testCase.Failure.Type = testCase.Failure.Message
 						}
@@ -336,9 +377,9 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 					}
 				}
 				testCase.Name += suffix
-				newSuite.Testcases = append(newSuite.Testcases, testCase)
+				newSuite.AddTestcase(testCase)
 			}
-			combined.Suites = append(combined.Suites, newSuite)
+			combined.AddSuite(newSuite)
 		}
 	}
 
@@ -346,6 +387,23 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		Testsuites:    combined,
 		reportingErrs: reportingErrs,
 	}, nil
+}
+
+func hasFailedDescendant(testcases []junit.Testcase, parent int) bool {
+	prefix := testcases[parent].Name + "/"
+	for _, testcase := range testcases[parent+1:] {
+		if !strings.HasPrefix(testcase.Name, prefix) {
+			break
+		}
+		if testcase.Failure != nil || testcase.Error != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func preservesFailureType(suiteName string) bool {
+	return suiteName == alertsSuiteName || suiteName == testrunnerSuiteName
 }
 
 type node struct {

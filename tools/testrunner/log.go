@@ -116,7 +116,7 @@ func preferFullyQualifiedTestName(tests []string) string {
 	return primary
 }
 
-// parseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
+// parseAlerts scans a go test stdout stream and extracts high-priority
 // alerts such as data races and panics. It returns a slice of alerts in the
 // order they were encountered.
 func parseAlerts(stdout string) []alert {
@@ -324,24 +324,6 @@ func shouldStopOnTestBoundary(line string, _ int, _ int) bool {
 	return isTestResultBoundary(line)
 }
 
-// parseFailedTestsFromOutput extracts failing test names from gotestsum stdout.
-// It looks for Go test failure lines produced as tests complete, and is
-// used when the test binary was killed externally before producing a JUnit XML.
-func parseFailedTestsFromOutput(stdout string) []string {
-	var failed []string
-	seen := make(map[string]struct{})
-	for line := range strings.SplitSeq(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, goTestFailLinePrefix) {
-			continue
-		}
-		if name, ok := parseTripleDashTestName(line); ok {
-			addUniqueTest(&failed, seen, name)
-		}
-	}
-	return failed
-}
-
 // parseFailureDetails extracts the actionable part of a JUnit failure Data block.
 func parseFailureDetails(data string) string {
 	lines := normalizedFailureLines(data)
@@ -373,22 +355,22 @@ func normalizedFailureLines(data string) []string {
 
 func findLastAssertionFailureBlock(lines []string) (string, bool) {
 	var failLine string
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
+	for i, rawLine := range slices.Backward(lines) {
+		line := strings.TrimSpace(rawLine)
 		if failLine == "" && strings.HasPrefix(line, goTestFailLinePrefix) {
 			// Keep the final Go test failure line because it carries the test duration.
 			failLine = line
 			continue
 		}
-		if !strings.Contains(lines[i], "Error Trace:") {
+		if !strings.Contains(rawLine, "Error Trace:") {
 			continue
 		}
 
 		// Include the nearest preceding line when present. For testify this is
 		// the file header; for await failures this is the attempt marker.
 		start := i
-		for prev := i - 1; prev >= 0; prev-- {
-			if strings.TrimSpace(lines[prev]) != "" {
+		for prev, prevLine := range slices.Backward(lines[:i]) {
+			if strings.TrimSpace(prevLine) != "" {
 				start = prev
 				break
 			}
@@ -422,8 +404,8 @@ func endOfAssertionBlock(lines []string, start int) int {
 }
 
 func findLastTestOutputFailureBlock(lines []string) (start, end int, ok bool) {
-	for start := len(lines) - 1; start >= 0; start-- {
-		if !isTestOutputLine(lines[start]) {
+	for start, line := range slices.Backward(lines) {
+		if !isTestOutputLine(line) {
 			continue
 		}
 		end := start + 1
