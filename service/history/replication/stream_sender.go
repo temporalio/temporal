@@ -414,7 +414,10 @@ func (s *StreamSenderImpl) catchupBeginWatermark(priority enumsspb.TaskPriority,
 		s.logger.Debug("StreamSender queueState not found")
 		return end
 	}
-	readerID := s.readerGroup.ReaderID()
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
 	readerState, ok := queueState.ReaderStates[readerID]
 	if !ok {
 		s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
