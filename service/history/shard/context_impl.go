@@ -74,6 +74,8 @@ const (
 const (
 	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
 	queueMetricUpdateInterval = 5 * time.Minute
+	// Spreads the emit, and the task read it does, so shards owned by a host don't align on it.
+	queueMetricUpdateJitterCoefficient = 0.15
 )
 
 var (
@@ -1204,7 +1206,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 }
 
 func (s *ContextImpl) monitorQueueMetrics() {
-	timer := time.NewTimer(queueMetricUpdateInterval)
+	timer := time.NewTimer(backoff.Jitter(queueMetricUpdateInterval, queueMetricUpdateJitterCoefficient))
 	defer timer.Stop()
 
 	done := s.lifecycleCtx.Done()
@@ -1216,7 +1218,7 @@ func (s *ContextImpl) monitorQueueMetrics() {
 			s.emitShardInfoMetricsLogs()
 			// We reset the timer (rather than using a ticker) so that delays in grabbing the shard lock
 			// don't cause us to pile up
-			timer.Reset(queueMetricUpdateInterval)
+			timer.Reset(backoff.Jitter(queueMetricUpdateInterval, queueMetricUpdateJitterCoefficient))
 		}
 	}
 }
