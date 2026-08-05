@@ -235,7 +235,7 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	switch e.Type {
 	case model.HeartbeatType:
 		_, err := fc.RecordActivityTaskHeartbeat(a.d.ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
-			Namespace: ns, TaskToken: a.token, Details: payloads.EncodeString("heartbeat details"),
+			Namespace: ns, TaskToken: a.token, Details: activityRecordedHeartbeatDetails,
 		})
 		return err
 	case model.RespondCompletedType:
@@ -298,7 +298,7 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 		return err
 	case model.ResetType:
 		_, err := fc.ResetActivityExecution(a.d.ctx, &workflowservice.ResetActivityExecutionRequest{
-			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused,
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused, ResetHeartbeat: e.ResetHeartbeat,
 		})
 		return err
 	case model.UpdateOptionsType:
