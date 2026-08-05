@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/contextutil"
+	commonfailure "go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -1370,8 +1371,14 @@ func (a *Activity) recordFailedAttempt(
 ) error {
 	attempt := a.LastAttempt.Get(ctx)
 
+	attemptFailure := failure
+	if !noRetriesLeft {
+		// Similar to workflow activity, truncate only retryable failure, not the final one.
+		attemptFailure = truncateRetryableFailure(ctx, failure)
+	}
+
 	attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{
-		Failure: failure,
+		Failure: attemptFailure,
 		Time:    timestamppb.New(currentTime),
 	}
 	attempt.CompleteTime = timestamppb.New(currentTime)
@@ -1384,6 +1391,22 @@ func (a *Activity) recordFailedAttempt(
 		attempt.CurrentRetryIntervalSource = retryIntervalSource
 	}
 	return nil
+}
+
+// truncateRetryableFailure caps the size of a failure retained in the activity's state while it
+// retries, mirroring MutableStateImpl.truncateRetryableActivityFailure for workflow activities.
+func truncateRetryableFailure(ctx chasm.Context, attemptFailure *failurepb.Failure) *failurepb.Failure {
+	actCtx := activityContextFromChasm(ctx)
+	sizeLimit := actCtx.config.MutableStateActivityFailureSizeLimitError(ctx.NamespaceEntry().Name().String())
+	if attemptFailure.Size() <= sizeLimit {
+		return attemptFailure
+	}
+
+	// nonRetryable is set to false here as only failures of attempts that will be retried are
+	// truncated, so the value is only for visibility/debugging purposes.
+	serverFailure := commonfailure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+	serverFailure.Cause = commonfailure.Truncate(attemptFailure, sizeLimit)
+	return serverFailure
 }
 
 // tryReschedule attempts to reschedule the activity for retry. It handles the cases of pause and

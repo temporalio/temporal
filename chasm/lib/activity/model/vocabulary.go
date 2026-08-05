@@ -49,8 +49,9 @@ type Event struct {
 
 // Failure specifies the failure a RespondFailed event sends.
 type Failure struct {
-	Type      FailureType
-	Retryable bool // controls the non-retryable flag for application and server failures.
+	Type         FailureType
+	Retryable    bool // controls the non-retryable flag for application and server failures.
+	LargeMessage bool // sends a failure message exceeding activityFailureSizeLimit
 }
 
 // FailureType identifies the kind of failure a RespondFailed event reports.
