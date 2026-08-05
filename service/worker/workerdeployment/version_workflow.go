@@ -1268,6 +1268,9 @@ func (d *VersionWorkflowRunner) syncVersionDataToComputeStatus(ctx workflow.Cont
 				logger.Error("failed to sync compute status", "error", err)
 			} else if result.ProviderValidation != nil {
 				state.ComputeStatus = &result
+				if workflow.GetVersion(ctx, "sync-compute-status-to-deployment", workflow.DefaultVersion, 0) >= 0 {
+					d.syncSummary(ctx) // propagate updated ComputeStatus to deployment workflow
+				}
 			}
 		})
 	}

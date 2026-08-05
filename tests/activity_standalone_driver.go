@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -167,10 +168,10 @@ func (a *saaHandle) activityInfo(t require.TestingT) activityInfo {
 	return saaActivityInfo(a.describe(t).GetInfo())
 }
 
-// terminalStatus waits for the activity to reach a terminal state and reports it.
+// terminalOutcome waits for the activity to reach a terminal state and reports it.
 // PollActivityExecution resolves once the activity is no longer running. An empty response means the
 // server's long-poll window expired, so resubmit.
-func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
+func (a *saaHandle) terminalOutcome(t require.TestingT) activityTerminalOutcome {
 	deadline := time.Now().Add(activityDriverTimeout)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithDeadline(a.d.ctx, deadline)
@@ -187,12 +188,21 @@ func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 			break // the deadline cancelled the long poll
 		}
 		if resp.GetRunId() != "" {
-			return a.describe(t).GetInfo().GetStatus()
+			describeResponse := a.describe(t)
+			return activityTerminalOutcome{
+				status:     describeResponse.GetInfo().GetStatus(),
+				retryState: describeResponse.GetOutcome().GetRetryState(),
+			}
 		}
 	}
-	t.Errorf("the activity did not reach a terminal status within %s of the trace finishing. Last observed: %+v",
-		activityDriverTimeout, a.activityInfo(t))
-	return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
+	require.FailNow(
+		t,
+		"activity did not reach a terminal status",
+		"within %s of the trace finishing; last observed: %+v",
+		activityDriverTimeout,
+		a.activityInfo(t),
+	)
+	return activityTerminalOutcome{}
 }
 
 func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
@@ -201,7 +211,21 @@ func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
 		Attempt:                    i.GetAttempt(),
 		CurrentRetryInterval:       i.GetCurrentRetryInterval().AsDuration().Round(time.Second),
 		NextAttemptScheduleTimeSet: i.GetNextAttemptScheduleTime() != nil,
+		LastHeartbeatDetails:       activityMarshalPayloads(i.GetHeartbeatDetails()),
 	}
+}
+
+func (a *saaHandle) respondCanceledByID() error {
+	_, err := a.d.env.FrontendClient().RespondActivityTaskCanceledById(
+		a.d.ctx,
+		&workflowservice.RespondActivityTaskCanceledByIdRequest{
+			Namespace:  a.d.env.Namespace().String(),
+			ActivityId: a.activityID,
+			RunId:      a.runID,
+			Identity:   a.d.env.Tv().WorkerIdentity(),
+		},
+	)
+	return err
 }
 
 // rpc performs the frontend RPC for a non-Poll, non-timer event and returns its error.
@@ -209,10 +233,41 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	fc := a.d.env.FrontendClient()
 	ns := a.d.env.Namespace().String()
 	switch e.Type {
-	case model.RespondFailedType:
-		_, err := fc.RespondActivityTaskFailed(a.d.ctx, &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
+	case model.HeartbeatType:
+		_, err := fc.RecordActivityTaskHeartbeat(a.d.ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: ns, TaskToken: a.token, Details: activityRecordedHeartbeatDetails,
 		})
+		return err
+	case model.RespondCompletedType:
+		_, err := fc.RespondActivityTaskCompleted(a.d.ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
+			Result: payloads.EncodeString("result"),
+		})
+		return err
+	case model.RespondCompletedByIDType:
+		_, err := fc.RespondActivityTaskCompletedById(a.d.ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+			Namespace: ns, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
+			Result: payloads.EncodeString("result"),
+		})
+		return err
+	case model.RespondFailedType:
+		req := &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+		}
+		if e.HasHeartbeatDetails {
+			req.LastHeartbeatDetails = activityHeartbeatDetails
+		}
+		_, err := fc.RespondActivityTaskFailed(a.d.ctx, req)
+		return err
+	case model.RespondFailedByIDType:
+		req := &workflowservice.RespondActivityTaskFailedByIdRequest{
+			Namespace: ns, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
+			Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+		}
+		if e.HasHeartbeatDetails {
+			req.LastHeartbeatDetails = activityHeartbeatDetails
+		}
+		_, err := fc.RespondActivityTaskFailedById(a.d.ctx, req)
 		return err
 	case model.RespondCanceledType:
 		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{
@@ -225,14 +280,32 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 			Reason: "drive", RequestId: uuid.NewString(),
 		})
 		return err
+	case model.TerminateType:
+		_, err := fc.TerminateActivityExecution(a.d.ctx, &workflowservice.TerminateActivityExecutionRequest{
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+			Reason: "drive", RequestId: uuid.NewString(),
+		})
+		return err
 	case model.PauseType:
 		_, err := fc.PauseActivityExecution(a.d.ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: uuid.NewString(),
 		})
 		return err
+	case model.UnpauseType:
+		_, err := fc.UnpauseActivityExecution(a.d.ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+		})
+		return err
 	case model.ResetType:
 		_, err := fc.ResetActivityExecution(a.d.ctx, &workflowservice.ResetActivityExecutionRequest{
-			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused,
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused, ResetHeartbeat: e.ResetHeartbeat,
+		})
+		return err
+	case model.UpdateOptionsType:
+		_, err := fc.UpdateActivityExecutionOptions(a.d.ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+			ActivityOptions: &activitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(time.Hour)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
 		})
 		return err
 	default:

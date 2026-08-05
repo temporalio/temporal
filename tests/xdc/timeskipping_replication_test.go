@@ -37,7 +37,7 @@ func TestTimeSkippingReplicationSuite(t *testing.T) {
 
 func (s *timeSkippingReplicationSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.TimeSkippingEnabled.Key(): true,
+		dynamicconfig.WorkflowTimeSkippingEnabled.Key(): true,
 	}
 	// Drive the state-based replication path so TimeSkippingInfo replicates via the
 	// generic ExecutionInfo merge and PartialRefresh re-stamps timer tasks on the standby.
@@ -208,8 +208,8 @@ func (s *timeSkippingReplicationSuite) TestFastForwardDisablePropagates() {
 	)
 	runID := s.startSkippingWorkflow(ctx, ns, wfID, tq, 24*time.Hour, 0,
 		&commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(fastForward),
+			Enabled:           true,
+			FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"},
 		},
 	)
 
@@ -289,8 +289,8 @@ func (s *timeSkippingReplicationSuite) TestStandbyTimeSkippingTimerTaskAcksOnRea
 	const fastForward = 30 * time.Minute
 	runID := s.startSkippingWorkflow(ctx, ns, wfID, tq, 24*time.Hour, 0,
 		&commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(fastForward),
+			Enabled:           true,
+			FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"},
 		},
 	)
 

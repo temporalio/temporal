@@ -24,6 +24,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -1731,18 +1732,13 @@ func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb
 
 func cloneTaskQueueStats(in *taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
 	if in == nil {
-		return &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+		in = &taskqueuepb.TaskQueueStats{}
 	}
-	age := in.GetApproximateBacklogAge()
-	if age == nil {
-		age = durationpb.New(0)
+	out := common.CloneProto(in)
+	if out.ApproximateBacklogAge == nil {
+		out.ApproximateBacklogAge = durationpb.New(0)
 	}
-	return &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: in.GetApproximateBacklogCount(),
-		ApproximateBacklogAge:   durationpb.New(age.AsDuration()),
-		TasksAddRate:            in.GetTasksAddRate(),
-		TasksDispatchRate:       in.GetTasksDispatchRate(),
-	}
+	return out
 }
 
 func cloneStatsByPriority(in map[int32]*taskqueuepb.TaskQueueStats) map[int32]*taskqueuepb.TaskQueueStats {
@@ -1800,12 +1796,14 @@ func splitTaskQueueStatsByRampPercentage(
 		ApproximateBacklogAge:   currentAge,
 		TasksAddRate:            in.GetTasksAddRate() - rampAddRate,
 		TasksDispatchRate:       in.GetTasksDispatchRate() - rampDispatchRate,
+		RateLimitingActive:      in.GetRateLimitingActive(),
 	}
 	rampShare = &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: rampCount,
 		ApproximateBacklogAge:   rampAge,
 		TasksAddRate:            rampAddRate,
 		TasksDispatchRate:       rampDispatchRate,
+		RateLimitingActive:      in.GetRateLimitingActive(),
 	}
 	return currentShare, rampShare
 }
