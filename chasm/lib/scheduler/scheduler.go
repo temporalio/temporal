@@ -674,6 +674,7 @@ func (s *Scheduler) HandleNexusCompletion(
 			strings.ToLower(wfStatus.String()),
 			workflowID,
 		)
+		s.updateConflictToken()
 	}
 
 	// Record the completed action in the Invoker.
