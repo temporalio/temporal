@@ -21,6 +21,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -78,6 +79,7 @@ func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
 					},
 				},
 			}
+			injectActivityContext(t, ctx) // needed for last test case
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
 					Status:                 tc.status,
@@ -1996,4 +1998,110 @@ func TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion(t *testing.T) {
 		DeploymentName: "test-deployment",
 		BuildId:        "test-build-1",
 	}, resp.FrontendResponse.GetInfo().GetLastDeploymentVersion())
+}
+
+// oversizedActivityFailure returns an application failure whose details push it past the retained
+// failure size limit, mirroring the failure used by the workflow activity truncation tests.
+func oversizedActivityFailure(t *testing.T) *failurepb.Failure {
+	activityFailure := &failurepb.Failure{
+		Message: "activity failure with large details",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "application-failure-type",
+			NonRetryable: false,
+			Details: &commonpb.Payloads{
+				Payloads: []*commonpb.Payload{
+					{
+						Data: make([]byte, defaultFailureSizeLimit*2),
+					},
+				},
+			},
+		}},
+	}
+	require.Greater(t, activityFailure.Size(), defaultFailureSizeLimit)
+	return activityFailure
+}
+
+// withinLimitActivityFailure returns an application failure small enough to be retained whole.
+func withinLimitActivityFailure(t *testing.T) *failurepb.Failure {
+	activityFailure := &failurepb.Failure{
+		Message: "activity failure",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type: "application-failure-type",
+		}},
+	}
+	require.LessOrEqual(t, activityFailure.Size(), defaultFailureSizeLimit)
+	return activityFailure
+}
+
+// recordFailedAttempt truncates the retryable failure, and not the final failure.
+func TestRecordFailedAttempt_FailureTruncation(t *testing.T) {
+	requireTruncated := func(t *testing.T, sent, retained *failurepb.Failure) {
+		require.LessOrEqual(t, retained.Size(), defaultFailureSizeLimit)
+		require.Equal(t, common.FailureReasonFailureExceedsLimit, retained.GetMessage())
+		require.NotNil(t, retained.GetServerFailureInfo())
+		cause := retained.GetCause()
+		require.Equal(t, sent.GetMessage(), cause.GetMessage())
+		require.Equal(t, "application-failure-type", cause.GetApplicationFailureInfo().GetType())
+		require.Nil(t, cause.GetApplicationFailureInfo().GetDetails())
+	}
+	requireKeptWhole := func(t *testing.T, sent, retained *failurepb.Failure) {
+		protorequire.ProtoEqual(t, sent, retained)
+	}
+
+	testCases := []struct {
+		name          string
+		failure       func(*testing.T) *failurepb.Failure
+		noRetriesLeft bool
+		requireResult func(t *testing.T, sent, retained *failurepb.Failure)
+	}{
+		{
+			name:          "OversizedRetryableFailureIsTruncated",
+			failure:       oversizedActivityFailure,
+			requireResult: requireTruncated,
+		},
+		{
+			name:          "RetryableFailureWithinLimitIsKeptWhole",
+			failure:       withinLimitActivityFailure,
+			requireResult: requireKeptWhole,
+		},
+		{
+			name:          "OversizedTerminalFailureIsKeptWhole",
+			failure:       oversizedActivityFailure,
+			noRetriesLeft: true,
+			requireResult: requireKeptWhole,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			injectActivityContext(t, ctx)
+
+			attemptState := &activitypb.ActivityAttemptState{Count: 1}
+			activity := &Activity{
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+			}
+			activityFailure := tc.failure(t)
+
+			retryInterval, retryIntervalSource := time.Second, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
+			if tc.noRetriesLeft {
+				retryInterval, retryIntervalSource = 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
+			}
+
+			err := activity.recordFailedAttempt(
+				ctx,
+				retryInterval,
+				retryIntervalSource,
+				activityFailure,
+				defaultTime,
+				tc.noRetriesLeft,
+			)
+			require.NoError(t, err)
+
+			tc.requireResult(t, activityFailure, attemptState.GetLastFailureDetails().GetFailure())
+		})
+	}
 }
