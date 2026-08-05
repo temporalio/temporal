@@ -217,17 +217,14 @@ func convertBufferedStartsLegacyToCHASM(
 		v2Start := common.CloneProto(v1Start)
 
 		if v2Start.RequestId == "" {
-			v2Start.RequestId = fmt.Sprintf("%s-%d",
-				schedulerinternal.GenerateRequestID(
-					namespaceID,
-					scheduleID,
-					conflictToken,
-					"migrated",
-					v1Start.GetNominalTime().AsTime(),
-					v1Start.GetActualTime().AsTime(),
-				),
-				i,
-			)
+			v2Start.RequestId = schedulerinternal.GenerateRequestID(
+				namespaceID,
+				scheduleID,
+				conflictToken,
+				"migrated",
+				v1Start.GetNominalTime().AsTime(),
+				v1Start.GetActualTime().AsTime(),
+				fmt.Sprintf("%d", i))
 		}
 
 		if v2Start.WorkflowId == "" {

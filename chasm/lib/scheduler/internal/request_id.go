@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ func GenerateRequestID(
 	backfillID string,
 	nominal time.Time,
 	actual time.Time,
+	etc ...string,
 ) string {
 	if backfillID == "" {
 		backfillID = "auto"
@@ -31,12 +33,13 @@ func GenerateRequestID(
 		"sched-%s-%s",
 		backfillID,
 		uuid.NewSHA1(uuid.Nil, fmt.Appendf(nil,
-			"%q-%q-%d-%d-%d",
+			"%q-%q-%d-%d-%d-%s",
 			namespaceID,
 			scheduleID,
 			conflictToken,
 			nominal.UnixMilli(),
 			actual.UnixMilli(),
+			strings.Join(etc, ":"),
 		)),
 	)
 }
