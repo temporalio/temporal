@@ -46,7 +46,7 @@ func NewBackfillerTaskHandler(opts BackfillerTaskHandlerOptions) *BackfillerTask
 
 // BackfillerTask invalidation reasons. Limited cardinality for ReasonTag.
 const (
-	backfillerInvalidatedStaleGeneration metrics.ReasonString = "stale_generation"
+	backfillerInvalidatedStaleStamp metrics.ReasonString = "stale_stamp"
 )
 
 func (b *BackfillerTaskHandler) Validate(
@@ -58,18 +58,18 @@ func (b *BackfillerTaskHandler) Validate(
 	if backfiller.Scheduler.Get(ctx).WorkflowMigration != nil {
 		return false, nil
 	}
-	taskGeneration := task.GetGeneration()
-	currentGeneration := backfiller.GetTaskGeneration()
+	taskStamp := task.GetStamp()
+	currentStamp := backfiller.GetTaskStamp()
 	attempt := backfiller.GetAttempt()
-	valid := taskGeneration == currentGeneration && currentGeneration > attempt
-	if taskGeneration == 0 {
-		// An old binary schedules generation-zero tasks and advances only Attempt.
-		valid = currentGeneration == 0 || attempt >= currentGeneration
+	valid := taskStamp == currentStamp && currentStamp > attempt
+	if taskStamp == 0 {
+		// An old binary schedules zero-stamp tasks and advances only Attempt.
+		valid = currentStamp == 0 || attempt >= currentStamp
 	}
 	if !valid {
 		newTaggedMetricsHandler(b.metricsHandler, backfiller.Scheduler.Get(ctx)).
 			Counter(metrics.ScheduleBackfillerTask.Name()).
-			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleGeneration))
+			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleStamp))
 	}
 	return valid, nil
 }
@@ -82,9 +82,9 @@ func (b *BackfillerTaskHandler) Execute(
 ) error {
 	defer func() { backfiller.Attempt++ }()
 
-	if task.GetGeneration() == 0 {
-		// Restore the fence after a legacy binary scheduled this continuation.
-		backfiller.TaskGeneration = backfiller.Attempt + 1
+	if task.GetStamp() == 0 {
+		// Restore the stamp after a legacy binary scheduled this zero-stamp task.
+		backfiller.TaskStamp = backfiller.Attempt + 1
 	}
 
 	scheduler := backfiller.Scheduler.Get(ctx)

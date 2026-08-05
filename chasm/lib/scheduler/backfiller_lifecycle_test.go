@@ -243,10 +243,10 @@ func TestBackfiller_FutureRangeDoesNotStall(t *testing.T) {
 	require.Fail(t, "backfill should complete, but the continuation was invalidated and the range stalled")
 }
 
-// TestBackfiller_Validate_AcceptsOnlyCurrentGeneration pins the steady-state
-// generation fence. Validation must accept the current task, reject both stale
-// and impossible future generations, and invalidate a task when it is replaced.
-func TestBackfiller_Validate_AcceptsOnlyCurrentGeneration(t *testing.T) {
+// TestBackfiller_Validate_AcceptsOnlyCurrentStamp pins the steady-state stamp
+// validation. It must accept the current task, reject stale and impossible
+// future stamps, and make a replaced task stale.
+func TestBackfiller_Validate_AcceptsOnlyCurrentStamp(t *testing.T) {
 	// Create the schedule through the live handler API so the Backfiller and its
 	// initial task are produced by the same path used in production.
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
@@ -291,29 +291,29 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentGeneration(t *testing.T) {
 		SpecProcessor:  specProcessor,
 	})
 
-	// Resolve the committed Backfiller and validate task generations against
+	// Resolve the committed Backfiller and validate task stamps against
 	// the state created by the initial immediate execution.
 	var backfiller *scheduler.Backfiller
-	var gen int64
+	var stamp int64
 	var currentValid, staleValid, futureValid bool
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
 			for _, field := range s.Backfillers {
 				if candidate, ok := field.TryGet(ctx); ok {
 					backfiller = candidate
-					gen = candidate.GetTaskGeneration()
+					stamp = candidate.GetTaskStamp()
 					currentValid, err = handler.Validate(ctx, candidate, chasm.TaskInvocation{},
-						&schedulerpb.BackfillerTask{Generation: gen})
+						&schedulerpb.BackfillerTask{Stamp: stamp})
 					if err != nil {
 						return struct{}{}, err
 					}
 					staleValid, err = handler.Validate(ctx, candidate, chasm.TaskInvocation{},
-						&schedulerpb.BackfillerTask{Generation: gen - 1})
+						&schedulerpb.BackfillerTask{Stamp: stamp - 1})
 					if err != nil {
 						return struct{}{}, err
 					}
 					futureValid, err = handler.Validate(ctx, candidate, chasm.TaskInvocation{},
-						&schedulerpb.BackfillerTask{Generation: gen + 1})
+						&schedulerpb.BackfillerTask{Stamp: stamp + 1})
 					return struct{}{}, err
 				}
 			}
@@ -321,14 +321,14 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentGeneration(t *testing.T) {
 		}, struct{}{})
 	require.NoError(t, err)
 	require.NotNil(t, backfiller)
-	require.Positive(t, gen, "scheduling a task must have advanced the generation")
-	require.True(t, currentValid, "the current generation must be accepted")
-	require.False(t, staleValid, "an older (superseded/redelivered) generation must be rejected")
-	require.False(t, futureValid, "a generation ahead of the component must be rejected")
+	require.Positive(t, stamp, "scheduling a task must have advanced the stamp")
+	require.True(t, currentValid, "the current stamp must be accepted")
+	require.False(t, staleValid, "an older/redelivered stamp must be rejected")
+	require.False(t, futureValid, "a stamp ahead of the component must be rejected")
 
 	// Restore capacity through an engine update, then deliver the current task
 	// through the CHASM pure-task lifecycle.
-	currentTask := &schedulerpb.BackfillerTask{Generation: gen}
+	currentTask := &schedulerpb.BackfillerTask{Stamp: stamp}
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
 			s.Invoker.Get(ctx).BufferedStarts = nil
@@ -341,29 +341,29 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentGeneration(t *testing.T) {
 	require.False(t, dropped)
 
 	// The exact payload that executed must now be invalid, while the successor
-	// generation remains executable.
-	var nextGeneration int64
+	// stamp remains executable.
+	var nextStamp int64
 	var executedValid, successorValid bool
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
 			for _, field := range s.Backfillers {
 				if candidate, ok := field.TryGet(ctx); ok {
-					nextGeneration = candidate.GetTaskGeneration()
+					nextStamp = candidate.GetTaskStamp()
 					executedValid, err = handler.Validate(ctx, candidate, chasm.TaskInvocation{}, currentTask)
 					if err != nil {
 						return struct{}{}, err
 					}
 					successorValid, err = handler.Validate(ctx, candidate, chasm.TaskInvocation{},
-						&schedulerpb.BackfillerTask{Generation: nextGeneration})
+						&schedulerpb.BackfillerTask{Stamp: nextStamp})
 					return struct{}{}, err
 				}
 			}
 			return struct{}{}, nil
 		}, struct{}{})
 	require.NoError(t, err)
-	require.Greater(t, nextGeneration, gen)
-	require.False(t, executedValid, "the executed generation must become invalid")
-	require.True(t, successorValid, "the newly-scheduled generation must be valid")
+	require.Greater(t, nextStamp, stamp)
+	require.False(t, executedValid, "the executed stamp must become invalid")
+	require.True(t, successorValid, "the newly-scheduled stamp must be valid")
 }
 
 // TestBackfiller_LegacyTaskStartsAtRequestedRange covers a rolling-upgrade handoff.
@@ -426,15 +426,16 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 	legacyTaskAttrs := chasm.TaskAttributes{ScheduledTime: now}
 
 	// Arrange the persisted state at the handoff boundary directly: Attempt has
-	// advanced past task N+1 and an unnumbered task is ready for the new code.
-	var generation int64
+	// advanced to the current stamp and a zero-stamp task is ready for the new
+	// code.
+	var stamp int64
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
 			s.Invoker.Get(ctx).BufferedStarts = nil
 			for _, field := range s.Backfillers {
 				if candidate, ok := field.TryGet(ctx); ok {
 					backfiller = candidate
-					generation = candidate.GetTaskGeneration()
+					stamp = candidate.GetTaskStamp()
 					candidate.Attempt++
 					ctx.AddTask(candidate, legacyTaskAttrs, &schedulerpb.BackfillerTask{})
 				}
@@ -444,8 +445,9 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, backfiller)
 
-	// The new validator rejects the numbered task and accepts the unnumbered task.
-	currentTask := &schedulerpb.BackfillerTask{Generation: generation}
+	// The new validator rejects the stale stamped task and accepts the zero-stamp
+	// legacy task.
+	currentTask := &schedulerpb.BackfillerTask{Stamp: stamp}
 	legacyTask := &schedulerpb.BackfillerTask{}
 	var currentValid, legacyValid bool
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
@@ -463,8 +465,8 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 			return struct{}{}, nil
 		}, struct{}{})
 	require.NoError(t, err)
-	require.False(t, currentValid, "the numbered task must be stale")
-	require.True(t, legacyValid, "the unnumbered task must remain executable")
+	require.False(t, currentValid, "the stamped task must be stale")
+	require.True(t, legacyValid, "the zero-stamp task must remain executable")
 
 	// Execute the old task with the new handler through the CHASM lifecycle.
 	executed, err := engine.FirePureTasks(rootRef, now)
@@ -472,8 +474,8 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 	require.Equal(t, 1, executed)
 
 	// With no HWM, processing must start at the requested range rather than the
-	// Unix epoch. Execution also restores the fence for the next numbered task.
-	var attempt, taskGeneration int64
+	// Unix epoch. Execution also restores the stamp for the next task.
+	var attempt, taskStamp int64
 	var legacyStillValid bool
 	var actualTimes []time.Time
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
@@ -484,7 +486,7 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 			for _, field := range s.Backfillers {
 				if candidate, ok := field.TryGet(ctx); ok {
 					attempt = candidate.GetAttempt()
-					taskGeneration = candidate.GetTaskGeneration()
+					taskStamp = candidate.GetTaskStamp()
 					legacyStillValid, err = handler.Validate(ctx, candidate, chasm.TaskInvocation{}, legacyTask)
 					return struct{}{}, err
 				}
@@ -497,6 +499,6 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 		require.False(t, actualTime.Before(request.GetStartTime().AsTime()),
 			"the old task must not process times before the requested range")
 	}
-	require.Equal(t, attempt+1, taskGeneration)
-	require.False(t, legacyStillValid, "executing the unnumbered task must restore the fence")
+	require.Equal(t, attempt+1, taskStamp)
+	require.False(t, legacyStillValid, "executing the zero-stamp task must restore the stamp")
 }

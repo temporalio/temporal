@@ -362,10 +362,13 @@ type BackfillerState struct {
 	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
 	// Number of successful task executions.
 	Attempt int64 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	// Fence shared with the currently scheduled BackfillerTask.
-	TaskGeneration int64 `protobuf:"varint,9,opt,name=task_generation,json=taskGeneration,proto3" json:"task_generation,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Monotonic stamp shared with the currently scheduled BackfillerTask. It is
+	// advanced when the initial task or an incomplete task's successor is
+	// scheduled, making tasks with older stamps stale. It is not advanced when a
+	// task fails or completes the Backfiller.
+	TaskStamp     int64 `protobuf:"varint,9,opt,name=task_stamp,json=taskStamp,proto3" json:"task_stamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BackfillerState) Reset() {
@@ -444,9 +447,9 @@ func (x *BackfillerState) GetAttempt() int64 {
 	return 0
 }
 
-func (x *BackfillerState) GetTaskGeneration() int64 {
+func (x *BackfillerState) GetTaskStamp() int64 {
 	if x != nil {
-		return x.TaskGeneration
+		return x.TaskStamp
 	}
 	return 0
 }
@@ -744,15 +747,16 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"\x0fbuffered_starts\x18\x02 \x03(\v2..temporal.server.api.schedule.v1.BufferedStartR\x0ebufferedStarts\x12T\n" +
 	"\x10cancel_workflows\x18\x03 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x0fcancelWorkflows\x12Z\n" +
 	"\x13terminate_workflows\x18\x04 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\x12terminateWorkflows\x12J\n" +
-	"\x13last_processed_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTimeJ\x04\b\x06\x10\a\"\x84\x03\n" +
+	"\x13last_processed_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTimeJ\x04\b\x06\x10\a\"\xfa\x02\n" +
 	"\x0fBackfillerState\x12V\n" +
 	"\x10backfill_request\x18\x01 \x01(\v2).temporal.api.schedule.v1.BackfillRequestH\x00R\x0fbackfillRequest\x12^\n" +
 	"\x0ftrigger_request\x18\x02 \x01(\v23.temporal.api.schedule.v1.TriggerImmediatelyRequestH\x00R\x0etriggerRequest\x12\x1f\n" +
 	"\vbackfill_id\x18\x06 \x01(\tR\n" +
 	"backfillId\x12J\n" +
 	"\x13last_processed_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12\x18\n" +
-	"\aattempt\x18\b \x01(\x03R\aattempt\x12'\n" +
-	"\x0ftask_generation\x18\t \x01(\x03R\x0etaskGenerationB\t\n" +
+	"\aattempt\x18\b \x01(\x03R\aattempt\x12\x1d\n" +
+	"\n" +
+	"task_stamp\x18\t \x01(\x03R\ttaskStampB\t\n" +
 	"\arequest\"\x8d\x01\n" +
 	"\x14LastCompletionResult\x129\n" +
 	"\asuccess\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\asuccess\x12:\n" +

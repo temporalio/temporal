@@ -104,8 +104,11 @@ message BackfillerState {
   // Number of successful task executions.
   int64 attempt = 8;
 
-  // Fence shared with the currently scheduled BackfillerTask.
-  int64 task_generation = 9;
+  // Monotonic stamp shared with the currently scheduled BackfillerTask. It is
+  // advanced when the initial task or an incomplete task's successor is
+  // scheduled, making tasks with older stamps stale. It is not advanced when a
+  // task fails or completes the Backfiller.
+  int64 task_stamp = 9;
 }
 
 // CHASM scheduler retains the payload data for the last completed workflow. Both
