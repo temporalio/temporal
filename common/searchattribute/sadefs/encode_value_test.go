@@ -392,6 +392,72 @@ func Test_MustEncodeValue(t *testing.T) {
 	})
 }
 
+func Test_MustDecodeValue(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		encodedValue, err := payload.Encode("foo")
+		require.NoError(t, err)
+		decodedValue := MustDecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		require.Equal(t, "foo", decodedValue)
+	})
+
+	t.Run("success with nil value", func(t *testing.T) {
+		encodedValue, err := payload.Encode(nil)
+		require.NoError(t, err)
+		decodedValue := MustDecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		require.Nil(t, decodedValue)
+	})
+
+	t.Run("success with metadata type", func(t *testing.T) {
+		encodedValue, err := payload.Encode(int64(123))
+		require.NoError(t, err)
+		encodedValue.Metadata[MetadataType] = []byte(enumspb.INDEXED_VALUE_TYPE_INT.String())
+		decodedValue := MustDecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+		require.Equal(t, int64(123), decodedValue)
+	})
+
+	t.Run("panic on unspecified type without metadata", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			require.NotNil(t, r)
+			err, ok := r.(error)
+			require.True(t, ok)
+			require.ErrorIs(t, err, ErrInvalidType)
+		}()
+		encodedValue, err := payload.Encode(int64(123))
+		require.NoError(t, err)
+		_ = MustDecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+		require.Fail(t, "MustDecodeValue did not panic with unspecified type")
+	})
+
+	t.Run("panic on type mismatch", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			require.NotNil(t, r)
+			err, ok := r.(error)
+			require.True(t, ok)
+			require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		}()
+		encodedValue, err := payload.Encode(int64(123))
+		require.NoError(t, err)
+		_ = MustDecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		require.Fail(t, "MustDecodeValue did not panic with type mismatch")
+	})
+
+	t.Run("panic on list not allowed", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			require.NotNil(t, r)
+			err, ok := r.(error)
+			require.True(t, ok)
+			require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		}()
+		encodedValue, err := payload.Encode([]int64{123, 456})
+		require.NoError(t, err)
+		_ = MustDecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_INT)
+		require.Fail(t, "MustDecodeValue did not panic with list of values")
+	})
+}
+
 func Test_ValidateStrings(t *testing.T) {
 	_, err := validateStrings("anything here", errors.New("test error"))
 	assert.Error(t, err)

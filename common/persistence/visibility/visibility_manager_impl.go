@@ -174,6 +174,7 @@ func (p *visibilityManagerImpl) ListChasmExecutions(
 		executionInfo, err := p.convertToChasmExecutionInfo(
 			exec,
 			mapper,
+			request.ArchetypeId,
 			namespace.Name(request.Namespace),
 		)
 		if err != nil {
@@ -192,6 +193,7 @@ func (p *visibilityManagerImpl) ListChasmExecutions(
 func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 	exec *store.InternalExecutionInfo,
 	mapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 	namespaceName namespace.Name,
 ) (*chasmspb.VisibilityExecutionInfo, error) {
 	customSAs, chasmSAs := splitSearchAttributes(exec.SearchAttributes)
@@ -212,6 +214,48 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		if value, ok := chasmSystemOverrideValue(exec, field); ok {
 			chasmAliasedSAs.IndexedFields[field] = sadefs.MustEncodeValue(value, valueType)
 		}
+	}
+	if archetypeID == chasm.WorkflowArchetypeID {
+		if !exec.ExecutionTime.After(time.Unix(0, 0)) {
+			exec.ExecutionTime = exec.StartTime
+		}
+
+		chasmAliasedSAs.IndexedFields[sadefs.ExecutionStatus] = sadefs.MustEncodeValue(
+			exec.Status.String(),
+			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		)
+		chasmAliasedSAs.IndexedFields[sadefs.WorkflowType] = sadefs.MustEncodeValue(
+			exec.TypeName,
+			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		)
+		chasmAliasedSAs.IndexedFields[sadefs.ExecutionTime] = sadefs.MustEncodeValue(
+			exec.ExecutionTime,
+			enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		)
+		if exec.ExecutionDuration > 0 {
+			chasmAliasedSAs.IndexedFields[sadefs.ExecutionDuration] = sadefs.MustEncodeValue(
+				exec.ExecutionDuration.Nanoseconds(),
+				enumspb.INDEXED_VALUE_TYPE_INT,
+			)
+		}
+		if exec.ParentWorkflowID != "" {
+			chasmAliasedSAs.IndexedFields[sadefs.ParentWorkflowID] = sadefs.MustEncodeValue(
+				exec.ParentWorkflowID,
+				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			)
+			chasmAliasedSAs.IndexedFields[sadefs.ParentRunID] = sadefs.MustEncodeValue(
+				exec.ParentRunID,
+				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			)
+		}
+		chasmAliasedSAs.IndexedFields[sadefs.RootWorkflowID] = sadefs.MustEncodeValue(
+			exec.RootWorkflowID,
+			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		)
+		chasmAliasedSAs.IndexedFields[sadefs.RootRunID] = sadefs.MustEncodeValue(
+			exec.RootRunID,
+			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		)
 	}
 
 	customAliasedSAs, err := searchattribute.AliasFields(

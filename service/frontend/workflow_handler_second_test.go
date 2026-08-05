@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,7 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
@@ -153,6 +155,91 @@ func makeVisibilityManagerStub(controller *gomock.Controller) *manager.MockVisib
 	visibilityManager := manager.NewMockVisibilityManager(controller)
 	visibilityManager.EXPECT().GetIndexName().Return("index").AnyTimes()
 	return visibilityManager
+}
+
+func TestPrepareQueryChasmWorkflows(t *testing.T) {
+	t.Parallel()
+
+	baseFilter := fmt.Sprintf(
+		"TemporalNamespaceDivision is null or TemporalNamespaceDivision = '%d'",
+		chasm.WorkflowArchetypeID,
+	)
+	wrappedFilter := "(" + baseFilter + ")"
+
+	tests := []struct {
+		name     string
+		query    string
+		expected string
+	}{
+		{
+			name:     "empty query returns base filter",
+			query:    "",
+			expected: baseFilter,
+		},
+		{
+			name:     "whitespace only returns base filter",
+			query:    "   \t  ",
+			expected: baseFilter,
+		},
+		{
+			name:     "simple where clause is wrapped",
+			query:    "foo = 'bar'",
+			expected: wrappedFilter + " and (foo = 'bar')",
+		},
+		{
+			name:     "compound where clause is wrapped",
+			query:    "foo = 1 and bar = 2",
+			expected: wrappedFilter + " and (foo = 1 and bar = 2)",
+		},
+		{
+			name:     "where clause with order by",
+			query:    "foo > 1 order by bar desc",
+			expected: wrappedFilter + " and (foo > 1) order by bar desc",
+		},
+		{
+			name:     "short where clause is wrapped",
+			query:    "a = 1",
+			expected: wrappedFilter + " and (a = 1)",
+		},
+		{
+			name:     "query gets trimmed before wrapping",
+			query:    "  foo = 'bar'  ",
+			expected: wrappedFilter + " and (foo = 'bar')",
+		},
+		{
+			name:     "order by only is appended without wrapping",
+			query:    "order by foo desc",
+			expected: baseFilter + " order by foo desc",
+		},
+		{
+			name:     "group by only is appended without wrapping",
+			query:    "group by foo",
+			expected: baseFilter + " group by foo",
+		},
+		{
+			name:     "order by prefix is case-insensitive",
+			query:    "ORDER BY foo DESC",
+			expected: baseFilter + " ORDER BY foo DESC",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := prepareQueryChasmWorkflows(tc.query)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+
+	t.Run("invalid query returns parse error", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := prepareQueryChasmWorkflows("foo === bar")
+		require.Error(t, err)
+		require.Empty(t, got)
+	})
 }
 
 func makeResponseWithScheduledWorkflowAttributes(nameValueMap map[string]string) *schedulespb.DescribeResponse {
