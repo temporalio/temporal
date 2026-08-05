@@ -63,6 +63,11 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	if err := validateAndSetNamespaceHandoverParams(&params); err != nil {
 		return err
 	}
+
+	if dryRun, _ := isDryRunMode(ctx); dryRun {
+		return nil
+	}
+
 	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    time.Second,
 		MaximumInterval:    time.Second,
