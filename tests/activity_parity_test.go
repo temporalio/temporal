@@ -92,6 +92,97 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 	})
 }
 
+// A retryable ServerFailure reported through RespondActivityTaskFailedById must be retried, exactly
+// like a retryable ApplicationFailure. Only the by-ID API accepts a non-application failure (the
+// by-token API rejects one), so this is the path a ServerFailure reaches the handler through.
+func (s *activityParityTestSuite) TestRetryableServerFailureIsRetried() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	trace := []model.Event{model.Poll, model.FailByIDRetryablyWithServerFailure}
+	// A second attempt is scheduled and backing off, rather than the activity going terminal.
+	expected := activityInfo{
+		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		Attempt:                    2,
+		CurrentRetryInterval:       activityLongDuration,
+		NextAttemptScheduleTimeSet: true,
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t),
+			"a retryable ServerFailure must schedule another attempt, not fail terminally")
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t),
+			"a retryable ServerFailure must schedule another attempt, not fail terminally")
+	})
+}
+
+// Failures submitted through RespondActivityTaskFailedById use the same retry classification for
+// standalone and workflow activities, including non-application failures a worker synthesizes.
+func (s *activityParityTestSuite) TestSyntheticFailuresHaveRetryParity() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	retryableFailures := []struct {
+		name  string
+		event model.Event
+	}{
+		{name: "StartToCloseTimeout", event: model.FailByIDRetryablyWithStartToCloseTimeoutFailure},
+		{name: "HeartbeatTimeout", event: model.FailByIDRetryablyWithHeartbeatTimeoutFailure},
+		{name: "UnknownFailure", event: model.FailByIDRetryablyWithUnknownFailure},
+	}
+	wantRetry := activityInfo{
+		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		Attempt:                    2,
+		CurrentRetryInterval:       activityLongDuration,
+		NextAttemptScheduleTimeSet: true,
+	}
+
+	for _, tc := range retryableFailures {
+		s.Run(tc.name, func(s *activityParityTestSuite) {
+			trace := []model.Event{model.Poll, tc.event}
+			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, wantRetry, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+			})
+			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, wantRetry, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+			})
+		})
+	}
+
+	// Both implementations close these failures without retrying. WFA surfaces them as timed out,
+	// while SAA surfaces worker-reported timeouts as failed, so terminal status itself is not parity.
+	nonRetryableTimeouts := []struct {
+		name  string
+		event model.Event
+	}{
+		{name: "ScheduleToStartTimeout", event: model.FailByIDWithScheduleToStartTimeoutFailure},
+		{name: "ScheduleToCloseTimeout", event: model.FailByIDWithScheduleToCloseTimeoutFailure},
+	}
+	for _, tc := range nonRetryableTimeouts {
+		s.Run(tc.name, func(s *activityParityTestSuite) {
+			trace := []model.Event{model.Poll, tc.event}
+			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, activityTerminalOutcome{
+					status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+					retryState: enumspb.RETRY_STATE_TIMEOUT,
+				}, newWFADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
+			})
+			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, activityTerminalOutcome{
+					status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+					retryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+				}, newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
+			})
+		})
+	}
+}
+
 // A terminal timeout must chain the application failure that drove its retries as its Cause, so an SDK
 // can expose the real failure.
 func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
@@ -487,25 +578,22 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 2}
 
-	trace := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}
 	expected := activityMarshalPayloads(activityHeartbeatDetails)
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, expected,
-			newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
-	})
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		d := newSAADriver(t, env, cfg)
-		require.Equal(t, expected,
-			d.driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
-
-		// For SAA we additionally confirm that it's persisted even if the failure is terminal. WFA
-		// drops the pending activity from MS at this point.
-		terminal := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: false}, HasHeartbeatDetails: true}}
-		require.Equal(t, expected,
-			d.driveTrace(t, terminal).activityInfo(t).LastHeartbeatDetails)
-	})
+	for _, eventType := range []model.EventType{model.RespondFailedType, model.RespondFailedByIDType} {
+		s.Run(eventType.String(), func(s *activityParityTestSuite) {
+			trace := []model.Event{model.Poll, {Type: eventType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}
+			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, expected,
+					newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+			})
+			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, expected,
+					newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+			})
+		})
+	}
 }
 
 func (s *activityParityTestSuite) TestTerminalRetryState() {

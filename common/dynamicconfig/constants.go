@@ -979,6 +979,13 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
+	FrontendEnforceScheduleDurationValidation = NewGlobalBoolSetting(
+		"frontend.enforceScheduleDurationValidation",
+		true,
+		`FrontendEnforceScheduleDurationValidation rejects CreateSchedule/UpdateSchedule requests whose
+interval or phase durations are not valid google.protobuf.Duration messages. When disabled, such
+requests are logged and allowed through instead of being rejected.`,
+	)
 	// [cleanup-wv-pre-release]
 	EnableDeployments = NewNamespaceBoolSetting(
 		"system.enableDeployments",
