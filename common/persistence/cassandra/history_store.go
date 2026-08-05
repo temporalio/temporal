@@ -175,10 +175,30 @@ func (h *HistoryStore) ReadHistoryBranch(
 	}
 
 	nodes := make([]p.InternalHistoryNode, 0, request.PageSize)
-	message := make(map[string]any)
-	for iter.MapScan(message) {
-		nodes = append(nodes, convertHistoryNode(message))
-		message = make(map[string]any)
+	var nodeID, prevTxnID, txnID int64
+	var data []byte
+	var dataEncoding string
+	if request.MetadataOnly {
+		// Column order must match v2templateReadHistoryNodeMetadata SELECT clause.
+		for iter.Scan(&nodeID, &prevTxnID, &txnID) {
+			nodes = append(nodes, p.InternalHistoryNode{
+				NodeID:            nodeID,
+				PrevTransactionID: prevTxnID,
+				TransactionID:     txnID,
+			})
+		}
+	} else {
+		// Column order must match v2templateReadHistoryNode / v2templateReadHistoryNodeReverse SELECT clause.
+		for iter.Scan(&nodeID, &prevTxnID, &txnID, &data, &dataEncoding) {
+			dataCopy := make([]byte, len(data))
+			copy(dataCopy, data)
+			nodes = append(nodes, p.InternalHistoryNode{
+				NodeID:            nodeID,
+				PrevTransactionID: prevTxnID,
+				TransactionID:     txnID,
+				Events:            p.NewDataBlob(dataCopy, dataEncoding),
+			})
+		}
 	}
 
 	if err := iter.Close(); err != nil {
@@ -319,10 +339,12 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	var encoding string
 
 	for iter.Scan(&treeUUID, &branchUUID, &data, &encoding) {
+		dataCopy := make([]byte, len(data))
+		copy(dataCopy, data)
 		branch := p.InternalHistoryBranchDetail{
 			TreeID:   treeUUID,
 			BranchID: branchUUID,
-			Data:     data,
+			Data:     dataCopy,
 			Encoding: encoding,
 		}
 		branches = append(branches, branch)
@@ -375,7 +397,9 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 		var data []byte
 		var encoding string
 		for iter.Scan(&branchUUID, &data, &encoding) {
-			treeInfos = append(treeInfos, p.NewDataBlob(data, encoding))
+			dataCopy := make([]byte, len(data))
+			copy(dataCopy, data)
+			treeInfos = append(treeInfos, p.NewDataBlob(dataCopy, encoding))
 
 			branchUUID = ""
 			data = []byte{}
@@ -398,27 +422,6 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 
 func (h *HistoryStore) GetHistoryBranchUtil() p.HistoryBranchUtil {
 	return h.HistoryBranchUtil
-}
-
-func convertHistoryNode(
-	message map[string]any,
-) p.InternalHistoryNode {
-	nodeID := message["node_id"].(int64)
-	prevTxnID := message["prev_txn_id"].(int64)
-	txnID := message["txn_id"].(int64)
-
-	var data []byte
-	var dataEncoding string
-	if _, ok := message["data"]; ok {
-		data = message["data"].([]byte)
-		dataEncoding = message["data_encoding"].(string)
-	}
-	return p.InternalHistoryNode{
-		NodeID:            nodeID,
-		PrevTransactionID: prevTxnID,
-		TransactionID:     txnID,
-		Events:            p.NewDataBlob(data, dataEncoding),
-	}
 }
 
 func convertTimeoutError(err error) error {

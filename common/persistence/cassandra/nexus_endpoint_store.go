@@ -343,32 +343,19 @@ func (s *NexusEndpointStore) getTableVersion(ctx context.Context) (int64, error)
 func (s *NexusEndpointStore) getEndpointList(iter gocql.Iter) ([]p.InternalNexusEndpoint, error) {
 	var endpoints []p.InternalNexusEndpoint
 
-	row := make(map[string]any)
-	for iter.MapScan(row) {
-		id, err := getTypedFieldFromRow[any]("id", row)
-		if err != nil {
-			return nil, err
-		}
-		version, err := getTypedFieldFromRow[int64]("version", row)
-		if err != nil {
-			return nil, err
-		}
-		data, err := getTypedFieldFromRow[[]byte]("data", row)
-		if err != nil {
-			return nil, err
-		}
-		dataEncoding, err := getTypedFieldFromRow[string]("data_encoding", row)
-		if err != nil {
-			return nil, err
-		}
-
+	var id any
+	var data []byte
+	var dataEncoding string
+	var version int64
+	// Column order must match templateBaseListEndpointsQuery SELECT clause.
+	for iter.Scan(&id, &data, &dataEncoding, &version) {
+		dataCopy := make([]byte, len(data))
+		copy(dataCopy, data)
 		endpoints = append(endpoints, p.InternalNexusEndpoint{
 			ID:      gocql.UUIDToString(id),
 			Version: version,
-			Data:    p.NewDataBlob(data, dataEncoding),
+			Data:    p.NewDataBlob(dataCopy, dataEncoding),
 		})
-
-		row = make(map[string]any)
 	}
 
 	return endpoints, nil
