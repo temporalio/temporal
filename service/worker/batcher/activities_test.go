@@ -727,10 +727,13 @@ func (s *activitiesSuite) TestIsNonRetryableError() {
 			want:      true,
 		},
 		{
-			name:      "terminal state error for DELETE_ACTIVITY returns true",
+			// Delete gets no ExecutionStatus='Running' filter from
+			// adjustQueryBatchTypeEnum, so it never hits the stale-visibility
+			// case and keeps the default retry behavior.
+			name:      "terminal state error for DELETE_ACTIVITY returns false",
 			err:       serviceerror.NewFailedPreconditionf("activity is in terminal state %v", "Completed"),
 			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
-			want:      true,
+			want:      false,
 		},
 		{
 			// Wrapped errors must still be classified, since the task layer may

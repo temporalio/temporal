@@ -857,14 +857,23 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 		// Pinned version that is not present in a task queue error is non-retryable for workflow options updates
 		return strings.Contains(errMsg, worker_versioning.ErrPinnedVersionNotInTaskQueueSubstring)
 	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
-		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
-		enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
-		// FailedPrecondition from an activity terminate/cancel/delete means the
-		// target is in a state that will never permit the operation: a terminal
-		// status or an already-recorded terminate/cancel request with a
-		// different request ID.
-		var failedPrecondition *serviceerror.FailedPrecondition
-		return errors.As(err, &failedPrecondition)
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY:
+		// A FailedPrecondition from an activity terminate/cancel means the target
+		// is in a state that will never permit the operation: a terminal status,
+		// or an already-recorded terminate/cancel request with a different
+		// request ID. Retrying cannot change either, so fail fast instead of
+		// spending every AttemptsOnRetryableError -- processTaskWithRetries
+		// retries in place with no backoff.
+		//
+		// Only these two are listed. UNPAUSE_ACTIVITY, UPDATE_ACTIVITY_OPTIONS
+		// and RESET_ACTIVITY get the same Running filter appended by
+		// adjustQueryBatchTypeEnum and so reach this path too, but their
+		// FailedPreconditions include states a retry does clear (pending reset,
+		// pending cancellation, deferred Reset(RestoreOriginalOptions)).
+		// DELETE_ACTIVITY gets no Running filter at all, so it never sees the
+		// stale-visibility case this guards against.
+		_, isFailedPrecondition := errors.AsType[*serviceerror.FailedPrecondition](err)
+		return isFailedPrecondition
 	default:
 		return false
 	}
