@@ -253,10 +253,6 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 func (s *StreamSenderImpl) recvSyncReplicationState(
 	attr *replicationspb.SyncReplicationState,
 ) error {
-	readerID := shard.ReplicationReaderIDFromClusterShardID(
-		int64(s.clientShardKey.ClusterID),
-		s.clientShardKey.ShardID,
-	)
 	if s.readerGroup != nil {
 		readerState, err := s.readerGroup.BuildReaderState(attr)
 		if err != nil {
@@ -269,6 +265,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		if s.isTieredStackEnabled {
 			s.flowController.RefreshReceiverFlowControlInfo(attr)
 		}
+		readerID := s.readerGroup.ReaderID()
 		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, readerState); err != nil {
 			return err
 		}
@@ -362,6 +359,11 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
 	}
 
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+
 	if err := s.shardContext.UpdateReplicationQueueReaderState(
 		readerID,
 		readerState,
@@ -407,15 +409,12 @@ func (s *StreamSenderImpl) catchupBeginWatermark(priority enumsspb.TaskPriority,
 	if s.readerGroup != nil {
 		return s.readerGroup.CatchupBeginWatermark(end, priority)
 	}
-	readerID := shard.ReplicationReaderIDFromClusterShardID(
-		int64(s.clientShardKey.ClusterID),
-		s.clientShardKey.ShardID,
-	)
 	queueState, ok := s.shardContext.GetQueueState(tasks.CategoryReplication)
 	if !ok {
 		s.logger.Debug("StreamSender queueState not found")
 		return end
 	}
+	readerID := s.readerGroup.ReaderID()
 	readerState, ok := queueState.ReaderStates[readerID]
 	if !ok {
 		s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
