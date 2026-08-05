@@ -153,9 +153,8 @@ func maxLifetimeMonitor(
 		return
 	}
 
-	// backoff.Jitter panics on a coefficient outside [0, 1]; clamp the (dynamic) value defensively.
-	jitter := max(0.0, min(1.0, jitterFn()))
-	timer := time.NewTimer(backoff.Jitter(maxLifetime, jitter))
+	// backoff.Jitter clamps the (dynamic) coefficient into [0, 1] internally.
+	timer := time.NewTimer(backoff.Jitter(maxLifetime, jitterFn()))
 	defer timer.Stop()
 
 	select {
