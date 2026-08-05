@@ -20,6 +20,7 @@ type (
 		IdleTime                          time.Duration // How long to keep schedules after they're done
 		EventLogMaxEntries                int           // Maximum EventLog entries retained per component; the earliest entries are dropped beyond this.
 		EventLogMaxMessageLen             int           // Maximum byte length of an EventLog message; longer messages are truncated at a UTF-8 boundary.
+		FutureActionTimesRefreshInterval  time.Duration // How often the generator re-publishes FutureActionTimes (and the derived next-action-time search attribute) to visibility. Plain spec ticks within this window don't churn visibility. Must stay well under the stuck-schedule scanner's OverdueNextActionTimeTolerance (10m).
 	}
 
 	// Config is the CHASM Scheduler dynamic config, shared among all sub-components.
@@ -94,6 +95,7 @@ var (
 		IdleTime:                          7 * 24 * time.Hour,
 		EventLogMaxEntries:                30,
 		EventLogMaxMessageLen:             1000,
+		FutureActionTimesRefreshInterval:  time.Minute,
 	}
 )
 
