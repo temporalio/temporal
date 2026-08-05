@@ -856,6 +856,15 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 	case enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS:
 		// Pinned version that is not present in a task queue error is non-retryable for workflow options updates
 		return strings.Contains(errMsg, worker_versioning.ErrPinnedVersionNotInTaskQueueSubstring)
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
+		// FailedPrecondition from an activity terminate/cancel/delete means the
+		// target is in a state that will never permit the operation: a terminal
+		// status or an already-recorded terminate/cancel request with a
+		// different request ID.
+		var failedPrecondition *serviceerror.FailedPrecondition
+		return errors.As(err, &failedPrecondition)
 	default:
 		return false
 	}
