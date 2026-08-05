@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -26,6 +27,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -1962,4 +1964,36 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 	require.Error(t, err)
 	require.Empty(t, activity.GetLastResetRequestId())
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
+}
+
+func TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+		},
+	}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		},
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			LastDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: "test-deployment",
+				BuildId:        "test-build-1",
+			},
+		}),
+		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{}),
+		Visibility:  chasm.NewComponentField(ctx, &chasm.Visibility{}),
+	}
+
+	resp, err := activity.buildDescribeActivityExecutionResponse(ctx, &activitypb.DescribeActivityExecutionRequest{
+		FrontendRequest: &workflowservice.DescribeActivityExecutionRequest{},
+	})
+
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-1",
+	}, resp.FrontendResponse.GetInfo().GetLastDeploymentVersion())
 }

@@ -13,7 +13,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
@@ -367,6 +369,16 @@ func TestTransitionStarted(t *testing.T) {
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			Identity: "test-worker",
 		},
+		// TODO: change this and serverside once versioning is supported in SAA.
+		// LastDeploymentVersion represents the worker that actually accepted the task,
+		// than when it's scheduled. WFA derives it from PollRequest via
+		// DeploymentFromCapabilities, while this test uses VersionDirective.
+		VersionDirective: &taskqueuespb.TaskVersionDirective{
+			DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: "test-deployment",
+				BuildId:        "test-build-1",
+			},
+		},
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)
@@ -375,6 +387,10 @@ func TestTransitionStarted(t *testing.T) {
 	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
 	require.Equal(t, headers.ClientNameGoSDK, attemptState.SdkName)
 	require.Equal(t, temporal.SDKVersion, attemptState.SdkVersion)
+
+	deploymentVersion := attemptState.GetLastDeploymentVersion()
+	require.Equal(t, "test-deployment", deploymentVersion.GetDeploymentName())
+	require.Equal(t, "test-build-1", deploymentVersion.GetBuildId())
 
 	// Verify added tasks
 	require.Len(t, ctx.Tasks, 1)
