@@ -599,6 +599,63 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 	}
 }
 
+// Reset rewinds the attempt counter but carries the heartbeat checkpoint into the new attempt, so a
+// long-running activity resumes from where it got to. reset_heartbeat opts out of that: the
+// checkpoint is discarded, and the new attempt starts with none.
+func (s *activityParityTestSuite) TestResetHeartbeatDetails() {
+	env := newActivityParityEnv(s.T())
+	// A long retry interval holds the activity in backoff, so a reset lands while it is SCHEDULED and
+	// no dispatched attempt can pick the checkpoint up before it is read.
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	recorded := activityMarshalPayloads(activityRecordedHeartbeatDetails)
+
+	for _, tc := range []struct {
+		name                     string
+		resetEvent               model.Event
+		expectedHeartbeatDetails []byte
+	}{
+		{name: "Keep", resetEvent: model.Reset, expectedHeartbeatDetails: recorded},
+		{name: "Clear", resetEvent: model.ResetClearingHeartbeat, expectedHeartbeatDetails: nil},
+	} {
+		s.Run(tc.name, func(s *activityParityTestSuite) {
+			// Reset with no attempt in progress: takes effect at once.
+			s.Run("WhileScheduled", func(s *activityParityTestSuite) {
+				trace := []model.Event{model.Poll, model.Heartbeat, model.FailRetryably, tc.resetEvent}
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					require.Equal(t, tc.expectedHeartbeatDetails,
+						newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+				})
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					require.Equal(t, tc.expectedHeartbeatDetails,
+						newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+				})
+			})
+			// Reset while a worker owns the attempt: deferred until that worker yields
+			s.Run("WhileStarted", func(s *activityParityTestSuite) {
+				trace := []model.Event{model.Poll, model.Heartbeat, tc.resetEvent}
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					handle := newWFADriver(t, env, cfg).driveTrace(t, trace)
+					require.Equal(t, recorded, handle.activityInfo(t).LastHeartbeatDetails,
+						"the running attempt must keep reporting its checkpoint until it yields")
+					handle.driveEvent(t, model.FailRetryably)
+					require.Equal(t, tc.expectedHeartbeatDetails, handle.activityInfo(t).LastHeartbeatDetails)
+				})
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					handle := newSAADriver(t, env, cfg).driveTrace(t, trace)
+					require.Equal(t, recorded, handle.activityInfo(t).LastHeartbeatDetails,
+						"the running attempt must keep reporting its checkpoint until it yields")
+					handle.driveEvent(t, model.FailRetryably)
+					require.Equal(t, tc.expectedHeartbeatDetails, handle.activityInfo(t).LastHeartbeatDetails)
+				})
+			})
+		})
+	}
+}
+
 // A retryable failure payload is truncated to MutableStateActivityFailureSizeLimitError,
 // but final failure is not.
 func (s *activityParityTestSuite) TestRetryableFailureTruncation() {

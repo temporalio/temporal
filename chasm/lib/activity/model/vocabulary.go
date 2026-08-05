@@ -42,6 +42,7 @@ type Event struct {
 	Type EventType
 
 	KeepPaused          bool     // Reset: a paused activity stays paused across the reset.
+	ResetHeartbeat      bool     // Reset: discard the persisted heartbeat checkpoint instead of carrying it into the new attempt.
 	HasHeartbeatDetails bool     // Failure response: attach last_heartbeat_details, to be stored as the activity's heartbeat progress.
 	Failure             *Failure // RespondFailed: the failure to send, or nil to respond with no failure at all (as a worker may). A nil failure is retryable.
 }
@@ -91,6 +92,7 @@ var (
 	ResetKeepPaused                                 = Event{Type: ResetType, KeepPaused: true}
 	Unpause                                         = Event{Type: UnpauseType}
 	Reset                                           = Event{Type: ResetType}
+	ResetClearingHeartbeat                          = Event{Type: ResetType, ResetHeartbeat: true}
 	UpdateOptions                                   = Event{Type: UpdateOptionsType}
 	StartToCloseElapses                             = Event{Type: StartToCloseElapsesType}
 	ScheduleToCloseElapses                          = Event{Type: ScheduleToCloseElapsesType}
@@ -158,7 +160,7 @@ func (e Event) String() string {
 		}
 		return fmt.Sprintf("%s[heartbeatDetails=%v,failureType=%d]", e.Type.String(), e.HasHeartbeatDetails, e.Failure.Type)
 	case ResetType:
-		return fmt.Sprintf("%s[keepPaused=%v]", e.Type.String(), e.KeepPaused)
+		return fmt.Sprintf("%s[keepPaused=%v,resetHeartbeat=%v]", e.Type.String(), e.KeepPaused, e.ResetHeartbeat)
 	default:
 		return e.Type.String()
 	}
