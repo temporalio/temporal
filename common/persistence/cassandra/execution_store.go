@@ -8,6 +8,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
+	"golang.org/x/sync/errgroup"
 )
 
 // Guidelines for creating new special UUID constants
@@ -69,6 +70,10 @@ const (
 
 	// ref: https://docs.datastax.com/en/dse-trblshoot/doc/troubleshooting/recoveringTtlYear2038Problem.html
 	maxCassandraTTL = int64(315360000) // Cassandra max support time is 2038-01-19T03:14:06+00:00. Updated this to 10 years to support until year 2028
+
+	// appendHistoryParallelism limits concurrent AppendHistoryNodes calls
+	// during execution store operations to avoid overwhelming the DB.
+	appendHistoryParallelism = 8
 )
 
 var (
@@ -98,10 +103,8 @@ func (d *ExecutionStore) CreateWorkflowExecution(
 	ctx context.Context,
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (*p.InternalCreateWorkflowExecutionResponse, error) {
-	for _, req := range request.NewWorkflowNewEvents {
-		if err := d.AppendHistoryNodes(ctx, req); err != nil {
-			return nil, err
-		}
+	if err := d.appendHistoryEventsParallel(ctx, request.NewWorkflowNewEvents); err != nil {
+		return nil, err
 	}
 
 	return d.MutableStateStore.CreateWorkflowExecution(ctx, request)
@@ -111,15 +114,11 @@ func (d *ExecutionStore) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
-	for _, req := range request.UpdateWorkflowNewEvents {
-		if err := d.AppendHistoryNodes(ctx, req); err != nil {
-			return err
-		}
-	}
-	for _, req := range request.NewWorkflowNewEvents {
-		if err := d.AppendHistoryNodes(ctx, req); err != nil {
-			return err
-		}
+	if err := d.appendHistoryEventsParallel(ctx,
+		request.UpdateWorkflowNewEvents,
+		request.NewWorkflowNewEvents,
+	); err != nil {
+		return err
 	}
 
 	return d.MutableStateStore.UpdateWorkflowExecution(ctx, request)
@@ -129,23 +128,34 @@ func (d *ExecutionStore) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
-	for _, req := range request.CurrentWorkflowEventsNewEvents {
-		if err := d.AppendHistoryNodes(ctx, req); err != nil {
-			return err
-		}
-	}
-	for _, req := range request.ResetWorkflowEventsNewEvents {
-		if err := d.AppendHistoryNodes(ctx, req); err != nil {
-			return err
-		}
-	}
-	for _, req := range request.NewWorkflowEventsNewEvents {
-		if err := d.AppendHistoryNodes(ctx, req); err != nil {
-			return err
-		}
+	if err := d.appendHistoryEventsParallel(ctx,
+		request.CurrentWorkflowEventsNewEvents,
+		request.ResetWorkflowEventsNewEvents,
+		request.NewWorkflowEventsNewEvents,
+	); err != nil {
+		return err
 	}
 
 	return d.MutableStateStore.ConflictResolveWorkflowExecution(ctx, request)
+}
+
+// appendHistoryEventsParallel appends history events from multiple event slices
+// concurrently. Each AppendHistoryNodes call writes to independent rows, so
+// there is no ordering dependency between them.
+func (d *ExecutionStore) appendHistoryEventsParallel(
+	ctx context.Context,
+	eventSlices ...[]*p.InternalAppendHistoryNodesRequest,
+) error {
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(appendHistoryParallelism)
+	for _, events := range eventSlices {
+		for _, req := range events {
+			g.Go(func() error {
+				return d.AppendHistoryNodes(ctx, req)
+			})
+		}
+	}
+	return g.Wait()
 }
 
 func (d *ExecutionStore) GetName() string {
