@@ -366,8 +366,8 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentStamp(t *testing.T) {
 	require.True(t, successorValid, "the newly-scheduled stamp must be valid")
 }
 
-// TestBackfiller_LegacyTaskStartsAtRequestedRange covers a rolling-upgrade handoff.
-func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
+// TestBackfiller_LegacyTaskSchedulesStampedSuccessor covers a rolling-upgrade handoff.
+func TestBackfiller_LegacyTaskSchedulesStampedSuccessor(t *testing.T) {
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
 	registry := chasm.NewRegistry(logger)
@@ -428,7 +428,7 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 	// Arrange the persisted state at the handoff boundary directly: Attempt has
 	// advanced to the current stamp and a zero-stamp task is ready for the new
 	// code.
-	var stamp int64
+	var stamp, attemptBeforeWake int64
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
 			s.Invoker.Get(ctx).BufferedStarts = nil
@@ -437,6 +437,7 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 					backfiller = candidate
 					stamp = candidate.GetTaskStamp()
 					candidate.Attempt++
+					attemptBeforeWake = candidate.GetAttempt()
 					ctx.AddTask(candidate, legacyTaskAttrs, &schedulerpb.BackfillerTask{})
 				}
 			}
@@ -468,16 +469,18 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 	require.False(t, currentValid, "the stamped task must be stale")
 	require.True(t, legacyValid, "the zero-stamp task must remain executable")
 
-	// Execute the old task with the new handler through the CHASM lifecycle.
+	// Execute the old task with the new handler through the CHASM lifecycle. It
+	// only schedules a stamped successor; it must not process the backfill range.
 	executed, err := engine.FirePureTasks(rootRef, now)
 	require.NoError(t, err)
 	require.Equal(t, 1, executed)
 
-	// With no HWM, processing must start at the requested range rather than the
-	// Unix epoch. Execution also restores the stamp for the next task.
+	// The migration wake-up keeps the range unprocessed, does not increment
+	// Attempt, and invalidates all zero-stamp tasks after scheduling the successor.
 	var attempt, taskStamp int64
-	var legacyStillValid bool
+	var legacyStillValid, successorValid bool
 	var actualTimes []time.Time
+	var lastProcessedTime *timestamppb.Timestamp
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
 			for _, start := range s.Invoker.Get(ctx).GetBufferedStarts() {
@@ -487,18 +490,23 @@ func TestBackfiller_LegacyTaskStartsAtRequestedRange(t *testing.T) {
 				if candidate, ok := field.TryGet(ctx); ok {
 					attempt = candidate.GetAttempt()
 					taskStamp = candidate.GetTaskStamp()
+					lastProcessedTime = candidate.GetLastProcessedTime()
 					legacyStillValid, err = handler.Validate(ctx, candidate, chasm.TaskInvocation{}, legacyTask)
+					if err != nil {
+						return struct{}{}, err
+					}
+					successorValid, err = handler.Validate(ctx, candidate, chasm.TaskInvocation{},
+						&schedulerpb.BackfillerTask{Stamp: taskStamp})
 					return struct{}{}, err
 				}
 			}
 			return struct{}{}, nil
 		}, struct{}{})
 	require.NoError(t, err)
-	require.NotEmpty(t, actualTimes)
-	for _, actualTime := range actualTimes {
-		require.False(t, actualTime.Before(request.GetStartTime().AsTime()),
-			"the old task must not process times before the requested range")
-	}
+	require.Empty(t, actualTimes, "the zero-stamp task must not process the range")
+	require.Nil(t, lastProcessedTime, "the zero-stamp task must not advance the range watermark")
+	require.Equal(t, attemptBeforeWake, attempt, "the migration wake-up must not increment Attempt")
 	require.Equal(t, attempt+1, taskStamp)
-	require.False(t, legacyStillValid, "executing the zero-stamp task must restore the stamp")
+	require.False(t, legacyStillValid, "the zero-stamp task must be invalid after the successor is scheduled")
+	require.True(t, successorValid, "the stamped successor must be valid")
 }

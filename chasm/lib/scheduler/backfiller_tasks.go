@@ -85,17 +85,20 @@ func (b *BackfillerTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	task *schedulerpb.BackfillerTask,
 ) error {
-	defer func() { backfiller.Attempt++ }()
-
-	if task.GetStamp() == 0 {
-		// Restore the stamp after a legacy binary scheduled this zero-stamp task.
-		backfiller.TaskStamp = backfiller.Attempt + 1
-	}
-
 	scheduler := backfiller.Scheduler.Get(ctx)
-	logger := newTaggedLogger(b.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(b.metricsHandler, scheduler)
 	metricsHandler.Counter(metrics.ScheduleBackfillerTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
+
+	if task.GetStamp() == 0 {
+		// A legacy binary ignored TaskStamp. Use its zero-stamp task only to
+		// schedule a current stamped task, without allowing it to process a range.
+		backfiller.TaskStamp = backfiller.Attempt
+		b.rescheduleBackfill(ctx, backfiller)
+		return nil
+	}
+	defer func() { backfiller.Attempt++ }()
+
+	logger := newTaggedLogger(b.baseLogger, scheduler)
 
 	invoker := scheduler.Invoker.Get(ctx)
 
