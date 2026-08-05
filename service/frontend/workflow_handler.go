@@ -2024,9 +2024,10 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	}
 
 	req := &workflowservice.RespondActivityTaskFailedRequest{
-		TaskToken: token,
-		Failure:   request.GetFailure(),
-		Identity:  request.Identity,
+		TaskToken:            token,
+		Failure:              request.GetFailure(),
+		Identity:             request.Identity,
+		LastHeartbeatDetails: request.GetLastHeartbeatDetails(),
 	}
 
 	_, err = wh.historyClient.RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -6886,9 +6887,32 @@ func (wh *WorkflowHandler) validateSchedulePayloadSize(
 	)
 }
 
+func validateScheduleIntervalDurations(spec *schedulepb.ScheduleSpec) error {
+	for _, interval := range spec.GetInterval() {
+		if d := interval.GetInterval(); d != nil {
+			if err := d.CheckValid(); err != nil {
+				return fmt.Errorf("interval is not a valid duration: %w", err)
+			}
+		}
+		if d := interval.GetPhase(); d != nil {
+			if err := d.CheckValid(); err != nil {
+				return fmt.Errorf("phase is not a valid duration: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
 func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedule) error {
 	if schedule.Spec == nil {
 		schedule.Spec = &schedulepb.ScheduleSpec{}
+	}
+	if err := validateScheduleIntervalDurations(schedule.Spec); err != nil {
+		if wh.config.EnforceScheduleDurationValidation() {
+			return serviceerror.NewInvalidArgumentf("Invalid schedule spec: %v", err)
+		}
+		wh.throttledLogger.Warn("Accepting schedule spec with malformed duration: validation enforcement is disabled",
+			tag.Error(err))
 	}
 	compiledSpec, err := wh.scheduleSpecBuilder.NewCompiledSpec(schedule.Spec)
 	if err != nil {

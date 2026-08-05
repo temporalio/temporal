@@ -30,7 +30,7 @@ var (
 
 	StartDelayEnabled = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.startDelayEnabled",
-		false,
+		true,
 		`Allows non-zero start_delay on StartActivityExecution requests.`,
 	)
 
@@ -59,6 +59,8 @@ type Config struct {
 	MaxIDLengthLimit                         dynamicconfig.IntPropertyFn
 	MaxCallbacksPerExecution                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy               dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+	MaxUserMetadataDetailsSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxUserMetadataSummarySize               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	StartDelayEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
@@ -77,6 +79,8 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 		StartDelayEnabled:                        StartDelayEnabled.Get(dc),
 		MaxCallbacksPerExecution:                 callback.MaxPerExecution.Get(dc),
+		MaxUserMetadataDetailsSize:               dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
+		MaxUserMetadataSummarySize:               dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
 		VisibilityMaxPageSize:                    dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}
 }

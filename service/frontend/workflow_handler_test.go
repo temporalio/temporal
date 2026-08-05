@@ -5327,6 +5327,256 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 	})
 }
 
+// maxProtoDurationSeconds is the largest seconds value a google.protobuf.Duration may
+// carry (10000 years). Anything beyond it fails durationpb's CheckValid.
+const maxProtoDurationSeconds = int64(315576000000)
+
+// newScheduleSpecHandler builds the minimum WorkflowHandler that canonicalizeScheduleSpec
+// needs: a config, a spec builder, and a logger for the non-enforcing path. configure is
+// nil to exercise the shipped dynamic config defaults.
+func newScheduleSpecHandler(configure func(*Config)) *WorkflowHandler {
+	config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
+	if configure != nil {
+		configure(config)
+	}
+	return &WorkflowHandler{
+		config:              config,
+		throttledLogger:     log.NewNoopLogger(),
+		scheduleSpecBuilder: scheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }),
+	}
+}
+
+// Regression test for SCH-057. Malformed interval/phase duration protobufs (mismatched
+// seconds/nanos signs, nanos outside the protobuf range, seconds outside the protobuf
+// range) normalize to Go durations that satisfy the semantic interval checks, so schedule
+// intake used to accept them and persist the invalid wire form verbatim.
+func TestCanonicalizeScheduleSpec_IntervalDurationValidation(t *testing.T) {
+	testCases := []struct {
+		name        string
+		interval    *durationpb.Duration
+		phase       *durationpb.Duration
+		errContains string
+	}{
+		// Valid boundary values: these must keep working, and must not be capped or
+		// otherwise rewritten by the validation.
+		{
+			name:     "minimum valid interval",
+			interval: &durationpb.Duration{Seconds: 1},
+		},
+		{
+			name:     "maximum valid nanos",
+			interval: &durationpb.Duration{Seconds: 1, Nanos: 999999999},
+		},
+		{
+			name:     "valid interval and phase",
+			interval: durationpb.New(time.Hour),
+			phase:    durationpb.New(30 * time.Minute),
+		},
+		{
+			name:     "maximum protobuf seconds",
+			interval: &durationpb.Duration{Seconds: maxProtoDurationSeconds},
+		},
+		{
+			name:     "zero phase is valid",
+			interval: durationpb.New(time.Hour),
+			phase:    &durationpb.Duration{},
+		},
+
+		// Malformed protobuf wire values.
+		{
+			name:        "interval with mismatched signs",
+			interval:    &durationpb.Duration{Seconds: 2, Nanos: -1},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "interval with nanos at 1e9",
+			interval:    &durationpb.Duration{Nanos: 1000000000},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "interval with seconds above the protobuf range",
+			interval:    &durationpb.Duration{Seconds: maxProtoDurationSeconds + 1},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "interval with seconds below the protobuf range",
+			interval:    &durationpb.Duration{Seconds: -maxProtoDurationSeconds - 1},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "phase with nanos at 1e9",
+			interval:    &durationpb.Duration{Seconds: 2},
+			phase:       &durationpb.Duration{Nanos: 1000000000},
+			errContains: "phase is not a valid duration",
+		},
+		{
+			name:        "phase with mismatched signs",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       &durationpb.Duration{Seconds: 1, Nanos: -1},
+			errContains: "phase is not a valid duration",
+		},
+		{
+			name:        "phase with nanos at -1e9",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       &durationpb.Duration{Nanos: -1000000000},
+			errContains: "phase is not a valid duration",
+		},
+
+		// Controls: well-formed protobufs that violate the pre-existing semantic checks
+		// must still be rejected with the pre-existing messages.
+		{
+			name:        "normalized interval below the minimum",
+			interval:    &durationpb.Duration{Nanos: 500000000},
+			errContains: "interval is too small",
+		},
+		{
+			name:        "negative phase",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       &durationpb.Duration{Seconds: -1},
+			errContains: "phase is negative",
+		},
+		{
+			name:        "phase not less than interval",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       durationpb.New(10 * time.Second),
+			errContains: "phase cannot be greater than Interval",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(nil)
+			schedule := &schedulepb.Schedule{
+				Spec: &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{{
+						Interval: tc.interval,
+						Phase:    tc.phase,
+					}},
+				},
+			}
+
+			err := wh.canonicalizeScheduleSpec(schedule)
+			if tc.errContains == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.Contains(t, err.Error(), tc.errContains)
+		})
+	}
+}
+
+// The duration validation is enforced by default, but operators can turn enforcement off
+// with frontend.enforceScheduleDurationValidation. With it off, a malformed duration is
+// logged and allowed through, and the spec still compiles on its normalized value.
+func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
+	testCases := []struct {
+		name string
+		// configure is nil when the case exercises the shipped default.
+		configure   func(*Config)
+		errContains string
+	}{
+		{
+			name:        "enforced by default",
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name: "enforcement explicitly enabled",
+			configure: func(c *Config) {
+				c.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(true)
+			},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name: "enforcement disabled",
+			configure: func(c *Config) {
+				c.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(false)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(tc.configure)
+
+			schedule := &schedulepb.Schedule{
+				Spec: &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{{
+						Interval: &durationpb.Duration{Seconds: 2, Nanos: -1},
+					}},
+				},
+			}
+
+			err := wh.canonicalizeScheduleSpec(schedule)
+			if tc.errContains != "" {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Contains(t, err.Error(), tc.errContains)
+				return
+			}
+			require.NoError(t, err)
+			// Canonicalization still ran, on the malformed duration's normalized value.
+			require.Equal(t, 2*time.Second-time.Nanosecond,
+				schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration())
+		})
+	}
+}
+
+// Regression test for SCH-057: CreateSchedule and UpdateSchedule must reject malformed
+// interval duration protobufs with InvalidArgument before either the V1 or the CHASM
+// backend is invoked.
+func (s *WorkflowHandlerSuite) TestCreateUpdateSchedule_RejectsMalformedIntervalDuration() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	// Mismatched seconds/nanos signs normalize to ~2s, and nanos=1e9 normalizes to 1s,
+	// so both satisfy the semantic interval/phase checks while being invalid on the wire.
+	malformedSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: &durationpb.Duration{Seconds: 2, Nanos: -1},
+					Phase:    &durationpb.Duration{Nanos: 1000000000},
+				}},
+			},
+		}
+	}
+
+	// No backend call is expected: the scheduler (CHASM) client is nil in this suite and
+	// the history client mock has no expectations registered, so reaching either backend
+	// fails the test.
+	s.Run("CreateSchedule", func() {
+		resp, err := wh.CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Schedule:   malformedSchedule(),
+			RequestId:  uuid.NewString(),
+			Identity:   "test-identity",
+		})
+		s.Nil(resp)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), "not a valid duration")
+	})
+
+	s.Run("UpdateSchedule", func() {
+		resp, err := wh.UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Schedule:   malformedSchedule(),
+			RequestId:  uuid.NewString(),
+			Identity:   "test-identity",
+		})
+		s.Nil(resp)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), "not a valid duration")
+	})
+}
+
 func (s *WorkflowHandlerSuite) TestUpdateSchedule_ValidationAndErrors() {
 	config := s.newConfig()
 	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)

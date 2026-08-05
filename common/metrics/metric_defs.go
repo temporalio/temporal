@@ -1092,20 +1092,31 @@ var (
 	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
 	ReplicationStreamChannelFull          = NewCounterDef("replication_stream_channel_full")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
-	ReplicationTaskSendAttempt            = NewDimensionlessHistogramDef("replication_task_send_attempt")
-	ReplicationTaskSendError              = NewCounterDef("replication_task_send_error")
-	ReplicationTaskGenerationLatency      = NewTimerDef("replication_task_generation_latency")
-	ReplicationTaskLoadLatency            = NewTimerDef("replication_task_load_latency")
-	ReplicationTaskLoadSize               = NewDimensionlessHistogramDef("replication_task_load_size")
-	ReplicationTaskSendLatency            = NewTimerDef("replication_task_send_latency")
-	ReplicationTaskSendBacklog            = NewDimensionlessHistogramDef("replication_task_send_backlog")
-	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
-	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
-	ReplicationTasksSkipped               = NewCounterDef("replication_tasks_skipped")
-	ReplicationTasksApplied               = NewCounterDef("replication_tasks_applied")
-	ReplicationTasksFailed                = NewCounterDef("replication_tasks_failed")
-	ReplicationTasksBackFill              = NewCounterDef("replication_tasks_back_fill")
-	ReplicationTasksBackFillLatency       = NewTimerDef("replication_tasks_back_fill_latency")
+	// ReplicationStreamReadBufferHits counts replication queue read pages served from the
+	// shard's read-through buffer; ReplicationStreamReadBufferMisses counts pages that fell
+	// through to persistence while the buffer was enabled. With N streams/lanes scanning the
+	// same tip, the ideal shape is one miss (the fetch that fills the buffer) per N-1 hits.
+	ReplicationStreamReadBufferHits   = NewCounterDef("replication_stream_read_buffer_hits")
+	ReplicationStreamReadBufferMisses = NewCounterDef("replication_stream_read_buffer_misses")
+	// ReplicationStreamReadBufferMissLag records, for misses that start below the buffered
+	// range, how far below coverage the read began (in task ids). Small values mean a larger
+	// buffer would convert these misses to hits; large values mean the reader is deep in
+	// backlog, where no tip buffer helps and reads are paced by the reader itself.
+	ReplicationStreamReadBufferMissLag = NewDimensionlessHistogramDef("replication_stream_read_buffer_miss_lag")
+	ReplicationTaskSendAttempt         = NewDimensionlessHistogramDef("replication_task_send_attempt")
+	ReplicationTaskSendError           = NewCounterDef("replication_task_send_error")
+	ReplicationTaskGenerationLatency   = NewTimerDef("replication_task_generation_latency")
+	ReplicationTaskLoadLatency         = NewTimerDef("replication_task_load_latency")
+	ReplicationTaskLoadSize            = NewDimensionlessHistogramDef("replication_task_load_size")
+	ReplicationTaskSendLatency         = NewTimerDef("replication_task_send_latency")
+	ReplicationTaskSendBacklog         = NewDimensionlessHistogramDef("replication_task_send_backlog")
+	ReplicationTasksRecv               = NewCounterDef("replication_tasks_recv")
+	ReplicationTasksRecvBacklog        = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
+	ReplicationTasksSkipped            = NewCounterDef("replication_tasks_skipped")
+	ReplicationTasksApplied            = NewCounterDef("replication_tasks_applied")
+	ReplicationTasksFailed             = NewCounterDef("replication_tasks_failed")
+	ReplicationTasksBackFill           = NewCounterDef("replication_tasks_back_fill")
+	ReplicationTasksBackFillLatency    = NewTimerDef("replication_tasks_back_fill_latency")
 	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
 	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
 	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")

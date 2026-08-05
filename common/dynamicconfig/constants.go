@@ -979,6 +979,13 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
+	FrontendEnforceScheduleDurationValidation = NewGlobalBoolSetting(
+		"frontend.enforceScheduleDurationValidation",
+		true,
+		`FrontendEnforceScheduleDurationValidation rejects CreateSchedule/UpdateSchedule requests whose
+interval or phase durations are not valid google.protobuf.Duration messages. When disabled, such
+requests are logged and allowed through instead of being rejected.`,
+	)
 	// [cleanup-wv-pre-release]
 	EnableDeployments = NewNamespaceBoolSetting(
 		"system.enableDeployments",
@@ -2886,6 +2893,16 @@ that task will be sent to DLQ.`,
 		"history.EnableReplicationTaskTieredProcessing",
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
+	)
+	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
+		"history.ReplicationStreamReadBufferSize",
+		0,
+		`ReplicationStreamReadBufferSize is the per-shard capacity, in tasks, of the read-through
+buffer over the replication task queue's tip. All replication stream senders on a shard (every
+remote cluster, every priority lane) scan the same queue; the buffer lets those overlapping
+scans share one persistence read, with only readers below the buffered range falling through
+to persistence. The buffer holds slim queue rows (task metadata, not event payloads).
+0 disables the buffer.`,
 	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",

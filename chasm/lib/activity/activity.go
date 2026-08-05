@@ -59,6 +59,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -292,7 +293,27 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		}
 		return nil, err
 	}
+	if dispatchTime := a.dispatchTimeForAttempt(lastAttempt); dispatchTime != nil {
+		metrics.TaskScheduleToStartLatency.With(a.taskScheduleToStartMetricsHandler(ctx)).Record(
+			lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
+		)
+	}
 	return a.GenerateRecordActivityTaskStartedResponse(ctx, request.GetPollRequest().GetNamespace())
+}
+
+func (a *Activity) taskScheduleToStartMetricsHandler(ctx chasm.Context) metrics.Handler {
+	actCtx := activityContextFromChasm(ctx)
+	namespaceEntry := ctx.NamespaceEntry()
+	namespaceName := namespaceEntry.Name().String()
+	taskQueue := a.GetTaskQueue().GetName()
+	return metrics.GetPerTaskQueuePartitionTypeScope(
+		a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskStartedScope),
+		namespaceName,
+		tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), taskQueue).
+			TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).
+			RootPartition(),
+		actCtx.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+	)
 }
 
 // GenerateRecordActivityTaskStartedResponse generates the response for HandleStarted.
@@ -601,14 +622,24 @@ func (a *Activity) HandleFailed(
 	if err != nil {
 		return nil, err
 	}
-	failure := event.Request.GetFailedRequest().GetFailure()
+	failedRequest := event.Request.GetFailedRequest()
+	failure := failedRequest.GetFailure()
 
-	appFailure := failure.GetApplicationFailureInfo()
-	isRetryable := appFailure != nil &&
-		!appFailure.GetNonRetryable() &&
-		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
+	if details := failedRequest.GetLastHeartbeatDetails(); details != nil {
+		heartbeat := a.getOrCreateLastHeartbeat(ctx)
+		heartbeat.Details = details
+		heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
+		heartbeat.TotalHeartbeatCount++
+		a.emitHeartbeatMetrics(ctx, details)
+	}
 
-	retryState, err := a.tryReschedule(ctx, isRetryable, appFailure.GetNextRetryDelay().AsDuration(), failure)
+	nextRetryDelay := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration()
+	retryState, err := a.tryReschedule(
+		ctx,
+		retrypolicy.IsRetryableFailure(failure, a.GetRetryPolicy().GetNonRetryableErrorTypes()),
+		nextRetryDelay,
+		failure,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -620,6 +651,7 @@ func (a *Activity) HandleFailed(
 
 	if err := TransitionFailed.Apply(a, ctx, failedEvent{
 		req:             event.Request,
+		retryState:      retryState,
 		baseHandler:     baseHandler,
 		enrichedHandler: enrichedHandler,
 	}); err != nil {
@@ -636,6 +668,9 @@ func (a *Activity) HandleCanceled(
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId(), false); err != nil {
 		return nil, err
+	}
+	if !TransitionCanceled.Possible(a) {
+		return nil, consts.ErrActivityTaskNotCancelRequested
 	}
 
 	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
@@ -698,11 +733,18 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
 		return nil, serviceerror.NewFailedPreconditionf("Cannot update options for activity in state %s", a.Status.String())
 	default:
+	}
+
+	if a.ResetRestoreOptions {
+		return nil, serviceerror.NewFailedPrecondition(
+			"cannot update options while a deferred Reset(RestoreOriginalOptions) is pending")
 	}
 
 	if frontendReq.GetRestoreOriginal() {
@@ -1010,28 +1052,21 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	if a.isTerminal() {
 		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
 	}
-	// TODO(sean): this should be FailedPrecondition, instead of no-op. And remove persisting LastUnpauseRequestId since it fails
-	if !a.isPaused() {
-		return &activitypb.UnpauseActivityExecutionResponse{}, nil
-	}
-
 	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.ActivityUnpausedScope)
 	if err != nil {
 		return nil, err
 	}
 
 	event := unpauseEvent{req: frontendReq, metricsHandler: metricsHandler}
-	switch a.GetStatus() {
-	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+	switch {
+	case TransitionUnpaused.Possible(a):
 		if err := TransitionUnpaused.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
-	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+	case TransitionUnpausedWhilePauseRequested.Possible(a):
 		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
-	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		a.ResetKeepPaused = false
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
 	}
@@ -1047,7 +1082,7 @@ func (a *Activity) isPaused() bool {
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return true
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		return a.GetResetKeepPaused()
+		return a.GetResetShouldPause()
 	default:
 		return false
 	}
@@ -1061,14 +1096,6 @@ func (a *Activity) unpause(
 	dispatchTime := a.unpauseDispatchTime(ctx, event)
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 
-	if event.req.GetResetAttempts() {
-		attempt.Count = 1
-		attempt.CurrentRetryInterval = nil
-		attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
-	}
-	if event.req.GetResetHeartbeat() {
-		a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
-	}
 	attempt.Stamp++
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
@@ -1089,10 +1116,7 @@ func (a *Activity) unpauseDispatchTime(ctx chasm.MutableContext, event unpauseEv
 		unpauseTime = unpauseTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	}
 	dispatchTime := a.dispatchTimeRespectingStartDelay(unpauseTime)
-	var retryDispatchTime *timestamppb.Timestamp
-	if !event.req.GetResetAttempts() {
-		retryDispatchTime = dispatchTimeForRetry(a.LastAttempt.Get(ctx))
-	}
+	retryDispatchTime := dispatchTimeForRetry(a.LastAttempt.Get(ctx))
 	if retryDispatchTime != nil && retryDispatchTime.AsTime().After(dispatchTime) {
 		return retryDispatchTime.AsTime()
 	}
@@ -1125,7 +1149,9 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	attempt.Stamp++
 	attempt.CurrentRetryInterval = nil
 	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
-	a.clearHeartbeatDetails(ctx)
+	if event.req.GetResetHeartbeat() {
+		a.clearHeartbeatDetails(ctx)
+	}
 	dispatchTime := a.dispatchTimeRespectingStartDelay(event.resetTime)
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
@@ -1205,7 +1231,7 @@ func (a *Activity) handleReset(
 			a.restoreOriginalOptions(ctx)
 		}
 		if frontendReq.GetKeepPaused() {
-			return a.resetKeepPaused(ctx, metricsHandler)
+			return a.resetKeepPaused(ctx, frontendReq, metricsHandler)
 		}
 		// No keepPaused: perform an immediate reset. restoreOriginalOptions (if requested) already
 		// ran above, so skip it in resetImmediately to avoid restoring twice.
@@ -1241,9 +1267,12 @@ func (a *Activity) deferResetWhileRunning(
 	if frontendReq.GetRestoreOriginalOptions() {
 		a.ResetRestoreOptions = true
 	}
+	if frontendReq.GetResetHeartbeat() {
+		a.ResetShouldClearHeartbeat = true
+	}
 	// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
 	// yields the activity lands back in PAUSED rather than SCHEDULED.
-	a.ResetKeepPaused = keepPaused && pauseRequested
+	a.ResetShouldPause = keepPaused && pauseRequested
 	if err := TransitionResetRequested.Apply(a, ctx, nil); err != nil {
 		return nil, err
 	}
@@ -1253,6 +1282,7 @@ func (a *Activity) deferResetWhileRunning(
 
 func (a *Activity) resetKeepPaused(
 	ctx chasm.MutableContext,
+	frontendReq *workflowservice.ResetActivityExecutionRequest,
 	metricsHandler metrics.Handler,
 ) (*activitypb.ResetActivityExecutionResponse, error) {
 	attempt := a.LastAttempt.Get(ctx)
@@ -1261,7 +1291,9 @@ func (a *Activity) resetKeepPaused(
 	attempt.CurrentRetryInterval = nil
 	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 	attempt.DispatchTime = nil
-	a.clearHeartbeatDetails(ctx)
+	if frontendReq.GetResetHeartbeat() {
+		a.clearHeartbeatDetails(ctx)
+	}
 	a.emitOnResetMetrics(metricsHandler)
 	return &activitypb.ResetActivityExecutionResponse{}, nil
 }
@@ -1280,6 +1312,7 @@ func (a *Activity) resetImmediately(
 		resetTime = resetTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	}
 	if err := TransitionReset.Apply(a, ctx, resetEvent{
+		req:            frontendReq,
 		resetTime:      resetTime,
 		metricsHandler: metricsHandler,
 	}); err != nil {
@@ -1363,13 +1396,25 @@ func (a *Activity) tryReschedule(
 	overridingRetryInterval time.Duration,
 	failure *failurepb.Failure,
 ) (enumspb.RetryState, error) {
+	status := a.GetStatus()
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		event := rescheduleEvent{failure: failure}
+		if a.ResetShouldPause {
+			return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
+		}
+		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
+	}
+	if a.GetRetryPolicy() == nil {
+		return enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET, nil
+	}
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
+	}
 	retryState, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
 	if !failureRetryable {
 		retryState = enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
-	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
-	// A pending reset request is always honored, regardless of retryability or the should retry result.
-	if !resetRequested && retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 		return retryState, nil
 	}
 	retryIntervalSource := activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
@@ -1377,14 +1422,9 @@ func (a *Activity) tryReschedule(
 		retryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE
 	}
 	event := rescheduleEvent{retryInterval: retryInterval, retryIntervalSource: retryIntervalSource, failure: failure}
-	switch a.GetStatus() {
+	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
-	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		if a.ResetKeepPaused {
-			return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
-		}
-		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
 	default:
 		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionRescheduled.Apply(a, ctx, event)
 	}
@@ -1392,9 +1432,7 @@ func (a *Activity) tryReschedule(
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (enumspb.RetryState, time.Duration) {
 	if !TransitionRescheduled.Possible(a) &&
-		!TransitionAttemptFailedWhilePauseRequested.Possible(a) &&
-		!TransitionResetAttemptFailedToScheduled.Possible(a) &&
-		!TransitionResetAttemptFailedToPaused.Possible(a) {
+		!TransitionAttemptFailedWhilePauseRequested.Possible(a) {
 		return enumspb.RETRY_STATE_UNSPECIFIED, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)
@@ -1575,6 +1613,16 @@ func (a *Activity) applyDeferredOptionRestore(ctx chasm.MutableContext) {
 	a.restoreOriginalOptions(ctx)
 }
 
+// applyDeferredHeartbeatClear applies a Reset(ResetHeartbeat) that was deferred because a worker was
+// running an attempt at reset time (see handleReset).
+func (a *Activity) applyDeferredHeartbeatClear(ctx chasm.MutableContext) {
+	if !a.ResetShouldClearHeartbeat {
+		return
+	}
+	a.ResetShouldClearHeartbeat = false
+	a.clearHeartbeatDetails(ctx)
+}
+
 // restoreOriginalOptions resets the activity's options to the values it was originally scheduled
 // with and reissues the ScheduleToClose timer at the resulting deadline. start_delay is restored
 // only if the activity has never started.
@@ -1662,13 +1710,7 @@ func (a *Activity) RecordHeartbeat(
 			},
 		)
 	}
-	detailsSize := details.Size()
-	metricsHandler := a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskHeartbeatScope)
-	emitPayloadSizeMetric(metricsHandler, detailsSize)
-	metrics.ActivityHeartbeatCount.With(metricsHandler).Record(
-		1,
-		metrics.StringTag("has_details", strconv.FormatBool(detailsSize > 0)),
-	)
+	a.emitHeartbeatMetrics(ctx, details)
 
 	response := &historyservice.RecordActivityTaskHeartbeatResponse{}
 	switch a.Status {
@@ -1791,6 +1833,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
 		LastStartedTime:         attempt.GetStartedTime(),
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
+		LastDeploymentVersion:   attempt.GetLastDeploymentVersion(),
 		SdkName:                 attempt.GetSdkName(),
 		SdkVersion:              attempt.GetSdkVersion(),
 		NextAttemptScheduleTime: a.nextAttemptDispatchTime(ctx, attempt),
@@ -1935,7 +1978,8 @@ func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOu
 	}
 	if failure := a.terminalFailure(ctx); failure != nil {
 		return &apiactivitypb.ActivityExecutionOutcome{
-			Value: &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
+			Value:      &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
+			RetryState: activityOutcome.GetRetryState(),
 		}
 	}
 	return nil
@@ -2057,6 +2101,17 @@ func emitPayloadSizeMetric(metricsHandler metrics.Handler, size int) {
 	if size > 0 {
 		metrics.ActivityPayloadSize.With(metricsHandler).Record(int64(size))
 	}
+}
+
+// emitHeartbeatMetrics records the heartbeat count and payload size for heartbeat details.
+func (a *Activity) emitHeartbeatMetrics(ctx chasm.Context, details *commonpb.Payloads) {
+	metricsHandler := a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskHeartbeatScope)
+	detailsSize := details.Size()
+	emitPayloadSizeMetric(metricsHandler, detailsSize)
+	metrics.ActivityHeartbeatCount.With(metricsHandler).Record(
+		1,
+		metrics.StringTag("has_details", strconv.FormatBool(detailsSize > 0)),
+	)
 }
 
 func (a *Activity) emitOnCompletedMetrics(

@@ -386,7 +386,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
@@ -438,13 +438,13 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 	s.Equal(int64(4096), resp.NamespaceInfo.Limits.WorkflowTaskCompletionSizeLimitError)
 
-	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.Activity.EnableStandaloneActivityOperatorCommands = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
 	})
 	s.Require().NoError(err)
-	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 }
 
