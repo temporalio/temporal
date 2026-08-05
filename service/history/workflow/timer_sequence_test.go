@@ -927,7 +927,7 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 		TaskStatus:     TimerTaskStatusCreated,
 	}
 
-	expectedTimerSequence := &TimerSequenceID{
+	expectedTimerSequence := TimerSequenceID{
 		EventID:      timerInfo.StartedEventId,
 		Timestamp:    timerExpiry.AsTime(),
 		TimerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
@@ -935,12 +935,14 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 		Attempt:      1,
 	}
 
-	timerSequence := s.timerSequence.getUserTimerTimeout(timerInfo)
+	timerSequence, ok := s.timerSequence.getUserTimerTimeout(timerInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 
 	timerInfo.TaskStatus = TimerTaskStatusNone
 	expectedTimerSequence.TimerCreated = false
-	timerSequence = s.timerSequence.getUserTimerTimeout(timerInfo)
+	timerSequence, ok = s.timerSequence.getUserTimerTimeout(timerInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 }
 
@@ -962,8 +964,8 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithTimeout_N
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithTimeout_Scheduled_NotStarted() {
@@ -984,7 +986,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithTimeout_S
 		Attempt:                 12,
 	}
 
-	expectedTimerSequence := &TimerSequenceID{
+	expectedTimerSequence := TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    activityInfo.ScheduledTime.AsTime().Add(activityInfo.ScheduleToStartTimeout.AsDuration()),
 		TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -992,12 +994,14 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithTimeout_S
 		Attempt:      12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	timerSequence, ok := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
 	expectedTimerSequence.TimerCreated = false
-	timerSequence = s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	timerSequence, ok = s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 }
 
@@ -1019,12 +1023,12 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithTimeout_S
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.False(ok)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
-	timerSequence = s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok = s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithoutTimeout_NotScheduled() {
@@ -1045,8 +1049,8 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithoutTimeou
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithoutTimeout_Scheduled_NotStarted() {
@@ -1067,12 +1071,12 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithoutTimeou
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.False(ok)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
-	timerSequence = s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok = s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithoutTimeout_Scheduled_Started() {
@@ -1093,12 +1097,12 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToStartTimeout_WithoutTimeou
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.False(ok)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
-	timerSequence = s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok = s.timerSequence.getActivityScheduleToStartTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithTimeout_NotScheduled() {
@@ -1119,8 +1123,8 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithTimeout_N
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithTimeout_Scheduled() {
@@ -1142,7 +1146,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithTimeout_S
 		Attempt:                 12,
 	}
 
-	expectedTimerSequence := &TimerSequenceID{
+	expectedTimerSequence := TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    activityInfo.ScheduledTime.AsTime().Add(activityInfo.ScheduleToCloseTimeout.AsDuration()),
 		TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
@@ -1150,12 +1154,14 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithTimeout_S
 		Attempt:      12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
+	timerSequence, ok := s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
 	expectedTimerSequence.TimerCreated = false
-	timerSequence = s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
+	timerSequence, ok = s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 }
 
@@ -1177,8 +1183,8 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithoutTimeou
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithoutTimeout_Scheduled() {
@@ -1199,12 +1205,12 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithoutTimeou
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
+	s.False(ok)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
-	timerSequence = s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok = s.timerSequence.getActivityScheduleToCloseTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_WithTimeout_NotStarted() {
@@ -1225,8 +1231,8 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_WithTimeout_NotS
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_WithTimeout_Started() {
@@ -1247,7 +1253,7 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_WithTimeout_Star
 		Attempt:                 12,
 	}
 
-	expectedTimerSequence := &TimerSequenceID{
+	expectedTimerSequence := TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    activityInfo.StartedTime.AsTime().Add(activityInfo.StartToCloseTimeout.AsDuration()),
 		TimerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
@@ -1255,12 +1261,14 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_WithTimeout_Star
 		Attempt:      12,
 	}
 
-	timerSequence := s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
+	timerSequence, ok := s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
 	expectedTimerSequence.TimerCreated = false
-	timerSequence = s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
+	timerSequence, ok = s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 }
 
@@ -1282,8 +1290,8 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_WithoutTimeout_N
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_WithoutTimeout_Started() {
@@ -1304,12 +1312,12 @@ func (s *timerSequenceSuite) TestGetActivityStartToCloseTimeout_WithoutTimeout_S
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
+	s.False(ok)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
-	timerSequence = s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok = s.timerSequence.getActivityStartToCloseTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_NotStarted() {
@@ -1330,8 +1338,8 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_NotSt
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Started_NoHeartbeat() {
@@ -1352,7 +1360,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 		Attempt:                 12,
 	}
 
-	expectedTimerSequence := &TimerSequenceID{
+	expectedTimerSequence := TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    activityInfo.StartedTime.AsTime().Add(activityInfo.HeartbeatTimeout.AsDuration()),
 		TimerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
@@ -1360,12 +1368,14 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 		Attempt:      12,
 	}
 
-	timerSequence := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	timerSequence, ok := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
 	expectedTimerSequence.TimerCreated = false
-	timerSequence = s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	timerSequence, ok = s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 }
 
@@ -1387,7 +1397,7 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 		Attempt:                 12,
 	}
 
-	expectedTimerSequence := &TimerSequenceID{
+	expectedTimerSequence := TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    activityInfo.LastHeartbeatUpdateTime.AsTime().Add(activityInfo.HeartbeatTimeout.AsDuration()),
 		TimerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
@@ -1395,12 +1405,14 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithHeartbeat_Start
 		Attempt:      12,
 	}
 
-	timerSequence := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	timerSequence, ok := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
 	expectedTimerSequence.TimerCreated = false
-	timerSequence = s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	timerSequence, ok = s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.True(ok)
 	s.Equal(expectedTimerSequence, timerSequence)
 }
 
@@ -1422,8 +1434,8 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_No
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_Started_NoHeartbeat() {
@@ -1444,12 +1456,12 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_St
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.False(ok)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
-	timerSequence = s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok = s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_Started_Heartbeated() {
@@ -1470,12 +1482,12 @@ func (s *timerSequenceSuite) TestGetActivityHeartbeatTimeout_WithoutHeartbeat_St
 		Attempt:                 12,
 	}
 
-	timerSequence := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok := s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.False(ok)
 
 	activityInfo.TimerTaskStatus = TimerTaskStatusNone
-	timerSequence = s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
-	s.Empty(timerSequence)
+	_, ok = s.timerSequence.getActivityHeartbeatTimeout(activityInfo)
+	s.False(ok)
 }
 
 func (s *timerSequenceSuite) TestConversion() {
