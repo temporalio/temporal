@@ -459,7 +459,7 @@ func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.Re
 					RunId:      frontendReq.GetRunId(),
 				},
 				Activity:               &workflowservice.ResetActivityRequest_Id{Id: frontendReq.GetActivityId()},
-				ResetHeartbeat:         true,
+				ResetHeartbeat:         frontendReq.GetResetHeartbeat(),
 				RestoreOriginalOptions: frontendReq.GetRestoreOriginalOptions(),
 				KeepPaused:             frontendReq.GetKeepPaused(),
 				Jitter:                 frontendReq.GetJitter(),
