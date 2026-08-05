@@ -1705,11 +1705,14 @@ func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
 			wantErr:      false,
 		},
 		{
+			// A workflow can be paused before its first workflow task has ever
+			// run (e.g. while waiting out start_delay/cron/retry backoff), in
+			// which case the run-state stays CREATED.
 			name:         "created-> {created, paused}",
 			currentState: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			toState:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			toStatus:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
-			wantErr:      true,
+			wantErr:      false,
 		},
 		{
 			name:         "created-> {created, completed} (invalid)",
@@ -2158,6 +2161,51 @@ func (s *mutableStateSuite) TestPauseWorkflowExecution_FailStateValidation() {
 	// Status should remain unchanged and PauseInfo should not be set when validation fails.
 	s.Equal(prevStatus, s.mutableState.executionState.Status)
 	s.Nil(s.mutableState.executionInfo.PauseInfo)
+}
+
+// TestPauseUnpause_BeforeFirstWorkflowTask_RunStateStaysCreated verifies that
+// pausing and unpausing a workflow that has never run a workflow task (e.g.
+// while waiting out start_delay/cron/retry backoff) only ever changes Status;
+// the run-state stays CREATED throughout and does not get promoted to
+// RUNNING by pause/unpause themselves. The run-state is only ever supposed to
+// transition to RUNNING when the first WorkflowTaskScheduled event is applied
+// (see ApplyWorkflowTaskScheduledEvent), which does not happen here.
+func (s *mutableStateSuite) TestPauseUnpause_BeforeFirstWorkflowTask_RunStateStaysCreated() {
+	s.SetupSubTest()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType: &commonpb.WorkflowType{Name: "test-workflow"},
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-queue"},
+			},
+			FirstWorkflowTaskBackoff: durationpb.New(time.Minute),
+		},
+	)
+	s.NoError(err)
+
+	// A fresh mutable state starts as (CREATED, RUNNING); adding the started
+	// event with a start_delay does not schedule a workflow task, so it stays
+	// (CREATED, RUNNING) and HadOrHasWorkflowTask() is false.
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, s.mutableState.executionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.mutableState.executionState.Status)
+	s.False(s.mutableState.HadOrHasWorkflowTask())
+
+	_, err = s.mutableState.AddWorkflowExecutionPausedEvent("tester", "test_reason", uuid.NewString())
+	s.NoError(err)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, s.mutableState.executionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, s.mutableState.executionState.Status)
+
+	_, err = s.mutableState.AddWorkflowExecutionUnpausedEvent("tester", "test_reason", uuid.NewString())
+	s.NoError(err)
+	// Unpause must restore (CREATED, RUNNING), not (RUNNING, RUNNING): the
+	// run-state is untouched by pause/unpause, only Status is.
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, s.mutableState.executionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.mutableState.executionState.Status)
+	s.False(s.mutableState.HadOrHasWorkflowTask(), "unpause must not itself schedule a workflow task")
 }
 
 func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
