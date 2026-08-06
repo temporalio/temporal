@@ -23,11 +23,11 @@ type AdminTestSuite struct {
 	parallelsuite.Suite[*AdminTestSuite]
 }
 
-func runTestAdminRebuildMutableState_ChasmDisabled(t *testing.T) {
+func runTestAdminRebuildMutableStateChasmDisabled(t *testing.T) {
 	parallelsuite.Run(t, &AdminTestSuite{}, false)
 }
 
-func runTestAdminRebuildMutableState_ChasmEnabled(t *testing.T) {
+func runTestAdminRebuildMutableStateChasmEnabled(t *testing.T) {
 	parallelsuite.Run(t, &AdminTestSuite{}, true)
 }
 

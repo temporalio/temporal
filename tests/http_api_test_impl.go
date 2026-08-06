@@ -47,7 +47,7 @@ type HttpApiTestSuite struct {
 	parallelsuite.Suite[*HttpApiTestSuite]
 }
 
-func runTestHttpApiTestSuite(t *testing.T) {
+func runTestHTTPAPITestSuite(t *testing.T) {
 	parallelsuite.Run(t, &HttpApiTestSuite{})
 }
 

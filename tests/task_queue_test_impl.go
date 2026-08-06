@@ -1026,7 +1026,9 @@ func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Query() {
 }
 
 func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Nexus() {
-	s.testTaskDispatchLatencyMetric(testNexusTaskDispatchLatencyEmitted)
+	s.testTaskDispatchLatencyMetric(func(env *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration) {
+		testNexusTaskDispatchLatencyEmitted(s.Context(), env, expectedForwarded, expectedSource, expectedPartitionID, forwardDelay)
+	})
 }
 
 func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
@@ -1208,11 +1210,11 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	s.Equal(1, activityCount, "expected exactly 1 task_dispatch_latency recording for activity task")
 }
 
-func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
+func testNexusTaskDispatchLatencyEmitted(ctx context.Context, s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
 	tv := testvars.New(s.T())
 
 	// Create a nexus endpoint targeting our task queue.
-	_, err := s.Cluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+	_, err := s.Cluster().OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: "nexus-" + uuid.New().String(),
 			Target: &nexuspb.EndpointTarget{
@@ -1277,7 +1279,7 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 		dispatchTQName = nexusTQ.NormalPartition(11).RpcName()
 	}
 
-	_, err = s.Cluster().MatchingClient().DispatchNexusTask(s.Context(), &matchingservice.DispatchNexusTaskRequest{
+	_, err = s.Cluster().MatchingClient().DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: s.NamespaceID().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: dispatchTQName,

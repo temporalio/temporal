@@ -40,7 +40,7 @@ type ActivityApiResetClientTestSuite struct {
 
 // TestActivityApiResetClientTestSuite runs the suite twice: once with the legacy
 // ResetActivity API and once with the newer ResetActivityExecution API.
-func runTestActivityApiResetClientTestSuite(t *testing.T) {
+func runTestActivityAPIResetClientTestSuite(t *testing.T) {
 	for _, apiName := range []string{"legacy-api", "execution-api"} {
 		t.Run(apiName, func(t *testing.T) {
 			s := new(ActivityApiResetClientTestSuite)

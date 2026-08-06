@@ -439,32 +439,32 @@ func (e *TestEnv) HistoryTaskRecorder() *HistoryTaskRecorder {
 // TLSConfigProvider returns the cluster TLS configuration.
 func (e *TestEnv) TLSConfigProvider() *encryption.FixedTLSConfigProvider {
 	e.t.Helper()
-	provider, ok := e.cluster.(TLSConfigProvider)
-	if !ok || provider.TLSConfigProvider() == nil {
+	tlsConfigProvider, ok := e.cluster.(TLSConfigProvider)
+	if !ok || tlsConfigProvider.TLSConfigProvider() == nil {
 		e.t.Fatal("TLSConfigProvider is unavailable for this test cluster")
 		return nil
 	}
-	return provider.TLSConfigProvider()
+	return tlsConfigProvider.TLSConfigProvider()
 }
 
 // ChasmContext adds the cluster's Chasm state to ctx.
 func (e *TestEnv) ChasmContext(ctx context.Context) (context.Context, error) {
-	provider, ok := e.cluster.(ChasmContextProvider)
+	chasmContextProvider, ok := e.cluster.(ChasmContextProvider)
 	if !ok {
-		return nil, fmt.Errorf("ChasmContext is unavailable for this test cluster")
+		return nil, errors.New("ChasmContext is unavailable for this test cluster")
 	}
-	return provider.ChasmContext(ctx)
+	return chasmContextProvider.ChasmContext(ctx)
 }
 
 // DynamicConfigValues returns the effective values for key on this cluster.
 func (e *TestEnv) DynamicConfigValues(key dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
 	e.t.Helper()
-	provider, ok := e.cluster.(DynamicConfigValueProvider)
+	dynamicConfigValueProvider, ok := e.cluster.(DynamicConfigValueProvider)
 	if !ok {
 		e.t.Fatal("DynamicConfigValues is unavailable for this test cluster")
 		return nil
 	}
-	return provider.DynamicConfigValues(key)
+	return dynamicConfigValueProvider.DynamicConfigValues(key)
 }
 
 // NoError asserts that err is nil.

@@ -30,7 +30,7 @@ type ActivityApiBatchUnpauseClientTestSuite struct {
 	parallelsuite.Suite[*ActivityApiBatchUnpauseClientTestSuite]
 }
 
-func runTestActivityApiBatchUnpauseClientTestSuite(t *testing.T) {
+func runTestActivityAPIBatchUnpauseClientTestSuite(t *testing.T) {
 	testcore.UseSuiteScopedCluster(t)                                               //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 	parallelsuite.RunLegacySequential(t, &ActivityApiBatchUnpauseClientTestSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }

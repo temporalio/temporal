@@ -1960,7 +1960,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 // SchedulerCallbacksTask must run first, observe the workflow as completed,
 // stamp Completed, and only then fire ProcessBuffer (which then sees
 // isRunning=false and does not apply SKIP).
-func runTestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
+func runTestScheduleMigrationStaleRunningDoesNotSkipPending(t *testing.T) {
 	env := newScheduleEnv(
 		t,
 		testcore.WithWorkerService("scheduler operations"),
@@ -2227,7 +2227,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 	}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for V1 schedule %q", stayV1SID)
 }
 
-func runTestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
+func runTestScheduleMigrationNoRunningWorkflowsGeneratorStarts(t *testing.T) {
 	// Use a very short idle time so the schedule closes quickly once the generator
 	// determines there's nothing to do (empty spec → no next wakeup time → idle).
 	shortIdleTime := 500 * time.Millisecond

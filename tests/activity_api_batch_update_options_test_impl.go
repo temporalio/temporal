@@ -30,7 +30,7 @@ type ActivityAPIBatchUpdateOptionsSuite struct {
 	parallelsuite.Suite[*ActivityAPIBatchUpdateOptionsSuite]
 }
 
-func runTestActivityApiBatchUpdateOptionsClientTestSuite(t *testing.T) {
+func runTestActivityAPIBatchUpdateOptionsClientTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &ActivityAPIBatchUpdateOptionsSuite{})
 }
 

@@ -38,7 +38,7 @@ func scalerEnvOptions(dcPartitions int) []testcore.TestOption {
 	}
 }
 
-func runTestPartitionScaling_Up(t *testing.T) {
+func runTestPartitionScalingUp(t *testing.T) {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
 	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
 
@@ -78,7 +78,7 @@ func runTestPartitionScaling_Up(t *testing.T) {
 	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 }
 
-func runTestPartitionScaling_Down(t *testing.T) {
+func runTestPartitionScalingDown(t *testing.T) {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
 	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
 
@@ -130,7 +130,7 @@ func runTestPartitionScaling_Down(t *testing.T) {
 	// That's tested in TestPartitionScaling_Down_AndStopPolling.
 }
 
-func runTestPartitionScaling_Up_FromDC(t *testing.T) {
+func runTestPartitionScalingUpFromDC(t *testing.T) {
 	// default dynamic config to 3
 	s := testcore.NewEnv(t, scalerEnvOptions(3)...)
 
@@ -161,7 +161,7 @@ func runTestPartitionScaling_Up_FromDC(t *testing.T) {
 	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 }
 
-func runTestPartitionScaling_Down_FromDC(t *testing.T) {
+func runTestPartitionScalingDownFromDC(t *testing.T) {
 	// default dynamic config to 6
 	s := testcore.NewEnv(t, scalerEnvOptions(6)...)
 
@@ -203,7 +203,7 @@ func runTestPartitionScaling_Down_FromDC(t *testing.T) {
 	s.Len(pollsByPartition, 6)
 }
 
-func runTestPartitionScaling_Down_AndStopPolling(t *testing.T) {
+func runTestPartitionScalingDownAndStopPolling(t *testing.T) {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
 	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
 
@@ -257,7 +257,7 @@ func runTestPartitionScaling_Down_AndStopPolling(t *testing.T) {
 // regardless of how fast tasks arrive. We build a backlog by sending tasks
 // without polling, watch the scaler open partitions up to Max, then drain and
 // confirm everything empties out.
-func runTestPartitionScaling_Backlog(t *testing.T) {
+func runTestPartitionScalingBacklog(t *testing.T) {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
 	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
 

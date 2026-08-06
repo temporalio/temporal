@@ -26,7 +26,7 @@ type ActivityApiRulesClientTestSuite struct {
 	parallelsuite.Suite[*ActivityApiRulesClientTestSuite]
 }
 
-func runTestActivityApiRulesClientTestSuite(t *testing.T) {
+func runTestActivityAPIRulesClientTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &ActivityApiRulesClientTestSuite{})
 }
 

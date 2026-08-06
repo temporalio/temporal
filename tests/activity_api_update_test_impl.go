@@ -102,7 +102,7 @@ func updateAPIs() []activityUpdateAPI {
 	}
 }
 
-func runTestActivityApiUpdateClientTestSuite(t *testing.T) {
+func runTestActivityAPIUpdateClientTestSuite(t *testing.T) {
 	t.Parallel()
 
 	for _, api := range updateAPIs() {
@@ -460,7 +460,7 @@ func runTestActivityApiUpdateClientTestSuite(t *testing.T) {
 // TestActivityUpdateExecutionOptionsApi tests the new UpdateActivityExecutionOptions RPC
 // on workflow activities (workflow_id != ""), verifying it behaves identically to the
 // existing UpdateActivityOptions RPC.
-func runTestActivityUpdateExecutionOptionsApi(t *testing.T) {
+func runTestActivityUpdateExecutionOptionsAPI(t *testing.T) {
 	t.Parallel()
 
 	t.Run("ChangeRetryInterval", func(t *testing.T) {

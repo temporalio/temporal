@@ -166,14 +166,14 @@ type (
 	}
 )
 
-func historyTaskRecorderFor(cluster Cluster) (*HistoryTaskRecorder, error) {
-	provider, ok := cluster.(HistoryTaskRecorderProvider)
+func historyTaskRecorderFor(testCluster Cluster) (*HistoryTaskRecorder, error) {
+	provider, ok := testCluster.(HistoryTaskRecorderProvider)
 	if !ok {
-		return nil, fmt.Errorf("WithHistoryTaskRecorder requires a cluster that implements HistoryTaskRecorderProvider, got %T", cluster)
+		return nil, fmt.Errorf("WithHistoryTaskRecorder requires a cluster that implements HistoryTaskRecorderProvider, got %T", testCluster)
 	}
 	recorder := provider.GetHistoryTaskRecorder()
 	if recorder == nil {
-		return nil, fmt.Errorf("WithHistoryTaskRecorder requires an enabled history task recorder on %T", cluster)
+		return nil, fmt.Errorf("WithHistoryTaskRecorder requires an enabled history task recorder on %T", testCluster)
 	}
 	return recorder, nil
 }

@@ -93,7 +93,7 @@ type TaskQueueStatsSuite struct {
 	parallelsuite.Suite[*TaskQueueStatsSuite]
 }
 
-func runTestTaskQueueStats_Pri_Suite(t *testing.T) {
+func runTestTaskQueueStatsPriSuite(t *testing.T) {
 	testcore.UseSuiteScopedCluster(t)                                  //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 	parallelsuite.RunLegacySequential(t, &TaskQueueStatsSuite{}, true) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }

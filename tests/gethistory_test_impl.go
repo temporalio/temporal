@@ -36,11 +36,11 @@ type GetHistorySuite struct {
 	parallelsuite.Suite[*GetHistorySuite]
 }
 
-func runTestGetHistorySuite_DisableTransitionHistory(t *testing.T) {
+func runTestGetHistorySuiteDisableTransitionHistory(t *testing.T) {
 	parallelsuite.Run(t, &GetHistorySuite{}, false)
 }
 
-func runTestGetHistorySuite_EnableTransitionHistory(t *testing.T) {
+func runTestGetHistorySuiteEnableTransitionHistory(t *testing.T) {
 	parallelsuite.Run(t, &GetHistorySuite{}, true)
 }
 

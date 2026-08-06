@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"testing"
@@ -89,7 +90,7 @@ func selectFunctionalTestEntries(options ...RunOption) ([]FunctionalTestEntry, e
 		switch selector.kind {
 		case runSelectorPredicate:
 			if selector.predicate == nil {
-				return nil, fmt.Errorf("functional test predicate is nil")
+				return nil, errors.New("functional test predicate is nil")
 			}
 			allowsEmptySelection = true
 		case runSelectorExactNames:
@@ -112,7 +113,7 @@ func selectFunctionalTestEntries(options ...RunOption) ([]FunctionalTestEntry, e
 		selected = filterFunctionalTestEntries(selected, selector)
 	}
 	if len(selected) == 0 && !allowsEmptySelection {
-		return nil, fmt.Errorf("functional test selection is empty; use WithFunctionalTestPredicate to allow it")
+		return nil, errors.New("functional test selection is empty; use WithFunctionalTestPredicate to allow it")
 	}
 	return selected, nil
 }

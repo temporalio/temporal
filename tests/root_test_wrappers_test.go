@@ -27,31 +27,31 @@ func TestActivityAPIBatchTerminateClientTestSuite(t *testing.T) {
 }
 
 func TestActivityApiBatchUnpauseClientTestSuite(t *testing.T) {
-	runTestActivityApiBatchUnpauseClientTestSuite(t)
+	runTestActivityAPIBatchUnpauseClientTestSuite(t)
 }
 
 func TestActivityApiBatchUpdateOptionsClientTestSuite(t *testing.T) {
-	runTestActivityApiBatchUpdateOptionsClientTestSuite(t)
+	runTestActivityAPIBatchUpdateOptionsClientTestSuite(t)
 }
 
 func TestActivityApiPauseClientTestSuite(t *testing.T) {
-	runTestActivityApiPauseClientTestSuite(t)
+	runTestActivityAPIPauseClientTestSuite(t)
 }
 
 func TestActivityApiPause_AttributesToActivityInContextMetadata(t *testing.T) {
-	runTestActivityApiPause_AttributesToActivityInContextMetadata(t)
+	runTestActivityAPIPauseAttributesToActivityInContextMetadata(t)
 }
 
 func TestActivityApiResetClientTestSuite(t *testing.T) {
-	runTestActivityApiResetClientTestSuite(t)
+	runTestActivityAPIResetClientTestSuite(t)
 }
 
 func TestActivityApiRulesClientTestSuite(t *testing.T) {
-	runTestActivityApiRulesClientTestSuite(t)
+	runTestActivityAPIRulesClientTestSuite(t)
 }
 
 func TestActivityApiUpdateClientTestSuite(t *testing.T) {
-	runTestActivityApiUpdateClientTestSuite(t)
+	runTestActivityAPIUpdateClientTestSuite(t)
 }
 
 func TestActivityClientTestSuite(t *testing.T) {
@@ -67,7 +67,7 @@ func TestActivityTestSuite(t *testing.T) {
 }
 
 func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
-	runTestActivityUpdateExecutionOptionsApi(t)
+	runTestActivityUpdateExecutionOptionsAPI(t)
 }
 
 func TestAddTasksSuite(t *testing.T) {
@@ -79,11 +79,11 @@ func TestAdminBatchRefreshWorkflowTasksTestSuite(t *testing.T) {
 }
 
 func TestAdminRebuildMutableState_ChasmDisabled(t *testing.T) {
-	runTestAdminRebuildMutableState_ChasmDisabled(t)
+	runTestAdminRebuildMutableStateChasmDisabled(t)
 }
 
 func TestAdminRebuildMutableState_ChasmEnabled(t *testing.T) {
-	runTestAdminRebuildMutableState_ChasmEnabled(t)
+	runTestAdminRebuildMutableStateChasmEnabled(t)
 }
 
 func TestAdvancedVisibilitySuite(t *testing.T) {
@@ -171,11 +171,11 @@ func TestFairnessSuite(t *testing.T) {
 }
 
 func TestGetHistorySuite_DisableTransitionHistory(t *testing.T) {
-	runTestGetHistorySuite_DisableTransitionHistory(t)
+	runTestGetHistorySuiteDisableTransitionHistory(t)
 }
 
 func TestGetHistorySuite_EnableTransitionHistory(t *testing.T) {
-	runTestGetHistorySuite_EnableTransitionHistory(t)
+	runTestGetHistorySuiteEnableTransitionHistory(t)
 }
 
 func TestHistoryNodeCleanupSuite(t *testing.T) {
@@ -183,7 +183,7 @@ func TestHistoryNodeCleanupSuite(t *testing.T) {
 }
 
 func TestHttpApiTestSuite(t *testing.T) {
-	runTestHttpApiTestSuite(t)
+	runTestHTTPAPITestSuite(t)
 }
 
 func TestLinksTestSuite(t *testing.T) {
@@ -215,11 +215,11 @@ func TestNexusAPIValidationTestSuite(t *testing.T) {
 }
 
 func TestNexusApiTestSuiteWithLegacyErrorPaths(t *testing.T) {
-	runTestNexusApiTestSuiteWithLegacyErrorPaths(t)
+	runTestNexusAPITestSuiteWithLegacyErrorPaths(t)
 }
 
 func TestNexusApiTestSuiteWithTemporalFailures(t *testing.T) {
-	runTestNexusApiTestSuiteWithTemporalFailures(t)
+	runTestNexusAPITestSuiteWithTemporalFailures(t)
 }
 
 func TestNexusEndpointsCommonSuite(t *testing.T) {
@@ -259,27 +259,27 @@ func TestNilSearchAttributeSuite(t *testing.T) {
 }
 
 func TestPartitionScaling_Backlog(t *testing.T) {
-	runTestPartitionScaling_Backlog(t)
+	runTestPartitionScalingBacklog(t)
 }
 
 func TestPartitionScaling_Down(t *testing.T) {
-	runTestPartitionScaling_Down(t)
+	runTestPartitionScalingDown(t)
 }
 
 func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
-	runTestPartitionScaling_Down_AndStopPolling(t)
+	runTestPartitionScalingDownAndStopPolling(t)
 }
 
 func TestPartitionScaling_Down_FromDC(t *testing.T) {
-	runTestPartitionScaling_Down_FromDC(t)
+	runTestPartitionScalingDownFromDC(t)
 }
 
 func TestPartitionScaling_Up(t *testing.T) {
-	runTestPartitionScaling_Up(t)
+	runTestPartitionScalingUp(t)
 }
 
 func TestPartitionScaling_Up_FromDC(t *testing.T) {
-	runTestPartitionScaling_Up_FromDC(t)
+	runTestPartitionScalingUpFromDC(t)
 }
 
 func TestPauseWorkflowExecutionSuite(t *testing.T) {
@@ -355,11 +355,11 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 }
 
 func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
-	runTestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t)
+	runTestScheduleMigrationNoRunningWorkflowsGeneratorStarts(t)
 }
 
 func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
-	runTestScheduleMigration_StaleRunningDoesNotSkipPending(t)
+	runTestScheduleMigrationStaleRunningDoesNotSkipPending(t)
 }
 
 func TestScheduleNextActionTimeVisibility(t *testing.T) {
@@ -403,7 +403,7 @@ func TestTLSFunctionalSuite(t *testing.T) {
 }
 
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
-	runTestTaskQueueStats_Pri_Suite(t)
+	runTestTaskQueueStatsPriSuite(t)
 }
 
 func TestTaskQueueSuite(t *testing.T) {

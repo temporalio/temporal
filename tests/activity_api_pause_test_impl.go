@@ -104,7 +104,7 @@ func pauseAPIs() []activityPauseAPI {
 	}
 }
 
-func runTestActivityApiPauseClientTestSuite(t *testing.T) {
+func runTestActivityAPIPauseClientTestSuite(t *testing.T) {
 	t.Parallel()
 
 	for _, api := range pauseAPIs() {
@@ -958,7 +958,7 @@ func runTestActivityApiPauseClientTestSuite(t *testing.T) {
 // marks the targeted activity so that the activity's type and task queue — not just the workflow's —
 // are resolved from mutable state and propagated to the caller in the "contextmetadata-bin" gRPC
 // trailer, the same way RecordActivityTaskHeartbeat does.
-func runTestActivityApiPause_AttributesToActivityInContextMetadata(t *testing.T) {
+func runTestActivityAPIPauseAttributesToActivityInContextMetadata(t *testing.T) {
 	t.Parallel()
 
 	const (

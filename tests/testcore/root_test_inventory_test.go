@@ -25,23 +25,31 @@ func TestRootTestWrappersMatchBaseline(t *testing.T) {
 		}
 	}
 
-	actual := rootTestWrapperNames(t)
-	assertSortedUniqueRootTestNames(t, "wrappers", actual)
-	if !slices.Equal(expected, actual) {
-		t.Fatalf("root test wrappers differ from frozen baseline\nwant: %v\ngot:  %v", expected, actual)
+	wrappers := rootTestWrappers(t)
+	wrapperNames := make([]string, len(wrappers))
+	for i, wrapper := range wrappers {
+		wrapperNames[i] = wrapper.name
+	}
+	assertSortedUniqueRootTestNames(t, "wrappers", wrapperNames)
+	if !slices.Equal(expected, wrapperNames) {
+		t.Fatalf("root test wrappers differ from frozen baseline\nwant: %v\ngot:  %v", expected, wrapperNames)
 	}
 
 	entries := functionalTestRegistryEntries(t)
 	registryNames := make([]string, len(entries))
+	registryByName := make(map[string]string, len(entries))
 	for i, entry := range entries {
 		registryNames[i] = entry.name
-		if entry.run != "run"+entry.name {
-			t.Errorf("registry entry %q invokes %q, want %q", entry.name, entry.run, "run"+entry.name)
-		}
+		registryByName[entry.name] = entry.run
 	}
 	assertSortedUniqueRootTestNames(t, "registry", registryNames)
 	if !slices.Equal(expected, registryNames) {
 		t.Fatalf("functional test registry differs from frozen baseline\nwant: %v\ngot:  %v", expected, registryNames)
+	}
+	for _, wrapper := range wrappers {
+		if registryByName[wrapper.name] != wrapper.run {
+			t.Errorf("registry entry %q invokes %q, want wrapper callback %q", wrapper.name, registryByName[wrapper.name], wrapper.run)
+		}
 	}
 }
 
@@ -57,7 +65,12 @@ func assertSortedUniqueRootTestNames(t *testing.T, source string, names []string
 	}
 }
 
-func rootTestWrapperNames(t *testing.T) []string {
+type rootTestWrapper struct {
+	name string
+	run  string
+}
+
+func rootTestWrappers(t *testing.T) []rootTestWrapper {
 	t.Helper()
 	fileSet := token.NewFileSet()
 	path := rootTestSourcePath(t, "root_test_wrappers_test.go")
@@ -65,7 +78,7 @@ func rootTestWrapperNames(t *testing.T) []string {
 	if err != nil {
 		t.Fatalf("parse root test wrapper source %s: %v", path, err)
 	}
-	var names []string
+	var wrappers []rootTestWrapper
 	for _, declaration := range file.Decls {
 		function, ok := declaration.(*ast.FuncDecl)
 		if !ok {
@@ -74,12 +87,13 @@ func rootTestWrapperNames(t *testing.T) []string {
 		if function.Recv != nil || !strings.HasPrefix(function.Name.Name, "Test") {
 			t.Fatalf("root test source %s contains non-wrapper function %s", path, function.Name.Name)
 		}
-		if !isThinRootTestWrapper(function) {
+		run, ok := thinRootTestWrapperCallback(function)
+		if !ok {
 			t.Fatalf("root test source %s contains non-thin wrapper %s", path, function.Name.Name)
 		}
-		names = append(names, function.Name.Name)
+		wrappers = append(wrappers, rootTestWrapper{name: function.Name.Name, run: run})
 	}
-	return names
+	return wrappers
 }
 
 type functionalTestRegistryEntry struct {
@@ -172,38 +186,41 @@ func rootTestSourcePath(t *testing.T, name string) string {
 	return filepath.Join(filepath.Dir(filepath.Dir(sourceFile)), name)
 }
 
-func isThinRootTestWrapper(function *ast.FuncDecl) bool {
+func thinRootTestWrapperCallback(function *ast.FuncDecl) (string, bool) {
 	if function.Type.TypeParams != nil || function.Type.Results != nil || len(function.Type.Params.List) != 1 || function.Body == nil || len(function.Body.List) != 1 {
-		return false
+		return "", false
 	}
 	parameter := function.Type.Params.List[0]
 	if len(parameter.Names) != 1 || parameter.Names[0].Name != "t" {
-		return false
+		return "", false
 	}
 	pointer, ok := parameter.Type.(*ast.StarExpr)
 	if !ok {
-		return false
+		return "", false
 	}
 	selector, ok := pointer.X.(*ast.SelectorExpr)
 	if !ok {
-		return false
+		return "", false
 	}
 	pkg, ok := selector.X.(*ast.Ident)
 	if !ok || pkg.Name != "testing" || selector.Sel.Name != "T" {
-		return false
+		return "", false
 	}
 	expression, ok := function.Body.List[0].(*ast.ExprStmt)
 	if !ok {
-		return false
+		return "", false
 	}
 	call, ok := expression.X.(*ast.CallExpr)
 	if !ok || len(call.Args) != 1 || call.Ellipsis.IsValid() {
-		return false
+		return "", false
 	}
 	callee, ok := call.Fun.(*ast.Ident)
-	if !ok || callee.Name != "run"+function.Name.Name {
-		return false
+	if !ok || !strings.HasPrefix(callee.Name, "runTest") {
+		return "", false
 	}
 	argument, ok := call.Args[0].(*ast.Ident)
-	return ok && argument.Name == "t"
+	if !ok || argument.Name != "t" {
+		return "", false
+	}
+	return callee.Name, true
 }
