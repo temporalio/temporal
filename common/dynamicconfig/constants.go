@@ -1352,6 +1352,12 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		defaultNumTaskQueuePartitions,
 		`MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue`,
 	)
+	MatchingClientReadLoadBalancerMode = NewTaskQueueTypedSettingWithConverter(
+		"matching.clientReadLoadBalancerMode",
+		ConvertMatchingClientReadLoadBalancerMode,
+		MatchingReadLoadBalancerModeBacklogWeighted,
+		`MatchingClientReadLoadBalancerMode controls how the matching client selects read partitions. Valid values are fewest-pollers, weighted-fewest, and backlog-weighted.`,
+	)
 	MetricsBreakdownByTaskQueue = NewTaskQueueBoolSetting(
 		"metrics.breakdownByTaskQueue",
 		true,

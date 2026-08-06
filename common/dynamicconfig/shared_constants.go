@@ -6,6 +6,15 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
+// MatchingReadLoadBalancerMode controls how matching clients select read partitions.
+type MatchingReadLoadBalancerMode string
+
+const (
+	MatchingReadLoadBalancerModeFewestPollers   MatchingReadLoadBalancerMode = "fewest-pollers"
+	MatchingReadLoadBalancerModeWeightedFewest  MatchingReadLoadBalancerMode = "weighted-fewest"
+	MatchingReadLoadBalancerModeBacklogWeighted MatchingReadLoadBalancerMode = "backlog-weighted"
+)
+
 const GlobalDefaultNumTaskQueuePartitions = 4
 
 var defaultNumTaskQueuePartitions = []TypedConstrainedValue[int]{
