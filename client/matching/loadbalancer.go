@@ -11,6 +11,13 @@ import (
 	"go.temporal.io/server/common/tqid"
 )
 
+// Compact8 encodes backlogs below 32 as zero. Using 32 as the weight floor limits the first
+// representable backlog bucket to twice the weight of an encoded-zero partition while preserving
+// poll traffic to empty partitions.
+// Choosing a lower floor would weight polls more aggressively away from encoded-zero partitions
+// when another partition has encoded-greater-than-zero backlog. 2x feels like a good ratio.
+const readPartitionWeightFloor int64 = 32
+
 type (
 	// LoadBalancer is the interface for implementers of
 	// component that distributes add/poll api calls across
@@ -37,11 +44,10 @@ type (
 	}
 
 	defaultLoadBalancer struct {
-		namespaceIDToName    func(id namespace.ID) (namespace.Name, error)
-		nReadPartitions      dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		nWritePartitions     dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		readLoadBalancerMode dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.MatchingReadLoadBalancerMode]
-		testHooks            testhooks.TestHooks
+		namespaceIDToName func(id namespace.ID) (namespace.Name, error)
+		nReadPartitions   dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		nWritePartitions  dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		testHooks         testhooks.TestHooks
 
 		lock         sync.RWMutex
 		taskQueueLBs map[tqid.TaskQueue]*tqLoadBalancer
@@ -68,12 +74,11 @@ func NewLoadBalancer(
 	testHooks testhooks.TestHooks,
 ) LoadBalancer {
 	lb := &defaultLoadBalancer{
-		namespaceIDToName:    namespaceIDToName,
-		nReadPartitions:      dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
-		nWritePartitions:     dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
-		readLoadBalancerMode: dynamicconfig.MatchingClientReadLoadBalancerMode.Get(dc),
-		testHooks:            testHooks,
-		taskQueueLBs:         make(map[tqid.TaskQueue]*tqLoadBalancer),
+		namespaceIDToName: namespaceIDToName,
+		nReadPartitions:   dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		nWritePartitions:  dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
+		testHooks:         testHooks,
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
 	}
 	return lb
 }
@@ -162,11 +167,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		return tqlb.forceReadPartition(partitionCount, n)
 	}
 
-	mode := dynamicconfig.MatchingReadLoadBalancerModeBacklogWeighted
-	if lb.readLoadBalancerMode != nil {
-		mode = lb.readLoadBalancerMode(namespaceName.String(), taskQueue.Name(), taskQueue.TaskType())
-	}
-	return tqlb.pickReadPartition(partitionCount, pc.BacklogCount, mode)
+	return tqlb.pickReadPartition(partitionCount, pc.BacklogCount, pc.BacklogCap)
 }
 
 func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
@@ -196,34 +197,22 @@ func newTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
 func (b *tqLoadBalancer) pickReadPartition(
 	partitionCount int,
 	backlogCounts []number.Compact8,
-	mode dynamicconfig.MatchingReadLoadBalancerMode,
+	backlogCap number.Compact8,
 ) *pollToken {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
 	b.ensurePartitionCountLocked(partitionCount)
 
-	hasBacklog := hasPositiveBacklog(partitionCount, backlogCounts)
 	var pickedPartitionID int
-	if hasBacklog && mode == dynamicconfig.MatchingReadLoadBalancerModeBacklogWeighted {
+	if backlogCap > 0 && len(backlogCounts) >= partitionCount {
 		pickedPartitionID = pickPartitionByWeight(partitionCount, backlogCounts)
 	} else {
-		weightedFewest := hasBacklog && mode == dynamicconfig.MatchingReadLoadBalancerModeWeightedFewest
 		startPartitionID := rand.Intn(partitionCount)
-		if weightedFewest {
-			startPartitionID = pickPartitionByWeight(partitionCount, backlogCounts)
-		}
 		pickedPartitionID = startPartitionID
 		for i := 1; i < partitionCount; i++ {
 			currPartitionID := (startPartitionID + i) % partitionCount
-			if weightedFewest {
-				pickedWeight := readPartitionWeight(backlogCounts, pickedPartitionID)
-				currWeight := readPartitionWeight(backlogCounts, currPartitionID)
-				if int64(b.pollerCounts[currPartitionID])*pickedWeight <
-					int64(b.pollerCounts[pickedPartitionID])*currWeight {
-					pickedPartitionID = currPartitionID
-				}
-			} else if b.pollerCounts[currPartitionID] < b.pollerCounts[pickedPartitionID] {
+			if b.pollerCounts[currPartitionID] < b.pollerCounts[pickedPartitionID] {
 				pickedPartitionID = currPartitionID
 			}
 		}
@@ -235,18 +224,6 @@ func (b *tqLoadBalancer) pickReadPartition(
 		TQPartition: b.taskQueue.NormalPartition(pickedPartitionID),
 		balancer:    b,
 	}
-}
-
-func hasPositiveBacklog(partitionCount int, backlogCounts []number.Compact8) bool {
-	if len(backlogCounts) < partitionCount {
-		return false
-	}
-	for partitionID := range partitionCount {
-		if backlogCounts[partitionID] != 0 {
-			return true
-		}
-	}
-	return false
 }
 
 // pickPartitionByWeight randomly selects a partition in proportion to its backlog weight.
@@ -268,9 +245,9 @@ func pickPartitionByWeight(partitionCount int, backlogCounts []number.Compact8) 
 
 func readPartitionWeight(backlogCounts []number.Compact8, partitionID int) int64 {
 	if partitionID >= len(backlogCounts) {
-		return 1
+		return readPartitionWeightFloor
 	}
-	return number.DecodeCompact8(backlogCounts[partitionID]) + 1
+	return number.DecodeCompact8(backlogCounts[partitionID]) + readPartitionWeightFloor
 }
 
 func (b *tqLoadBalancer) forceReadPartition(partitionCount, partitionID int) *pollToken {

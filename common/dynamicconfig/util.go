@@ -2,33 +2,12 @@ package dynamicconfig
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 	"time"
 
 	"github.com/mitchellh/mapstructure"
 	"go.temporal.io/server/common/util"
 )
-
-func ConvertMatchingClientReadLoadBalancerMode(in any) (MatchingReadLoadBalancerMode, error) {
-	var mode MatchingReadLoadBalancerMode
-	switch value := in.(type) {
-	case MatchingReadLoadBalancerMode:
-		mode = value
-	case string:
-		mode = MatchingReadLoadBalancerMode(value)
-	default:
-		return "", errors.New("value type is not string")
-	}
-	switch mode {
-	case MatchingReadLoadBalancerModeFewestPollers,
-		MatchingReadLoadBalancerModeWeightedFewest,
-		MatchingReadLoadBalancerModeBacklogWeighted:
-		return mode, nil
-	default:
-		return "", fmt.Errorf("unknown matching client read load balancer mode: %q", mode)
-	}
-}
 
 var (
 	MatchAnythingRE = regexp.MustCompile(".*")
