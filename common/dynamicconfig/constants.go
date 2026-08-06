@@ -1501,7 +1501,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		2,
 		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
 	)
-	// TODO (Shivam): Temporal Cloud sets this to true by default. Change the OSS default to true in v1.33.
+	// TODO (Shivam): Do not enable this for OSS until a receiver-compatible migration is implemented.
+	// Version workflows started before the demote-version signal handler was introduced do not register
+	// it until they Continue-As-New. Enabling this can therefore leave a demoted version stuck in Draining.
+	// Temporal Cloud overrides this to true globally because affected Version workflows there were forcibly
+	// Continued-As-New. This config is a temporary OSS safety gate.
 	MatchingEnableWorkerDeploymentVersionDemotionSignal = NewGlobalBoolSetting(
 		"matching.enableWorkerDeploymentVersionDemotionSignal",
 		false,

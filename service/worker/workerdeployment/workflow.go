@@ -124,7 +124,6 @@ func shouldUseVersionDemotionSignal(
 		// used the signal path to denote demotion to the previous current/ramping version.
 		// Note: Official on-going workflow executions started using OSS 1.31 do not reach this helper during replay because they also
 		// lack commit-routing-first.
-		// TODO (Shivam): Enable the dynamic config for this demotion to be True by default in OSS 1.33.
 		return true, nil
 	}
 
