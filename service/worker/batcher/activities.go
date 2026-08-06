@@ -418,6 +418,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		Namespace:     ns,
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
+	defer sdkClient.Close()
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
