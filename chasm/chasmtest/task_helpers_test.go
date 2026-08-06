@@ -29,7 +29,7 @@ func (h *noOpPureTTLTaskHandler) Execute(
 func (h *noOpPureTTLTaskHandler) Validate(
 	_ chasm.Context,
 	store *chasmtests.PayloadStore,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	task *testspb.TestPayloadTTLPureTask,
 ) (bool, error) {
 	_, ok := store.State.ExpirationTimes[task.PayloadKey]

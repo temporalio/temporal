@@ -3837,7 +3837,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).
 		DoAndReturn(func(_ Context, _ any, _ TaskInvocation, task *TestPureTask) (bool, error) {
-			return string(task.Payload.Data) != "root-task-payload", nil
+			return string(task.Data) != "root-task-payload", nil
 		}).Times(2)
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Execute(
@@ -3913,8 +3913,13 @@ func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 	s.Equal([]time.Time{taskStartTime, nextTaskTime}, observedTimes)
 }
 
-func (s *nodeSuite) TestExecuteImmediatePureTaskRequiresPostExecutionInvalidation() {
+// TestExecuteImmediatePureTaskSkipsPostExecutionValidation verifies that immediate pure tasks
+// do not undergo post-execution validation, even when DLQScheduledPureTaskOnValidation is enabled.
+// Immediate tasks that remain valid after execution succeed without error.
+func (s *nodeSuite) TestExecuteImmediatePureTaskSkipsPostExecutionValidation() {
 	root := s.testComponentTree()
+	// Enable the DLQ validation flag to confirm it has no effect on immediate tasks.
+	s.nodeBackend.HandleChasmDLQScheduledPureTaskOnValidationEnabled = func() bool { return true }
 
 	_, err := root.CloseTransaction()
 	s.NoError(err)
@@ -3930,6 +3935,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTaskRequiresPostExecutionInvalidatio
 	}
 	mutableContext.AddTask(testComponent, taskAttributes, pureTask)
 
+	// Pre-execution validate (true) then execute succeed; no post-execution validate expected.
 	gomock.InOrder(
 		s.testLibrary.mockPureTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Eq(pureTask)).Return(true, nil).Times(1),
@@ -4143,6 +4149,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 		Data: []byte("some-random-data"),
 	}
 
+	s.nodeBackend.HandleChasmDLQScheduledPureTaskOnValidationEnabled = func() bool { return true }
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.NotNil(root)
@@ -4172,7 +4179,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 		calls := make([]*gomock.Call, 0, len(results))
 		for _, result := range results {
 			calls = append(calls, s.testLibrary.mockPureTaskHandler.EXPECT().
-				Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).
+				Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).
 				Return(result.valid, result.err).Times(1))
 		}
 		orderedCalls := make([]any, 0, len(calls))
@@ -4258,6 +4265,25 @@ func (s *nodeSuite) TestExecutePureTask() {
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
+
+	// When DLQScheduledPureTaskOnValidation is disabled, remaining valid after execution is not an error.
+	s.nodeBackend.HandleChasmDLQScheduledPureTaskOnValidationEnabled = func() bool { return false }
+	rootNoDLQ, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+	rootNoDLQ.setValueState(valueStateSynced)
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Eq(pureTask)).
+		Return(true, nil).Times(1)
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Execute(
+			gomock.AssignableToTypeOf(&mutableCtx{}),
+			gomock.AssignableToTypeOf(&TestComponent{}),
+			gomock.Eq(taskAttributes),
+			gomock.Eq(pureTask),
+		).Return(nil).Times(1)
+	executed, err = rootNoDLQ.ExecutePureTask(ctx, taskAttributes, pureTask)
+	s.NoError(err)
+	s.True(executed)
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {

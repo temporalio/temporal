@@ -228,9 +228,6 @@ func (g *GeneratorTaskHandler) Validate(
 	attrs chasm.TaskInvocation,
 	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
-	if attrs.IsImmediate() {
-		return generator.GetFutureActionTimes() == nil, nil
-	}
 	return validateTaskHighWaterMark(
 		generator.GetLastProcessedTime(),
 		attrs.ScheduledTime,

@@ -209,6 +209,7 @@ type (
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
 		ChasmSkipPersistenceEnabled() bool
+		ChasmDLQScheduledPureTaskOnValidationEnabled() bool
 		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
@@ -3553,23 +3554,25 @@ func (n *Node) ExecutePureTask(
 		return true, execErr
 	}
 
-	valid, err = n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
-	if err != nil {
-		return true, err
-	}
-	if valid {
-		archetypeID := n.ArchetypeID()
-		archetype, _ := n.registry.ArchetypeDisplayName(archetypeID)
-		encodedPath, _ := n.getEncodedPath()
-		return true, NewTaskNotInvalidatedErrorWithDetails("pure", TaskNotInvalidatedDetails{
-			TaskType:             registrableTask.fqType(),
-			TaskTypeID:           registrableTask.taskTypeID,
-			Archetype:            archetype,
-			ArchetypeID:          archetypeID,
-			ComponentPath:        n.path(),
-			EncodedComponentPath: encodedPath,
-			TaskAttributes:       taskAttributes,
-		})
+	if !taskAttributes.IsImmediate() && n.backend.ChasmDLQScheduledPureTaskOnValidationEnabled() {
+		valid, err = n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
+		if err != nil {
+			return true, err
+		}
+		if valid {
+			archetypeID := n.ArchetypeID()
+			archetype, _ := n.registry.ArchetypeDisplayName(archetypeID)
+			encodedPath, _ := n.getEncodedPath()
+			return true, NewTaskNotInvalidatedErrorWithDetails("pure", TaskNotInvalidatedDetails{
+				TaskType:             registrableTask.fqType(),
+				TaskTypeID:           registrableTask.taskTypeID,
+				Archetype:            archetype,
+				ArchetypeID:          archetypeID,
+				ComponentPath:        n.path(),
+				EncodedComponentPath: encodedPath,
+				TaskAttributes:       taskAttributes,
+			})
+		}
 	}
 
 	return true, nil
