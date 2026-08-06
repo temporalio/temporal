@@ -158,35 +158,19 @@ func TestLoadBalancer_ReducedPartitionCount(t *testing.T) {
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 }
 
-func TestTQLoadBalancerWithoutBacklogCapUsesFewestPollers(t *testing.T) {
-	f := newTestTaskQueueFamily(t)
-
-	backlogCounts := map[string][]number.Compact8{
-		"absent": nil,
-		"zero":   make([]number.Compact8, 4),
-		"tiny": {
-			number.EncodeCompact8(1),
-			number.EncodeCompact8(3),
-			number.EncodeCompact8(5),
-			number.EncodeCompact8(10),
-		},
-	}
-	for backlogName, counts := range backlogCounts {
-		t.Run(backlogName, func(t *testing.T) {
-			tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
-			for range 8 {
-				tqlb.pickReadPartition(4, counts, 0)
-			}
-			require.Equal(t, []int{2, 2, 2, 2}, tqlb.pollerCounts)
-		})
-	}
+func TestHasCompleteAndPositiveBacklog(t *testing.T) {
+	positive := number.EncodeCompact8(32)
+	require.False(t, hasCompleteAndPositiveBacklog(4, nil))
+	require.False(t, hasCompleteAndPositiveBacklog(4, []number.Compact8{0, 0, positive}))
+	require.False(t, hasCompleteAndPositiveBacklog(4, []number.Compact8{0, 0, 0, 0, positive}))
+	require.True(t, hasCompleteAndPositiveBacklog(4, []number.Compact8{0, 0, 0, positive}))
 }
 
 func TestTQLoadBalancerBacklogCapEnablesWeightedReads(t *testing.T) {
 	f := newTestTaskQueueFamily(t)
 	backlogCounts := []number.Compact8{0, 0, 0, number.EncodeCompact8(1000)}
 
-	t.Run("fewest pollers", func(t *testing.T) {
+	t.Run("without backlog cap", func(t *testing.T) {
 		tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 		for range 8 {
 			tqlb.pickReadPartition(4, backlogCounts, 0)

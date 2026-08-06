@@ -205,7 +205,7 @@ func (b *tqLoadBalancer) pickReadPartition(
 	b.ensurePartitionCountLocked(partitionCount)
 
 	var pickedPartitionID int
-	if backlogCap > 0 && len(backlogCounts) >= partitionCount {
+	if backlogCap > 0 && hasCompleteAndPositiveBacklog(partitionCount, backlogCounts) {
 		pickedPartitionID = pickPartitionByWeight(partitionCount, backlogCounts)
 	} else {
 		pickedPartitionID = b.pickReadPartitionWithFewestPolls(partitionCount)
@@ -217,6 +217,18 @@ func (b *tqLoadBalancer) pickReadPartition(
 		TQPartition: b.taskQueue.NormalPartition(pickedPartitionID),
 		balancer:    b,
 	}
+}
+
+func hasCompleteAndPositiveBacklog(partitionCount int, backlogCounts []number.Compact8) bool {
+	if len(backlogCounts) < partitionCount {
+		return false
+	}
+	for partitionID := range partitionCount {
+		if number.DecodeCompact8(backlogCounts[partitionID]) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // pickPartitionByWeight randomly selects a partition in proportion to its backlog weight.
