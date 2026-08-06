@@ -1501,6 +1501,15 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		2,
 		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
 	)
+	// Enabling this without caution might leave old Deployment Versions in a bad state.
+	// Version workflows started before the demote-version signal handler was introduced do not register
+	// it until they Continue-As-New. A demotion signal sent before then is ignored, leaving the version
+	// stuck in Draining and requiring manual intervention to fix the workflow.
+	MatchingEnableWorkerDeploymentVersionDemotionSignal = NewGlobalBoolSetting(
+		"matching.enableWorkerDeploymentVersionDemotionSignal",
+		false,
+		`MatchingEnableWorkerDeploymentVersionDemotionSignal enables the new signal-based implementation for propagating Worker Deployment Version demotions. When disabled, the existing update-based implementation is used.`,
+	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
 		1000,
