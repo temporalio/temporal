@@ -512,6 +512,10 @@ func (s *WorkerDeploymentSuite) testSetRampingDemotion(versionDemotionSignalEnab
 	}
 }
 
+// This always expects an activity that promotes the new version. When
+// versionDemotionSignalEnabled is true, it expects the previous version to be
+// demoted by signal. When false, it expects another activity to demote the
+// previous version and fails if a signal is sent.
 func (s *WorkerDeploymentSuite) expectVersionDemotion(
 	versionDemotionSignalEnabled bool,
 	previousVersionWorkflowID string,

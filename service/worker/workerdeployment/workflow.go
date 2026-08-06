@@ -112,18 +112,20 @@ func shouldUseVersionDemotionSignal(
 	asyncMode bool,
 	versionDemotionSignalEnabledGetter func() bool,
 ) (bool, error) {
-	// Keep this version call unconditional to preserve command ordering for existing histories.
+	// Call GetVersion unconditionally, even when asyncMode is false. This is because existing
+	// histories recorded this marker regardless of asyncMode. Skipping it during replay
+	// would cause a non-determinism error.
 	commitRoutingFirst := workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0
 	if !asyncMode || !commitRoutingFirst {
 		return false, nil
 	}
 
 	if workflow.GetVersion(ctx, versionDemotionSignalChangeID, workflow.DefaultVersion, 0) == workflow.DefaultVersion {
-		// This is the backwards compatibility check for the version demotion signal. Histories of this workflow execution that predated
-		// this new checkpoint,  which adds the dynamic config,  should not evaluate the sideEffect call but must return True since they
-		// used the signal path to denote demotion to the previous current/ramping version.
-		// Note: Official on-going workflow executions started using OSS 1.31 do not reach this helper during replay because they also
-		// lack commit-routing-first.
+		// Histories that have commit-routing-first (previous check), but predate this checkpoint are
+		// workflows that already used signal-based demotion. They must continue
+		// on the signal path to avoid a non-determinism error, regardless of the
+		// current dynamic config value.
+		// OSS 1.31 histories never reach here because they didn't have commit-routing-first.
 		return true, nil
 	}
 
