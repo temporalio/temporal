@@ -162,14 +162,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		return tqlb.forceReadPartition(partitionCount, n)
 	}
 
-	// If the server provided per-partition backlog counts covering all read partitions, weight
-	// polls toward partitions with more backlog (size + floor) so pollers aren't trapped on empty
-	// partitions. Otherwise keep the classic fewest-outstanding-pollers behavior.
-	if partitionCount > 0 && len(pc.BacklogCount) >= partitionCount {
-		return tqlb.pickReadPartitionWeighted(partitionCount, pc.BacklogCount)
-	}
-
-	return tqlb.pickReadPartition(partitionCount)
+	return tqlb.pickReadPartition(partitionCount, pc.BacklogCount)
 }
 
 func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
@@ -196,25 +189,10 @@ func newTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
 	}
 }
 
-func (b *tqLoadBalancer) pickReadPartition(partitionCount int) *pollToken {
-	b.lock.Lock()
-	defer b.lock.Unlock()
-
-	b.ensurePartitionCountLocked(partitionCount)
-	partitionID := b.pickReadPartitionWithFewestPolls(partitionCount)
-
-	b.pollerCounts[partitionID]++
-
-	return &pollToken{
-		TQPartition: b.taskQueue.NormalPartition(partitionID),
-		balancer:    b,
-	}
-}
-
-// pickReadPartitionWeighted is like pickReadPartition, but distributes outstanding pollers across
-// partitions proportionally to backlog count (rather than equally). weights must have length
-// partitionCount.
-func (b *tqLoadBalancer) pickReadPartitionWeighted(partitionCount int, backlogCounts []number.Compact8) *pollToken {
+func (b *tqLoadBalancer) pickReadPartition(
+	partitionCount int,
+	backlogCounts []number.Compact8,
+) *pollToken {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
@@ -224,12 +202,15 @@ func (b *tqLoadBalancer) pickReadPartitionWeighted(partitionCount int, backlogCo
 	pickedPartitionID := startPartitionID
 	for i := 1; i < partitionCount; i++ {
 		currPartitionID := (startPartitionID + i) % partitionCount
-		// currPartitionID is more under-served than pickedPartitionID when
-		//   pollerCounts[curr]/(backlog[curr]+1) < pollerCounts[picked]/(backlog[picked]+1)
-		// which, since backlog+1 is positive, is equivalent to the cross-multiplied form below
-		// (avoids floating point).
-		if int64(b.pollerCounts[currPartitionID])*(number.DecodeCompact8(backlogCounts[pickedPartitionID])+1) <
-			int64(b.pollerCounts[pickedPartitionID])*(number.DecodeCompact8(backlogCounts[currPartitionID])+1) {
+		pickedWeight := readPartitionWeight(backlogCounts, pickedPartitionID)
+		currWeight := readPartitionWeight(backlogCounts, currPartitionID)
+		// Let weight = backlogCounts[partition] + 1, or 1 if backlogCounts is nil or incomplete
+		// currPartition is more under-served than pickedPartition when
+		//   pollerCounts[curr]/currWeight < pollerCounts[picked]/pickedWeight
+		// which, since weight is always positive, is equivalent to the cross-multiplied form
+		// below (avoids floating point).
+		if int64(b.pollerCounts[currPartitionID])*pickedWeight <
+			int64(b.pollerCounts[pickedPartitionID])*currWeight {
 			pickedPartitionID = currPartitionID
 		}
 	}
@@ -240,6 +221,13 @@ func (b *tqLoadBalancer) pickReadPartitionWeighted(partitionCount int, backlogCo
 		TQPartition: b.taskQueue.NormalPartition(pickedPartitionID),
 		balancer:    b,
 	}
+}
+
+func readPartitionWeight(backlogCounts []number.Compact8, partitionID int) int64 {
+	if partitionID >= len(backlogCounts) {
+		return 1
+	}
+	return number.DecodeCompact8(backlogCounts[partitionID]) + 1
 }
 
 func (b *tqLoadBalancer) forceReadPartition(partitionCount, partitionID int) *pollToken {
@@ -254,23 +242,6 @@ func (b *tqLoadBalancer) forceReadPartition(partitionCount, partitionID int) *po
 		TQPartition: b.taskQueue.NormalPartition(partitionID),
 		balancer:    b,
 	}
-}
-
-// caller to ensure that lock is obtained before call this function
-func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) int {
-	// pick a random partition to start with
-	startPartitionID := rand.Intn(partitionCount)
-	pickedPartitionID := startPartitionID
-	minPollerCount := b.pollerCounts[pickedPartitionID]
-	for i := 1; i < partitionCount && minPollerCount > 0; i++ {
-		currPartitionID := (startPartitionID + i) % int(partitionCount)
-		if b.pollerCounts[currPartitionID] < minPollerCount {
-			pickedPartitionID = currPartitionID
-			minPollerCount = b.pollerCounts[currPartitionID]
-		}
-	}
-
-	return pickedPartitionID
 }
 
 // caller to ensure that lock is obtained before call this function

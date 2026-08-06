@@ -42,22 +42,22 @@ func TestTQLoadBalancer(t *testing.T) {
 	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
 
 	// pick 4 times, each partition picked would have one poller
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
-	p3 := tqlb.pickReadPartition(partitionCount)
+	p3 := tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 
 	// release one, and pick one, the newly picked one should have one poller
 	p3.Release()
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 
 	// pick one again, this time it should have 2 pollers
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 }
 
@@ -75,20 +75,20 @@ func TestTQLoadBalancerForce(t *testing.T) {
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 
 	// when we don't force it should balance out
-	tqlb.pickReadPartition(partitionCount)
-	tqlb.pickReadPartition(partitionCount)
-	tqlb.pickReadPartition(partitionCount)
-	tqlb.pickReadPartition(partitionCount)
-	tqlb.pickReadPartition(partitionCount)
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
+	tqlb.pickReadPartition(partitionCount, nil)
+	tqlb.pickReadPartition(partitionCount, nil)
+	tqlb.pickReadPartition(partitionCount, nil)
+	tqlb.pickReadPartition(partitionCount, nil)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 
 	// releasing the forced one and adding another should still be balanced
 	p1.Release()
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 3, maxPollerCount(tqlb))
 }
 
@@ -104,7 +104,7 @@ func TestLoadBalancerConcurrent(t *testing.T) {
 	for range concurrentCount {
 		go func() {
 			defer wg.Done()
-			tqlb.pickReadPartition(partitionCount)
+			tqlb.pickReadPartition(partitionCount, nil)
 		}()
 	}
 	wg.Wait()
@@ -121,23 +121,23 @@ func TestLoadBalancer_ReducedPartitionCount(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	assert.NoError(t, err)
 	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
-	p1 := tqlb.pickReadPartition(partitionCount)
-	p2 := tqlb.pickReadPartition(partitionCount)
+	p1 := tqlb.pickReadPartition(partitionCount, nil)
+	p2 := tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 
 	partitionCount += 2 // increase partition count
-	p3 := tqlb.pickReadPartition(partitionCount)
-	p4 := tqlb.pickReadPartition(partitionCount)
+	p3 := tqlb.pickReadPartition(partitionCount, nil)
+	p4 := tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 
 	partitionCount -= 2 // reduce partition count
-	p5 := tqlb.pickReadPartition(partitionCount)
-	p6 := tqlb.pickReadPartition(partitionCount)
+	p5 := tqlb.pickReadPartition(partitionCount, nil)
+	p6 := tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 	assert.Equal(t, 2, maxPollerCount(tqlb))
-	p7 := tqlb.pickReadPartition(partitionCount)
+	p7 := tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 3, maxPollerCount(tqlb))
 
 	// release all of them and it should be ok.
@@ -149,11 +149,11 @@ func TestLoadBalancer_ReducedPartitionCount(t *testing.T) {
 	p6.Release()
 	p7.Release()
 
-	tqlb.pickReadPartition(partitionCount)
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 	assert.Equal(t, 1, maxPollerCount(tqlb))
-	tqlb.pickReadPartition(partitionCount)
+	tqlb.pickReadPartition(partitionCount, nil)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 }
 
@@ -231,7 +231,7 @@ func TestPickReadPartition_NoBacklogFallsBack(t *testing.T) {
 	}
 }
 
-func TestPickReadPartition_IncompleteBacklogFallsBack(t *testing.T) {
+func TestPickReadPartition_IncompleteBacklogUsesDefaultWeight(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	require.NoError(t, err)
 	tq := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
@@ -241,16 +241,14 @@ func TestPickReadPartition_IncompleteBacklogFallsBack(t *testing.T) {
 		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
 	}
 
-	// backlog counts present but shorter than the read count (e.g. lagging a scale-up) -> fall
-	// back to fewest-poller balancing rather than indexing out of range.
+	// Backlog counts shorter than the read count can occur while a scale-up is propagating.
+	// Partitions missing a count use the minimum weight.
 	pc := PartitionCounts{Read: 4, Write: 4, BacklogCount: []number.Compact8{0, 100}}
 	for range 8 {
 		lb.PickReadPartition(tq, pc)
 	}
 	tqlb := lb.getTaskQueueLoadBalancer(tq)
-	for _, c := range tqlb.pollerCounts {
-		require.Equal(t, 2, c)
-	}
+	require.Equal(t, []int{1, 5, 1, 1}, tqlb.pollerCounts)
 }
 
 func TestPickWritePartition_BacklogAware(t *testing.T) {
