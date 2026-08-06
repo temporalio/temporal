@@ -51,6 +51,7 @@ type Env interface {
 	NamespaceID() namespace.ID
 	FrontendClient() workflowservice.WorkflowServiceClient
 	AdminClient() adminservice.AdminServiceClient
+	Cluster() Cluster
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
@@ -70,7 +71,7 @@ type TestEnv struct {
 
 	Logger log.Logger
 
-	cluster        *TestCluster
+	cluster        Cluster
 	nsName         namespace.Name
 	nsID           namespace.ID
 	taskPoller     *taskpoller.TaskPoller
@@ -270,17 +271,17 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the router.
-	base := testClusterRouter.get(t, clusterRequest{
+	base := routerFor(t).get(t, clusterRequest{
 		dedicated:         options.dedicatedCluster,
 		needWorkerService: options.needWorkerService,
 		dedicatedReason:   options.dedicatedReason,
 		dynamicConfig:     startupConfig,
 		clusterOpts:       options.clusterOptions,
 	})
-	cluster := base.GetTestCluster()
+	cluster := base.testCluster
 
 	// Create a dedicated namespace for the test to help with test isolation.
-	baseName := strings.ReplaceAll(t.Name(), "/", "-")
+	baseName := strings.ReplaceAll(logicalTestName(t), "/", "-")
 	ns := namespace.Name(RandomizeStr(baseName))
 	nsID, err := base.RegisterNamespace(
 		ns,
@@ -312,7 +313,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t:                  t,
 		tv:                 tv,
 		ctx:                testcontext.For(t),
-		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
+		sdkWorkerTQ:        RandomizeStr("tq-" + logicalTestName(t)),
 		dedicatedGuard:     dedicatedGuard,
 	}
 	t.Cleanup(func() {
@@ -365,7 +366,7 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
+		if e.isShared && !routerFor(e.t).hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")
@@ -373,7 +374,12 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	default:
 		e.t.Fatalf("InjectHook: unknown scope %v", hook.Scope())
 	}
-	return e.cluster.host.injectHook(e.t, hook, scope)
+	injector, ok := e.cluster.(HookInjector)
+	if !ok {
+		e.t.Fatal("InjectHook is unavailable for this test cluster")
+		return nil
+	}
+	return injector.InjectHook(e.t, hook, scope)
 }
 
 func (e *TestEnv) SetOnAuthorize(
@@ -384,9 +390,14 @@ func (e *TestEnv) SetOnAuthorize(
 		e.t.Fatal("SetOnAuthorize cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
 	e.dedicatedGuard.record("authorization callback")
-	e.cluster.host.SetOnAuthorize(fn)
+	callbacks, ok := e.cluster.(AuthorizationCallbackSetter)
+	if !ok {
+		e.t.Fatal("SetOnAuthorize is unavailable for this test cluster")
+		return
+	}
+	callbacks.SetOnAuthorize(fn)
 	e.t.Cleanup(func() {
-		e.cluster.host.SetOnAuthorize(nil)
+		callbacks.SetOnAuthorize(nil)
 	})
 }
 
@@ -396,9 +407,14 @@ func (e *TestEnv) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorizatio
 		e.t.Fatal("SetOnGetClaims cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
 	e.dedicatedGuard.record("authorization callback")
-	e.cluster.host.SetOnGetClaims(fn)
+	callbacks, ok := e.cluster.(AuthorizationCallbackSetter)
+	if !ok {
+		e.t.Fatal("SetOnGetClaims is unavailable for this test cluster")
+		return
+	}
+	callbacks.SetOnGetClaims(fn)
 	e.t.Cleanup(func() {
-		e.cluster.host.SetOnGetClaims(nil)
+		callbacks.SetOnGetClaims(nil)
 	})
 }
 
@@ -484,7 +500,8 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 			Logger:    log.NewSdkLogger(e.Logger),
 		}
 
-		if provider := e.cluster.host.tlsConfigProvider; provider != nil {
+		if tlsProvider, ok := e.cluster.(TLSConfigProvider); ok && tlsProvider.TLSConfigProvider() != nil {
+			provider := tlsProvider.TLSConfigProvider()
 			clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
 		}
 
@@ -550,7 +567,12 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 	} else if !canBeNamespaceScoped(setting.Precedence()) {
 		e.dedicatedGuard.record("global dynamic config used")
 	}
-	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
+	overrider, ok := e.cluster.(DynamicConfigOverrider)
+	if !ok {
+		e.t.Fatal("OverrideDynamicConfig is unavailable for this test cluster")
+		return nil
+	}
+	return overrider.OverrideDynamicConfig(e.t, setting, value)
 }
 
 // StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.
@@ -562,7 +584,12 @@ func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
 	}
 	e.dedicatedGuard.record("global metric capture") // note that globalCapture has its own misuse detection
 
-	handler := e.cluster.host.CaptureMetricsHandler()
+	metricsProvider, ok := e.cluster.(MetricsCaptureProvider)
+	if !ok {
+		e.t.Fatal("StartGlobalMetricCapture is unavailable for this test cluster")
+		return nil
+	}
+	handler := metricsProvider.CaptureMetricsHandler()
 	if handler == nil {
 		e.t.Fatal("StartGlobalMetricCapture is unavailable because metrics capture is not enabled on this cluster")
 	}
@@ -585,7 +612,12 @@ func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
 
 // StartNamespaceMetricCaptureFor starts a metrics capture scoped to the provided namespace.
 func (e *TestEnv) StartNamespaceMetricCaptureFor(namespaceName string) *NamespaceMetricCapture {
-	handler := e.cluster.host.CaptureMetricsHandler()
+	metricsProvider, ok := e.cluster.(MetricsCaptureProvider)
+	if !ok {
+		e.t.Fatal("StartNamespaceMetricCapture is unavailable for this test cluster")
+		return nil
+	}
+	handler := metricsProvider.CaptureMetricsHandler()
 	if handler == nil {
 		e.t.Fatal("StartNamespaceMetricCapture is unavailable because metrics capture is not enabled on this cluster")
 	}
@@ -627,24 +659,48 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 func checkTestShard(t *testing.T) {
 	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
 	indexStr := os.Getenv("TEST_SHARD_INDEX")
+	logicalName := logicalTestName(t)
+	total := 1
+	index := 0
 	if totalStr == "" || indexStr == "" {
+		recordTestShard(t, logicalName, total, index)
 		return
 	}
-	total, err := strconv.Atoi(totalStr)
+	var err error
+	total, err = strconv.Atoi(totalStr)
 	if err != nil || total < 1 {
 		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
 	}
-	index, err := strconv.Atoi(indexStr)
+	index, err = strconv.Atoi(indexStr)
 	if err != nil || index < 0 || index >= total {
 		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
 	}
 
-	nameToHash := t.Name() + strings.TrimSpace(shardSalt)
-	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
+	testIndex := testShardOwner(logicalName, total)
+	recordTestShard(t, logicalName, total, index)
 	if testIndex != index {
-		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
+		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", logicalName, index+1, total, testIndex+1)
 	}
-	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
+	t.Logf("Running %s in test shard %d/%d", logicalName, index+1, total)
+}
+
+func testShardOwner(logicalName string, total int) int {
+	nameToHash := logicalName + strings.TrimSpace(shardSalt)
+	return int(farm.Fingerprint32([]byte(nameToHash))) % total
+}
+
+func recordTestShard(t *testing.T, logicalName string, total int, index int) {
+	ctx := runContextFor(t)
+	if ctx == nil {
+		return
+	}
+	owner := testShardOwner(logicalName, total)
+	ctx.recordShard(ShardRecord{
+		LogicalName: logicalName,
+		Owner:       owner,
+		Total:       total,
+		Owned:       owner == index,
+	})
 }
 
 type dedicatedClusterGuard struct {

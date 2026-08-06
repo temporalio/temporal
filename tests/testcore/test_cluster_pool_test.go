@@ -1,11 +1,21 @@
 package testcore
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/dynamicconfig"
 )
+
+type teardownErrorReporter struct {
+	messages []string
+}
+
+func (r *teardownErrorReporter) Errorf(format string, args ...any) {
+	r.messages = append(r.messages, fmt.Sprintf(format, args...))
+}
 
 func TestClusterPool_GlobalOverridesSurviveTestCleanup(t *testing.T) {
 	dc := dynamicconfig.NewMemoryClient()
@@ -103,4 +113,19 @@ func TestClusterPool_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	// The old poisoned lease remains active, while leaseCount restarts on the replacement.
 	require.Equal(t, 2, slot.activeLeases)
 	require.Equal(t, 1, slot.leaseCount)
+}
+
+func TestClusterRouter_FreshDedicatedCleanupReportsTearDownFailure(t *testing.T) {
+	teardownErr := errors.New("cluster close failed")
+	reporter := &teardownErrorReporter{}
+	cluster := &FunctionalTestBase{
+		testCluster: teardownRecordingCluster{
+			teardown: func() {},
+			err:      teardownErr,
+		},
+	}
+
+	reportFreshDedicatedTearDown(reporter, cluster)
+
+	require.Equal(t, []string{"Failed to tear down fresh dedicated cluster: cluster close failed"}, reporter.messages)
 }

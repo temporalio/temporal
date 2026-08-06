@@ -68,7 +68,7 @@ type (
 
 		t *sharedClusterT // proxy T backing Logger; tracks active tests and cluster poison state
 
-		testCluster *TestCluster
+		testCluster Cluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
 		testClusterConfig *TestClusterConfig
 
@@ -187,6 +187,15 @@ func WithSharedCluster() TestClusterOption {
 }
 
 func (s *FunctionalTestBase) GetTestCluster() *TestCluster {
+	cluster, ok := s.testCluster.(*TestCluster)
+	if !ok {
+		panic("GetTestCluster is unavailable for a non-OSS testcore cluster")
+	}
+	return cluster
+}
+
+// Cluster returns the test cluster through the generic testcore contract.
+func (s *FunctionalTestBase) Cluster() Cluster {
 	return s.testCluster
 }
 
@@ -207,7 +216,7 @@ func (s *FunctionalTestBase) OperatorClient() operatorservice.OperatorServiceCli
 }
 
 func (s *FunctionalTestBase) HttpAPIAddress() string {
-	return s.testCluster.Host().FrontendHTTPAddress()
+	return s.testCluster.FrontendHTTPAddress()
 }
 
 func (s *FunctionalTestBase) Namespace() namespace.Name {
@@ -223,11 +232,11 @@ func (s *FunctionalTestBase) ExternalNamespace() namespace.Name {
 }
 
 func (s *FunctionalTestBase) FrontendGRPCAddress() string {
-	return s.GetTestCluster().Host().FrontendGRPCAddress()
+	return s.testCluster.FrontendGRPCAddress()
 }
 
 func (s *FunctionalTestBase) WorkerGRPCAddress() string {
-	return s.GetTestCluster().WorkerGRPCAddress()
+	return s.testCluster.WorkerGRPCAddress()
 }
 
 func (s *FunctionalTestBase) SdkWorker() sdkworker.Worker {
@@ -263,13 +272,14 @@ func (s *FunctionalTestBase) TearDownSuite() {
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
 	// Reserve a slot from the dedicated test cluster pool.
-	testClusterRouter.dedicated.reserveSlot(s.T())
+	router := routerFor(s.T())
+	router.dedicated.reserveSlot(s.T())
 	s.setupCluster(options...)
 	clusterRequest{
 		kind:              clusterKindDedicated,
 		dedicatedReason:   "legacy-suite",
 		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
-	}.recordCreation(s.T())
+	}.recordCreation(s.T(), router)
 }
 
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
@@ -329,7 +339,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	}
 
 	var err error
-	testClusterFactory := NewTestClusterFactory()
+	testClusterFactory := clusterFactoryFor(s.T())
 	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
 
@@ -407,7 +417,8 @@ func (s *FunctionalTestBase) setupSdk() {
 		Logger:    log.NewSdkLogger(s.Logger),
 	}
 
-	if provider := s.testCluster.host.tlsConfigProvider; provider != nil {
+	if tlsProvider, ok := s.testCluster.(TLSConfigProvider); ok && tlsProvider.TLSConfigProvider() != nil {
+		provider := tlsProvider.TLSConfigProvider()
 		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
 	}
 
@@ -495,7 +506,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 	historyArchivalURI string,
 	visibilityArchivalURI string,
 ) (namespace.ID, error) {
-	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
+	currentClusterName := s.testCluster.TestBase().ClusterMetadata.GetCurrentClusterName()
 	nsID := namespace.ID(uuid.NewString())
 	expectedSearchAttributes := searchattribute.TestSearchAttributesToRegister()
 	namespaceRequest := &persistence.CreateNamespaceRequest{
@@ -525,7 +536,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 		},
 		IsGlobalNamespace: false,
 	}
-	_, err := s.testCluster.testBase.MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
+	_, err := s.testCluster.TestBase().MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
 
 	if err != nil {
 		return namespace.EmptyID, err
@@ -637,7 +648,12 @@ func (s *FunctionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
 }
 
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	return s.testCluster.host.overrideDynamicConfigForTest(s.T(), setting.Key(), value)
+	overrider, ok := s.testCluster.(DynamicConfigOverrider)
+	if !ok {
+		s.T().Fatal("OverrideDynamicConfig is unavailable for this test cluster")
+		return nil
+	}
+	return overrider.OverrideDynamicConfig(s.T(), setting, value)
 }
 
 // InjectHook sets a test hook inside the cluster.
@@ -651,7 +667,12 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	default:
 		s.T().Fatalf("InjectHook: unknown scope %v", hook.Scope())
 	}
-	return s.testCluster.host.injectHook(s.T(), hook, scope)
+	injector, ok := s.testCluster.(HookInjector)
+	if !ok {
+		s.T().Fatal("InjectHook is unavailable for this test cluster")
+		return nil
+	}
+	return injector.InjectHook(s.T(), hook, scope)
 }
 
 // CloseShard closes the shard that contains the given workflow.

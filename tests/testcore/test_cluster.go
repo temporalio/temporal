@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -52,14 +53,32 @@ import (
 type (
 	transferProtocol string
 
-	// TestCluster is a testcore struct for functional tests
-	TestCluster struct {
-		testBase *persistencetests.TestBase
-		host     *temporalImpl
+	// Cluster is the portion of a functional-test cluster that testcore owns.
+	// Implementations may provide the optional capability interfaces below for
+	// test facilities that are unavailable on every cluster.
+	Cluster interface {
+		TearDownCluster() error
+		TestBase() *persistencetests.TestBase
+		FrontendClient() workflowservice.WorkflowServiceClient
+		AdminClient() adminservice.AdminServiceClient
+		OperatorClient() operatorservice.OperatorServiceClient
+		HistoryClient() historyservice.HistoryServiceClient
+		MatchingClient() matchingservice.MatchingServiceClient
+		SchedulerClient() schedulerpb.SchedulerServiceClient
+		ExecutionManager() persistence.ExecutionManager
+		FrontendHTTPAddress() string
+		FrontendGRPCAddress() string
+		WorkerGRPCAddress() string
+		GetHistoryTaskRecorder() *HistoryTaskRecorder
 	}
 
-	// TestClusterConfig are config for a test cluster
-	TestClusterConfig struct {
+	// ClusterFactory creates clusters for one testcore router.
+	ClusterFactory interface {
+		NewCluster(t *testing.T, clusterConfig *ClusterConfig, logger log.Logger) (Cluster, error)
+	}
+
+	// ClusterConfig is the configuration supplied to a [ClusterFactory].
+	ClusterConfig struct {
 		IsMasterCluster           bool
 		ClusterMetadata           cluster.Config
 		Persistence               persistencetests.TestBaseOptions
@@ -83,14 +102,66 @@ type (
 		AdditionalServerOptions   []temporal.ServerOption
 	}
 
+	// TestClusterConfig remains as the default OSS configuration name.
+	TestClusterConfig = ClusterConfig
+
+	// TestClusterFactory creates the default OSS test cluster.
 	TestClusterFactory interface {
 		NewCluster(t *testing.T, clusterConfig *TestClusterConfig, logger log.Logger) (*TestCluster, error)
+	}
+
+	// TLSConfigProvider supplies the TLS configuration used by SDK test clients.
+	TLSConfigProvider interface {
+		TLSConfigProvider() *encryption.FixedTLSConfigProvider
+	}
+
+	// DynamicConfigOverrider applies a dynamic configuration override for a test.
+	DynamicConfigOverrider interface {
+		OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) (cleanup func())
+	}
+
+	// HookInjector applies a test hook to a cluster.
+	HookInjector interface {
+		InjectHook(t *testing.T, hook testhooks.Hook, scope any) func()
+	}
+
+	// AuthorizationCallbackSetter configures test authorization callbacks.
+	AuthorizationCallbackSetter interface {
+		SetOnAuthorize(fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error))
+		SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error))
+	}
+
+	// MetricsCaptureProvider supplies metric captures for test assertions.
+	MetricsCaptureProvider interface {
+		CaptureMetricsHandler() *metricstest.CaptureHandler
+	}
+
+	// ChasmContextProvider adds cluster Chasm state to a context.
+	ChasmContextProvider interface {
+		ChasmContext(context.Context) (context.Context, error)
+	}
+
+	// DynamicConfigValueProvider exposes the effective test dynamic configuration.
+	DynamicConfigValueProvider interface {
+		DynamicConfigValues(key dynamicconfig.Key) []dynamicconfig.ConstrainedValue
+	}
+
+	// TestCluster is a testcore struct for functional tests
+	TestCluster struct {
+		testBase *persistencetests.TestBase
+		host     *temporalImpl
 	}
 
 	defaultTestClusterFactory struct {
 		tbFactory persistenceTestBaseFactory
 	}
+
+	defaultClusterFactoryAdapter struct {
+		TestClusterFactory
+	}
 )
+
+var _ Cluster = (*TestCluster)(nil)
 
 const (
 	httpProtocol transferProtocol = "http"
@@ -101,9 +172,18 @@ func (f *defaultTestClusterFactory) NewCluster(t *testing.T, clusterConfig *Test
 	return newClusterWithPersistenceTestBaseFactory(t, clusterConfig, logger, f.tbFactory)
 }
 
+func (f defaultClusterFactoryAdapter) NewCluster(t *testing.T, clusterConfig *ClusterConfig, logger log.Logger) (Cluster, error) {
+	return f.TestClusterFactory.NewCluster(t, clusterConfig, logger)
+}
+
 func NewTestClusterFactory() TestClusterFactory {
 	tbFactory := &defaultPersistenceTestBaseFactory{}
 	return newTestClusterFactoryWithCustomTestBaseFactory(tbFactory)
+}
+
+// NewClusterFactory adapts the default OSS cluster factory to [ClusterFactory].
+func NewClusterFactory() ClusterFactory {
+	return defaultClusterFactoryAdapter{TestClusterFactory: NewTestClusterFactory()}
 }
 
 func newTestClusterFactoryWithCustomTestBaseFactory(tbFactory persistenceTestBaseFactory) TestClusterFactory {
@@ -536,6 +616,14 @@ func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
 	return tc.testBase.ExecutionManager
 }
 
+func (tc *TestCluster) FrontendHTTPAddress() string {
+	return tc.host.FrontendHTTPAddress()
+}
+
+func (tc *TestCluster) FrontendGRPCAddress() string {
+	return tc.host.FrontendGRPCAddress()
+}
+
 // TODO (alex): expose only needed objects from TemporalImpl.
 func (tc *TestCluster) Host() *temporalImpl {
 	return tc.host
@@ -563,6 +651,32 @@ func (tc *TestCluster) GetHistoryTaskRecorder() *HistoryTaskRecorder {
 
 func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) (cleanup func()) {
 	return tc.host.overrideDynamicConfigForTest(t, key.Key(), value)
+}
+
+func (tc *TestCluster) TLSConfigProvider() *encryption.FixedTLSConfigProvider {
+	return tc.host.TLSConfigProvider()
+}
+
+func (tc *TestCluster) SetOnAuthorize(
+	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
+) {
+	tc.host.SetOnAuthorize(fn)
+}
+
+func (tc *TestCluster) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+	tc.host.SetOnGetClaims(fn)
+}
+
+func (tc *TestCluster) CaptureMetricsHandler() *metricstest.CaptureHandler {
+	return tc.host.CaptureMetricsHandler()
+}
+
+func (tc *TestCluster) ChasmContext(ctx context.Context) (context.Context, error) {
+	return tc.host.ChasmContext(ctx)
+}
+
+func (tc *TestCluster) DynamicConfigValues(key dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
+	return tc.host.DcClient().GetValue(key)
 }
 
 var errCannotAddCACertToPool = errors.New("failed adding CA to pool")
