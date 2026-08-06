@@ -16,7 +16,7 @@ import (
 // poll traffic to empty partitions.
 // Choosing a lower floor would weight polls more aggressively away from encoded-zero partitions
 // when another partition has encoded-greater-than-zero backlog. 2x feels like a good ratio.
-const readPartitionWeightFloor int64 = 32
+var readPartitionWeightFloor = number.DecodeCompact8(1)
 
 type (
 	// LoadBalancer is the interface for implementers of
