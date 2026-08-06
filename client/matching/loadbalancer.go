@@ -208,14 +208,7 @@ func (b *tqLoadBalancer) pickReadPartition(
 	if backlogCap > 0 && len(backlogCounts) >= partitionCount {
 		pickedPartitionID = pickPartitionByWeight(partitionCount, backlogCounts)
 	} else {
-		startPartitionID := rand.Intn(partitionCount)
-		pickedPartitionID = startPartitionID
-		for i := 1; i < partitionCount; i++ {
-			currPartitionID := (startPartitionID + i) % partitionCount
-			if b.pollerCounts[currPartitionID] < b.pollerCounts[pickedPartitionID] {
-				pickedPartitionID = currPartitionID
-			}
-		}
+		pickedPartitionID = b.pickReadPartitionWithFewestPolls(partitionCount)
 	}
 
 	b.pollerCounts[pickedPartitionID]++
@@ -262,6 +255,23 @@ func (b *tqLoadBalancer) forceReadPartition(partitionCount, partitionID int) *po
 		TQPartition: b.taskQueue.NormalPartition(partitionID),
 		balancer:    b,
 	}
+}
+
+// caller to ensure that lock is obtained before call this function
+func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) int {
+	// pick a random partition to start with
+	startPartitionID := rand.Intn(partitionCount)
+	pickedPartitionID := startPartitionID
+	minPollerCount := b.pollerCounts[pickedPartitionID]
+	for i := 1; i < partitionCount && minPollerCount > 0; i++ {
+		currPartitionID := (startPartitionID + i) % int(partitionCount)
+		if b.pollerCounts[currPartitionID] < minPollerCount {
+			pickedPartitionID = currPartitionID
+			minPollerCount = b.pollerCounts[currPartitionID]
+		}
+	}
+
+	return pickedPartitionID
 }
 
 // caller to ensure that lock is obtained before call this function
