@@ -4036,6 +4036,15 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NoError(err)
 	s.NotNil(root)
 
+	// EachPureTask asserts that an executed pure task has become invalid. This
+	// test's callback reports execution without going through ExecutePureTask, so
+	// the validator is reached only by that assertion; report the tasks as
+	// invalidated, which is what a compliant component does.
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(false, nil).
+		AnyTimes()
+
 	processedTaskData := [][]byte{}
 	err = root.EachPureTask(now.Add(time.Minute), func(handler NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
 		s.NotNil(handler)
