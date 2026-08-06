@@ -492,7 +492,7 @@ func (s *StreamSenderImpl) sendTasks(
 	ctx := headers.SetCallerInfo(s.server.Context(), callerInfo)
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
-		string(s.clientShardKey.ClusterID),
+		s.clientClusterName,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)
