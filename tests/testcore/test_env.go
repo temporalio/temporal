@@ -279,9 +279,14 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		clusterOpts:       options.clusterOptions,
 	})
 	cluster := base.testCluster
+	if options.historyTaskRecorder {
+		if _, err := historyTaskRecorderFor(cluster); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	// Create a dedicated namespace for the test to help with test isolation.
-	baseName := strings.ReplaceAll(logicalTestName(t), "/", "-")
+	baseName := strings.ReplaceAll(LogicalTestName(t), "/", "-")
 	ns := namespace.Name(RandomizeStr(baseName))
 	nsID, err := base.RegisterNamespace(
 		ns,
@@ -313,7 +318,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t:                  t,
 		tv:                 tv,
 		ctx:                testcontext.For(t),
-		sdkWorkerTQ:        RandomizeStr("tq-" + logicalTestName(t)),
+		sdkWorkerTQ:        RandomizeStr("tq-" + LogicalTestName(t)),
 		dedicatedGuard:     dedicatedGuard,
 	}
 	t.Cleanup(func() {
@@ -338,11 +343,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
 	}
-	if options.historyTaskRecorder {
-		recorder := cluster.GetHistoryTaskRecorder()
-		require.NotNil(t, recorder)
-	}
-
 	return env
 }
 
@@ -659,7 +659,7 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 func checkTestShard(t *testing.T) {
 	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
 	indexStr := os.Getenv("TEST_SHARD_INDEX")
-	logicalName := logicalTestName(t)
+	logicalName := LogicalTestName(t)
 	total := 1
 	index := 0
 	if totalStr == "" || indexStr == "" {

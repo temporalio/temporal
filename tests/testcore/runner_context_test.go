@@ -22,7 +22,7 @@ type runnerContextObservations struct {
 func (o *runnerContextObservations) add(t *testing.T) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.names = append(o.names, logicalTestName(t))
+	o.names = append(o.names, LogicalTestName(t))
 	o.routers = append(o.routers, routerFor(t))
 }
 
@@ -43,6 +43,20 @@ type teardownRecordingCluster struct {
 func (c teardownRecordingCluster) TearDownCluster() error {
 	c.teardown()
 	return c.err
+}
+
+func TestLogicalTestName_Default(t *testing.T) {
+	require.Equal(t, t.Name(), LogicalTestName(t))
+}
+
+func TestLogicalTestName_Runner(t *testing.T) {
+	t.Run("imported", func(t *testing.T) {
+		Run(t, NewClusterFactory(), func() {
+			t.Run("suite", func(t *testing.T) {
+				require.Equal(t, "imported/suite", LogicalTestName(t))
+			})
+		})
+	})
 }
 
 func TestRunContext_ParallelSuiteUsesLogicalNamesAndRouter(t *testing.T) {
@@ -76,7 +90,7 @@ func TestRunContext_NestedContextsKeepLogicalNamesDistinct(t *testing.T) {
 			Run(t, NewClusterFactory(), func() {
 				routers[runName] = routerFor(t)
 				t.Run("suite", func(t *testing.T) {
-					names[runName] = logicalTestName(t)
+					names[runName] = LogicalTestName(t)
 				})
 			})
 		})
@@ -185,7 +199,7 @@ func TestRunContext_PreservesShardOwner(t *testing.T) {
 	t.Run("imported", func(t *testing.T) {
 		Run(t, NewClusterFactory(), func() {
 			t.Run("suite", func(t *testing.T) {
-				logicalName = logicalTestName(t)
+				logicalName = LogicalTestName(t)
 			})
 		})
 	})

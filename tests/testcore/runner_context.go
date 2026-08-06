@@ -123,7 +123,9 @@ func clusterFactoryFor(t *testing.T) ClusterFactory {
 	return routerFor(t).factory
 }
 
-func logicalTestName(t *testing.T) string {
+// LogicalTestName returns t's name relative to its active testcore runner.
+// Outside a runner, it returns t.Name().
+func LogicalTestName(t *testing.T) string {
 	ctx := runContextFor(t)
 	if ctx == nil {
 		return t.Name()

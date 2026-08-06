@@ -69,6 +69,11 @@ type (
 		FrontendHTTPAddress() string
 		FrontendGRPCAddress() string
 		WorkerGRPCAddress() string
+	}
+
+	// HistoryTaskRecorderProvider is implemented by clusters that expose a
+	// history task recorder.
+	HistoryTaskRecorderProvider interface {
 		GetHistoryTaskRecorder() *HistoryTaskRecorder
 	}
 
@@ -160,6 +165,18 @@ type (
 		TestClusterFactory
 	}
 )
+
+func historyTaskRecorderFor(cluster Cluster) (*HistoryTaskRecorder, error) {
+	provider, ok := cluster.(HistoryTaskRecorderProvider)
+	if !ok {
+		return nil, fmt.Errorf("WithHistoryTaskRecorder requires a cluster that implements HistoryTaskRecorderProvider, got %T", cluster)
+	}
+	recorder := provider.GetHistoryTaskRecorder()
+	if recorder == nil {
+		return nil, fmt.Errorf("WithHistoryTaskRecorder requires an enabled history task recorder on %T", cluster)
+	}
+	return recorder, nil
+}
 
 var _ Cluster = (*TestCluster)(nil)
 

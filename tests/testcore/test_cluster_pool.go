@@ -266,7 +266,7 @@ func (s *suiteScopedCluster) tearDown() error {
 func UseSuiteScopedCluster(t *testing.T) {
 	t.Helper()
 	router := routerFor(t)
-	scopeName := logicalTestName(t)
+	scopeName := LogicalTestName(t)
 	if runContextFor(t) == nil && scopeName != t.Name() {
 		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
 	}
@@ -339,7 +339,7 @@ func (r clusterRequest) reason() string {
 // run can be queried for which suite created how many clusters of each kind, and
 // why. Events fall back to the test log when no events file is configured.
 func (r clusterRequest) recordCreation(t *testing.T, router *clusterRouter) {
-	logicalName := logicalTestName(t)
+	logicalName := LogicalTestName(t)
 	suite, _, _ := strings.Cut(logicalName, "/")
 	line, err := json.Marshal(map[string]any{
 		"suite":  suite,
@@ -387,7 +387,7 @@ func (p *clusterRouter) hasSuiteScoped(t *testing.T) bool {
 }
 
 func (p *clusterRouter) suiteScopedFor(t *testing.T) *suiteScopedCluster {
-	logicalName := logicalTestName(t)
+	logicalName := LogicalTestName(t)
 	var match *suiteScopedCluster
 	var matchLen int
 	p.suiteScoped.Range(func(key, value any) bool {
