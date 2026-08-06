@@ -469,3 +469,32 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "complete-update", nil))
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "stop", nil))
 }
+
+func (s *UpdateWorkflowSdkSuite) TestUpdateRejectsInvalidCallbackURL() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+	)
+
+	_, err := env.FrontendClient().UpdateWorkflowExecution(s.Context(), &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: env.Tv().WorkflowExecution(),
+		WaitPolicy: &updatepb.WaitPolicy{
+			LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+		},
+		Request: &updatepb.Request{
+			Meta:      &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
+			Input:     &updatepb.Input{Name: env.Tv().HandlerName()},
+			RequestId: env.Tv().RequestID(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{Url: "temporal://not-internal"},
+				},
+			}},
+		},
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "invalid url: unknown scheme")
+}
