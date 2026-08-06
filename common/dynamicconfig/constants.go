@@ -7,6 +7,7 @@ import (
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
@@ -259,6 +260,11 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		"system.historyHealthSignalPercentileLatencySettings",
 		LatencyHealthChecksPerPercentile{},
 		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
+	)
+	HealthCheckHistoryGRPCSettings = NewGlobalTypedSetting(
+		"system.healthCheckHistoryGRPCSettings",
+		health.Settings{},
+		"controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables the group checks",
 	)
 	// TODO: This should be removed once percentiles are the default.
 	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
