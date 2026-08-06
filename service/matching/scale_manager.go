@@ -374,6 +374,7 @@ func (sm *scaleManager) describeRequest(id int32, versions []string) *matchingse
 			AllActive: true,
 		},
 		ReportInternalTaskQueueStatus: true,
+		SkipMarkAlive:                 true,
 	}
 }
 

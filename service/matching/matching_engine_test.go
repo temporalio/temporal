@@ -282,6 +282,42 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 	return pm
 }
 
+func (s *matchingEngineSuite) TestDescribeTaskQueuePartitionForwardsSkipMarkAlive() {
+	partition := tqid.MustNormalPartitionFromRpcName(
+		"task-queue",
+		s.ns.ID().String(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	)
+	mockPM := NewMocktaskQueuePartitionManager(s.controller)
+	mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
+	mockPM.EXPECT().Describe(
+		gomock.Any(),
+		map[string]bool{"": true},
+		true,
+		false,
+		false,
+		true,
+		true,
+	).Return(&matchingservice.DescribeTaskQueuePartitionResponse{}, nil)
+	mockPM.EXPECT().Stop(gomock.Any()).AnyTimes()
+	s.matchingEngine.updateTaskQueue(partition, mockPM)
+
+	_, err := s.matchingEngine.DescribeTaskQueuePartition(context.Background(), &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId: s.ns.ID().String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     partition.TaskQueue().Name(),
+			TaskQueueType: partition.TaskType(),
+		},
+		Versions: &taskqueuepb.TaskQueueVersionSelection{
+			Unversioned: true,
+			AllActive:   true,
+		},
+		ReportInternalTaskQueueStatus: true,
+		SkipMarkAlive:                 true,
+	})
+	s.Require().NoError(err)
+}
+
 // captureNPollDeadlines injects a mock partition manager, runs n sequential polls, and returns
 // the context deadline observed inside each pm.PollTask call.
 func (s *matchingEngineSuite) captureNPollDeadlines(
