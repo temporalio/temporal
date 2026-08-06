@@ -11,9 +11,9 @@ import (
 	"go.temporal.io/server/common/tqid"
 )
 
-// Compact8 encodes backlogs below 32 as zero. Using 32 as the weight floor limits the first
-// representable backlog bucket to twice the weight of an encoded-zero partition while preserving
-// poll traffic to empty partitions.
+// Compact8 encodes backlogs below 32 as zero. Using the smallest representable Compact8 as
+// the weight floor limits the first representable backlog bucket to twice the weight of an
+// encoded-zero partition while preserving poll traffic to empty partitions.
 // Choosing a lower floor would weight polls more aggressively away from encoded-zero partitions
 // when another partition has encoded-greater-than-zero backlog. 2x feels like a good ratio.
 var readPartitionWeightFloor = number.DecodeCompact8(1)
