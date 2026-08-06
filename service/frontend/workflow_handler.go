@@ -886,7 +886,7 @@ func (wh *WorkflowHandler) convertToHistoryMultiOperationItem(
 		if updateReq.Namespace != "" && updateReq.Namespace != namespaceName.String() {
 			return nil, "", errMultiOpNamespaceMismatch
 		}
-		if err := wh.prepareUpdateWorkflowRequest(updateReq); err != nil {
+		if err := wh.prepareUpdateWorkflowRequest(ctx, namespaceName, updateReq); err != nil {
 			return nil, "", err
 		}
 		if updateReq.FirstExecutionRunId != "" {
@@ -5378,7 +5378,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 ) (_ *workflowservice.UpdateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if err := wh.prepareUpdateWorkflowRequest(request); err != nil {
+	if err := wh.prepareUpdateWorkflowRequest(ctx, namespace.Name(request.GetNamespace()), request); err != nil {
 		return nil, err
 	}
 
@@ -5409,6 +5409,8 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 }
 
 func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
+	ctx context.Context,
+	namespaceName namespace.Name,
 	request *workflowservice.UpdateWorkflowExecutionRequest,
 ) error {
 	if request == nil {
@@ -5456,6 +5458,12 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
 		!wh.config.EnableUpdateWorkflowExecutionAsyncAccepted(request.Namespace) {
 		return errUpdateWorkflowExecutionAsyncAcceptedNotAllowed
+	}
+
+	if cbs := request.GetRequest().GetCompletionCallbacks(); len(cbs) > 0 {
+		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
+			return err
+		}
 	}
 
 	return nil

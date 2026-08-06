@@ -5649,6 +5649,50 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
 }
 
+func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.testNamespace.String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+			Request: &updatepb.Request{
+				Meta:                &updatepb.Meta{UpdateId: "update-id"},
+				Input:               &updatepb.Input{Name: "update-name"},
+				RequestId:           "request-id",
+				CompletionCallbacks: callbacks,
+			},
+		}
+	}
+
+	s.Run("invalid callback", func() {
+		err := wh.prepareUpdateWorkflowRequest(
+			context.Background(),
+			s.testNamespace,
+			newRequest([]*commonpb.Callback{{}}),
+		)
+
+		var unimplemented *serviceerror.Unimplemented
+		s.ErrorAs(err, &unimplemented)
+		s.ErrorContains(err, "unknown callback variant")
+	})
+
+	s.Run("normalizes callback headers", func() {
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url:    "http://localhost/callback",
+					Header: map[string]string{"X-Request-ID": "value"},
+				},
+			},
+		}})
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		s.NoError(err)
+		s.Equal(map[string]string{"x-request-id": "value"}, request.GetRequest().GetCompletionCallbacks()[0].GetNexus().GetHeader())
+	})
+}
+
 func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
