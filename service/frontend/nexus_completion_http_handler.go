@@ -655,7 +655,12 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.NamespaceRateLimitInterceptor.Allow(c.namespace.Name(), nexusCompletionAPIName, request.HTTPRequest.Header); err != nil {
+	if err := c.NamespaceRateLimitInterceptor.Allow(
+		ctx,
+		c.namespace.Name(),
+		nexusCompletionAPIName,
+		request.HTTPRequest.Header,
+	); err != nil {
 		c.outcomeTag = metrics.OutcomeTag("namespace_rate_limited")
 		return commonnexus.ConvertGRPCError(err, true)
 	}

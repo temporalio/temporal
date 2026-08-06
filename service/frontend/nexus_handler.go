@@ -234,7 +234,12 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.namespaceRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
+	if err := c.namespaceRateLimitInterceptor.Allow(
+		ctx,
+		c.namespace.Name(),
+		c.apiName,
+		header,
+	); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_rate_limited"))
 		return commonnexus.ConvertGRPCError(err, true)
 	}

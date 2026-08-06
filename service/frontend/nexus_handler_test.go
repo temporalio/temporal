@@ -145,7 +145,7 @@ func newOperationContext(options contextOptions) *operationContext {
 	oc.namespaceRateLimitInterceptor = interceptor.NewNamespaceRateLimitInterceptor(
 		nil,
 		mockRateLimiter{options.namespaceRateLimitAllow},
-		make(map[string]int),
+		nil, // requestToTokenFunc
 		map[string]struct{}{},
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		metrics.NoopMetricsHandler,

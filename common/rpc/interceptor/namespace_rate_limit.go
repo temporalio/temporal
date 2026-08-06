@@ -31,15 +31,47 @@ var (
 
 type (
 	NamespaceRateLimitInterceptor interface {
-		Intercept(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error)
-		Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error
-		Wait(ctx context.Context, namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error
+		Intercept(
+			ctx context.Context,
+			req any,
+			info *grpc.UnaryServerInfo,
+			handler grpc.UnaryHandler,
+		) (resp any, err error)
+
+		Allow(
+			ctx context.Context,
+			namespaceName namespace.Name,
+			methodName string,
+			headerGetter headers.HeaderGetter,
+		) error
+
+		Wait(
+			ctx context.Context,
+			namespaceName namespace.Name,
+			methodName string,
+			headerGetter headers.HeaderGetter,
+		) error
+
+		AllowN(
+			ctx context.Context,
+			namespaceName namespace.Name,
+			methodName string,
+			headerGetter headers.HeaderGetter,
+			numToken int,
+		) error
+
+		WaitN(
+			ctx context.Context,
+			namespaceName namespace.Name,
+			methodName string,
+			headerGetter headers.HeaderGetter,
+			numToken int,
+		) error
 	}
 
 	NamespaceRateLimitInterceptorImpl struct {
 		namespaceRegistry                 namespace.Registry
 		rateLimiter                       quotas.RequestRateLimiter
-		tokens                            map[string]int
 		reducePollWorkflowHistoryPriority dynamicconfig.BoolPropertyFn
 		pollMethods                       map[string]struct{}
 		pollWaitForToken                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -53,7 +85,6 @@ var _ NamespaceRateLimitInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil)
 func NewNamespaceRateLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	rateLimiter quotas.RequestRateLimiter,
-	tokens map[string]int,
 	pollMethods map[string]struct{},
 	pollWaitForToken dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	metricsHandler metrics.Handler,
@@ -61,7 +92,6 @@ func NewNamespaceRateLimitInterceptor(
 	return &NamespaceRateLimitInterceptorImpl{
 		namespaceRegistry: namespaceRegistry,
 		rateLimiter:       rateLimiter,
-		tokens:            tokens,
 		pollMethods:       pollMethods,
 		pollWaitForToken:  pollWaitForToken,
 		metricsHandler:    metricsHandler,
@@ -81,15 +111,13 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 		} else if IsLongPollDescribeActivityExecutionRequest(req) {
 			method = configs.PollActivityExecutionAPIName
 		}
-		if ni.pollWaitForToken(ns.String()) {
-			if _, ok := ni.pollMethods[info.FullMethod]; ok {
-				if err := ni.Wait(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
-					return nil, err
-				}
-				return handler(ctx, req)
+		if _, ok := ni.pollMethods[info.FullMethod]; ok && ni.pollWaitForToken(ns.String()) {
+			if err := ni.Wait(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
+				return nil, err
 			}
+			return handler(ctx, req)
 		}
-		if err := ni.Allow(ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
+		if err := ni.Allow(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 			return nil, err
 		}
 	}
@@ -97,14 +125,25 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 	return handler(ctx, req)
 }
 
-func (ni *NamespaceRateLimitInterceptorImpl) Wait(ctx context.Context, namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
-	token, ok := ni.tokens[methodName]
-	if !ok {
-		token = NamespaceRateLimitDefaultToken
-	}
+func (ni *NamespaceRateLimitInterceptorImpl) Wait(
+	ctx context.Context,
+	namespaceName namespace.Name,
+	methodName string,
+	headerGetter headers.HeaderGetter,
+) error {
+	return ni.WaitN(ctx, namespaceName, methodName, headerGetter, NamespaceRateLimitDefaultToken)
+}
+
+func (ni *NamespaceRateLimitInterceptorImpl) WaitN(
+	ctx context.Context,
+	namespaceName namespace.Name,
+	methodName string,
+	headerGetter headers.HeaderGetter,
+	numToken int,
+) error {
 	request := quotas.NewRequest(
 		methodName,
-		token,
+		numToken,
 		namespaceName.String(),
 		headerGetter.Get(headers.CallerTypeHeaderName),
 		0,  // this interceptor layer does not throttle based on caller segment
@@ -139,15 +178,25 @@ func (ni *NamespaceRateLimitInterceptorImpl) Wait(ctx context.Context, namespace
 	return ctx.Err()
 }
 
-func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
-	token, ok := ni.tokens[methodName]
-	if !ok {
-		token = NamespaceRateLimitDefaultToken
-	}
+func (ni *NamespaceRateLimitInterceptorImpl) Allow(
+	ctx context.Context,
+	namespaceName namespace.Name,
+	methodName string,
+	headerGetter headers.HeaderGetter,
+) error {
+	return ni.AllowN(ctx, namespaceName, methodName, headerGetter, NamespaceRateLimitDefaultToken)
+}
 
+func (ni *NamespaceRateLimitInterceptorImpl) AllowN(
+	ctx context.Context,
+	namespaceName namespace.Name,
+	methodName string,
+	headerGetter headers.HeaderGetter,
+	numToken int,
+) error {
 	if !ni.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
-		token,
+		numToken,
 		namespaceName.String(),
 		headerGetter.Get(headers.CallerTypeHeaderName),
 		0,  // this interceptor layer does not throttle based on caller segment

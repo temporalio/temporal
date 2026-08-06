@@ -349,7 +349,6 @@ func NamespaceRateLimitInterceptorProvider(
 			namespaceRateFn,
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},      // no token overrides
 		map[string]struct{}{}, // no long polls on history service
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
 		metricsHandler,
