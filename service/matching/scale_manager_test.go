@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -27,6 +28,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -54,6 +56,9 @@ type ScaleManagerSuite struct {
 
 	// newTarget counts "new target" logs, which are also used for test synchronization
 	newTarget *testlogger.Expectation
+
+	userDataValue *persistencespb.VersionedTaskQueueUserData
+	userDataErr   error
 }
 
 func TestScaleManagerSuite(t *testing.T) {
@@ -62,10 +67,15 @@ func TestScaleManagerSuite(t *testing.T) {
 
 func (s *ScaleManagerSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.userDataValue = nil
+	s.userDataErr = nil
 	s.controller = gomock.NewController(s.T())
 	s.scaler = NewMockPartitionScaler(s.controller)
 	s.scaleDB = NewMockscaleDB(s.controller)
 	s.userData = NewMockuserDataManager(s.controller)
+	s.userData.EXPECT().GetUserData().DoAndReturn(func() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+		return s.userDataValue, nil, s.userDataErr
+	}).AnyTimes()
 	s.matching = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.timeSource = clock.NewEventTimeSource()
 	s.capture = metricstest.NewCaptureHandler()
@@ -183,6 +193,71 @@ func assertNoNewLogs(s *ScaleManagerSuite, e *testlogger.Expectation, d time.Dur
 }
 
 // --- tests ---
+
+func (s *ScaleManagerSuite) TestVersionsForDescribe() {
+	legacyActive := &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: "legacy-deployment",
+		BuildId:        "active",
+	}
+	s.userDataValue = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						Versions: []*deploymentspb.DeploymentVersionData{
+							{Version: legacyActive, Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+							{
+								Version: &deploymentspb.WorkerDeploymentVersion{
+									DeploymentName: "legacy-deployment",
+									BuildId:        "drained",
+								},
+								Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+							},
+						},
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							"new-deployment": {
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									"active":  {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+									"deleted": {Deleted: true},
+									"drained": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED},
+								},
+							},
+							"legacy-deployment": {
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									"active": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	s.startManager(1, nil)
+
+	versions, err := s.sm.versionsForDescribe()
+
+	s.Require().NoError(err)
+	s.ElementsMatch([]string{
+		worker_versioning.WorkerDeploymentVersionToStringV32(legacyActive),
+		worker_versioning.BuildIDToStringV32("new-deployment", "active"),
+	}, versions)
+}
+
+func (s *ScaleManagerSuite) TestUserDataErrorPreservesBacklogState() {
+	s.userDataErr = errors.New("user data unavailable")
+	initial := &persistencespb.PartitionScaleState{
+		Target:        2,
+		BacklogState:  bitSet(nil).set(0).set(1),
+		BacklogCounts: []byte{number.EncodeCompact8(100), number.EncodeCompact8(200)},
+	}
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	s.startManager(2, initial)
+
+	s.sm.updateBacklogAndDrainState(context.Background())
+
+	s.Same(initial, s.sm.scaleState)
+}
 
 // TestAddedTasksWakesScalerOnFullBatch verifies that the scaler is only called
 // once cumulative batch reaches numTasks*BatchSize.
