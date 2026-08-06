@@ -57,7 +57,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	tq := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
-	_, err := env.GetTestCluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+	_, err := env.Cluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: endpointName,
 			Target: &nexuspb.EndpointTarget{

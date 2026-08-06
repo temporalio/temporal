@@ -43,7 +43,7 @@ func (s *CommonSuite) TestListOrdering() {
 	ctx := s.Context()
 
 	// get initial table version since it has been modified by other tests
-	resp, err := env.GetTestCluster().MatchingClient().ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
+	resp, err := env.Cluster().MatchingClient().ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 		LastKnownTableVersion: 0,
 		PageSize:              0,
 	})
@@ -58,7 +58,7 @@ func (s *CommonSuite) TestListOrdering() {
 	tableVersion := initialTableVersion + int64(numEndpoints)
 
 	// list from persistence manager level
-	persistence := env.GetTestCluster().TestBase().NexusEndpointManager
+	persistence := env.Cluster().TestBase().NexusEndpointManager
 	persistenceResp1, err := persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
 		LastKnownTableVersion: tableVersion,
 		PageSize:              numEndpoints / 2,
@@ -75,7 +75,7 @@ func (s *CommonSuite) TestListOrdering() {
 	s.Len(persistenceResp2.Entries, numEndpoints/2)
 
 	// list from matching level
-	matchingClient := env.GetTestCluster().MatchingClient()
+	matchingClient := env.Cluster().MatchingClient()
 	matchingResp1, err := matchingClient.ListNexusEndpoints(ctx, &matchingservice.ListNexusEndpointsRequest{
 		LastKnownTableVersion: tableVersion,
 		PageSize:              int32(numEndpoints / 2),
@@ -130,7 +130,7 @@ func (s *MatchingSuite) TestCreate() {
 	s.Equal(entry.Spec.Name, endpointName)
 	s.Equal(entry.Spec.Target.GetWorker().Namespace, env.Namespace().String())
 
-	_, err := env.GetTestCluster().MatchingClient().CreateNexusEndpoint(ctx, &matchingservice.CreateNexusEndpointRequest{
+	_, err := env.Cluster().MatchingClient().CreateNexusEndpoint(ctx, &matchingservice.CreateNexusEndpointRequest{
 		Spec: &persistencespb.NexusEndpointSpec{
 			Name: endpointName,
 			Target: &persistencespb.NexusEndpointTarget{
@@ -228,7 +228,7 @@ func (s *MatchingSuite) TestUpdate() {
 		},
 	}
 
-	matchingClient := env.GetTestCluster().MatchingClient()
+	matchingClient := env.Cluster().MatchingClient()
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := matchingClient.UpdateNexusEndpoint(s.Context(), tc.request)
@@ -263,7 +263,7 @@ func (s *MatchingSuite) TestDelete() {
 		},
 	}
 
-	matchingClient := env.GetTestCluster().MatchingClient()
+	matchingClient := env.Cluster().MatchingClient()
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			resp, err := matchingClient.DeleteNexusEndpoint(
@@ -290,7 +290,7 @@ func (s *MatchingSuite) TestList() {
 	env.createRandomNexusEndpoint(s.Context(), s.T())
 
 	// get expected table version and endpoints for the course of the tests
-	matchingClient := env.GetTestCluster().MatchingClient()
+	matchingClient := env.Cluster().MatchingClient()
 	resp, err := matchingClient.ListNexusEndpoints(
 		ctx,
 		&matchingservice.ListNexusEndpointsRequest{

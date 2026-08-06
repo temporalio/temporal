@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -52,6 +53,7 @@ type Env interface {
 	FrontendClient() workflowservice.WorkflowServiceClient
 	AdminClient() adminservice.AdminServiceClient
 	Cluster() Cluster
+	// Deprecated: use Cluster.
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
@@ -420,6 +422,49 @@ func (e *TestEnv) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorizatio
 
 func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 	return e.taskPoller
+}
+
+// HistoryTaskRecorder returns the history task recorder requested with
+// [WithHistoryTaskRecorder].
+func (e *TestEnv) HistoryTaskRecorder() *HistoryTaskRecorder {
+	e.t.Helper()
+	recorder, err := historyTaskRecorderFor(e.cluster)
+	if err != nil {
+		e.t.Fatal(err)
+		return nil
+	}
+	return recorder
+}
+
+// TLSConfigProvider returns the cluster TLS configuration.
+func (e *TestEnv) TLSConfigProvider() *encryption.FixedTLSConfigProvider {
+	e.t.Helper()
+	provider, ok := e.cluster.(TLSConfigProvider)
+	if !ok || provider.TLSConfigProvider() == nil {
+		e.t.Fatal("TLSConfigProvider is unavailable for this test cluster")
+		return nil
+	}
+	return provider.TLSConfigProvider()
+}
+
+// ChasmContext adds the cluster's Chasm state to ctx.
+func (e *TestEnv) ChasmContext(ctx context.Context) (context.Context, error) {
+	provider, ok := e.cluster.(ChasmContextProvider)
+	if !ok {
+		return nil, fmt.Errorf("ChasmContext is unavailable for this test cluster")
+	}
+	return provider.ChasmContext(ctx)
+}
+
+// DynamicConfigValues returns the effective values for key on this cluster.
+func (e *TestEnv) DynamicConfigValues(key dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
+	e.t.Helper()
+	provider, ok := e.cluster.(DynamicConfigValueProvider)
+	if !ok {
+		e.t.Fatal("DynamicConfigValues is unavailable for this test cluster")
+		return nil
+	}
+	return provider.DynamicConfigValues(key)
 }
 
 // NoError asserts that err is nil.

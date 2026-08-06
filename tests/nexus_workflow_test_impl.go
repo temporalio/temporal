@@ -631,11 +631,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartsStandaloneActivityBidir
 	}
 
 	env := s.newTestEnv(chasmEnabled)
-	cluster := env.GetTestCluster()
 	nsValues := []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true},
 	}
-	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues)
+	env.OverrideDynamicConfig(activity.Enabled, nsValues)
 	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
@@ -750,12 +749,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncStandaloneActivityComple
 	}
 
 	env := s.newTestEnv(chasmEnabled)
-	cluster := env.GetTestCluster()
 	nsValues := []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true},
 	}
-	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues)
-	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues)
+	env.OverrideDynamicConfig(activity.Enabled, nsValues)
+	env.OverrideDynamicConfig(activity.EnableCallbacks, nsValues)
 	ctx := s.Context()
 
 	callerTQ := testcore.RandomizeStr(s.T().Name() + "-caller")

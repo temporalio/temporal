@@ -2,6 +2,8 @@ package testcore
 
 import (
 	"errors"
+	"os"
+	"os/exec"
 	"sync"
 	"testing"
 
@@ -53,8 +55,27 @@ func TestLogicalTestName_Runner(t *testing.T) {
 	t.Run("imported", func(t *testing.T) {
 		Run(t, NewClusterFactory(), func() {
 			t.Run("suite", func(t *testing.T) {
-				require.Equal(t, "imported/suite", LogicalTestName(t))
+				require.Equal(t, "suite", LogicalTestName(t))
 			})
+		})
+	})
+}
+
+const duplicateRunContextEnv = "TESTCORE_DUPLICATE_RUN_CONTEXT"
+
+func TestRunContext_DuplicatePhysicalRootFails(t *testing.T) {
+	if os.Getenv(duplicateRunContextEnv) != "1" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestRunContext_DuplicatePhysicalRootFails$")
+		cmd.Env = append(os.Environ(), duplicateRunContextEnv+"=1")
+		output, err := cmd.CombinedOutput()
+		require.Error(t, err)
+		require.Contains(t, string(output), `testcore.Run already active for physical root "TestRunContext_DuplicatePhysicalRootFails"`)
+		return
+	}
+
+	Run(t, NewClusterFactory(), func() {
+		Run(t, NewClusterFactory(), func() {
+			t.Fatal("duplicate testcore.Run should fail before invoking its callback")
 		})
 	})
 }
@@ -64,8 +85,8 @@ func TestRunContext_ParallelSuiteUsesLogicalNamesAndRouter(t *testing.T) {
 	var runnerRouter *clusterRouter
 	t.Cleanup(func() {
 		require.ElementsMatch(t, []string{
-			"imported/TestFirst",
-			"imported/TestSecond",
+			"TestFirst",
+			"TestSecond",
 		}, observations.names)
 		require.Len(t, observations.routers, 2)
 		for _, router := range observations.routers {
@@ -81,7 +102,7 @@ func TestRunContext_ParallelSuiteUsesLogicalNamesAndRouter(t *testing.T) {
 	})
 }
 
-func TestRunContext_NestedContextsKeepLogicalNamesDistinct(t *testing.T) {
+func TestRunContext_SequentialSubtestsUseDistinctRoots(t *testing.T) {
 	routers := make(map[string]*clusterRouter)
 	names := make(map[string]string)
 
@@ -96,9 +117,32 @@ func TestRunContext_NestedContextsKeepLogicalNamesDistinct(t *testing.T) {
 		})
 	}
 
-	require.Equal(t, "first/suite", names["first"])
-	require.Equal(t, "second/suite", names["second"])
+	require.Equal(t, "suite", names["first"])
+	require.Equal(t, "suite", names["second"])
 	require.NotSame(t, routers["first"], routers["second"])
+}
+
+func TestRunContext_DeepestContextDefinesLogicalName(t *testing.T) {
+	var outerRouter, innerRouter *clusterRouter
+	t.Run("outer", func(t *testing.T) {
+		Run(t, NewClusterFactory(), func() {
+			outerRouter = routerFor(t)
+			t.Run("inner", func(t *testing.T) {
+				Run(t, NewClusterFactory(), func() {
+					innerRouter = routerFor(t)
+					t.Run("suite", func(t *testing.T) {
+						require.Equal(t, "suite", LogicalTestName(t))
+						require.Same(t, innerRouter, routerFor(t))
+					})
+				})
+			})
+			t.Run("outer-suite", func(t *testing.T) {
+				require.Equal(t, "outer-suite", LogicalTestName(t))
+				require.Same(t, outerRouter, routerFor(t))
+			})
+		})
+	})
+	require.NotSame(t, outerRouter, innerRouter)
 }
 
 func TestRunContext_SuiteScopedClusterRoutesBelowNestedParent(t *testing.T) {
@@ -204,7 +248,7 @@ func TestRunContext_PreservesShardOwner(t *testing.T) {
 		})
 	})
 
-	require.Equal(t, testShardOwner("imported/suite", total), testShardOwner(logicalName, total))
+	require.Equal(t, testShardOwner("suite", total), testShardOwner(logicalName, total))
 }
 
 func TestRunContext_RecordsShardDecisions(t *testing.T) {

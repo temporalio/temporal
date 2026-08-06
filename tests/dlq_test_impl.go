@@ -96,7 +96,7 @@ func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {
 	w.SdkWorker().RegisterWorkflow(s.myWorkflow)
 
 	var err error
-	w.dlq, err = w.GetTestCluster().TestBase().Factory.NewHistoryTaskQueueManager()
+	w.dlq, err = w.Cluster().TestBase().Factory.NewHistoryTaskQueueManager()
 	s.NoError(err)
 	s.T().Cleanup(w.dlq.Close)
 

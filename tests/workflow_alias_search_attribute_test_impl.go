@@ -78,7 +78,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 	}
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
-		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
+		resp, err := env.Cluster().MatchingClient().CheckTaskQueueVersionMembership(
 			s.Context(),
 			&matchingservice.CheckTaskQueueVersionMembershipRequest{
 				NamespaceId:   env.NamespaceID().String(),

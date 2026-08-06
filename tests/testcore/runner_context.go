@@ -18,9 +18,8 @@ type ShardRecord struct {
 // RunContext owns the router and shard decisions for an imported functional
 // test runner.
 type RunContext struct {
-	router        *clusterRouter
-	physicalRoot  string
-	logicalParent string
+	router       *clusterRouter
+	physicalRoot string
 
 	mu            sync.Mutex
 	shardManifest []ShardRecord
@@ -44,15 +43,26 @@ func Run(t *testing.T, factory ClusterFactory, run func()) *RunContext {
 	}
 
 	physicalRoot := t.Name()
-	logicalParent, _, _ := strings.Cut(physicalRoot, "/")
 	ctx := &RunContext{
-		router:        newClusterRouter(factory, defaultRouterConfig),
-		physicalRoot:  physicalRoot,
-		logicalParent: logicalParent,
+		physicalRoot: physicalRoot,
 	}
 	activeRunContexts.Lock()
-	activeRunContexts.contexts[ctx] = struct{}{}
+	duplicate := false
+	for active := range activeRunContexts.contexts {
+		if active.physicalRoot == physicalRoot {
+			duplicate = true
+			break
+		}
+	}
+	if !duplicate {
+		activeRunContexts.contexts[ctx] = struct{}{}
+	}
 	activeRunContexts.Unlock()
+	if duplicate {
+		t.Fatalf("testcore.Run already active for physical root %q", physicalRoot)
+		return nil
+	}
+	ctx.router = newClusterRouter(factory, defaultRouterConfig)
 
 	t.Cleanup(func() {
 		activeRunContexts.Lock()
@@ -130,8 +140,8 @@ func LogicalTestName(t *testing.T) string {
 	if ctx == nil {
 		return t.Name()
 	}
-	if t.Name() == ctx.logicalParent {
+	if t.Name() == ctx.physicalRoot {
 		return t.Name()
 	}
-	return strings.TrimPrefix(t.Name(), ctx.logicalParent+"/")
+	return strings.TrimPrefix(t.Name(), ctx.physicalRoot+"/")
 }

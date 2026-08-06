@@ -45,7 +45,7 @@ func (s *activityParityTestSuite) TestScheduleToStartMetric() {
 	}
 	capture := func(t *testing.T, standalone, breakdownByTaskQueue bool, trace []model.Event) captureResult {
 		env := newActivityParityEnv(t)
-		env.GetTestCluster().OverrideDynamicConfig(t, dynamicconfig.MetricsBreakdownByTaskQueue,
+		env.OverrideDynamicConfig(dynamicconfig.MetricsBreakdownByTaskQueue,
 			[]dynamicconfig.ConstrainedValue{{
 				Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()},
 				Value:       breakdownByTaskQueue,

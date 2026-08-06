@@ -55,11 +55,10 @@ func newStandaloneActivityBatchEnvWithBatchOperations(t *testing.T, enabled bool
 			{Constraints: dynamicconfig.Constraints{Namespace: env.ExternalNamespace().String()}, Value: value},
 		}
 	}
-	cluster := env.GetTestCluster()
-	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, nsValues(true))
-	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
-	cluster.OverrideDynamicConfig(t, activity.EnableCallbacks, nsValues(true))
-	cluster.OverrideDynamicConfig(t, dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities, nsValues(enabled))
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, nsValues(true))
+	env.OverrideDynamicConfig(activity.Enabled, nsValues(true))
+	env.OverrideDynamicConfig(activity.EnableCallbacks, nsValues(true))
+	env.OverrideDynamicConfig(dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities, nsValues(enabled))
 	return env
 }
 

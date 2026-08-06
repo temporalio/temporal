@@ -111,11 +111,10 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 			{Constraints: dynamicconfig.Constraints{Namespace: env.ExternalNamespace().String()}, Value: value},
 		}
 	}
-	cluster := env.GetTestCluster()
-	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableChasm, nsValues(true))
-	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues(true))
-	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
-	cluster.OverrideDynamicConfig(s.T(), activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, nsValues(true))
+	env.OverrideDynamicConfig(activity.Enabled, nsValues(true))
+	env.OverrideDynamicConfig(activity.EnableCallbacks, nsValues(true))
+	env.OverrideDynamicConfig(activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
 }
 
@@ -10372,7 +10371,7 @@ func (s *standaloneActivityTestSuite) TestCallbacksDisabled() {
 	nsValues := []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: false},
 	}
-	env.GetTestCluster().OverrideDynamicConfig(t, activity.EnableCallbacks, nsValues)
+	env.OverrideDynamicConfig(activity.EnableCallbacks, nsValues)
 
 	cb := []*commonpb.Callback{{
 		Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/cb"}},

@@ -55,7 +55,7 @@ func dispatchAndCompleteNexusTask(t *testing.T, s *testcore.TestEnv, expectTaskF
 	defer cancel()
 
 	taskQueue := testcore.RandomizeStr("test-nexus-tq")
-	matchingClient := s.GetTestCluster().MatchingClient()
+	matchingClient := s.Cluster().MatchingClient()
 
 	capture := s.StartNamespaceMetricCapture()
 

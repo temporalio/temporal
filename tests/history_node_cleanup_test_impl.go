@@ -45,7 +45,7 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
 		tv.WorkflowID(),
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-	execMgr := env.GetTestCluster().TestBase().ExecutionManager
+	execMgr := env.Cluster().TestBase().ExecutionManager
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -99,7 +99,7 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfWorkflowAfterReset() {
 		tv.WorkflowID(),
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-	execMgr := env.GetTestCluster().TestBase().ExecutionManager
+	execMgr := env.Cluster().TestBase().ExecutionManager
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 
 	// ── Step 1: start and complete run A ─────────────────────────────────────

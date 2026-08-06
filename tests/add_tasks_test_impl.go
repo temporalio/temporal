@@ -108,7 +108,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 				},
 			}
 			if tc.shouldCallAddTasks {
-				_, err = env.GetTestCluster().AdminClient().AddTasks(s.Context(), request)
+				_, err = env.Cluster().AdminClient().AddTasks(s.Context(), request)
 				s.NoError(err)
 			}
 
@@ -127,7 +127,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 
 func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
 	env := testcore.NewEnv(s.T())
-	_, err := env.GetTestCluster().HistoryClient().AddTasks(s.Context(), &historyservice.AddTasksRequest{
+	_, err := env.Cluster().HistoryClient().AddTasks(s.Context(), &historyservice.AddTasksRequest{
 		ShardId: 0,
 	})
 	s.Error(err)

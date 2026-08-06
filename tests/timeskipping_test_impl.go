@@ -371,7 +371,7 @@ func (s *TimeSkippingTestSuite) getMutableState(env *testcore.TestEnv, workflowI
 		workflowID,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
+	ms, err := env.Cluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: env.NamespaceID().String(),
 		WorkflowID:  workflowID,
@@ -744,7 +744,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 	elapsed := time.Since(wallStart)
 	s.Less(elapsed, shiftTol, "skip should have shifted the 1h start delay into near-now wall-clock; took %v", elapsed)
 
-	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
+	recorder := env.HistoryTaskRecorder()
 	s.NotNil(recorder)
 	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
 		NamespaceID: env.NamespaceID().String(),
@@ -1073,7 +1073,7 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	)
 
 	// ── Assertion 5: WorkflowRunTimeoutTask regenerated with shifted timestamp. ─
-	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
+	recorder := env.HistoryTaskRecorder()
 	s.NotNil(recorder)
 	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
 		NamespaceID: env.NamespaceID().String(),

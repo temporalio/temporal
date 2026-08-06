@@ -69,11 +69,19 @@ func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}),
 	}
-	if strings.HasPrefix(t.Name(), "TestScheduleV1") {
+	if scheduleNeedsWorkerService(t) {
 		// only v1 needs the worker service
 		opts = append(opts, testcore.WithWorkerService("V1 scheduler"))
 	}
 	return opts
+}
+
+func scheduleNeedsWorkerService(t *testing.T) bool {
+	return scheduleNameNeedsWorkerService(testcore.LogicalTestName(t))
+}
+
+func scheduleNameNeedsWorkerService(name string) bool {
+	return strings.HasPrefix(name, "TestScheduleV1")
 }
 
 func newScheduleEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv {
@@ -2941,7 +2949,7 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 	// DescribeSchedule should return NotFound, as well as CreateSentinel
 	nsID := s.NamespaceID().String()
 	s.Eventually(func() bool {
-		_, descErr := s.GetTestCluster().SchedulerClient().DescribeSchedule(
+		_, descErr := s.Cluster().SchedulerClient().DescribeSchedule(
 			ctx,
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
@@ -2955,7 +2963,7 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 
 		// A CHASM CreateSchedule should also fail with NotFound because
 		// the sentinel blocks it.
-		_, createErr := s.GetTestCluster().SchedulerClient().CreateSchedule(
+		_, createErr := s.Cluster().SchedulerClient().CreateSchedule(
 			ctx,
 			&schedulerpb.CreateScheduleRequest{
 				NamespaceId: nsID,
@@ -3076,7 +3084,7 @@ func testSkipsCHASMSentinelWhenDisabled(t *testing.T, newContext contextFactory)
 	// With no CHASM sentinel reserving the ID, a CHASM CreateSchedule for the
 	// same ID must not be blocked by the NotFound (sentinel) signal.
 	nsID := s.NamespaceID().String()
-	_, createErr := s.GetTestCluster().SchedulerClient().CreateSchedule(
+	_, createErr := s.Cluster().SchedulerClient().CreateSchedule(
 		ctx,
 		&schedulerpb.CreateScheduleRequest{
 			NamespaceId: nsID,
@@ -3330,7 +3338,7 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 			},
 		},
 	}
-	_, err = s.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+	_, err = s.Cluster().SchedulerClient().CreateFromMigrationState(
 		ctx,
 		&schedulerpb.CreateFromMigrationStateRequest{
 			NamespaceId: nsID,
@@ -3340,7 +3348,7 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	s.Eventually(func() bool {
-		descResp, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(
+		descResp, err := s.Cluster().SchedulerClient().DescribeSchedule(
 			ctx,
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
@@ -3365,7 +3373,7 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	s.Eventually(func() bool {
-		descResp, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(
+		descResp, err := s.Cluster().SchedulerClient().DescribeSchedule(
 			ctx,
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
@@ -4811,7 +4819,7 @@ func runTestScheduleCreationRolloutPercent(t *testing.T) {
 	// A direct CHASM DescribeSchedule succeeds for CHASM-backed schedules and
 	// returns NotFound for V1-backed schedules (whose CHASM key is a sentinel).
 	describeOnCHASM := func(sid string) error {
-		_, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+		_, err := s.Cluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
 			NamespaceId:     nsID,
 			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 		})

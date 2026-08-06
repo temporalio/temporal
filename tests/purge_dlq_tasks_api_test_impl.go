@@ -155,7 +155,7 @@ func (s *PurgeDLQTasksSuite) enqueueTasks(
 	queueKey persistence.QueueKey,
 	task *tasks.WorkflowTask,
 ) persistence.HistoryTaskQueueManager {
-	dlq, err := env.GetTestCluster().TestBase().Factory.NewHistoryTaskQueueManager()
+	dlq, err := env.Cluster().TestBase().Factory.NewHistoryTaskQueueManager()
 	s.NoError(err)
 
 	_, err = dlq.CreateQueue(s.Context(), &persistence.CreateQueueRequest{

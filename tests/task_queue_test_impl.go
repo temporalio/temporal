@@ -1111,7 +1111,7 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	} {
 		s.Eventually(func() bool {
-			resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
+			resp, err := s.Cluster().MatchingClient().DescribeTaskQueuePartition(
 				s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: s.NamespaceID().String(),
 					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -1212,7 +1212,7 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	tv := testvars.New(s.T())
 
 	// Create a nexus endpoint targeting our task queue.
-	_, err := s.GetTestCluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+	_, err := s.Cluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: "nexus-" + uuid.New().String(),
 			Target: &nexuspb.EndpointTarget{
@@ -1244,7 +1244,7 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 
 	// Wait for nexus poller to arrive at root partition before dispatching.
 	s.Eventually(func() bool {
-		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
+		resp, err := s.Cluster().MatchingClient().DescribeTaskQueuePartition(
 			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -1277,7 +1277,7 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 		dispatchTQName = nexusTQ.NormalPartition(11).RpcName()
 	}
 
-	_, err = s.GetTestCluster().MatchingClient().DispatchNexusTask(s.Context(), &matchingservice.DispatchNexusTaskRequest{
+	_, err = s.Cluster().MatchingClient().DispatchNexusTask(s.Context(), &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: s.NamespaceID().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: dispatchTQName,
@@ -1346,7 +1346,7 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 
 	// Wait for poller to arrive at root partition before starting workflow.
 	s.Eventually(func() bool {
-		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
+		resp, err := s.Cluster().MatchingClient().DescribeTaskQueuePartition(
 			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -1404,7 +1404,7 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 
 	// Wait for query poller to arrive before issuing query.
 	s.Eventually(func() bool {
-		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
+		resp, err := s.Cluster().MatchingClient().DescribeTaskQueuePartition(
 			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{

@@ -39,7 +39,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 	env := testcore.NewEnv(s.T(), opts...)
 
 	if testWithChasm {
-		configValues := env.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())
+		configValues := env.DynamicConfigValues(dynamicconfig.EnableChasm.Key())
 		s.NotEmpty(configValues, "EnableChasm config should be set")
 		configValue, _ := configValues[0].Value.(bool)
 		s.True(configValue, "EnableChasm config should be true")

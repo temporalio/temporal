@@ -38,10 +38,9 @@ func newActivityParityEnv(t *testing.T) *testcore.TestEnv {
 			{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: value},
 		}
 	}
-	cluster := env.GetTestCluster()
-	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, nsValues(true))
-	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
-	cluster.OverrideDynamicConfig(t, activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, nsValues(true))
+	env.OverrideDynamicConfig(activity.Enabled, nsValues(true))
+	env.OverrideDynamicConfig(activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
 }
 

@@ -186,6 +186,7 @@ func WithSharedCluster() TestClusterOption {
 	}
 }
 
+// Deprecated: use [FunctionalTestBase.Cluster].
 func (s *FunctionalTestBase) GetTestCluster() *TestCluster {
 	cluster, ok := s.testCluster.(*TestCluster)
 	if !ok {

@@ -452,7 +452,7 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(env *VersioningTestEnv, s
 
 	// Wait for the version to be present in the task queue. Version existence is required before it can be set as an override.
 	s.Await(func(s *Versioning3Suite) {
-		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(s.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		resp, err := env.Cluster().MatchingClient().CheckTaskQueueVersionMembership(s.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
@@ -1951,7 +1951,7 @@ func (s *Versioning3Suite) testChildWorkflowExplicitPinnedOverrideTakesPrecedenc
 	env.validatePinnedVersionExistsInTaskQueue(s, tvChildV2)
 
 	if crossTaskQueue {
-		membership, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
+		membership, err := env.Cluster().MatchingClient().CheckTaskQueueVersionMembership(
 			s.Context(),
 			&matchingservice.CheckTaskQueueVersionMembershipRequest{
 				NamespaceId:   env.NamespaceID().String(),
@@ -4435,7 +4435,7 @@ func (s *Versioning3Suite) testRetryNoBounceBack(env *VersioningTestEnv, testCon
 
 	// Verify that the rollback propagated to all partitions
 	s.Await(func(s *Versioning3Suite) {
-		ms, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(s.Context(), &matchingservice.GetTaskQueueUserDataRequest{
+		ms, err := env.Cluster().MatchingClient().GetTaskQueueUserData(s.Context(), &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv0.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
@@ -4500,7 +4500,7 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 
 	// No version exists in the task queue's userData as of now
 	s.Await(func(s *Versioning3Suite) {
-		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(s.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		resp, err := env.Cluster().MatchingClient().CheckTaskQueueVersionMembership(s.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv1.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
@@ -4522,7 +4522,7 @@ func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
 
 	// The version should eventually show up in the task queue's user data
 	s.Await(func(s *Versioning3Suite) {
-		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(s.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		resp, err := env.Cluster().MatchingClient().CheckTaskQueueVersionMembership(s.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv1.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
@@ -4556,7 +4556,7 @@ func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 		}
 
 		deploymentName := tvVersion.DeploymentVersion().GetDeploymentName()
-		_, err := env.GetTestCluster().MatchingClient().SyncDeploymentUserData(
+		_, err := env.Cluster().MatchingClient().SyncDeploymentUserData(
 			s.Context(), &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:        env.NamespaceID().String(),
 				TaskQueue:          tv.TaskQueue().GetName(),
@@ -4762,7 +4762,7 @@ func (s *Versioning3Suite) TestVersionedQueueUnload() {
 				return
 			case <-ticker.C:
 				smallCtx, cancel := context.WithTimeout(s.Context(), 200*time.Millisecond)
-				_, _ = env.GetTestCluster().MatchingClient().GetTaskQueueUserData(smallCtx, &matchingservice.GetTaskQueueUserDataRequest{
+				_, _ = env.Cluster().MatchingClient().GetTaskQueueUserData(smallCtx, &matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   env.NamespaceID().String(),
 					OnlyIfLoaded:  false,
 					TaskQueue:     tv1.TaskQueue().GetName(),

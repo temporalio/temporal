@@ -69,7 +69,7 @@ func newChasmTestEnv(suiteContext func() context.Context, t *testing.T, unified 
 		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
 	)
 
-	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(suiteContext())
+	chasmCtx, err := env.ChasmContext(suiteContext())
 	require.NoError(t, err)
 
 	return chasmTestEnv{TestEnv: env, chasmCtx: chasmCtx}

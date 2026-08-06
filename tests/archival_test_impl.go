@@ -164,7 +164,7 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 		visibilityProvider,
 		customHistoryArchiverFactory,
 		customVisibilityArchiverFactory,
-		ae.GetTestCluster().ExecutionManager(),
+		ae.Cluster().ExecutionManager(),
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
@@ -384,7 +384,7 @@ func (s *ArchivalSuite) historyIsDeleted(env *archivalTestEnv, workflowInfo arch
 	)
 
 	s.Eventually(func() bool {
-		_, err := env.GetTestCluster().TestBase().ExecutionManager.ReadHistoryBranch(
+		_, err := env.Cluster().TestBase().ExecutionManager.ReadHistoryBranch(
 			s.Context(),
 			&persistence.ReadHistoryBranchRequest{
 				ShardID:       shardID,
@@ -415,7 +415,7 @@ func (s *ArchivalSuite) mutableStateIsDeleted(env *archivalTestEnv, namespaceID 
 	}
 
 	s.Eventually(func() bool {
-		_, err := env.GetTestCluster().TestBase().ExecutionManager.GetWorkflowExecution(s.Context(), request)
+		_, err := env.Cluster().TestBase().ExecutionManager.GetWorkflowExecution(s.Context(), request)
 		if common.IsNotFoundError(err) {
 			return true
 		}

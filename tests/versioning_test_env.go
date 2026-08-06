@@ -187,7 +187,7 @@ func (env *VersioningTestEnv) pollAndDispatchNexusTask(
 	tv *testvars.TestVars,
 	nexusRequest *matchingservice.DispatchNexusTaskRequest,
 ) {
-	matchingClient := env.GetTestCluster().MatchingClient()
+	matchingClient := env.Cluster().MatchingClient()
 
 	nexusCompleted := make(chan any)
 	env.pollNexusTaskAndHandle(s, tv, false, nexusCompleted,
@@ -574,7 +574,7 @@ func (env *VersioningTestEnv) getTaskQueueDeploymentData(
 	ctx, cancel := context.WithTimeout(s.Context(), time.Second*5)
 	defer cancel()
 
-	resp, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(
+	resp, err := env.Cluster().MatchingClient().GetTaskQueueUserData(
 		ctx, &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
@@ -598,7 +598,7 @@ func (env *VersioningTestEnv) syncTaskQueueDeploymentDataWithRoutingConfig(
 	deploymentName := tv.DeploymentVersion().GetDeploymentName()
 	var err error
 
-	_, err = env.GetTestCluster().MatchingClient().SyncDeploymentUserData(
+	_, err = env.Cluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
 			NamespaceId:         env.NamespaceID().String(),
 			TaskQueue:           tv.TaskQueue().GetName(),
@@ -633,7 +633,7 @@ func (env *VersioningTestEnv) rollbackTaskQueueToVersion(
 
 	// Verify that the rollback propagated to all partitions
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ms, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(t.Context(), &matchingservice.GetTaskQueueUserDataRequest{
+		ms, err := env.Cluster().MatchingClient().GetTaskQueueUserData(t.Context(), &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
@@ -671,7 +671,7 @@ func (env *VersioningTestEnv) syncTaskQueueDeploymentData(
 		rampingSinceTime = routingUpdateTime
 	}
 
-	_, err := env.GetTestCluster().MatchingClient().SyncDeploymentUserData(
+	_, err := env.Cluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
 			NamespaceId:    env.NamespaceID().String(),
 			TaskQueue:      tv.TaskQueue().GetName(),
@@ -704,7 +704,7 @@ func (env *VersioningTestEnv) forgetDeploymentVersionsFromDeploymentData(
 	if forgetUnversionedRamp {
 		v.BuildId = ""
 	}
-	_, err := env.GetTestCluster().MatchingClient().SyncDeploymentUserData(
+	_, err := env.Cluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
 			NamespaceId:    env.NamespaceID().String(),
 			TaskQueue:      tv.TaskQueue().GetName(),
@@ -728,7 +728,7 @@ func (env *VersioningTestEnv) forgetTaskQueueDeploymentVersion(
 	if forgetUnversionedRamp {
 		v.BuildId = ""
 	}
-	_, err := env.GetTestCluster().MatchingClient().SyncDeploymentUserData(
+	_, err := env.Cluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
 			NamespaceId:    env.NamespaceID().String(),
 			TaskQueue:      tv.TaskQueue().GetName(),
@@ -1094,7 +1094,7 @@ func (env *VersioningTestEnv) verifyWorkflowStickyQueue(
 	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 ) {
-	ms, err := env.GetTestCluster().HistoryClient().GetMutableState(
+	ms, err := env.Cluster().HistoryClient().GetMutableState(
 		s.Context(), &historyservice.GetMutableStateRequest{
 			NamespaceId: env.NamespaceID().String(),
 			Execution:   tv.WorkflowExecution(),
@@ -1131,7 +1131,7 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 	unversionedRamp bool,
 	tqTypes ...enumspb.TaskQueueType,
 ) {
-	v := env.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
+	v := env.DynamicConfigValues(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
 	s.Require().NotEmpty(v, "versioning tests require setting explicit number of partitions")
 	count, ok := v[0].Value.(int)
 	s.Require().True(ok, "partition count is not an int")
@@ -1154,7 +1154,7 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
-			res, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(
+			res, err := env.Cluster().MatchingClient().GetTaskQueueUserData(
 				t.Context(),
 				&matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   env.NamespaceID().String(),
@@ -1302,7 +1302,7 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 // TODO (future improvement): This can be further extended to validate the presence of any version instead of using the GetTaskQueueUserData RPC.
 func (env *VersioningTestEnv) validatePinnedVersionExistsInTaskQueue(s parallelsuite.Scope, tv *testvars.TestVars) {
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(t.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		resp, err := env.Cluster().MatchingClient().CheckTaskQueueVersionMembership(t.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,

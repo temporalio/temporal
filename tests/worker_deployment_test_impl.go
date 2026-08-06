@@ -2307,7 +2307,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 	// versioning info has been propagated correctly by checking the current/ramping versions
 	for j := range numTaskQueues {
 		tqTV := env.Tv().WithTaskQueueNumber(j)
-		tqUD, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(s.Context(), &matchingservice.GetTaskQueueUserDataRequest{
+		tqUD, err := env.Cluster().MatchingClient().GetTaskQueueUserData(s.Context(), &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueueType: tqTypeWf,
 			TaskQueue:     tqTV.TaskQueue().GetName(),

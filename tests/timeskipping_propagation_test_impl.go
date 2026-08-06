@@ -782,7 +782,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 			"WorkflowExecutionExpirationTime, when set, lives in the virtual frame and is shifted by accum")
 	}
 
-	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
+	recorder := env.HistoryTaskRecorder()
 	s.NotNil(recorder)
 	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
 		NamespaceID: env.NamespaceID().String(),
@@ -908,7 +908,7 @@ func (s *TimeSkippingPropagationTestSuite) getMutableState(env *testcore.TestEnv
 		workflowID,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
+	ms, err := env.Cluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: env.NamespaceID().String(),
 		WorkflowID:  workflowID,

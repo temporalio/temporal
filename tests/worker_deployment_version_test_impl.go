@@ -3068,7 +3068,7 @@ func (s *DeploymentVersionSuite) getTaskQueueDeploymentData(
 ) *persistencespb.DeploymentData {
 	ctx, cancel := context.WithTimeout(s.Context(), time.Second*5)
 	defer cancel()
-	resp, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(
+	resp, err := env.Cluster().MatchingClient().GetTaskQueueUserData(
 		ctx,
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   env.NamespaceID().String(),
