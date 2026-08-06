@@ -92,6 +92,8 @@ func TestMixedBrain(t *testing.T) {
 
 	currentLog := filepath.Join(logRoot, "mixedbrain_process-current.log")
 	releaseLog := filepath.Join(logRoot, "mixedbrain_process-release.log")
+	currentMetricsEndpoint := allocateMetricsEndpoint(t)
+	releaseMetricsEndpoint := allocateMetricsEndpoint(t)
 
 	var releaseTag string
 	t.Run("setup", func(t *testing.T) {
@@ -131,7 +133,7 @@ func TestMixedBrain(t *testing.T) {
 
 	t.Run("start current server", func(st *testing.T) {
 		// Server processes use the parent t so their context survives this sub-test.
-		currentSrv, currentLogFile = startDevServer(t, "current", currentLog, devserver.Options{
+		currentSrv, currentLogFile = startMetricsDevServer(t, "current", currentLog, currentMetricsEndpoint, devserver.Options{
 			SourceDir:   sourceRoot(),
 			Persistence: persistence,
 		})
@@ -153,7 +155,7 @@ func TestMixedBrain(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 
 	t.Run("start release server", func(_ *testing.T) {
-		releaseSrv, releaseLogFile = startDevServer(t, "release", releaseLog, devserver.Options{
+		releaseSrv, releaseLogFile = startMetricsDevServer(t, "release", releaseLog, releaseMetricsEndpoint, devserver.Options{
 			Ref:         releaseTag,
 			Persistence: persistence,
 			ClusterEndpoint: devserver.ClusterEndpoint{
@@ -204,6 +206,23 @@ func TestMixedBrain(t *testing.T) {
 		}
 	})
 
+	t.Run("scan metric schemas", func(st *testing.T) {
+		currentSchemas, err := fetchMetricSchemas(st.Context(), currentMetricsEndpoint)
+		require.NoError(st, err)
+		releaseSchemas, err := fetchMetricSchemas(st.Context(), releaseMetricsEndpoint)
+		require.NoError(st, err)
+		require.NotEmpty(st, currentSchemas, "current server metrics scrape was empty")
+		require.NotEmpty(st, releaseSchemas, "release server metrics scrape was empty")
+		require.True(st, hasMetric(currentSchemas, "task_requests", "task_requests_total"),
+			"current server did not emit task_requests metrics")
+		require.True(st, hasMetric(releaseSchemas, "task_requests", "task_requests_total"),
+			"release server did not emit task_requests metrics")
+
+		for _, problem := range metricSchemaProblems(currentSchemas, releaseSchemas) {
+			st.Error(problem)
+		}
+	})
+
 	// Stop the servers so their logs are fully flushed, then scan them for
 	// panics, soft-assertion failures, and other problems that don't surface as
 	// a process exit. Runs regardless of whether "verify" failed, since a crashed
@@ -220,6 +239,15 @@ func TestMixedBrain(t *testing.T) {
 			st.Error(p)
 		}
 	})
+}
+
+func hasMetric(schemas metricSchemas, names ...string) bool {
+	for _, name := range names {
+		if _, ok := schemas[name]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // runOmes runs the given Omes scenario against serverAddr under the given run ID.
