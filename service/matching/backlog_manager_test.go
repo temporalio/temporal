@@ -544,6 +544,72 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() 
 	s.Zero(db.getTotalApproximateBacklogCount())
 }
 
+// Tasks acked while a gc pass is in flight skip their own gc because inGC is set, and gc is
+// otherwise only triggered by completeTask. The finishing pass has to notice that the ack level
+// moved, or those rows sit in the store until the next task completes.
+func (s *BacklogManagerTestSuite) TestGCResumesAfterAckDuringInFlightGC() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+
+	// GC on every ack, so the batch size limit doesn't hide the behavior under test.
+	s.cfgcli.OverrideValue(dynamicconfig.MatchingMaxTaskDeleteBatchSize.Key(), 1)
+
+	blm := s.blm.(*priBacklogManagerImpl)
+	queue := s.ptqMgr.QueueKey()
+
+	s.setupToCaptureTasks()
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	tr := blm.subqueues[subqueueZero]
+
+	const taskCount = 3
+	for range taskCount {
+		s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}))
+	}
+	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == taskCount },
+		5*time.Second, 10*time.Millisecond)
+	tasks := s.capturedTasks()
+
+	// Ack the first task normally and let its gc pass settle, so gc starts caught up.
+	tasks[0].finish(taskFinishResult{consumedToken: true})
+	await.RequireTrue(s.T(), func() bool {
+		tr.lock.Lock()
+		defer tr.lock.Unlock()
+		return !tr.inGC && tr.gcAckLevel == tr.ackLevel
+	}, 5*time.Second, 10*time.Millisecond)
+	s.Equal(taskCount-1, s.taskMgr.getTaskCount(queue))
+
+	// Now hold a gc pass open and ack the rest. Each of those acks advances the ack level but
+	// skips its own gc.
+	tr.lock.Lock()
+	tr.inGC = true
+	inFlightAckLevel := tr.ackLevel
+	tr.lock.Unlock()
+
+	for _, t := range tasks[1:] {
+		t.finish(taskFinishResult{consumedToken: true})
+	}
+
+	tr.lock.Lock()
+	s.Greater(tr.ackLevel, inFlightAckLevel, "acks should have advanced the ack level")
+	tr.lock.Unlock()
+
+	// Complete the in-flight pass at the level it captured. It must start another pass for the
+	// tasks acked in the meantime.
+	tr.doGC(inFlightAckLevel)
+
+	await.RequireTruef(s.T(), func() bool { return s.taskMgr.getTaskCount(queue) == 0 },
+		5*time.Second, 10*time.Millisecond,
+		"gc should resume for tasks acked during the in-flight pass")
+}
+
 func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 	if !s.newMatcher {
 		s.T().Skip("SyncState is only used by the new backlog manager")
