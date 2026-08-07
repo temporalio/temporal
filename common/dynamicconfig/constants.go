@@ -2740,7 +2740,22 @@ the number of children greater than or equal to this threshold`,
 	ReplicationTaskApplyTimeout = NewGlobalDurationSetting(
 		"history.ReplicationTaskApplyTimeout",
 		20*time.Second,
-		`ReplicationTaskApplyTimeout is the context timeout for replication task apply`,
+		`ReplicationTaskApplyTimeout is the context timeout for replication task apply, and for the
+standby CloseExecutionTask's child-to-parent completion verification`,
+	)
+	ParentWorkflowResendMaxInFlight = NewGlobalIntSetting(
+		"history.parentWorkflowResendMaxInFlight",
+		8,
+		`ParentWorkflowResendMaxInFlight caps how many parent workflow resends a shard may run
+concurrently when EnableAsyncParentWorkflowResend is on. Attempts beyond the cap are dropped; the
+verifying task retries. This bounds the goroutines this path can create per shard.`,
+	)
+	EnableAsyncParentWorkflowResend = NewGlobalBoolSetting(
+		"history.enableAsyncParentWorkflowResend",
+		false,
+		`EnableAsyncParentWorkflowResend controls whether the standby child-to-parent completion
+verification resends the parent workflow in the background rather than inline, so the verifying task
+is not held for the duration of the cross-cluster sync.`,
 	)
 	ReplicationTaskFetcherParallelism = NewGlobalIntSetting(
 		"history.ReplicationTaskFetcherParallelism",

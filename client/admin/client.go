@@ -19,6 +19,9 @@ const (
 	DefaultTimeout = 10 * time.Second * debug.TimeoutMultiplier
 	// DefaultLargeTimeout is the default timeout used to make calls
 	DefaultLargeTimeout = time.Minute * debug.TimeoutMultiplier
+	// DefaultStateSyncTimeout is a backstop for SyncWorkflowState, which ships a workflow's state
+	// across clusters. Callers set the real deadline; the smaller one wins.
+	DefaultStateSyncTimeout = 10 * time.Minute * debug.TimeoutMultiplier
 )
 
 type clientImpl struct {
@@ -42,6 +45,10 @@ func NewClient(
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
+}
+
+func (c *clientImpl) createContextWithStateSyncTimeout(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, DefaultStateSyncTimeout)
 }
 
 func (c *clientImpl) createContextWithLargeTimeout(parent context.Context) (context.Context, context.CancelFunc) {
