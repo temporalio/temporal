@@ -3932,6 +3932,12 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return nil
 	}
 
+	if startWorkflow.WorkflowId == "" {
+		return workflow.ErrWorkflowIDNotSet
+	}
+
+	// The scheduler may append a timestamp to the workflow ID, so check the length limit
+	// against the longest ID it can produce.
 	if err := wh.validator.ValidateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
 		return err
 	}

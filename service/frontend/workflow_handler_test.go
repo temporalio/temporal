@@ -5192,6 +5192,64 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime
 	}
 }
 
+func (s *WorkflowHandlerSuite) TestCreateSchedule_StartWorkflowValidation() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	newRequest := func(startWorkflow *workflowpb.NewWorkflowExecutionInfo) *workflowservice.CreateScheduleRequest {
+		return &workflowservice.CreateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			RequestId:  uuid.NewString(),
+			Schedule: &schedulepb.Schedule{
+				Action: &schedulepb.ScheduleAction{
+					Action: &schedulepb.ScheduleAction_StartWorkflow{
+						StartWorkflow: startWorkflow,
+					},
+				},
+			},
+		}
+	}
+
+	s.Run("empty workflow ID should return error", func() {
+		request := newRequest(&workflowpb.NewWorkflowExecutionInfo{
+			WorkflowId:   "",
+			WorkflowType: &commonpb.WorkflowType{Name: "test-workflow-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+
+		resp, err := wh.CreateSchedule(ctx, request)
+		s.Nil(resp)
+		s.Equal(workflow.ErrWorkflowIDNotSet, err)
+	})
+
+	s.Run("workflow ID too long should return error", func() {
+		request := newRequest(&workflowpb.NewWorkflowExecutionInfo{
+			WorkflowId:   strings.Repeat("a", config.MaxIDLengthLimit()),
+			WorkflowType: &commonpb.WorkflowType{Name: "test-workflow-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+
+		resp, err := wh.CreateSchedule(ctx, request)
+		s.Nil(resp)
+		s.ErrorContains(err, "WorkflowId exceeds maximum allowed length")
+	})
+
+	s.Run("missing workflow type should return error", func() {
+		request := newRequest(&workflowpb.NewWorkflowExecutionInfo{
+			WorkflowId: "test-workflow-id",
+			TaskQueue:  &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+
+		resp, err := wh.CreateSchedule(ctx, request)
+		s.Nil(resp)
+		s.Equal(errWorkflowTypeNotSet, err)
+	})
+}
+
 func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 	config := s.newConfig()
 	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
