@@ -140,6 +140,10 @@ func (s *componentRefSuite) TestForConsistencyLevel() {
 	testCases := []struct {
 		name  string
 		level RefConsistencyLevel
+		// archetypeID overrides the ref's archetype; the zero value keeps newRef's WorkflowArchetypeID.
+		archetypeID ArchetypeID
+		// wantErr, when set, is the error forConsistencyLevel must return (verify is then skipped).
+		wantErr error
 		// verify asserts the level-specific expectations on the original (orig) and adjusted refs.
 		verify func(orig, adjusted ComponentRef)
 	}{
@@ -174,12 +178,27 @@ func (s *componentRefSuite) TestForConsistencyLevel() {
 				s.Empty(adjusted.RunID)
 			},
 		},
+		{
+			// CurrentRun only makes sense for workflow executions (they have a run chain), so it is
+			// rejected for other archetypes.
+			name:        "CurrentRun is rejected for a non-workflow archetype",
+			level:       RefConsistencyLevelCurrentRun,
+			archetypeID: WorkflowArchetypeID + 1,
+			wantErr:     ErrInvalidRefConsistencyLevel,
+		},
 	}
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			ref := newRef()
+			if tc.archetypeID != UnspecifiedArchetypeID {
+				ref.archetypeID = tc.archetypeID
+			}
 			adjusted, err := ref.forConsistencyLevel(tc.level)
+			if tc.wantErr != nil {
+				s.ErrorIs(err, tc.wantErr)
+				return
+			}
 			s.NoError(err)
 			tc.verify(ref, adjusted)
 

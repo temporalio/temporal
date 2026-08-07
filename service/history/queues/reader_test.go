@@ -3,6 +3,7 @@ package queues
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -236,6 +237,43 @@ func (s *readerSuite) TestAppendSlices() {
 			))
 		}
 	}
+}
+
+func (s *readerSuite) TestAppendSlices_RaceWithLockedMutation() {
+	// Two slices so MoveToBack mutates list pointers (a no-op on a single element).
+	scopes := NewRandomScopes(2)
+	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
+
+	// An empty MaximumKey scope hits Back() without appending, so the locked
+	// mutator below can keep racing on the same list for every iteration.
+	emptyIncoming := NewSlice(
+		nil,
+		s.executableFactory,
+		s.monitor,
+		NewScope(NewRange(tasks.MaximumKey, tasks.MaximumKey), predicates.Universal[tasks.Task]()),
+		GrouperNamespaceID{},
+		noPredicateSizeLimit,
+		defaultMaxPendingKeys,
+		metrics.NoopMetricsHandler,
+	)
+
+	const iterations = 10000
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range iterations {
+			reader.Lock()
+			if e := reader.slices.Front(); e != nil {
+				reader.slices.MoveToBack(e)
+			}
+			reader.Unlock()
+		}
+	})
+	wg.Go(func() {
+		for range iterations {
+			reader.AppendSlices(emptyIncoming)
+		}
+	})
+	wg.Wait()
 }
 
 func (s *readerSuite) TestShrinkSlices() {

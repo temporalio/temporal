@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -33,18 +35,18 @@ import (
 // scaleState needs no lock. AddedTasks talks to the worker only via the atomic
 // batch counter and the wakeup channel, so it never blocks.
 type scaleManager struct {
-	partition          tqid.Partition
-	logger             log.Logger
-	metricsHandler     metrics.Handler
-	userDataManager    userDataManager
-	matchingClient     matchingservice.MatchingServiceClient
-	partitionScaler    PartitionScaler
-	batchSize          int64 // fixed at creation time
-	settings           dynamicconfig.TypedPropertyFn[dynamicconfig.PartitionScaleManagerSettings]
-	getWritePartitions dynamicconfig.IntPropertyFn
-	emitGaugeMetrics   dynamicconfig.BoolPropertyFn
-	timeSource         clock.TimeSource
-	background         *goro.Handle
+	partition              tqid.Partition
+	logger                 log.Logger
+	metricsHandler         metrics.Handler
+	userDataManager        userDataManager
+	matchingClient         matchingservice.MatchingServiceClient
+	partitionScaler        PartitionScaler
+	batchSize              int64 // fixed at creation time
+	settings               dynamicconfig.TypedPropertyFn[dynamicconfig.PartitionScaleManagerSettings]
+	getWritePartitions     dynamicconfig.IntPropertyFn
+	shouldEmitGaugeMetrics dynamicconfig.BoolPropertyFn
+	timeSource             clock.TimeSource
+	background             *goro.Handle
 
 	// owned by the worker goroutine after Start starts it
 	scaleState       *persistencespb.PartitionScaleState
@@ -77,19 +79,19 @@ func newScaleManager(
 	emitGaugeMetrics dynamicconfig.BoolPropertyFn,
 ) *scaleManager {
 	return &scaleManager{
-		partition:          partition,
-		logger:             log.With(logger, tag.ComponentPartitionScaler),
-		metricsHandler:     metricsHandler,
-		userDataManager:    userDataManager,
-		matchingClient:     matchingClient,
-		partitionScaler:    partitionScaler,
-		batchSize:          int64(settings().BatchSize),
-		settings:           settings,
-		getWritePartitions: getWritePartitions,
-		emitGaugeMetrics:   emitGaugeMetrics,
-		timeSource:         timeSource,
-		background:         goro.NewHandle(baseCtx),
-		wakeup:             make(chan struct{}, 1),
+		partition:              partition,
+		logger:                 log.With(logger, tag.ComponentPartitionScaler),
+		metricsHandler:         metricsHandler,
+		userDataManager:        userDataManager,
+		matchingClient:         matchingClient,
+		partitionScaler:        partitionScaler,
+		batchSize:              int64(settings().BatchSize),
+		settings:               settings,
+		getWritePartitions:     getWritePartitions,
+		shouldEmitGaugeMetrics: emitGaugeMetrics,
+		timeSource:             timeSource,
+		background:             goro.NewHandle(baseCtx),
+		wakeup:                 make(chan struct{}, 1),
 	}
 }
 
@@ -99,12 +101,8 @@ func (sm *scaleManager) Stop() {
 	}
 	sm.background.Cancel()
 	sm.partitionScaler.Stop()
-	if sm.emitGaugeMetrics() {
-		// this is unfortunate but at least allows max() across pods to get the right value
-		metrics.PartitionScaleRead.With(sm.metricsHandler).Record(float64(-1))
-		metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(float64(-1))
-		metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(float64(-1))
-	}
+	// this is unfortunate but at least allows max() across pods to get the right value
+	sm.emitGaugeMetricsIfEnabled(-1, -1, -1)
 }
 
 // Start is called when the root partitions's default queue has loaded its metadata.
@@ -230,10 +228,12 @@ func (sm *scaleManager) callScaler() {
 			sm.prevShadowTarget == target || // only log new changes
 			target <= 0 { // only log if scaler is enabled
 			// emit scale event metric as a heartbeat even if no shadow log
-			metrics.PartitionScaleEvents.With(sm.metricsHandler.
-				WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
+			metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 			return
 		}
+		// Untagged: read == write == 0 marks this as a shadow target rather than an applied one.
+		// Emit only when the target decision changed (like in real mode).
+		sm.emitGaugeMetricsIfEnabled(0, 0, float64(target))
 		sm.nextShadowLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
 		sm.prevShadowTarget = target
 	} else {
@@ -243,7 +243,7 @@ func (sm *scaleManager) callScaler() {
 			return
 		}
 
-		sm.setState(newState, settings)
+		sm.setState(newState, settings) // emits partition_scale_{read,write,target}
 	}
 
 	cooldown := time.Duration(float32(time.Second) / settings.MaxRate)
@@ -254,8 +254,15 @@ func (sm *scaleManager) callScaler() {
 		tag.Int32("prev-target", prevTarget),
 		tag.Int32("max-target", newState.MaxTarget),
 		tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
-	metrics.PartitionScaleEvents.With(sm.metricsHandler.
-		WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
+	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
+}
+
+func (sm *scaleManager) emitGaugeMetricsIfEnabled(read, write, target float64) {
+	if sm.shouldEmitGaugeMetrics() {
+		metrics.PartitionScaleRead.With(sm.metricsHandler).Record(read)
+		metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(write)
+		metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(target)
+	}
 }
 
 // releaseManagedState relinquishes a previously-applied managed scale target back
@@ -301,14 +308,55 @@ func (sm *scaleManager) setState(newState *persistencespb.PartitionScaleState, s
 		sm.userDataManager.SetPartitionScale(newInfo)
 	}
 
-	if sm.emitGaugeMetrics() {
-		metrics.PartitionScaleRead.With(sm.metricsHandler).Record(float64(newInfo.Read))
-		metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(float64(newInfo.Write))
-		metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(float64(sm.scaleState.GetTarget()))
-	}
+	sm.emitGaugeMetricsIfEnabled(float64(newInfo.Read), float64(newInfo.Write), float64(sm.scaleState.GetTarget()))
 }
 
-func (sm *scaleManager) describeRequest(id int32) *matchingservice.DescribeTaskQueuePartitionRequest {
+func (sm *scaleManager) versionsForDescribe() ([]string, error) {
+	// Get all the versions that this task queue has ever been a part of,
+	// they could have backlog even if not loaded, so we need to check them.
+	// Exclude drained versions because they definitely have no backlog.
+	//
+	// Also exclude deleted versions, even if they are not drained; if a
+	// non-drained version is deleted, the user killed all pollers and then
+	// force-deleted the version, explicitly abandoning it. The backlog can't
+	// be consumed by any existing pollers, so it should not prevent the partition
+	// from draining.
+	// If the user re-creates the version and the partition count does not scale
+	// back up to reach this backlog, the tasks will time out. That is reasonable
+	// given the force-delete, and better than the alternative of blocking partition
+	// scale down indefinitely.
+	userData, _, err := sm.userDataManager.GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	perType := userData.GetData().GetPerType()[int32(sm.partition.TaskType())]
+	versionsSet := make(map[string]struct{})
+	//nolint:staticcheck // SA1019: old deployment data remains supported during migration
+	for _, versionData := range perType.GetDeploymentData().GetVersions() {
+		version := versionData.GetVersion()
+		if version.GetDeploymentName() == "" || version.GetBuildId() == "" || // legacy version data may have version=nil for unversioned
+			versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED {
+			continue
+		}
+		versionsSet[worker_versioning.WorkerDeploymentVersionToStringV32(version)] = struct{}{}
+	}
+
+	for deploymentName, deploymentData := range perType.GetDeploymentData().GetDeploymentsData() {
+		for buildID, versionData := range deploymentData.GetVersions() {
+			if versionData.GetDeleted() || versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED {
+				continue
+			}
+			versionsSet[worker_versioning.BuildIDToStringV32(deploymentName, buildID)] = struct{}{}
+		}
+	}
+	versions := make([]string, 0, len(versionsSet))
+	for version := range versionsSet {
+		versions = append(versions, version)
+	}
+	return versions, nil
+}
+
+func (sm *scaleManager) describeRequest(id int32, versions []string) *matchingservice.DescribeTaskQueuePartitionRequest {
 	return &matchingservice.DescribeTaskQueuePartitionRequest{
 		NamespaceId: sm.partition.NamespaceId(),
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -317,11 +365,16 @@ func (sm *scaleManager) describeRequest(id int32) *matchingservice.DescribeTaskQ
 			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: id},
 		},
 		Versions: &taskqueuepb.TaskQueueVersionSelection{
+			BuildIds: versions,
+			// this is the default queue, equivalent to putting "" in the BuildIds list
 			Unversioned: true,
-			// TODO(dp)(carlydf): deal with inactive/deleted versions (use user data version info)
+			// versions list should already contain all the loaded per-version queues, we
+			// include AllActive too because it doesn't hurt and would cover recently-added
+			// versions in case the user data is stale for some reason
 			AllActive: true,
 		},
 		ReportInternalTaskQueueStatus: true,
+		OnlyIfLoaded:                  true,
 	}
 }
 
@@ -331,9 +384,15 @@ func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 	if read == 0 {
 		return
 	}
+	versions, err := sm.versionsForDescribe()
+	if err != nil {
+		return
+	}
 
 	prevBacklog := scaleState.GetBacklogCounts()
 	newBacklog := make([]byte, read)
+	// Preserve the last known backlog for partitions whose Describe call fails.
+	copy(newBacklog, prevBacklog)
 	backlogChanged := false
 
 	// check if we should evaluate drain state
@@ -346,9 +405,10 @@ func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 
 	for id := range read {
 		callCtx, cancel := context.WithTimeout(ctx, ioTimeout)
-		res, err := sm.matchingClient.DescribeTaskQueuePartition(callCtx, sm.describeRequest(id))
+		res, err := sm.matchingClient.DescribeTaskQueuePartition(callCtx, sm.describeRequest(id, versions))
 		cancel()
 		if err != nil {
+			// CONSIDER(carlydf): Emit a metric when an unloaded partition in the draining range blocks scale-down.
 			continue
 		}
 
