@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -354,6 +355,95 @@ func (s *workflowSuite) TestStart() {
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestStartKeepOriginalWorkflowID() {
+	// keep_original_workflow_id: the started workflow keeps the id from the action
+	// verbatim, with no nominal timestamp appended.
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Equal("myid", req.Request.WorkflowId)
+		// A verbatim id is reused by every action, so REJECT_DUPLICATE would reject
+		// every action after the first one.
+		s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.Request.WorkflowIdReusePolicy)
+		return nil, nil
+	})
+
+	s.run(&schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(55 * time.Minute),
+			}},
+		},
+		Action: s.defaultAction("myid"),
+		Policies: &schedulepb.SchedulePolicies{
+			KeepOriginalWorkflowId: true,
+		},
+	}, 2)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestStartKeepOriginalWorkflowIDAllowAllStillAppends() {
+	// ALLOW_ALL permits concurrent runs, which cannot share a workflow id, so it
+	// overrides keep_original_workflow_id.
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, req.Request.WorkflowIdReusePolicy)
+		return nil, nil
+	})
+
+	s.run(&schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(55 * time.Minute),
+			}},
+		},
+		Action: s.defaultAction("myid"),
+		Policies: &schedulepb.SchedulePolicies{
+			KeepOriginalWorkflowId: true,
+			OverlapPolicy:          enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 2)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func TestAppendsTimestamp(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		overlapPolicy          enumspb.ScheduleOverlapPolicy
+		keepOriginalWorkflowID bool
+		expected               bool
+	}{
+		{
+			name:          "default appends",
+			overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			expected:      true,
+		},
+		{
+			name:                   "keep original suppresses append",
+			overlapPolicy:          enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			keepOriginalWorkflowID: true,
+			expected:               false,
+		},
+		{
+			name:          "allow all appends",
+			overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			expected:      true,
+		},
+		{
+			name:                   "allow all overrides keep original",
+			overlapPolicy:          enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			keepOriginalWorkflowID: true,
+			expected:               true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, AppendsTimestamp(tc.overlapPolicy, tc.keepOriginalWorkflowID))
+		})
+	}
 }
 
 func (s *workflowSuite) TestInitialPatch() {

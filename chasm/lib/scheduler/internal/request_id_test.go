@@ -14,8 +14,16 @@ func TestGenerateWorkflowID(t *testing.T) {
 	baseWorkflowID := "my-workflow"
 	nominalTime := time.Date(2024, 6, 15, 10, 30, 45, 123456789, time.UTC)
 
-	actual := GenerateWorkflowID(baseWorkflowID, nominalTime)
+	actual := GenerateWorkflowID(baseWorkflowID, nominalTime, true)
 	require.Equal(t, "my-workflow-2024-06-15T10:30:45Z", actual)
+}
+
+func TestGenerateWorkflowID_KeepOriginal(t *testing.T) {
+	baseWorkflowID := "my-workflow"
+	nominalTime := time.Date(2024, 6, 15, 10, 30, 45, 123456789, time.UTC)
+
+	actual := GenerateWorkflowID(baseWorkflowID, nominalTime, false)
+	require.Equal(t, "my-workflow", actual)
 }
 
 func TestGenerateRequestID(t *testing.T) {

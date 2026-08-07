@@ -567,6 +567,11 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestListSchedulesFilterByScheduleId", func(t *testing.T) { t.Parallel(); testListSchedulesFilterByScheduleID(t, newContext) })
 	t.Run("TestBufferSizeReportedWhenBuffered", func(t *testing.T) { t.Parallel(); testBufferSizeReportedWhenBuffered(t, newContext) })
 	t.Run("TestBufferOneDeferredFiresAfterCompletion", func(t *testing.T) { t.Parallel(); testBufferOneDeferredFiresAfterCompletion(t, newContext) })
+	t.Run("TestKeepOriginalWorkflowID", func(t *testing.T) { t.Parallel(); testKeepOriginalWorkflowID(t, newContext) })
+	t.Run("TestKeepOriginalWorkflowIDAllowAllStillAppends", func(t *testing.T) {
+		t.Parallel()
+		testKeepOriginalWorkflowIDAllowAllStillAppends(t, newContext)
+	})
 }
 
 // testBufferSizeReportedWhenBuffered verifies that ScheduleInfo.BufferSize is
@@ -836,6 +841,103 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 			deferred.GetScheduleTime().AsTime().Sub(first.GetScheduleTime().AsTime()) == fastInterval
 	}, awaitTimeout, pollInterval,
 		"deferred fire must be the start buffered one interval after the first tick, not a later fresh action")
+}
+
+// testKeepOriginalWorkflowID verifies that SchedulePolicies.KeepOriginalWorkflowId
+// starts every action with the action's workflow id verbatim, with no nominal
+// timestamp appended.
+//
+// Reaching two runs is the substantive assertion, not just the id format: with a
+// reused id, a closed run with that id exists after the first action, so a
+// REJECT_DUPLICATE reuse policy would reject every subsequent action and the count
+// would stick at 1.
+func testKeepOriginalWorkflowID(t *testing.T, newContext contextFactory) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-keep-original-id")
+	wid := testcore.RandomizeStr("sched-keep-original-id-wf")
+	wt := testcore.RandomizeStr("sched-keep-original-id-wt")
+
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	ctx := newContext(s.Context())
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(fastInterval),
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			KeepOriginalWorkflowId: true,
+		},
+	})
+
+	await.RequireTruef(t, func() bool { return runs.Load() >= 2 },
+		awaitTimeout, pollInterval,
+		"a second action must start even though the first run already used this workflow id")
+
+	// Every started workflow used the id verbatim.
+	wfResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.Namespace().String(),
+		PageSize:  5,
+		Query:     fmt.Sprintf("WorkflowType = %q", wt),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, wfResp.Executions)
+	for _, ex := range wfResp.Executions {
+		require.Equal(t, wid, ex.Execution.WorkflowId,
+			"no timestamp should be appended when KeepOriginalWorkflowId is set")
+	}
+
+	// The schedule agrees: its recorded actions point at the verbatim id too.
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, desc.GetInfo().GetRecentActions())
+	for _, a := range desc.GetInfo().GetRecentActions() {
+		require.Equal(t, wid, a.GetStartWorkflowResult().GetWorkflowId())
+	}
+}
+
+// testKeepOriginalWorkflowIDAllowAllStillAppends verifies that ALLOW_ALL overrides
+// the opt-out: concurrent runs cannot share a workflow id, so the timestamp is
+// still appended.
+func testKeepOriginalWorkflowIDAllowAllStillAppends(t *testing.T, newContext contextFactory) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-keep-original-allow-all")
+	wid := testcore.RandomizeStr("sched-keep-original-allow-all-wf")
+	wt := testcore.RandomizeStr("sched-keep-original-allow-all-wt")
+
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	ctx := newContext(s.Context())
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(fastInterval),
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			KeepOriginalWorkflowId: true,
+			OverlapPolicy:          enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	})
+
+	await.RequireTruef(t, func() bool { return runs.Load() >= 2 },
+		awaitTimeout, pollInterval, "expected at least two actions to start")
+
+	wfResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.Namespace().String(),
+		PageSize:  5,
+		Query:     fmt.Sprintf("WorkflowType = %q", wt),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, wfResp.Executions)
+	for _, ex := range wfResp.Executions {
+		require.NotEqual(t, wid, ex.Execution.WorkflowId,
+			"ALLOW_ALL must still append a timestamp so concurrent runs get distinct ids")
+		require.True(t, strings.HasPrefix(ex.Execution.WorkflowId, wid+"-"),
+			"expected %q to be the base id plus a timestamp", ex.Execution.WorkflowId)
+	}
 }
 
 func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {

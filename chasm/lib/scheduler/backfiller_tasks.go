@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -227,7 +228,14 @@ func (b *BackfillerTaskHandler) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
-	workflowID := schedulerinternal.GenerateWorkflowID(scheduler.WorkflowID(), now)
+	workflowID := schedulerinternal.GenerateWorkflowID(
+		scheduler.WorkflowID(),
+		now,
+		legacyscheduler.AppendsTimestamp(
+			overlapPolicy,
+			scheduler.GetSchedule().GetPolicies().GetKeepOriginalWorkflowId(),
+		),
+	)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
