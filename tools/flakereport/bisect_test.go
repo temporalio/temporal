@@ -1,6 +1,7 @@
 package flakereport
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -295,9 +296,13 @@ func TestBuildObservations(t *testing.T) {
 		{Name: "TestFoo", Failed: false, RunID: 999},
 	}
 
-	obs := buildObservations("TestFoo", runs, commitOrderSlice, runToSHA)
+	index := buildTestRunIndex(summarizeTestRuns(runs), commitOrderSlice, runToSHA)
+	obs := buildObservations("TestFoo", index)
 
+	require.Equal(t, 12, index.tests["TestFoo"].totalRuns)
+	require.Equal(t, 4, index.tests["TestFoo"].failures)
 	require.Len(t, obs, 4, "should have one observation per commit with data")
+	require.Empty(t, buildObservations("TestMissing", index))
 
 	// Verify chronological ordering
 	for i := 1; i < len(obs); i++ {
@@ -348,14 +353,14 @@ func TestSelectTopFlakyTests(t *testing.T) {
 	t.Run("excludes tests below MinFailures threshold", func(t *testing.T) {
 		runs := makeRunsForTest("TestLowFails", 100, 2) // 2 failures: below minBisectFailures=5
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 10}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(summarizeTestRuns(runs), nil, nil), cfg)
 		assert.NotContains(t, result, "TestLowFails")
 	})
 
 	t.Run("excludes tests below MinRuns threshold", func(t *testing.T) {
 		runs := makeRunsForTest("TestFewRuns", 10, 6) // only 10 total runs: below minBisectRuns=30
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(summarizeTestRuns(runs), nil, nil), cfg)
 		assert.NotContains(t, result, "TestFewRuns")
 	})
 
@@ -366,7 +371,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 		runs = append(runs, makeRunsForTest("TestHighRate", 40, 20)...)
 		runs = append(runs, makeRunsForTest("TestLowRate", 40, 10)...)
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(summarizeTestRuns(runs), nil, nil), cfg)
 		require.GreaterOrEqual(t, len(result), 2)
 		assert.Equal(t, "TestHighRate", result[0])
 		assert.Equal(t, "TestLowRate", result[1])
@@ -378,7 +383,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 			runs = append(runs, makeRunsForTest("TestFlaky"+string(rune('A'+i)), 40, 10)...)
 		}
 		cfg := BisectConfig{TopN: 3, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(summarizeTestRuns(runs), nil, nil), cfg)
 		assert.Len(t, result, 3)
 	})
 
@@ -388,7 +393,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 			{Name: "TestSkipped", Skipped: true, Failed: true},
 		}
 		cfg := BisectConfig{TopN: 10, MinFailures: 1, MinRuns: 1}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(summarizeTestRuns(runs), nil, nil), cfg)
 		assert.NotContains(t, result, "TestSkipped")
 	})
 
@@ -402,7 +407,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 			runs = append(runs, TestRun{Name: "TestFlaky (retry 1)", Failed: true})
 		}
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(summarizeTestRuns(runs), nil, nil), cfg)
 		require.Len(t, result, 1)
 		assert.Equal(t, "TestFlaky", result[0])
 	})
@@ -508,7 +513,8 @@ func TestRunBisectForTestDirectionFilter(t *testing.T) {
 		MinProbability: 0.5,
 	}
 
-	report := runBisectForTest(cfg, "TestFoo", allRuns, commitOrderSlice, runToSHA, nil)
+	index := buildTestRunIndex(summarizeTestRuns(allRuns), commitOrderSlice, runToSHA)
+	report := runBisectForTest(cfg, "TestFoo", index, nil)
 
 	// The only high-probability transition point (sha5, where rate dropped 80%→0%) should be
 	// filtered out by the direction filter, leaving no actionable suspects.
@@ -547,12 +553,50 @@ func TestRunBisectForTestDirectionFilterKeepsIntroduction(t *testing.T) {
 		MinProbability: 0.5,
 	}
 
-	report := runBisectForTest(cfg, "TestFoo", allRuns, commitOrderSlice, runToSHA, nil)
+	index := buildTestRunIndex(summarizeTestRuns(allRuns), commitOrderSlice, runToSHA)
+	report := runBisectForTest(cfg, "TestFoo", index, nil)
 
 	require.False(t, report.Skipped, "report should not be skipped: a real introduction exists")
 	require.NotEmpty(t, report.TopSuspects)
 	assert.Equal(t, "sha3", report.TopSuspects[0].CommitSHA, "sha3 should be the top suspect")
 	assert.Greater(t, report.TopSuspects[0].Probability, 0.5)
+}
+
+func BenchmarkTestRunIndex(b *testing.B) {
+	const (
+		testCount   = 1000
+		commitCount = 20
+		runsPerTest = 100
+	)
+
+	commitOrderSlice := make([]string, commitCount)
+	runToSHA := make(map[int64]string, commitCount)
+	for i := range commitCount {
+		sha := fmt.Sprintf("sha-%d", i)
+		commitOrderSlice[i] = sha
+		runToSHA[int64(i)] = sha
+	}
+
+	runs := make([]TestRun, 0, testCount*runsPerTest)
+	for testIdx := range testCount {
+		name := fmt.Sprintf("Test%d", testIdx)
+		for runIdx := range runsPerTest {
+			runs = append(runs, TestRun{
+				Name:   name,
+				Failed: runIdx%10 == 0,
+				RunID:  int64(runIdx % commitCount),
+			})
+		}
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		index := buildTestRunIndex(summarizeTestRuns(runs), commitOrderSlice, runToSHA)
+		for testName := range index.tests {
+			buildObservations(testName, index)
+		}
+	}
 }
 
 // makeRunsForTest creates a slice of TestRun with the given total count and failure count.
@@ -566,4 +610,10 @@ func makeRunsForTest(name string, total, failures int) []TestRun {
 		}
 	}
 	return runs
+}
+
+func summarizeTestRuns(runs []TestRun) *testRunSummary {
+	summary := newTestRunSummary()
+	summary.add(runs)
+	return summary
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/tools/common/github"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -64,6 +65,11 @@ func NewCliApp() *cli.App {
 					Name:  "concurrency",
 					Value: defaultConcurrency,
 					Usage: "Number of parallel workers for artifact processing",
+				},
+				&cli.IntFlag{
+					Name:  "rps",
+					Value: github.DefaultAPIRPS,
+					Usage: "Maximum GitHub API requests per second",
 				},
 				&cli.StringFlag{
 					Name:  "output-dir",
@@ -141,55 +147,141 @@ func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID in
 	return runs, successfulRuns, nil
 }
 
-// collectArtifactJobs collects all artifact jobs from workflow runs
-func collectArtifactJobs(ctx context.Context, repo string, runs []github.Run, tempDir string) ([]ArtifactJob, error) {
-	fmt.Println("\n=== Collecting artifacts ===")
-	var jobs []ArtifactJob
-	totalArtifacts := 0
+type artifactRunResult struct {
+	index     int
+	run       github.Run
+	artifacts []github.Artifact
+	err       error
+}
 
-	for i, run := range runs {
-		artifacts, err := fetchRunArtifacts(ctx, repo, run.DatabaseID)
-		if err != nil {
-			fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", run.DatabaseID, err)
-			continue
-		}
+type artifactDiscoveryResult struct {
+	jobs []ArtifactJob
+	err  error
+}
 
-		if len(artifacts) == 0 {
-			fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): No test artifacts found\n",
-				i+1, len(runs), run.DatabaseID, run.CreatedAt.Format(time.RFC3339Nano))
-			continue
-		}
+type bisectPreparationResult struct {
+	preparation *bisectPreparation
+	err         error
+}
 
-		fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): Found %d artifacts\n",
-			i+1, len(runs), run.DatabaseID, run.CreatedAt.Format(time.RFC3339Nano), len(artifacts))
+type fetchRunArtifactsFunc func(context.Context, string, int64) ([]github.Artifact, error)
 
-		for _, artifact := range artifacts {
-			totalArtifacts++
-			jobs = append(jobs, ArtifactJob{
-				Repo:         repo,
-				RunID:        run.DatabaseID,
-				RunCreatedAt: run.CreatedAt,
-				Artifact:     artifact,
-				TempDir:      tempDir,
-				RunNumber:    i + 1,
-				TotalRuns:    len(runs),
-				ArtifactNum:  totalArtifacts,
+func streamArtifactJobs(
+	ctx context.Context,
+	repo string,
+	runs []github.Run,
+	tempDir string,
+) (<-chan ArtifactJob, <-chan artifactDiscoveryResult) {
+	return streamArtifactJobsWithFetcher(ctx, repo, runs, tempDir, fetchRunArtifacts)
+}
+
+func streamArtifactJobsWithFetcher(
+	ctx context.Context,
+	repo string,
+	runs []github.Run,
+	tempDir string,
+	fetchArtifacts fetchRunArtifactsFunc,
+) (<-chan ArtifactJob, <-chan artifactDiscoveryResult) {
+	jobs := make(chan ArtifactJob, defaultConcurrency)
+	done := make(chan artifactDiscoveryResult, 1)
+	runResults := make(chan artifactRunResult, defaultConcurrency)
+
+	go func() {
+		g, groupCtx := errgroup.WithContext(ctx)
+		g.SetLimit(defaultConcurrency)
+		for i, run := range runs {
+			g.Go(func() error {
+				artifacts, err := fetchArtifacts(groupCtx, repo, run.DatabaseID)
+				select {
+				case runResults <- artifactRunResult{index: i, run: run, artifacts: artifacts, err: err}:
+					return nil
+				case <-groupCtx.Done():
+					return groupCtx.Err()
+				}
 			})
 		}
+		_ = g.Wait()
+		close(runResults)
+	}()
+
+	go func() {
+		defer close(jobs)
+		result := artifactDiscoveryResult{}
+		artifactNum := 0
+		for runResult := range runResults {
+			if runResult.err != nil {
+				fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", runResult.run.DatabaseID, runResult.err)
+				continue
+			}
+			if len(runResult.artifacts) == 0 {
+				fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): No test artifacts found\n",
+					runResult.index+1, len(runs), runResult.run.DatabaseID, runResult.run.CreatedAt.Format(time.RFC3339Nano))
+				continue
+			}
+
+			fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): Found %d artifacts\n",
+				runResult.index+1, len(runs), runResult.run.DatabaseID,
+				runResult.run.CreatedAt.Format(time.RFC3339Nano), len(runResult.artifacts))
+			for _, artifact := range runResult.artifacts {
+				artifactNum++
+				job := ArtifactJob{
+					Repo:         repo,
+					RunID:        runResult.run.DatabaseID,
+					RunCreatedAt: runResult.run.CreatedAt,
+					Artifact:     artifact,
+					TempDir:      tempDir,
+					RunNumber:    runResult.index + 1,
+					TotalRuns:    len(runs),
+					ArtifactNum:  artifactNum,
+				}
+				result.jobs = append(result.jobs, job)
+				select {
+				case jobs <- job:
+				case <-ctx.Done():
+					result.err = ctx.Err()
+					done <- result
+					return
+				}
+			}
+		}
+		result.err = ctx.Err()
+		fmt.Printf("\nTotal artifacts discovered: %d\n", len(result.jobs))
+		done <- result
+	}()
+
+	return jobs, done
+}
+
+func processWorkflowArtifacts(
+	ctx context.Context,
+	repo string,
+	runs []github.Run,
+	tempDir string,
+	concurrency int,
+) ([]TestFailure, *testRunSummary, []ArtifactJob, int, error) {
+	if concurrency < 1 {
+		return nil, nil, nil, 0, fmt.Errorf("concurrency must be at least 1")
 	}
 
-	fmt.Printf("\nTotal artifacts to process: %d\n", totalArtifacts)
-	return jobs, nil
+	jobs, discoveryDone := streamArtifactJobs(ctx, repo, runs, tempDir)
+	failures, summary, processed, processErr := processArtifactStream(ctx, jobs, concurrency)
+	discovery := <-discoveryDone
+	if processErr != nil {
+		return nil, nil, discovery.jobs, processed, processErr
+	}
+	if discovery.err != nil {
+		return nil, nil, discovery.jobs, processed, discovery.err
+	}
+	return failures, summary, discovery.jobs, processed, nil
 }
 
 // buildReportSummary builds the complete report summary from processed data
 func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerReports []TestReport,
 	suiteReports []SuiteReport,
-	allFailures []TestFailure, allTestRuns []TestRun, runs []github.Run, successfulRuns int) *ReportSummary {
+	allFailures []TestFailure, totalTestRuns int, runs []github.Run, successfulRuns int) *ReportSummary {
 
 	// Calculate overall failure rate
 	overallFailureRate := 0.0
-	totalTestRuns := len(allTestRuns)
 	if totalTestRuns > 0 {
 		overallFailureRate = (float64(len(allFailures)) / float64(totalTestRuns)) * 1000.0
 	}
@@ -218,6 +310,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	workflowID := c.Int64("workflow-id")
 	maxLinks := c.Int("max-links")
 	concurrency := c.Int("concurrency")
+	rps := c.Int("rps")
 	outputDir := c.String("output-dir")
 	slackWebhook := c.String("slack-webhook")
 	runID := c.String("run-id")
@@ -233,6 +326,9 @@ func runGenerateCommand(c *cli.Context) (err error) {
 			sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
 		}
 	}()
+	if err := github.SetAPIRPS(rps); err != nil {
+		return err
+	}
 
 	fmt.Println("Starting flaky test report generation...")
 	fmt.Printf("Repository: %s\n", repo)
@@ -240,6 +336,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	fmt.Printf("Lookback days: %d\n", days)
 	fmt.Printf("Workflow ID: %d\n", workflowID)
 	fmt.Printf("Parallel workers: %d\n", concurrency)
+	fmt.Printf("GitHub API requests per second: %d\n", rps)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
@@ -267,23 +364,49 @@ func runGenerateCommand(c *cli.Context) (err error) {
 		}
 	}()
 
-	// Collect all artifacts
-	jobs, err := collectArtifactJobs(ctx, repo, runs, tempDir)
-	if err != nil {
-		return err
+	var bisectCfg BisectConfig
+	var bisectPreparationDone <-chan bisectPreparationResult
+	if runBisect {
+		bisectCfg = BisectConfig{
+			Repo:           repo,
+			TopN:           bisectTopN,
+			MinFailures:    minBisectFailures,
+			MinRuns:        minBisectRuns,
+			MinProbability: bisectMinProbability,
+		}
+		preparationDone := make(chan bisectPreparationResult, 1)
+		bisectPreparationDone = preparationDone
+		go func() {
+			bisectRuns := runs
+			if bisectDays > days {
+				bisectSince := now.AddDate(0, 0, -bisectDays)
+				fmt.Printf("Fetching incremental runs for bisect (days %d–%d)...\n", days, bisectDays)
+				extraRuns, _, extraErr := fetchAndAnalyzeWorkflowRuns(ctx, repo, workflowID, branch, bisectSince, reportSince)
+				if extraErr != nil {
+					fmt.Printf("Warning: Failed to fetch bisect runs: %v\n", extraErr)
+				} else {
+					bisectRuns = append(extraRuns, runs...)
+				}
+			}
+			preparation, prepErr := prepareBisectAnalysis(ctx, bisectCfg, bisectRuns)
+			preparationDone <- bisectPreparationResult{preparation: preparation, err: prepErr}
+		}()
 	}
 
-	// Process artifacts in parallel
-	fmt.Println("\n=== Processing artifacts in parallel ===")
-	allFailures, allTestRuns, processedArtifacts := processArtifactsParallel(ctx, jobs, concurrency)
+	// Discover, download, and parse artifacts as a bounded pipeline.
+	fmt.Println("\n=== Discovering and processing artifacts ===")
+	allFailures, testRuns, jobs, processedArtifacts, err := processWorkflowArtifacts(ctx, repo, runs, tempDir, concurrency)
+	if err != nil {
+		return fmt.Errorf("failed to process artifacts: %w", err)
+	}
 
 	fmt.Println("\n=== Processing Results ===")
-	fmt.Printf("Total test runs: %d\n", len(allTestRuns))
+	fmt.Printf("Total test runs: %d\n", testRuns.totalRuns)
 	fmt.Printf("Total test failures found: %d\n", len(allFailures))
 	fmt.Printf("Processed artifacts: %d\n", processedArtifacts)
 
 	// Count test runs by name for failure rate calculation
-	testRunCounts := countTestRuns(allTestRuns)
+	testRunCounts := testRuns.countsByTest()
 
 	// Group failures by test name, then remove parent entries whose subtests were observed.
 	grouped := groupFailuresByTest(allFailures)
@@ -309,43 +432,29 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, len(runs), repo, maxLinks, reportWindow)
 
 	// Compute suite-level breakdown
-	suiteReports := generateSuiteReports(allFailures, allTestRuns)
+	suiteReports := generateSuiteReports(allFailures, testRuns.suiteRuns)
 	fmt.Printf("Suites: %d\n", len(suiteReports))
 
 	// Build summary
 	summary := buildReportSummary(
 		flakyReports, timeoutReports, crashReports, ciBreakerReports,
 		suiteReports,
-		allFailures, allTestRuns, runs, successfulRuns,
+		allFailures, testRuns.totalRuns, runs, successfulRuns,
 	)
 
 	// Optionally run Bayesian bisect analysis
 	var bisectReports []TestBisectReport
 	if runBisect {
 		fmt.Println("\n=== Running Bayesian bisect analysis ===")
-		// Extend the run set with the incremental window (days→bisectDays) to avoid
-		// re-fetching runs we already have from the report window.
-		bisectRuns := runs
-		if bisectDays > days {
-			bisectSince := now.AddDate(0, 0, -bisectDays)
-			fmt.Printf("Fetching incremental runs for bisect (days %d–%d)...\n", days, bisectDays)
-			extraRuns, _, extraErr := fetchAndAnalyzeWorkflowRuns(ctx, repo, workflowID, branch, bisectSince, reportSince)
-			if extraErr != nil {
-				fmt.Printf("Warning: Failed to fetch bisect runs: %v\n", extraErr)
-			} else {
-				bisectRuns = append(extraRuns, runs...)
+		preparationResult := <-bisectPreparationDone
+		if preparationResult.err != nil {
+			fmt.Printf("Warning: Bisect preparation failed: %v\n", preparationResult.err)
+		} else {
+			var analysisErr error
+			bisectReports, analysisErr = runPreparedBisectAnalysis(ctx, bisectCfg, testRuns, preparationResult.preparation)
+			if analysisErr != nil {
+				fmt.Printf("Warning: Bisect analysis failed: %v\n", analysisErr)
 			}
-		}
-		bisectCfg := BisectConfig{
-			Repo:           repo,
-			TopN:           bisectTopN,
-			MinFailures:    minBisectFailures,
-			MinRuns:        minBisectRuns,
-			MinProbability: bisectMinProbability,
-		}
-		bisectReports, err = runBisectAnalysis(ctx, bisectCfg, allTestRuns, bisectRuns)
-		if err != nil {
-			fmt.Printf("Warning: Bisect analysis failed: %v\n", err)
 		}
 	}
 

@@ -59,7 +59,7 @@ func fetchRunArtifacts(ctx context.Context, repo string, runID int64) ([]github.
 }
 
 // extractArtifactZip extracts zip file and returns paths to JUnit XML files
-func extractArtifactZip(zipPath, outputDir string) ([]string, error) {
+func extractArtifactZip(ctx context.Context, zipPath, outputDir string) ([]string, error) {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open zip file %s: %w", zipPath, err)
@@ -73,6 +73,9 @@ func extractArtifactZip(zipPath, outputDir string) ([]string, error) {
 	var xmlFiles []string
 
 	for _, f := range r.File {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		// Skip directories
 		if f.FileInfo().IsDir() {
 			continue
@@ -100,7 +103,7 @@ func extractArtifactZip(zipPath, outputDir string) ([]string, error) {
 		}
 
 		// Copy content
-		_, err = io.Copy(outFile, rc)
+		_, err = io.Copy(outFile, contextReader{ctx: ctx, reader: rc})
 		if closeErr := rc.Close(); closeErr != nil {
 			_ = outFile.Close()
 			return nil, fmt.Errorf("failed to close zip file reader: %w", closeErr)

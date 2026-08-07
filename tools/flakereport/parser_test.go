@@ -256,7 +256,9 @@ func TestGenerateSuiteReports(t *testing.T) {
 		{SuiteName: "TestHealthySuite", Name: "TestOk", RunID: 2, MatrixName: "db-a"},
 	}
 
-	reports := generateSuiteReports(failures, allRuns)
+	summary := newTestRunSummary()
+	summary.add(allRuns)
+	reports := generateSuiteReports(failures, summary.suiteRuns)
 
 	// Should have SuiteA and SuiteB (SuiteC is all skipped)
 	require.Len(t, reports, 2)

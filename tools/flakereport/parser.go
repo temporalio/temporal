@@ -1,8 +1,10 @@
 package flakereport
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -16,8 +18,22 @@ import (
 var finalRegex = regexp.MustCompile(`\s*\(final\)$`)
 var trailingSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
 
-// parseJUnitFile reads and parses a single JUnit XML file
-func parseJUnitFile(filePath string) (*junit.Testsuites, error) {
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	default:
+		return r.reader.Read(p)
+	}
+}
+
+// parseJUnitFile reads and parses a single JUnit XML file.
+func parseJUnitFile(ctx context.Context, filePath string) (*junit.Testsuites, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
@@ -29,14 +45,14 @@ func parseJUnitFile(filePath string) (*junit.Testsuites, error) {
 	}()
 
 	var testsuites junit.Testsuites
-	decoder := xml.NewDecoder(file)
+	decoder := xml.NewDecoder(contextReader{ctx: ctx, reader: file})
 	if err := decoder.Decode(&testsuites); err != nil {
 		// Try parsing as a single testsuite
 		if _, seekErr := file.Seek(0, 0); seekErr != nil {
 			return nil, fmt.Errorf("failed to seek file %s: %w", filePath, seekErr)
 		}
 		var testsuite junit.Testsuite
-		decoder = xml.NewDecoder(file)
+		decoder = xml.NewDecoder(contextReader{ctx: ctx, reader: file})
 		if err := decoder.Decode(&testsuite); err != nil {
 			return nil, fmt.Errorf("failed to parse JUnit XML %s: %w", filePath, err)
 		}
@@ -138,21 +154,6 @@ func groupFailuresByTest(failures []TestFailure) map[string][]TestFailure {
 	}
 
 	return grouped
-}
-
-// countTestRuns counts total runs (including successes) by normalized test name
-func countTestRuns(allRuns []TestRun) map[string]int {
-	counts := make(map[string]int)
-
-	for _, run := range allRuns {
-		// Only count non-skipped tests
-		if !run.Skipped {
-			normalizedName := normalizeTestName(run.Name)
-			counts[normalizedName]++
-		}
-	}
-
-	return counts
 }
 
 // classifyFailure returns "timeout", "crash", or "flaky" based on the test name.
@@ -332,10 +333,6 @@ func analyzeArtifactForCIBreakers(artifactID string, artifactFailures []TestFail
 		ciBreakers[normalized] = append(ciBreakers[normalized], failure)
 	}
 
-	for testName := range ciBreakers {
-		fmt.Printf("  CI BREAKER: %s (artifact %s)\n", testName, artifactID)
-	}
-
 	return ciBreakers
 }
 
@@ -413,35 +410,12 @@ func identifyCIBreakers(failures []TestFailure) (map[string][]TestFailure, map[s
 	return ciBreakers, ciBreakCount
 }
 
-// suiteRunKey returns a string that uniquely identifies a single (CI run × DB config) pair.
-// Each workflow run may spawn multiple matrix jobs sharing the same RunID but with distinct
-// MatrixNames (DB configs). Keying by (RunID, MatrixName) ensures shards belonging to the
-// same run+config are counted once, regardless of how many shard JobIDs they produce.
-func suiteRunKey(runID int64, matrixName string) string {
-	return fmt.Sprintf("%d:%s", runID, matrixName)
-}
-
 // generateSuiteReports creates per-suite flake breakdown from all failures and test runs.
 // Suite flake rate = % of (CI run × DB config) pairs where the suite had at least one
 // non-retry failure.
-func generateSuiteReports(allFailures []TestFailure, allTestRuns []TestRun) []SuiteReport {
-	// Track unique (CI run × DB config) pairs per suite (denominator).
-	// Using MatrixName avoids the inflation caused by per-shard JobIDs: suites whose
-	// test methods are spread across N shards would otherwise be counted N times per
-	// (run × DB config).
-	suiteRuns := make(map[string]map[string]bool)
-	for _, run := range allTestRuns {
-		if run.Skipped || !isGoTestSuite(run.SuiteName) {
-			continue
-		}
-		if suiteRuns[run.SuiteName] == nil {
-			suiteRuns[run.SuiteName] = make(map[string]bool)
-		}
-		suiteRuns[run.SuiteName][suiteRunKey(run.RunID, run.MatrixName)] = true
-	}
-
+func generateSuiteReports(allFailures []TestFailure, suiteRuns map[string]map[suiteRunIdentity]struct{}) []SuiteReport {
 	// Track (CI run × DB config) pairs with non-retry failures per suite (numerator)
-	suiteFailedRuns := make(map[string]map[string]bool)
+	suiteFailedRuns := make(map[string]map[suiteRunIdentity]struct{})
 	suiteLastFailure := make(map[string]time.Time)
 	for _, failure := range allFailures {
 		if !isGoTestSuite(failure.SuiteName) {
@@ -452,10 +426,10 @@ func generateSuiteReports(allFailures []TestFailure, allTestRuns []TestRun) []Su
 			continue
 		}
 		if suiteFailedRuns[failure.SuiteName] == nil {
-			suiteFailedRuns[failure.SuiteName] = make(map[string]bool)
+			suiteFailedRuns[failure.SuiteName] = make(map[suiteRunIdentity]struct{})
 		}
-		runKey := suiteRunKey(failure.RunID, failure.MatrixName)
-		suiteFailedRuns[failure.SuiteName][runKey] = true
+		run := suiteRunIdentity{runID: failure.RunID, matrixName: failure.MatrixName}
+		suiteFailedRuns[failure.SuiteName][run] = struct{}{}
 		if failure.Timestamp.After(suiteLastFailure[failure.SuiteName]) {
 			suiteLastFailure[failure.SuiteName] = failure.Timestamp
 		}
