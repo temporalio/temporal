@@ -46,6 +46,7 @@ type Config struct {
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog                            dynamicconfig.BoolPropertyFn
+	EmitImmediateQueueBacklogAge               dynamicconfig.BoolPropertyFn
 	EnableDataLossMetrics                      dynamicconfig.BoolPropertyFn
 	ThrottledLogRPS                            dynamicconfig.IntPropertyFn
 	EnableStickyQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -493,8 +494,9 @@ func NewConfig(
 		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
 		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
-		EmitShardLagLog:       dynamicconfig.EmitShardLagLog.Get(dc),
-		EnableDataLossMetrics: dynamicconfig.EnableDataLossMetrics.Get(dc),
+		EmitShardLagLog:              dynamicconfig.EmitShardLagLog.Get(dc),
+		EmitImmediateQueueBacklogAge: dynamicconfig.EmitImmediateQueueBacklogAge.Get(dc),
+		EnableDataLossMetrics:        dynamicconfig.EnableDataLossMetrics.Get(dc),
 		// HistoryCacheLimitSizeBased should not change during runtime.
 		HistoryCacheLimitSizeBased:                 dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
 		HistoryHostLevelCacheMaxSize:               dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),

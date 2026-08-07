@@ -1294,6 +1294,10 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 	immediateBacklogs := s.emitQueueLagMetrics(metricsHandler)
 
+	if !s.config.EmitImmediateQueueBacklogAge() {
+		return
+	}
+
 	// Immediate task keys carry no timestamp, so the age needs the task itself, read off the lock.
 	for _, backlog := range immediateBacklogs {
 		if s.lifecycleCtx.Err() != nil {
