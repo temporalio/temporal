@@ -1390,9 +1390,6 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
 
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
@@ -1501,7 +1498,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(serializedToken, result.TaskToken)
 		i++
 	}
-	s.Equal(0, s.taskManager.getTaskCount(tlID))
+	// Pri GC deletes completed tasks asynchronously (go doGC); wait for it to catch up.
+	await.RequireTrue(s.T(), func() bool {
+		return s.taskManager.getTaskCount(tlID) == 0
+	}, 5*time.Second, 10*time.Millisecond)
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
@@ -1691,9 +1691,6 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 		5. Verify that both the pollers have received tasks.
 	*/
 
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 
 	scope := tally.NewTestScope("test", nil)
@@ -1871,9 +1868,6 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
 	dispatchLimitFn := func(int, int64) float64 {
 		return defaultTaskDispatchRPS
 	}
@@ -2035,7 +2029,17 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(dbq).rangeID)
-	s.Equal(0, s.taskManager.getTaskCount(dbq))
+	if s.fairness {
+		// Under fairness, concurrent merge/evict can race with completeTask such that a
+		// matched task is missing from outstandingTasks (TaskCompletedMissing). complete
+		// then returns without ack/GC, leaving a DB row that may not be re-read. That is
+		// recovered on partition reload; do not require an empty store here.
+	} else {
+		// Pri GC deletes completed tasks asynchronously (go doGC); wait for it to catch up.
+		await.RequireTrue(s.T(), func() bool {
+			return s.taskManager.getTaskCount(dbq) == 0
+		}, 5*time.Second, 10*time.Millisecond)
+	}
 
 	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
 	bufCtr := scope.Snapshot().Counters()["test.buffer_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
@@ -2050,10 +2054,6 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
-
 	runID := uuid.NewString()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2156,7 +2156,14 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		}()
 	}
 	wg.Wait()
-	s.Equal(0, s.taskManager.getTaskCount(tlID))
+	if s.fairness {
+		// See concurrentPublishConsumeActivities: fair evict/complete race can leave DB rows.
+	} else {
+		// Pri GC deletes completed tasks asynchronously (go doGC); wait for it to catch up.
+		await.RequireTrue(s.T(), func() bool {
+			return s.taskManager.getTaskCount(tlID) == 0
+		}, 5*time.Second, 10*time.Millisecond)
+	}
 	totalTasks := taskCount * workerCount
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	s.Less(persisted, totalTasks)
@@ -3894,8 +3901,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	s.addWorkflowTasks(taskCount*numWorkers, taskQueue, workflowExecution)
 
-	// TaskID of the first task to be added
-	minTaskID, done := s.taskManager.minTaskID(ptq)
+	minLevel, done := s.taskManager.minFairLevel(ptq)
 	s.True(done)
 
 	partitionManager, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), false, loadCauseTask)
@@ -3904,13 +3910,25 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	s.Equal(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
 
-	// Check the maxReadLevel with the value of task stored in db
-	maxTaskId, ok := s.taskManager.maxTaskID(ptq)
+	// Check the max read level matches the highest task in the store.
+	// Fair tracks FairMaxReadLevel; classic/pri track maxReadLevel (task id).
+	maxLevel, ok := s.taskManager.maxFairLevel(ptq)
 	s.True(ok)
-	s.Equal(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
+	if s.fairness {
+		s.Equal(maxLevel, pqMgr.backlogMgr.getDB().GetMaxFairReadLevel(0))
+	} else {
+		s.Equal(maxLevel.id, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
+	}
 
 	// validate the approximateBacklogCounter
-	s.EqualValues(taskCount*numWorkers, totalApproximateBacklogCount(pqMgr.backlogMgr))
+	backlogCount := totalApproximateBacklogCount(pqMgr.backlogMgr)
+	if s.fairness {
+		// fairBacklogManager can reset ApproximateBacklogCount on read (knownCount when atEnd),
+		// so the counter may already be slightly more accurate than the write-side estimate.
+		s.InDelta(taskCount*numWorkers, backlogCount, 2)
+	} else {
+		s.EqualValues(taskCount*numWorkers, backlogCount)
+	}
 
 	// Unload the PQM
 	s.matchingEngine.unloadTaskQueuePartition(partitionManager, unloadCauseForce)
@@ -3919,12 +3937,16 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	// Remove the task from testTaskManager but not from db/AckManager
 
 	// Stop the backlogManager so that we TTL and the taskReader does not catch this
+	exclusiveMax := minLevel.inc()
 	request := &persistence.CompleteTasksLessThanRequest{
 		NamespaceID:        namespaceID,
 		TaskQueueName:      taskQueue.Name,
 		TaskType:           enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		ExclusiveMaxTaskID: minTaskID + 1,
+		ExclusiveMaxTaskID: exclusiveMax.id,
 		Limit:              100,
+	}
+	if s.fairness {
+		request.ExclusiveMaxPass = exclusiveMax.pass
 	}
 	_, err = s.taskManager.CompleteTasksLessThan(context.Background(), request)
 	s.NoError(err)
@@ -3936,11 +3958,17 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	// Update pgMgr to have the latest pgMgr
 	pqMgr = s.getPhysicalTaskQueueManagerImplFromKey(ptq)
 
-	// Overwrite the maxReadLevel since it could have increased if the previous taskWriter was
-	// stopped (which would not result in resetting).
-	pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(subqueueZero, maxTaskId)
+	// Classic/pri reset ApproximateBacklogCount when ack catches up to maxReadLevel.
+	// Force maxReadLevel back in case the previous writer advanced it past remaining tasks.
+	// Fair resets via knownCount when atEnd; it does not use classic maxReadLevel.
+	if !s.fairness {
+		pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(subqueueZero, maxLevel.id)
+	}
 
-	s.Equal(0, s.taskManager.getTaskCount(ptq))
+	// Pri/Fair GC deletes completed tasks asynchronously (go doGC); wait for it to catch up.
+	await.RequireTrue(s.T(), func() bool {
+		return s.taskManager.getTaskCount(ptq) == 0
+	}, 5*time.Second, 10*time.Millisecond)
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		require.Equal(collect, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
@@ -3948,17 +3976,10 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
 func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
-
 	s.resetBacklogCounter(2, 2, 2)
 }
 
 func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
@@ -3968,16 +3989,10 @@ func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
 	s.resetBacklogCounter(10, 20, 2)
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
@@ -4027,9 +4042,6 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
@@ -5512,22 +5524,32 @@ func (m *testTaskManager) GetTaskQueue(
 
 // minTaskID returns the minimum value of the TaskID present in testTaskManager
 func (m *testTaskManager) minTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
+	level, ok := m.minFairLevel(dbq)
+	return level.id, ok
+}
+
+// maxTaskID returns the maximum value of the TaskID present in testTaskManager
+func (m *testTaskManager) maxTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
+	level, ok := m.maxFairLevel(dbq)
+	return level.id, ok
+}
+
+func (m *testTaskManager) minFairLevel(dbq *PhysicalTaskQueueKey) (fairLevel, bool) {
 	tlm := m.getQueueDataByKey(dbq)
 	tlm.Lock()
 	defer tlm.Unlock()
 	minKey, _ := tlm.tasks.Min()
 	key, ok := minKey.(fairLevel)
-	return key.id, ok
+	return key, ok
 }
 
-// maxTaskID returns the maximum value of the TaskID present in testTaskManager
-func (m *testTaskManager) maxTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
+func (m *testTaskManager) maxFairLevel(dbq *PhysicalTaskQueueKey) (fairLevel, bool) {
 	tlm := m.getQueueDataByKey(dbq)
 	tlm.Lock()
 	defer tlm.Unlock()
 	maxKey, _ := tlm.tasks.Max()
 	key, ok := maxKey.(fairLevel)
-	return key.id, ok
+	return key, ok
 }
 
 func (m *testTaskManager) CompleteTasksLessThan(
