@@ -66,6 +66,8 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
+	// preserve workflow and request IDs assigned to starts migrated from CHASM
+	PreserveMigratedStartIDs = 13
 )
 
 const (
@@ -215,7 +217,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           TriggerImmediatelyTimestamp,
+		Version:                           PreserveMigratedStartIDs,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -1473,8 +1475,15 @@ func (s *scheduler) startWorkflow(
 	newWorkflow *workflowpb.NewWorkflowExecutionInfo,
 ) (*schedulepb.ScheduleActionResult, error) {
 	nominalTimeSec := start.NominalTime.AsTime().UTC().Truncate(time.Second)
-	workflowID := newWorkflow.WorkflowId
-	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp {
+	workflowID := ""
+	if s.hasMinVersion(PreserveMigratedStartIDs) {
+		workflowID = start.WorkflowId
+	}
+	if workflowID == "" {
+		workflowID = newWorkflow.WorkflowId
+	}
+	if (!s.hasMinVersion(PreserveMigratedStartIDs) || start.WorkflowId == "") &&
+		(start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp) {
 		// must match AppendedTimestampForValidation
 		workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
 	}
@@ -1510,6 +1519,13 @@ func (s *scheduler) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
+	requestID := ""
+	if s.hasMinVersion(PreserveMigratedStartIDs) {
+		requestID = start.RequestId
+	}
+	if requestID == "" {
+		requestID = s.newUUIDString()
+	}
 	req := &schedulespb.StartWorkflowRequest{
 		Request: &workflowservice.StartWorkflowExecutionRequest{
 			WorkflowId:               workflowID,
@@ -1520,7 +1536,7 @@ func (s *scheduler) startWorkflow(
 			WorkflowRunTimeout:       newWorkflow.WorkflowRunTimeout,
 			WorkflowTaskTimeout:      newWorkflow.WorkflowTaskTimeout,
 			Identity:                 s.identity(),
-			RequestId:                s.newUUIDString(),
+			RequestId:                requestID,
 			WorkflowIdReusePolicy:    reusePolicy,
 			RetryPolicy:              newWorkflow.RetryPolicy,
 			Memo:                     newWorkflow.Memo,
