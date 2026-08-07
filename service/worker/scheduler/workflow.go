@@ -66,6 +66,10 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
+	// reconcile running-workflow status before evaluating CHASM migration
+	// eligibility, so an actively-firing schedule can observe an empty
+	// RunningWorkflows window and migrate instead of deferring forever
+	RefreshBeforeMigrationCheck = 13
 )
 
 const (
@@ -215,7 +219,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           TriggerImmediatelyTimestamp,
+		Version: TriggerImmediatelyTimestamp,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -332,6 +336,13 @@ func (s *scheduler) run() error {
 				false,
 				nil,
 			)
+		}
+
+		if s.hasMinVersion(RefreshBeforeMigrationCheck) &&
+			s.tweakables.EnableCHASMMigration && !s.State.PendingMigration &&
+			s.State.NeedRefresh {
+			s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
+			s.State.NeedRefresh = false
 		}
 
 		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
