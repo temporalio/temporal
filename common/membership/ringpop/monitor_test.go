@@ -1,6 +1,7 @@
 package ringpop
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -22,6 +23,37 @@ type RpoSuite struct {
 func TestRpoSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(RpoSuite))
+}
+
+func TestDynamicDiscoverProviderHosts(t *testing.T) {
+	calls := 0
+	provider := dynamicDiscoverProvider{
+		bootstrapHostPortRetriever: func() ([]string, error) {
+			calls++
+			return []string{fmt.Sprintf("host-%d", calls)}, nil
+		},
+	}
+
+	hosts, err := provider.Hosts()
+	require.NoError(t, err)
+	require.Equal(t, []string{"host-1"}, hosts)
+
+	hosts, err = provider.Hosts()
+	require.NoError(t, err)
+	require.Equal(t, []string{"host-2"}, hosts)
+}
+
+func TestDynamicDiscoverProviderHostsReturnsError(t *testing.T) {
+	expectedErr := errors.New("failed to get bootstrap hosts")
+	provider := dynamicDiscoverProvider{
+		bootstrapHostPortRetriever: func() ([]string, error) {
+			return nil, expectedErr
+		},
+	}
+
+	hosts, err := provider.Hosts()
+	require.ErrorIs(t, err, expectedErr)
+	require.Nil(t, hosts)
 }
 
 func (s *RpoSuite) SetupTest() {
