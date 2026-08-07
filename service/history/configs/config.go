@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -281,6 +282,8 @@ type Config struct {
 
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
+	EnableAsyncParentWorkflowResend                      dynamicconfig.BoolPropertyFn
+	ParentWorkflowResendMaxInFlight                      dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherAggregationInterval            dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherTimerJitterCoefficient         dynamicconfig.FloatPropertyFn
@@ -317,6 +320,7 @@ type Config struct {
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
+	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
 	ReplicationStreamEventLoopRetryMaxAttempts          dynamicconfig.IntPropertyFn
@@ -418,6 +422,7 @@ type Config struct {
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
+	HealthCheckHistoryGRPCSettings      dynamicconfig.TypedPropertyFn[health.Settings]
 	HealthPersistenceLatencyFailure     dynamicconfig.FloatPropertyFn
 	HealthPersistenceLatencyPercentiles dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
 	HealthPersistenceErrorRatio         dynamicconfig.FloatPropertyFn
@@ -633,6 +638,7 @@ func NewConfig(
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
+		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
 		ReplicationStreamEventLoopRetryMaxAttempts:          dynamicconfig.ReplicationStreamEventLoopRetryMaxAttempts.Get(dc),
@@ -703,6 +709,8 @@ func NewConfig(
 		SendTransientOrSpeculativeWorkflowTaskEvents:     dynamicconfig.SendTransientOrSpeculativeWorkflowTaskEvents.Get(dc),
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
+		EnableAsyncParentWorkflowResend:              dynamicconfig.EnableAsyncParentWorkflowResend.Get(dc),
+		ParentWorkflowResendMaxInFlight:              dynamicconfig.ParentWorkflowResendMaxInFlight.Get(dc),
 		ReplicationTaskFetcherParallelism:            dynamicconfig.ReplicationTaskFetcherParallelism.Get(dc),
 		ReplicationTaskFetcherAggregationInterval:    dynamicconfig.ReplicationTaskFetcherAggregationInterval.Get(dc),
 		ReplicationTaskFetcherTimerJitterCoefficient: dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient.Get(dc),
@@ -811,6 +819,7 @@ func NewConfig(
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
 
+		HealthCheckHistoryGRPCSettings:      dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
 		HealthPersistenceLatencyFailure:     dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceLatencyPercentiles: dynamicconfig.PersistenceHealthSignalPercentileLatencySettings.Get(dc),
 		HealthPersistenceErrorRatio:         dynamicconfig.HealthPersistenceErrorRatio.Get(dc),

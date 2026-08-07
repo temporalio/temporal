@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/contextutil"
+	commonfailure "go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -1149,7 +1150,9 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	attempt.Stamp++
 	attempt.CurrentRetryInterval = nil
 	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
-	a.clearHeartbeatDetails(ctx)
+	if event.req.GetResetHeartbeat() {
+		a.clearHeartbeatDetails(ctx)
+	}
 	dispatchTime := a.dispatchTimeRespectingStartDelay(event.resetTime)
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
@@ -1229,7 +1232,7 @@ func (a *Activity) handleReset(
 			a.restoreOriginalOptions(ctx)
 		}
 		if frontendReq.GetKeepPaused() {
-			return a.resetKeepPaused(ctx, metricsHandler)
+			return a.resetKeepPaused(ctx, frontendReq, metricsHandler)
 		}
 		// No keepPaused: perform an immediate reset. restoreOriginalOptions (if requested) already
 		// ran above, so skip it in resetImmediately to avoid restoring twice.
@@ -1265,6 +1268,9 @@ func (a *Activity) deferResetWhileRunning(
 	if frontendReq.GetRestoreOriginalOptions() {
 		a.ResetRestoreOptions = true
 	}
+	if frontendReq.GetResetHeartbeat() {
+		a.ResetShouldClearHeartbeat = true
+	}
 	// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
 	// yields the activity lands back in PAUSED rather than SCHEDULED.
 	a.ResetShouldPause = keepPaused && pauseRequested
@@ -1277,6 +1283,7 @@ func (a *Activity) deferResetWhileRunning(
 
 func (a *Activity) resetKeepPaused(
 	ctx chasm.MutableContext,
+	frontendReq *workflowservice.ResetActivityExecutionRequest,
 	metricsHandler metrics.Handler,
 ) (*activitypb.ResetActivityExecutionResponse, error) {
 	attempt := a.LastAttempt.Get(ctx)
@@ -1285,7 +1292,9 @@ func (a *Activity) resetKeepPaused(
 	attempt.CurrentRetryInterval = nil
 	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 	attempt.DispatchTime = nil
-	a.clearHeartbeatDetails(ctx)
+	if frontendReq.GetResetHeartbeat() {
+		a.clearHeartbeatDetails(ctx)
+	}
 	a.emitOnResetMetrics(metricsHandler)
 	return &activitypb.ResetActivityExecutionResponse{}, nil
 }
@@ -1304,6 +1313,7 @@ func (a *Activity) resetImmediately(
 		resetTime = resetTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	}
 	if err := TransitionReset.Apply(a, ctx, resetEvent{
+		req:            frontendReq,
 		resetTime:      resetTime,
 		metricsHandler: metricsHandler,
 	}); err != nil {
@@ -1361,8 +1371,14 @@ func (a *Activity) recordFailedAttempt(
 ) error {
 	attempt := a.LastAttempt.Get(ctx)
 
+	attemptFailure := failure
+	if !noRetriesLeft {
+		// Similar to workflow activity, truncate only retryable failure, not the final one.
+		attemptFailure = truncateRetryableFailure(ctx, failure)
+	}
+
 	attempt.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{
-		Failure: failure,
+		Failure: attemptFailure,
 		Time:    timestamppb.New(currentTime),
 	}
 	attempt.CompleteTime = timestamppb.New(currentTime)
@@ -1375,6 +1391,22 @@ func (a *Activity) recordFailedAttempt(
 		attempt.CurrentRetryIntervalSource = retryIntervalSource
 	}
 	return nil
+}
+
+// truncateRetryableFailure caps the size of a failure retained in the activity's state while it
+// retries, mirroring MutableStateImpl.truncateRetryableActivityFailure for workflow activities.
+func truncateRetryableFailure(ctx chasm.Context, attemptFailure *failurepb.Failure) *failurepb.Failure {
+	actCtx := activityContextFromChasm(ctx)
+	sizeLimit := actCtx.config.MutableStateActivityFailureSizeLimitError(ctx.NamespaceEntry().Name().String())
+	if attemptFailure.Size() <= sizeLimit {
+		return attemptFailure
+	}
+
+	// nonRetryable is set to false here as only failures of attempts that will be retried are
+	// truncated, so the value is only for visibility/debugging purposes.
+	serverFailure := commonfailure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+	serverFailure.Cause = commonfailure.Truncate(attemptFailure, sizeLimit)
+	return serverFailure
 }
 
 // tryReschedule attempts to reschedule the activity for retry. It handles the cases of pause and
@@ -1604,6 +1636,16 @@ func (a *Activity) applyDeferredOptionRestore(ctx chasm.MutableContext) {
 	a.restoreOriginalOptions(ctx)
 }
 
+// applyDeferredHeartbeatClear applies a Reset(ResetHeartbeat) that was deferred because a worker was
+// running an attempt at reset time (see handleReset).
+func (a *Activity) applyDeferredHeartbeatClear(ctx chasm.MutableContext) {
+	if !a.ResetShouldClearHeartbeat {
+		return
+	}
+	a.ResetShouldClearHeartbeat = false
+	a.clearHeartbeatDetails(ctx)
+}
+
 // restoreOriginalOptions resets the activity's options to the values it was originally scheduled
 // with and reissues the ScheduleToClose timer at the resulting deadline. start_delay is restored
 // only if the activity has never started.
@@ -1814,6 +1856,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
 		LastStartedTime:         attempt.GetStartedTime(),
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
+		LastDeploymentVersion:   attempt.GetLastDeploymentVersion(),
 		SdkName:                 attempt.GetSdkName(),
 		SdkVersion:              attempt.GetSdkVersion(),
 		NextAttemptScheduleTime: a.nextAttemptDispatchTime(ctx, attempt),
