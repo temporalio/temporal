@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -63,6 +64,7 @@ type (
 		flowController          SenderFlowController
 		sendLock                sync.Mutex
 		ssRateLimiter           ServerSchedulerRateLimiter
+		testHooks               testhooks.TestHooks
 	}
 )
 
@@ -77,6 +79,7 @@ func NewStreamSender(
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 	config *configs.Config,
+	testHooks testhooks.TestHooks,
 ) *StreamSenderImpl {
 	logger := log.With(
 		shardContext.GetLogger(),
@@ -103,6 +106,7 @@ func NewStreamSender(
 		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
+		testHooks:               testHooks,
 	}
 }
 
@@ -557,9 +561,23 @@ Loop:
 					metrics.ReplicationTaskPriorityTag(priority),
 				)
 			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
-			if err != nil {
-				return s.recordRetry(item, attempt, fmt.Errorf("convert: %w", err))
+			var task *replicationspb.ReplicationTask
+			convert := func() error {
+				var convertErr error
+				task, convertErr = s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
+				return convertErr
+			}
+			// Tests use this hook to force a task's conversion to fail, exercising the
+			// stuck-task skip path (see isSkippable). No-op in production.
+			if hook, ok := testhooks.Get(s.testHooks, testhooks.ReplicationStreamSenderTaskInterceptor, testhooks.GlobalScope); ok {
+				originalConvert := convert
+				convert = func() error { return hook(item, originalConvert) }
+			}
+			if err := convert(); err != nil {
+				// Wrap as convertError so isSkippable can tell "the task could not be built"
+				// (its source info is corrupt/unusable) apart from transient send/rate-limit
+				// failures, which must not be skipped.
+				return s.recordRetry(item, attempt, &convertError{err: fmt.Errorf("convert: %w", err)})
 			}
 			if task == nil {
 				return nil
@@ -648,6 +666,29 @@ Loop:
 				metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 				metrics.ReplicationTaskPriorityTag(priority),
 			)
+			// Only skip a task that could not be *built* after exhausting retries (isSkippable):
+			// its source info is corrupt/unusable, so retrying or reconnecting will never make it
+			// send. Transient send/rate-limit failures are NOT skipped (dropping a task that would
+			// have succeeded on reconnect is silent data loss), and infra/teardown errors
+			// (shard-ownership-lost, stream error, context canceled) must still tear the stream
+			// down so shard handoff / reconnect can proceed. Deterministic non-retryable failures
+			// such as an oversized gRPC message are also intentionally NOT handled here: they
+			// surface from the send path as a (non-retryable) StreamError, are left to the
+			// transport-layer message-size fix, and remain observable via the throttled skip log
+			// and the ReplicationTaskSendSkipped metric.
+			if s.config.ReplicationStreamSenderSkipStuckTask() && isSkippable(err) {
+				s.recordStuckTaskSkipped(item, attempt, err)
+				metrics.ReplicationTaskSendSkipped.With(s.metrics).Record(
+					int64(1),
+					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+					metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+					metrics.ReplicationTaskPriorityTag(priority),
+				)
+				// Skip (discard) the stuck task and keep going; the trailing watermark send
+				// below advances the receiver past it so the stream is not wedged.
+				continue Loop
+			}
 			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
 		}
 	}
@@ -748,4 +789,49 @@ func (s *StreamSenderImpl) recordRetry(
 		tag.Error(err),
 	)
 	return err
+}
+
+// recordStuckTaskSkipped logs (at error level, throttled) that a replication task could not
+// be built after exhausting retries and is being skipped. The log identifies the workflow so
+// an operator can remediate (e.g. tdbg task refresh / force replication) if the target needs
+// the dropped state. Paired with the ReplicationTaskSendSkipped metric for alerting.
+func (s *StreamSenderImpl) recordStuckTaskSkipped(
+	item tasks.Task,
+	attempt int64,
+	err error,
+) {
+	s.shardContext.GetThrottledLogger().Error("Replication task could not be built after exhausting retries, skipping task",
+		tag.TaskID(item.GetTaskID()),
+		tag.WorkflowNamespaceID(item.GetNamespaceID()),
+		tag.WorkflowID(item.GetWorkflowID()),
+		tag.WorkflowRunID(item.GetRunID()),
+		tag.Counter(int(attempt)),
+		tag.Error(err),
+	)
+}
+
+// convertError marks a failure to build ("convert") a replication task from its source task info.
+// Such a task cannot be re-sent as-is, so — unlike a transient send or rate-limit failure — it is a
+// candidate to skip when ReplicationStreamSenderSkipStuckTask is enabled. See isSkippable.
+type convertError struct {
+	err error
+}
+
+func (e *convertError) Error() string { return e.err.Error() }
+func (e *convertError) Unwrap() error { return e.err }
+
+// isSkippable reports whether a task that failed to send after exhausting its retry budget may be
+// safely skipped (dropped, with the watermark advanced past it) instead of wedging the stream. We
+// skip only when BOTH hold:
+//   - the task could not be built (convertError): its source info is corrupt/unusable, so retrying
+//     or reconnecting will never make it send; and
+//   - the underlying error is otherwise retryable: infra/teardown errors (shard-ownership-lost,
+//     stream error, context canceled) can also surface from the convert step, and those must still
+//     tear the stream down so shard handoff / reconnect can proceed.
+//
+// Transient send and rate-limit failures are deliberately excluded (they are not convertErrors):
+// dropping a task that would have succeeded on reconnect would be silent data loss.
+func isSkippable(err error) bool {
+	var convErr *convertError
+	return errors.As(err, &convErr) && isRetryableError(err)
 }

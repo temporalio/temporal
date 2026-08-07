@@ -25,6 +25,7 @@ var (
 	MatchingDeploymentRegisterErrorBackoff   = newKey[time.Duration, namespace.ID]()
 	MatchingForwardTaskDelay                 = newKey[time.Duration, namespace.ID]()
 	HistoryReplicationTaskInterceptor        = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
+	ReplicationStreamSenderTaskInterceptor   = newKey[func(historytasks.Task, func() error) error, global]()
 	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
 	HistoryChasmRuntimeProvider              = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
