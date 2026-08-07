@@ -25,14 +25,11 @@ var (
 	MatchingDeploymentRegisterErrorBackoff   = newKey[time.Duration, namespace.ID]()
 	MatchingForwardTaskDelay                 = newKey[time.Duration, namespace.ID]()
 	HistoryReplicationTaskInterceptor        = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
-	// HistorySyncWorkflowStateInterceptor wraps the source cluster's handling of a SyncWorkflowState
-	// request. Tests use it to delay or fail a cross-cluster workflow state pull.
-	HistorySyncWorkflowStateInterceptor   = newKey[func(context.Context, *historyservice.SyncWorkflowStateRequest, func() error) error, global]()
-	HistoryReplicationDLQWriteInterceptor = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
-	HistoryChasmRuntimeProvider           = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
-	HistoryTransferTaskInterceptor        = newKey[func(historytasks.Task, func()), namespace.ID]()
-	HistoryDLQTaskDeleteInterceptor       = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
-	NamespaceReplicationTaskInterceptor   = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
+	HistoryChasmRuntimeProvider              = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
+	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
+	HistoryDLQTaskDeleteInterceptor          = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
+	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.

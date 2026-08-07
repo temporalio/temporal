@@ -1127,28 +1127,7 @@ func (e *historyEngineImpl) StateMachineEnvironment(
 }
 
 func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
-	var response *historyservice.SyncWorkflowStateResponse
-	invoke := func() error {
-		resp, err := replicationapi.SyncWorkflowState(ctx, request, e.replicationProgressCache, e.syncStateRetriever, e.logger)
-		if err != nil {
-			return err
-		}
-		response = resp
-		return nil
-	}
-
-	// Tests use this hook to delay or fail the active cluster's response.
-	if hook, ok := testhooks.Get(e.testHooks, testhooks.HistorySyncWorkflowStateInterceptor, testhooks.GlobalScope); ok {
-		if err := hook(ctx, request, invoke); err != nil {
-			return nil, err
-		}
-		return response, nil
-	}
-
-	if err := invoke(); err != nil {
-		return nil, err
-	}
-	return response, nil
+	return replicationapi.SyncWorkflowState(ctx, request, e.replicationProgressCache, e.syncStateRetriever, e.logger)
 }
 
 func (e *historyEngineImpl) UpdateActivityOptions(
