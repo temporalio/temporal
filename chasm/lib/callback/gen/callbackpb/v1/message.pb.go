@@ -401,13 +401,17 @@ func (x *Callback_Nexus) GetHeader() map[string]string {
 	return nil
 }
 
-// Forked from the definition in the api repo with comments stripped.
+// Forked from temporal.api.common.v1.Callback.Worker in the api repo, with abbreviated comments.
 type Callback_Worker struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskQueueName string                 `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
-	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
-	Operation     string                 `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
-	SourceContext *v11.Payload           `protobuf:"bytes,4,opt,name=source_context,json=sourceContext,proto3" json:"source_context,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Nexus task queue the Temporal worker is listening on.
+	TaskQueueName string `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
+	// Target Nexus service.
+	Service string `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
+	// Target operation.
+	Operation string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
+	// Arbitrary user-supplied data from the source operation's callsite.
+	SourceContext *v11.Payload `protobuf:"bytes,4,opt,name=source_context,json=sourceContext,proto3" json:"source_context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
