@@ -3967,7 +3967,15 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	}
 
 	if err := worker_versioning.ValidateVersioningOverride(startWorkflow.GetVersioningOverride(), wh.config.MaxIDLengthLimit()); err != nil {
-		return err
+		if !wh.config.IsScheduleValidationDisabled(dynamicconfig.FrontendScheduleValidationVersioningOverride, namespaceName.String()) {
+			return err
+		}
+		wh.logger.Warn(
+			"Ignoring disabled schedule validation",
+			tag.WorkflowNamespace(namespaceName.String()),
+			tag.NewStringTag("validation", string(dynamicconfig.FrontendScheduleValidationVersioningOverride)),
+			tag.Error(err),
+		)
 	}
 
 	// Unalias startWorkflow search attributes only for validation.

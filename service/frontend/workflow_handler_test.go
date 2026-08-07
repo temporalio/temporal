@@ -526,6 +526,29 @@ func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_I
 	s.ErrorContains(err, "auto-upgrade override must be true")
 }
 
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_InvalidVersioningOverrideAllowedWhenDisabled() {
+	config := s.newConfig()
+	config.DisabledScheduleValidations = func(namespace string) []dc.FrontendScheduleValidation {
+		s.Equal(s.testNamespace.String(), namespace)
+		return []dc.FrontendScheduleValidation{dc.FrontendScheduleValidationVersioningOverride}
+	}
+	wh := s.getWorkflowHandler(config)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(s.testNamespace).Return(nil, nil)
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_AutoUpgrade{},
+		},
+	})
+
+	s.Require().NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverrideVersion() {
 	wh := s.getWorkflowHandler(s.newConfig())
 	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{

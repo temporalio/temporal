@@ -485,6 +485,22 @@ func (s *collectionSuite) TestGetGenericParseHook() {
 	})
 }
 
+func (s *collectionSuite) TestGetGenericParseHookSlice() {
+	def := []someEnum(nil)
+	setting := dynamicconfig.NewGlobalTypedSetting(
+		testGetTypedPropertyKey,
+		def,
+		"",
+	)
+	get := setting.Get(s.cln)
+
+	s.client.SetValue(testGetTypedPropertyKey, []any{"one", "THRee"})
+	s.Equal([]someEnum{someEnumValueOne, someEnumValueThree}, get())
+
+	s.client.SetValue(testGetTypedPropertyKey, []any{"one", "four"})
+	s.Equal(def, get())
+}
+
 func (s *collectionSuite) TestGetGenericParseHookValue_Struct() {
 	type myStruct struct {
 		FieldA someEnum

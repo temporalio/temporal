@@ -3,6 +3,7 @@ package frontend
 import (
 	"net"
 	"regexp"
+	"slices"
 	"sync"
 	"time"
 
@@ -178,6 +179,7 @@ type Config struct {
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
 	// advance of EnableCHASMSchedulerCreation.
 	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	DisabledScheduleValidations   dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]dynamicconfig.FrontendScheduleValidation]
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -262,6 +264,10 @@ func (c *Config) IsExperimentAllowed(experiment string, namespace string) bool {
 		}
 	}
 	return false
+}
+
+func (c *Config) IsScheduleValidationDisabled(validation dynamicconfig.FrontendScheduleValidation, namespace string) bool {
+	return slices.Contains(c.DisabledScheduleValidations(namespace), validation)
 }
 
 // NewConfig returns new service config with default values
@@ -368,6 +374,7 @@ func NewConfig(
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
 		EnableCHASMSchedulerRouting:          dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
 		EnableCHASMSchedulerSentinels:        dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
+		DisabledScheduleValidations:          dynamicconfig.FrontendDisabledScheduleValidations.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
