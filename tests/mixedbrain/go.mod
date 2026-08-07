@@ -4,6 +4,7 @@ go 1.26.4
 
 require (
 	github.com/blang/semver/v4 v4.0.0
+	github.com/prometheus/common v0.62.0
 	github.com/siderolabs/grpc-proxy v0.5.2
 	github.com/stretchr/testify v1.11.1
 	github.com/temporalio/omes v0.0.0-20260529203146-c6ee1f56c726
@@ -19,8 +20,10 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/prometheus/client_model v0.6.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
 	golang.org/x/net v0.57.0 // indirect

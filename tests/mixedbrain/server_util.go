@@ -87,6 +87,38 @@ func startDevServer(t *testing.T, name, logPath string, opts devserver.Options) 
 	return srv, f
 }
 
+func startMetricsDevServer(
+	t *testing.T,
+	name string,
+	logPath string,
+	metricsEndpoint string,
+	opts devserver.Options,
+) (*devserver.Server, *os.File) {
+	t.Helper()
+
+	originalEndpoint, endpointWasSet := os.LookupEnv("PROMETHEUS_ENDPOINT")
+	require.NoError(t, os.Setenv("PROMETHEUS_ENDPOINT", metricsEndpoint))
+	defer func() {
+		if endpointWasSet {
+			require.NoError(t, os.Setenv("PROMETHEUS_ENDPOINT", originalEndpoint))
+		} else {
+			require.NoError(t, os.Unsetenv("PROMETHEUS_ENDPOINT"))
+		}
+	}()
+
+	return startDevServer(t, name, logPath, opts)
+}
+
+func allocateMetricsEndpoint(t *testing.T) string {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	endpoint := listener.Addr().String()
+	require.NoError(t, listener.Close())
+	return endpoint
+}
+
 // waitForClusterFormation waits until the server's reachable members include
 // all membership ports from all provided servers, confirming the servers
 // discovered each other. Reachable members use raw ringpop addresses (membership ports).
