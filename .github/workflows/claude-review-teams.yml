@@ -227,16 +227,20 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
           path: pr-head
+          persist-credentials: false
       - name: Claude PR review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1.0.183
         with:
           github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: ${{ github.event.action != 'labeled' }}
+          show_full_output: false
           prompt: |
             Use `.claude/skills/review/SKILL.md` and apply it as the review skill.
             Please review PR #${{ needs.check-review-eligibility.outputs.pr_number }}.
@@ -250,4 +254,7 @@ jobs:
             Do not duplicate inline findings in a top-level comment.
             Only post GitHub comments - don't submit review text as messages.
           claude_args: |
-            --add-dir pr-head --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --add-dir pr-head
+            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --disallowedTools "WebFetch,WebSearch"
+            --max-turns 10
