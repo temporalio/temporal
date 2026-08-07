@@ -76,20 +76,20 @@ func TestTQLoadBalancerForce(t *testing.T) {
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 
 	// when we don't force it should balance out
-	tqlb.pickReadPartition(partitionCount, nil, number.EncodeCompact8(32))
-	tqlb.pickReadPartition(partitionCount, nil, number.EncodeCompact8(32))
-	tqlb.pickReadPartition(partitionCount, nil, number.EncodeCompact8(32))
-	tqlb.pickReadPartition(partitionCount, nil, number.EncodeCompact8(32))
-	tqlb.pickReadPartition(partitionCount, nil, number.EncodeCompact8(32))
-	tqlb.pickReadPartition(partitionCount, nil, number.EncodeCompact8(32))
+	tqlb.pickReadPartition(partitionCount, nil, 0)
+	tqlb.pickReadPartition(partitionCount, nil, 0)
+	tqlb.pickReadPartition(partitionCount, nil, 0)
+	tqlb.pickReadPartition(partitionCount, nil, 0)
+	tqlb.pickReadPartition(partitionCount, nil, 0)
+	tqlb.pickReadPartition(partitionCount, nil, 0)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 
 	// releasing the forced one and adding another should still be balanced
 	p1.Release()
-	tqlb.pickReadPartition(partitionCount, nil, number.EncodeCompact8(32))
+	tqlb.pickReadPartition(partitionCount, nil, 0)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
 
-	tqlb.pickReadPartition(partitionCount, nil, number.EncodeCompact8(32))
+	tqlb.pickReadPartition(partitionCount, nil, 0)
 	assert.Equal(t, 3, maxPollerCount(tqlb))
 }
 
