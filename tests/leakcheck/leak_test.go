@@ -60,8 +60,6 @@ var objectLeakOpts = []objectleak.Option{
 	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
 	objectleak.WithExpected("FunctionalTestBase.testClusterConfig"),
-	// TODO: This is not fully garbage collected because of the goroutine leak above. Nothing to be done here.
-	objectleak.WithExpected("sdkClient*"),
 }
 
 // TestClusterShutdownLeak is a goroutine-leak regression test for the functional
@@ -109,9 +107,10 @@ func TestClusterShutdownLeak(t *testing.T) {
 		buildRunTeardownCluster(t, &leakCheck)
 	}
 
-	// Wait for warmup goroutines to drain before snapshotting the baseline.
+	// Wait for warmup goroutines to drain before snapshotting the object and goroutine baselines.
 	_ = goleak.Find(goleakOpts...)
-	baseline := goleak.IgnoreCurrent()
+	objleakBaseline := leakCheck.IgnoreCurrent()
+	goleakBaseline := goleak.IgnoreCurrent()
 
 	// Run the leak test: build, run, and tear down a cluster per iteration.
 	for i := range iters {
@@ -120,7 +119,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 
 	// Verify that no goroutines leaked beyond the baseline.
-	goleakErr := goleak.Find(append(goleakOpts, baseline)...)
+	goleakErr := goleak.Find(append(goleakOpts, goleakBaseline)...)
 	goleakReport := "no unexpected goroutines\n"
 	if goleakErr != nil {
 		goleakReport = goleakErr.Error() + "\n"
@@ -130,7 +129,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 	// Verify that no cluster references leaked.
 	leakCheckStart := time.Now()
-	leakReport, leakErr := leakCheck.Check()
+	leakReport, leakErr := leakCheck.Check(objleakBaseline)
 	t.Logf("object leak check settled in %s", time.Since(leakCheckStart).Round(time.Millisecond))
 	reportPath := filepath.Join(outputDir, "objectleak_report.txt")
 	writeReport(t, outputDir, "objectleak_report.txt", leakReport+"\n")

@@ -7,18 +7,18 @@ import (
 	"unsafe"
 )
 
-type objectWalker struct {
-	objects    []trackedObject
-	seen       map[uintptr]struct{}
-	pruneTypes patterns
-}
-
 type trackedObject struct {
 	addr      uintptr
 	path      path
 	typeName  string
 	collected *atomic.Bool
 	cleanup   runtime.Cleanup
+}
+
+type objectWalker struct {
+	objects    []trackedObject
+	seen       map[uintptr]struct{}
+	pruneTypes patterns
 }
 
 func newObjectWalker(pruneTypes patterns) objectWalker {
