@@ -282,6 +282,8 @@ type Config struct {
 
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
+	EnableAsyncParentWorkflowResend                      dynamicconfig.BoolPropertyFn
+	ParentWorkflowResendMaxInFlight                      dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherAggregationInterval            dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherTimerJitterCoefficient         dynamicconfig.FloatPropertyFn
@@ -707,6 +709,8 @@ func NewConfig(
 		SendTransientOrSpeculativeWorkflowTaskEvents:     dynamicconfig.SendTransientOrSpeculativeWorkflowTaskEvents.Get(dc),
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
+		EnableAsyncParentWorkflowResend:              dynamicconfig.EnableAsyncParentWorkflowResend.Get(dc),
+		ParentWorkflowResendMaxInFlight:              dynamicconfig.ParentWorkflowResendMaxInFlight.Get(dc),
 		ReplicationTaskFetcherParallelism:            dynamicconfig.ReplicationTaskFetcherParallelism.Get(dc),
 		ReplicationTaskFetcherAggregationInterval:    dynamicconfig.ReplicationTaskFetcherAggregationInterval.Get(dc),
 		ReplicationTaskFetcherTimerJitterCoefficient: dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient.Get(dc),
