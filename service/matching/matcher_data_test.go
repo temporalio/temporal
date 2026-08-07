@@ -976,7 +976,8 @@ func (s *MatcherDataSuite) TestFindMatch() {
 					MinPriority: tc.pollerMinPriority,
 				}
 			}
-			s.md.pollers.heap = []*waitingPoller{poller}
+			s.md.pollers = pollerList{logger: s.md.logger}
+			s.md.pollers.Add(poller)
 
 			// Call findMatch
 			s.md.lock.Lock()

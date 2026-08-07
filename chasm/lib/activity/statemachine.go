@@ -181,13 +181,18 @@ var TransitionStarted = chasm.NewTransition(
 )
 
 type completeEvent struct {
-	req            *historyservice.RespondActivityTaskCompletedRequest
-	metricsHandler metrics.Handler
+	req             *historyservice.RespondActivityTaskCompletedRequest
+	baseHandler     metrics.Handler
+	enrichedHandler metrics.Handler
 }
 
-// TransitionCompleted transitions to Completed status.
+// TransitionCompleted transitions to Completed status. SCHEDULED and PAUSED are included because
+// RespondActivityTaskCompletedById can force-complete an activity that has no attempt in
+// progress, mirroring workflow-activity behavior.
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
@@ -198,7 +203,16 @@ var TransitionCompleted = chasm.NewTransition(
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetCompleteRequest()
 
+			attemptWasStarted := a.hasAttemptInProgress()
 			attempt := a.LastAttempt.Get(ctx)
+			if !attemptWasStarted {
+				// RespondActivityTaskCompletedById can complete an activity when no attempt is in
+				// progress.
+				attempt.StartedTime = timestamppb.New(ctx.Now(a))
+				if a.FirstAttemptStartedTime == nil {
+					a.FirstAttemptStartedTime = attempt.StartedTime
+				}
+			}
 			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
 			attempt.LastWorkerIdentity = req.GetIdentity()
 			outcome := a.Outcome.Get(ctx)
@@ -208,7 +222,7 @@ var TransitionCompleted = chasm.NewTransition(
 				},
 			}
 
-			a.emitOnCompletedMetrics(ctx, event.metricsHandler)
+			a.emitOnCompletedMetrics(ctx, event.baseHandler, event.enrichedHandler, req.GetResult(), attemptWasStarted)
 
 			return nil
 		})
@@ -216,8 +230,10 @@ var TransitionCompleted = chasm.NewTransition(
 )
 
 type failedEvent struct {
-	req            *historyservice.RespondActivityTaskFailedRequest
-	metricsHandler metrics.Handler
+	req             *historyservice.RespondActivityTaskFailedRequest
+	retryState      enumspb.RetryState
+	baseHandler     metrics.Handler
+	enrichedHandler metrics.Handler
 }
 
 // TransitionFailed transitions to Failed status.
@@ -232,20 +248,27 @@ var TransitionFailed = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event failedEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetFailedRequest()
+			a.Outcome.Get(ctx).RetryState = event.retryState
 
-			if details := req.GetLastHeartbeatDetails(); details != nil {
-				heartbeat := a.getOrCreateLastHeartbeat(ctx)
-				heartbeat.Details = details
-				heartbeat.RecordedTime = timestamppb.New(ctx.Now(a))
-			}
 			attempt := a.LastAttempt.Get(ctx)
 			attempt.LastWorkerIdentity = req.GetIdentity()
 
-			if err := a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, req.GetFailure(), ctx.Now(a), true); err != nil {
+			// A worker may respond failed without a Failure. Synthesize a generic terminal failure so
+			// the closed activity still exposes a consumable outcome; otherwise PollActivityExecution
+			// returns a nil outcome and a client cannot tell the closed activity apart from one that
+			// simply has no result yet, and polls forever. (Workflow activities tolerate a nil failure
+			// because the SDK wraps the failed history event in an ActivityError; a standalone activity
+			// returns the raw outcome with no such wrapper.)
+			failure := req.GetFailure()
+			if failure == nil {
+				failure = &failurepb.Failure{Message: "activity task failed without failure details"}
+			}
+
+			if err := a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true); err != nil {
 				return err
 			}
 
-			a.emitOnFailedMetrics(ctx, event.metricsHandler)
+			a.emitOnFailedMetrics(ctx, event.baseHandler, event.enrichedHandler, req.GetFailure())
 
 			return nil
 		})
@@ -314,6 +337,9 @@ var TransitionCancelRequested = chasm.NewTransition(
 			Reason:      req.GetReason(),
 			RequestTime: timestamppb.New(ctx.Now(a)),
 		}
+		// Cancel takes precedence over a pending reset so clear its deferred intents
+		a.ResetRestoreOptions = false
+		a.ResetShouldClearHeartbeat = false
 
 		return nil
 	},
@@ -360,7 +386,6 @@ type timeoutEvent struct {
 	metricsHandler metrics.Handler
 	timeoutType    enumspb.TimeoutType
 	retryState     enumspb.RetryState
-	fromStatus     activitypb.ActivityExecutionStatus
 }
 
 // TransitionTimedOut transitions to TimedOut status.
@@ -378,6 +403,8 @@ var TransitionTimedOut = chasm.NewTransition(
 		timeoutType := event.timeoutType
 
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			a.Outcome.Get(ctx).RetryState = event.retryState
+			priorAttemptFailure := a.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure()
 			var err error
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -386,14 +413,17 @@ var TransitionTimedOut = chasm.NewTransition(
 					ctx,
 					timeoutType,
 					fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
+					priorAttemptFailure,
 				)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
 				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
+				failure.Cause = priorAttemptFailure
 				err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
 			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 				failure := createHeartbeatTimeoutFailure()
 				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
+				failure.Cause = priorAttemptFailure
 				err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
 			default:
 				err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
@@ -401,17 +431,22 @@ var TransitionTimedOut = chasm.NewTransition(
 			if err != nil {
 				return err
 			}
-			if event.retryState == enumspb.RETRY_STATE_TIMEOUT {
+
+			retryPreventedByScheduleToClose := event.retryState == enumspb.RETRY_STATE_TIMEOUT &&
+				(timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+					timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT)
+			if retryPreventedByScheduleToClose {
 				if err := a.recordScheduleToStartOrCloseTimeoutFailure(
 					ctx,
 					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 					common.FailureReasonActivityRetryScheduleToCloseTimeout,
+					priorAttemptFailure,
 				); err != nil {
 					return err
 				}
 			}
 
-			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
+			a.emitOnTimedOutMetrics(event.metricsHandler, timeoutType)
 
 			return nil
 		})
@@ -498,8 +533,9 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 )
 
 type resetEvent struct {
-	resetTime time.Time
-	handler   metrics.Handler
+	req            *workflowservice.ResetActivityExecutionRequest
+	resetTime      time.Time
+	metricsHandler metrics.Handler
 }
 
 // TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to
@@ -520,7 +556,7 @@ var TransitionReset = chasm.NewTransition(
 )
 
 // TransitionResetRequested transitions a STARTED or PAUSE_REQUESTED activity to RESET_REQUESTED.
-// PAUSE_REQUESTED is allowed when the operator issues reset with keepPaused=true: ResetKeepPaused is
+// PAUSE_REQUESTED is allowed when the operator issues reset with keepPaused=true: ResetShouldPause is
 // set so the activity lands back in PAUSED (not SCHEDULED) when the worker yields. The worker is
 // still in charge of the activity; it will be notified via
 // ActivityReset=true on its next heartbeat response, its task token is not invalidated by this
@@ -538,7 +574,7 @@ var TransitionResetRequested = chasm.NewTransition(
 )
 
 // TransitionResetAttemptFailedToPaused transitions RESET_REQUESTED → PAUSED. It is performed
-// when the worker yields in RESET_REQUESTED with ResetKeepPaused set (i.e. reset was issued with
+// when the worker yields in RESET_REQUESTED with ResetShouldPause set (i.e. reset was issued with
 // keepPaused=true while the activity was in PAUSE_REQUESTED). The failed attempt is recorded, the
 // attempt count is reset to 1, and no dispatch task is emitted — the activity stays paused until
 // an explicit unpause.
@@ -549,9 +585,9 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
 		attempt := a.LastAttempt.Get(ctx)
-		a.ResetKeepPaused = false
+		a.ResetShouldPause = false
 		a.applyDeferredOptionRestore(ctx)
-		a.clearHeartbeatDetails(ctx)
+		a.applyDeferredHeartbeatClear(ctx)
 		attempt.Count = 1
 		attempt.Stamp++
 		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false); err != nil {
@@ -578,9 +614,9 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		attempt := a.LastAttempt.Get(ctx)
 		currentTime := ctx.Now(a)
 
-		a.ResetKeepPaused = false
+		a.ResetShouldPause = false
 		a.applyDeferredOptionRestore(ctx)
-		a.clearHeartbeatDetails(ctx)
+		a.applyDeferredHeartbeatClear(ctx)
 
 		attempt.Count = 1
 		attempt.Stamp++

@@ -83,7 +83,6 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	s.ns = ns
 	config := defaultTestConfig()
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	if s.fairness {
 		useFairness(config)
 	} else if !s.newMatcher {
@@ -217,12 +216,27 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 		}
 	}
 
-	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	// Fresh migrating queues briefly expose a draining backlog in their internal
+	// status; only the active (non-draining) backlog is relevant here.
+	status1 := activeInternalStatus(resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status1))
 	s.ProtoEqual(status0, status1[0])
-	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	status2 := activeInternalStatus(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status2))
 	s.ProtoEqual(status0, status2[0])
+}
+
+// activeInternalStatus filters out any draining backlog entries, leaving only
+// the active backlog(s). Migrating queues transiently report a draining backlog
+// alongside the active one.
+func activeInternalStatus(status []*taskqueuespb.InternalTaskQueueStatus) []*taskqueuespb.InternalTaskQueueStatus {
+	active := make([]*taskqueuespb.InternalTaskQueueStatus, 0, len(status))
+	for _, st := range status {
+		if !st.Draining {
+			active = append(active, st)
+		}
+	}
+	return active
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
@@ -2182,4 +2196,55 @@ func TestWorkerCommandsPollTask_VersioningFieldsIgnored(t *testing.T) {
 			require.ErrorIs(t, err, errNoTasks, "PollTask on WorkerCommandsPartition must not reject versioning fields")
 		})
 	}
+}
+
+func TestCloneTaskQueueStats_PreservesAllFields(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 42,
+		ApproximateBacklogAge:   durationpb.New(5 * time.Minute),
+		TasksAddRate:            10.5,
+		TasksDispatchRate:       8.3,
+		RateLimitingActive:      true,
+	}
+	cloned := cloneTaskQueueStats(original)
+
+	require.Equal(t, original.ApproximateBacklogCount, cloned.ApproximateBacklogCount)
+	require.Equal(t, original.ApproximateBacklogAge.AsDuration(), cloned.ApproximateBacklogAge.AsDuration())
+	require.InDelta(t, original.TasksAddRate, cloned.TasksAddRate, 1e-9)
+	require.InDelta(t, original.TasksDispatchRate, cloned.TasksDispatchRate, 1e-9)
+	require.True(t, cloned.RateLimitingActive)
+}
+
+func TestCloneTaskQueueStats_Nil(t *testing.T) {
+	cloned := cloneTaskQueueStats(nil)
+	require.NotNil(t, cloned)
+	require.False(t, cloned.RateLimitingActive)
+}
+
+func TestSplitTaskQueueStatsByRampPercentage_PreservesRateLimitingActive(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+		ApproximateBacklogAge:   durationpb.New(2 * time.Minute),
+		TasksAddRate:            20,
+		TasksDispatchRate:       15,
+		RateLimitingActive:      true,
+	}
+	currentShare, rampShare := splitTaskQueueStatsByRampPercentage(original, 30)
+
+	require.True(t, currentShare.RateLimitingActive, "currentShare should preserve RateLimitingActive")
+	require.True(t, rampShare.RateLimitingActive, "rampShare should preserve RateLimitingActive")
+}
+
+func TestSplitTaskQueueStatsByRampPercentage_RateLimitingFalse(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+		ApproximateBacklogAge:   durationpb.New(2 * time.Minute),
+		TasksAddRate:            20,
+		TasksDispatchRate:       15,
+		RateLimitingActive:      false,
+	}
+	currentShare, rampShare := splitTaskQueueStatsByRampPercentage(original, 30)
+
+	require.False(t, currentShare.RateLimitingActive)
+	require.False(t, rampShare.RateLimitingActive)
 }
