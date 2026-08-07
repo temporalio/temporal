@@ -282,12 +282,34 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 	return pm
 }
 
-func (s *matchingEngineSuite) TestDescribeTaskQueuePartitionForwardsSkipMarkAlive() {
+func (s *matchingEngineSuite) TestDescribeTaskQueuePartitionOnlyIfLoaded() {
 	partition := tqid.MustNormalPartitionFromRpcName(
 		"task-queue",
 		s.ns.ID().String(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	)
+	request := &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId: s.ns.ID().String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     partition.TaskQueue().Name(),
+			TaskQueueType: partition.TaskType(),
+		},
+		Versions: &taskqueuepb.TaskQueueVersionSelection{
+			Unversioned: true,
+			AllActive:   true,
+		},
+		ReportInternalTaskQueueStatus: true,
+		OnlyIfLoaded:                  true,
+	}
+
+	_, err := s.matchingEngine.DescribeTaskQueuePartition(context.Background(), request)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.Require().ErrorAs(err, &failedPrecondition)
+	s.matchingEngine.partitionsLock.RLock()
+	partitionCount := len(s.matchingEngine.partitions)
+	s.matchingEngine.partitionsLock.RUnlock()
+	s.Zero(partitionCount)
+
 	mockPM := NewMocktaskQueuePartitionManager(s.controller)
 	mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
 	mockPM.EXPECT().Describe(
@@ -302,19 +324,7 @@ func (s *matchingEngineSuite) TestDescribeTaskQueuePartitionForwardsSkipMarkAliv
 	mockPM.EXPECT().Stop(gomock.Any()).AnyTimes()
 	s.matchingEngine.updateTaskQueue(partition, mockPM)
 
-	_, err := s.matchingEngine.DescribeTaskQueuePartition(context.Background(), &matchingservice.DescribeTaskQueuePartitionRequest{
-		NamespaceId: s.ns.ID().String(),
-		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     partition.TaskQueue().Name(),
-			TaskQueueType: partition.TaskType(),
-		},
-		Versions: &taskqueuepb.TaskQueueVersionSelection{
-			Unversioned: true,
-			AllActive:   true,
-		},
-		ReportInternalTaskQueueStatus: true,
-		SkipMarkAlive:                 true,
-	})
+	_, err = s.matchingEngine.DescribeTaskQueuePartition(context.Background(), request)
 	s.Require().NoError(err)
 }
 

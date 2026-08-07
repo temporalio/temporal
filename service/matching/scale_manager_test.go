@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -257,6 +258,35 @@ func (s *ScaleManagerSuite) TestUserDataErrorPreservesBacklogState() {
 	s.sm.updateBacklogAndDrainState(context.Background())
 
 	s.Same(initial, s.sm.scaleState)
+}
+
+func (s *ScaleManagerSuite) TestUnavailablePartitionPreservesBacklogAndDrainState() {
+	initial := &persistencespb.PartitionScaleState{
+		Target:        1,
+		BacklogState:  bitSet(nil).set(0).set(1),
+		BacklogCounts: []byte{number.EncodeCompact8(100), number.EncodeCompact8(200)},
+	}
+	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(
+			_ context.Context,
+			req *matchingservice.DescribeTaskQueuePartitionRequest,
+			_ ...grpc.CallOption,
+		) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+			s.Require().True(req.GetOnlyIfLoaded())
+			if req.GetTaskQueuePartition().GetNormalPartitionId() == 1 {
+				return nil, serviceerror.NewFailedPrecondition("partition was not loaded")
+			}
+			return backlogDescribeResponse(50, false), nil
+		}).Times(2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), false).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			s.Equal([]byte{number.EncodeCompact8(50), number.EncodeCompact8(200)}, state.BacklogCounts)
+			s.Equal(int32(2), bitSet(state.BacklogState).len())
+		}).Return(nil)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	s.startManager(2, initial)
+
+	s.sm.updateBacklogAndDrainState(context.Background())
 }
 
 // TestAddedTasksWakesScalerOnFullBatch verifies that the scaler is only called

@@ -374,7 +374,7 @@ func (sm *scaleManager) describeRequest(id int32, versions []string) *matchingse
 			AllActive: true,
 		},
 		ReportInternalTaskQueueStatus: true,
-		SkipMarkAlive:                 true,
+		OnlyIfLoaded:                  true,
 	}
 }
 
@@ -391,6 +391,8 @@ func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 
 	prevBacklog := scaleState.GetBacklogCounts()
 	newBacklog := make([]byte, read)
+	// Preserve the last known backlog for partitions whose Describe call fails.
+	copy(newBacklog, prevBacklog)
 	backlogChanged := false
 
 	// check if we should evaluate drain state
@@ -406,6 +408,7 @@ func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 		res, err := sm.matchingClient.DescribeTaskQueuePartition(callCtx, sm.describeRequest(id, versions))
 		cancel()
 		if err != nil {
+			// CONSIDER(carlydf): Emit a metric when an unloaded partition in the draining range blocks scale-down.
 			continue
 		}
 
