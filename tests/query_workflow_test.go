@@ -140,6 +140,61 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.Equal("pauseabc", queryResultStr)
 }
 
+func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
+	env := testcore.NewEnv(s.T())
+	workflowFn := func(ctx workflow.Context) error {
+		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+			return "", nil
+		})
+		workflow.GetSignalChannel(ctx, "test").Receive(ctx, nil)
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+
+	wid := "test-query-result-link-wid"
+	run, err := env.SdkClient().ExecuteWorkflow(ctx,
+		sdkclient.StartWorkflowOptions{ID: wid, TaskQueue: env.WorkerTaskQueue()}, workflowFn)
+	s.NoError(err)
+
+	// use frontend client to query workflow so that the resp can be
+	// inspected directly instead of using the sdkclient
+	resp, err := env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+		Namespace:            env.Namespace().String(),
+		Execution:            &commonpb.WorkflowExecution{WorkflowId: wid},
+		Query:                &querypb.WorkflowQuery{QueryType: "test"},
+		QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN, // set here too so the second query below differs only by the workflow being closed
+	})
+	s.NoError(err)
+
+	link := resp.GetLink().GetWorkflow()
+	s.NotNil(link, "query must carry a link of type workflow")
+	s.Equal(env.Namespace().String(), link.GetNamespace())
+	s.Equal(wid, link.GetWorkflowId())
+	s.Equal(run.GetRunID(), link.GetRunId())
+	s.Equal("Query processed", link.GetReason())
+
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, wid, "", "test", ""))
+	s.NoError(run.Get(ctx, nil))
+	// run same after workflow closed, should reject due to QueryRejectCondition
+	resp, err = env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+		Namespace:            env.Namespace().String(),
+		Execution:            &commonpb.WorkflowExecution{WorkflowId: wid},
+		Query:                &querypb.WorkflowQuery{QueryType: "test"},
+		QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+	})
+	s.NoError(err)
+
+	link = resp.GetLink().GetWorkflow()
+	s.NotNil(link, "query must carry a link of type workflow")
+	s.Equal(env.Namespace().String(), link.GetNamespace())
+	s.Equal(wid, link.GetWorkflowId())
+	s.Equal(run.GetRunID(), link.GetRunId())
+	s.Equal("Query rejected", link.GetReason())
+}
+
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	env := testcore.NewEnv(s.T())
 	tv := testvars.New(s.T())

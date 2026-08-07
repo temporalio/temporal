@@ -52,6 +52,15 @@ func TestValidate(t *testing.T) {
 			},
 		},
 	}
+	validWorkflow := &commonpb.Link{
+		Variant: &commonpb.Link_Workflow_{
+			Workflow: &commonpb.Link_Workflow{
+				Namespace:  "ns",
+				WorkflowId: "wid",
+				RunId:      "rid",
+			},
+		},
+	}
 
 	t.Run("HappyPath", func(t *testing.T) {
 		err := links.Validate([]*commonpb.Link{
@@ -59,7 +68,8 @@ func TestValidate(t *testing.T) {
 			validBatchJob,
 			validNexusOperation,
 			validActivity,
-		}, maxLinks+1, maxSize)
+			validWorkflow,
+		}, maxLinks+2, maxSize)
 		require.NoError(t, err)
 	})
 
@@ -154,5 +164,26 @@ func TestValidate(t *testing.T) {
 	t.Run("UnsupportedVariant", func(t *testing.T) {
 		err := links.Validate([]*commonpb.Link{{}}, maxLinks, maxSize)
 		require.ErrorContains(t, err, "unsupported link variant")
+	})
+
+	t.Run("Workflow/EmptyNamespace", func(t *testing.T) {
+		l := proto.Clone(validWorkflow).(*commonpb.Link)
+		l.GetWorkflow().Namespace = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.EqualError(t, err, "workflow link must not have an empty namespace field")
+	})
+
+	t.Run("Workflow/EmptyWorkflowID", func(t *testing.T) {
+		l := proto.Clone(validWorkflow).(*commonpb.Link)
+		l.GetWorkflow().WorkflowId = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.EqualError(t, err, "workflow link must not have an empty workflow ID field")
+	})
+
+	t.Run("Workflow/EmptyRunID", func(t *testing.T) {
+		l := proto.Clone(validWorkflow).(*commonpb.Link)
+		l.GetWorkflow().RunId = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.EqualError(t, err, "workflow link must not have an empty run ID field")
 	})
 }
