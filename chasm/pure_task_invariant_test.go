@@ -4,13 +4,12 @@ import (
 	"context"
 	"time"
 
-	"go.uber.org/mock/gomock"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -93,8 +92,8 @@ func (s *nodeSuite) TestEachPureTask_StillValidTaskIsRejected() {
 	s.logger.(*testlogger.TestLogger).Expect(testlogger.Error, ".*", tag.FailedAssertion)
 
 	err := s.runInvariantSweep(true)
-	s.Error(err)
-	s.IsType(&serviceerror.Internal{}, err)
+	var internalErr *serviceerror.Internal
+	s.ErrorAs(err, &internalErr)
 	s.Contains(err.Error(), "pure task is still valid after being executed")
 }
 
