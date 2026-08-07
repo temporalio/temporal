@@ -930,7 +930,12 @@ var (
 		"task_errors_throttled",
 		WithDescription("The number of history task processing errors caused by resource exhausted errors, excluding workflow busy case."),
 	)
-	TaskCorruptionCounter = NewCounterDef("task_errors_corruption")
+	TaskCorruptionCounter  = NewCounterDef("task_errors_corruption")
+	ChildExecutionNotFound = NewCounterDef(
+		"child_execution_not_found",
+		WithDescription("The number of times scheduling a child's first workflow task returned NotFound after the "+
+			"parent had already committed ChildWorkflowExecutionStarted."),
+	)
 	ChasmPureTaskRequests = NewCounterDef(
 		"chasm_pure_task_requests",
 		WithDescription("The number of CHASM pure tasks executed."),

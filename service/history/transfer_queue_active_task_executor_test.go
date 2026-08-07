@@ -3274,6 +3274,144 @@ func (s *transferQueueActiveTaskExecutorSuite) recoverClosedChildCompletion(
 	)
 }
 
+// The parent committed ChildWorkflowExecutionStarted, so the child existed, yet scheduling its first workflow task
+// returns NotFound. Check that it is captured in metrics.
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_ChildNotFound_Counted() {
+	captureHandler := metricstest.NewCaptureHandler()
+	s.transferQueueActiveTaskExecutor.metricHandler = captureHandler
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	childWorkflowID, childRunID, transferTask := s.setupStartedChildForNotFoundTest()
+
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("workflow not found"),
+	)
+
+	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Error(resp.ExecutionErr)
+	s.IsType(&serviceerror.NotFound{}, resp.ExecutionErr)
+
+	recordings := capture.Snapshot()[metrics.ChildExecutionNotFound.Name()]
+	s.Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	// Namespace attribution comes from the log, matching the other metrics on this executor's handler.
+	s.Empty(recordings[0].Tags)
+	s.NotEmpty(childWorkflowID)
+	s.NotEmpty(childRunID)
+}
+
+// A closed child answers ErrWorkflowCompleted, a legitimate NotFound.
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_ChildNotFound_ClosedChildExcluded() {
+	captureHandler := metricstest.NewCaptureHandler()
+	s.transferQueueActiveTaskExecutor.metricHandler = captureHandler
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	_, _, transferTask := s.setupStartedChildForNotFoundTest()
+
+	overTheWire := serviceerror.FromStatus(serviceerror.ToStatus(consts.ErrWorkflowCompleted))
+	s.NotErrorIs(overTheWire, consts.ErrWorkflowCompleted) // only the message survives the hop
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).Return(nil, overTheWire)
+
+	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Error(resp.ExecutionErr)
+	s.Empty(capture.Snapshot()[metrics.ChildExecutionNotFound.Name()])
+}
+
+// A deleted target namespace is a legitimate reason for the child to be absent, so it must not be counted.
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_ChildNotFound_NamespaceNotFoundExcluded() {
+	captureHandler := metricstest.NewCaptureHandler()
+	s.transferQueueActiveTaskExecutor.metricHandler = captureHandler
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	_, _, transferTask := s.setupStartedChildForNotFoundTest()
+
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNamespaceNotFound(s.childNamespace.String()),
+	)
+
+	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Error(resp.ExecutionErr)
+	s.Empty(capture.Snapshot()[metrics.ChildExecutionNotFound.Name()])
+}
+
+// Builds a parent whose ChildWorkflowExecutionStarted is already committed, so the task takes the childStarted branch
+// straight to createFirstWorkflowTask.
+func (s *transferQueueActiveTaskExecutorSuite) setupStartedChildForNotFoundTest() (string, string, *tasks.StartChildExecutionTask) {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	childWorkflowID := "some random child workflow ID"
+	childRunID := uuid.NewString()
+	childWorkflowType := "some random child workflow type"
+	childTaskQueueName := "some random child task queue"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	taskID := s.mustGenerateTaskID()
+
+	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
+		mutableState,
+		event.GetEventId(),
+		s.childNamespace,
+		s.childNamespaceID,
+		childWorkflowID,
+		childWorkflowType,
+		childTaskQueueName,
+		nil,
+		1*time.Second,
+		1*time.Second,
+		1*time.Second,
+		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	)
+
+	transferTask := &tasks.StartChildExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TaskID:              taskID,
+		InitiatedEventID:    event.GetEventId(),
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+	childClock := vclock.NewVectorClock(rand.Int63(), rand.Int31(), rand.Int63())
+	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), childWorkflowID, childRunID, childWorkflowType, childClock)
+	mutableState.FlushBufferedEvents()
+	ci.StartedEventId = event.GetEventId()
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	return childWorkflowID, childRunID, transferTask
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
