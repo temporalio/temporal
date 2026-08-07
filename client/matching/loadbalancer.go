@@ -224,7 +224,7 @@ func hasCompleteAndPositiveBacklog(partitionCount int, backlogCounts []number.Co
 		return false
 	}
 	for partitionID := range partitionCount {
-		if number.DecodeCompact8(backlogCounts[partitionID]) > 0 {
+		if backlogCounts[partitionID] > 0 {
 			return true
 		}
 	}
