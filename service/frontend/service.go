@@ -166,9 +166,6 @@ type Config struct {
 
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	// Reject schedules whose interval/phase durations are malformed protobufs. When
-	// disabled, such schedules are logged and allowed through.
-	EnforceScheduleDurationValidation dynamicconfig.BoolPropertyFn
 
 	// Enable CHASM tree infrastructure
 	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -372,7 +369,6 @@ func NewConfig(
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
 		EnableSchedules:                      dynamicconfig.FrontendEnableSchedules.Get(dc),
-		EnforceScheduleDurationValidation:    dynamicconfig.FrontendEnforceScheduleDurationValidation.Get(dc),
 		EnableChasm:                          dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSchedulerCreation:         dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),

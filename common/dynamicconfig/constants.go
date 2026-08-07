@@ -18,12 +18,13 @@ type FrontendScheduleValidation string
 
 const (
 	FrontendScheduleValidationVersioningOverride FrontendScheduleValidation = "versioningOverride"
+	FrontendScheduleValidationScheduleDuration   FrontendScheduleValidation = "scheduleDuration"
 )
 
 func (FrontendScheduleValidation) DynamicConfigParseHook(value string) (FrontendScheduleValidation, error) {
 	validation := FrontendScheduleValidation(value)
 	switch validation {
-	case FrontendScheduleValidationVersioningOverride:
+	case FrontendScheduleValidationVersioningOverride, FrontendScheduleValidationScheduleDuration:
 		return validation, nil
 	default:
 		return "", fmt.Errorf("unknown frontend schedule validation %q", value)
@@ -685,7 +686,7 @@ ScheduleInvariantsScannerParams comments for details.`,
 	FrontendDisabledScheduleValidations = NewNamespaceTypedSetting(
 		"frontend.disabledScheduleValidations",
 		[]FrontendScheduleValidation(nil),
-		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioningOverride.`,
+		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioningOverride, scheduleDuration.`,
 	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
@@ -1000,13 +1001,6 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		"frontend.enableSchedules",
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
-	)
-	FrontendEnforceScheduleDurationValidation = NewGlobalBoolSetting(
-		"frontend.enforceScheduleDurationValidation",
-		true,
-		`FrontendEnforceScheduleDurationValidation rejects CreateSchedule/UpdateSchedule requests whose
-interval or phase durations are not valid google.protobuf.Duration messages. When disabled, such
-requests are logged and allowed through instead of being rejected.`,
 	)
 	// [cleanup-wv-pre-release]
 	EnableDeployments = NewNamespaceBoolSetting(

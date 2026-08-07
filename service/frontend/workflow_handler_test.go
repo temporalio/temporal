@@ -5453,7 +5453,7 @@ func TestCanonicalizeScheduleSpec_IntervalDurationValidation(t *testing.T) {
 				},
 			}
 
-			err := wh.canonicalizeScheduleSpec(schedule)
+			err := wh.canonicalizeScheduleSpec(schedule, "test-namespace")
 			if tc.errContains == "" {
 				require.NoError(t, err)
 				return
@@ -5465,9 +5465,9 @@ func TestCanonicalizeScheduleSpec_IntervalDurationValidation(t *testing.T) {
 	}
 }
 
-// The duration validation is enforced by default, but operators can turn enforcement off
-// with frontend.enforceScheduleDurationValidation. With it off, a malformed duration is
-// logged and allowed through, and the spec still compiles on its normalized value.
+// The duration validation is enforced by default, but operators can disable it for a
+// namespace with frontend.disabledScheduleValidations. When disabled, a malformed duration
+// is logged and allowed through, and the spec still compiles on its normalized value.
 func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -5480,16 +5480,21 @@ func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 			errContains: "interval is not a valid duration",
 		},
 		{
-			name: "enforcement explicitly enabled",
+			name: "unrelated validation disabled",
 			configure: func(c *Config) {
-				c.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(true)
+				c.DisabledScheduleValidations = dc.GetTypedPropertyFnFilteredByNamespace(
+					[]dc.FrontendScheduleValidation{dc.FrontendScheduleValidationVersioningOverride},
+				)
 			},
 			errContains: "interval is not a valid duration",
 		},
 		{
-			name: "enforcement disabled",
+			name: "duration validation disabled",
 			configure: func(c *Config) {
-				c.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(false)
+				c.DisabledScheduleValidations = func(namespace string) []dc.FrontendScheduleValidation {
+					require.Equal(t, "test-namespace", namespace)
+					return []dc.FrontendScheduleValidation{dc.FrontendScheduleValidationScheduleDuration}
+				}
 			},
 		},
 	}
@@ -5506,7 +5511,7 @@ func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 				},
 			}
 
-			err := wh.canonicalizeScheduleSpec(schedule)
+			err := wh.canonicalizeScheduleSpec(schedule, "test-namespace")
 			if tc.errContains != "" {
 				var invalidArgument *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgument)
