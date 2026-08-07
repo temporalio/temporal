@@ -298,6 +298,73 @@ func TestExecuteTask_RetryableFailure(t *testing.T) {
 	})
 }
 
+func TestExecuteTask_DropsExpiredRetry(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	now := env.TimeSource.Now()
+	startTime := timestamppb.New(now.Add(-defaultCatchupWindow * 2))
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "expired-retry",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       2,
+		}},
+		ExpectedMissedCatchupWindow: 1,
+	})
+}
+
+func TestExecuteTask_RetryAtCatchupDeadlineIsAllowed(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	now := env.TimeSource.Now()
+	startTime := timestamppb.New(now.Add(-defaultCatchupWindow))
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("boundary-retry")).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "boundary-retry",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       2,
+		}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+	})
+}
+
+func TestExecuteTask_DoesNotExpireManualRetry(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	now := env.TimeSource.Now()
+	startTime := timestamppb.New(now.Add(-defaultCatchupWindow * 2))
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("manual-retry")).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			Manual:        true,
+			RequestId:     "manual-retry",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       2,
+		}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+	})
+}
+
 // A buffered start fails when a duplicate workflow has already been started.
 func TestExecuteTask_AlreadyStarted(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
@@ -685,6 +752,26 @@ func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
 	live := invoker.BufferedStarts[0]
 	require.Equal(t, int64(1), live.Attempt, "Attempt must not be incremented on a started entry")
 	require.Nil(t, live.BackoffTime, "BackoffTime must not be set on a started entry")
+}
+
+func TestExecuteTask_RecordResultIdempotentOnExpiredRace(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		RequestId:  "req",
+		WorkflowId: "wf",
+		Attempt:    2,
+		RunId:      "winning-run",
+	}}
+
+	missed := invoker.RecordExpiredExecuteResult(ctx, &schedulespb.BufferedStart{
+		RequestId: "req",
+	}, false)
+
+	require.Empty(t, missed)
+	require.Len(t, invoker.BufferedStarts, 1)
+	require.Equal(t, "winning-run", invoker.BufferedStarts[0].GetRunId())
 }
 
 func TestExecuteTask_EventLog(t *testing.T) {

@@ -175,6 +175,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	var lastCompletionState *schedulerpb.LastCompletionResult
 	var schedulerRef []byte
 	var now time.Time
+	var missedCatchupByActionRunning map[bool]int64
 
 	// Read and deep copy returned components, since we'll continue to access them
 	// outside of this function (outside of the MS lock).
@@ -243,8 +244,16 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			s := i.Scheduler.Get(ctx)
 			// Use newlyStarted (not len(result.CompletedStarts)) so a concurrent
 			// ExecuteTask's duplicate StartWorkflow can't inflate ActionCount.
-			newlyStarted, droppedDuplicates := i.recordExecuteResult(ctx, &result)
-			s.recordActionResult(&schedulerActionResult{actionCount: int64(newlyStarted)})
+			newlyStarted, droppedDuplicates, recordedMissedCatchup := i.recordExecuteResult(ctx, &result)
+			missedCatchupByActionRunning = recordedMissedCatchup
+			totalMissedCatchup := int64(0)
+			for _, count := range missedCatchupByActionRunning {
+				totalMissedCatchup += count
+			}
+			s.recordActionResult(&schedulerActionResult{
+				actionCount:         int64(newlyStarted),
+				missedCatchupWindow: totalMissedCatchup,
+			})
 			if droppedDuplicates > 0 {
 				h.recordDuplicateExecuteDrops(s, droppedDuplicates)
 			}
@@ -254,6 +263,16 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update component state: %w", err)
+	}
+
+	for actionRunning, count := range missedCatchupByActionRunning {
+		newTaggedMetricsHandler(h.metricsHandler, scheduler).WithTags(
+			metrics.StringTag(metrics.ScheduleMissedReasonTag, metrics.ScheduleMissedReasonBufferExpired),
+			metrics.StringTag(metrics.ScheduleActionRunningTag, fmt.Sprintf("%t", actionRunning)),
+		).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(count)
+		newTaggedMetricsHandler(h.metricsHandler, scheduler).
+			Counter(metrics.ScheduleBufferedStartDropped.Name()).
+			Record(count, metrics.ReasonTag(bufferedStartDroppedMissedCatchup))
 	}
 
 	return nil
@@ -369,8 +388,20 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 
 	var wg sync.WaitGroup
 	var resultMutex sync.Mutex
+	isRunning := len(invoker.runningWorkflowExecutions()) > 0
 
 	for _, start := range invoker.getEligibleBufferedStarts() {
+		deadline := startWorkflowDeadline(h.config, scheduler, start)
+		if !start.GetManual() && now.After(deadline) {
+			resultMutex.Lock()
+			result.ExpiredStarts = append(result.ExpiredStarts, expiredStart{
+				start:         common.CloneProto(start),
+				actionRunning: isRunning || start.GetDesiredTime().AsTime().After(deadline),
+			})
+			resultMutex.Unlock()
+			continue
+		}
+
 		// Starts that haven't been executed yet will remain in `BufferedStarts`,
 		// without change, so another ExecuteTask will be immediately created to continue
 		// processing in a new task.
@@ -531,9 +562,10 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	// window doesn't consume a LimitedActions slot.
 	droppedCounter := newTaggedMetricsHandler(h.metricsHandler, scheduler).
 		Counter(metrics.ScheduleBufferedStartDropped.Name())
+	now := ctx.Now(invoker)
 	for _, start := range readyStarts {
-		deadline := h.startWorkflowDeadline(ctx, scheduler, start)
-		if ctx.Now(invoker).After(deadline) {
+		deadline := startWorkflowDeadline(h.config, scheduler, start)
+		if !start.GetManual() && now.After(deadline) {
 			// Action was buffered in time but expired before execution
 			// (e.g., due to overlap deferral, retries, or system delay).
 			// Only emit the metric if the schedule would have run this
@@ -570,6 +602,23 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 		return !keep
 	})
 
+	for _, start := range invoker.GetBufferedStarts() {
+		if start.GetAttempt() < 1 ||
+			start.GetManual() ||
+			start.GetRunId() != "" ||
+			start.GetCompleted() != nil {
+			continue
+		}
+		deadline := startWorkflowDeadline(h.config, scheduler, start)
+		if !now.After(deadline) {
+			continue
+		}
+		actionRunning := isRunning || start.GetDesiredTime().AsTime().After(deadline)
+		result.missedCatchupByActionRunning[actionRunning]++
+		result.discardStarts = append(result.discardStarts, start)
+		droppedCounter.Record(1, metrics.ReasonTag(bufferedStartDroppedMissedCatchup))
+	}
+
 	// Terminate overrides cancel if both are requested.
 	if action.NeedTerminate {
 		result.terminateWorkflows = runningWorkflows
@@ -599,28 +648,15 @@ func (h *InvokerExecuteTaskHandler) applyBackoff(start *schedulespb.BufferedStar
 	start.BackoffTime = timestamppb.New(now.Add(delay))
 }
 
-// startWorkflowDeadline returns the latest time at which a buffered workflow
-// should be started, instead of dropped. The deadline puts an upper bound on
-// the number of retry attempts per buffered start.
-func (h *InvokerProcessBufferTaskHandler) startWorkflowDeadline(
-	ctx chasm.Context,
+// startWorkflowDeadline returns the latest time at which an automated buffered
+// workflow should be started.
+func startWorkflowDeadline(
+	config *Config,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
 ) time.Time {
-	var timeout time.Duration
-
-	if start.Manual {
-		// For manual starts, use a default value in the future, as the catchup window
-		// doesn't apply. Manual starts may only time out through max attempt count,
-		// not deadline.
-		return ctx.Now(scheduler).Add(time.Hour)
-	}
-
-	// Set request deadline based on the schedule's catchup window, which is the
-	// latest time that it's acceptable to start this workflow.
-	tweakables := h.config.Tweakables(scheduler.Namespace)
-	timeout = catchupWindow(scheduler, tweakables)
-
+	tweakables := config.Tweakables(scheduler.Namespace)
+	timeout := catchupWindow(scheduler, tweakables)
 	timeout = max(timeout, startWorkflowMinDeadline)
 
 	return start.ActualTime.AsTime().Add(timeout)
@@ -671,29 +707,19 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		return err
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		CompletionCallbacks:      []*commonpb.Callback{callback},
-		Header:                   requestSpec.Header,
-		Identity:                 scheduler.identity(),
-		Input:                    requestSpec.Input,
-		Memo:                     requestSpec.Memo,
-		Namespace:                scheduler.Namespace,
-		RequestId:                start.RequestId,
-		RetryPolicy:              requestSpec.RetryPolicy,
-		SearchAttributes:         scheduler.startWorkflowSearchAttributes(start.NominalTime.AsTime()),
-		TaskQueue:                requestSpec.TaskQueue,
-		UserMetadata:             requestSpec.UserMetadata,
-		WorkflowExecutionTimeout: requestSpec.WorkflowExecutionTimeout,
-		WorkflowId:               start.WorkflowId,
-		WorkflowIdReusePolicy:    reusePolicy,
-		WorkflowRunTimeout:       requestSpec.WorkflowRunTimeout,
-		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
-		WorkflowType:             requestSpec.WorkflowType,
-		Priority:                 requestSpec.Priority,
-		ContinuedFailure:         lastCompletionState.Failure,
+		CompletionCallbacks:   []*commonpb.Callback{callback},
+		Identity:              scheduler.identity(),
+		Namespace:             scheduler.Namespace,
+		RequestId:             start.RequestId,
+		SearchAttributes:      scheduler.startWorkflowSearchAttributes(start.NominalTime.AsTime()),
+		WorkflowId:            start.WorkflowId,
+		WorkflowIdReusePolicy: reusePolicy,
+		ContinuedFailure:      lastCompletionState.Failure,
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
 		},
 	}
+	applyNewWorkflowExecutionInfo(request, requestSpec)
 
 	result, err := h.frontendClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
