@@ -385,6 +385,10 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
 		}
+		// A canceled completion must carry CanceledFailureInfo so that it is recorded as canceled instead of failed.
+		if req.State == nexus.OperationStateCanceled {
+			failure = commonnexus.CoerceToCanceledFailure(failure)
+		}
 		hr.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Failure{
 			Failure: failure,
 		}
