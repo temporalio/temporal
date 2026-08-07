@@ -8244,6 +8244,46 @@ func (s *mutableStateSuite) TestUpdateActivityProgress_HeartbeatCountMetric() {
 	s.Contains(s.testScope.Snapshot().Counters(), counterKey("false"))
 }
 
+func (s *mutableStateSuite) TestReportedProblems_SetAndClearMetrics() {
+	nsName := s.namespaceEntry.Name().String()
+	const wfType = "TestReportedProblemsWorkflowType"
+	const cause = "WorkflowTaskFailedCauseWorkflowWorkerUnhandledFailure"
+	setKey := "test.wf_reported_problems_set+cause=" + cause +
+		",namespace=" + nsName + ",operation=WorkflowContext,service_name=history,workflowType=" + wfType
+	clearedKey := "test.wf_reported_problems_cleared+namespace=" + nsName +
+		",operation=WorkflowContext,service_name=history,workflowType=" + wfType
+
+	counterValue := func(key string) int64 {
+		if c := s.testScope.Snapshot().Counters()[key]; c != nil {
+			return c.Value()
+		}
+		return 0
+	}
+
+	// Simulate consecutive WFT failures having recorded a failure cause.
+	s.mutableState.executionInfo.WorkflowTypeName = wfType
+	s.mutableState.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause{
+		LastWorkflowTaskFailureCause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+	}
+
+	// Setting the search attribute emits the "set" counter once, tagged with namespace,
+	// cause, and (unconditionally) workflow type.
+	s.NoError(s.mutableState.UpdateReportedProblemsSearchAttribute())
+	s.Equal(int64(1), counterValue(setKey))
+
+	// Re-running with an unchanged problem set is a no-op and must not increment the counter.
+	s.NoError(s.mutableState.UpdateReportedProblemsSearchAttribute())
+	s.Equal(int64(1), counterValue(setKey))
+
+	// Clearing (workflow becomes unstuck) emits the "cleared" counter once.
+	s.NoError(s.mutableState.RemoveReportedProblemsSearchAttribute())
+	s.Equal(int64(1), counterValue(clearedKey))
+
+	// Removing again is a no-op (attribute already absent) and must not increment.
+	s.NoError(s.mutableState.RemoveReportedProblemsSearchAttribute())
+	s.Equal(int64(1), counterValue(clearedKey))
+}
+
 // scheduleCompletedWFTForBatchIDTest puts the suite's mutable state into a
 // configuration where the next Add*Event call lands in its own size-rolled
 // batch, then completes a WFT and returns the WFT-completed event
