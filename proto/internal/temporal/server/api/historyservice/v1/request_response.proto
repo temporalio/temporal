@@ -106,6 +106,9 @@ message StartWorkflowExecutionRequest {
   temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 17;
   reserved 18;
   temporal.api.common.v1.TimeSkippingStatePropagation time_skipping_state_propagation = 19;
+  // Set when the parent has established that a conflicting execution can only be its own child, orphaned by an
+  // initiation that lost conflict resolution after a force failover.
+  bool zombify_conflicting_child = 20;
 }
 
 message StartWorkflowExecutionResponse {

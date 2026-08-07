@@ -2655,6 +2655,14 @@ where the user has set an explicit RetryPolicy, but not specified all the fields
 		true,
 		`Allows resetting of workflows with pending children when set to true`,
 	)
+	EnableOrphanedChildWorkflowReplacement = NewNamespaceBoolSetting(
+		"history.enableOrphanedChildWorkflowReplacement",
+		false,
+		`Allows a parent to replace an open child created by an initiation that lost conflict resolution
+after force failover. The conflicting run is verified and marked zombie in the same transaction that
+creates its replacement. This defaults to false because the replacement may repeat work already
+performed by the orphaned child`,
+	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
 		"history.historyMaxAutoResetPoints",
 		primitives.DefaultHistoryMaxAutoResetPoints,

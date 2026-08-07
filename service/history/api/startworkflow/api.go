@@ -10,6 +10,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
@@ -446,21 +447,39 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	// previously created workflow context.
 	newRunID := primitives.NewUUID().String()
 
-	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
-		s.shardContext,
-		workflowKey,
-		s.namespace,
-		newRunID,
-		currentWorkflowConditionFailed.State,
-		currentWorkflowConditionFailed.Status,
-		currentWorkflowConditionFailed.RequestIDs,
-		currentWorkflowConditionFailed.FirstExecutionRunID,
-		s.request.StartRequest.GetWorkflowIdReusePolicy(),
-		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
-		currentWorkflowStartTime,
-		s.request.ParentExecutionInfo,
-		s.request.ChildWorkflowOnly,
-	)
+	var currentExecutionUpdateAction api.UpdateWorkflowActionFunc
+	var err error
+	currentIsOpen := currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+		currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	if s.request.GetZombifyConflictingChild() && currentIsOpen {
+		// currentIsOpen is routing, not a duplicate of the action's own liveness check: a durably
+		// closed run is not a replaceable orphan and belongs on the reuse-policy path below. Drop it
+		// and a closed child retries the zombify path forever on ErrWorkflowCompleted, which is only
+		// a race signal when the snapshot said open.
+		// TODO: handle orphan closed child run
+		currentExecutionUpdateAction = api.ZombifyConflictingChildAction(
+			s.request.ParentExecutionInfo,
+			s.request.StartRequest.GetWorkflowIdConflictPolicy(),
+			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+			s.shardContext.GetLogger(),
+		)
+	} else {
+		currentExecutionUpdateAction, err = api.ResolveDuplicateWorkflowID(
+			s.shardContext,
+			workflowKey,
+			s.namespace,
+			newRunID,
+			currentWorkflowConditionFailed.State,
+			currentWorkflowConditionFailed.Status,
+			currentWorkflowConditionFailed.RequestIDs,
+			currentWorkflowConditionFailed.FirstExecutionRunID,
+			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+			s.request.StartRequest.GetWorkflowIdConflictPolicy(),
+			currentWorkflowStartTime,
+			s.request.ParentExecutionInfo,
+			s.request.ChildWorkflowOnly,
+		)
+	}
 
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):

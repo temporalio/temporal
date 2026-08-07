@@ -11,6 +11,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
@@ -233,6 +235,99 @@ func terminateWorkflowAction(
 			nil, // No links necessary.
 		)
 	}, nil
+}
+
+// ZombifyConflictingChildAction validates and marks the conflicting child as a zombie while holding
+// its lock. The replacement is then created in the same transaction.
+func ZombifyConflictingChildAction(
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	conflictPolicy enumspb.WorkflowIdConflictPolicy,
+	reusePolicy enumspb.WorkflowIdReusePolicy,
+	logger log.Logger,
+) UpdateWorkflowActionFunc {
+	return func(workflowLease WorkflowLease) (*UpdateWorkflowAction, error) {
+		mutableState := workflowLease.GetMutableState()
+		if err := validateOrphanedChild(mutableState, parentExecutionInfo, conflictPolicy, reusePolicy); err != nil {
+			if !errors.Is(err, consts.ErrWorkflowCompleted) {
+				logger.Warn(
+					"Unable to zombify conflicting child workflow.",
+					tag.WorkflowNamespaceID(mutableState.GetWorkflowKey().NamespaceID),
+					tag.WorkflowID(mutableState.GetWorkflowKey().WorkflowID),
+					tag.WorkflowRunID(mutableState.GetWorkflowKey().RunID),
+					tag.Error(err),
+				)
+			}
+			return nil, err
+		}
+
+		if _, err := mutableState.UpdateWorkflowStateStatus(
+			enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		); err != nil {
+			return nil, err
+		}
+
+		logger.Info(
+			"Zombified conflicting child workflow.",
+			tag.WorkflowNamespaceID(mutableState.GetWorkflowKey().NamespaceID),
+			tag.WorkflowID(mutableState.GetWorkflowKey().WorkflowID),
+			tag.WorkflowRunID(mutableState.GetWorkflowKey().RunID),
+		)
+		// Reuse same post-action as a termination: no workflow task, and in-flight Workflow Updates must be
+		// aborted because a zombie run will never make progress again.
+		return UpdateWorkflowTerminate, nil
+	}
+}
+
+// validateOrphanedChild rejects anything that is not an open child of exactly this parent descending
+// from an initiation other than the one being reissued. It reads live mutable state under the
+// conflicting run's lock, so no check can go stale before the zombify.
+//
+// The policy checks are assertions: startChildWorkflow always sends conflict policy FAIL and the
+// child command's own reuse policy. Rejecting on them matches normal duplicate resolution, which for
+// an open run also returns WorkflowExecutionAlreadyStarted.
+func validateOrphanedChild(
+	mutableState historyi.MutableState,
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	conflictPolicy enumspb.WorkflowIdConflictPolicy,
+	reusePolicy enumspb.WorkflowIdReusePolicy,
+) error {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+
+	executionState := mutableState.GetExecutionState()
+	alreadyStartedErr := func() error {
+		return generateWorkflowAlreadyStartedError(
+			"Workflow execution is already running. WorkflowId: %v, RunId: %v.",
+			executionState.GetRequestIds(),
+			mutableState.GetWorkflowKey(),
+			executionState.GetFirstExecutionRunId(),
+		)
+	}
+	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
+		return alreadyStartedErr()
+	}
+	if reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
+		reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
+		return alreadyStartedErr()
+	}
+	if parentExecutionInfo == nil {
+		return alreadyStartedErr()
+	}
+
+	executionInfo := mutableState.GetExecutionInfo()
+	if executionInfo.GetParentNamespaceId() != parentExecutionInfo.GetNamespaceId() ||
+		executionInfo.GetParentWorkflowId() != parentExecutionInfo.GetExecution().GetWorkflowId() ||
+		executionInfo.GetParentRunId() != parentExecutionInfo.GetExecution().GetRunId() {
+		return alreadyStartedErr()
+	}
+
+	if executionInfo.GetParentInitiatedId() == parentExecutionInfo.GetInitiatedId() &&
+		executionInfo.GetParentInitiatedVersion() == parentExecutionInfo.GetInitiatedVersion() {
+		return alreadyStartedErr()
+	}
+	return nil
 }
 
 func generateWorkflowAlreadyStartedError(
