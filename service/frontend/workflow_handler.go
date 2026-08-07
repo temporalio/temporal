@@ -3849,7 +3849,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
-	err := wh.canonicalizeScheduleSpec(request.Schedule)
+	err := wh.canonicalizeScheduleSpec(request.Schedule, namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
@@ -3964,6 +3964,18 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	if startWorkflow.WorkflowIdReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
 		startWorkflow.WorkflowIdReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
 		return errIDReusePolicyNotAllowed
+	}
+
+	if err := worker_versioning.ValidateVersioningOverride(startWorkflow.GetVersioningOverride(), wh.config.MaxIDLengthLimit()); err != nil {
+		if !wh.config.IsScheduleValidationDisabled(scheduleValidationVersioningOverride, namespaceName.String()) {
+			return err
+		}
+		wh.logger.Warn(
+			"Ignoring disabled schedule validation",
+			tag.WorkflowNamespace(namespaceName.String()),
+			tag.NewStringTag("validation", scheduleValidationVersioningOverride),
+			tag.Error(err),
+		)
 	}
 
 	// Unalias startWorkflow search attributes only for validation.
@@ -4654,7 +4666,7 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
-	err := wh.canonicalizeScheduleSpec(request.Schedule)
+	err := wh.canonicalizeScheduleSpec(request.Schedule, namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
@@ -6870,16 +6882,20 @@ func validateScheduleIntervalDurations(spec *schedulepb.ScheduleSpec) error {
 	return nil
 }
 
-func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedule) error {
+func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedule, namespaceName string) error {
 	if schedule.Spec == nil {
 		schedule.Spec = &schedulepb.ScheduleSpec{}
 	}
 	if err := validateScheduleIntervalDurations(schedule.Spec); err != nil {
-		if wh.config.EnforceScheduleDurationValidation() {
+		if !wh.config.IsScheduleValidationDisabled(scheduleValidationScheduleDuration, namespaceName) {
 			return serviceerror.NewInvalidArgumentf("Invalid schedule spec: %v", err)
 		}
-		wh.throttledLogger.Warn("Accepting schedule spec with malformed duration: validation enforcement is disabled",
-			tag.Error(err))
+		wh.throttledLogger.Warn(
+			"Ignoring disabled schedule validation",
+			tag.WorkflowNamespace(namespaceName),
+			tag.NewStringTag("validation", scheduleValidationScheduleDuration),
+			tag.Error(err),
+		)
 	}
 	compiledSpec, err := wh.scheduleSpecBuilder.NewCompiledSpec(schedule.Spec)
 	if err != nil {

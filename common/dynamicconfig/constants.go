@@ -671,6 +671,11 @@ ScheduleInvariantsScannerParams comments for details.`,
 		[]string(nil),
 		`FrontendAllowedExperiments is a list of experiment names that can be enabled via the temporal-experiment header for a specific namespace.`,
 	)
+	FrontendDisabledScheduleValidations = NewNamespaceTypedSetting(
+		"frontend.disabledScheduleValidations",
+		[]string(nil),
+		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration.`,
+	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
 		ConvertWildcardStringListToRegexp,
@@ -984,13 +989,6 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		"frontend.enableSchedules",
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
-	)
-	FrontendEnforceScheduleDurationValidation = NewGlobalBoolSetting(
-		"frontend.enforceScheduleDurationValidation",
-		true,
-		`FrontendEnforceScheduleDurationValidation rejects CreateSchedule/UpdateSchedule requests whose
-interval or phase durations are not valid google.protobuf.Duration messages. When disabled, such
-requests are logged and allowed through instead of being rejected.`,
 	)
 	// [cleanup-wv-pre-release]
 	EnableDeployments = NewNamespaceBoolSetting(

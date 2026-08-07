@@ -694,6 +694,9 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 			Payloads: lcr,
 		},
 	}
+	if h.config.Tweakables(scheduler.Namespace).EnableVersioningOverride {
+		request.VersioningOverride = requestSpec.VersioningOverride
+	}
 
 	result, err := h.frontendClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
