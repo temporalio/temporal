@@ -214,6 +214,12 @@ func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
 		if bs, ok := value.([]byte); ok {
 			return string(bs), nil
 		}
+		// Default-division workflows have a NULL namespace division. Represent
+		// them as the empty string to match the Elasticsearch behavior, where
+		// documents missing the field are bucketed under "".
+		if value == nil && fieldName == sadefs.TemporalNamespaceDivision {
+			return "", nil
+		}
 		return value, nil
 	}
 }
