@@ -685,6 +685,18 @@ func (a *Activity) applyCancelRequested(ctx chasm.MutableContext, req *workflows
 // TransitionResetAttemptFailedToPaused: it applies the deferred reset and leaves the
 // activity paused, emitting no dispatch task.
 func (a *Activity) applyResetAttemptFailedToPaused(ctx chasm.MutableContext, event rescheduleEvent) error {
+	if err := a.applyDeferredReset(ctx, event); err != nil {
+		return err
+	}
+	a.LastAttempt.Get(ctx).DispatchTime = nil
+	return nil
+}
+
+// applyDeferredReset applies a reset that was deferred because a worker held the attempt at
+// reset time (see handleReset), now that the worker has yielded. Shared by the two
+// RESET_REQUESTED transitions, which differ only in what they do afterwards: land in PAUSED
+// with no dispatch, or land in SCHEDULED and dispatch again.
+func (a *Activity) applyDeferredReset(ctx chasm.MutableContext, event rescheduleEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
 	a.ResetShouldPause = false
 	a.applyDeferredOptionRestore(ctx)
@@ -697,7 +709,6 @@ func (a *Activity) applyResetAttemptFailedToPaused(ctx chasm.MutableContext, eve
 	// Reset discards the retry backoff
 	attempt.CurrentRetryInterval = nil
 	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
-	attempt.DispatchTime = nil
 	return nil
 }
 
@@ -705,42 +716,12 @@ func (a *Activity) applyResetAttemptFailedToPaused(ctx chasm.MutableContext, eve
 // TransitionResetAttemptFailedToScheduled: it applies the deferred reset and re-emits
 // the dispatch and ScheduleToStart tasks.
 func (a *Activity) applyResetAttemptFailedToScheduled(ctx chasm.MutableContext, event rescheduleEvent) error {
-	attempt := a.LastAttempt.Get(ctx)
-	currentTime := ctx.Now(a)
-
-	a.ResetShouldPause = false
-	a.applyDeferredOptionRestore(ctx)
-	a.applyDeferredHeartbeatClear(ctx)
-
-	attempt.Count = 1
-	attempt.Stamp++
-
-	if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, currentTime, false); err != nil {
+	if err := a.applyDeferredReset(ctx, event); err != nil {
 		return err
 	}
-	// Reset discards the retry backoff
-	attempt.CurrentRetryInterval = nil
-	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
-
-	dispatchTime := a.dispatchTimeRespectingStartDelay(currentTime)
-	attempt.DispatchTime = timestamppb.New(dispatchTime)
-	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{
-				ScheduledTime: dispatchTime.Add(timeout),
-			},
-			&activitypb.ScheduleToStartTimeoutTask{
-				Stamp: attempt.GetStamp(),
-			})
-	}
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{
-			ScheduledTime: dispatchTime,
-		},
-		a.newActivityDispatchTask(ctx))
-
+	// applyDeferredReset cleared CurrentRetryInterval, so
+	// reissueDispatchAndScheduleToStart dispatches now, lifted to honor any start delay.
+	a.reissueDispatchAndScheduleToStart(ctx, a.LastAttempt.Get(ctx))
 	return nil
 }
 

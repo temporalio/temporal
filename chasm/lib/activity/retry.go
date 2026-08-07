@@ -329,11 +329,8 @@ func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, a
 		dispatchTime = a.dispatchTimeRespectingStartDelay(ctx.Now(a))
 	}
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{ScheduledTime: dispatchTime},
-		a.newActivityDispatchTask(ctx),
-	)
+	// ScheduleToStart is emitted before the dispatch task, matching every other site that
+	// emits both.
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
 			a,
@@ -341,6 +338,11 @@ func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, a
 			&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
 		)
 	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{ScheduledTime: dispatchTime},
+		a.newActivityDispatchTask(ctx),
+	)
 }
 
 // reissueRunningAttemptTimers re-emits the StartToClose and Heartbeat timeout tasks for the
@@ -490,27 +492,9 @@ func (a *Activity) applyRescheduled(ctx chasm.MutableContext, event rescheduleEv
 		return err
 	}
 
-	attempt := a.LastAttempt.Get(ctx)
-	retryScheduledTime := dispatchTimeForRetry(attempt).AsTime()
-	attempt.DispatchTime = timestamppb.New(retryScheduledTime)
-
-	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{
-				ScheduledTime: retryScheduledTime.Add(timeout),
-			},
-			&activitypb.ScheduleToStartTimeoutTask{
-				Stamp: attempt.GetStamp(),
-			})
-	}
-
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{
-			ScheduledTime: retryScheduledTime,
-		},
-		a.newActivityDispatchTask(ctx))
+	// applyFailedAttempt has set CurrentRetryInterval and CompleteTime, so
+	// reissueDispatchAndScheduleToStart dispatches at the retry time.
+	a.reissueDispatchAndScheduleToStart(ctx, a.LastAttempt.Get(ctx))
 
 	return nil
 }
