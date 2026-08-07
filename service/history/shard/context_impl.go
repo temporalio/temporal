@@ -1008,6 +1008,9 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							&tasks.DeleteExecutionReplicationTask{
 								WorkflowKey: key,
 								ArchetypeID: archetypeID,
+								// Stamp the failover version this cluster is active at, so that target
+								// clusters can drop the deletion if the namespace failed over since.
+								Version: nsEntry.FailoverVersion(key.WorkflowID),
 							},
 						}
 					}

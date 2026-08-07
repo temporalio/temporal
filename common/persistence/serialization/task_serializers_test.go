@@ -452,6 +452,7 @@ func (s *taskSerializerSuite) TestDeleteExecutionReplicationTask() {
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
 		ArchetypeID:         rand.Uint32(),
+		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(deleteExecutionReplicationTask)

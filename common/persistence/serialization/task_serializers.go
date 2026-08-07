@@ -1574,6 +1574,7 @@ func replicationDeleteExecutionTaskToProto(
 		TaskId:         task.TaskID,
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 		ArchetypeId:    task.ArchetypeID,
+		Version:        task.Version,
 	}
 }
 
@@ -1593,5 +1594,6 @@ func replicationDeleteExecutionTaskFromProto(
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              info.TaskId,
 		ArchetypeID:         info.ArchetypeId,
+		Version:             info.Version,
 	}
 }

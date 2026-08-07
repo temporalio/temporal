@@ -12,6 +12,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
@@ -26,6 +27,11 @@ type ExecutableDeleteExecutionTask struct {
 
 	chasm.ComponentRef
 	ExecutableTask
+
+	// taskVersion is the namespace failover version of the cluster that deleted the execution.
+	// It is common.EmptyVersion when the source did not stamp one, i.e. for tasks generated before
+	// the version was introduced and for deletions synthesized from another replication task.
+	taskVersion int64
 }
 
 var _ ctasks.Task = (*ExecutableDeleteExecutionTask)(nil)
@@ -49,6 +55,14 @@ func NewExecutableDeleteExecutionTask(
 		softassert.That(processToolBox.Logger, false, "delete execution replication task has unspecified archetype ID")
 	}
 
+	// Only take the version from a genuine delete execution replication task. Other replication
+	// tasks (sync/verify versioned transition) synthesize a deletion out of their own task, whose
+	// version describes a different operation and must not be interpreted as a deletion version.
+	taskVersion := common.EmptyVersion
+	if rawInfo.GetTaskType() == enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION {
+		taskVersion = rawInfo.GetVersion()
+	}
+
 	return &ExecutableDeleteExecutionTask{
 		ProcessToolBox: processToolBox,
 		ComponentRef: chasm.NewComponentRefByArchetypeID(
@@ -69,6 +83,7 @@ func NewExecutableDeleteExecutionTask(
 			sourceShardKey,
 			replicationTask,
 		),
+		taskVersion: taskVersion,
 	}
 }
 
@@ -106,6 +121,27 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(e.NamespaceID))
 	if err != nil {
 		return err
+	}
+	// The deletion was decided by the cluster that was active at e.taskVersion. If the namespace has
+	// failed over since then, the execution is owned by another cluster now and this deletion is
+	// stale: applying it would drop state the new active cluster may still be mutating (and replicate
+	// nothing back). The new active cluster deletes and replicates on its own retention timer.
+	namespaceFailoverVersion := namespaceEntry.FailoverVersion(e.BusinessID)
+	if e.taskVersion != common.EmptyVersion && e.taskVersion < namespaceFailoverVersion {
+		e.Logger.Warn("Skipping delete execution replication task generated before a failover",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.BusinessID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.TaskID()),
+			tag.TaskVersion(e.taskVersion),
+			tag.FailoverVersion(namespaceFailoverVersion),
+		)
+		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
+			1,
+			metrics.OperationTag(metrics.DeleteExecutionReplicationTaskScope),
+			metrics.NamespaceTag(namespaceName),
+		)
+		return nil
 	}
 	currentCluster := e.ClusterMetadata.GetCurrentClusterName()
 	if namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: e.BusinessID}) == currentCluster {
