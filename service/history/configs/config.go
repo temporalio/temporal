@@ -318,7 +318,14 @@ type Config struct {
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
+	EnableReplicationReaderGroup                        dynamicconfig.BoolPropertyFn
 	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
+	EnableReplicationNamespaceIsolation                 dynamicconfig.BoolPropertyFn
+	ReplicationStreamSenderThrottledTierQPSRatio        dynamicconfig.FloatPropertyFn
+	ReplicationStreamSenderThrottledTierCount           dynamicconfig.IntPropertyFn
+	ReplicationStreamSenderTierDemotionCycles           dynamicconfig.IntPropertyFn
+	ReplicationStreamSenderUnthrottleCooldownCycles     dynamicconfig.IntPropertyFn
+	ReplicationStreamSenderMaxIsolatedNamespaces        dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
 	ReplicationStreamEventLoopRetryMaxAttempts          dynamicconfig.IntPropertyFn
@@ -636,7 +643,14 @@ func NewConfig(
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
+		EnableReplicationReaderGroup:                        dynamicconfig.EnableReplicationReaderGroup.Get(dc),
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
+		EnableReplicationNamespaceIsolation:                 dynamicconfig.EnableReplicationNamespaceIsolation.Get(dc),
+		ReplicationStreamSenderThrottledTierQPSRatio:        dynamicconfig.ReplicationStreamSenderThrottledTierQPSRatio.Get(dc),
+		ReplicationStreamSenderThrottledTierCount:           dynamicconfig.ReplicationStreamSenderThrottledTierCount.Get(dc),
+		ReplicationStreamSenderTierDemotionCycles:           dynamicconfig.ReplicationStreamSenderTierDemotionCycles.Get(dc),
+		ReplicationStreamSenderUnthrottleCooldownCycles:     dynamicconfig.ReplicationStreamSenderUnthrottleCooldownCycles.Get(dc),
+		ReplicationStreamSenderMaxIsolatedNamespaces:        dynamicconfig.ReplicationStreamSenderMaxIsolatedNamespaces.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
 		ReplicationStreamEventLoopRetryMaxAttempts:          dynamicconfig.ReplicationStreamEventLoopRetryMaxAttempts.Get(dc),
