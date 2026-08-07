@@ -3136,6 +3136,15 @@ This optimization should only be enabled after every cluster that may receive CH
 hydrated ancestor components when applying child-node mutations.`,
 	)
 
+	ChasmDLQScheduledPureTaskOnValidation = NewNamespaceBoolSetting(
+		"history.chasmDLQScheduledPureTaskOnValidation",
+		false,
+		`ChasmDLQScheduledPureTaskOnValidation controls whether scheduled CHASM pure tasks that remain valid
+after successful execution are sent to DLQ instead of retried indefinitely. A pure task that is still
+valid after execution would otherwise loop forever; enabling this flag detects that condition and
+terminates the task via DLQ. Immediate pure tasks are never affected by this setting.`,
+	)
+
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
 		"history.chasmMaxInMemoryPureTasks",
 		32,
