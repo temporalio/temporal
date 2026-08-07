@@ -528,9 +528,9 @@ func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_I
 
 func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_InvalidVersioningOverrideAllowedWhenDisabled() {
 	config := s.newConfig()
-	config.DisabledScheduleValidations = func(namespace string) []dc.FrontendScheduleValidation {
+	config.DisabledScheduleValidations = func(namespace string) []string {
 		s.Equal(s.testNamespace.String(), namespace)
-		return []dc.FrontendScheduleValidation{dc.FrontendScheduleValidationVersioningOverride}
+		return []string{"VERSIONING-OVERRIDE"}
 	}
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(s.testNamespace).Return(nil, nil)
@@ -5483,7 +5483,7 @@ func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 			name: "unrelated validation disabled",
 			configure: func(c *Config) {
 				c.DisabledScheduleValidations = dc.GetTypedPropertyFnFilteredByNamespace(
-					[]dc.FrontendScheduleValidation{dc.FrontendScheduleValidationVersioningOverride},
+					[]string{scheduleValidationVersioningOverride},
 				)
 			},
 			errContains: "interval is not a valid duration",
@@ -5491,9 +5491,9 @@ func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 		{
 			name: "duration validation disabled",
 			configure: func(c *Config) {
-				c.DisabledScheduleValidations = func(namespace string) []dc.FrontendScheduleValidation {
+				c.DisabledScheduleValidations = func(namespace string) []string {
 					require.Equal(t, "test-namespace", namespace)
-					return []dc.FrontendScheduleValidation{dc.FrontendScheduleValidationScheduleDuration}
+					return []string{"Scheduler-Duration"}
 				}
 			},
 		},

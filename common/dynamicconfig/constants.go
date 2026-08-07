@@ -1,7 +1,6 @@
 package dynamicconfig
 
 import (
-	"fmt"
 	"math"
 	"os"
 	"time"
@@ -14,23 +13,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/matching/counter"
 )
-
-type FrontendScheduleValidation string
-
-const (
-	FrontendScheduleValidationVersioningOverride FrontendScheduleValidation = "versioningOverride"
-	FrontendScheduleValidationScheduleDuration   FrontendScheduleValidation = "scheduleDuration"
-)
-
-func (FrontendScheduleValidation) DynamicConfigParseHook(value string) (FrontendScheduleValidation, error) {
-	validation := FrontendScheduleValidation(value)
-	switch validation {
-	case FrontendScheduleValidationVersioningOverride, FrontendScheduleValidationScheduleDuration:
-		return validation, nil
-	default:
-		return "", fmt.Errorf("unknown frontend schedule validation %q", value)
-	}
-}
 
 var (
 	// keys for dynamic config itself
@@ -691,8 +673,8 @@ ScheduleInvariantsScannerParams comments for details.`,
 	)
 	FrontendDisabledScheduleValidations = NewNamespaceTypedSetting(
 		"frontend.disabledScheduleValidations",
-		[]FrontendScheduleValidation(nil),
-		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioningOverride, scheduleDuration.`,
+		[]string(nil),
+		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration.`,
 	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",

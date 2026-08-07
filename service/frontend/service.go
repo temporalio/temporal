@@ -3,7 +3,7 @@ package frontend
 import (
 	"net"
 	"regexp"
-	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +25,11 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+)
+
+const (
+	scheduleValidationVersioningOverride = "versioning-override"
+	scheduleValidationScheduleDuration   = "scheduler-duration"
 )
 
 // Config represents configuration for frontend service
@@ -179,7 +184,7 @@ type Config struct {
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
 	// advance of EnableCHASMSchedulerCreation.
 	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	DisabledScheduleValidations   dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]dynamicconfig.FrontendScheduleValidation]
+	DisabledScheduleValidations   dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -266,8 +271,13 @@ func (c *Config) IsExperimentAllowed(experiment string, namespace string) bool {
 	return false
 }
 
-func (c *Config) IsScheduleValidationDisabled(validation dynamicconfig.FrontendScheduleValidation, namespace string) bool {
-	return slices.Contains(c.DisabledScheduleValidations(namespace), validation)
+func (c *Config) IsScheduleValidationDisabled(validation string, namespace string) bool {
+	for _, disabled := range c.DisabledScheduleValidations(namespace) {
+		if strings.EqualFold(disabled, validation) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewConfig returns new service config with default values

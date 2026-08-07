@@ -3967,13 +3967,13 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	}
 
 	if err := worker_versioning.ValidateVersioningOverride(startWorkflow.GetVersioningOverride(), wh.config.MaxIDLengthLimit()); err != nil {
-		if !wh.config.IsScheduleValidationDisabled(dynamicconfig.FrontendScheduleValidationVersioningOverride, namespaceName.String()) {
+		if !wh.config.IsScheduleValidationDisabled(scheduleValidationVersioningOverride, namespaceName.String()) {
 			return err
 		}
 		wh.logger.Warn(
 			"Ignoring disabled schedule validation",
 			tag.WorkflowNamespace(namespaceName.String()),
-			tag.NewStringTag("validation", string(dynamicconfig.FrontendScheduleValidationVersioningOverride)),
+			tag.NewStringTag("validation", scheduleValidationVersioningOverride),
 			tag.Error(err),
 		)
 	}
@@ -6887,13 +6887,13 @@ func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedul
 		schedule.Spec = &schedulepb.ScheduleSpec{}
 	}
 	if err := validateScheduleIntervalDurations(schedule.Spec); err != nil {
-		if !wh.config.IsScheduleValidationDisabled(dynamicconfig.FrontendScheduleValidationScheduleDuration, namespaceName) {
+		if !wh.config.IsScheduleValidationDisabled(scheduleValidationScheduleDuration, namespaceName) {
 			return serviceerror.NewInvalidArgumentf("Invalid schedule spec: %v", err)
 		}
 		wh.throttledLogger.Warn(
 			"Ignoring disabled schedule validation",
 			tag.WorkflowNamespace(namespaceName),
-			tag.NewStringTag("validation", string(dynamicconfig.FrontendScheduleValidationScheduleDuration)),
+			tag.NewStringTag("validation", scheduleValidationScheduleDuration),
 			tag.Error(err),
 		)
 	}
