@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# ast-diff: prove that a commit changed a Go package's AST in no meaningful way.
+#
+# Emits a canonical, position-independent dump of the package at two revisions
+# -- every top-level declaration re-printed via go/printer, its doc comment, the
+# union of imports, and every free-floating comment -- then diffs them. Because
+# the text is re-derived from the parsed tree, whitespace, ordering across files
+# and formatting differences cannot show up; only real AST changes can.
+#
+# Usage: .task/ast-diff <pkg-dir> [before-rev] [after-rev]
+#   pkg-dir     package path relative to repo root, e.g. chasm/lib/activity
+#   before-rev  default HEAD~1
+#   after-rev   default: the working tree
+#
+# Example: .task/ast-diff chasm/lib/activity HEAD~1
+set -euo pipefail
+
+PKG=${1:?usage: ast-diff <pkg-dir> [before-rev] [after-rev]}
+BEFORE=${2:-HEAD~1}
+AFTER=${3:-}
+
+ROOT=$(git rev-parse --show-toplevel)
+TOOL=$ROOT/.task/astcmp
+TMP=$(mktemp -d)
+WORKTREES=()
+cleanup() {
+  for w in ${WORKTREES+"${WORKTREES[@]}"}; do git -C "$ROOT" worktree remove --force "$w" >/dev/null 2>&1 || true; done
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
+
+(cd "$TOOL" && go build -o "$TMP/astcmp" .)
+
+git -C "$ROOT" worktree add -q --detach "$TMP/before" "$BEFORE"
+WORKTREES+=("$TMP/before")
+"$TMP/astcmp" "$TMP/before/$PKG" > "$TMP/before.txt"
+
+if [[ -n $AFTER ]]; then
+  git -C "$ROOT" worktree add -q --detach "$TMP/after" "$AFTER"
+  WORKTREES+=("$TMP/after")
+  AFTER_DIR=$TMP/after/$PKG
+  AFTER_LABEL=$AFTER
+else
+  AFTER_DIR=$ROOT/$PKG
+  AFTER_LABEL="working tree"
+fi
+"$TMP/astcmp" "$AFTER_DIR" > "$TMP/after.txt"
+
+echo "package:  $PKG"
+echo "before:   $BEFORE"
+echo "after:    $AFTER_LABEL"
+echo
+grep '^### ' "$TMP/before.txt" | sed 's/^/  before  /'
+grep '^### ' "$TMP/after.txt"  | sed 's/^/  after   /'
+echo
+echo "--- declarations + doc comments + import union ---"
+if diff -q <(sed '/^### FLOATING/,$d' "$TMP/before.txt") \
+           <(sed '/^### FLOATING/,$d' "$TMP/after.txt") >/dev/null; then
+  echo "  BYTE-IDENTICAL"
+else
+  diff <(sed '/^### FLOATING/,$d' "$TMP/before.txt") \
+       <(sed '/^### FLOATING/,$d' "$TMP/after.txt") | sed 's/^/  /' || true
+fi
+echo
+echo "--- free-floating comments ---"
+if diff -q "$TMP/before.txt" "$TMP/after.txt" >/dev/null; then
+  echo "  BYTE-IDENTICAL"
+else
+  diff <(sed -n '/^### FLOATING/,$p' "$TMP/before.txt") \
+       <(sed -n '/^### FLOATING/,$p' "$TMP/after.txt") | sed 's/^/  /' || true
+fi
