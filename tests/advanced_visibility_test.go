@@ -1013,13 +1013,84 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow(enableUnifiedQueryCon
 	countRequest.Query = query
 	_, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), countRequest)
 	s.Error(err)
-	s.Contains(strings.ToLower(err.Error()), "'group by' clause is only supported for")
+	s.Contains(strings.ToLower(err.Error()), "'group by' clause is not supported for")
 
 	query = `GROUP BY ExecutionStatus, WorkflowType`
 	countRequest.Query = query
 	_, err = env.FrontendClient().CountWorkflowExecutions(s.Context(), countRequest)
 	s.Error(err)
 	s.Contains(strings.ToLower(err.Error()), "'group by' clause supports only a single field")
+}
+
+func (s *AdvancedVisibilitySuite) TestCountGroupByNamespaceDivision(enableUnifiedQueryConverter bool) {
+	env := s.newTestEnv(enableUnifiedQueryConverter)
+	id := "es-functional-count-groupby-nsdivision-test"
+	wt := "es-functional-count-groupby-nsdivision-test-type"
+	tl := "es-functional-count-groupby-nsdivision-test-taskqueue"
+
+	// Workflows without TemporalNamespaceDivision belong to the default
+	// (empty-string) division; workflows with the attribute set belong to the
+	// named division. Grouping by TemporalNamespaceDivision must count both,
+	// bucketing the default-division workflows under the empty string rather
+	// than dropping them.
+	numDefaultDivision := 6
+	numNamedDivision := 4
+	namedDivision := "es-functional-division"
+
+	for i := range numDefaultDivision {
+		request := s.createStartWorkflowExecutionRequest(env, id+"-default-"+strconv.Itoa(i), wt, tl)
+		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+		s.NoError(err)
+	}
+	for i := range numNamedDivision {
+		request := s.createStartWorkflowExecutionRequest(env, id+"-named-"+strconv.Itoa(i), wt, tl)
+		request.SearchAttributes = &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				sadefs.TemporalNamespaceDivision: sadefs.MustEncodeValue(
+					namedDivision,
+					enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				),
+			},
+		}
+		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+		s.NoError(err)
+	}
+
+	// The query does not mention TemporalNamespaceDivision in the filter, so the
+	// GROUP BY is what disables the default-division filter; both divisions must
+	// be counted.
+	query := fmt.Sprintf(`WorkflowType = %q GROUP BY TemporalNamespaceDivision`, wt)
+	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: env.Namespace().String(),
+		Query:     query,
+	}
+	var countResp *workflowservice.CountWorkflowExecutionsResponse
+	s.Await(
+		func(s *AdvancedVisibilitySuite) {
+			resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), countRequest)
+			s.NoError(err)
+			s.Equal(int64(numDefaultDivision+numNamedDivision), resp.GetCount())
+			countResp = resp
+		},
+		testcore.WaitForESToSettle,
+		esPollInterval,
+	)
+
+	// Group ordering differs across visibility stores, so compare as a map.
+	actual := make(map[string]int64, len(countResp.Groups))
+	for _, group := range countResp.Groups {
+		s.Len(group.GroupValues, 1)
+		var division string
+		s.NoError(payload.Decode(group.GroupValues[0], &division))
+		actual[division] = group.GetCount()
+	}
+	s.Equal(
+		map[string]int64{
+			"":            int64(numDefaultDivision),
+			namedDivision: int64(numNamedDivision),
+		},
+		actual,
+	)
 }
 
 func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(env *testcore.TestEnv, id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {

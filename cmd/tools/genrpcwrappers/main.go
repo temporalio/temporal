@@ -79,6 +79,12 @@ var (
 	largeTimeoutContext = map[string]bool{
 		"client.admin.GetReplicationMessages": true,
 	}
+	// stateSyncTimeoutContext are the cross-cluster workflow state sync hops, whose callers set a
+	// deadline that can exceed even the large timeout. DefaultStateSyncTimeout is only a backstop.
+	stateSyncTimeoutContext = map[string]bool{
+		"client.admin.SyncWorkflowState":   true,
+		"client.history.SyncWorkflowState": true,
+	}
 	longPollRetryPolicy = map[string]string{
 		"retryableClient.matching.PollWorkflowTaskQueue": "pollPolicy",
 		"retryableClient.matching.PollActivityTaskQueue": "pollPolicy",
@@ -439,6 +445,9 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	if largeTimeoutContext[key] {
 		fields["WithLargeTimeout"] = "WithLargeTimeout"
 	}
+	if stateSyncTimeoutContext[key] {
+		fields["WithLargeTimeout"] = "WithStateSyncTimeout"
+	}
 	if impl == "client" {
 		if service.name == "history" {
 			routingOptions := historyRoutingOptions(reqType)
@@ -512,7 +521,7 @@ func (c *clientImpl) {{.Method}}(
 	var response {{.ResponseType}}
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
-		ctx, cancel := c.createContext(ctx)
+		ctx, cancel := c.createContext{{or .WithLargeTimeout ""}}(ctx)
 		defer cancel()
 		response, err = client.{{.Method}}(ctx, request, opts...)
 		return err
