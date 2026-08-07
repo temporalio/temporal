@@ -103,8 +103,9 @@ func (s *taskTracker) rateAndFull() (float32, bool) {
 	s.advanceAndReset(elapsed)
 	totalTasks := s.tasks.totalTasks()
 
+	timeOffsetIntoCurrentBucket := currentTime.Sub(s.bucketStartTime)
 	elapsedTime := min(
-		currentTime.Sub(s.bucketStartTime)+s.totalInterval,
+		s.totalInterval+timeOffsetIntoCurrentBucket,
 		currentTime.Sub(s.startTime))
 
 	if elapsedTime <= 0 {
