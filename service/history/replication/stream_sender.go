@@ -60,6 +60,7 @@ type (
 		shutdownChan            channel.ShutdownOnce
 		config                  *configs.Config
 		isTieredStackEnabled    bool
+		readerGroup             *replicationReaderGroup
 		flowController          SenderFlowController
 		sendLock                sync.Mutex
 		ssRateLimiter           ServerSchedulerRateLimiter
@@ -85,6 +86,10 @@ func NewStreamSender(
 		tag.ShardID(serverShardKey.ShardID), // server is the source cluster (active cluster)
 		tag.Operation("replication-stream-sender"),
 	)
+	// Read the dynamic config once so every derived field sees the same snapshot: a
+	// flip between two reads would leave the sender half in each mode until the recv
+	// loop's config guard restarts the stream.
+	tieredStackEnabled := config.EnableReplicationTaskTieredProcessing()
 	return &StreamSenderImpl{
 		server:                  server,
 		shardContext:            shardContext,
@@ -100,7 +105,8 @@ func NewStreamSender(
 		recvSignalChan:          make(chan struct{}, 1),
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
-		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
+		isTieredStackEnabled:    tieredStackEnabled,
+		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey, tieredStackEnabled, logger),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
 	}
@@ -184,6 +190,9 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		if s.isTieredStackEnabled != s.config.EnableReplicationTaskTieredProcessing() {
 			return NewStreamError("StreamSender detected tiered stack change, restart the stream", nil)
 		}
+		if (s.readerGroup != nil) != s.config.EnableReplicationReaderGroup() {
+			return NewStreamError("StreamSender detected reader group config change, restart the stream", nil)
+		}
 
 		req, err := s.server.Recv()
 		if err != nil {
@@ -244,6 +253,28 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 func (s *StreamSenderImpl) recvSyncReplicationState(
 	attr *replicationspb.SyncReplicationState,
 ) error {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	if s.readerGroup != nil {
+		readerState, err := s.readerGroup.BuildReaderState(attr)
+		if err != nil {
+			return err
+		}
+		taskID, ts, err := s.readerGroup.FailoverWatermark(attr)
+		if err != nil {
+			return err
+		}
+		if s.isTieredStackEnabled {
+			s.flowController.RefreshReceiverFlowControlInfo(attr)
+		}
+		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, readerState); err != nil {
+			return err
+		}
+		return s.shardContext.UpdateRemoteReaderInfo(readerID, taskID, ts)
+	}
+
 	var readerState *persistencespb.QueueReaderState
 	switch s.isTieredStackEnabled {
 	case true:
@@ -327,10 +358,6 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	inclusiveLowWatermark := attr.GetInclusiveLowWatermark()
 	inclusiveLowWatermarkTime := attr.GetInclusiveLowWatermarkTime()
 
-	readerID := shard.ReplicationReaderIDFromClusterShardID(
-		int64(s.clientShardKey.ClusterID),
-		s.clientShardKey.ShardID,
-	)
 	if s.isTieredStackEnabled {
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
 	}
@@ -360,29 +387,9 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 }
 
 func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, error) {
-	readerID := shard.ReplicationReaderIDFromClusterShardID(
-		int64(s.clientShardKey.ClusterID),
-		s.clientShardKey.ShardID,
-	)
-
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
-	var catchupBeginInclusiveWatermark int64
-	queueState, ok := s.shardContext.GetQueueState(
-		tasks.CategoryReplication,
-	)
-	if !ok {
-		s.logger.Debug("StreamSender queueState not found")
-		catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
-	} else {
-		readerState, ok := queueState.ReaderStates[readerID]
-		if !ok {
-			s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
-			catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
-		} else {
-			catchupBeginInclusiveWatermark = s.getSendCatchupBeginInclusiveWatermark(readerState, priority)
-		}
-	}
+	catchupBeginInclusiveWatermark := s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
 	if err := s.sendTasks(
 		priority,
 		catchupBeginInclusiveWatermark,
@@ -393,31 +400,50 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 	return catchupEndExclusiveWatermark, nil
 }
 
-func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *persistencespb.QueueReaderState, priority enumsspb.TaskPriority) int64 {
-	getReaderScopesIndex := func(priority enumsspb.TaskPriority) int {
-		switch priority {
-		case enumsspb.TASK_PRIORITY_HIGH:
-			/*
-				this is to handle the case when switch from single stack to tiered stack, the reader state is still in old format.
-				In this case, it is safe to use the overall low watermark as the beginInclusiveWatermark, as long as we always guarantee
-				the overall low watermark is Min(lowPriorityLowWatermark, highPriorityLowWatermark)
-			*/
-			if len(readerState.Scopes) != 3 {
-				return 0
-			}
-			return 1
-		case enumsspb.TASK_PRIORITY_LOW:
-			if len(readerState.Scopes) != 3 {
-				return 0
-			}
-			return 2
-		case enumsspb.TASK_PRIORITY_UNSPECIFIED:
-			return 0
-		default:
-			return 0
-		}
+// catchupBeginWatermark returns the inclusive begin watermark for the catch-up scan:
+// the persisted reader-state cursor for the given priority, falling back to the
+// current end watermark when no state is persisted for this reader.
+func (s *StreamSenderImpl) catchupBeginWatermark(priority enumsspb.TaskPriority, end int64) int64 {
+	if s.readerGroup != nil {
+		return s.readerGroup.CatchupBeginWatermark(end, priority)
 	}
-	return readerState.Scopes[getReaderScopesIndex(priority)].Range.InclusiveMin.TaskId
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	queueState, ok := s.shardContext.GetQueueState(tasks.CategoryReplication)
+	if !ok {
+		s.logger.Debug("StreamSender queueState not found")
+		return end
+	}
+	readerState, ok := queueState.ReaderStates[readerID]
+	if !ok {
+		s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
+		return end
+	}
+	return s.getSendCatchupBeginInclusiveWatermark(readerState, priority)
+}
+
+func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *persistencespb.QueueReaderState, priority enumsspb.TaskPriority) int64 {
+	// priorityScopeIndex tolerates the single-stack format (1 scope -> index 0) and the
+	// tiered format (3 scopes -> HIGH=1, LOW=2). When switching from single to tiered
+	// stack the reader state is still in the old format, in which case using the overall
+	// low watermark (scope 0) is safe as long as we always guarantee the overall low
+	// watermark is Min(lowPriorityLowWatermark, highPriorityLowWatermark).
+	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes), s.readerGroup != nil)].Range.InclusiveMin.TaskId
+}
+
+func newReaderGroupIfEnabled(
+	config *configs.Config,
+	shardContext historyi.ShardContext,
+	clientShardKey ClusterShardKey,
+	tieredStackEnabled bool,
+	logger log.Logger,
+) *replicationReaderGroup {
+	if !config.EnableReplicationReaderGroup() {
+		return nil
+	}
+	return newReplicationReaderGroup(shardContext, clientShardKey, tieredStackEnabled, logger)
 }
 
 func (s *StreamSenderImpl) sendLive(
