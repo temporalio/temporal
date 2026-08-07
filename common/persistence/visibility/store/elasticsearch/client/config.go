@@ -40,8 +40,10 @@ type (
 
 	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS
 	ESAWSRequestSigningConfig struct {
-		Enabled bool   `yaml:"enabled"`
-		Region  string `yaml:"region"`
+		Enabled              bool   `yaml:"enabled"`
+		Region               string `yaml:"region"`
+		Service              string `yaml:"service"`
+		AddPayloadHashHeader bool   `yaml:"addPayloadHashHeader"`
 
 		// Possible options for CredentialProvider include:
 		//   1) static (fill out static Credential Provider)
