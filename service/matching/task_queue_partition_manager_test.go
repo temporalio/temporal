@@ -152,7 +152,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	buildIds[bld2] = true
 
 	// validating TQ Stats
-	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false)
+	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false, false)
 	s.NoError(err)
 	s.Equal(2, len(resp.VersionsInfoInternal))
 
@@ -191,7 +191,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.validatePollTask(bld2, true)
 
 	// fresher call of the describe API
-	resp, err = s.partitionMgr.Describe(ctx, buildIds, false, true, true, true)
+	resp, err = s.partitionMgr.Describe(ctx, buildIds, false, true, true, true, false)
 	s.NoError(err)
 
 	// validate TQ internal statistics (not exposed via public API)
@@ -224,6 +224,33 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	status2 := activeInternalStatus(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status2))
 	s.ProtoEqual(status0, status2[0])
+}
+
+func TestDescribeSkipMarkAlive(t *testing.T) {
+	controller := gomock.NewController(t)
+	physicalQueue := NewMockphysicalTaskQueueManager(controller)
+	physicalQueue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).Times(2)
+	physicalQueue.EXPECT().GetInternalTaskQueueStatus().Return(nil).Times(2)
+	physicalQueue.EXPECT().MarkAlive().Times(1)
+
+	const buildID = "build-id"
+	pm := &taskQueuePartitionManagerImpl{
+		partition: tqid.MustNormalPartitionFromRpcName(
+			taskQueueName,
+			namespaceID,
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		),
+		versionedQueues: map[PhysicalTaskQueueVersion]physicalTaskQueueManager{
+			{buildId: buildID}: physicalQueue,
+		},
+		userDataManager: &mockUserDataManager{},
+	}
+	buildIDs := map[string]bool{buildID: true}
+
+	_, err := pm.Describe(context.Background(), buildIDs, false, false, false, true, true)
+	require.NoError(t, err)
+	_, err = pm.Describe(context.Background(), buildIDs, false, false, false, true, false)
+	require.NoError(t, err)
 }
 
 // activeInternalStatus filters out any draining backlog entries, leaving only
@@ -1347,7 +1374,7 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 	s.Require().Eventually(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
-		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus)
+		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus, false)
 		if err != nil {
 			return false
 		}
