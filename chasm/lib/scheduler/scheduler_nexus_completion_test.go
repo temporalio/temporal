@@ -9,10 +9,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -193,6 +195,64 @@ func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
 	}
 
 	executeNexusCompletion(t, tc)
+}
+
+func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+	sched.Schedule.Policies.PauseOnFailure = true
+	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+		{
+			RequestId:  "req-1",
+			WorkflowId: "wf-1",
+			RunId:      "run-1",
+			Attempt:    1,
+		},
+	}
+	_, err := node.CloseTransaction()
+	require.NoError(t, err)
+
+	describeResponse, err := sched.Describe(
+		chasm.NewContext(context.Background(), node),
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+			},
+		},
+		newLegacySpecBuilder(0, 0),
+	)
+	require.NoError(t, err)
+	staleDescription := describeResponse.GetFrontendResponse()
+	require.False(t, staleDescription.GetSchedule().GetState().GetPaused())
+
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	err = sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+		RequestId: "req-1",
+		Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+			Failure: &failurepb.Failure{Message: "workflow failed"},
+		},
+		CloseTime: timestamppb.Now(),
+	})
+	require.NoError(t, err)
+	_, err = node.CloseTransaction()
+	require.NoError(t, err)
+	require.True(t, sched.Schedule.GetState().GetPaused())
+	require.NotEmpty(t, sched.Schedule.GetState().GetNotes())
+
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{
+			Namespace:     namespace,
+			ScheduleId:    scheduleID,
+			Schedule:      staleDescription.GetSchedule(),
+			ConflictToken: staleDescription.GetConflictToken(),
+		},
+	})
+	require.ErrorIs(t, err, scheduler.ErrConflictTokenMismatch)
+	require.True(t, sched.Schedule.GetState().GetPaused())
+	require.NotEmpty(t, sched.Schedule.GetState().GetNotes())
 }
 
 // TestHandleNexusCompletion_Idempotent verifies that handling a completion for an
