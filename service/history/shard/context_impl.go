@@ -1420,7 +1420,11 @@ func (s *ContextImpl) oldestImmediateTaskVisibilityTime(
 	if len(resp.Tasks) == 0 {
 		return time.Time{}, false
 	}
-	return resp.Tasks[0].GetVisibilityTime(), true
+	// An unset visibility time would date the age from the epoch.
+	if oldest := resp.Tasks[0].GetVisibilityTime(); !oldest.IsZero() {
+		return oldest, true
+	}
+	return time.Time{}, false
 }
 
 func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
