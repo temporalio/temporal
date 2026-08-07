@@ -10065,7 +10065,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.Equal(t, enumspb.CALLBACK_STATE_STANDBY, cbInfo.GetInfo().GetState())
 		require.NotNil(t, cbInfo.GetInfo().GetRegistrationTime())
 		// Confirm there is no outcome, because the callback hasn't been triggered.
-		require.Nil(t, cbInfo.GetInfo().GetOutcome())
+		require.Nil(t, cbInfo.GetInfo().GetSuccess())
+		require.Nil(t, cbInfo.GetInfo().GetFailure())
 	})
 
 	t.Run("ExceedsMaxCallbacksLimit", func(t *testing.T) {
@@ -10171,7 +10172,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 
 		// Wait for the callback to complete and verify.
 		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
-		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
+		require.NotNil(t, cbInfo.GetSuccess())
 	})
 
 	t.Run("FailsWithCallbacks", func(t *testing.T) {
@@ -10250,7 +10251,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		// Wait for the callback to complete and verify.
 		// The Activity may have failed, but the callback reporting the failure should be successful.
 		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
-		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
+		require.NotNil(t, cbInfo.GetSuccess())
 	})
 
 	t.Run("TerminatedWithCallbacks", func(t *testing.T) {
@@ -10329,7 +10330,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 
 		// Wait for the callback to complete and verify.
 		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
-		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
+		require.NotNil(t, cbInfo.GetSuccess())
 	})
 
 	t.Run("CanceledWithCallbacks", func(t *testing.T) {
@@ -10413,7 +10414,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 
 		// Wait for the callback to complete and verify.
 		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
-		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
+		require.NotNil(t, cbInfo.GetSuccess())
 	})
 
 	// This test covers the timeout callback path using schedule-to-start, but the callback behavior
@@ -10480,7 +10481,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 
 		// Wait for the callback to complete and verify.
 		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
-		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
+		require.NotNil(t, cbInfo.GetSuccess())
 	})
 }
 

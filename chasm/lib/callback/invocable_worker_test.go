@@ -374,10 +374,8 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 				Links:  []nexus.Link{sourceLink},
 			},
 			assertOn: func(t *testing.T, req *notificationservice.OnCompleteRequest) {
-				payloads := req.GetOutcome().GetSuccess().GetPayloads()
-				require.Len(t, payloads, 1)
-				require.Equal(t, []byte("result-data"), payloads[0].GetData())
-				require.Nil(t, req.GetOutcome().GetFailure())
+				require.Equal(t, []byte("result-data"), req.GetSuccess().GetData())
+				require.Nil(t, req.GetFailure())
 			},
 		},
 		{
@@ -387,9 +385,10 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 				Links: []nexus.Link{sourceLink},
 			},
 			assertOn: func(t *testing.T, req *notificationservice.OnCompleteRequest) {
-				require.NotNil(t, req.GetOutcome())
-				require.Nil(t, req.GetOutcome().GetFailure())
-				require.Empty(t, req.GetOutcome().GetSuccess().GetPayloads())
+				require.Nil(t, req.GetFailure())
+				// There is a success payload, but without any data in it.
+				require.NotNil(t, req.GetSuccess())
+				require.Nil(t, req.GetSuccess().GetData())
 			},
 		},
 		{
@@ -402,9 +401,9 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 				Links: []nexus.Link{sourceLink},
 			},
 			assertOn: func(t *testing.T, req *notificationservice.OnCompleteRequest) {
-				require.Nil(t, req.GetOutcome().GetSuccess())
+				require.Nil(t, req.GetSuccess())
 				// The operation error is unwrapped; the handler receives the underlying cause.
-				require.Equal(t, "operation failed", req.GetOutcome().GetFailure().GetMessage())
+				require.Equal(t, "operation failed", req.GetFailure().GetMessage())
 			},
 		},
 	} {

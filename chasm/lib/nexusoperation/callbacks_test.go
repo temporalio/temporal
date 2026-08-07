@@ -404,19 +404,20 @@ func TestBuildCompletionCallbackInfos(t *testing.T) {
 		// Ordering follows the sorted callback IDs, not the (randomized) map iteration order.
 		require.Equal(t, "http://localhost:8080/standby", infos[0].GetInfo().GetCallback().GetNexus().GetUrl())
 		require.Equal(t, enumspb.CALLBACK_STATE_STANDBY, infos[0].GetInfo().GetState())
-		require.Nil(t, infos[0].GetInfo().GetOutcome())
+		require.Nil(t, infos[0].GetInfo().GetSuccess())
+		require.Nil(t, infos[0].GetInfo().GetFailure())
 		require.Equal(t, defaultTime, infos[0].GetInfo().GetRegistrationTime().AsTime())
 		// Every callback on a standalone operation is triggered by the operation completing.
 		require.NotNil(t, infos[0].GetTrigger().GetOperationCompleted())
 
 		require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, infos[1].GetInfo().GetState())
-		require.NotNil(t, infos[1].GetInfo().GetOutcome().GetSuccess())
+		require.NotNil(t, infos[1].GetInfo().GetSuccess())
 
 		require.Equal(t, enumspb.CALLBACK_STATE_FAILED, infos[2].GetInfo().GetState())
 		require.Equal(t, int32(3), infos[2].GetInfo().GetAttempt())
 		protorequire.ProtoEqual(t,
 			&failurepb.Failure{Message: "boom"},
-			infos[2].GetInfo().GetOutcome().GetFailure(),
+			infos[2].GetInfo().GetFailure(),
 		)
 	})
 }

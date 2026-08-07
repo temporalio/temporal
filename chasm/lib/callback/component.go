@@ -164,15 +164,15 @@ func (c *Callback) saveResult(
 	}
 }
 
-// outcome returns the callback's outcome, or nil if the Callback isn't in a terminal state.
-// The returned proto is a copy, safe to use after the CHASM context closes.
-func (c *Callback) outcome(ctx chasm.Context) *callbackpb.CallbackOutcome {
+// Sets the Result field of the CallbackInfo based on the state of the supplied Callback.
+//
+// This is needed because the way the protobuf code for CallbackInfo is generated, there
+// isn't an exported type we can use.
+func setCallbackInfoResult(ctx chasm.Context, c *Callback, cbi *callbackpb.CallbackInfo) {
 	switch c.Status {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
-		return &callbackpb.CallbackOutcome{
-			Value: &callbackpb.CallbackOutcome_Success{
-				Success: &emptypb.Empty{},
-			},
+		cbi.Result = &callbackpb.CallbackInfo_Success{
+			Success: &emptypb.Empty{},
 		}
 	case callbackspb.CALLBACK_STATUS_FAILED:
 		failure, ok := c.TerminalFailure.TryGet(ctx)
@@ -184,13 +184,11 @@ func (c *Callback) outcome(ctx chasm.Context) *callbackpb.CallbackOutcome {
 			// the callback's invocation failure before we added the TerminalFailure field.
 			failure = c.LastAttemptFailure
 		}
-		return &callbackpb.CallbackOutcome{
-			Value: &callbackpb.CallbackOutcome_Failure{
-				Failure: common.CloneProto(failure),
-			},
+		cbi.Result = &callbackpb.CallbackInfo_Failure{
+			Failure: common.CloneProto(failure),
 		}
 	default:
-		return nil
+		cbi.Result = nil
 	}
 }
 
@@ -249,8 +247,8 @@ func (c *Callback) ToAPICallbackInfo(ctx chasm.Context) (*callbackpb.CallbackInf
 		LastAttemptCompleteTime: common.CloneProto(c.LastAttemptCompleteTime),
 		LastAttemptFailure:      common.CloneProto(c.LastAttemptFailure),
 		NextAttemptScheduleTime: common.CloneProto(c.NextAttemptScheduleTime),
-		Outcome:                 c.outcome(ctx),
 	}
+	setCallbackInfoResult(ctx, c, info)
 	return info, nil
 }
 

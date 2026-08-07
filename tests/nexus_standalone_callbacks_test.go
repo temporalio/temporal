@@ -154,7 +154,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 
 		infos := s.awaitCallbackInfos(env, operationID, 1, enumspb.CALLBACK_STATE_SUCCEEDED)
 		s.Equal(callbackURL, infos[0].GetInfo().GetCallback().GetNexus().GetUrl())
-		s.NotNil(infos[0].GetInfo().GetOutcome().GetSuccess())
+		s.NotNil(infos[0].GetInfo().GetSuccess())
 		s.NotNil(infos[0].GetTrigger().GetOperationCompleted())
 	})
 
@@ -229,7 +229,8 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCallbacks() {
 
 		infos := s.awaitCallbackInfos(env, operationID, 2, enumspb.CALLBACK_STATE_STANDBY)
 		for _, info := range infos {
-			s.Nil(info.GetInfo().GetOutcome())
+			s.Nil(info.GetInfo().GetSuccess())
+			s.Nil(info.GetInfo().GetFailure())
 			s.NotNil(info.GetInfo().GetRegistrationTime())
 		}
 	})

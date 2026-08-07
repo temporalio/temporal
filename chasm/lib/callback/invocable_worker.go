@@ -146,31 +146,29 @@ func (n invocableWorker) buildDispatchRequest(ns *namespace.Namespace) (*matchin
 // buildOnCompleteRequest builds the input delivered to the worker's completion handler from the source
 // operation's outcome and the context the callback was registered with.
 func (n invocableWorker) buildOnCompleteRequest() (*notificationservice.OnCompleteRequest, error) {
-	outcome := &notificationservice.OnCompleteRequest_Outcome{}
+	req := &notificationservice.OnCompleteRequest{
+		SourceContext: n.callback.GetSourceContext(),
+	}
+
 	if n.completion.Error != nil {
 		failure, err := nexusToTemporalFailure(n.completion.Error)
 		if err != nil {
 			return nil, err
 		}
-		outcome.Result = &notificationservice.OnCompleteRequest_Outcome_Failure{Failure: failure}
+		req.Result = &notificationservice.OnCompleteRequest_Failure{Failure: failure}
 	} else {
-		// A successful operation may legitimately have no result, in which case the success variant is
-		// still set, just without payloads.
-		var payloads *commonpb.Payloads
+		var payload *commonpb.Payload
 		if n.completion.Result != nil {
 			p, ok := n.completion.Result.(*commonpb.Payload)
 			if !ok {
 				return nil, fmt.Errorf("invalid result, expected a payload, got: %T", n.completion.Result)
 			}
-			payloads = &commonpb.Payloads{Payloads: []*commonpb.Payload{p}}
+			payload = p
 		}
-		outcome.Result = &notificationservice.OnCompleteRequest_Outcome_Success{Success: payloads}
+		req.Result = &notificationservice.OnCompleteRequest_Success{Success: payload}
 	}
 
-	return &notificationservice.OnCompleteRequest{
-		Outcome:       outcome,
-		SourceContext: n.callback.GetSourceContext(),
-	}, nil
+	return req, nil
 }
 
 // classifyDispatchResult maps the result of the dispatch RPC onto an invocation result and a metrics outcome tag.

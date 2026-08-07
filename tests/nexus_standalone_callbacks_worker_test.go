@@ -184,11 +184,11 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacks()
 		s.True(startResp.GetStarted())
 
 		deliveries := s.awaitWorkerCallbackDeliveries(handler, 1)
-		outcome := deliveries[0].GetOutcome()
-		s.Nil(outcome.GetFailure())
-		s.Require().Len(outcome.GetSuccess().GetPayloads(), 1)
+		failure := deliveries[0].GetFailure()
+		s.Nil(failure)
+
 		var result string
-		s.NoError(payload.Decode(outcome.GetSuccess().GetPayloads()[0], &result))
+		s.NoError(payload.Decode(deliveries[0].GetSuccess(), &result))
 		s.Equal("operation-result", result)
 		// The source context is opaque to the server: it arrives at the handler exactly as attached.
 		protorequire.ProtoEqual(t, sourceContext, deliveries[0].GetSourceContext())
@@ -199,7 +199,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacks()
 		s.Equal(taskQueue, worker.GetTaskQueueName())
 		s.Equal(workerCallbackService, worker.GetService())
 		s.Equal(workerCallbackOperation, worker.GetOperation())
-		s.NotNil(infos[0].GetInfo().GetOutcome().GetSuccess())
+		s.NotNil(infos[0].GetInfo().GetSuccess())
 		s.NotNil(infos[0].GetTrigger().GetOperationCompleted())
 	})
 
@@ -232,13 +232,13 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacks()
 		s.NoError(err)
 
 		deliveries := s.awaitWorkerCallbackDeliveries(handler, 1)
-		outcome := deliveries[0].GetOutcome()
-		s.Nil(outcome.GetSuccess())
-		s.Require().NotNil(outcome.GetFailure())
+		got := deliveries[0]
+		s.Nil(got.GetSuccess())
+		s.Require().NotNil(got.GetFailure())
 		// The operation error is unwrapped before delivery, so the handler receives the failure the
 		// operation closed with: an OperationError carrying the Nexus handler's failure as its cause.
-		s.Equal("OperationError", outcome.GetFailure().GetApplicationFailureInfo().GetType())
-		s.Equal("deliberate failure", outcome.GetFailure().GetCause().GetMessage())
+		s.Equal("OperationError", got.GetFailure().GetApplicationFailureInfo().GetType())
+		s.Equal("deliberate failure", got.GetFailure().GetCause().GetMessage())
 
 		s.awaitCallbackInfos(env, operationID, 1, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
@@ -303,7 +303,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacks()
 		s.NoError(err)
 
 		infos := s.awaitCallbackInfos(env, operationID, 1, enumspb.CALLBACK_STATE_FAILED)
-		s.NotNil(infos[0].GetInfo().GetOutcome().GetFailure())
+		s.NotNil(infos[0].GetInfo().GetFailure())
 		s.Contains(infos[0].GetInfo().GetLastAttemptFailure().GetMessage(), "completion rejected")
 		// FAILED is terminal, so the single delivery was the only one.
 		s.Len(handler.deliveries(), 1)
@@ -402,9 +402,9 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacks()
 		s.NoError(err)
 
 		deliveries := s.awaitWorkerCallbackDeliveries(handler, 1)
-		s.Nil(deliveries[0].GetOutcome().GetSuccess())
-		s.Require().NotNil(deliveries[0].GetOutcome().GetFailure())
-		s.Contains(deliveries[0].GetOutcome().GetFailure().GetMessage(), "terminated by the test")
+		s.Nil(deliveries[0].GetSuccess())
+		s.Require().NotNil(deliveries[0].GetFailure())
+		s.Contains(deliveries[0].GetFailure().GetMessage(), "terminated by the test")
 
 		s.awaitCallbackInfos(env, operationID, 1, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
