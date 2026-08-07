@@ -36,8 +36,10 @@ type (
 		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
 		MarkAlive()
 		// TrySyncMatch tries to match task to a local or remote poller. Returns a syncMatchOutcome
-		// indicating success or the reason the match failed.
-		TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error)
+		// indicating success or the reason the match failed, and whether the task was forwarded to
+		// another partition to attempt a remote sync match (true regardless of whether that forward
+		// matched), so the origin partition can tag the tasks_added metric.
+		TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, bool, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		// TODO(pri): old matcher cleanup
@@ -71,8 +73,11 @@ type (
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
-		// RecordTaskAdd records the outcome of a task add to this physical queue using
-		// the queue's tagged metrics handler, so all per-physical-queue labels are included.
+		// RecordTaskAdd records that a task was added to this physical queue, tagged with the add
+		// result (sync_match or backlog), whether the origin partition forwarded the task for a
+		// remote sync match, and the versioning behavior. It uses the queue's tagged metrics
+		// handler, so all per-physical-queue labels are included. It should only be called on the
+		// origin (non-forwarded) partition and only for tasks that were actually added.
 		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior)
 	}
 )

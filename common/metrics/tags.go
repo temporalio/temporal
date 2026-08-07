@@ -322,12 +322,12 @@ func PollResultTag(result string) Tag {
 	return Tag{Key: pollResultTagName, Value: result}
 }
 
+// TaskAddResult values for the tasks_added metric. Only outcomes for tasks that were
+// actually added are recorded (sync-matched or spooled to the backlog); error/rejection
+// outcomes are covered by the Add*Task metrics instead.
 const (
-	TaskAddResultSyncMatch        = "sync_match"
-	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
-	TaskAddResultBacklog          = "backlog"
-	TaskAddResultThrottled        = "throttled"
-	TaskAddResultFailure          = "failure"
+	TaskAddResultSyncMatch = "sync_match"
+	TaskAddResultBacklog   = "backlog"
 )
 
 func TaskAddResultTag(result string) Tag {
