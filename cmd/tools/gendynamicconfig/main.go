@@ -16,6 +16,10 @@ type (
 		Name   string
 		GoArgs string
 		Expr   string
+		// MapExpr builds the same precedence list from a ConstraintsMap instead of from
+		// positional arguments, for the GetC accessors. Defined as methods in
+		// common/dynamicconfig/constraints_map.go.
+		MapExpr string
 	}
 
 	dynamicConfigData struct {
@@ -62,23 +66,27 @@ var (
 		},
 		Precedences: []settingPrecedence{
 			{
-				Name:   "Global",
-				GoArgs: "",
-				Expr:   "[]Constraints{{}}",
+				Name:    "Global",
+				MapExpr: "cm.globalPrecedence()",
+				GoArgs:  "",
+				Expr:    "[]Constraints{{}}",
 			},
 			{
-				Name:   "Namespace",
-				GoArgs: "namespace string",
-				Expr:   "[]Constraints{{Namespace: namespace}, {}}",
+				Name:    "Namespace",
+				MapExpr: "cm.namespacePrecedence()",
+				GoArgs:  "namespace string",
+				Expr:    "[]Constraints{{Namespace: namespace}, {}}",
 			},
 			{
-				Name:   "NamespaceID",
-				GoArgs: "namespaceID namespace.ID",
-				Expr:   "[]Constraints{{NamespaceID: namespaceID.String()}, {}}",
+				Name:    "NamespaceID",
+				MapExpr: "cm.namespaceIDPrecedence()",
+				GoArgs:  "namespaceID namespace.ID",
+				Expr:    "[]Constraints{{NamespaceID: namespaceID.String()}, {}}",
 			},
 			{
-				Name:   "TaskQueue",
-				GoArgs: "namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType",
+				Name:    "TaskQueue",
+				MapExpr: "cm.taskQueuePrecedence()",
+				GoArgs:  "namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType",
 				// A task-queue-name-only filter applies to a single task queue name across all
 				// namespaces, with higher precedence than a namespace-only filter. This is intended to
 				// be used by the default partition count and is probably not useful otherwise.
@@ -91,18 +99,21 @@ var (
 		}`,
 			},
 			{
-				Name:   "ShardID",
-				GoArgs: "shardID int32",
-				Expr:   "[]Constraints{{ShardID: shardID}, {}}",
+				Name:    "ShardID",
+				MapExpr: "cm.shardIDPrecedence()",
+				GoArgs:  "shardID int32",
+				Expr:    "[]Constraints{{ShardID: shardID}, {}}",
 			},
 			{
-				Name:   "TaskType",
-				GoArgs: "taskType enumsspb.TaskType",
-				Expr:   "[]Constraints{{TaskType: taskType}, {}}",
+				Name:    "TaskType",
+				MapExpr: "cm.taskTypePrecedence()",
+				GoArgs:  "taskType enumsspb.TaskType",
+				Expr:    "[]Constraints{{TaskType: taskType}, {}}",
 			},
 			{
-				Name:   "Destination",
-				GoArgs: "namespace string, destination string",
+				Name:    "Destination",
+				MapExpr: "cm.destinationPrecedence()",
+				GoArgs:  "namespace string, destination string",
 				Expr: `[]Constraints{
 			{Namespace: namespace, Destination: destination},
 			{Destination: destination},
@@ -111,9 +122,10 @@ var (
 		}`,
 			},
 			{
-				Name:   "ChasmTaskType",
-				GoArgs: "chasmTaskType string",
-				Expr:   "[]Constraints{{ChasmTaskType: chasmTaskType}, {}}",
+				Name:    "ChasmTaskType",
+				MapExpr: "cm.chasmTaskTypePrecedence()",
+				GoArgs:  "chasmTaskType string",
+				Expr:    "[]Constraints{{ChasmTaskType: chasmTaskType}, {}}",
 			},
 		}}
 )

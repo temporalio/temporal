@@ -385,8 +385,11 @@ type Config struct {
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
 	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableEagerWorkflowStart          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
+	// PROTOTYPE: migrated to the constraints-based accessor, so a rollout can be scoped by
+	// dimensions the Constraints struct has no field for — the calling SDK, for instance.
+	// See common/dynamicconfig/constraints_map.go.
+	EnableEagerWorkflowStart      dynamicconfig.BoolPropertyFnC
+	NamespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
@@ -780,7 +783,7 @@ func NewConfig(
 		EnableActivityEagerExecution:      dynamicconfig.EnableActivityEagerExecution.Get(dc),
 		EnableActivityRetryStampIncrement: dynamicconfig.EnableActivityRetryStampIncrement.Get(dc),
 		EnableCancelActivityWorkerCommand: dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
-		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.GetC(dc),
 		NamespaceCacheRefreshInterval:     dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 
 		// Archival related

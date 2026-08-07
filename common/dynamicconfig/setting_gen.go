@@ -22,6 +22,18 @@ const (
 	PrecedenceChasmTaskType
 )
 
+// TypedPropertyFnC is the accessor returned by Setting.GetC. Unlike the Get accessors it has
+// the same shape for every precedence: the caller supplies its dimensions in a ConstraintsMap
+// rather than as positional filter arguments, so it can pass dimensions that the Constraints
+// struct has no field for.
+type TypedPropertyFnC[T any] func(ConstraintsMap) T
+
+// GetTypedPropertyFnC returns an accessor that always yields value, for tests and for
+// hard-coded configuration.
+func GetTypedPropertyFnC[T any](value T) TypedPropertyFnC[T] {
+	return func(ConstraintsMap) T { return value }
+}
+
 type GlobalBoolSetting = GlobalTypedSetting[bool]
 type GlobalBoolConstrainedDefaultSetting = GlobalTypedConstrainedDefaultSetting[bool]
 
@@ -34,6 +46,14 @@ func NewGlobalBoolSettingWithConstrainedDefault(key string, cdef []TypedConstrai
 }
 
 type BoolPropertyFn = TypedPropertyFn[bool]
+
+// BoolPropertyFnC is the constraints-based accessor. There is one per value type
+// rather than one per value type per precedence, because GetC has a uniform signature.
+type BoolPropertyFnC = TypedPropertyFnC[bool]
+
+func GetBoolPropertyFnC(value bool) BoolPropertyFnC {
+	return GetTypedPropertyFnC(value)
+}
 
 func GetBoolPropertyFn(value bool) BoolPropertyFn {
 	return GetTypedPropertyFn(value)
@@ -171,6 +191,14 @@ func NewGlobalIntSettingWithConstrainedDefault(key string, cdef []TypedConstrain
 
 type IntPropertyFn = TypedPropertyFn[int]
 
+// IntPropertyFnC is the constraints-based accessor. There is one per value type
+// rather than one per value type per precedence, because GetC has a uniform signature.
+type IntPropertyFnC = TypedPropertyFnC[int]
+
+func GetIntPropertyFnC(value int) IntPropertyFnC {
+	return GetTypedPropertyFnC(value)
+}
+
 func GetIntPropertyFn(value int) IntPropertyFn {
 	return GetTypedPropertyFn(value)
 }
@@ -306,6 +334,14 @@ func NewGlobalFloatSettingWithConstrainedDefault(key string, cdef []TypedConstra
 }
 
 type FloatPropertyFn = TypedPropertyFn[float64]
+
+// FloatPropertyFnC is the constraints-based accessor. There is one per value type
+// rather than one per value type per precedence, because GetC has a uniform signature.
+type FloatPropertyFnC = TypedPropertyFnC[float64]
+
+func GetFloatPropertyFnC(value float64) FloatPropertyFnC {
+	return GetTypedPropertyFnC(value)
+}
 
 func GetFloatPropertyFn(value float64) FloatPropertyFn {
 	return GetTypedPropertyFn(value)
@@ -443,6 +479,14 @@ func NewGlobalStringSettingWithConstrainedDefault(key string, cdef []TypedConstr
 
 type StringPropertyFn = TypedPropertyFn[string]
 
+// StringPropertyFnC is the constraints-based accessor. There is one per value type
+// rather than one per value type per precedence, because GetC has a uniform signature.
+type StringPropertyFnC = TypedPropertyFnC[string]
+
+func GetStringPropertyFnC(value string) StringPropertyFnC {
+	return GetTypedPropertyFnC(value)
+}
+
 func GetStringPropertyFn(value string) StringPropertyFn {
 	return GetTypedPropertyFn(value)
 }
@@ -579,6 +623,14 @@ func NewGlobalDurationSettingWithConstrainedDefault(key string, cdef []TypedCons
 
 type DurationPropertyFn = TypedPropertyFn[time.Duration]
 
+// DurationPropertyFnC is the constraints-based accessor. There is one per value type
+// rather than one per value type per precedence, because GetC has a uniform signature.
+type DurationPropertyFnC = TypedPropertyFnC[time.Duration]
+
+func GetDurationPropertyFnC(value time.Duration) DurationPropertyFnC {
+	return GetTypedPropertyFnC(value)
+}
+
 func GetDurationPropertyFn(value time.Duration) DurationPropertyFn {
 	return GetTypedPropertyFn(value)
 }
@@ -714,6 +766,14 @@ func NewGlobalMapSettingWithConstrainedDefault(key string, cdef []TypedConstrain
 }
 
 type MapPropertyFn = TypedPropertyFn[map[string]any]
+
+// MapPropertyFnC is the constraints-based accessor. There is one per value type
+// rather than one per value type per precedence, because GetC has a uniform signature.
+type MapPropertyFnC = TypedPropertyFnC[map[string]any]
+
+func GetMapPropertyFnC(value map[string]any) MapPropertyFnC {
+	return GetTypedPropertyFnC(value)
+}
 
 func GetMapPropertyFn(value map[string]any) MapPropertyFn {
 	return GetTypedPropertyFn(value)
@@ -932,6 +992,37 @@ func (s GlobalTypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPropert
 	}
 }
 
+// GetC is Get for callers that supply their own constraints instead of positional filter
+// arguments. Unlike Get, the returned function has the same signature for every precedence,
+// which is what lets a caller pass dimensions that Constraints has no field for. Known keys
+// in the map are still projected onto the precedence list, so values configured in the
+// dynamic config file continue to apply to a call site that has moved to GetC.
+func (s GlobalTypedSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertC(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			cm,
+			cm.globalPrecedence(),
+		)
+	}
+}
+
+func (s GlobalTypedConstrainedDefaultSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertCWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			cm,
+			cm.globalPrecedence(),
+		)
+	}
+}
+
 type TypedSubscribable[T any] func(callback func(T)) (v T, cancel func())
 
 func (s GlobalTypedSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
@@ -1027,8 +1118,10 @@ func (s NamespaceTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s NamespaceTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
-func (s NamespaceTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceNamespace }
+func (s NamespaceTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
+func (s NamespaceTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
+	return PrecedenceNamespace
+}
 func (s NamespaceTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1064,6 +1157,37 @@ func (s NamespaceTypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedProp
 			s.cdef,
 			s.convert,
 			prec,
+		)
+	}
+}
+
+// GetC is Get for callers that supply their own constraints instead of positional filter
+// arguments. Unlike Get, the returned function has the same signature for every precedence,
+// which is what lets a caller pass dimensions that Constraints has no field for. Known keys
+// in the map are still projected onto the precedence list, so values configured in the
+// dynamic config file continue to apply to a call site that has moved to GetC.
+func (s NamespaceTypedSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertC(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			cm,
+			cm.namespacePrecedence(),
+		)
+	}
+}
+
+func (s NamespaceTypedConstrainedDefaultSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertCWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			cm,
+			cm.namespacePrecedence(),
 		)
 	}
 }
@@ -1163,8 +1287,10 @@ func (s NamespaceIDTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
-func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceNamespaceID }
+func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
+func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
+	return PrecedenceNamespaceID
+}
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1200,6 +1326,37 @@ func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPr
 			s.cdef,
 			s.convert,
 			prec,
+		)
+	}
+}
+
+// GetC is Get for callers that supply their own constraints instead of positional filter
+// arguments. Unlike Get, the returned function has the same signature for every precedence,
+// which is what lets a caller pass dimensions that Constraints has no field for. Known keys
+// in the map are still projected onto the precedence list, so values configured in the
+// dynamic config file continue to apply to a call site that has moved to GetC.
+func (s NamespaceIDTypedSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertC(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			cm,
+			cm.namespaceIDPrecedence(),
+		)
+	}
+}
+
+func (s NamespaceIDTypedConstrainedDefaultSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertCWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			cm,
+			cm.namespaceIDPrecedence(),
 		)
 	}
 }
@@ -1299,8 +1456,10 @@ func (s TaskQueueTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s TaskQueueTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
-func (s TaskQueueTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceTaskQueue }
+func (s TaskQueueTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
+func (s TaskQueueTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
+	return PrecedenceTaskQueue
+}
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1348,6 +1507,37 @@ func (s TaskQueueTypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedProp
 			s.cdef,
 			s.convert,
 			prec,
+		)
+	}
+}
+
+// GetC is Get for callers that supply their own constraints instead of positional filter
+// arguments. Unlike Get, the returned function has the same signature for every precedence,
+// which is what lets a caller pass dimensions that Constraints has no field for. Known keys
+// in the map are still projected onto the precedence list, so values configured in the
+// dynamic config file continue to apply to a call site that has moved to GetC.
+func (s TaskQueueTypedSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertC(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			cm,
+			cm.taskQueuePrecedence(),
+		)
+	}
+}
+
+func (s TaskQueueTypedConstrainedDefaultSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertCWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			cm,
+			cm.taskQueuePrecedence(),
 		)
 	}
 }
@@ -1500,6 +1690,37 @@ func (s ShardIDTypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedProper
 	}
 }
 
+// GetC is Get for callers that supply their own constraints instead of positional filter
+// arguments. Unlike Get, the returned function has the same signature for every precedence,
+// which is what lets a caller pass dimensions that Constraints has no field for. Known keys
+// in the map are still projected onto the precedence list, so values configured in the
+// dynamic config file continue to apply to a call site that has moved to GetC.
+func (s ShardIDTypedSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertC(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			cm,
+			cm.shardIDPrecedence(),
+		)
+	}
+}
+
+func (s ShardIDTypedConstrainedDefaultSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertCWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			cm,
+			cm.shardIDPrecedence(),
+		)
+	}
+}
+
 type TypedSubscribableWithShardIDFilter[T any] func(shardID int32, callback func(T)) (v T, cancel func())
 
 func (s ShardIDTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithShardIDFilter[T] {
@@ -1636,6 +1857,37 @@ func (s TaskTypeTypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPrope
 	}
 }
 
+// GetC is Get for callers that supply their own constraints instead of positional filter
+// arguments. Unlike Get, the returned function has the same signature for every precedence,
+// which is what lets a caller pass dimensions that Constraints has no field for. Known keys
+// in the map are still projected onto the precedence list, so values configured in the
+// dynamic config file continue to apply to a call site that has moved to GetC.
+func (s TaskTypeTypedSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertC(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			cm,
+			cm.taskTypePrecedence(),
+		)
+	}
+}
+
+func (s TaskTypeTypedConstrainedDefaultSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertCWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			cm,
+			cm.taskTypePrecedence(),
+		)
+	}
+}
+
 type TypedSubscribableWithTaskTypeFilter[T any] func(taskType enumsspb.TaskType, callback func(T)) (v T, cancel func())
 
 func (s TaskTypeTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithTaskTypeFilter[T] {
@@ -1731,8 +1983,10 @@ func (s DestinationTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s DestinationTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
-func (s DestinationTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceDestination }
+func (s DestinationTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
+func (s DestinationTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
+	return PrecedenceDestination
+}
 func (s DestinationTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1778,6 +2032,37 @@ func (s DestinationTypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPr
 			s.cdef,
 			s.convert,
 			prec,
+		)
+	}
+}
+
+// GetC is Get for callers that supply their own constraints instead of positional filter
+// arguments. Unlike Get, the returned function has the same signature for every precedence,
+// which is what lets a caller pass dimensions that Constraints has no field for. Known keys
+// in the map are still projected onto the precedence list, so values configured in the
+// dynamic config file continue to apply to a call site that has moved to GetC.
+func (s DestinationTypedSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertC(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			cm,
+			cm.destinationPrecedence(),
+		)
+	}
+}
+
+func (s DestinationTypedConstrainedDefaultSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertCWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			cm,
+			cm.destinationPrecedence(),
 		)
 	}
 }
@@ -1887,8 +2172,10 @@ func (s ChasmTaskTypeTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
-func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceChasmTaskType }
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
+	return PrecedenceChasmTaskType
+}
 func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1924,6 +2211,37 @@ func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Get(c *Collection) Typed
 			s.cdef,
 			s.convert,
 			prec,
+		)
+	}
+}
+
+// GetC is Get for callers that supply their own constraints instead of positional filter
+// arguments. Unlike Get, the returned function has the same signature for every precedence,
+// which is what lets a caller pass dimensions that Constraints has no field for. Known keys
+// in the map are still projected onto the precedence list, so values configured in the
+// dynamic config file continue to apply to a call site that has moved to GetC.
+func (s ChasmTaskTypeTypedSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertC(
+			c,
+			s.key,
+			s.def,
+			s.convert,
+			cm,
+			cm.chasmTaskTypePrecedence(),
+		)
+	}
+}
+
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) GetC(c *Collection) TypedPropertyFnC[T] {
+	return func(cm ConstraintsMap) T {
+		return matchAndConvertCWithConstrainedDefault(
+			c,
+			s.key,
+			s.cdef,
+			s.convert,
+			cm,
+			cm.chasmTaskTypePrecedence(),
 		)
 	}
 }
@@ -1969,4 +2287,3 @@ func GetTypedPropertyFnFilteredByChasmTaskType[T any](value T) TypedPropertyFnWi
 		return value
 	}
 }
-
