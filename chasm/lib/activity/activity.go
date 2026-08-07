@@ -7,6 +7,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -21,6 +22,7 @@ import (
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -738,4 +740,51 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 		chasm.SearchAttributeTaskQueue.Value(a.GetTaskQueue().GetName()),
 		chasm.SearchAttributeExecutionTime.Value(a.firstDispatchTime()),
 	}
+}
+
+// Transition bodies. Each is invoked from a chasm.Transition in statemachine.go, which
+// has already validated that the activity is in a legal source state.
+
+// applyStarted is the body of TransitionStarted: it records the worker that picked the
+// attempt up and emits the StartToClose and Heartbeat tasks.
+func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.StartedTime = timestamppb.New(ctx.Now(a))
+	attempt.StartedStamp = request.GetStamp()
+	// Record the first-ever worker pickup time once and never update on retries or resets.
+	if a.FirstAttemptStartedTime == nil {
+		a.FirstAttemptStartedTime = attempt.GetStartedTime()
+	}
+	attempt.StartRequestId = request.GetRequestId()
+	attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
+	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
+	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
+	if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
+		attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+			BuildId:        versionDirective.GetBuildId(),
+			DeploymentName: versionDirective.GetDeploymentName(),
+		}
+	}
+	startTime := attempt.GetStartedTime().AsTime()
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{
+			ScheduledTime: startTime.Add(a.GetStartToCloseTimeout().AsDuration()),
+		},
+		&activitypb.StartToCloseTimeoutTask{
+			Stamp: a.LastAttempt.Get(ctx).GetStamp(),
+		})
+
+	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{
+				ScheduledTime: startTime.Add(heartbeatTimeout),
+			},
+			&activitypb.HeartbeatTimeoutTask{
+				Stamp: attempt.GetStamp(),
+			})
+	}
+
+	return nil
 }

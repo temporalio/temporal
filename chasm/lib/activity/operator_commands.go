@@ -384,10 +384,12 @@ func (a *Activity) isPaused() bool {
 	}
 }
 
-func (a *Activity) unpause(
+// applyUnpaused is the body of TransitionUnpaused: it bumps the attempt stamp and re-emits
+// the dispatch and ScheduleToStart tasks so that another attempt is made.
+func (a *Activity) applyUnpaused(
 	ctx chasm.MutableContext,
 	event unpauseEvent,
-) {
+) error {
 	attempt := a.LastAttempt.Get(ctx)
 	dispatchTime := a.unpauseDispatchTime(ctx, event)
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
@@ -403,6 +405,7 @@ func (a *Activity) unpause(
 		a,
 		chasm.TaskAttributes{ScheduledTime: dispatchTime},
 		a.newActivityDispatchTask(ctx))
+	return nil
 }
 
 // unpauseDispatchTime computes when an unpaused attempt should be dispatched
@@ -439,7 +442,10 @@ func (a *Activity) clearHeartbeatDetails(ctx chasm.MutableContext) {
 	}
 }
 
-func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
+// applyReset is the body of TransitionReset: it returns the activity to attempt 1, bumps the
+// attempt stamp to invalidate any pending dispatch task, and re-emits the dispatch and
+// ScheduleToStart tasks at the reset time.
+func (a *Activity) applyReset(ctx chasm.MutableContext, event resetEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
 	attempt.Stamp++
@@ -463,6 +469,7 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 		a.newActivityDispatchTask(ctx),
 	)
 	a.emitOnResetMetrics(event.metricsHandler)
+	return nil
 }
 
 // handleReset handles the activity execution reset.
@@ -653,4 +660,104 @@ func (a *Activity) restoreOriginalOptions(ctx chasm.MutableContext) {
 		a.StartDelay = common.CloneProto(og.GetStartDelay())
 	}
 	a.reissueScheduleToClose(ctx)
+}
+
+// Transition bodies. Each is invoked from a chasm.Transition in statemachine.go, which
+// has already validated that the activity is in a legal source state.
+
+// applyCancelRequested is the body of TransitionCancelRequested: it records the cancel
+// request and drops any deferred reset intent.
+func (a *Activity) applyCancelRequested(ctx chasm.MutableContext, req *workflowservice.RequestCancelActivityExecutionRequest) error {
+	a.CancelState = &activitypb.ActivityCancelState{
+		Identity:    req.GetIdentity(),
+		RequestId:   req.GetRequestId(),
+		Reason:      req.GetReason(),
+		RequestTime: timestamppb.New(ctx.Now(a)),
+	}
+	// Cancel takes precedence over a pending reset so clear its deferred intents
+	a.ResetRestoreOptions = false
+	a.ResetShouldClearHeartbeat = false
+
+	return nil
+}
+
+// applyResetAttemptFailedToPaused is the body of
+// TransitionResetAttemptFailedToPaused: it applies the deferred reset and leaves the
+// activity paused, emitting no dispatch task.
+func (a *Activity) applyResetAttemptFailedToPaused(ctx chasm.MutableContext, event rescheduleEvent) error {
+	attempt := a.LastAttempt.Get(ctx)
+	a.ResetShouldPause = false
+	a.applyDeferredOptionRestore(ctx)
+	a.applyDeferredHeartbeatClear(ctx)
+	attempt.Count = 1
+	attempt.Stamp++
+	if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false); err != nil {
+		return err
+	}
+	// Reset discards the retry backoff
+	attempt.CurrentRetryInterval = nil
+	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
+	attempt.DispatchTime = nil
+	return nil
+}
+
+// applyResetAttemptFailedToScheduled is the body of
+// TransitionResetAttemptFailedToScheduled: it applies the deferred reset and re-emits
+// the dispatch and ScheduleToStart tasks.
+func (a *Activity) applyResetAttemptFailedToScheduled(ctx chasm.MutableContext, event rescheduleEvent) error {
+	attempt := a.LastAttempt.Get(ctx)
+	currentTime := ctx.Now(a)
+
+	a.ResetShouldPause = false
+	a.applyDeferredOptionRestore(ctx)
+	a.applyDeferredHeartbeatClear(ctx)
+
+	attempt.Count = 1
+	attempt.Stamp++
+
+	if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, currentTime, false); err != nil {
+		return err
+	}
+	// Reset discards the retry backoff
+	attempt.CurrentRetryInterval = nil
+	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
+
+	dispatchTime := a.dispatchTimeRespectingStartDelay(currentTime)
+	attempt.DispatchTime = timestamppb.New(dispatchTime)
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{
+				ScheduledTime: dispatchTime.Add(timeout),
+			},
+			&activitypb.ScheduleToStartTimeoutTask{
+				Stamp: attempt.GetStamp(),
+			})
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{
+			ScheduledTime: dispatchTime,
+		},
+		a.newActivityDispatchTask(ctx))
+
+	return nil
+}
+
+// applyPaused is the body of TransitionPaused: it records the pause and bumps the attempt
+// stamp so that any pending dispatch task is invalidated and the activity is not dispatched
+// while paused.
+func (a *Activity) applyPaused(ctx chasm.MutableContext, event pauseEvent) error {
+	a.recordPauseState(ctx, event)
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.Stamp++
+	return nil
+}
+
+// applyPauseRequested is the body of TransitionPauseRequested: it records the pause request.
+// Unlike applyPaused it does not bump the attempt stamp, because the worker remains in charge
+// of the attempt and its StartToClose and Heartbeat tasks must stay valid.
+func (a *Activity) applyPauseRequested(ctx chasm.MutableContext, event pauseEvent) error {
+	a.recordPauseState(ctx, event)
+	return nil
 }
