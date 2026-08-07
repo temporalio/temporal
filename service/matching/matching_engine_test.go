@@ -283,8 +283,9 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 }
 
 func (s *matchingEngineSuite) TestDescribeTaskQueuePartitionOnlyIfLoaded() {
+	taskQueue := testvars.New(s.T()).TaskQueue()
 	partition := tqid.MustNormalPartitionFromRpcName(
-		"task-queue",
+		taskQueue.GetName(),
 		s.ns.ID().String(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	)
