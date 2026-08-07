@@ -2636,6 +2636,12 @@ When the this config is zero or lower we will only update shard info at most onc
 		false,
 		`EmitShardLagLog whether emit the shard lag log`,
 	)
+	EmitImmediateQueueBacklogAge = NewGlobalBoolSetting(
+		"history.emitImmediateQueueBacklogAge",
+		true,
+		`EmitImmediateQueueBacklogAge whether to emit shardinfo_immediate_queue_backlog_age, which reads
+the oldest task of each immediate queue category that has a backlog`,
+	)
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
 		retrypolicy.DefaultDefaultRetrySettings,
