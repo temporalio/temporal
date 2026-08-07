@@ -59,18 +59,102 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		"historyservice latency", true))
 
 	for _, settings := range h.config.HealthRPCLatencyPercentiles().PercentileSettings {
+		latency, found := h.historyHealthSignal.LatencyQuantile(settings.Percentile)
+		if !found {
+			continue
+		}
+
 		checks = append(checks, errorIfOverThreshold(
 			healthcheck.CheckTypeRPCLatency+fmt.Sprintf("_P%0.2f", 100.0*settings.Percentile),
-			h.historyHealthSignal.LatencyQuantile(settings.Percentile),
+			latency,
 			float64(settings.Threshold.Milliseconds()),
 			fmt.Sprintf("historyservice percentile latency (P%0.2f < %d, enforced: %t)", 100.0*settings.Percentile, settings.Threshold.Milliseconds(), settings.Enforced),
 			settings.Enforced,
 		))
 	}
 
-	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypeRPCErrorRatio,
-		h.historyHealthSignal.ErrorRatio(), h.config.HealthRPCErrorRatio(),
-		"historyservice error ratio", true))
+	errRatio, found := h.historyHealthSignal.ErrorRatio()
+	if found {
+		checks = append(checks, errorIfOverThreshold(
+			healthcheck.CheckTypeRPCErrorRatio,
+			errRatio,
+			h.config.HealthRPCErrorRatio(),
+			"historyservice error ratio",
+			true, // enforced
+		))
+	}
+
+	// //////////////////
+	// overall latency
+	// //////////////////
+
+	healthCheckSettings := h.config.HealthCheckHistoryGRPCSettings()
+
+	for _, qt := range healthCheckSettings.Overall.QuantileThresholds {
+		latency, found := h.historyHealthSignal.LatencyQuantile(qt.Quantile)
+		if !found {
+			continue
+		}
+
+		checks = append(checks, errorIfOverThreshold(
+			healthcheck.CheckTypeRPCLatencyOverall+fmt.Sprintf("_P%0.2f", 100.0*qt.Quantile),
+			latency,
+			float64(qt.Threshold.Milliseconds()),
+			fmt.Sprintf("history service overall percentile latency (P%0.2f < %dms, enforced: %t)", 100.0*qt.Quantile, qt.Threshold.Milliseconds(), healthCheckSettings.Overall.Enforced),
+			healthCheckSettings.Overall.Enforced,
+		))
+	}
+
+	// //////////////////
+	// overall error ratio
+	// //////////////////
+
+	if healthCheckSettings.Overall.ErrorRatioThreshold != nil {
+		errorRatio, found := h.historyHealthSignal.ErrorRatio()
+		if found {
+			checks = append(checks, errorIfOverThreshold(
+				healthcheck.CheckTypeRPCErrorRatioOverall,
+				errorRatio,
+				healthCheckSettings.Overall.ErrorRatioThreshold.Threshold,
+				fmt.Sprintf("history service overall error ratio (< %0.2f, enforced: %t)", healthCheckSettings.Overall.ErrorRatioThreshold.Threshold, healthCheckSettings.Overall.Enforced),
+				healthCheckSettings.Overall.Enforced,
+			))
+		}
+	}
+
+	// //////////////////
+	// groups
+	// //////////////////
+
+	for _, group := range healthCheckSettings.Groups {
+		for _, qt := range group.Thresholds.QuantileThresholds {
+			latency, found := h.historyHealthSignal.LatencyQuantileByGroup(group.Name, qt.Quantile)
+			if !found {
+				continue
+			}
+
+			checks = append(checks, errorIfOverThreshold(
+				fmt.Sprintf("%s_%s_P%0.2f", healthcheck.CheckTypeRPCLatencyGroup, group.Name, 100.0*qt.Quantile),
+				latency,
+				float64(qt.Threshold.Milliseconds()),
+				fmt.Sprintf("history service %s group percentile latency (P%0.2f < %dms, enforced: %t)", group.Name, 100.0*qt.Quantile, qt.Threshold.Milliseconds(), group.Thresholds.Enforced),
+				group.Thresholds.Enforced,
+			))
+		}
+
+		if group.Thresholds.ErrorRatioThreshold != nil {
+			errorRatio, found := h.historyHealthSignal.ErrorRatioByGroup(group.Name)
+			if found {
+				checks = append(checks, errorIfOverThreshold(
+					fmt.Sprintf("%s_%s", healthcheck.CheckTypeRPCErrorRatioGroup, group.Name),
+					errorRatio,
+					group.Thresholds.ErrorRatioThreshold.Threshold,
+					fmt.Sprintf("history service %s group error ratio (< %0.2f, enforced: %t)", group.Name, group.Thresholds.ErrorRatioThreshold.Threshold, group.Thresholds.Enforced),
+					group.Thresholds.Enforced,
+				))
+			}
+		}
+	}
 
 	// TODO: Remove AverageLatency check once Latency is used by default.
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceLatency,
