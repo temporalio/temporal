@@ -10474,9 +10474,128 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
 
-		// Wait for the callback to complete and verify.
+		// Confirm the callback was successful. (Receiving the timeout failure, verified above.)
 		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 		require.NotNil(t, cbInfo.GetOutcome().GetSuccess())
+	})
+
+	// Verify that if the callback fails to be delivered for some reason, that the failure is
+	// persisted correctly and available from the Describe operation.
+	t.Run("CallbackDeliveryFailure", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		ch := &completionHandler{
+			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
+			requestCompleteCh: make(chan error, 1),
+		}
+		defer func() {
+			close(ch.requestCh)
+			close(ch.requestCompleteCh)
+		}()
+		callbackAddress := env.runNexusCompletionHTTPServer(t, ch)
+
+		// Start and successfully complete a standalone Activity.
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:    env.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: env.Tv().ActivityType(),
+			Identity:     env.Tv().WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+			}},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		// Simulate the completion handler returning a retryable error followed by
+		// an unretryable error. Confirm the SAA's CallbackInfo includes the terminal
+		// failure.
+		var deliveryAttempt int
+		for deliveryAttempt < 2 {
+			select {
+			case completion := <-ch.requestCh:
+				deliveryAttempt++
+
+				// Pull the completion request from the channel.
+				require.Equal(t, nexus.OperationStateSucceeded, completion.State)
+				// The first attempt to deliver the Activity's completion callback reports a retyrable error.
+				if deliveryAttempt == 1 {
+					// Call Describe and confirm the Callback has just been scheduled.
+					cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SCHEDULED)
+					require.EqualValues(t, 0, cbInfo.Attempt) // zero attempts so far.
+					require.Nil(t, cbInfo.LastAttemptFailure)
+					require.Nil(t, cbInfo.GetOutcome())
+
+					// Retryable error.
+					ch.requestCompleteCh <- nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "delivery #1")
+					break
+				}
+				// The second attempt to deliver the Activity's completion callback should report a
+				// non-retryable error.
+				if deliveryAttempt == 2 {
+					// Call Describe and confirm the CallbackInfo describes the previous delivery attempt.
+					cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SCHEDULED)
+					require.EqualValues(t, 1, cbInfo.Attempt) // 1 attempt so far, the 2nd is in-progress.
+					lastAttemptFailure := cbInfo.GetLastAttemptFailure()
+					require.NotNil(t, lastAttemptFailure)
+					require.Equal(t, "handler error (UNAVAILABLE): delivery #1", lastAttemptFailure.GetMessage())
+					require.Nil(t, cbInfo.GetOutcome())
+
+					// Unretryable error.
+					ch.requestCompleteCh <- nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "delivery #2")
+					break
+				}
+				panic("should be unreachable")
+
+			case <-s.Context().Done():
+				require.Fail(t, "timed out waiting for completion callback")
+			}
+		}
+
+		// Verify the Activity is in completed state.
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+
+		// Verify the completion callback delivery has failed.
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_FAILED)
+		require.Nil(t, cbInfo.GetOutcome().GetSuccess())
+
+		// The last delivery failure should be from delivery #2.
+		const lastDeliveryFailureMessage = "handler error (BAD_REQUEST): delivery #2"
+		lastAttemptFailure := cbInfo.GetLastAttemptFailure()
+		require.NotNil(t, lastAttemptFailure)
+		require.Equal(t, lastDeliveryFailureMessage, lastAttemptFailure.GetMessage())
+
+		// Confirm the outcome / terminal failure as well.
+		// (No way to test something like the Callback itself timing out since that isn't supported ATM.)
+		terminalFailure := cbInfo.GetOutcome().GetFailure()
+		require.NotNil(t, terminalFailure)
+		require.Equal(t, lastDeliveryFailureMessage, terminalFailure.GetMessage())
 	})
 }
 
@@ -10525,15 +10644,6 @@ func (s *standaloneActivityTestSuite) TestCallbacksDisabled() {
 		})
 		require.ErrorContains(t, err, "completion callbacks are not enabled for this namespace")
 	})
-}
-
-func (s *standaloneActivityTestSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
-	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
-	srv := httptest.NewServer(hh)
-	t.Cleanup(func() {
-		srv.Close()
-	})
-	return srv.URL
 }
 
 func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
