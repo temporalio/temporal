@@ -33,6 +33,8 @@ const (
 	AsyncSetCurrentAndRamping
 	// Version Data has its own revision number with TaskQueue registration being async as well
 	VersionDataRevisionNumber
+	// TQ registration propagation is tracked in deployment workflow state
+	TqRegistrationPropagationTracking
 )
 
 type (
