@@ -11,12 +11,99 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
 )
 
-func (s *activityParityTestSuite) TestWFASAAMetricsParity() {
+// TestScheduleToStartMetric asserts that SAA and WFA record task_schedule_to_start_latency
+// identically: one sample per accepted worker start, with the same tags. Workflow-task starts share
+// the metric name, so only recordings tagged with the activity-task start operation and task type
+// are collected. Both settings of MetricsBreakdownByTaskQueue are covered, since it decides whether
+// "taskqueue" carries the real name or the "__omitted__" cardinality placeholder.
+func (s *activityParityTestSuite) TestScheduleToStartMetric() {
+	type scenario struct {
+		name           string
+		trace          []model.Event
+		expectedStarts int
+	}
+	type captureResult struct {
+		recordings []*metricstest.CapturedRecording
+		namespace  string
+		taskQueue  string
+	}
+
+	scenarios := []scenario{
+		{name: "FirstAttempt", trace: []model.Event{model.Poll}, expectedStarts: 1},
+		{
+			name:           "RetryAttempt",
+			trace:          []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll},
+			expectedStarts: 2,
+		},
+	}
+	capture := func(t *testing.T, standalone, breakdownByTaskQueue bool, trace []model.Event) captureResult {
+		env := newActivityParityEnv(t)
+		env.GetTestCluster().OverrideDynamicConfig(t, dynamicconfig.MetricsBreakdownByTaskQueue,
+			[]dynamicconfig.ConstrainedValue{{
+				Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()},
+				Value:       breakdownByTaskQueue,
+			}})
+		metricCapture := env.StartNamespaceMetricCapture()
+
+		var taskQueue string
+		if standalone {
+			taskQueue = newSAADriver(t, env, activityConfig{}).driveTrace(t, trace).taskQueue
+		} else {
+			taskQueue = newWFADriver(t, env, activityConfig{}).driveTrace(t, trace).taskQueue
+		}
+		recordings := metricCapture.CollectMetric(metrics.TaskScheduleToStartLatency.Name(), func(rec *metricstest.CapturedRecording) bool {
+			return rec.Tags["operation"] == metrics.HistoryRecordActivityTaskStartedScope &&
+				rec.Tags["task_type"] == enumspb.TASK_QUEUE_TYPE_ACTIVITY.String()
+		})
+		return captureResult{recordings: recordings, namespace: env.Namespace().String(), taskQueue: taskQueue}
+	}
+	check := func(t *testing.T, implementation string, result captureResult, breakdownByTaskQueue bool, expectedStarts int) {
+		require.Len(t, result.recordings, expectedStarts,
+			"%s must record schedule-to-start latency once for every accepted worker start", implementation)
+		taskQueue := "__omitted__"
+		if breakdownByTaskQueue {
+			taskQueue = result.taskQueue
+		}
+		expectedTags := map[string]string{
+			"namespace":    result.namespace,
+			"operation":    metrics.HistoryRecordActivityTaskStartedScope,
+			"partition":    "__normal__",
+			"service_name": string(primitives.HistoryService),
+			"task_type":    enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(),
+			"taskqueue":    taskQueue,
+		}
+		for _, recording := range result.recordings {
+			require.Equal(t, expectedTags, recording.Tags, "%s metric tags must match the activity-task start scope", implementation)
+		}
+	}
+
+	for _, breakdownByTaskQueue := range []bool{true, false} {
+		breakdownName := "TaskQueueBreakdownEnabled"
+		if !breakdownByTaskQueue {
+			breakdownName = "TaskQueueBreakdownDisabled"
+		}
+		s.Run(breakdownName, func(s *activityParityTestSuite) {
+			for _, sc := range scenarios {
+				s.Run(sc.name, func(s *activityParityTestSuite) {
+					t := s.T()
+					wfa := capture(t, false, breakdownByTaskQueue, sc.trace)
+					saa := capture(t, true, breakdownByTaskQueue, sc.trace)
+					check(t, "WFA", wfa, breakdownByTaskQueue, sc.expectedStarts)
+					check(t, "SAA", saa, breakdownByTaskQueue, sc.expectedStarts)
+				})
+			}
+		})
+	}
+}
+
+func (s *activityParityTestSuite) TestMetrics() {
 	type activityMetric struct {
 		name             string
 		compared         bool
@@ -72,6 +159,7 @@ func (s *activityParityTestSuite) TestWFASAAMetricsParity() {
 		{name: "TerminalTimeout", trace: []model.Event{model.Poll, model.StartToCloseElapses}, cfg: activityConfig{MaxAttempts: 1, StartToClose: activityShortTimeout}, anchor: metrics.ActivityTimeout.Name()},
 		{name: "RetryableTimeout", trace: []model.Event{model.Poll, model.StartToCloseElapses}, cfg: activityConfig{MaxAttempts: 2, StartToClose: activityShortTimeout}, anchor: metrics.ActivityTaskTimeout.Name()},
 		{name: "RetryableTaskFailure", trace: []model.Event{model.Poll, model.FailRetryably}, cfg: activityConfig{MaxAttempts: 2}},
+		{name: "RetryableTaskFailureWithHeartbeatDetails", trace: []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}, cfg: activityConfig{MaxAttempts: 2}},
 		{name: "Heartbeat", trace: []model.Event{model.Poll, model.Heartbeat}, cfg: activityConfig{MaxAttempts: 1}},
 		{name: "Pause", trace: []model.Event{model.Poll, model.Pause}, cfg: activityConfig{MaxAttempts: 1}},
 		{name: "Unpause", trace: []model.Event{model.Poll, model.Pause, model.Unpause}, cfg: activityConfig{MaxAttempts: 1}},

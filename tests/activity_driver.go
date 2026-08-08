@@ -5,16 +5,20 @@ package tests
 import (
 	"cmp"
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/await"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -49,6 +53,14 @@ type activityConfig struct {
 
 // activityInput is what both SAA and WFA send, so a worker sees the same input either way.
 const activityInput = "Input"
+
+// activityHeartbeatDetails is the checkpoint payload a driver attaches to RespondActivityTaskFailed when
+// the event sets HasHeartbeatDetails; the server stores it as the activity's last heartbeat progress. It
+// differs from the model.Heartbeat payload so assertions can tell which source was persisted.
+var activityHeartbeatDetails = payloads.EncodeString("failure checkpoint details")
+
+// activityRecordedHeartbeatDetails is the checkpoint payload a driver sends for a model.Heartbeat event.
+var activityRecordedHeartbeatDetails = payloads.EncodeString("heartbeat details")
 
 // timerProcessorMaxShift is the floor the timer queue puts on a task's fire time: it will not fire one
 // earlier than now + this.
@@ -127,6 +139,14 @@ type activityInfo struct {
 	Attempt                    int32
 	CurrentRetryInterval       time.Duration
 	NextAttemptScheduleTimeSet bool
+	LastHeartbeatDetails       []byte
+}
+
+// activityTerminalOutcome is user-visible terminal activity state projected from SAA's
+// ActivityExecutionOutcome and WFA's workflow result.
+type activityTerminalOutcome struct {
+	status     enumspb.ActivityExecutionStatus
+	retryState enumspb.RetryState
 }
 
 // activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
@@ -206,14 +226,61 @@ func isDispatchDelayEvent(et model.EventType) bool {
 	return et == model.StartDelayElapsesType || et == model.BackoffElapsesType
 }
 
-func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Failure {
-	info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !retryable}
-	if nextRetryDelay > 0 {
-		info.NextRetryDelay = durationpb.New(nextRetryDelay)
+// activityFailureSizeLimit is used to truncate larger retryable failure message.
+var activityFailureSizeLimit = dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(
+	dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))("")
+
+// activityLargeFailureMessage is an example large message which may get truncated.
+var activityLargeFailureMessage = strings.Repeat("x", 2*activityFailureSizeLimit)
+
+// respondFailedFailure is the Failure a RespondFailed event carries, or nil when the event omits it
+// (modeling a worker that calls RespondActivityTaskFailed without a Failure).
+func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurepb.Failure {
+	if e.Failure == nil {
+		return nil
 	}
+	switch e.Failure.Type {
+	case model.ApplicationFailureType:
+		info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !e.Failure.Retryable}
+		if nextRetryDelay > 0 {
+			info.NextRetryDelay = durationpb.New(nextRetryDelay)
+		}
+		message := "test failure"
+		if e.Failure.LargeMessage {
+			message = activityLargeFailureMessage
+		}
+		return &failurepb.Failure{
+			Message:     message,
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: info},
+		}
+	case model.ServerFailureType:
+		return &failurepb.Failure{
+			Message:     "test server failure",
+			FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: !e.Failure.Retryable}},
+		}
+	case model.StartToCloseTimeoutFailureType:
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	case model.HeartbeatTimeoutFailureType:
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_HEARTBEAT)
+	case model.ScheduleToStartTimeoutFailureType:
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+	case model.ScheduleToCloseTimeoutFailureType:
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	case model.UnknownFailureType:
+		return &failurepb.Failure{Message: "test unknown failure"}
+	default:
+		panic(fmt.Sprintf("unknown failure type: %d", e.Failure.Type))
+	}
+}
+
+// syntheticTimeoutFailure creates a worker-reported timeout for the by-ID failure RPC,
+// exercising failure classification rather than the server's timeout-task path.
+func syntheticTimeoutFailure(timeoutType enumspb.TimeoutType) *failurepb.Failure {
 	return &failurepb.Failure{
-		Message:     "test failure",
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: info},
+		Message: "test synthetic timeout failure",
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: timeoutType,
+		}},
 	}
 }
 
@@ -320,4 +387,15 @@ func awaitActivityDispatchDelay(
 		t.Errorf("%s: the activity stopped being in progress before the driver observed its delayed dispatch becoming due; last observed: %+v",
 			e, details)
 	}
+}
+
+func activityMarshalPayloads(p *commonpb.Payloads) []byte {
+	if p == nil {
+		return nil
+	}
+	b, err := p.Marshal()
+	if err != nil {
+		panic("marshaling payloads failed: " + err.Error())
+	}
+	return b
 }
