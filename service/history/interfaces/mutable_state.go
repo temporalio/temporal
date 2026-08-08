@@ -148,6 +148,9 @@ type (
 		SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo)
 		GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo
 		AttachRequestID(requestID string, eventType enumspb.EventType, eventID int64)
+		// SetResetRequestID records the request ID used to create a reset run without
+		// replacing the original start request ID used to rebuild callbacks.
+		SetResetRequestID(requestID string)
 
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)

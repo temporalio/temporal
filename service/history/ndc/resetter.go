@@ -30,6 +30,8 @@ type (
 			baseLastEventVersion int64,
 			incomingFirstEventID int64,
 			incomingFirstEventVersion int64,
+			startRequestID string,
+			resetRequestID string,
 		) (historyi.MutableState, error)
 	}
 
@@ -84,6 +86,8 @@ func (r *resetterImpl) resetWorkflow(
 	baseLastEventVersion int64,
 	incomingFirstEventID int64,
 	incomingFirstEventVersion int64,
+	startRequestID string,
+	resetRequestID string,
 ) (historyi.MutableState, error) {
 
 	baseBranchToken, err := r.getBaseBranchToken(
@@ -103,7 +107,9 @@ func (r *resetterImpl) resetWorkflow(
 		return nil, err
 	}
 
-	requestID := uuid.NewString()
+	if startRequestID == "" {
+		startRequestID = uuid.NewString()
+	}
 	rebuildMutableState, rebuildStats, err := r.stateRebuilder.Rebuild(
 		ctx,
 		now,
@@ -121,10 +127,18 @@ func (r *resetterImpl) resetWorkflow(
 			r.newRunID,
 		),
 		resetBranchToken,
-		requestID,
+		startRequestID,
 	)
 	if err != nil {
 		return nil, err
+	}
+	rebuildMutableState.SetBaseWorkflow(
+		r.baseRunID,
+		baseLastEventID,
+		baseLastEventVersion,
+	)
+	if resetRequestID != "" {
+		rebuildMutableState.SetResetRequestID(resetRequestID)
 	}
 	rebuildMutableState.AddHistorySize(rebuildStats.HistorySize)
 	rebuildMutableState.AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)

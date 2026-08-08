@@ -171,8 +171,13 @@ type BaseExecutionInfo struct {
 	RunId                            string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	LowestCommonAncestorEventId      int64                  `protobuf:"varint,2,opt,name=lowest_common_ancestor_event_id,json=lowestCommonAncestorEventId,proto3" json:"lowest_common_ancestor_event_id,omitempty"`
 	LowestCommonAncestorEventVersion int64                  `protobuf:"varint,3,opt,name=lowest_common_ancestor_event_version,json=lowestCommonAncestorEventVersion,proto3" json:"lowest_common_ancestor_event_version,omitempty"`
-	unknownFields                    protoimpl.UnknownFields
-	sizeCache                        protoimpl.SizeCache
+	// Request ID associated with the WorkflowExecutionStarted event. This is used to
+	// rebuild callback state when a reset run is replicated.
+	StartRequestId string `protobuf:"bytes,4,opt,name=start_request_id,json=startRequestId,proto3" json:"start_request_id,omitempty"`
+	// Request ID of the ResetWorkflowExecution call that created the reset run.
+	ResetRequestId string `protobuf:"bytes,5,opt,name=reset_request_id,json=resetRequestId,proto3" json:"reset_request_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *BaseExecutionInfo) Reset() {
@@ -226,6 +231,20 @@ func (x *BaseExecutionInfo) GetLowestCommonAncestorEventVersion() int64 {
 	return 0
 }
 
+func (x *BaseExecutionInfo) GetStartRequestId() string {
+	if x != nil {
+		return x.StartRequestId
+	}
+	return ""
+}
+
+func (x *BaseExecutionInfo) GetResetRequestId() string {
+	if x != nil {
+		return x.ResetRequestId
+	}
+	return ""
+}
+
 var File_temporal_server_api_workflow_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_workflow_v1_message_proto_rawDesc = "" +
@@ -240,11 +259,13 @@ const file_temporal_server_api_workflow_v1_message_proto_rawDesc = "" +
 	"\x11initiated_version\x18\x06 \x01(\x03R\x10initiatedVersion\x12G\n" +
 	" pinned_worker_deployment_version\x18\a \x01(\tR\x1dpinnedWorkerDeploymentVersionJ\x04\b\b\x10\t\"\\\n" +
 	"\x11RootExecutionInfo\x12G\n" +
-	"\texecution\x18\x01 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\xc0\x01\n" +
+	"\texecution\x18\x01 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\x94\x02\n" +
 	"\x11BaseExecutionInfo\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12D\n" +
 	"\x1flowest_common_ancestor_event_id\x18\x02 \x01(\x03R\x1blowestCommonAncestorEventId\x12N\n" +
-	"$lowest_common_ancestor_event_version\x18\x03 \x01(\x03R lowestCommonAncestorEventVersionB0Z.go.temporal.io/server/api/workflow/v1;workflowb\x06proto3"
+	"$lowest_common_ancestor_event_version\x18\x03 \x01(\x03R lowestCommonAncestorEventVersion\x12(\n" +
+	"\x10start_request_id\x18\x04 \x01(\tR\x0estartRequestId\x12(\n" +
+	"\x10reset_request_id\x18\x05 \x01(\tR\x0eresetRequestIdB0Z.go.temporal.io/server/api/workflow/v1;workflowb\x06proto3"
 
 var (
 	file_temporal_server_api_workflow_v1_message_proto_rawDescOnce sync.Once

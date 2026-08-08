@@ -32,4 +32,9 @@ message BaseExecutionInfo {
   string run_id = 1;
   int64 lowest_common_ancestor_event_id = 2;
   int64 lowest_common_ancestor_event_version = 3;
+  // Request ID associated with the WorkflowExecutionStarted event. This is used to
+  // rebuild callback state when a reset run is replicated.
+  string start_request_id = 4;
+  // Request ID of the ResetWorkflowExecution call that created the reset run.
+  string reset_request_id = 5;
 }
