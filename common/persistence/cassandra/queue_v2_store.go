@@ -163,7 +163,7 @@ func (s *queueV2Store) ReadMessages(
 	).WithContext(ctx).Iter()
 
 	var (
-		messages []persistence.QueueV2Message
+		messages = make([]persistence.QueueV2Message, 0, request.PageSize)
 		// messageID is the ID of the last message returned by the query.
 		messageID int64
 	)
@@ -476,7 +476,7 @@ func (s *queueV2Store) ListQueues(
 	// page because the partition key is (queue_type, queue_name) and we filter
 	// only on queue_type. Keep fetching pages until we have enough rows or
 	// exhaust the result set.
-	var queues []persistence.QueueInfo
+	var queues = make([]persistence.QueueInfo, 0, request.PageSize)
 	pageToken := request.NextPageToken
 
 	for len(queues) < request.PageSize {
