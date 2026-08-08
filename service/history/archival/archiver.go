@@ -139,6 +139,7 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 	if err := a.rateLimiter.WaitN(ctx, numTargets); err != nil {
 		return nil, &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
 			Message: fmt.Sprintf("archival rate limited: %s", err.Error()),
 		}
 	}
