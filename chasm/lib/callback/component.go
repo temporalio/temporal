@@ -5,7 +5,10 @@ import (
 	"maps"
 	"time"
 
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -13,6 +16,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -29,6 +33,9 @@ type Callback struct {
 
 	// Persisted internal state
 	*callbackspb.CallbackState
+	// The failure that terminated the callback. May differ from LastAttemptFailure when the callback
+	// fails for a reason other than a delivery attempt, such as a timeout (once supported).
+	TerminalFailure chasm.Field[*failurepb.Failure]
 
 	// Interface to retrieve Nexus operation completion data
 	CompletionSource chasm.ParentPtr[CompletionSource]
@@ -143,6 +150,36 @@ func (c *Callback) saveResult(
 	}
 }
 
+// outcome returns the callback's outcome, or nil if the Callback isn't in a terminal state.
+// The returned proto is a copy, safe to use after the CHASM context closes.
+func (c *Callback) outcome(ctx chasm.Context) *callbackpb.CallbackOutcome {
+	switch c.Status {
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return &callbackpb.CallbackOutcome{
+			Value: &callbackpb.CallbackOutcome_Success{
+				Success: &emptypb.Empty{},
+			},
+		}
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		failure, ok := c.TerminalFailure.TryGet(ctx)
+		if !ok {
+			// TerminalFailure will not be present on Callbacks which failed before the field was added
+			// to the CHASM component. So fallback to including the LastAttemptFailure.
+			//
+			// This is still accurate, since we didn't have any way a callback could fail outside of
+			// the callback's invocation failure before we added the TerminalFailure field.
+			failure = c.LastAttemptFailure
+		}
+		return &callbackpb.CallbackOutcome{
+			Value: &callbackpb.CallbackOutcome_Failure{
+				Failure: common.CloneProto(failure),
+			},
+		}
+	default:
+		return nil
+	}
+}
+
 // ToAPICallback converts a CHASM callback to API callback proto.
 func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	// Convert CHASM callback proto to API callback proto
@@ -172,6 +209,54 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 		return res, nil
 	default:
 		return nil, serviceerror.NewInternalf("unsupported CHASM callback type: %T", variant)
+	}
+}
+
+// ToAPICallbackInfo returns the API CallbackInfo based on the current state of the CHASM component.
+// A deep copy is made of proto fields, so the response can outlive the CHASM context.
+func (c *Callback) ToAPICallbackInfo(ctx chasm.Context) (*callbackpb.CallbackInfo, error) {
+	apiCb, err := c.ToAPICallback()
+	if err != nil {
+		return nil, err
+	}
+	apiState, err := c.APIState()
+	if err != nil {
+		return nil, err
+	}
+
+	info := &callbackpb.CallbackInfo{
+		Callback:         apiCb,
+		RegistrationTime: common.CloneProto(c.RegistrationTime),
+		State:            apiState,
+		// Surfacing why a callback is blocked, e.g. currently backing off due to circuit breaker,
+		// is not currently implemented.
+		BlockedReason:           "",
+		Attempt:                 c.Attempt,
+		LastAttemptCompleteTime: common.CloneProto(c.LastAttemptCompleteTime),
+		LastAttemptFailure:      common.CloneProto(c.LastAttemptFailure),
+		NextAttemptScheduleTime: common.CloneProto(c.NextAttemptScheduleTime),
+		Outcome:                 c.outcome(ctx),
+	}
+	return info, nil
+}
+
+// APIState converts the CHASM callback status to the API CallbackState enum.
+func (c *Callback) APIState() (enumspb.CallbackState, error) {
+	switch c.Status {
+	case callbackspb.CALLBACK_STATUS_STANDBY:
+		return enumspb.CALLBACK_STATE_STANDBY, nil
+	case callbackspb.CALLBACK_STATUS_SCHEDULED:
+		return enumspb.CALLBACK_STATE_SCHEDULED, nil
+	case callbackspb.CALLBACK_STATUS_BACKING_OFF:
+		return enumspb.CALLBACK_STATE_BACKING_OFF, nil
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		return enumspb.CALLBACK_STATE_FAILED, nil
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return enumspb.CALLBACK_STATE_SUCCEEDED, nil
+	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternal("callback with UNSPECIFIED state")
+	default:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternalf("unknown callback state: %v", c.Status)
 	}
 }
 

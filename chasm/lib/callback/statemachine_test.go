@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -106,6 +107,11 @@ func TestValidTransitions(t *testing.T) {
 	require.True(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, callback.NextAttemptScheduleTime)
+	// The terminal failure should be structurally but not referentially equal to LastAttemptFailure.
+	terminalFailure, ok := callback.TerminalFailure.TryGet(mctx)
+	require.True(t, ok)
+	protorequire.ProtoEqual(t, callback.LastAttemptFailure, terminalFailure)
+	require.NotSame(t, callback.LastAttemptFailure, terminalFailure)
 
 	// Assert task is not generated, failed is terminal
 	require.Empty(t, mctx.Tasks)

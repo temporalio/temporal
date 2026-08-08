@@ -86,7 +86,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 		name                  string
 		caller                HTTPCaller
 		expectedMetricOutcome string
-		assertOutcome         func(*testing.T, *Callback, error)
+		assertOutcome         func(*testing.T, chasm.Context, *Callback, error)
 	}{
 		{
 			name: "success",
@@ -94,7 +94,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "success",
-			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+			assertOutcome: func(t *testing.T, _ chasm.Context, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
 			},
@@ -105,7 +105,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return nil, errors.New("fake failure")
 			},
 			expectedMetricOutcome: "unknown-error",
-			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+			assertOutcome: func(t *testing.T, _ chasm.Context, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
@@ -117,10 +117,16 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
-			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+			assertOutcome: func(t *testing.T, ctx chasm.Context, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+
+				// The LastAttemptFailure is set but not TerminalFailure, because the error is retryable.
+				require.NotNil(t, cb.LastAttemptFailure)
+				require.Contains(t, cb.LastAttemptFailure.GetMessage(), "handler error (INTERNAL)")
+				_, hasTerminalFailure := cb.TerminalFailure.TryGet(ctx)
+				require.False(t, hasTerminalFailure)
 			},
 		},
 		{
@@ -129,9 +135,16 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "handler-error:BAD_REQUEST",
-			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+			assertOutcome: func(t *testing.T, ctx chasm.Context, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+
+				// Non-retryable failure sets both LastAttemptFailure and TerminalFailure.
+				require.NotNil(t, cb.LastAttemptFailure)
+				require.Contains(t, cb.LastAttemptFailure.GetMessage(), "handler error (BAD_REQUEST)")
+				terminalFailure, hasTerminalFailure := cb.TerminalFailure.TryGet(ctx)
+				require.True(t, hasTerminalFailure)
+				require.Contains(t, terminalFailure.GetMessage(), "handler error (BAD_REQUEST)")
 			},
 		},
 	}
@@ -261,16 +274,16 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			)
 
 			// Verify outcome by reading component state directly.
-			resultCallback, err := chasm.ReadComponent(
+			_, err = chasm.ReadComponent(
 				engineCtx,
 				callbackRef,
-				func(c *Callback, _ chasm.Context, _ struct{}) (*Callback, error) {
-					return c, nil
+				func(c *Callback, chasmCtx chasm.Context, _ struct{}) (struct{}, error) {
+					tc.assertOutcome(t, chasmCtx, c, executeErr)
+					return struct{}{}, nil
 				},
 				struct{}{},
 			)
 			require.NoError(t, err)
-			tc.assertOutcome(t, resultCallback, executeErr)
 		})
 	}
 }
