@@ -20,6 +20,8 @@ const (
 	ClientNameCLI           = "temporal-cli"
 	ClientNameUI            = "temporal-ui"
 	ClientNameNexusGoSDK    = "Nexus-go-sdk"
+	ClientNameDotNetSDK     = "temporal-dotnet"
+	ClientNameRubySDK       = "temporal-ruby"
 
 	// ServerVersion value can be changed by the create-tag Github workflow.
 	// If you change the var name or move it, be sure to update the workflow.
@@ -41,6 +43,10 @@ var (
 		FeatureFollowsNextRunID,
 	}, SupportedFeaturesHeaderDelim)
 
+	// SupportedClients maps a client name to the range of versions this server supports.
+	// Listed clients have their version validated by semver.Parse, so only SDKs that always
+	// report valid semver may be added. Python is omitted, as it has versions like "0.1a1"
+	// which fail to parse
 	SupportedClients = map[string]string{
 		ClientNameGoSDK:         "<2.0.0",
 		ClientNameJavaSDK:       "<2.0.0",
@@ -50,6 +56,8 @@ var (
 		ClientNameServer:        "<2.0.0",
 		ClientNameUI:            "<3.0.0",
 		ClientNameNexusGoSDK:    "<2.0.0",
+		ClientNameDotNetSDK:     "<2.0.0",
+		ClientNameRubySDK:       "<2.0.0",
 	}
 
 	internalVersionHeaderPairs = []string{

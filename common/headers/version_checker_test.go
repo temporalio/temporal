@@ -112,6 +112,32 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 	}
 }
 
+func (s *VersionCheckerSuite) TestClientSupported_DefaultSupportedClients() {
+	versionChecker := NewDefaultVersionChecker()
+
+	testCases := []struct {
+		clientName    string
+		clientVersion string
+		expectErr     bool
+	}{
+		{ClientNameDotNetSDK, "1.14.0", false},
+		{ClientNameDotNetSDK, "2.0.0", true},
+		{ClientNameRubySDK, "1.5.0", false},
+		{ClientNameRubySDK, "2.0.0", true},
+	}
+
+	for caseIndex, tc := range testCases {
+		ctx := s.constructCallContext(tc.clientVersion, tc.clientName, "", "")
+		err := versionChecker.ClientSupported(ctx)
+		if tc.expectErr {
+			s.Errorf(err, "Case #%d (%s %s)", caseIndex, tc.clientName, tc.clientVersion)
+			s.IsType(&serviceerror.ClientVersionNotSupported{}, err, "Case #%d", caseIndex)
+		} else {
+			s.NoErrorf(err, "Case #%d (%s %s)", caseIndex, tc.clientName, tc.clientVersion)
+		}
+	}
+}
+
 func (s *VersionCheckerSuite) constructCallContext(clientVersion, clientName, supportedServerVersions, supportedFeatures string) context.Context {
 	return SetVersionsForTests(context.Background(), clientVersion, clientName, supportedServerVersions, supportedFeatures)
 }
