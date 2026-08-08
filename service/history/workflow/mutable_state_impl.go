@@ -4372,7 +4372,10 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		}
 	}
 
-	if deployment != nil {
+	if deployment == nil {
+		ai.LastWorkerDeploymentVersion = ""
+		ai.LastDeploymentVersion = nil
+	} else {
 		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment))
 		ai.LastDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)
 	}
