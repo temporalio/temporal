@@ -3,6 +3,7 @@ package frontend
 import (
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,11 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+)
+
+const (
+	scheduleValidationVersioningOverride = "versioning-override"
+	scheduleValidationScheduleDuration   = "scheduler-duration"
 )
 
 // Config represents configuration for frontend service
@@ -178,6 +184,7 @@ type Config struct {
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
 	// advance of EnableCHASMSchedulerCreation.
 	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	DisabledScheduleValidations   dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -258,6 +265,15 @@ func (c *Config) IsExperimentAllowed(experiment string, namespace string) bool {
 	allowedExperiments := c.AllowedExperiments(namespace)
 	for _, allowed := range allowedExperiments {
 		if allowed == "*" || allowed == experiment {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Config) IsScheduleValidationDisabled(validation string, namespace string) bool {
+	for _, disabled := range c.DisabledScheduleValidations(namespace) {
+		if strings.EqualFold(disabled, validation) {
 			return true
 		}
 	}
@@ -368,6 +384,7 @@ func NewConfig(
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
 		EnableCHASMSchedulerRouting:          dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
 		EnableCHASMSchedulerSentinels:        dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
+		DisabledScheduleValidations:          dynamicconfig.FrontendDisabledScheduleValidations.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),

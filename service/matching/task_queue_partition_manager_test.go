@@ -152,7 +152,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	buildIds[bld2] = true
 
 	// validating TQ Stats
-	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false)
+	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false, false)
 	s.NoError(err)
 	s.Equal(2, len(resp.VersionsInfoInternal))
 
@@ -191,7 +191,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.validatePollTask(bld2, true)
 
 	// fresher call of the describe API
-	resp, err = s.partitionMgr.Describe(ctx, buildIds, false, true, true, true)
+	resp, err = s.partitionMgr.Describe(ctx, buildIds, false, true, true, true, false)
 	s.NoError(err)
 
 	// validate TQ internal statistics (not exposed via public API)
@@ -224,6 +224,33 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	status2 := activeInternalStatus(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status2))
 	s.ProtoEqual(status0, status2[0])
+}
+
+func TestDescribeSkipMarkAlive(t *testing.T) {
+	controller := gomock.NewController(t)
+	physicalQueue := NewMockphysicalTaskQueueManager(controller)
+	physicalQueue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).Times(2)
+	physicalQueue.EXPECT().GetInternalTaskQueueStatus().Return(nil).Times(2)
+	physicalQueue.EXPECT().MarkAlive().Times(1)
+
+	const buildID = "build-id"
+	pm := &taskQueuePartitionManagerImpl{
+		partition: tqid.MustNormalPartitionFromRpcName(
+			taskQueueName,
+			namespaceID,
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		),
+		versionedQueues: map[PhysicalTaskQueueVersion]physicalTaskQueueManager{
+			{buildId: buildID}: physicalQueue,
+		},
+		userDataManager: &mockUserDataManager{},
+	}
+	buildIDs := map[string]bool{buildID: true}
+
+	_, err := pm.Describe(context.Background(), buildIDs, false, false, false, true, true)
+	require.NoError(t, err)
+	_, err = pm.Describe(context.Background(), buildIDs, false, false, false, true, false)
+	require.NoError(t, err)
 }
 
 // activeInternalStatus filters out any draining backlog entries, leaving only
@@ -1347,7 +1374,7 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 	s.Require().Eventually(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
-		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus)
+		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus, false)
 		if err != nil {
 			return false
 		}
@@ -2196,4 +2223,55 @@ func TestWorkerCommandsPollTask_VersioningFieldsIgnored(t *testing.T) {
 			require.ErrorIs(t, err, errNoTasks, "PollTask on WorkerCommandsPartition must not reject versioning fields")
 		})
 	}
+}
+
+func TestCloneTaskQueueStats_PreservesAllFields(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 42,
+		ApproximateBacklogAge:   durationpb.New(5 * time.Minute),
+		TasksAddRate:            10.5,
+		TasksDispatchRate:       8.3,
+		RateLimitingActive:      true,
+	}
+	cloned := cloneTaskQueueStats(original)
+
+	require.Equal(t, original.ApproximateBacklogCount, cloned.ApproximateBacklogCount)
+	require.Equal(t, original.ApproximateBacklogAge.AsDuration(), cloned.ApproximateBacklogAge.AsDuration())
+	require.InDelta(t, original.TasksAddRate, cloned.TasksAddRate, 1e-9)
+	require.InDelta(t, original.TasksDispatchRate, cloned.TasksDispatchRate, 1e-9)
+	require.True(t, cloned.RateLimitingActive)
+}
+
+func TestCloneTaskQueueStats_Nil(t *testing.T) {
+	cloned := cloneTaskQueueStats(nil)
+	require.NotNil(t, cloned)
+	require.False(t, cloned.RateLimitingActive)
+}
+
+func TestSplitTaskQueueStatsByRampPercentage_PreservesRateLimitingActive(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+		ApproximateBacklogAge:   durationpb.New(2 * time.Minute),
+		TasksAddRate:            20,
+		TasksDispatchRate:       15,
+		RateLimitingActive:      true,
+	}
+	currentShare, rampShare := splitTaskQueueStatsByRampPercentage(original, 30)
+
+	require.True(t, currentShare.RateLimitingActive, "currentShare should preserve RateLimitingActive")
+	require.True(t, rampShare.RateLimitingActive, "rampShare should preserve RateLimitingActive")
+}
+
+func TestSplitTaskQueueStatsByRampPercentage_RateLimitingFalse(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+		ApproximateBacklogAge:   durationpb.New(2 * time.Minute),
+		TasksAddRate:            20,
+		TasksDispatchRate:       15,
+		RateLimitingActive:      false,
+	}
+	currentShare, rampShare := splitTaskQueueStatsByRampPercentage(original, 30)
+
+	require.False(t, currentShare.RateLimitingActive)
+	require.False(t, rampShare.RateLimitingActive)
 }

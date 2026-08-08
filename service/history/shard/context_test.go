@@ -19,6 +19,10 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -50,6 +54,11 @@ type (
 func TestShardContextSuite(t *testing.T) {
 	s := &contextSuite{}
 	suite.Run(t, s)
+}
+
+// SetupSubTest rebinds the embedded assertions so an s.Run failure reports against the subtest.
+func (s *contextSuite) SetupSubTest() {
+	s.Assertions = require.New(s.T())
 }
 
 func (s *contextSuite) SetupTest() {
@@ -983,4 +992,223 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 	s.NoError(err)
 	s.True(called)
 	s.Equal(0, s.mockShard.tasksCompletedSinceLastUpdate)
+}
+
+// setImmediateAckLevels replaces the shard's queue states so each given immediate category has its
+// ack level at the given task id, i.e. a backlog of everything above it.
+func (s *contextSuite) setImmediateAckLevels(ackLevelByCategoryID map[int32]int64) {
+	queueStates := make(map[int32]*persistencespb.QueueState, len(ackLevelByCategoryID))
+	for categoryID, taskID := range ackLevelByCategoryID {
+		queueStates[categoryID] = &persistencespb.QueueState{
+			ExclusiveReaderHighWatermark: ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+		}
+	}
+	s.mockShard.shardInfo.QueueStates = queueStates
+}
+
+// expectOldestTaskRead returns a task of the requested category with the given age.
+func (s *contextSuite) expectOldestTaskRead(now time.Time, age time.Duration) {
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+			return &persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
+				tasks.NewFakeTask(definition.WorkflowKey{}, req.TaskCategory, now.Add(-age)),
+			}}, nil
+		}).Times(1)
+}
+
+func (s *contextSuite) captureShardInfoMetrics() metricstest.CaptureSnapshot {
+	captureHandler := metricstest.NewCaptureHandler()
+	s.mockShard.SetMetricsHandler(captureHandler)
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	s.mockShard.emitShardInfoMetricsLogs()
+	return capture.Snapshot()
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_ImmediateBacklogAge() {
+	now := s.timeSource.Now()
+	highWatermark := s.mockShard.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryTransfer)
+	s.setImmediateAckLevels(map[int32]int64{int32(tasks.CategoryIDTransfer): 100})
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+			// Read window is [persisted ack level, reader high watermark).
+			s.Equal(tasks.NewImmediateKey(100), req.InclusiveMinTaskKey)
+			s.Equal(highWatermark, req.ExclusiveMaxTaskKey)
+			return &persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
+				tasks.NewFakeTask(definition.WorkflowKey{}, req.TaskCategory, now.Add(-time.Hour)),
+			}}, nil
+		}).Times(1)
+
+	snap := s.captureShardInfoMetrics()
+
+	recordings := snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(time.Hour, recordings[0].Value.(time.Duration))
+	// Tags must match the count metric so the two line up.
+	s.Equal(metrics.ShardInfoScope, recordings[0].Tags["operation"])
+	s.Equal(tasks.CategoryTransfer.Name(), recordings[0].Tags["task_category"])
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_ImmediateBacklogAge_PerCategory() {
+	now := s.timeSource.Now()
+	s.setImmediateAckLevels(map[int32]int64{
+		int32(tasks.CategoryIDTransfer):   100,
+		int32(tasks.CategoryIDVisibility): 100,
+	})
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+			age := time.Hour
+			if req.TaskCategory.ID() == tasks.CategoryIDVisibility {
+				age = time.Minute
+			}
+			return &persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
+				tasks.NewFakeTask(definition.WorkflowKey{}, req.TaskCategory, now.Add(-age)),
+			}}, nil
+		}).Times(2)
+
+	snap := s.captureShardInfoMetrics()
+
+	recordings := snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()]
+	s.Require().Len(recordings, 2)
+	ageByCategory := make(map[string]time.Duration, len(recordings))
+	for _, recording := range recordings {
+		ageByCategory[recording.Tags["task_category"]] = recording.Value.(time.Duration)
+	}
+	s.Require().Len(ageByCategory, 2, "each category must be tagged with its own name")
+	s.Equal(time.Hour, ageByCategory[tasks.CategoryTransfer.Name()])
+	s.Equal(time.Minute, ageByCategory[tasks.CategoryVisibility.Name()])
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_FutureVisibilityTime_ClampedToZero() {
+	now := s.timeSource.Now()
+	s.setImmediateAckLevels(map[int32]int64{int32(tasks.CategoryIDTransfer): 100})
+	// A host with a fast clock must not produce a negative age.
+	s.expectOldestTaskRead(now, -time.Minute)
+
+	snap := s.captureShardInfoMetrics()
+
+	recordings := snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(time.Duration(0), recordings[0].Value.(time.Duration))
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_ReadFindsNothing_NoSample() {
+	s.setImmediateAckLevels(map[int32]int64{int32(tasks.CategoryIDTransfer): 100})
+	// The backlog drained between the ack level being persisted and the read. Reporting anything here
+	// would date the age from the zero time.
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetHistoryTasksResponse{}, nil).Times(1)
+
+	snap := s.captureShardInfoMetrics()
+
+	s.Empty(snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()])
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_OneCategoryReadFails_OthersStillReported() {
+	now := s.timeSource.Now()
+	s.setImmediateAckLevels(map[int32]int64{
+		int32(tasks.CategoryIDTransfer):   100,
+		int32(tasks.CategoryIDVisibility): 100,
+	})
+	// Ordered on the mock rather than the category, because queue states are iterated in map order.
+	gomock.InOrder(
+		s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
+			Return(nil, errors.New("persistence unavailable")),
+		s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+				return &persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
+					tasks.NewFakeTask(definition.WorkflowKey{}, req.TaskCategory, now.Add(-time.Hour)),
+				}}, nil
+			}),
+	)
+
+	snap := s.captureShardInfoMetrics()
+
+	s.Len(snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()], 1)
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_ScheduledCategory_NotRead() {
+	now := s.timeSource.Now()
+	s.setImmediateAckLevels(map[int32]int64{int32(tasks.CategoryIDTransfer): 100})
+	// Scheduled keys already carry a timestamp, so only the immediate category is read.
+	s.mockShard.shardInfo.QueueStates[int32(tasks.CategoryIDTimer)] = &persistencespb.QueueState{
+		ExclusiveReaderHighWatermark: ConvertToPersistenceTaskKey(tasks.NewKey(now.Add(-time.Hour), 0)),
+	}
+	s.expectOldestTaskRead(now, time.Hour)
+
+	snap := s.captureShardInfoMetrics()
+
+	s.Len(snap[metrics.ShardInfoScheduledQueueLagTimer.Name()], 1)
+	s.Len(snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()], 1)
+}
+
+// The three tests below each pin a reason the age is not read. They set no GetHistoryTasks
+// expectation, so a read would fail them, and they assert the count metric still reports.
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_CaughtUp_NoRead() {
+	highWatermark := s.mockShard.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryTransfer)
+	s.setImmediateAckLevels(map[int32]int64{int32(tasks.CategoryIDTransfer): highWatermark.TaskID})
+
+	snap := s.captureShardInfoMetrics()
+
+	s.Empty(snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()])
+	s.Len(snap[metrics.ShardInfoImmediateQueueLagHistogram.Name()], 1)
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_BacklogAgeDisabled_NoRead() {
+	s.setImmediateAckLevels(map[int32]int64{int32(tasks.CategoryIDTransfer): 100})
+	s.mockShard.config.EmitImmediateQueueBacklogAge = dynamicconfig.GetBoolPropertyFn(false)
+
+	snap := s.captureShardInfoMetrics()
+
+	s.Empty(snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()])
+	s.Len(snap[metrics.ShardInfoImmediateQueueLagHistogram.Name()], 1)
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_ShuttingDown_NoRead() {
+	s.setImmediateAckLevels(map[int32]int64{int32(tasks.CategoryIDTransfer): 100})
+	s.mockShard.lifecycleCancel()
+
+	snap := s.captureShardInfoMetrics()
+
+	s.Empty(snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()])
+	s.Len(snap[metrics.ShardInfoImmediateQueueLagHistogram.Name()], 1)
+}
+
+func (s *contextSuite) TestOldestImmediateTaskVisibilityTime() {
+	now := s.timeSource.Now()
+	minKey, maxKey := tasks.NewImmediateKey(100), tasks.NewImmediateKey(1000)
+
+	s.Run("returns the oldest task's visibility time", func() {
+		s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+				s.Equal(s.shardID, req.ShardID)
+				s.Equal(tasks.CategoryTransfer, req.TaskCategory)
+				s.Equal(minKey, req.InclusiveMinTaskKey)
+				s.Equal(maxKey, req.ExclusiveMaxTaskKey)
+				s.Equal(1, req.BatchSize)
+				// Shed before real task loading rather than sharing its priority.
+				s.Equal(headers.CallerTypePreemptable, headers.GetCallerInfo(ctx).CallerType)
+				return &persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
+					&tasks.ActivityTask{VisibilityTimestamp: now.Add(-time.Hour)},
+				}}, nil
+			}).Times(1)
+		got, ok := s.mockShard.oldestImmediateTaskVisibilityTime(tasks.CategoryTransfer, minKey, maxKey)
+		s.True(ok)
+		s.Equal(now.Add(-time.Hour), got)
+	})
+
+	s.Run("reports nothing when the backlog drained before the read", func() {
+		s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetHistoryTasksResponse{}, nil).Times(1)
+		_, ok := s.mockShard.oldestImmediateTaskVisibilityTime(tasks.CategoryTransfer, minKey, maxKey)
+		s.False(ok)
+	})
+
+	s.Run("reports nothing on read failure", func() {
+		s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
+			Return(nil, errors.New("persistence unavailable")).Times(1)
+		_, ok := s.mockShard.oldestImmediateTaskVisibilityTime(tasks.CategoryTransfer, minKey, maxKey)
+		s.False(ok)
+	})
 }
