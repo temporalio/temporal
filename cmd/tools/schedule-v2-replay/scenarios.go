@@ -17,14 +17,15 @@ import (
 const scenarioWorkflowType = "schedule-v1-replay-fixture-workflow"
 
 type fixtureScenario struct {
-	name          string
-	spec          client.ScheduleSpec
-	overlap       enumspb.ScheduleOverlapPolicy
-	runFor        time.Duration
-	paused        bool
-	immediate     bool
-	targetActions int
-	interact      func(context.Context, client.ScheduleHandle) error
+	name             string
+	spec             client.ScheduleSpec
+	overlap          enumspb.ScheduleOverlapPolicy
+	runFor           time.Duration
+	paused           bool
+	immediate        bool
+	remainingActions int
+	targetActions    int
+	interact         func(context.Context, client.ScheduleHandle) error
 }
 
 func generateScenarioFixtures(parent context.Context, opts options) error {
@@ -72,6 +73,7 @@ func generateScenarioFixture(
 		},
 		Overlap:            scenario.overlap,
 		Paused:             scenario.paused,
+		RemainingActions:   scenario.remainingActions,
 		TriggerImmediately: scenario.immediate,
 	})
 	if err != nil {
@@ -88,9 +90,6 @@ func generateScenarioFixture(
 	}
 	if scenarioErr == nil {
 		scenarioErr = waitForActions(ctx, handle, scenario.targetActions)
-	}
-	if scenarioErr == nil {
-		scenarioErr = handle.Pause(ctx, client.SchedulePauseOptions{Note: "fixture capture complete"})
 	}
 	if scenarioErr == nil {
 		settleFor := time.Second
@@ -140,7 +139,7 @@ func fixtureScenarios() []fixtureScenario {
 	quick := func(name string, spec client.ScheduleSpec) fixtureScenario {
 		return fixtureScenario{
 			name: name, spec: spec, overlap: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			immediate: true, targetActions: 2,
+			immediate: true, remainingActions: 1, targetActions: 2,
 		}
 	}
 	return []fixtureScenario{
@@ -160,7 +159,7 @@ func fixtureScenarios() []fixtureScenario {
 		}),
 		{
 			name: "update", spec: client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: time.Hour}}},
-			overlap: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, paused: true, targetActions: 2,
+			overlap: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, paused: true, remainingActions: 2, targetActions: 2,
 			interact: func(ctx context.Context, handle client.ScheduleHandle) error {
 				if err := handle.Update(ctx, client.ScheduleUpdateOptions{DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 					input.Description.Schedule.Spec = &everySecond
@@ -173,7 +172,7 @@ func fixtureScenarios() []fixtureScenario {
 		},
 		{
 			name: "pause-unpause", spec: everySecond, overlap: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			immediate: true, targetActions: 2,
+			immediate: true, remainingActions: 1, targetActions: 2,
 			interact: func(ctx context.Context, handle client.ScheduleHandle) error {
 				if err := handle.Pause(ctx, client.SchedulePauseOptions{Note: "fixture pause"}); err != nil {
 					return fmt.Errorf("pause schedule: %w", err)
@@ -195,12 +194,12 @@ func fixtureScenarios() []fixtureScenario {
 		{
 			name: "buffer-all-running", spec: everySecond,
 			overlap: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL, runFor: 3 * time.Second,
-			immediate: true, targetActions: 2,
+			immediate: true, remainingActions: 1, targetActions: 2,
 		},
 		{
 			name: "skip-running", spec: everySecond,
 			overlap: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, runFor: 3 * time.Second,
-			immediate: true, targetActions: 2,
+			immediate: true, remainingActions: 1, targetActions: 2,
 		},
 	}
 }

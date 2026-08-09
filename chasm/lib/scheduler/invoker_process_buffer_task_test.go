@@ -317,6 +317,73 @@ func TestProcessBufferTask_BufferOne(t *testing.T) {
 	})
 }
 
+func TestProcessBufferTask_SkipDropsOccurrenceWhileWorkflowRunning(t *testing.T) {
+	env := newTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "due-while-running",
+			WorkflowId:    "due-while-running",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		}},
+		InitialRunningWorkflows:  []*commonpb.WorkflowExecution{{WorkflowId: "running", RunId: "running-run"}},
+		ExpectedRunningWorkflows: 1,
+		ExpectedOverlapSkipped:   1,
+	})
+}
+
+func TestProcessBufferTask_SkipStartsOccurrenceAfterWorkflowCompleted(t *testing.T) {
+	env := newTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{
+			{
+				RequestId:  "completed",
+				WorkflowId: "completed",
+				RunId:      "completed-run",
+				Attempt:    1,
+				Completed:  &schedulespb.CompletedResult{},
+			},
+			{
+				NominalTime:   startTime,
+				ActualTime:    startTime,
+				DesiredTime:   startTime,
+				RequestId:     "due-after-completion",
+				WorkflowId:    "due-after-completion",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			},
+		},
+		ExpectedBufferedStarts: 2,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			for _, start := range invoker.GetBufferedStarts() {
+				if start.GetRequestId() == "due-after-completion" {
+					require.Equal(t, int64(1), start.GetAttempt())
+					return
+				}
+			}
+			require.Fail(t, "due occurrence was not retained")
+		},
+	})
+}
+
+func TestProcessBufferTask_PauseDoesNotRemoveRunningWorkflow(t *testing.T) {
+	env := newTestEnv(t)
+	env.Scheduler.Schedule.State.Paused = true
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			RequestId:  "already-started",
+			WorkflowId: "already-started",
+			RunId:      "already-started-run",
+			Attempt:    1,
+		}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+	})
+}
+
 // ProcessBuffer is scheduled with an empty buffer.
 func TestProcessBufferTask_Empty(t *testing.T) {
 	env := newTestEnv(t)

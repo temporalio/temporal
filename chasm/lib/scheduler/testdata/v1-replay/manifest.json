@@ -1,11 +1,15 @@
 {
-  "version": 1,
+  "version": 2,
   "source": {
     "server": "1.30.2",
     "goSdk": "1.44.0",
     "scheduleImplementation": "v1"
   },
   "corpus": "current-v1",
+  "capture": {
+    "automatedStop": "remaining-actions",
+    "teardownPause": false
+  },
   "scenarios": [
     "interval",
     "calendar",

@@ -69,6 +69,9 @@ func TestFixtureScenariosCoverConformanceMatrix(t *testing.T) {
 	for _, scenario := range scenarios {
 		names = append(names, scenario.name)
 		require.Positive(t, scenario.targetActions)
+		if scenario.name != "backfill-allow-all" {
+			require.Positive(t, scenario.remainingActions)
+		}
 	}
 	require.Equal(t, []string{
 		"interval",

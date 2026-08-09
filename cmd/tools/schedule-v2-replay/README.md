@@ -9,6 +9,9 @@ each CHASM task deadline and V1 external input in chronological order. External 
 timestamp are applied before timer work. The harness applies update and patch signals, returns
 observed workflow-start results through mocked clients, and applies observed workflow completions
 as CHASM callbacks. It compares workflow IDs, action counts, and final schedule configuration.
+In the current corpus every schedule action is `StartWorkflow`, so an action mismatch means a
+workflow execution was started by only one implementation. See [DIVERGENCES.md](DIVERGENCES.md)
+for the investigated findings and first-pass severity triage.
 
 V1 may record `WatchWorkflow` as either a normal activity or a local activity. For local
 activities, the marker contains the result but not the watched workflow ID. The harness therefore

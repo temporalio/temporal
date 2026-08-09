@@ -167,6 +167,28 @@ func TestDownloadedV1HistoriesAgainstCHASM(t *testing.T) {
 	}
 }
 
+func TestCurrentV1ConformanceCorpus(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("testdata", "v1-replay", "current-v1", "*.json.gz"))
+	require.NoError(t, err)
+	require.Len(t, paths, 9)
+	for _, path := range paths {
+		path := path
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			result := replayV1HistoryAgainstCHASM(t, readReplayHistory(t, path))
+			if filepath.Base(path) == "skip-running.json.gz" {
+				require.Equal(t, replayClassificationSignificant, result.Classification)
+				require.Contains(t, replayDivergenceKinds(result), "missing_action")
+				require.Contains(t, replayDivergenceKinds(result), "extra_action")
+				require.Equal(t, result.V1ActionCount, result.CHASMActionCount)
+				return
+			}
+			require.NotEqual(t, replayClassificationSignificant, result.Classification, result.Divergences)
+			require.NotEqual(t, replayClassificationUnsupported, result.Classification, result.Divergences)
+			require.ElementsMatch(t, result.V1Starts, result.CHASMStarts)
+		})
+	}
+}
+
 func TestV1HistoryAgainstCHASM_TimeSkippingStart(t *testing.T) {
 	startTime := time.Unix(100, 0).UTC()
 	args := &schedulespb.StartScheduleArgs{
@@ -236,11 +258,14 @@ func TestCaptureV1LocalActivities(t *testing.T) {
 }
 
 func TestNormalizeScheduleForComparison(t *testing.T) {
-	expected := &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{}}
+	expected := &schedulepb.Schedule{
+		Spec:  &schedulepb.ScheduleSpec{},
+		State: &schedulepb.ScheduleState{LimitedActions: true, RemainingActions: 2},
+	}
 	actual := &schedulepb.Schedule{
 		Spec:     &schedulepb.ScheduleSpec{},
 		Policies: &schedulepb.SchedulePolicies{},
-		State:    &schedulepb.ScheduleState{},
+		State:    &schedulepb.ScheduleState{LimitedActions: true},
 	}
 	protorequire.ProtoEqual(t, normalizeScheduleForComparison(expected), normalizeScheduleForComparison(actual))
 }
@@ -652,6 +677,14 @@ func advanceCHASMTime(
 
 func normalizeScheduleForComparison(schedule *schedulepb.Schedule) *schedulepb.Schedule {
 	normalized := proto.CloneOf(schedule)
+	if normalized.GetState() != nil {
+		// Workflow history exposes action decisions but not enough information to
+		// reconstruct whether every observed start consumed the scheduled-action
+		// limit (manual triggers and backfills do not). Compare durable
+		// configuration here and report action counts separately.
+		normalized.State.LimitedActions = false
+		normalized.State.RemainingActions = 0
+	}
 	if proto.Equal(normalized.GetPolicies(), &schedulepb.SchedulePolicies{}) {
 		normalized.Policies = nil
 	}
@@ -688,6 +721,14 @@ func classifyReplayDivergences(divergences []replayDivergence) replayClassificat
 		}
 	}
 	return classification
+}
+
+func replayDivergenceKinds(result replayCaseResult) []string {
+	kinds := make([]string, 0, len(result.Divergences))
+	for _, divergence := range result.Divergences {
+		kinds = append(kinds, divergence.Kind)
+	}
+	return kinds
 }
 
 func replayClassificationSeverity(classification replayClassification) int {
