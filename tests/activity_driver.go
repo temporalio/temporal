@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -225,6 +226,13 @@ func isDispatchDelayEvent(et model.EventType) bool {
 	return et == model.StartDelayElapsesType || et == model.BackoffElapsesType
 }
 
+// activityFailureSizeLimit is used to truncate larger retryable failure message.
+var activityFailureSizeLimit = dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(
+	dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))("")
+
+// activityLargeFailureMessage is an example large message which may get truncated.
+var activityLargeFailureMessage = strings.Repeat("x", 2*activityFailureSizeLimit)
+
 // respondFailedFailure is the Failure a RespondFailed event carries, or nil when the event omits it
 // (modeling a worker that calls RespondActivityTaskFailed without a Failure).
 func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurepb.Failure {
@@ -237,8 +245,12 @@ func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurep
 		if nextRetryDelay > 0 {
 			info.NextRetryDelay = durationpb.New(nextRetryDelay)
 		}
+		message := "test failure"
+		if e.Failure.LargeMessage {
+			message = activityLargeFailureMessage
+		}
 		return &failurepb.Failure{
-			Message:     "test failure",
+			Message:     message,
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: info},
 		}
 	case model.ServerFailureType:
