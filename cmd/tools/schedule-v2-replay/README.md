@@ -13,7 +13,9 @@ as CHASM callbacks. It compares workflow IDs, normalized `StartWorkflowExecution
 counts, and final schedule configuration, and reports selected CHASM scheduler counters.
 In the current corpus every schedule action is `StartWorkflow`, so an action mismatch means a
 workflow execution was started by only one implementation. See [DIVERGENCES.md](DIVERGENCES.md)
-for the investigated findings and first-pass severity triage.
+for the investigated controlled-corpus findings and first-pass severity triage. See
+[S_AW031_SWEEP_2026-08-09.md](S_AW031_SWEEP_2026-08-09.md) for the redacted production-sweep
+results and replay-fidelity limitations found on `s-aw031`.
 
 V1 may record `WatchWorkflow` as either a normal activity or a local activity. For local
 activities, the marker contains the result but not the watched workflow ID. The harness therefore
