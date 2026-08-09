@@ -201,6 +201,14 @@ type observedStartFailure struct {
 	request    *workflowservice.StartWorkflowExecutionRequest
 }
 
+type observedStartAttempt struct {
+	workflowID string
+	runID      string
+	time       time.Time
+	request    *workflowservice.StartWorkflowExecutionRequest
+	failed     bool
+}
+
 type chasmStart struct {
 	workflowID string
 	time       time.Time
@@ -253,6 +261,7 @@ type v1HistoryTrace struct {
 	history       *historypb.History
 	starts        []observedStart
 	failedStarts  []observedStartFailure
+	startAttempts []observedStartAttempt
 	watches       map[int64]scheduledWatch
 	startsByEvent map[int64]*schedulespb.StartWorkflowRequest
 	localWatches  map[int64]observedWatchCompletion
@@ -263,6 +272,16 @@ type v1HistoryTrace struct {
 	baseActions   int64
 	capturedIDs   bool
 	startRetries  int
+}
+
+func groupObservedStartAttempts(attempts []observedStartAttempt) map[string][]observedStartAttempt {
+	grouped := make(map[string][]observedStartAttempt)
+	for _, attempt := range attempts {
+		if attempt.workflowID != "" {
+			grouped[attempt.workflowID] = append(grouped[attempt.workflowID], attempt)
+		}
+	}
+	return grouped
 }
 
 func TestDownloadedV1HistoriesAgainstCHASM(t *testing.T) {
@@ -486,6 +505,22 @@ func TestExtractV1HistoryTraceCapturesStartFailure(t *testing.T) {
 	require.Empty(t, trace.starts)
 	require.Len(t, trace.failedStarts, 1)
 	require.Equal(t, "failed-workflow", trace.failedStarts[0].workflowID)
+	require.Len(t, trace.startAttempts, 1)
+	require.True(t, trace.startAttempts[0].failed)
+}
+
+func TestGroupObservedStartAttemptsPreservesOutcomeOrder(t *testing.T) {
+	attempts := []observedStartAttempt{
+		{workflowID: "same-id", runID: "successful-run"},
+		{workflowID: "other-id", failed: true},
+		{workflowID: "same-id", failed: true},
+	}
+
+	grouped := groupObservedStartAttempts(attempts)
+	require.Equal(t, []observedStartAttempt{
+		{workflowID: "same-id", runID: "successful-run"},
+		{workflowID: "same-id", failed: true},
+	}, grouped["same-id"])
 }
 
 func TestNormalizeScheduleForComparison(t *testing.T) {
@@ -710,12 +745,8 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 			startsByWorkflowID[start.workflowID] = append(startsByWorkflowID[start.workflowID], start)
 		}
 	}
-	failedStartsByWorkflowID := make(map[string][]observedStartFailure, len(trace.failedStarts))
-	for _, failure := range trace.failedStarts {
-		failedStartsByWorkflowID[failure.workflowID] = append(failedStartsByWorkflowID[failure.workflowID], failure)
-	}
-	consumedFailedStarts := make(map[string]int, len(trace.failedStarts))
-	consumedStarts := make(map[string]int, len(trace.starts))
+	attemptsByWorkflowID := groupObservedStartAttempts(trace.startAttempts)
+	consumedAttempts := make(map[string]int, len(attemptsByWorkflowID))
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(trace.startTime)
 	frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes().
@@ -725,71 +756,48 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 			budget.addStart()
 			workflowID := request.GetWorkflowId()
 			chasmTime := timeSource.Now().UTC()
-			if failures := failedStartsByWorkflowID[workflowID]; consumedFailedStarts[workflowID] < len(failures) {
-				failure := failures[consumedFailedStarts[workflowID]]
-				consumedFailedStarts[workflowID]++
-				if !proto.Equal(normalizeStartWorkflowRequest(failure.request), normalizeStartWorkflowRequest(request)) {
-					fields := startWorkflowRequestDifferenceFields(failure.request, request)
+			if attempts := attemptsByWorkflowID[workflowID]; consumedAttempts[workflowID] < len(attempts) {
+				attempt := attempts[consumedAttempts[workflowID]]
+				consumedAttempts[workflowID]++
+				if !proto.Equal(normalizeStartWorkflowRequest(attempt.request), normalizeStartWorkflowRequest(request)) {
+					fields := startWorkflowRequestDifferenceFields(attempt.request, request)
+					message := "V1 and CHASM emitted different StartWorkflowExecution requests"
+					if attempt.failed {
+						message = "V1 and CHASM emitted different failed StartWorkflowExecution requests"
+					}
 					divergences = append(divergences, replayDivergence{
 						Classification:   replayClassificationSignificant,
 						Kind:             "action_request",
-						Message:          "V1 and CHASM emitted different failed StartWorkflowExecution requests",
+						Message:          message,
 						WorkflowID:       workflowID,
-						V1Time:           timePointer(failure.time),
+						V1Time:           timePointer(attempt.time),
 						CHASMTime:        timePointer(chasmTime),
 						Fields:           fields,
-						FieldDifferences: startWorkflowRequestFieldDifferences(failure.request, request, fields),
+						FieldDifferences: startWorkflowRequestFieldDifferences(attempt.request, request, fields),
 					})
 				}
-				return nil, serviceerror.NewInvalidArgument("replayed V1 StartWorkflow failure")
-			}
-			chasmStarts = append(chasmStarts, chasmStart{workflowID: workflowID, time: chasmTime})
-			if starts, ok := startsByWorkflowID[request.GetWorkflowId()]; ok {
-				startPosition := consumedStarts[workflowID]
-				if startPosition >= len(starts) {
-					divergences = append(divergences, replayDivergence{
-						Classification: replayClassificationSignificant,
-						Kind:           "duplicate_action",
-						Message:        fmt.Sprintf("CHASM emitted duplicate workflow start %q", workflowID),
-						WorkflowID:     workflowID,
-						CHASMTime:      timePointer(chasmTime),
-					})
-					return &workflowservice.StartWorkflowExecutionResponse{RunId: fmt.Sprintf("chasm-replay-duplicate-%d", len(chasmStarts))}, nil
+				if attempt.failed {
+					return nil, serviceerror.NewInvalidArgument("replayed V1 StartWorkflow failure")
 				}
-				start := starts[startPosition]
-				consumedStarts[workflowID]++
-				executionMap[workflowExecutionKey{workflowID: start.workflowID, runID: start.runID}] = workflowExecutionKey{
+				chasmStarts = append(chasmStarts, chasmStart{workflowID: workflowID, time: chasmTime})
+				executionMap[workflowExecutionKey{workflowID: attempt.workflowID, runID: attempt.runID}] = workflowExecutionKey{
 					workflowID: request.GetWorkflowId(),
-					runID:      start.runID,
+					runID:      attempt.runID,
 				}
 				startIndex++
-				normalizedV1Request := normalizeStartWorkflowRequest(start.request)
-				normalizedCHASMRequest := normalizeStartWorkflowRequest(request)
-				if start.request != nil && !proto.Equal(normalizedV1Request, normalizedCHASMRequest) {
-					fields := startWorkflowRequestDifferenceFields(start.request, request)
-					divergences = append(divergences, replayDivergence{
-						Classification:   replayClassificationSignificant,
-						Kind:             "action_request",
-						Message:          "V1 and CHASM emitted different StartWorkflowExecution requests",
-						WorkflowID:       workflowID,
-						V1Time:           timePointer(start.time),
-						CHASMTime:        timePointer(chasmTime),
-						Fields:           fields,
-						FieldDifferences: startWorkflowRequestFieldDifferences(start.request, request, fields),
-					})
-				}
-				if !start.time.IsZero() && !start.time.Equal(chasmTime) {
+				if !attempt.time.IsZero() && !attempt.time.Equal(chasmTime) {
 					divergences = append(divergences, replayDivergence{
 						Classification: replayClassificationTimingOnly,
 						Kind:           "action_time",
 						Message:        "V1 and CHASM emitted the same workflow start at different observed times",
 						WorkflowID:     workflowID,
-						V1Time:         timePointer(start.time),
+						V1Time:         timePointer(attempt.time),
 						CHASMTime:      timePointer(chasmTime),
 					})
 				}
-				return &workflowservice.StartWorkflowExecutionResponse{RunId: start.runID}, nil
+				return &workflowservice.StartWorkflowExecutionResponse{RunId: attempt.runID}, nil
 			}
+			chasmStarts = append(chasmStarts, chasmStart{workflowID: workflowID, time: chasmTime})
 			if len(startsByWorkflowID) == 0 && startIndex < len(trace.starts) {
 				start := trace.starts[startIndex]
 				startIndex++
@@ -964,34 +972,26 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 	}
 
 	startMu.Lock()
-	checkedStarts := make(map[string]int, len(trace.starts))
-	for _, start := range trace.starts {
-		if start.workflowID != "" {
-			position := checkedStarts[start.workflowID]
-			checkedStarts[start.workflowID]++
-			if consumedStarts[start.workflowID] <= position {
+	checkedAttempts := make(map[string]int, len(trace.startAttempts))
+	for _, attempt := range trace.startAttempts {
+		if attempt.workflowID != "" {
+			position := checkedAttempts[attempt.workflowID]
+			checkedAttempts[attempt.workflowID]++
+			if consumedAttempts[attempt.workflowID] <= position {
+				kind := "missing_action"
+				message := fmt.Sprintf("V1 emitted workflow start %q but CHASM did not", attempt.workflowID)
+				if attempt.failed {
+					kind = "missing_action_attempt"
+					message = fmt.Sprintf("V1 attempted workflow start %q but CHASM did not", attempt.workflowID)
+				}
 				divergences = append(divergences, replayDivergence{
 					Classification: replayClassificationSignificant,
-					Kind:           "missing_action",
-					Message:        fmt.Sprintf("V1 emitted workflow start %q but CHASM did not", start.workflowID),
-					WorkflowID:     start.workflowID,
-					V1Time:         timePointer(start.time),
+					Kind:           kind,
+					Message:        message,
+					WorkflowID:     attempt.workflowID,
+					V1Time:         timePointer(attempt.time),
 				})
 			}
-		}
-	}
-	checkedFailures := make(map[string]int, len(trace.failedStarts))
-	for _, failure := range trace.failedStarts {
-		position := checkedFailures[failure.workflowID]
-		checkedFailures[failure.workflowID]++
-		if consumedFailedStarts[failure.workflowID] <= position {
-			divergences = append(divergences, replayDivergence{
-				Classification: replayClassificationSignificant,
-				Kind:           "missing_action_attempt",
-				Message:        fmt.Sprintf("V1 attempted workflow start %q but CHASM did not", failure.workflowID),
-				WorkflowID:     failure.workflowID,
-				V1Time:         timePointer(failure.time),
-			})
 		}
 	}
 	if len(startsByWorkflowID) == 0 && startIndex != len(trace.starts) {
@@ -2072,6 +2072,10 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 						workflowID: request.GetRequest().GetWorkflowId(), time: event.GetEventTime().AsTime(),
 						request: proto.CloneOf(request.GetRequest()),
 					})
+					trace.startAttempts = append(trace.startAttempts, observedStartAttempt{
+						workflowID: request.GetRequest().GetWorkflowId(), time: event.GetEventTime().AsTime(),
+						request: proto.CloneOf(request.GetRequest()), failed: true,
+					})
 					continue
 				}
 				var response schedulespb.StartWorkflowResponse
@@ -2085,6 +2089,10 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 					start.request = proto.CloneOf(request.GetRequest())
 				}
 				trace.starts = append(trace.starts, start)
+				trace.startAttempts = append(trace.startAttempts, observedStartAttempt{
+					workflowID: start.workflowID, runID: start.runID, time: start.time,
+					request: proto.CloneOf(start.request),
+				})
 			}
 			if metadata.ActivityType == "WatchWorkflow" {
 				require.NotNil(t, localActivities)
@@ -2118,9 +2126,14 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 			}
 			var response schedulespb.StartWorkflowResponse
 			require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(attributes.GetResult(), &response))
-			trace.starts = append(trace.starts, observedStart{
+			start := observedStart{
 				workflowID: request.GetRequest().GetWorkflowId(), runID: response.GetRunId(),
 				time: event.GetEventTime().AsTime(), request: proto.CloneOf(request.GetRequest()),
+			}
+			trace.starts = append(trace.starts, start)
+			trace.startAttempts = append(trace.startAttempts, observedStartAttempt{
+				workflowID: start.workflowID, runID: start.runID, time: start.time,
+				request: proto.CloneOf(start.request),
 			})
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 			attributes := event.GetActivityTaskFailedEventAttributes()
@@ -2130,6 +2143,10 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 					workflowID: request.GetRequest().GetWorkflowId(), time: event.GetEventTime().AsTime(),
 					request: proto.CloneOf(request.GetRequest()),
 				})
+				trace.startAttempts = append(trace.startAttempts, observedStartAttempt{
+					workflowID: request.GetRequest().GetWorkflowId(), time: event.GetEventTime().AsTime(),
+					request: proto.CloneOf(request.GetRequest()), failed: true,
+				})
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 			attributes := event.GetActivityTaskTimedOutEventAttributes()
@@ -2138,6 +2155,10 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 				trace.failedStarts = append(trace.failedStarts, observedStartFailure{
 					workflowID: request.GetRequest().GetWorkflowId(), time: event.GetEventTime().AsTime(),
 					request: proto.CloneOf(request.GetRequest()),
+				})
+				trace.startAttempts = append(trace.startAttempts, observedStartAttempt{
+					workflowID: request.GetRequest().GetWorkflowId(), time: event.GetEventTime().AsTime(),
+					request: proto.CloneOf(request.GetRequest()), failed: true,
 				})
 			}
 		default:

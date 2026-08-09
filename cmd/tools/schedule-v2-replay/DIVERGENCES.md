@@ -13,7 +13,7 @@ different nominal occurrence:
 
 | Finding | V1 | CHASM | Compatibility impact | Likelihood of a V2 correctness bug |
 | --- | --- | --- | --- | --- |
-| Immediate-action scheduled time | Truncates to a whole second | Preserves the trigger timestamp | Low | Low |
+| Immediate-action scheduled time | Uses `TriggerImmediately.ScheduledTime`, then truncates for the request | Uses CHASM framework time and ignores `ScheduledTime` | Low normally; action-changing at a second boundary | High |
 | `SKIP` completion near a deadline | Starts nominal `07:38:50` | Skips `07:38:50`, starts `07:38:51` | Medium | Low |
 | Pause near a deadline (original corpus) | Suppressed nominal `07:18:04` | Started nominal `07:18:04` | Low | Low |
 
@@ -56,27 +56,32 @@ For example:
 - V1 search attribute: `2026-08-09T07:38:24Z`.
 - CHASM search attribute: `2026-08-09T07:38:24.750628Z`.
 
-V1 explicitly truncates every buffered start's nominal time to a whole second before constructing
-the workflow ID and scheduled-time search attribute in `service/worker/scheduler/workflow.go`.
-CHASM's immediate backfiller records the exact framework time and
-`chasm/lib/scheduler/scheduler.go` converts that nominal time directly into the search attribute.
-The workflow-ID builders still use the same whole-second suffix, so the difference was invisible
-to the earlier ID-only oracle.
+The frontend stamps `TriggerImmediately.ScheduledTime` before delivering the patch. V1 consumes
+that field in `service/worker/scheduler/workflow.go`, then truncates the buffered nominal time to a
+whole second when constructing the workflow ID and scheduled-time search attribute. CHASM's
+`NewImmediateBackfiller` instead initializes `LastProcessedTime` from `ctx.Now` and
+`processTrigger` uses that framework time without reading `ScheduledTime`.
+
+Most requests are received within the same second, so the workflow IDs match and only the search
+attribute differs. The production sweep contains a request stamped at `23:33:03.998` and delivered
+at `23:33:04.003`; V1 targets the `23:33:03` workflow ID while CHASM targets `23:33:04`. With
+same-second repeated triggers and workflow-ID rejection, this changes which attempt succeeds and
+increases the CHASM action count by one. Chronological success/failure replay confirms this is not
+an oracle ordering artifact.
 
 First-pass triage:
 
-- **Compatibility impact: Low.** Workflows or visibility queries that inspect
-  `TemporalScheduledStartTime` can observe a sub-second change for immediate actions. The selected
-  workflow and action count do not change.
-- **V2 correctness-bug likelihood: Low.** Preserving the actual immediate trigger time is more
-  precise; the whole-second V1 value follows its legacy workflow-ID truncation rather than a clear
-  API requirement.
-- **Confidence: High.** The normalized request comparison isolates the timestamp value after
-  removing transport and encoding representation differences.
+- **Compatibility impact: Low normally, Medium at a second boundary.** The common case changes
+  only timestamp precision; a request crossing the boundary can change workflow identity and
+  deduplication outcome.
+- **V2 correctness-bug likelihood: High.** `ScheduledTime` is explicitly the timestamp used for
+  target-workflow identity, but CHASM currently ignores it.
+- **Confidence: High.** Controlled and production evidence agree, and the responsible V1/CHASM
+  code paths are direct.
 
-The production sweep should measure whether non-immediate schedules with sub-second interval
-phases expose the same compatibility difference before deciding whether CHASM should emulate the
-legacy truncation.
+The fix should make the immediate backfiller use a non-zero request `ScheduledTime`, falling back
+to framework time only for older requests where the field is absent. Whether the search attribute
+should retain sub-second precision after that is a separate, lower-severity compatibility choice.
 
 ## Confirmed difference: `SKIP` near workflow completion
 
@@ -135,6 +140,33 @@ generates at exact physical task deadlines and resolves overlap in
 
 This should be treated as a migration-compatibility decision, not fixed as a V2 defect without
 first deciding whether exact V1 behavior or the documented `SKIP` contract takes precedence.
+
+## Confirmed difference: terminal failure propagation
+
+V1's workflow watcher returns a failure payload only for `FAILED`. For `CANCELED`, `TERMINATED`,
+and `TIMED_OUT`, it returns the terminal status with no failure. Consequently, V1 leaves
+`ContinuedFailure` unchanged. Workflow completion callbacks used by CHASM construct typed canceled,
+terminated, and timeout failures, and CHASM stores that failure for the next
+`StartWorkflowExecution` request.
+
+The difference is covered directly by V1 response-builder and CHASM invoker tests. It appears
+independently in five production histories before their first unmatched occurrence: three timeout
+chains and two terminated workflows. Later repeated mismatches are downstream, not independent
+failures.
+
+Triage:
+
+- **Compatibility impact: Medium.** The next workflow can observe a non-nil `ContinuedFailure` in
+  V2 where V1 supplied nil and may branch differently.
+- **V2 correctness-bug likelihood: Low.** The CHASM callback contains more complete terminal-state
+  information, and its behavior is internally consistent. This is nevertheless an observable
+  migration difference that needs an explicit compatibility decision.
+- **Confidence: High.** Both implementations' unit tests and production request diffs show the
+  same status matrix.
+
+The 36 production `LastCompletionResult` mismatches and activity-failure mismatches begin only
+after a nominal occurrence has already diverged. They are causal fallout from comparing different
+workflow chains, not evidence of a separate result-conversion bug.
 
 ## Closed finding: pause at a deadline
 

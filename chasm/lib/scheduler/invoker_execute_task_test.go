@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -66,6 +67,7 @@ type executeTestCase struct {
 	InitialCancelWorkflows    []*commonpb.WorkflowExecution
 	InitialTerminateWorkflows []*commonpb.WorkflowExecution
 	InitialRunningWorkflows   []*commonpb.WorkflowExecution
+	InitialLastCompletion     *schedulerpb.LastCompletionResult
 
 	ExpectedBufferedStarts      int
 	ExpectedRunningWorkflows    int
@@ -81,6 +83,9 @@ type executeTestCase struct {
 func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTestCase) {
 	ctx := env.MutableContext()
 	invoker := env.Scheduler.Invoker.Get(ctx)
+	if c.InitialLastCompletion != nil {
+		env.Scheduler.LastCompletionResult = chasm.NewDataField(ctx, proto.CloneOf(c.InitialLastCompletion))
+	}
 
 	// Set up initial state. Note: InitialRunningWorkflows is now represented by
 	// BufferedStarts that have RunId set but no Completed field.
@@ -125,6 +130,39 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	// Callbacks.
 	if c.ValidateInvoker != nil {
 		c.ValidateInvoker(t, invoker, env)
+	}
+}
+
+func TestExecuteTask_PropagatesTerminalFailureToNextStart(t *testing.T) {
+	testCases := []struct {
+		name    string
+		failure *failurepb.Failure
+	}{
+		{name: "canceled", failure: &failurepb.Failure{FailureInfo: &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}}}},
+		{name: "terminated", failure: &failurepb.Failure{FailureInfo: &failurepb.Failure_TerminatedFailureInfo{TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{}}}},
+		{name: "timed-out", failure: &failurepb.Failure{FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{}}}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newInvokerExecuteTestEnv(t)
+			startTime := timestamppb.New(env.TimeSource.Now())
+			env.mockFrontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+					require.IsType(t, tc.failure.GetFailureInfo(), request.GetContinuedFailure().GetFailureInfo())
+					return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+				})
+
+			runExecuteTestCase(t, env, &executeTestCase{
+				InitialBufferedStarts: []*schedulespb.BufferedStart{{
+					NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
+					RequestId: "request-id", WorkflowId: "workflow-id", Attempt: 1,
+				}},
+				InitialLastCompletion: &schedulerpb.LastCompletionResult{
+					Failure: tc.failure,
+				},
+				ExpectedBufferedStarts: 1, ExpectedRunningWorkflows: 1, ExpectedActionCount: 1,
+			})
+		})
 	}
 }
 

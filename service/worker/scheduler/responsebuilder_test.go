@@ -175,6 +175,7 @@ func TestResponseBuilder(t *testing.T) {
 
 			assertError(t, err, nil)
 			assertResponseResult(t, response, nil)
+			require.Nil(t, response.GetFailure())
 			assertResponseStatus(t, response, status)
 		})
 	}
@@ -247,6 +248,7 @@ func TestResponseBuilder(t *testing.T) {
 			response, err := rb.Build(&event)
 			assertError(t, err, nil)
 			assertResponseResult(t, response, nil)
+			require.Nil(t, response.GetFailure())
 			assertResponseStatus(t, response, enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT)
 
 		})
