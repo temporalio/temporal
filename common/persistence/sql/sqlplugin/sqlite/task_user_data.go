@@ -78,18 +78,19 @@ func (mdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplu
 }
 
 func (mdb *db) AddToBuildIdToTaskQueueMapping(ctx context.Context, request sqlplugin.AddToBuildIdToTaskQueueMapping) error {
-	query := addBuildIdToTaskQueueMappingQry
+	var query strings.Builder
+	query.WriteString(addBuildIdToTaskQueueMappingQry)
 	var params []any
 	for idx, buildId := range request.BuildIds {
 		if idx == len(request.BuildIds)-1 {
-			query += "(?, ?, ?)"
+			query.WriteString("(?, ?, ?)")
 		} else {
-			query += "(?, ?, ?), "
+			query.WriteString("(?, ?, ?), ")
 		}
 		params = append(params, request.NamespaceID, buildId, request.TaskQueueName)
 	}
 
-	_, err := mdb.conn.ExecContext(ctx, query, params...)
+	_, err := mdb.conn.ExecContext(ctx, query.String(), params...)
 	return err
 }
 

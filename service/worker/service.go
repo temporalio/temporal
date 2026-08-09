@@ -212,6 +212,8 @@ func NewConfig(
 			ExecutionScannerHistoryEventIdValidator: dynamicconfig.ExecutionScannerHistoryEventIdValidator.Get(dc),
 			RemovableBuildIdDurationSinceDefault:    dynamicconfig.RemovableBuildIdDurationSinceDefault.Get(dc),
 			BuildIdScavengerVisibilityRPS:           dynamicconfig.BuildIdScavengerVisibilityRPS.Get(dc),
+
+			ScheduleInvariantsScannerOptions: dynamicconfig.ScheduleInvariantsScannerOptions.Get(dc),
 		},
 		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
 		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),

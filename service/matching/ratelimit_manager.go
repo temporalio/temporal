@@ -62,8 +62,11 @@ const (
 	defaultBurstDuration = time.Second
 )
 
-// Create a new rate limit manager for the task queue partition.
-func newRateLimitManager(userDataManager userDataManager,
+// Create a new rate limit manager for the task queue partition. This only allocates;
+// dynamic config subscriptions are registered in Start, so an unstarted manager holds
+// no external references and can simply be garbage collected.
+func newRateLimitManager(
+	userDataManager userDataManager,
 	config *taskQueueConfig,
 	taskQueueType enumspb.TaskQueueType,
 ) *rateLimitManager {
@@ -82,21 +85,23 @@ func newRateLimitManager(userDataManager userDataManager,
 		r.dynamicRateBurst,
 		config.RateLimiterRefreshInterval,
 	)
+	return r
+}
 
+// Start registers dynamic config subscriptions and computes the initial rate limits.
+func (r *rateLimitManager) Start() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partitons.
 	var cancel func()
-	r.adminNsRate, cancel = config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
+	r.adminNsRate, cancel = r.config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
 	r.cancels = append(r.cancels, cancel)
-	r.adminTqRate, cancel = config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
+	r.adminTqRate, cancel = r.config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
 	r.cancels = append(r.cancels, cancel)
-	r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
+	r.numReadPartitions, cancel = r.config.NumReadPartitionsSub(r.setNumReadPartitions)
 	r.cancels = append(r.cancels, cancel)
 	r.computeEffectiveRPSAndSourceLocked()
-
-	return r
 }
 
 func (r *rateLimitManager) setAdminNsRate(rps float64) {
@@ -143,12 +148,13 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 		r.adminTqRate,
 	)
 	r.systemRPS = systemRPS
+	fraction := r.config.RateLimitFraction()
 	switch {
 	case r.apiConfigRPS != nil:
-		effectiveRPS = *r.apiConfigRPS / float64(r.numReadPartitions)
+		effectiveRPS = *r.apiConfigRPS * fraction / float64(r.numReadPartitions)
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_API
 	case r.workerRPS != nil:
-		effectiveRPS = *r.workerRPS / float64(r.numReadPartitions)
+		effectiveRPS = *r.workerRPS * fraction / float64(r.numReadPartitions)
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
 	}
 
@@ -235,8 +241,10 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	if fairnessKeyRateLimitDefault.GetRateLimit() == nil {
 		r.fairnessKeyRateLimitDefault = nil
 	} else {
-		// Maintain the fairnessKeyRateLimitDefault as per-partition rate.
-		val := float64(fairnessKeyRateLimitDefault.GetRateLimit().GetRequestsPerSecond()) / float64(r.numReadPartitions)
+		// Maintain the fairnessKeyRateLimitDefault as per-partition rate, scaled by the same
+		// fraction applied to the whole-queue effectiveRPS.
+		fraction := r.config.RateLimitFraction()
+		val := float64(fairnessKeyRateLimitDefault.GetRateLimit().GetRequestsPerSecond()) * fraction / float64(r.numReadPartitions)
 		r.fairnessKeyRateLimitDefault = &val
 	}
 	fairnessWeightOverrides := config.GetFairnessWeightOverrides()
@@ -316,6 +324,13 @@ func (r *rateLimitManager) updatePerKeySimpleRateLimitWithBurstLocked(burstDurat
 func (r *rateLimitManager) clearPerKeyRateLimitsLocked() {
 	r.perKeyReady = cache.New(r.config.FairnessKeyRateLimitCacheSize(), nil)
 	r.perKeyLimit = simpleLimiterParams{}
+}
+
+// rateLimitState returns the whole-queue ready time and whether a per-key limit is in effect.
+func (r *rateLimitManager) rateLimitState() (wholeQueueReady simpleLimiter, perKeyLimited bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.wholeQueueReady, r.perKeyLimit.limited()
 }
 
 func (r *rateLimitManager) readyTimeForTask(task *internalTask) simpleLimiter {

@@ -116,10 +116,8 @@ func runAlertCommand(c *cli.Context) error {
 	}
 
 	logger.Info("Built failure report",
-		zap.String("workflow", report.Workflow.Name),
-		zap.String("sha", report.Commit.ShortSHA),
-		zap.String("author", report.Commit.Author),
 		zap.Int("failed_jobs", len(report.FailedJobs)),
+		zap.Int("failures", len(report.Failures)),
 		zap.Int("total_jobs", report.TotalJobs),
 	)
 
@@ -149,7 +147,7 @@ func runAlertCommand(c *cli.Context) error {
 	message := BuildFailureMessage(report)
 
 	logger.Info("Sending Slack notification")
-	if err := SendSlackMessage(slackWebhook, message); err != nil {
+	if err := message.Send(slackWebhook); err != nil {
 		logger.Error("Failed to send Slack message", zap.Error(err))
 		// Don't fail CI if notification fails
 		return nil
@@ -224,7 +222,7 @@ func runDigestCommand(c *cli.Context) error {
 	message := BuildSuccessReportMessage(report)
 
 	logger.Info("Sending Slack notification")
-	if err := SendSlackMessage(slackWebhook, message); err != nil {
+	if err := message.Send(slackWebhook); err != nil {
 		logger.Error("Failed to send Slack message", zap.Error(err))
 		// Don't fail CI if reporting fails
 		return nil

@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -79,6 +78,7 @@ type (
 var (
 	groupByFieldAllowlist = []string{
 		sadefs.ExecutionStatus,
+		sadefs.TemporalNamespaceDivision,
 	}
 
 	groupByFieldPrefixAllowlist = []string{
@@ -282,8 +282,9 @@ func (c *QueryConverter[ExprT]) convertSelectStmt(
 		}
 		if !IsGroupByFieldAllowed(colName.FieldName) {
 			return nil, NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				NotSupportedErrMessage,
+				colName.Alias,
 			)
 		}
 		res.GroupBy = append(res.GroupBy, colName)
@@ -578,9 +579,6 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		if err != nil {
 			return nil, err
 		}
-		if saName == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
-		}
 		return value, nil
 	case sqlparser.BoolVal:
 		// no-op: no validation needed
@@ -718,10 +716,8 @@ func (c *QueryConverter[ExprT]) validateValueType(
 }
 
 func IsGroupByFieldAllowed(fieldName string) bool {
-	for _, allowedField := range groupByFieldAllowlist {
-		if fieldName == allowedField {
-			return true
-		}
+	if slices.Contains(groupByFieldAllowlist, fieldName) {
+		return true
 	}
 	for _, allowedPrefix := range groupByFieldPrefixAllowlist {
 		if strings.HasPrefix(fieldName, allowedPrefix) {

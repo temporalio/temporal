@@ -14,14 +14,22 @@ const (
 	queryDelimiter        = ';'
 	querySliceDefaultSize = 100
 
-	sqlLeftParenthesis  = '('
-	sqlRightParenthesis = ')'
-	sqlIfKeyword        = "if"
-	sqlBeginKeyword     = "begin"
-	sqlEndKeyword       = "end"
-	sqlLineComment      = "--"
-	sqlSingleQuote      = '\''
-	sqlDoubleQuote      = '"'
+	sqlLeftParenthesis     = '('
+	sqlRightParenthesis    = ')'
+	sqlCreateKeyword       = "create"
+	sqlTableKeyword        = "table"
+	sqlIndexKeyword        = "index"
+	sqlConcurrentlyKeyword = "concurrently"
+	sqlAddKeyword          = "add"
+	sqlColumnKeyword       = "column"
+	sqlDoubleDollarKeyword = "$$"
+	sqlIfKeyword           = "if"
+	sqlLoopKeyword         = "loop"
+	sqlBeginKeyword        = "begin"
+	sqlEndKeyword          = "end"
+	sqlLineComment         = "--"
+	sqlSingleQuote         = '\''
+	sqlDoubleQuote         = '"'
 )
 
 // LoadAndSplitQuery loads and split cql / sql query into one statement per string.
@@ -78,11 +86,37 @@ func LoadAndSplitQueryFromReaders(
 					}
 					st = st[:len(st)-1]
 
-				case sqlIfKeyword[0]:
-					if hasWordAt(contentStr, sqlIfKeyword, j) {
-						st = append(st, sqlIfKeyword[0])
-						j += len(sqlIfKeyword) - 1
+				case sqlDoubleDollarKeyword[0]:
+					if !hasWordAt(contentStr, sqlDoubleDollarKeyword, j) {
+						continue
 					}
+					if len(st) == 0 || st[len(st)-1] != sqlDoubleDollarKeyword[0] {
+						st = append(st, sqlDoubleDollarKeyword[0])
+						j += len(sqlDoubleDollarKeyword) - 1
+					} else {
+						st = st[:len(st)-1]
+						j += len(sqlDoubleDollarKeyword) - 1
+					}
+
+				case sqlIfKeyword[0]:
+					if !hasWordAt(contentStr, sqlIfKeyword, j) {
+						continue
+					}
+					if hasWordsBefore(contentStr, j-1, sqlAddKeyword, sqlColumnKeyword) ||
+						hasWordsBefore(contentStr, j-1, sqlCreateKeyword, sqlIndexKeyword) ||
+						hasWordsBefore(contentStr, j-1, sqlCreateKeyword, sqlIndexKeyword, sqlConcurrentlyKeyword) ||
+						hasWordsBefore(contentStr, j-1, sqlCreateKeyword, sqlTableKeyword) {
+						continue
+					}
+					st = append(st, sqlIfKeyword[0])
+					j += len(sqlIfKeyword) - 1
+
+				case sqlLoopKeyword[0]:
+					if !hasWordAt(contentStr, sqlLoopKeyword, j) {
+						continue
+					}
+					st = append(st, sqlLoopKeyword[0])
+					j += len(sqlLoopKeyword) - 1
 
 				case sqlBeginKeyword[0]:
 					if hasWordAt(contentStr, sqlBeginKeyword, j) {
@@ -100,6 +134,13 @@ func LoadAndSplitQueryFromReaders(
 						}
 						st = st[:len(st)-1]
 						j = after + len(sqlIfKeyword) - 1
+					} else if ok, after := hasWordAfter(contentStr, sqlLoopKeyword, j+len(sqlEndKeyword)); ok {
+						//nolint:revive
+						if len(st) == 0 || st[len(st)-1] != sqlLoopKeyword[0] {
+							return nil, errors.New("error reading contents: unmatched `END LOOP` keyword")
+						}
+						st = st[:len(st)-1]
+						j = after + len(sqlLoopKeyword) - 1
 					} else {
 						if len(st) == 0 || st[len(st)-1] != sqlBeginKeyword[0] {
 							return nil, errors.New("error reading contents: unmatched `END` keyword")
@@ -181,6 +222,35 @@ func hasWordAfter(s, word string, pos int) (bool, int) {
 		return false, after
 	}
 	return hasWordAt(s, word, after), after
+}
+
+// hasWordsBefore checks if the given words appears before position pos in s,
+// separated by at least one space, and each word is a whole word.
+// Words must appear is the given order.
+// Eg: hasWordsBefore("CREATE TABLE IF", 12, "CREATE", "TABLE") returns true.
+func hasWordsBefore(s string, pos int, words ...string) bool {
+	if len(words) == 0 {
+		return true
+	}
+	if pos <= 0 || !unicode.IsSpace(rune(s[pos])) {
+		return false
+	}
+	for i := len(words) - 1; i >= 0; i-- {
+		// skip spaces
+		for pos >= 0 && unicode.IsSpace(rune(s[pos])) {
+			pos--
+		}
+		// go to first char of word
+		for pos > 0 && isAlphanumeric(s[pos-1]) {
+			pos--
+		}
+		// check if current pos matches the word
+		if pos < 0 || !hasWordAt(s, words[i], pos) {
+			return false
+		}
+		pos--
+	}
+	return true
 }
 
 func isAlphanumeric(c byte) bool {

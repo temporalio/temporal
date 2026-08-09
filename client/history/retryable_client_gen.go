@@ -116,6 +116,21 @@ func (c *retryableClient) DeleteDLQTasks(
 	return resp, err
 }
 
+func (c *retryableClient) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteExecutionResponse, error) {
+	var resp *historyservice.DeleteExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
@@ -545,6 +560,21 @@ func (c *retryableClient) PollMutableState(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.PollMutableState(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PollWorkflowExecutionTimeSkipping(
+	ctx context.Context,
+	request *historyservice.PollWorkflowExecutionTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	var resp *historyservice.PollWorkflowExecutionTimeSkippingResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollWorkflowExecutionTimeSkipping(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

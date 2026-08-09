@@ -57,6 +57,7 @@ type (
 
 // selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs contains a list of APIs which can be redirected
 var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}{
+	// Workflow APIs
 	"StartWorkflowExecution":           {},
 	"SignalWithStartWorkflowExecution": {},
 	"SignalWorkflowExecution":          {},
@@ -64,10 +65,22 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 	"TerminateWorkflowExecution":       {},
 	"DeleteWorkflowExecution":          {},
 	"QueryWorkflow":                    {},
-	"StartActivityExecution":           {},
-	"RequestCancelActivityExecution":   {},
-	"TerminateActivityExecution":       {},
-	"DeleteActivityExecution":          {},
+
+	// Standalone Activity APIs
+	"StartActivityExecution":         {},
+	"RequestCancelActivityExecution": {},
+	"TerminateActivityExecution":     {},
+	"DeleteActivityExecution":        {},
+	"PauseActivityExecution":         {},
+	"UnpauseActivityExecution":       {},
+	"ResetActivityExecution":         {},
+	"UpdateActivityExecutionOptions": {},
+
+	// Standalone Nexus Operation APIs
+	"StartNexusOperationExecution":         {},
+	"RequestCancelNexusOperationExecution": {},
+	"TerminateNexusOperationExecution":     {},
+	"DeleteNexusOperationExecution":        {},
 }
 
 // RedirectionPolicyGenerator generate corresponding redirection policy
@@ -192,17 +205,17 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	// Get business ID from context (set by BusinessIDInterceptor)
-	businessID := GetBusinessIDFromContext(ctx)
+	// Get routingKey from context (set by RoutingKeyInterceptor)
+	routingKey := GetRoutingKeyFromContext(ctx)
 
 	if _, whitelisted := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]; whitelisted {
 		// redirect if API is whitelisted
-		return namespaceEntry.ActiveClusterName(businessID), true
+		return namespaceEntry.ActiveClusterName(routingKey), true
 	}
 
 	if policy.selectedAPIsOnly || policy.selectedAPIsOnlyForNS(namespaceEntry.Name().String()) {
 		return policy.currentClusterName, false
 	}
 
-	return namespaceEntry.ActiveClusterName(businessID), true
+	return namespaceEntry.ActiveClusterName(routingKey), true
 }

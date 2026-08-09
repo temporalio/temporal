@@ -23,9 +23,9 @@ import (
 // WARNING: This environment variable should only be used for testing; and never set it in production.
 const SerializerDataEncodingEnvVar = "TEMPORAL_TEST_DATA_ENCODING"
 
-// EncodingTypeFromEnv returns an EncodingType based on the environment variable `TEMPORAL_TEST_DATA_ENCODING`.
+// encodingTypeFromEnv returns an EncodingType based on the environment variable `TEMPORAL_TEST_DATA_ENCODING`.
 // It defaults to "ENCODING_TYPE_PROTO3" codec if the environment variable is not set.
-func EncodingTypeFromEnv() enumspb.EncodingType {
+func encodingTypeFromEnv() enumspb.EncodingType {
 	codecType := os.Getenv(SerializerDataEncodingEnvVar)
 	switch strings.ToLower(codecType) {
 	case "", "proto3":
@@ -38,12 +38,38 @@ func EncodingTypeFromEnv() enumspb.EncodingType {
 	}
 }
 
-// ProtoEncode is kept for backward compatibility.
-func ProtoEncode(m proto.Message) (*commonpb.DataBlob, error) {
-	return encodeBlob(m, enumspb.ENCODING_TYPE_PROTO3)
+type (
+	encodeOptions struct {
+		deterministic bool
+	}
+	EncodeOption func(*encodeOptions)
+)
+
+// WithDeterministicProto3 uses deterministic marshaling when Encode selects proto3.
+//
+// Deterministic encoding sorts map keys before encoding, making byte comparison
+// a reliable equality check for any well-formed proto message. For messages
+// without map fields this is a no-op with no performance overhead.
+var WithDeterministicProto3 EncodeOption = func(opts *encodeOptions) {
+	opts.deterministic = true
 }
 
-func encodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.DataBlob, error) {
+// Encode encodes the given proto message. It respects the `TEMPORAL_TEST_DATA_ENCODING` environment variable;
+// otherwise, it defaults to "ENCODING_TYPE_PROTO3".
+func Encode(m proto.Message, options ...EncodeOption) (*commonpb.DataBlob, error) {
+	return encodeBlob(m, encodingTypeFromEnv(), options...)
+}
+
+func encodeBlob(
+	m proto.Message,
+	encoding enumspb.EncodingType,
+	options ...EncodeOption,
+) (*commonpb.DataBlob, error) {
+	opts := encodeOptions{}
+	for _, option := range options {
+		option(&opts)
+	}
+
 	if m == nil {
 		return &commonpb.DataBlob{
 			Data:         nil,
@@ -62,7 +88,7 @@ func encodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.DataB
 			EncodingType: enumspb.ENCODING_TYPE_JSON,
 		}, nil
 	case enumspb.ENCODING_TYPE_PROTO3:
-		data, err := proto.Marshal(m)
+		data, err := proto.MarshalOptions{Deterministic: opts.deterministic}.Marshal(m)
 		if err != nil {
 			return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 		}

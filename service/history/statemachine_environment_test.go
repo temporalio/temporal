@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -100,14 +101,15 @@ func newStateMachineEnvTestContext(t *testing.T, enableTransitionHistory bool) *
 	mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       s.mockShard,
-		clusterMetadata:    mockClusterMetadata,
-		executionManager:   s.mockShard.GetExecutionManager(),
-		logger:             s.mockShard.GetLogger(),
-		tokenSerializer:    tasktoken.NewSerializer(),
-		metricsHandler:     s.mockShard.GetMetricsHandler(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		currentClusterName:  s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:        s.mockShard,
+		clusterMetadata:     mockClusterMetadata,
+		executionManager:    s.mockShard.GetExecutionManager(),
+		logger:              s.mockShard.GetLogger(),
+		tokenSerializer:     tasktoken.NewSerializer(),
+		metricsHandler:      s.mockShard.GetMetricsHandler(),
+		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			mockTimerProcessor.Category(): mockTimerProcessor,
 		},
@@ -254,7 +256,6 @@ func TestValidateStateMachineRef(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s := newStateMachineEnvTestContext(t, tc.enableTransitionHistory)
@@ -276,7 +277,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			tc.mutateNode(node)
 			tc.mutateRef(&ref)
 
-			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), chasm.WorkflowArchetypeID, log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), chasm.WorkflowArchetypeID, log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler, nil)
 			if tc.clearTransitionHistory {
 				mutableState.GetExecutionInfo().TransitionHistory = nil
 			}

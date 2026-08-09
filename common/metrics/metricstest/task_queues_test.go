@@ -81,7 +81,7 @@ func verifyTags(t *testing.T, handler metrics.Handler, expectedTags map[string]s
 	h.Counter("MyMetric").Record(1)
 	snap := capture.Snapshot()
 	h.StopCapture(capture)
-	a.Equal(1, len(snap))
-	a.Equal(1, len(snap["MyMetric"]))
+	a.Len(snap, 1)
+	a.Len(snap["MyMetric"], 1)
 	a.Equal(expectedTags, snap["MyMetric"][0].Tags)
 }

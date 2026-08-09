@@ -2,6 +2,8 @@ package callback
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -146,7 +148,7 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	// Convert CHASM callback proto to API callback proto
 	chasmCB := c.GetCallback()
 	res := &commonpb.Callback{
-		Links: chasmCB.GetLinks(),
+		Links: slices.Clone(chasmCB.GetLinks()),
 	}
 
 	// CHASM currently only supports Nexus callbacks
@@ -154,7 +156,7 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 		res.Variant = &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
 				Url:    variant.Nexus.GetUrl(),
-				Header: variant.Nexus.GetHeader(),
+				Header: maps.Clone(variant.Nexus.GetHeader()),
 			},
 		}
 		return res, nil
@@ -162,4 +164,20 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 
 	// This should not happen as CHASM only supports Nexus callbacks currently
 	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
+}
+
+// ScheduleStandbyCallbacks transitions all STANDBY callbacks to SCHEDULED state,
+// triggering their invocation. Used by both workflows and standalone activities
+// when the execution reaches a terminal state.
+func ScheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[string, *Callback]) error {
+	for _, field := range callbacks {
+		cb := field.Get(ctx)
+		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+			continue
+		}
+		if err := TransitionScheduled.Apply(cb, ctx, EventScheduled{}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

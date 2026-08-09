@@ -145,10 +145,20 @@ func (s *Service) Stop() {
 		time.Sleep(s.config.ShutdownDrainDuration())
 	}
 
-	// Stop shard controller. We should have waited long enough for all shards to realize they
-	// lost ownership and close, but if not, this will definitely close them.
-	s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
-	s.handler.controller.Stop()
+	enableCloseInboundReplicationStreamOnShutdown := s.config.EnableCloseInboundReplicationStreamOnShutdown()
+	// When enabled, stop handler components (including the replication stream monitor) before
+	// waiting for gRPC handlers to return. This signals inbound stream senders on the peer to
+	// stop, allowing their handler goroutines to unblock and return cleanly before GracefulStop.
+	// Without this, those goroutines block indefinitely and the gRPC server falls back to a
+	// forceful Stop(), causing unclean H2 teardowns on the peer.
+	// Guarded by feature flag so the ordering change can be reverted if needed.
+	if enableCloseInboundReplicationStreamOnShutdown {
+		s.logger.Info("ShutdownHandler: Initiating handler shutdown")
+		s.handler.Stop()
+	} else {
+		s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
+		s.handler.controller.Stop()
+	}
 
 	// All grpc handlers should be cancelled now. Give them a little time to return.
 	t := time.AfterFunc(2*time.Second, func() {
@@ -157,8 +167,9 @@ func (s *Service) Stop() {
 	})
 	s.server.GracefulStop()
 	t.Stop()
-
-	s.handler.Stop()
+	if !enableCloseInboundReplicationStreamOnShutdown {
+		s.handler.Stop()
+	}
 	s.visibilityManager.Close()
 
 	s.logger.Info("history stopped")

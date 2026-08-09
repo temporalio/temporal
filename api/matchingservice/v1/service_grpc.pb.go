@@ -32,6 +32,7 @@ const (
 	MatchingService_RespondNexusTaskFailed_FullMethodName                 = "/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed"
 	MatchingService_CancelOutstandingPoll_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll"
 	MatchingService_CancelOutstandingWorkerPolls_FullMethodName           = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPolls"
+	MatchingService_CancelOutstandingWorkerPollsPartition_FullMethodName  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPollsPartition"
 	MatchingService_DescribeTaskQueue_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue"
 	MatchingService_DescribeTaskQueuePartition_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition"
 	MatchingService_DescribeVersionedTaskQueues_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeVersionedTaskQueues"
@@ -56,6 +57,7 @@ const (
 	MatchingService_ListNexusEndpoints_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/ListNexusEndpoints"
 	MatchingService_RecordWorkerHeartbeat_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/RecordWorkerHeartbeat"
 	MatchingService_ListWorkers_FullMethodName                            = "/temporal.server.api.matchingservice.v1.MatchingService/ListWorkers"
+	MatchingService_CountWorkers_FullMethodName                           = "/temporal.server.api.matchingservice.v1.MatchingService/CountWorkers"
 	MatchingService_UpdateTaskQueueConfig_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueConfig"
 	MatchingService_DescribeWorker_FullMethodName                         = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeWorker"
 	MatchingService_UpdateFairnessState_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateFairnessState"
@@ -104,6 +106,8 @@ type MatchingServiceClient interface {
 	// Note: This only cancels polls that are currently outstanding. The caller must ensure no new polls
 	// are issued after calling this RPC, otherwise those polls will not be cancelled.
 	CancelOutstandingWorkerPolls(ctx context.Context, in *CancelOutstandingWorkerPollsRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsResponse, error)
+	// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on the specified partitions.
+	CancelOutstandingWorkerPollsPartition(ctx context.Context, in *CancelOutstandingWorkerPollsPartitionRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsPartitionResponse, error)
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(ctx context.Context, in *DescribeTaskQueueRequest, opts ...grpc.CallOption) (*DescribeTaskQueueResponse, error)
@@ -214,6 +218,8 @@ type MatchingServiceClient interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(ctx context.Context, in *ListWorkersRequest, opts ...grpc.CallOption) (*ListWorkersResponse, error)
+	// CountWorkers counts workers in the specified namespace that match the provided query.
+	CountWorkers(ctx context.Context, in *CountWorkersRequest, opts ...grpc.CallOption) (*CountWorkersResponse, error)
 	// Set the persisted task queue configuration.
 	// (-- api-linter: core::0134::method-signature=disabled
 	//
@@ -358,6 +364,15 @@ func (c *matchingServiceClient) CancelOutstandingPoll(ctx context.Context, in *C
 func (c *matchingServiceClient) CancelOutstandingWorkerPolls(ctx context.Context, in *CancelOutstandingWorkerPollsRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsResponse, error) {
 	out := new(CancelOutstandingWorkerPollsResponse)
 	err := c.cc.Invoke(ctx, MatchingService_CancelOutstandingWorkerPolls_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) CancelOutstandingWorkerPollsPartition(ctx context.Context, in *CancelOutstandingWorkerPollsPartitionRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsPartitionResponse, error) {
+	out := new(CancelOutstandingWorkerPollsPartitionResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CancelOutstandingWorkerPollsPartition_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -580,6 +595,15 @@ func (c *matchingServiceClient) ListWorkers(ctx context.Context, in *ListWorkers
 	return out, nil
 }
 
+func (c *matchingServiceClient) CountWorkers(ctx context.Context, in *CountWorkersRequest, opts ...grpc.CallOption) (*CountWorkersResponse, error) {
+	out := new(CountWorkersResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CountWorkers_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *matchingServiceClient) UpdateTaskQueueConfig(ctx context.Context, in *UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*UpdateTaskQueueConfigResponse, error) {
 	out := new(UpdateTaskQueueConfigResponse)
 	err := c.cc.Invoke(ctx, MatchingService_UpdateTaskQueueConfig_FullMethodName, in, out, opts...)
@@ -658,6 +682,8 @@ type MatchingServiceServer interface {
 	// Note: This only cancels polls that are currently outstanding. The caller must ensure no new polls
 	// are issued after calling this RPC, otherwise those polls will not be cancelled.
 	CancelOutstandingWorkerPolls(context.Context, *CancelOutstandingWorkerPollsRequest) (*CancelOutstandingWorkerPollsResponse, error)
+	// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on the specified partitions.
+	CancelOutstandingWorkerPollsPartition(context.Context, *CancelOutstandingWorkerPollsPartitionRequest) (*CancelOutstandingWorkerPollsPartitionResponse, error)
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error)
@@ -768,6 +794,8 @@ type MatchingServiceServer interface {
 	// Supports pagination for large result sets. Returns an empty list if no workers match the criteria.
 	// Returns an error if the namespace doesn't exist.
 	ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error)
+	// CountWorkers counts workers in the specified namespace that match the provided query.
+	CountWorkers(context.Context, *CountWorkersRequest) (*CountWorkersResponse, error)
 	// Set the persisted task queue configuration.
 	// (-- api-linter: core::0134::method-signature=disabled
 	//
@@ -843,6 +871,9 @@ func (UnimplementedMatchingServiceServer) CancelOutstandingPoll(context.Context,
 func (UnimplementedMatchingServiceServer) CancelOutstandingWorkerPolls(context.Context, *CancelOutstandingWorkerPollsRequest) (*CancelOutstandingWorkerPollsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelOutstandingWorkerPolls not implemented")
 }
+func (UnimplementedMatchingServiceServer) CancelOutstandingWorkerPollsPartition(context.Context, *CancelOutstandingWorkerPollsPartitionRequest) (*CancelOutstandingWorkerPollsPartitionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelOutstandingWorkerPollsPartition not implemented")
+}
 func (UnimplementedMatchingServiceServer) DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueue not implemented")
 }
@@ -914,6 +945,9 @@ func (UnimplementedMatchingServiceServer) RecordWorkerHeartbeat(context.Context,
 }
 func (UnimplementedMatchingServiceServer) ListWorkers(context.Context, *ListWorkersRequest) (*ListWorkersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListWorkers not implemented")
+}
+func (UnimplementedMatchingServiceServer) CountWorkers(context.Context, *CountWorkersRequest) (*CountWorkersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CountWorkers not implemented")
 }
 func (UnimplementedMatchingServiceServer) UpdateTaskQueueConfig(context.Context, *UpdateTaskQueueConfigRequest) (*UpdateTaskQueueConfigResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateTaskQueueConfig not implemented")
@@ -1152,6 +1186,24 @@ func _MatchingService_CancelOutstandingWorkerPolls_Handler(srv interface{}, ctx 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).CancelOutstandingWorkerPolls(ctx, req.(*CancelOutstandingWorkerPollsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_CancelOutstandingWorkerPollsPartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelOutstandingWorkerPollsPartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).CancelOutstandingWorkerPollsPartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_CancelOutstandingWorkerPollsPartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).CancelOutstandingWorkerPollsPartition(ctx, req.(*CancelOutstandingWorkerPollsPartitionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1588,6 +1640,24 @@ func _MatchingService_ListWorkers_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_CountWorkers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CountWorkersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).CountWorkers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_CountWorkers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).CountWorkers(ctx, req.(*CountWorkersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchingService_UpdateTaskQueueConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateTaskQueueConfigRequest)
 	if err := dec(in); err != nil {
@@ -1716,6 +1786,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MatchingService_CancelOutstandingWorkerPolls_Handler,
 		},
 		{
+			MethodName: "CancelOutstandingWorkerPollsPartition",
+			Handler:    _MatchingService_CancelOutstandingWorkerPollsPartition_Handler,
+		},
+		{
 			MethodName: "DescribeTaskQueue",
 			Handler:    _MatchingService_DescribeTaskQueue_Handler,
 		},
@@ -1810,6 +1884,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListWorkers",
 			Handler:    _MatchingService_ListWorkers_Handler,
+		},
+		{
+			MethodName: "CountWorkers",
+			Handler:    _MatchingService_CountWorkers_Handler,
 		},
 		{
 			MethodName: "UpdateTaskQueueConfig",

@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package temporal.server.api.contextpropagation.v1;
+
+option go_package = "go.temporal.io/server/api/contextpropagation/v1;contextpropagation";
+
+// ContextMetadata carries all context metadata key-value pairs in a single
+// protobuf message. It is serialized into a gRPC trailer under the
+// "contextmetadata-bin" key. The "-bin" suffix causes gRPC to base64-encode
+// the value on the wire, making it safe for arbitrary byte sequences
+// (including HTTP/2-unsafe control characters in workflow type names).
+message ContextMetadata {
+  map<string, string> entries = 1;
+}

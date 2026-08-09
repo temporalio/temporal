@@ -17,6 +17,7 @@ var Module = fx.Options(
 		ControllerProvider,
 		func(impl *ControllerImpl) Controller { return impl },
 		ContextFactoryProvider,
+		NewDefaultHandoverTrackerFactory,
 		fx.Annotate(
 			func(p Controller) pingable.Pingable { return p },
 			fx.ResultTags(`group:"deadlockDetectorRoots"`),

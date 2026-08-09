@@ -52,7 +52,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	// leaving batches [6] and [7] for the second page.
 	const maxBatchesPerPage = 3
 
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 	tv := env.Tv()
 	runID := mustStartWorkflow(env, tv)
 	wfExecution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID}
@@ -80,7 +80,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	s.NoError(err)
 
 	// Send an update to create a speculative WFT (event 8 in memory, scheduled but not polled).
-	ctx, cancel := context.WithCancel(testcore.NewContext())
+	ctx, cancel := context.WithCancel(s.Context())
 	defer cancel()
 	updateCh := sendUpdate(ctx, env, tv)
 	defer func() { go func() { <-updateCh }() }()
@@ -92,13 +92,15 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	// Without this wait there is a race: if the update hasn't been processed yet, the signal
 	// would only add event 8 (SignalReceived) with freshNextEventId=9, producing 8 events
 	// instead of the expected 9 and causing a false test failure.
-	s.Eventually(func() bool {
-		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
+	s.Awaitf(func(s *PrematureEosTestSuite) {
+		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(s.Context(),
 			&workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: env.Namespace().String(),
 				Execution: wfExecution,
 			})
-		return descErr == nil && desc.GetPendingWorkflowTask() != nil
+		s.NoError(descErr)
+		s.NotNil(desc)
+		s.NotNil(desc.GetPendingWorkflowTask())
 	}, 5*time.Second, 250*time.Millisecond, "speculative WFT should be scheduled after sending update")
 
 	// Fetch page 1 via GetWorkflowExecutionHistory — mimicking what the SDK does when a
@@ -109,7 +111,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	// the next page. The continuation token encodes NextEventId=8 and PersistenceToken
 	// pointing to the next DB batch — this is the "stale token" that exercises the bug.
 	histPage1, err := env.FrontendClient().GetWorkflowExecutionHistory(
-		testcore.NewContext(),
+		s.Context(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:       env.Namespace().String(),
 			Execution:       wfExecution,
@@ -129,7 +131,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	//   8: WorkflowTaskScheduled  (normal WFT scheduled to handle the pending update)
 	//   9: WorkflowExecutionSignaled  (flushed immediately: HasStartedWorkflowTask=false)
 	// After this transaction, freshNextEventId=10.
-	_, signalErr := env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
+	_, signalErr := env.FrontendClient().SignalWorkflowExecution(s.Context(),
 		&workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
 			WorkflowExecution: wfExecution,
@@ -141,7 +143,7 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	allEvents := make([]*historypb.HistoryEvent, len(firstPageEvents))
 	copy(allEvents, firstPageEvents)
 	for nextPageToken := staleNextPageToken; nextPageToken != nil; {
-		histResp, histErr := env.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(),
+		histResp, histErr := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace:       env.Namespace().String(),
 				Execution:       wfExecution,

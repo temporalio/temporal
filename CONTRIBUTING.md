@@ -235,16 +235,12 @@ If you need to make changes to the gRPC / protobuf definitions while also workin
           go.temporal.io/sdk => ../sdk-go
       )
       ```
-   2. Build & fix errors: `make proto && make bins`
-
-## License headers
-
-This project is Open Source Software, and requires a header at the beginning of
-all source files. To verify that all files contain the header execute:
-
-```bash
-make copyright
-```
+   2. Build & fix errors:
+      ```
+      make proto
+      make go-generate
+      make bins
+      ```
 
 ## Commit Messages And Titles of Pull Requests
 

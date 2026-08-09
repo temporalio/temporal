@@ -80,7 +80,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomTextField": payload.EncodeString("test value"),
+			"CustomTextField": sadefs.MustEncodeValue("test value", enumspb.INDEXED_VALUE_TYPE_TEXT),
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -175,9 +175,10 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 				return false
 			}
 			fields := resp.GetExecutions()[0].SearchAttributes.GetIndexedFields()
-			if len(fields) != 3 {
+			if len(fields) < 3 {
 				return false
 			}
+			s.Len(fields, 3)
 
 			searchValBytes := fields["CustomTextField"]
 			var searchVal string
@@ -284,11 +285,10 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 
 // TODO (alex): remove this func.
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	attrValPayload2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomTextField": payload.EncodeString("another string"),
-			"CustomIntField":  attrValPayload2,
+			"CustomTextField": sadefs.MustEncodeValue("another string", enumspb.INDEXED_VALUE_TYPE_TEXT),
+			"CustomIntField":  sadefs.MustEncodeValue(123, enumspb.INDEXED_VALUE_TYPE_INT),
 		},
 	}
 	return upsertSearchAttr

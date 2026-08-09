@@ -162,11 +162,13 @@ func (f *visibilityQueueFactory) CreateQueue(
 			MaxReaderCount:                      f.Config.VisibilityQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
+			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},
 		logger,
 		metricsHandler,
 		factory,
+		nil, // taskPostProcessor
 	)
 }

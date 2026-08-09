@@ -21,7 +21,7 @@ func (d ScheduledEventDefinition) Type() enumspb.EventType {
 }
 
 func (d ScheduledEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
-	token, err := hsm.GenerateEventLoadToken(event)
+	token, err := root.GenerateEventLoadToken(event)
 	if err != nil {
 		return err
 	}

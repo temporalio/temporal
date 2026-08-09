@@ -212,7 +212,7 @@ func TestFilterParentTests(t *testing.T) {
 }
 
 func TestGenerateSuiteReports(t *testing.T) {
-	now := time.Now()
+	now := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
 	twoDaysAgo := now.Add(-48 * time.Hour)
 	oneDayAgo := now.Add(-24 * time.Hour)
 

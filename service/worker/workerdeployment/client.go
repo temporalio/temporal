@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/sdk/temporal"
@@ -26,6 +28,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -205,10 +208,14 @@ type Client interface {
 	// SignalVersionReactivation sends a reactivation signal to a version workflow.
 	// Used when workflows are pinned to a potentially DRAINED/INACTIVE version.
 	// This is a fire-and-forget operation - errors are logged but returned for caller handling.
+	// revisionNumber is used to compose a stable RequestId on the signal so concurrent signals
+	// for the same (deployment, buildID, revisionNumber) tuple are deduplicated by the receiver
+	// via Temporal's built-in pendingSignalRequestedIDs mechanism.
 	SignalVersionReactivation(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName, buildID string,
+		revisionNumber int64,
 	) error
 
 	ValidateComputeConfig(
@@ -226,6 +233,13 @@ type ErrRegister struct{ error }
 var retryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithExpirationInterval(1 * time.Minute)
 
 // ClientImpl implements Client
+// reactivationVersionKey identifies one target version workflow for reactivation-signal dedup.
+type reactivationVersionKey struct {
+	namespaceID    string
+	deploymentName string
+	buildID        string
+}
+
 type ClientImpl struct {
 	logger                           log.Logger
 	historyClient                    historyservice.HistoryServiceClient
@@ -238,6 +252,14 @@ type ClientImpl struct {
 	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	testHooks                        testhooks.TestHooks
 	metricsHandler                   metrics.Handler
+
+	// highestRevSignaledToVersionWf is a per-pod LRU that holds, for each target version
+	// workflow, the highest revision number this pod has successfully signaled for
+	// reactivation. A reactivation signal for the same or older revision is skipped.
+	// Size-bounded by ReactivationSignalDedupCacheMaxSize; LRU eviction is pure memory
+	// hygiene, not part of the dedup contract. Cross-pod deduplication is handled
+	// separately by the deterministic UUID RequestId on each signal.
+	highestRevSignaledToVersionWf cache.Cache
 }
 
 func (d *ClientImpl) SetManager(
@@ -609,6 +631,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return dInfo, queryResponse.GetState().GetConflictToken(), nil
 }
 
@@ -717,13 +740,30 @@ func (d *ClientImpl) ListWorkerDeployments(
 		return nil, nil, err
 	}
 
-	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, 0, len(persistenceResp.Executions))
-	for _, ex := range persistenceResp.Executions {
+	return d.collapseDuplicateDeploymentSummaries(namespaceEntry.Name(), persistenceResp.Executions), persistenceResp.NextPageToken, nil
+}
+
+// collapseDuplicateDeploymentSummaries builds the per-deployment summaries for one fetched
+// Visibility page, collapsing overlapping records for the same deployment. Pagination state
+// remains owned by Visibility.
+func (d *ClientImpl) collapseDuplicateDeploymentSummaries(
+	namespaceName namespace.Name,
+	executions []*workflowpb.WorkflowExecutionInfo,
+) []*deploymentspb.WorkerDeploymentSummary {
+	type indexedSummary struct {
+		index     int
+		startTime time.Time
+	}
+
+	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, 0, len(executions))
+	summaryByDeploymentName := make(map[string]*indexedSummary, len(executions))
+	for _, ex := range executions {
 		var workerDeploymentInfo *deploymentspb.WorkerDeploymentWorkflowMemo
 		if ex.GetMemo() != nil {
+			var err error
 			workerDeploymentInfo, err = DecodeWorkerDeploymentMemo(ex.GetMemo())
 			if err != nil {
-				d.logger.Error("unable to decode worker deployment memo", tag.Error(err), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowID(ex.GetExecution().GetWorkflowId()))
+				d.logger.Error("unable to decode worker deployment memo", tag.Error(err), tag.WorkflowNamespace(namespaceName.String()), tag.WorkflowID(ex.GetExecution().GetWorkflowId()))
 				continue
 			}
 		} else {
@@ -736,17 +776,43 @@ func (d *ClientImpl) ListWorkerDeployments(
 			}
 		}
 
-		workerDeploymentSummaries = append(workerDeploymentSummaries, &deploymentspb.WorkerDeploymentSummary{
+		summary := &deploymentspb.WorkerDeploymentSummary{
 			Name:                  workerDeploymentInfo.DeploymentName,
 			CreateTime:            workerDeploymentInfo.CreateTime,
 			RoutingConfig:         workerDeploymentInfo.RoutingConfig,
 			LatestVersionSummary:  workerDeploymentInfo.LatestVersionSummary,
 			RampingVersionSummary: workerDeploymentInfo.RampingVersionSummary,
 			CurrentVersionSummary: workerDeploymentInfo.CurrentVersionSummary,
-		})
+		}
+
+		// A single deployment can have more than one RUNNING Visibility record at once: creating a
+		// deployment immediately continues-as-new (and delete+recreate starts a fresh run), and
+		// Visibility is eventually consistent, so the successor run can become visible before the
+		// predecessor's close update lands. We collapse those into one summary, keeping the newest
+		// run. We key on the deployment name (stable across runs) and tiebreak on the raw execution
+		// start time
+		deploymentName := workerDeploymentInfo.GetDeploymentName()
+		startTime := ex.GetStartTime().AsTime()
+		if existing, ok := summaryByDeploymentName[deploymentName]; ok {
+			// Already seen this deployment on this page. Keep whichever run started later, but leave
+			// it in its original slot so the page's first-occurrence ordering is preserved.
+			if startTime.After(existing.startTime) {
+				workerDeploymentSummaries[existing.index] = summary
+				existing.startTime = startTime
+			}
+			continue
+		}
+
+		// First time we've seen this deployment: remember the slot it's about to occupy (the current
+		// length is the index the append lands on) so a later, newer run can overwrite it in place.
+		summaryByDeploymentName[deploymentName] = &indexedSummary{
+			index:     len(workerDeploymentSummaries),
+			startTime: startTime,
+		}
+		workerDeploymentSummaries = append(workerDeploymentSummaries, summary)
 	}
 
-	return workerDeploymentSummaries, persistenceResp.NextPageToken, nil
+	return workerDeploymentSummaries
 }
 
 func (d *ClientImpl) SetCurrentVersion(
@@ -1777,6 +1843,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 			LastDeactivationTime: v.GetLastDeactivationTime(),
 			Status:               v.GetStatus(),
 			ComputeConfig:        v.GetComputeConfig(),
+			ComputeStatus:        v.GetComputeStatus(),
 		})
 	}
 
@@ -1988,11 +2055,47 @@ func (d *ClientImpl) SignalVersionReactivation(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName, buildID string,
+	revisionNumber int64,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("SignalVersionReactivation", deploymentName, &retErr, buildID)()
 
+	key := reactivationVersionKey{
+		namespaceID:    namespaceEntry.ID().String(),
+		deploymentName: deploymentName,
+		buildID:        buildID,
+	}
+	metricsHandler := d.metricsHandler.WithTags(
+		metrics.CacheTypeTag(metrics.ReactivationSignalDedupCacheTypeTagValue),
+		metrics.OperationTag(metrics.ReactivationSignalDedupScope),
+		metrics.NamespaceIDTag(namespaceEntry.ID().String()),
+	)
+	metrics.CacheRequests.With(metricsHandler).Record(1)
+
+	if stored := d.highestRevSignaledToVersionWf.Get(key); stored != nil {
+		if storedRev, ok := stored.(int64); ok && revisionNumber <= storedRev {
+			// This pod has already signaled the target version workflow at this revision
+			// or a newer one; skip to avoid a redundant RPC. Another pod may still send;
+			// the receiver dedups via the deterministic UUID RequestId.
+			return nil
+		}
+	}
+	metrics.CacheMissCounter.With(metricsHandler).Record(1)
+
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+
+	// Deterministic UUID v5 RequestId derived from the revision number. Multiple history
+	// pods that independently decide to reactivate the same version at the same revision
+	// compute the same RequestId and fold into a single signal delivery, since the receiver
+	// dedups on RequestId.
+	//
+	// Revision alone is enough input because the dedup is scoped to this one version
+	// workflow (addressed by workflowID); different (deployment, build) pairs at the same
+	// revision don't collide because they're different workflows.
+	requestID := uuid.NewSHA1(
+		uuid.Nil,
+		[]byte("reactivation-signal:"+strconv.FormatInt(revisionNumber, 10)),
+	).String()
 
 	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -2004,11 +2107,19 @@ func (d *ClientImpl) SignalVersionReactivation(
 			SignalName: ReactivateVersionSignalName,
 			Input:      nil,
 			Identity:   "history-service",
+			RequestId:  requestID,
 		},
 	}
 
 	_, err := d.historyClient.SignalWorkflowExecution(ctx, signalRequest)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Record success so subsequent calls to the same version workflow for this or older
+	// revisions skip the RPC.
+	d.highestRevSignaledToVersionWf.Put(key, revisionNumber)
+	return nil
 }
 
 func (d *ClientImpl) getSyncBatchSize() int32 {

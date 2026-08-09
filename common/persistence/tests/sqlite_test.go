@@ -3,13 +3,17 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math"
 	"os"
 	"path"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
@@ -53,7 +57,7 @@ func NewSQLiteFileConfig() *config.SQL {
 		ConnectAddr:       environment.GetLocalhostIP(),
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
-		DatabaseName:      "test_" + persistencetests.GenerateRandomDBName(3),
+		DatabaseName:      persistencetests.GenerateRandomDBName(),
 		ConnectAttributes: map[string]string{"cache": "private"},
 	}
 }
@@ -78,6 +82,10 @@ func LoadSchema(t *testing.T, db sqlplugin.AdminDB, schemaFile string) {
 	statements, err := persistence.LoadAndSplitQuery([]string{schemaFile})
 	if err != nil {
 		t.Fatalf("Unable to load schema: %s", err)
+	}
+
+	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
+		statements = rewriter.RewriteSchemaStatements(statements)
 	}
 
 	for _, stmt := range statements {
@@ -107,7 +115,12 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
 	defer func() {
+		_ = db.Close()
 		factory.Close()
 	}()
 
@@ -118,7 +131,73 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 		serialization.NewSerializer(),
 		logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(t, s)
+}
+
+// TestSQLiteMutableStateTableConformance fails if a mutable-state table is added
+// without a matching delete in DeleteWorkflowExecution: it discovers every table
+// keyed by (shard_id, namespace_id, workflow_id, run_id, +>=1 more) — the shape
+// unique to mutable-state child tables — and asserts it matches what
+// sqlMutableStateTableCounts accounts for.
+func TestSQLiteMutableStateTableConformance(t *testing.T) {
+	t.Parallel()
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	t.Cleanup(func() { _ = os.Remove(cfg.DatabaseName) })
+
+	// Known set = the reader's map keys (single source of truth). The run need not
+	// exist; each covered table still yields a zero-count key.
+	mdb, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mdb.Close() })
+	counts, err := sqlMutableStateTableCounts(mdb)(context.Background(), 1, uuid.NewString(), "conformance-wf", uuid.NewString())
+	require.NoError(t, err)
+	var known []string
+	for table := range counts {
+		known = append(known, table)
+	}
+
+	discovered := discoverMutableStateTables(t, cfg)
+
+	require.ElementsMatch(t, known, discovered,
+		"mutable-state tables in the schema don't match the set DeleteWorkflowExecution accounts for; "+
+			"a table with a (shard_id, namespace_id, workflow_id, run_id, ...) primary key was likely added or removed "+
+			"without updating DeleteWorkflowExecution and sqlMutableStateTableCounts")
+}
+
+// discoverMutableStateTables returns the tables in the SQLite schema whose
+// primary key begins with (shard_id, namespace_id, workflow_id, run_id) and has at
+// least one further column.
+func discoverMutableStateTables(t *testing.T, cfg *config.SQL) []string {
+	t.Helper()
+	xdb, err := sqlx.Open("sqlite", cfg.DatabaseName)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = xdb.Close() })
+
+	var tableNames []string
+	require.NoError(t, xdb.Select(&tableNames,
+		`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`))
+
+	keyPrefix := []string{"shard_id", "namespace_id", "workflow_id", "run_id"}
+	var discovered []string
+	for _, name := range tableNames {
+		pk := sqlitePrimaryKeyColumns(t, xdb, name)
+		if len(pk) > len(keyPrefix) && slices.Equal(pk[:len(keyPrefix)], keyPrefix) {
+			discovered = append(discovered, name)
+		}
+	}
+	return discovered
+}
+
+// sqlitePrimaryKeyColumns returns a table's primary-key columns in key order.
+func sqlitePrimaryKeyColumns(t *testing.T, xdb *sqlx.DB, table string) []string {
+	t.Helper()
+	var pk []string
+	// table name comes from sqlite_master (trusted); a pragma argument can't be bound.
+	require.NoError(t, xdb.Select(&pk,
+		fmt.Sprintf("SELECT name FROM pragma_table_info('%s') WHERE pk > 0 ORDER BY pk", table)))
+	return pk
 }
 
 func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
@@ -323,7 +402,12 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
 	defer func() {
+		_ = db.Close()
 		factory.Close()
 	}()
 
@@ -334,6 +418,7 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 		serialization.NewSerializer(),
 		logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(t, s)
 }
 
@@ -556,7 +641,7 @@ func TestSQLiteHistoryV2PersistenceSuite(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -564,7 +649,7 @@ func TestSQLiteMetadataPersistenceSuiteV2(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -572,7 +657,7 @@ func TestSQLiteClusterMetadataPersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -580,7 +665,7 @@ func TestSQLiteQueuePersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -588,7 +673,7 @@ func TestSQLiteFileHistoryV2PersistenceSuite(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -596,7 +681,7 @@ func TestSQLiteFileMetadataPersistenceSuiteV2(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -604,7 +689,7 @@ func TestSQLiteFileClusterMetadataPersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -612,7 +697,7 @@ func TestSQLiteFileQueuePersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 

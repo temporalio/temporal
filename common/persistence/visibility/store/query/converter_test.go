@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
@@ -22,16 +21,6 @@ const (
 	testNamespaceName = namespace.Name("test-namespace")
 	testNamespaceID   = namespace.ID("test-namespace-id")
 )
-
-type identityMapper struct{}
-
-func (identityMapper) GetAlias(fieldName string, _ string) (string, error) {
-	return fieldName, nil
-}
-
-func (identityMapper) GetFieldName(alias string, _ string) (string, error) {
-	return alias, nil
-}
 
 func TestWithSearchAttributeInterceptor(t *testing.T) {
 	t.Parallel()
@@ -129,6 +118,17 @@ func TestQueryConverter_Convert(t *testing.T) {
 			mockNamespaceDivisionExpr: true,
 			mockBuildFinalAndExpr:     true,
 			mockBuildFinalAndRes:      namespaceDivisionExpr,
+		},
+
+		{
+			// Grouping by TemporalNamespaceDivision must suppress the default
+			// namespace division filter so that results span all divisions.
+			// mockNamespaceDivisionExpr is false, so the default filter is not
+			// applied and SeenNamespaceDivision() is expected to be true.
+			name:                  "success group by TemporalNamespaceDivision suppresses default filter",
+			in:                    "group by TemporalNamespaceDivision",
+			mockBuildFinalAndExpr: true,
+			mockBuildFinalAndRes:  nil,
 		},
 
 		{
@@ -504,11 +504,26 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 		},
 
 		{
+			name: "success group by TemporalNamespaceDivision",
+			in:   "select * from t group by TemporalNamespaceDivision",
+			out: &QueryParams[sqlparser.Expr]{
+				GroupBy: []*SAColumn{
+					NewSAColumn(
+						sadefs.TemporalNamespaceDivision,
+						sadefs.TemporalNamespaceDivision,
+						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					),
+				},
+			},
+		},
+
+		{
 			name: "fail not supported group by field",
 			in:   "select * from t group by RunId",
 			err: fmt.Sprintf(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				NotSupportedErrMessage,
+				"RunId",
 			),
 		},
 
@@ -1708,18 +1723,6 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 		},
 
 		{
-			name: "success special ScheduleID",
-			in: &sqlparser.ColName{
-				Name: sqlparser.NewColIdent(sadefs.ScheduleID),
-			},
-			out: NewSAColumn(
-				sadefs.ScheduleID,
-				sadefs.WorkflowID,
-				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			),
-		},
-
-		{
 			name: "success backticks",
 			in: &sqlparser.ColName{
 				Name: sqlparser.NewColIdent("`AliasForKeyword01`"),
@@ -1927,7 +1930,7 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 			)
 
 			if tc.useNoopMapper {
-				queryConverter.saMapper = identityMapper{}
+				queryConverter.saMapper = &searchattribute.NoopMapper{}
 			}
 
 			fn, ft, err := queryConverter.resolveSearchAttributeAlias(tc.in)
@@ -1964,15 +1967,6 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 			field:  sadefs.WorkflowType,
 			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			out:    "foo",
-		},
-
-		{
-			name:   "success special ScheduleID",
-			expr:   sqlparser.NewStrVal([]byte("foo")),
-			alias:  sadefs.ScheduleID,
-			field:  sadefs.WorkflowID,
-			saType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			out:    primitives.ScheduleWorkflowIDPrefix + "foo",
 		},
 
 		{

@@ -113,6 +113,11 @@ type (
 		VerifyVersion() error
 	}
 
+	// SchemaStatementRewriter lets SQL plugins adjust schema statements before execution.
+	SchemaStatementRewriter interface {
+		RewriteSchemaStatements(statements []string) []string
+	}
+
 	GenericDB interface {
 		DbName() string
 		PluginName() string

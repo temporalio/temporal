@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
@@ -76,4 +78,15 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 			assert.NoError(t, err)
 		}
 	}
+}
+
+func TestMigrateWorkflowIDReusePolicyForRunningWorkflow(t *testing.T) {
+	//nolint:staticcheck // SA1019: intentional migration coverage for deprecated policy
+	reusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING
+	conflictPolicy := enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED
+
+	MigrateWorkflowIDReusePolicyForRunningWorkflow(&reusePolicy, &conflictPolicy)
+
+	require.Equal(t, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, reusePolicy)
+	require.Equal(t, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING, conflictPolicy)
 }

@@ -19,25 +19,40 @@ func AllocListenAddress() string {
 }
 
 func NewNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) {
+	// Create listener
+	listener, err := net.Listen("tcp", listenAddr)
+	require.NoError(t, err, "Nexus test server failed to listen on %s", listenAddr)
+
+	// Create HTTP handler and server
 	hh := nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 		Handler: handler,
 	})
 	srv := &http.Server{Addr: listenAddr, Handler: hh}
-	listener, err := net.Listen("tcp", listenAddr)
-	require.NoError(t, err)
+
+	// Start server
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- srv.Serve(listener)
 	}()
 
 	t.Cleanup(func() {
-		// Graceful shutdown
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+
+		// Shutdown server gracefully
 		err = srv.Shutdown(ctx)
-		if ctx.Err() != nil {
-			require.NoError(t, err)
-			require.ErrorIs(t, <-errCh, http.ErrServerClosed)
+		if err != nil {
+			// Graceful shutdown failed, force close
+			require.ErrorIs(t, err, context.DeadlineExceeded, "Nexus test server graceful shutdown failed")
+			require.NoError(t, srv.Close(), "Nexus test server force close after graceful shutdown timeout")
+		}
+
+		// Wait for server to exit gracefully
+		select {
+		case err := <-errCh:
+			require.ErrorIs(t, err, http.ErrServerClosed, "Nexus test server Serve returned unexpected error")
+		case <-time.After(time.Second):
+			require.Fail(t, "Nexus test server Serve did not exit after shutdown")
 		}
 	})
 }

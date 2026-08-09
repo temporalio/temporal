@@ -39,7 +39,7 @@ frontend.workerVersioningRuleAPIs:
   - value: true
 component.nexusoperations.callback.endpoint.template:
   - value: http://localhost:7243/namespaces/{{.NamespaceName}}/nexus/callback
-component.callbacks.allowedAddresses:
+callback.allowedAddresses:
   - value:
       - Pattern: "*"
         AllowInsecure: true
@@ -49,9 +49,3 @@ history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192
-history.enableTransitionHistory:
-  - value: true
-history.enableChasm:
-  - value: true
-activity.enableStandalone:
-  - value: true

@@ -84,18 +84,32 @@ func (d *matchingTaskStoreV2) CreateTasks(
 			task.Task.EncodingType.String())
 	}
 
-	// The following query is used to ensure that range_id didn't change
-	batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, matchingTaskVersion2),
-		request.RangeID,
-		request.TaskQueueInfo.Data,
-		request.TaskQueueInfo.EncodingType.String(),
-		namespaceID,
-		taskQueue,
-		taskQueueType,
-		rowTypeTaskQueue,
-		taskQueueTaskID,
-		request.RangeID,
-	)
+	// The following query is used to ensure that range_id didn't change.
+	// When UpdateMetadata is true, we also write the metadata blob (backlog counts, etc.).
+	// When false, we only check the range_id for write fencing.
+	if request.UpdateMetadata {
+		batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, matchingTaskVersion2),
+			request.RangeID,
+			request.TaskQueueInfo.Data,
+			request.TaskQueueInfo.EncodingType.String(),
+			namespaceID,
+			taskQueue,
+			taskQueueType,
+			rowTypeTaskQueue,
+			taskQueueTaskID,
+			request.RangeID,
+		)
+	} else {
+		batch.Query(switchTasksTable(templateCheckRangeIDQuery, matchingTaskVersion2),
+			request.RangeID,
+			namespaceID,
+			taskQueue,
+			taskQueueType,
+			rowTypeTaskQueue,
+			taskQueueTaskID,
+			request.RangeID,
+		)
+	}
 
 	previous := make(map[string]any)
 	applied, _, err := d.Session.MapExecuteBatchCAS(batch, previous)
@@ -110,7 +124,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 		}
 	}
 
-	return &p.CreateTasksResponse{UpdatedMetadata: true}, nil
+	return &p.CreateTasksResponse{UpdatedMetadata: request.UpdateMetadata}, nil
 }
 
 // GetTasks get a task

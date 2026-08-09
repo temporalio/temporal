@@ -38,4 +38,36 @@ service ActivityService {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
+
+  rpc PauseActivityExecution(PauseActivityExecutionRequest) returns (PauseActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing) = {
+      business_id: "frontend_request.workflow_id"
+      business_id: "frontend_request.activity_id"
+    };
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc UnpauseActivityExecution(UnpauseActivityExecutionRequest) returns (UnpauseActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing) = {
+      business_id: "frontend_request.workflow_id"
+      business_id: "frontend_request.activity_id"
+    };
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc ResetActivityExecution(ResetActivityExecutionRequest) returns (ResetActivityExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing) = {
+      business_id: "frontend_request.workflow_id"
+      business_id: "frontend_request.activity_id"
+    };
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc UpdateActivityExecutionOptions(UpdateActivityExecutionOptionsRequest) returns (UpdateActivityExecutionOptionsResponse) {
+    option (temporal.server.api.routing.v1.routing) = {
+      business_id: "frontend_request.workflow_id"
+      business_id: "frontend_request.activity_id"
+    };
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 }

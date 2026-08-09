@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -63,6 +64,8 @@ type (
 		onPut                     func(wfContext *historyi.WorkflowContext)
 		onEvict                   func(wfContext *historyi.WorkflowContext)
 		nonUserContextLockTimeout time.Duration
+		// paginationLimiter limits pagination buffer size across all workflow cache contexts
+		paginationLimiter *limiter.KeyedBytesLimiter
 	}
 	cacheItem struct {
 		shardId   int32
@@ -126,17 +129,21 @@ func NewHostLevelCache(
 		OnEvict: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion
 			item := val.(*cacheItem)
-			if item.finalizer == nil {
-				return // should only happen in unit tests
+			if item.finalizer != nil {
+				wfKey := item.wfContext.GetWorkflowKey()
+				err := item.finalizer.Deregister(wfKey.String())
+				if err != nil {
+					// debug level since this is very common: the cache item was registered with a finalizer
+					// that has been finalized since then and is therefore no longer accepting any calls
+					logger.Debug("cache failed to de-register callback in finalizer",
+						tag.Error(err), tag.ShardID(item.shardId))
+					return
+				}
 			}
-			wfKey := item.wfContext.GetWorkflowKey()
-			err := item.finalizer.Deregister(wfKey.String())
-			if err != nil {
-				// debug level since this is very common: the cache item was registered with a finalizer
-				// that has been finalized since then and is therefore no longer accepting any calls
-				logger.Debug("cache failed to de-register callback in finalizer",
-					tag.Error(err), tag.ShardID(item.shardId))
-			}
+			// We removed the finalizer callback before it ran, so this eviction now owns clearing
+			// the context. Without this, resources it holds, for example the bytes it reserved on the
+			// shared pagination buffer limiter would leak until process restart.
+			item.wfContext.Clear()
 		},
 	}
 
@@ -145,6 +152,7 @@ func NewHostLevelCache(
 	return &cacheImpl{
 		Cache:                     c,
 		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
+		paginationLimiter:         limiter.NewKeyedBytesLimiter(),
 	}
 }
 
@@ -289,6 +297,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
+			c.paginationLimiter,
 		)
 
 		var err error
@@ -377,8 +386,8 @@ func (c *cacheImpl) makeReleaseFunc(
 					isDirty := wfContext.IsDirty()
 					if isDirty {
 						wfContext.Clear()
-						logger := log.With(shardContext.GetLogger(), tag.ComponentHistoryCache)
-						logger.Error("Cache encountered dirty mutable state transaction",
+						softassert.Fail(shardContext.GetLogger(), "Cache encountered dirty mutable state transaction",
+							tag.ComponentHistoryCache,
 							tag.WorkflowNamespaceID(wfContext.GetWorkflowKey().NamespaceID),
 							tag.WorkflowID(wfContext.GetWorkflowKey().WorkflowID),
 							tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),

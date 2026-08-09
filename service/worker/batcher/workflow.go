@@ -6,6 +6,7 @@ import (
 	"time"
 
 	batchpb "go.temporal.io/api/batch/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -31,24 +32,43 @@ const (
 	BatchReasonMemo = "batch_operation_reason"
 	// BatchOperationStatsMemo stores batch operation stats in memo
 	BatchOperationStatsMemo = "batch_operation_stats"
-	// BatchTypeTerminate is batch type for terminating workflows
-	BatchTypeTerminate = "terminate"
-	// BatchTypeCancel is the batch type for canceling workflows
-	BatchTypeCancel = "cancel"
-	// BatchTypeSignal is batch type for signaling workflows
-	BatchTypeSignal = "signal"
-	// BatchTypeDelete is batch type for deleting workflows
-	BatchTypeDelete = "delete"
-	// BatchTypeReset is batch type for resetting workflows
-	BatchTypeReset = "reset"
-	// BatchTypeUpdateOptions is batch type for updating the options of workflow executions
-	BatchTypeUpdateOptions = "update_options"
+	// BatchOperationVisibilityQueryMemo stores the batch operation's visibility query in memo
+	BatchOperationVisibilityQueryMemo = "batch_operation_visibility_query"
+	// BatchOperationExecutionsMemo stores the batch operation's explicit target
+	// executions (as opposed to a visibility query) in memo, encoded as a
+	// []*commonpb.Execution.
+	BatchOperationExecutionsMemo = "batch_operation_executions"
+	// Workflow batch operation memo type strings retain their legacy persisted
+	// values so pre-upgrade frontends can read jobs started during a rollout.
+
+	// BatchTypeTerminateWorkflows is batch type for terminating workflows
+	BatchTypeTerminateWorkflows = "terminate"
+	// BatchTypeCancelWorkflows is batch type for canceling workflows
+	BatchTypeCancelWorkflows = "cancel"
+	// BatchTypeSignalWorkflows is batch type for signaling workflows
+	BatchTypeSignalWorkflows = "signal"
+	// BatchTypeDeleteWorkflows is batch type for deleting workflows
+	BatchTypeDeleteWorkflows = "delete"
+	// BatchTypeResetWorkflows is batch type for resetting workflows
+	BatchTypeResetWorkflows = "reset"
+	// BatchTypeUpdateWorkflowOptions is batch type for updating the options of workflow executions
+	BatchTypeUpdateWorkflowOptions = "update_options"
+
+	// Activity batch operation memo type strings. Each operation is suffixed with
+	// the execution type it targets (activities).
+
+	// BatchTypeTerminateActivities is batch type for terminating activities
+	BatchTypeTerminateActivities = "terminate_activities"
+	// BatchTypeCancelActivities is batch type for canceling activities
+	BatchTypeCancelActivities = "cancel_activities"
+	// BatchTypeDeleteActivities is batch type for deleting activities
+	BatchTypeDeleteActivities = "delete_activities"
+	// BatchTypeResetActivities is batch type for resetting activities
+	BatchTypeResetActivities = "reset_activities"
 	// BatchTypeUnpauseActivities is batch type for unpausing activities
 	BatchTypeUnpauseActivities = "unpause_activities"
 	// BatchTypeUpdateActivitiesOptions is batch type for updating the options of activities
 	BatchTypeUpdateActivitiesOptions = "update_activity_options"
-	// BatchTypeResetActivities is batch type for resetting activities
-	BatchTypeResetActivities = "reset_activities"
 )
 
 var (
@@ -83,6 +103,9 @@ type (
 	task struct {
 		// the workflow execution to process
 		executionInfo *workflowpb.WorkflowExecutionInfo
+		// the activity target execution to process, set instead of
+		// executionInfo for activity batch operations (terminate/cancel/delete activities)
+		targetExecution *commonpb.Execution
 		// the number of attempts to process the workflow execution
 		attempts int
 		// reference to the page this task belongs to (for tracking page completion)
@@ -153,11 +176,23 @@ func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) er
 
 // nolint:revive,cognitive-complexity
 func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) error {
+	numTargetSelectors := 0
+	if len(params.GetVisibilityQuery()) != 0 {
+		numTargetSelectors++
+	}
+	//nolint:staticcheck // SA1019: Executions is deprecated but still a valid, mutually exclusive target selector
+	if len(params.GetExecutions()) != 0 {
+		numTargetSelectors++
+	}
+	if len(params.GetTargetExecutions()) != 0 {
+		numTargetSelectors++
+	}
+
 	if params.GetOperation() == nil ||
 		params.GetReason() == "" ||
 		params.GetNamespace() == "" ||
-		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
-		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
+		numTargetSelectors == 0 {
+		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType,Reason,Namespace, AND one of (Query OR Executions OR TargetExecutions)")
 	}
 
 	if len(params.GetJobId()) == 0 {
@@ -166,11 +201,30 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	if len(params.GetNamespace()) == 0 {
 		return serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	}
-	if len(params.GetVisibilityQuery()) == 0 && len(params.GetExecutions()) == 0 {
-		return serviceerror.NewInvalidArgument("VisibilityQuery or Executions must be set on request.")
+	if numTargetSelectors == 0 {
+		return serviceerror.NewInvalidArgument("VisibilityQuery, Executions, or TargetExecutions must be set on request.")
 	}
-	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
-		return errors.New("batch query and executions are mutually exclusive")
+	if numTargetSelectors > 1 {
+		return serviceerror.NewInvalidArgument("visibility query, executions, and target executions are mutually exclusive")
+	}
+	if targetExecutions := params.GetTargetExecutions(); len(targetExecutions) > 0 {
+		// TerminateActivitiesOperation/DeleteActivitiesOperation/CancelActivitiesOperation
+		// target standalone activity executions; every other operation targets workflow
+		// executions. Reject target executions that do not match the operation.
+		expectedType := enumspb.EXECUTION_TYPE_WORKFLOW
+		switch params.GetOperation().(type) {
+		case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
+			*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
+			*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+			expectedType = enumspb.EXECUTION_TYPE_ACTIVITY
+		}
+		for i, execution := range targetExecutions {
+			if execution.GetType() != expectedType {
+				return serviceerror.NewInvalidArgumentf(
+					"target_executions[%d] has type %v, but operation %T requires %v",
+					i, execution.GetType(), params.GetOperation(), expectedType)
+			}
+		}
 	}
 	if len(params.GetReason()) == 0 {
 		return serviceerror.NewInvalidArgument("Reason is not set on request.")
@@ -180,17 +234,21 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	}
 
 	switch op := params.GetOperation().(type) {
+	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
+		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
+		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+		return nil
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
-			return errors.New("must provide signal name")
+			return serviceerror.NewInvalidArgument("must provide signal name")
 		}
 		return nil
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		if op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions() == nil {
-			return errors.New("must provide UpdateOptions")
+			return serviceerror.NewInvalidArgument("must provide UpdateOptions")
 		}
 		if op.UpdateWorkflowOptionsOperation.GetUpdateMask() == nil {
-			return errors.New("must provide UpdateMask")
+			return serviceerror.NewInvalidArgument("must provide UpdateMask")
 		}
 		// Validation for Versioning Override, if present, happens in history.
 		return nil

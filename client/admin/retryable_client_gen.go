@@ -356,6 +356,21 @@ func (c *retryableClient) GetTaskQueueTasks(
 	return resp, err
 }
 
+func (c *retryableClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueUserDataResponse, error) {
+	var resp *adminservice.GetTaskQueueUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetTaskQueueUserData(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryRequest,

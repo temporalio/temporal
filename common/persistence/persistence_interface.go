@@ -297,12 +297,13 @@ type (
 	}
 
 	InternalCreateTasksRequest struct {
-		NamespaceID   string
-		TaskQueue     string
-		TaskType      enumspb.TaskQueueType
-		RangeID       int64
-		TaskQueueInfo *commonpb.DataBlob
-		Tasks         []*InternalCreateTask `json:",omitempty"`
+		NamespaceID    string
+		TaskQueue      string
+		TaskType       enumspb.TaskQueueType
+		RangeID        int64
+		TaskQueueInfo  *commonpb.DataBlob
+		Tasks          []*InternalCreateTask `json:",omitempty"`
+		UpdateMetadata bool
 	}
 
 	InternalCreateTask struct {

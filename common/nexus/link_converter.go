@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 // This file is duplicated in sdk-go/temporalnexus/link_converter.go.
 // Any changes here or there must be replicated. This is temporary until the
 // temporal repo updates to the most recent SDK version.
@@ -39,11 +17,14 @@ import (
 )
 
 const (
-	urlSchemeTemporalKey = "temporal"
-	urlPathNamespaceKey  = "namespace"
-	urlPathWorkflowIDKey = "workflowID"
-	urlPathRunIDKey      = "runID"
-	urlPathTemplate      = "/namespaces/%s/workflows/%s/%s/history"
+	urlSchemeTemporalKey          = "temporal"
+	urlPathNamespaceKey           = "namespace"
+	urlPathWorkflowIDKey          = "workflowID"
+	urlPathActivityIDKey          = "activityID"
+	urlPathRunIDKey               = "runID"
+	urlPathWorkflowEventTemplate  = "/namespaces/%s/workflows/%s/%s/history"
+	urlPathNexusOperationTemplate = "/namespaces/%s/nexus-operations/%s/%s/details"
+	urlPathActivityTemplate       = "/namespaces/%s/activities/%s/%s/details"
 
 	linkWorkflowEventReferenceTypeKey = "referenceType"
 	linkEventIDKey                    = "eventID"
@@ -54,6 +35,7 @@ const (
 var (
 	rePatternNamespace  = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathNamespaceKey)
 	rePatternWorkflowID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathWorkflowIDKey)
+	rePatternActivityID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathActivityIDKey)
 	rePatternRunID      = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathRunIDKey)
 	urlPathRE           = regexp.MustCompile(fmt.Sprintf(
 		`^/namespaces/%s/workflows/%s/%s/history$`,
@@ -61,9 +43,98 @@ var (
 		rePatternWorkflowID,
 		rePatternRunID,
 	))
+	urlPathActivityRE = regexp.MustCompile(fmt.Sprintf(
+		`^/namespaces/%s/activities/%s/%s/details$`,
+		rePatternNamespace,
+		rePatternActivityID,
+		rePatternRunID,
+	))
 	eventReferenceType     = string((&commonpb.Link_WorkflowEvent_EventReference{}).ProtoReflect().Descriptor().Name())
 	requestIDReferenceType = string((&commonpb.Link_WorkflowEvent_RequestIdReference{}).ProtoReflect().Descriptor().Name())
 )
+
+// ConvertLinkNexusOperationToNexusLink converts a Link_NexusOperation type to Nexus Link.
+func ConvertLinkNexusOperationToNexusLink(no *commonpb.Link_NexusOperation) nexus.Link {
+	u := &url.URL{
+		Scheme: urlSchemeTemporalKey,
+		Path:   fmt.Sprintf(urlPathNexusOperationTemplate, no.GetNamespace(), no.GetOperationId(), no.GetRunId()),
+		RawPath: fmt.Sprintf(
+			urlPathNexusOperationTemplate,
+			url.PathEscape(no.GetNamespace()),
+			url.PathEscape(no.GetOperationId()),
+			url.PathEscape(no.GetRunId()),
+		),
+	}
+
+	return nexus.Link{
+		URL:  u,
+		Type: string(no.ProtoReflect().Descriptor().FullName()),
+	}
+}
+
+// ConvertLinkActivityToNexusLink converts a Link_Activity type to Nexus Link.
+//
+// NOTE: Experimental
+func ConvertLinkActivityToNexusLink(a *commonpb.Link_Activity) nexus.Link {
+	u := &url.URL{
+		Scheme: urlSchemeTemporalKey,
+		Path:   fmt.Sprintf(urlPathActivityTemplate, a.GetNamespace(), a.GetActivityId(), a.GetRunId()),
+		RawPath: fmt.Sprintf(
+			urlPathActivityTemplate,
+			url.PathEscape(a.GetNamespace()),
+			url.PathEscape(a.GetActivityId()),
+			url.PathEscape(a.GetRunId()),
+		),
+	}
+
+	return nexus.Link{
+		URL:  u,
+		Type: string(a.ProtoReflect().Descriptor().FullName()),
+	}
+}
+
+// ConvertNexusLinkToLinkActivity converts a Nexus Link to Link_Activity.
+//
+// NOTE: Experimental
+func ConvertNexusLinkToLinkActivity(link nexus.Link) (*commonpb.Link_Activity, error) {
+	a := &commonpb.Link_Activity{}
+	if link.Type != string(a.ProtoReflect().Descriptor().FullName()) {
+		return nil, fmt.Errorf(
+			"cannot parse link type %q to %q",
+			link.Type,
+			a.ProtoReflect().Descriptor().FullName(),
+		)
+	}
+
+	if link.URL.Scheme != urlSchemeTemporalKey {
+		return nil, fmt.Errorf(
+			"failed to parse link to Link_Activity: invalid scheme: %s",
+			link.URL.Scheme,
+		)
+	}
+
+	matches := urlPathActivityRE.FindStringSubmatch(link.URL.EscapedPath())
+	if len(matches) != 4 {
+		return nil, errors.New("failed to parse link to Link_Activity: malformed URL path")
+	}
+
+	var err error
+	a.Namespace, err = url.PathUnescape(matches[urlPathActivityRE.SubexpIndex(urlPathNamespaceKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Activity: %w", err)
+	}
+
+	a.ActivityId, err = url.PathUnescape(matches[urlPathActivityRE.SubexpIndex(urlPathActivityIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Activity: %w", err)
+	}
+
+	a.RunId, err = url.PathUnescape(matches[urlPathActivityRE.SubexpIndex(urlPathRunIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Activity: %w", err)
+	}
+	return a, nil
+}
 
 // ConvertLinkWorkflowEventToNexusLink converts a Link_WorkflowEvent type to Nexus Link.
 //
@@ -71,9 +142,9 @@ var (
 func ConvertLinkWorkflowEventToNexusLink(we *commonpb.Link_WorkflowEvent) nexus.Link {
 	u := &url.URL{
 		Scheme: urlSchemeTemporalKey,
-		Path:   fmt.Sprintf(urlPathTemplate, we.GetNamespace(), we.GetWorkflowId(), we.GetRunId()),
+		Path:   fmt.Sprintf(urlPathWorkflowEventTemplate, we.GetNamespace(), we.GetWorkflowId(), we.GetRunId()),
 		RawPath: fmt.Sprintf(
-			urlPathTemplate,
+			urlPathWorkflowEventTemplate,
 			url.PathEscape(we.GetNamespace()),
 			url.PathEscape(we.GetWorkflowId()),
 			url.PathEscape(we.GetRunId()),

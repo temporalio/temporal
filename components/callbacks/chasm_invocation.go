@@ -2,7 +2,6 @@ package callbacks
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -11,6 +10,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -42,23 +42,27 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 }
 
 func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
-	// Get back the base64-encoded ComponentRef from the header.
+	// Get back the component ref and (optional) request ID from the callback token in the header.
 	header := nexus.Header(c.nexus.GetHeader())
 	if header == nil {
 		header = nexus.Header{}
 	}
 
-	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
-	if encodedRef == "" {
+	encodedToken := header.Get(commonnexus.CallbackTokenHeader)
+	if encodedToken == "" {
 		return invocationResultFail{logInternalError(e.Logger, "callback missing token", nil)}
 	}
 
-	decodedRef, err := base64.RawURLEncoding.DecodeString(encodedRef)
+	ref, requestID, err := chasm.UnpackNexusCallbackToken(encodedToken)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM ComponentRef", err)}
+		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM callback token", err)}
+	}
+	// Older tokens don't carry a request ID; fall back to the one on the callback state machine.
+	if requestID == "" {
+		requestID = c.requestID
 	}
 
-	request, err := c.getHistoryRequest(decodedRef)
+	request, err := c.getHistoryRequest(ref, requestID)
 	if err != nil {
 		return invocationResultFail{logInternalError(e.Logger, "failed to build history request: %v", err)}
 	}
@@ -78,12 +82,13 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 func (c chasmInvocation) getHistoryRequest(
 	ref []byte,
+	requestID string,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
 	completion := &tokenspb.NexusOperationCompletion{
 		ComponentRef: ref,
-		RequestId:    c.requestID,
+		RequestId:    requestID,
 	}
 
 	if c.completion.Error == nil {

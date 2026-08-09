@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/grpc/connectivity"
 )
 
 type (
@@ -73,6 +74,11 @@ func (r *CachingRedirector[C]) stop() {
 	r.goros.Wait()
 }
 
+func (r *CachingRedirector[C]) Close() {
+	r.stop()
+	r.connections.Close()
+}
+
 func (r *CachingRedirector[C]) clientForShardID(shardID int32) (C, error) {
 	var zero C
 	if err := checkShardID(shardID); err != nil {
@@ -103,6 +109,11 @@ func (r *CachingRedirector[C]) redirectLoop(ctx context.Context, opEntry cacheEn
 		}
 		opErr := op(ctx, opEntry.connection.grpcClient)
 		if opErr == nil {
+			return opErr
+		}
+		// If the underlying connection was closed by the connection pool, remove it from the cache.
+		if opEntry.connection.grpcConn.GetState() == connectivity.Shutdown {
+			r.cacheDeleteByAddress(opEntry.address)
 			return opErr
 		}
 		if maybeHostDownError(opErr) {

@@ -14,6 +14,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -269,7 +270,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Add() {
 	serverKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
 
 	s.streamReceiverMonitor.Lock()
-	s.Equal(0, len(s.streamReceiverMonitor.inboundStreams))
+	s.Empty(s.streamReceiverMonitor.inboundStreams)
 	s.streamReceiverMonitor.Unlock()
 
 	streamKeys := map[ClusterShardKeyPair]struct{}{
@@ -289,7 +290,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Add() {
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	s.Len(s.streamReceiverMonitor.inboundStreams, 1)
 	stream, ok := s.streamReceiverMonitor.inboundStreams[ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,
@@ -313,14 +314,14 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Remove() {
 	s.streamReceiverMonitor.RegisterInboundStream(streamSender)
 
 	s.streamReceiverMonitor.Lock()
-	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	s.Len(s.streamReceiverMonitor.inboundStreams, 1)
 	s.streamReceiverMonitor.Unlock()
 
 	s.streamReceiverMonitor.doReconcileInboundStreams(map[ClusterShardKeyPair]struct{}{})
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(0, len(s.streamReceiverMonitor.inboundStreams))
+	s.Empty(s.streamReceiverMonitor.inboundStreams)
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Reactivate() {
@@ -337,7 +338,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Reactivate() 
 	s.streamReceiverMonitor.RegisterInboundStream(streamSenderStale)
 
 	s.streamReceiverMonitor.Lock()
-	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	s.Len(s.streamReceiverMonitor.inboundStreams, 1)
 	s.streamReceiverMonitor.Unlock()
 
 	streamSenderValid := NewMockStreamSender(s.controller)
@@ -349,13 +350,88 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileInboundStreams_Reactivate() 
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(1, len(s.streamReceiverMonitor.inboundStreams))
+	s.Len(s.streamReceiverMonitor.inboundStreams, 1)
 	stream, ok := s.streamReceiverMonitor.inboundStreams[ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,
 	}]
 	s.True(ok)
 	s.Equal(streamSenderValid, stream)
+}
+
+func (s *streamReceiverMonitorSuite) TestStop_StopsInboundStreams() {
+	clientKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	streamSender := NewMockStreamSender(s.controller)
+	streamSender.EXPECT().Key().Return(ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}).AnyTimes()
+	streamSender.EXPECT().Stop()
+	s.streamReceiverMonitor.RegisterInboundStream(streamSender)
+
+	s.streamReceiverMonitor.Lock()
+	s.Len(s.streamReceiverMonitor.inboundStreams, 1)
+	s.streamReceiverMonitor.Unlock()
+
+	// Transition to started state so Stop() proceeds past the CAS check.
+	s.streamReceiverMonitor.status = common.DaemonStatusStarted
+	s.streamReceiverMonitor.Stop()
+
+	s.streamReceiverMonitor.Lock()
+	defer s.streamReceiverMonitor.Unlock()
+	s.Empty(s.streamReceiverMonitor.inboundStreams)
+}
+
+func (s *streamReceiverMonitorSuite) TestStop_SkipsInboundStreamsWhenFlagDisabled() {
+	col := dynamicconfig.NewCollection(
+		dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
+			dynamicconfig.EnableCloseInboundReplicationStreamOnShutdown.Key(): false,
+		}),
+		log.NewNoopLogger(),
+	)
+	monitor := NewStreamReceiverMonitor(
+		ProcessToolBox{
+			Config:          configs.NewConfig(col, 1),
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			MetricsHandler:  metrics.NoopMetricsHandler,
+			Logger:          log.NewNoopLogger(),
+			DLQWriter:       NoopDLQWriter{},
+		},
+		NewExecutableTaskConverter(ProcessToolBox{
+			Config:          configs.NewConfig(col, 1),
+			ClusterMetadata: s.clusterMetadata,
+			ClientBean:      s.clientBean,
+			ShardController: s.shardController,
+			MetricsHandler:  metrics.NoopMetricsHandler,
+			Logger:          log.NewNoopLogger(),
+			DLQWriter:       NoopDLQWriter{},
+		}),
+		true,
+	)
+
+	clientKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
+	serverKey := NewClusterShardKey(int32(cluster.TestCurrentClusterInitialFailoverVersion), rand.Int31())
+	streamSender := NewMockStreamSender(s.controller)
+	streamSender.EXPECT().Key().Return(ClusterShardKeyPair{
+		Client: clientKey,
+		Server: serverKey,
+	}).AnyTimes()
+	// Stop should NOT be called on inbound streams when the flag is disabled.
+	monitor.RegisterInboundStream(streamSender)
+
+	monitor.Lock()
+	s.Len(monitor.inboundStreams, 1)
+	monitor.Unlock()
+
+	monitor.status = common.DaemonStatusStarted
+	monitor.Stop()
+
+	monitor.Lock()
+	defer monitor.Unlock()
+	s.Len(monitor.inboundStreams, 1, "inbound streams should not be closed when flag is disabled")
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {
@@ -366,7 +442,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {
 	serverKey := NewClusterShardKey(int32(cluster.TestAlternativeClusterInitialFailoverVersion), rand.Int31())
 
 	s.streamReceiverMonitor.Lock()
-	s.Equal(0, len(s.streamReceiverMonitor.outboundStreams))
+	s.Empty(s.streamReceiverMonitor.outboundStreams)
 	s.streamReceiverMonitor.Unlock()
 
 	streamKeys := map[ClusterShardKeyPair]struct{}{
@@ -379,7 +455,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Add() {
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(1, len(s.streamReceiverMonitor.outboundStreams))
+	s.Len(s.streamReceiverMonitor.outboundStreams, 1)
 	stream, ok := s.streamReceiverMonitor.outboundStreams[ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,
@@ -402,7 +478,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Remove() {
 	streamReceiver.EXPECT().Stop()
 
 	s.streamReceiverMonitor.Lock()
-	s.Equal(0, len(s.streamReceiverMonitor.outboundStreams))
+	s.Empty(s.streamReceiverMonitor.outboundStreams)
 	s.streamReceiverMonitor.outboundStreams[ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,
@@ -413,7 +489,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Remove() {
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(0, len(s.streamReceiverMonitor.outboundStreams))
+	s.Empty(s.streamReceiverMonitor.outboundStreams)
 }
 
 func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Reactivate() {
@@ -431,7 +507,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Reactivate()
 	streamReceiverStale.EXPECT().Stop()
 
 	s.streamReceiverMonitor.Lock()
-	s.Equal(0, len(s.streamReceiverMonitor.outboundStreams))
+	s.Empty(s.streamReceiverMonitor.outboundStreams)
 	s.streamReceiverMonitor.outboundStreams[ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,
@@ -447,7 +523,7 @@ func (s *streamReceiverMonitorSuite) TestDoReconcileOutboundStreams_Reactivate()
 
 	s.streamReceiverMonitor.Lock()
 	defer s.streamReceiverMonitor.Unlock()
-	s.Equal(1, len(s.streamReceiverMonitor.outboundStreams))
+	s.Len(s.streamReceiverMonitor.outboundStreams, 1)
 	stream, ok := s.streamReceiverMonitor.outboundStreams[ClusterShardKeyPair{
 		Client: clientKey,
 		Server: serverKey,

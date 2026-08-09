@@ -1,11 +1,16 @@
 package encryption
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
@@ -103,11 +108,11 @@ func (s *tlsConfigTest) testGroupTLS(f func(*config.RootTLS, *config.GroupTLS)) 
 func (s *tlsConfigTest) testCertFileAndData(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Server = config.ServerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{CertFile: "foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{CertData: "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{CertFile: "foo", CertData: "bar"}
 	s.Error(validateRootTLS(cfg))
 }
@@ -115,11 +120,11 @@ func (s *tlsConfigTest) testCertFileAndData(cfg *config.RootTLS, group *config.G
 func (s *tlsConfigTest) testKeyFileAndData(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Server = config.ServerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{KeyFile: "foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{KeyData: "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{KeyFile: "foo", KeyData: "bar"}
 	s.Error(validateRootTLS(cfg))
 }
@@ -127,13 +132,13 @@ func (s *tlsConfigTest) testKeyFileAndData(cfg *config.RootTLS, group *config.Gr
 func (s *tlsConfigTest) testClientCAData(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Server = config.ServerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{"foo"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{"foo", "bar"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{"foo", " "}}
 	s.Error(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAData: []string{""}}
@@ -143,13 +148,13 @@ func (s *tlsConfigTest) testClientCAData(cfg *config.RootTLS, group *config.Grou
 func (s *tlsConfigTest) testClientCAFiles(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Server = config.ServerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{"foo"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{"foo", "bar"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{"foo", " "}}
 	s.Error(validateRootTLS(cfg))
 	group.Server = config.ServerTLS{ClientCAFiles: []string{""}}
@@ -159,13 +164,13 @@ func (s *tlsConfigTest) testClientCAFiles(cfg *config.RootTLS, group *config.Gro
 func (s *tlsConfigTest) testRootCAData(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Client = config.ClientTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{"foo"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{"foo", "bar"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{"foo", " "}}
 	s.Error(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAData: []string{""}}
@@ -175,13 +180,13 @@ func (s *tlsConfigTest) testRootCAData(cfg *config.RootTLS, group *config.GroupT
 func (s *tlsConfigTest) testRootCAFiles(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Client = config.ClientTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{"foo"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{"foo", "bar"}}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{"foo", " "}}
 	s.Error(validateRootTLS(cfg))
 	group.Client = config.ClientTLS{RootCAFiles: []string{""}}
@@ -191,30 +196,198 @@ func (s *tlsConfigTest) testRootCAFiles(cfg *config.RootTLS, group *config.Group
 func (s *tlsConfigTest) TestSystemWorkerTLSConfig() {
 	cfg := &config.RootTLS{}
 	cfg.SystemWorker = config.WorkerTLS{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{CertFile: "foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{CertData: "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{CertFile: "foo", CertData: "bar"}
 	s.Error(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{KeyFile: "foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{KeyData: "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	cfg.SystemWorker = config.WorkerTLS{KeyFile: "foo", KeyData: "bar"}
 	s.Error(validateRootTLS(cfg))
 
 	cfg.SystemWorker = config.WorkerTLS{Client: config.ClientTLS{}}
 	client := &cfg.SystemWorker.Client
 	client.RootCAData = []string{}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	client.RootCAData = []string{"foo"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	client.RootCAData = []string{"foo", "bar"}
-	s.Nil(validateRootTLS(cfg))
+	s.NoError(validateRootTLS(cfg))
 	client.RootCAData = []string{"foo", " "}
 	s.Error(validateRootTLS(cfg))
 	client.RootCAData = []string{""}
 	s.Error(validateRootTLS(cfg))
+}
+
+// stubCertProvider is a no-op CertProvider for use in unit tests.
+type stubCertProvider struct{}
+
+func (s *stubCertProvider) FetchServerCertificate() (*tls.Certificate, error) { return nil, nil }
+func (s *stubCertProvider) FetchClientCAs() (*x509.CertPool, error)           { return nil, nil }
+func (s *stubCertProvider) FetchClientCertificate(_ bool) (*tls.Certificate, error) {
+	return nil, nil
+}
+func (s *stubCertProvider) FetchServerRootCAsForClient(_ bool) (*x509.CertPool, error) {
+	return nil, nil
+}
+func (s *stubCertProvider) GetExpiringCerts(_ time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
+	return nil, nil, nil
+}
+
+func stubCertProviderFactory(_ *config.GroupTLS, _ *config.WorkerTLS, _ *config.ClientTLS, _ time.Duration, _ log.Logger) CertProvider {
+	return &stubCertProvider{}
+}
+
+func newTestTLSProvider(t *testing.T, cfg config.RootTLS) TLSConfigProvider {
+	t.Helper()
+	provider, err := NewLocalStoreTlsProvider(&cfg, metrics.NoopMetricsHandler, log.NewTestLogger(), stubCertProviderFactory)
+	require.NoError(t, err)
+	return provider
+}
+
+func TestGetRemoteClusterClientConfig_NoConfig(t *testing.T) {
+	provider := newTestTLSProvider(t, config.RootTLS{})
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("some-host")
+	require.NoError(t, err)
+	require.Nil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_UnknownHostNoDefault(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"cluster-a.example.com": {Client: config.ClientTLS{ForceTLS: true}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("unknown-host.example.com")
+	require.NoError(t, err)
+	require.Nil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_ExactMatch(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"cluster-a.example.com": {Client: config.ClientTLS{ForceTLS: true}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.example.com")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+
+	// Unknown host with no default → nil
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("cluster-b.example.com")
+	require.NoError(t, err)
+	require.Nil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_StarFallback(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"*": {Client: config.ClientTLS{ForceTLS: true}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("any-unknown-host")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_ExactOverStar(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"cluster-a.example.com": {Client: config.ClientTLS{ForceTLS: false}},
+			"*":                     {Client: config.ClientTLS{ForceTLS: true}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	// Exact match → nil (ForceTLS: false, so IsClientEnabled() == false)
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.example.com")
+	require.NoError(t, err)
+	require.Nil(t, tlsCfg)
+
+	// Unknown host falls back to * (ForceTLS: true) → non-nil
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("unknown-host")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_WildcardSubdomainMatch(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"*.temporal.cloud": {Client: config.ClientTLS{ForceTLS: true}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.temporal.cloud")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("cluster-b.temporal.cloud")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+
+	// No match — different domain
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("random.example.com")
+	require.NoError(t, err)
+	require.Nil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_MoreSpecificWildcardWins(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"*.temporal.cloud": {Client: config.ClientTLS{ForceTLS: false}},
+			"*":                {Client: config.ClientTLS{ForceTLS: true}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	// *.temporal.cloud is more specific, ForceTLS:false → nil
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.temporal.cloud")
+	require.NoError(t, err)
+	require.Nil(t, tlsCfg)
+
+	// Falls through to * catch-all, ForceTLS:true → non-nil
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("random.example.com")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+}
+
+func TestGetRemoteClusterClientConfig_ThreeTierPriority(t *testing.T) {
+	cfg := config.RootTLS{
+		RemoteClusters: map[string]config.GroupTLS{
+			"cluster-a.temporal.cloud": {Client: config.ClientTLS{ForceTLS: true, ServerName: "exact"}},
+			"*.temporal.cloud":         {Client: config.ClientTLS{ForceTLS: true, ServerName: "wildcard"}},
+			"*":                        {Client: config.ClientTLS{ForceTLS: true, ServerName: "star"}},
+		},
+	}
+	provider := newTestTLSProvider(t, cfg)
+
+	// Exact match
+	tlsCfg, err := provider.GetRemoteClusterClientConfig("cluster-a.temporal.cloud")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+	require.Equal(t, "exact", tlsCfg.ServerName)
+
+	// Wildcard subdomain match
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("cluster-b.temporal.cloud")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+	require.Equal(t, "wildcard", tlsCfg.ServerName)
+
+	// Catch-all
+	tlsCfg, err = provider.GetRemoteClusterClientConfig("random.example.com")
+	require.NoError(t, err)
+	require.NotNil(t, tlsCfg)
+	require.Equal(t, "star", tlsCfg.ServerName)
 }

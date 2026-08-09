@@ -34,6 +34,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -53,6 +54,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
@@ -63,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -206,15 +209,16 @@ func (s *engineSuite) SetupTest() {
 	)
 
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		logger:             s.mockShard.GetLogger(),
-		metricsHandler:     s.mockShard.GetMetricsHandler(),
-		tokenSerializer:    tasktoken.NewSerializer(),
-		eventNotifier:      eventNotifier,
-		config:             s.config,
+		currentClusterName:  s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:        s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		logger:              s.mockShard.GetLogger(),
+		metricsHandler:      s.mockShard.GetMetricsHandler(),
+		tokenSerializer:     tasktoken.NewSerializer(),
+		eventNotifier:       eventNotifier,
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
+		config:              s.config,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():          s.mockTxProcessor,
 			s.mockTimerProcessor.Category():       s.mockTimerProcessor,
@@ -376,6 +380,50 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	s.Nil(err)
 	s.Equal(int64(5), pollResponse.GetNextEventId())
 	waitGroup.Wait()
+}
+
+func (s *engineSuite) TestGetMutableStateLongPoll_ShardClosed() {
+	ctx := context.Background()
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "test-get-workflow-execution-shard-closed",
+		RunId:      tests.RunID,
+	}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
+
+	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	wt := addWorkflowTaskScheduledEvent(ms)
+	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+	// right now the next event ID is 4
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil).AnyTimes()
+
+	// Prime the workflow cache so the later poll reads from cache, not persistence.
+	_, err := s.historyEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		NamespaceId:         tests.NamespaceID.String(),
+		Execution:           &execution,
+		ExpectedNextEventId: 3,
+	})
+	s.NoError(err)
+
+	// Shard moves off this host. A poll blocked for new events must return promptly
+	// with the unchanged next event ID instead of waiting out the long-poll timeout.
+	s.mockShard.UnloadForOwnershipLost()
+
+	start := time.Now().UTC()
+	pollResponse, err := s.historyEngine.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
+		NamespaceId:         tests.NamespaceID.String(),
+		Execution:           &execution,
+		ExpectedNextEventId: 4,
+	})
+	elapsed := time.Since(start)
+	s.NoError(err)
+	s.Equal(int64(4), pollResponse.GetNextEventId())
+	s.Less(elapsed, 10*time.Second, "poll should return on shard close, not wait out the long-poll timeout")
 }
 
 func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
@@ -1889,6 +1937,13 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 	scheduleToStartTimeout := durationpb.New(10 * time.Second)
 	startToCloseTimeout := durationpb.New(50 * time.Second)
 	heartbeatTimeout := durationpb.New(5 * time.Second)
+	retryPolicy := &commonpb.RetryPolicy{
+		InitialInterval:        durationpb.New(time.Second),
+		BackoffCoefficient:     1.5,
+		MaximumInterval:        durationpb.New(10 * time.Second),
+		MaximumAttempts:        3,
+		NonRetryableErrorTypes: []string{"non-retryable"},
+	}
 	commands := []*commandpb.Command{
 		{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1915,6 +1970,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 				ScheduleToStartTimeout: scheduleToStartTimeout,
 				StartToCloseTimeout:    startToCloseTimeout,
 				HeartbeatTimeout:       heartbeatTimeout,
+				RetryPolicy:            retryPolicy,
 				RequestEagerExecution:  true,
 			}},
 		},
@@ -1966,6 +2022,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 	s.Equal(int32(1), activityTask.Attempt)
 	s.Nil(activityTask.HeartbeatDetails)
 	s.Equal(tests.LocalNamespaceEntry.Name().String(), activityTask.WorkflowNamespace)
+	s.ProtoEqual(retryPolicy, activityTask.RetryPolicy)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Cancelled() {
@@ -5005,97 +5062,171 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 
 // Test signal workflow task by adding request ID
 func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
-	we := commonpb.WorkflowExecution{
-		WorkflowId: "wId2",
-		RunId:      tests.RunID,
-	}
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			WorkflowExecution: &we,
-		},
-	}
-	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	// Verify error when namespace is missing (independent of CHASM flag).
+	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), &historyservice.SignalWorkflowExecutionRequest{
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "wId2",
+			RunId:      tests.RunID,
+		}},
+	})
 	s.EqualError(err, "Missing namespace UUID.")
 
-	taskqueue := "testTaskQueue"
-	identity := "testIdentity"
-	signalName := "my signal name 2"
-	input := payloads.EncodeString("test input 2")
-	requestID := uuid.NewString()
-	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         tests.NamespaceID.String(),
-			WorkflowExecution: &we,
-			Identity:          identity,
-			SignalName:        signalName,
-			Input:             input,
-			RequestId:         requestID,
-		},
+	for _, tc := range []struct {
+		name         string
+		chasmEnabled bool
+	}{
+		{name: "Legacy", chasmEnabled: false},
+		{name: "Chasm", chasmEnabled: true},
+	} {
+		s.Run(tc.name, func() {
+			// Use a unique RunId per sub-test to avoid workflow cache collisions
+			// between the Legacy and Chasm sub-tests.
+			we := commonpb.WorkflowExecution{
+				WorkflowId: "wId2",
+				RunId:      uuid.NewString(),
+			}
+
+			if tc.chasmEnabled {
+				s.config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				s.config.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				reg := s.mockShard.ChasmRegistry()
+				s.NoError(reg.Register(&chasm.CoreLibrary{}))
+				s.NoError(reg.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+			}
+
+			requestID := uuid.NewString()
+			signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+					Namespace:         tests.NamespaceID.String(),
+					WorkflowExecution: &we,
+					Identity:          "testIdentity",
+					SignalName:        "my signal name 2",
+					Input:             payloads.EncodeString("test input 2"),
+					RequestId:         requestID,
+				},
+			}
+
+			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
+				tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, &we, "wType", "testTaskQueue", payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "testIdentity")
+			addWorkflowTaskScheduledEvent(ms)
+
+			if tc.chasmEnabled {
+				// CHASM path: populate the CHASM IncomingSignals map with the requestID so that
+				// IsSignalRequested returns true for this ID when the DB record is loaded.
+				s.NoError(ms.ApplyWorkflowExecutionSignaled(&historypb.HistoryEvent{
+					EventId:   common.BufferedEventID,
+					EventTime: timestamppb.New(time.Now()),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
+						WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+							SignalName: "my signal name 2",
+							RequestId:  requestID,
+						},
+					},
+				}))
+			}
+
+			wfMs := workflow.TestCloneToProto(context.Background(), ms)
+			if !tc.chasmEnabled {
+				// Legacy path: dedup via the SignalRequestedIds set field.
+				wfMs.SignalRequestedIds = []string{requestID}
+			}
+			wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
+			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+
+			_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+			s.NoError(err)
+		})
 	}
-
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	addWorkflowTaskScheduledEvent(ms)
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
-	// assume duplicate request id
-	wfMs.SignalRequestedIds = []string{requestID}
-	wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-
-	_, err = s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.Nil(err)
 }
 
 // Test signal workflow task by dedup request ID & workflow finished
 func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
-	we := commonpb.WorkflowExecution{
-		WorkflowId: "wId2",
-		RunId:      tests.RunID,
-	}
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			WorkflowExecution: &we,
-		},
-	}
-	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	// Verify error when namespace is missing (independent of CHASM flag).
+	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), &historyservice.SignalWorkflowExecutionRequest{
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "wId2",
+			RunId:      tests.RunID,
+		}},
+	})
 	s.EqualError(err, "Missing namespace UUID.")
 
-	taskqueue := "testTaskQueue"
-	identity := "testIdentity"
-	signalName := "my signal name 2"
-	input := payloads.EncodeString("test input 2")
-	requestID := uuid.NewString()
-	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         tests.NamespaceID.String(),
-			WorkflowExecution: &we,
-			Identity:          identity,
-			SignalName:        signalName,
-			Input:             input,
-			RequestId:         requestID,
-		},
+	for _, tc := range []struct {
+		name         string
+		chasmEnabled bool
+	}{
+		{name: "Legacy", chasmEnabled: false},
+		{name: "Chasm", chasmEnabled: true},
+	} {
+		s.Run(tc.name, func() {
+			// Use a unique RunId per sub-test to avoid workflow cache collisions
+			// between the Legacy and Chasm sub-tests.
+			we := commonpb.WorkflowExecution{
+				WorkflowId: "wId2",
+				RunId:      uuid.NewString(),
+			}
+
+			if tc.chasmEnabled {
+				s.config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				s.config.EnableCHASMSignalBacklinks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+				reg := s.mockShard.ChasmRegistry()
+				s.NoError(reg.Register(&chasm.CoreLibrary{}))
+				s.NoError(reg.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+			}
+
+			requestID := uuid.NewString()
+			signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+					Namespace:         tests.NamespaceID.String(),
+					WorkflowExecution: &we,
+					Identity:          "testIdentity",
+					SignalName:        "my signal name 2",
+					Input:             payloads.EncodeString("test input 2"),
+					RequestId:         requestID,
+				},
+			}
+
+			ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
+				tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+			addWorkflowExecutionStartedEvent(ms, &we, "wType", "testTaskQueue", payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "testIdentity")
+			addWorkflowTaskScheduledEvent(ms)
+
+			if tc.chasmEnabled {
+				// CHASM path: populate the CHASM IncomingSignals map with the requestID so that
+				// IsSignalRequested returns true for this ID when the DB record is loaded.
+				s.NoError(ms.ApplyWorkflowExecutionSignaled(&historypb.HistoryEvent{
+					EventId:   common.BufferedEventID,
+					EventTime: timestamppb.New(time.Now()),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
+						WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+							SignalName: "my signal name 2",
+							RequestId:  requestID,
+						},
+					},
+				}))
+			}
+
+			wfMs := workflow.TestCloneToProto(context.Background(), ms)
+			if !tc.chasmEnabled {
+				// Legacy path: dedup via the SignalRequestedIds set field.
+				wfMs.SignalRequestedIds = []string{requestID}
+			}
+			wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
+			wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+			gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+
+			_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+			s.NoError(err)
+		})
 	}
-
-	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	addWorkflowTaskScheduledEvent(ms)
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
-	// assume duplicate request id
-	wfMs.SignalRequestedIds = []string{requestID}
-	wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
-	wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-
-	_, err = s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
-	s.Nil(err)
 }
 
 func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
@@ -5513,7 +5644,7 @@ func (s *engineSuite) TestEagerWorkflowStart_WithSearchAttributes() {
 
 	searchAttributes := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"Keyword01": payload.EncodeString("random-keyword"),
+			"Keyword01": sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
@@ -5578,8 +5709,8 @@ func (s *engineSuite) TestGetHistory() {
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"Keyword01":             payload.EncodeString("random-keyword"),
-								"TemporalChangeVersion": payload.EncodeString("random-data"),
+								"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+								"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 							},
 						},
 					},
@@ -6618,6 +6749,7 @@ func addWorkflowTaskStartedEventWithRequestID(ms historyi.MutableState, schedule
 		nil,
 		false,
 		nil,
+		0,
 	)
 
 	return event
@@ -6701,6 +6833,8 @@ func addActivityTaskStartedEvent(ms historyi.MutableState, scheduledEventID int6
 		identity,
 		nil,
 		nil,
+		nil,
+		"",
 		nil,
 	)
 	return event

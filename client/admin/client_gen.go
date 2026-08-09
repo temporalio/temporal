@@ -239,6 +239,16 @@ func (c *clientImpl) GetTaskQueueTasks(
 	return c.client.GetTaskQueueTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueUserDataResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetWorkflowExecutionRawHistory(
 	ctx context.Context,
 	request *adminservice.GetWorkflowExecutionRawHistoryRequest,
@@ -444,7 +454,7 @@ func (c *clientImpl) SyncWorkflowState(
 	request *adminservice.SyncWorkflowStateRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.SyncWorkflowStateResponse, error) {
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createContextWithStateSyncTimeout(ctx)
 	defer cancel()
 	return c.client.SyncWorkflowState(ctx, request, opts...)
 }

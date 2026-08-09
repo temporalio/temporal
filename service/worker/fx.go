@@ -7,6 +7,8 @@ import (
 	wcicomponent "go.temporal.io/auto-scaled-workers/wci/workercomponent"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -28,6 +30,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -45,6 +48,8 @@ var Module = fx.Options(
 	migration.Module,
 	resource.Module,
 	deletenamespace.Module,
+	chasmscheduler.Module,
+	callback.Module,
 	scheduler.Module,
 	batcher.Module,
 	workerdeployment.Module,
@@ -85,16 +90,21 @@ var Module = fx.Options(
 		clusterMetadata cluster.Metadata,
 		metadataManager persistence.MetadataManager,
 		dataMerger nsreplication.NamespaceDataMerger,
+		admitter nsreplication.NamespaceReplicationAdmitter,
 		logger log.Logger,
+		testHooks testhooks.TestHooks,
 	) nsreplication.TaskExecutor {
 		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
 			dataMerger,
+			admitter,
 			logger,
+			testHooks,
 		)
 	}),
 	fx.Provide(nsreplication.NewNoopDataMerger),
+	fx.Provide(nsreplication.NewDefaultAdmitter),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),

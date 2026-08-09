@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
@@ -117,12 +116,25 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			),
 		},
 		{
+			// Grouping by TemporalNamespaceDivision suppresses the default
+			// "TemporalNamespaceDivision is null" filter so results span all
+			// divisions, leaving the query string empty.
+			name:  "group by TemporalNamespaceDivision",
+			input: "GROUP BY TemporalNamespaceDivision",
+			output: &queryParamsLegacy{
+				queryString: "",
+				groupBy:     []string{sadefs.TemporalNamespaceDivision},
+			},
+			err: nil,
+		},
+		{
 			name:   "group by non ExecutionStatus",
 			input:  "GROUP BY WorkflowType",
 			output: nil,
 			err: query.NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				query.NotSupportedErrMessage,
+				"WorkflowType",
 			),
 		},
 		{
@@ -771,17 +783,6 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 			},
 			output: "('foo', 'bar')",
-			err:    nil,
-		},
-		{
-			name:  "ScheduleId transformation",
-			input: "'test-schedule'",
-			args: map[string]any{
-				"saName":      sadefs.ScheduleID,
-				"saFieldName": sadefs.WorkflowID,
-				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			output: fmt.Sprintf("'%stest-schedule'", primitives.ScheduleWorkflowIDPrefix),
 			err:    nil,
 		},
 	}

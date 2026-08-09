@@ -37,6 +37,18 @@ func (s *MetricCaptureSuite) TestNamespaceMetricCapture() {
 		s.Equal("test-ns", recordings[0].Tags["namespace"])
 	})
 
+	s.Run("can capture for an explicit namespace", func(s *MetricCaptureSuite) {
+		const metricName = "namespaced_metric_other"
+		handler.WithTags(metrics.NamespaceTag("test-ns")).Counter(metricName).Record(1)
+		handler.WithTags(metrics.NamespaceTag("other-ns")).Counter(metricName).Record(1)
+
+		namespaceCapture := newNamespaceMetricCapture(capture, "other-ns")
+
+		recordings := namespaceCapture.Metric(metricName)
+		s.Len(recordings, 1)
+		s.Equal("other-ns", recordings[0].Tags["namespace"])
+	})
+
 	s.Run("panics when the metric is not namespace-scoped", func(s *MetricCaptureSuite) {
 		// Record the metric without a namespace tag.
 		handler.Counter("cluster_metric").Record(1)

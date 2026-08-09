@@ -36,6 +36,12 @@ message SchedulerState {
   // Set when a migration to workflow-backed scheduler (V1) is pending.
   // Unpause operations are blocked while this is set.
   WorkflowMigrationState workflow_migration = 11;
+
+  // The time at which the idle timer is scheduled to fire and close this
+  // schedule. Set when the schedule goes idle; cleared when it has work again.
+  // Surfaced as the ScheduleIdleCloseTime search attribute for stuck-schedule
+  // detection.
+  google.protobuf.Timestamp idle_close_time = 12;
 }
 
 // WorkflowMigrationState tracks the state of an in-progress V2-to-V1 migration.
@@ -95,9 +101,17 @@ message BackfillerState {
   // High water mark.
   google.protobuf.Timestamp last_processed_time = 7;
 
-  // Attempt count, incremented when the buffer is full and the Backfiller
-  // needs to back off before retrying to fill.
+  // Number of successfully committed BackfillerTask executions. Starts at zero
+  // and advances after each execution; used as the retry-policy attempt for
+  // backoff. Unlike TaskStamp, it does not identify a particular scheduled
+  // task.
   int64 attempt = 8;
+
+  // Monotonic stamp shared with the currently scheduled BackfillerTask. It is
+  // advanced when the initial task or an incomplete task's successor is
+  // scheduled, making tasks with older stamps stale. It is not advanced when a
+  // task fails or completes the Backfiller.
+  int64 task_stamp = 9;
 }
 
 // CHASM scheduler retains the payload data for the last completed workflow. Both
@@ -119,4 +133,16 @@ message SchedulerMigrationState {
   // Visibility data.
   map<string, temporal.api.common.v1.Payload> search_attributes = 6;
   map<string, temporal.api.common.v1.Payload> memo = 7;
+}
+
+// EventLog keeps a bounded record of state changes, including automation
+// decisions, in lieu of a workflow event history. Entries are meant for
+// human consumption, and aren't used for any scheduler computation.
+message EventLog {
+  repeated Event events = 1;
+}
+
+message Event {
+  google.protobuf.Timestamp time = 1;
+  string message = 2;
 }

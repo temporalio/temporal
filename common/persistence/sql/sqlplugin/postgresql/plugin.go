@@ -86,15 +86,17 @@ func (p *plugin) createDBConnection(
 		return postgresqlSession.DB, nil
 	}
 
-	// database name not provided
-	// try defaults
-	defer func() { cfg.DatabaseName = "" }()
+	// Database name not provided, try defaults.
+	// Use a shallow copy so that the session's refreshable-connection closure
+	// (which captures the config pointer) sees the correct DatabaseName on
+	// reconnect
+	cfgCopy := *cfg
 
 	var errors []error
 	for _, databaseName := range defaultDatabaseNames {
-		cfg.DatabaseName = databaseName
+		cfgCopy.DatabaseName = databaseName
 		if postgresqlSession, err := session.NewSession(
-			cfg,
+			&cfgCopy,
 			p.driver,
 			resolver,
 		); err == nil {

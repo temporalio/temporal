@@ -44,6 +44,80 @@ func (this *OperationState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type NexusOperationTerminateState to the protobuf v3 wire format
+func (val *NexusOperationTerminateState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusOperationTerminateState from the protobuf v3 wire format
+func (val *NexusOperationTerminateState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusOperationTerminateState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusOperationTerminateState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusOperationTerminateState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusOperationTerminateState
+	switch t := that.(type) {
+	case *NexusOperationTerminateState:
+		that1 = t
+	case NexusOperationTerminateState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type OperationOutcome to the protobuf v3 wire format
+func (val *OperationOutcome) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type OperationOutcome from the protobuf v3 wire format
+func (val *OperationOutcome) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *OperationOutcome) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two OperationOutcome values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *OperationOutcome) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *OperationOutcome
+	switch t := that.(type) {
+	case *OperationOutcome:
+		that1 = t
+	case OperationOutcome:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type CancellationState to the protobuf v3 wire format
 func (val *CancellationState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -81,6 +155,43 @@ func (this *CancellationState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type OperationRequestData to the protobuf v3 wire format
+func (val *OperationRequestData) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type OperationRequestData from the protobuf v3 wire format
+func (val *OperationRequestData) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *OperationRequestData) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two OperationRequestData values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *OperationRequestData) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *OperationRequestData
+	switch t := that.(type) {
+	case *OperationRequestData:
+		that1 = t
+	case OperationRequestData:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 var (
 	OperationStatus_shorthandValue = map[string]int32{
 		"Unspecified": 0,
@@ -91,6 +202,7 @@ var (
 		"Failed":      5,
 		"Canceled":    6,
 		"TimedOut":    7,
+		"Terminated":  8,
 	}
 )
 

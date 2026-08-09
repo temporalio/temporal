@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -74,6 +75,10 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	}
 	e.MarkExecutionStart()
 
+	if e.Config.EmitReplicationLifecycleEvents() {
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskSyncVersionedTransition, int32(e.Attempt()))
+	}
+
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
@@ -86,7 +91,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
+			tag.TaskID(e.TaskID()),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
@@ -132,7 +137,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),
 		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.ExecutableTask.TaskID()),
+		tag.TaskID(e.TaskID()),
 		tag.Error(err),
 	)
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
@@ -158,7 +163,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
-					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.TaskID(e.TaskID()),
 					tag.Error(syncStateErr),
 				)
 				return err
@@ -209,7 +214,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		}
 		if resendErr := e.BackFillEvents(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
+			e.SourceClusterName(),
 			definition.NewWorkflowKey(e.NamespaceID, e.WorkflowID, e.RunID),
 			startEvent,
 			startEventVersion,
@@ -228,17 +233,10 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
 		)
-		// workflow is not found in source cluster, cleanup workflow in target cluster
-		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
-		defer cancel()
-		return e.DeleteWorkflow(
-			ctx,
-			definition.NewWorkflowKey(
-				e.NamespaceID,
-				e.WorkflowID,
-				e.RunID,
-			),
-		)
+		// Workflow is not found in source cluster, cleanup workflow in target cluster.
+		// This handles workflow deletion from source cluster and this is optional as deletion operation will replicate to target clusters.
+		deletionTask := NewExecutableDeleteExecutionTask(e.ProcessToolBox, e.TaskID(), e.TaskCreationTime(), e.SourceClusterName(), e.SourceShardKey(), e.ReplicationTask())
+		return deletionTask.Execute()
 	default:
 		return err
 	}

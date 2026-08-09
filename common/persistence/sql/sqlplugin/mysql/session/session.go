@@ -3,8 +3,11 @@ package session
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 
@@ -69,14 +72,32 @@ func createConnection(
 		return nil, err
 	}
 
-	dsn, err := buildDSN(dbKind, cfg, resolver)
-	if err != nil {
-		return nil, err
-	}
-
-	db, err := sqlx.Connect(driverName, dsn)
-	if err != nil {
-		return nil, err
+	var db *sqlx.DB
+	if cfg.PasswordCommand != nil {
+		c := sqlplugin.NewRefreshingConnector(
+			func() (string, error) {
+				return buildDSN(dbKind, cfg, resolver)
+			},
+			func(dsn string) (driver.Connector, error) {
+				return mysql.MySQLDriver{}.OpenConnector(dsn)
+			},
+			mysql.MySQLDriver{},
+		)
+		db = sqlx.NewDb(sql.OpenDB(c), driverName)
+		if err := db.Ping(); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+	} else {
+		var dsn string
+		dsn, err = buildDSN(dbKind, cfg, resolver)
+		if err != nil {
+			return nil, err
+		}
+		db, err = sqlx.Connect(driverName, dsn)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if cfg.MaxConns > 0 {
 		db.SetMaxOpenConns(cfg.MaxConns)
@@ -98,14 +119,18 @@ func buildDSN(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 ) (string, error) {
+	password, err := cfg.ResolvePassword()
+	if err != nil {
+		return "", err
+	}
+
 	mysqlConfig := mysql.NewConfig()
 
 	mysqlConfig.User = cfg.User
-	mysqlConfig.Passwd = cfg.Password
+	mysqlConfig.Passwd = password
 	mysqlConfig.Addr = r.Resolve(cfg.ConnectAddr)[0]
 	mysqlConfig.DBName = cfg.DatabaseName
 	mysqlConfig.Net = cfg.ConnectProtocol
-	var err error
 	mysqlConfig.Params, err = buildDSNAttrs(dbKind, cfg)
 	if err != nil {
 		return "", err
@@ -146,9 +171,7 @@ func buildDSNAttrs(dbKind sqlplugin.DbKind, cfg *config.SQL) (map[string]string,
 	}
 
 	// these attrs are always overriden
-	for k, v := range dsnAttrOverrides {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, dsnAttrOverrides)
 
 	if !paramInterpolationAllowed(dbKind) {
 		if _, ok := attrs[interpolateParamsAttr]; ok {

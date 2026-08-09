@@ -3,7 +3,6 @@ package deleteexecutions
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -18,13 +17,11 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -94,8 +91,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: nil,
-		logger:         nil,
+		useChasmDeleteExecution: func() bool { return false },
+		metricsHandler:          nil,
+		logger:                  nil,
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -238,8 +236,8 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
-	require.True(t, stderrors.As(err, &appErr))
-	require.Equal(t, appErr.Error(), "specific_error_from_activity (type: Unavailable, retryable: true)")
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "specific_error_from_activity (type: Unavailable, retryable: true)", appErr.Error())
 }
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) {
@@ -318,8 +316,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		useChasmDeleteExecution: func() bool { return false },
+		metricsHandler:          metrics.NoopMetricsHandler,
+		logger:                  log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -378,7 +377,10 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 				Execution: execution1,
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID1), 10)),
+						sadefs.TemporalNamespaceDivision: sadefs.MustEncodeValue(
+							strconv.FormatUint(uint64(archetypeID1), 10),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				},
 			},
@@ -387,7 +389,10 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 				Execution: execution2,
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						sadefs.TemporalNamespaceDivision: payload.EncodeString(strconv.FormatUint(uint64(archetypeID2), 10)),
+						sadefs.TemporalNamespaceDivision: sadefs.MustEncodeValue(
+							strconv.FormatUint(uint64(archetypeID2), 10),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				},
 			},
@@ -395,19 +400,17 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 	}, nil).Times(2)
 
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
-	historyClient.EXPECT().ForceDeleteWorkflowExecution(gomock.Any(), &historyservice.ForceDeleteWorkflowExecutionRequest{
+	historyClient.EXPECT().DeleteExecution(gomock.Any(), &historyservice.DeleteExecutionRequest{
 		NamespaceId: "namespace-id",
+		Execution:   execution1,
 		ArchetypeId: uint32(archetypeID1),
-		Request: &adminservice.DeleteWorkflowExecutionRequest{
-			Execution: execution1,
-		},
+		Reason:      "Namespace delete",
 	}).Return(nil, nil).Times(1)
-	historyClient.EXPECT().ForceDeleteWorkflowExecution(gomock.Any(), &historyservice.ForceDeleteWorkflowExecutionRequest{
+	historyClient.EXPECT().DeleteExecution(gomock.Any(), &historyservice.DeleteExecutionRequest{
 		NamespaceId: "namespace-id",
+		Execution:   execution2,
 		ArchetypeId: uint32(archetypeID2),
-		Request: &adminservice.DeleteWorkflowExecutionRequest{
-			Execution: execution2,
-		},
+		Reason:      "Namespace delete",
 	}).Return(nil, nil).Times(1)
 
 	a := &Activities{
@@ -416,8 +419,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		useChasmDeleteExecution: func() bool { return true },
+		metricsHandler:          metrics.NoopMetricsHandler,
+		logger:                  log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -515,8 +519,9 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
 			return 100, func() {}
 		},
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		useChasmDeleteExecution: func() bool { return false },
+		metricsHandler:          metrics.NoopMetricsHandler,
+		logger:                  log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -581,8 +586,8 @@ func Test_DeleteExecutionsWorkflow_QueryStats(t *testing.T) {
 		require.NoError(t, err)
 		testSuite.GetLogger().Info("Current stats.", "pageNumber", pageNumber, "DeleteExecutionsStats", string(desJson))
 
-		require.Equal(t, 10*(pageNumber-1), des.DeleteExecutionsResult.ErrorCount)
-		require.Equal(t, 220*(pageNumber-1), des.DeleteExecutionsResult.SuccessCount)
+		require.Equal(t, 10*(pageNumber-1), des.ErrorCount)
+		require.Equal(t, 220*(pageNumber-1), des.SuccessCount)
 		require.Equal(t, (10+220)*4, des.TotalExecutionsCount)
 		require.Equal(t, (10+220)*(4-(pageNumber-1)), des.RemainingExecutionsCount)
 		require.Equal(t, (10+220)/5, des.AverageRPS) // 5 seconds for every activity run.

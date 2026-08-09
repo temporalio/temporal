@@ -1,0 +1,12 @@
+<testsuites tests="1" failures="1">
+    <testsuite name="MySuite" tests="1" failures="1" errors="0" id="0" time="">
+        <testcase name="TestBar">
+            <failure message="Not equal" type="Failed"><![CDATA[    bar_test.go:9:
+        Error Trace:	__SOURCE__:2
+        Error:      	Not equal:
+                    	expected: 1
+                    	actual  : 2
+FAIL]]></failure>
+        </testcase>
+    </testsuite>
+</testsuites>

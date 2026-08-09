@@ -166,7 +166,7 @@ func (s *workflowSuite) Test_WorkflowExecutionIsNotRunning_ReturnWorkflowNotRunn
 		s.workflowConsistencyChecker,
 	)
 	s.Error(err)
-	s.EqualValues(consts.ErrWorkflowCompleted, err)
+	s.Equal(consts.ErrWorkflowCompleted, err)
 }
 
 func (s *workflowSuite) Test_CacheRefreshRequired_ReturnCacheStaleError() {
@@ -210,7 +210,7 @@ func (s *workflowSuite) Test_ActivityTaskDoesNotExist_ActivityNotRunning() {
 		s.workflowConsistencyChecker,
 	)
 	s.Error(err)
-	s.EqualValues(consts.ErrActivityTaskNotFound, err)
+	s.Equal(consts.ErrActivityTaskNotFound, err)
 }
 
 func (s *workflowSuite) Test_ActivityTaskDoesNotExist_TokenVersionDoesNotMatchActivityVersion() {
@@ -232,7 +232,7 @@ func (s *workflowSuite) Test_ActivityTaskDoesNotExist_TokenVersionDoesNotMatchAc
 		s.workflowConsistencyChecker,
 	)
 	s.Error(err)
-	s.EqualValues(consts.ErrActivityTaskNotFound, err)
+	s.Equal(consts.ErrActivityTaskNotFound, err)
 }
 
 func (s *workflowSuite) Test_ActivityTaskDoesNotExist_TokenVersionNonZeroAndAttemptDoesNotMatchActivityAttempt() {
@@ -255,7 +255,7 @@ func (s *workflowSuite) Test_ActivityTaskDoesNotExist_TokenVersionNonZeroAndAtte
 		s.workflowConsistencyChecker,
 	)
 	s.Error(err)
-	s.EqualValues(consts.ErrActivityTaskNotFound, err)
+	s.Equal(consts.ErrActivityTaskNotFound, err)
 }
 
 func (s *workflowSuite) Test_LastHeartBeatDetailsExist_UpdatesMutableState() {
