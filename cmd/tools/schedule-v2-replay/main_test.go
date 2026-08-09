@@ -10,7 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 )
 
 func TestWriteHistoryProducesReplayCompatibleGzipJSON(t *testing.T) {
@@ -36,6 +39,25 @@ func TestWriteHistoryProducesReplayCompatibleGzipJSON(t *testing.T) {
 	require.NoError(t, gz.Close())
 	require.NoError(t, f.Close())
 	require.Equal(t, history, decoded)
+}
+
+func TestIsV1ScheduleHistoryRequiresInitialState(t *testing.T) {
+	history := &historypb.History{Events: []*historypb.HistoryEvent{{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+		},
+	}}}
+	require.False(t, isV1ScheduleHistory(history))
+
+	args := &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{},
+		State:    &schedulespb.InternalState{},
+	}
+	input, err := converter.GetDefaultDataConverter().ToPayloads(args)
+	require.NoError(t, err)
+	history.Events[0].GetWorkflowExecutionStartedEventAttributes().Input = input
+	require.True(t, isV1ScheduleHistory(history))
 }
 
 func TestSafePathComponent(t *testing.T) {

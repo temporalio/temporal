@@ -368,10 +368,25 @@ func inspectCurrentRun(parent context.Context, c client.Client, opts options, na
 	}
 	runID := response.GetWorkflowExecutionInfo().GetExecution().GetRunId()
 	history, err := downloadHistoryLimited(parent, c, opts, namespace, primitives.ScheduleWorkflowIDPrefix+scheduleID, runID, limiter)
-	if err == nil {
-		err = replayHistory(history)
+	if err != nil || !isV1ScheduleHistory(history) {
+		return history, runID, false, err
 	}
-	return history, runID, true, err
+	return history, runID, true, replayHistory(history)
+}
+
+func isV1ScheduleHistory(history *historypb.History) bool {
+	if len(history.GetEvents()) == 0 {
+		return false
+	}
+	started := history.GetEvents()[0].GetWorkflowExecutionStartedEventAttributes()
+	if started == nil {
+		return false
+	}
+	var args schedulespb.StartScheduleArgs
+	if converter.GetDefaultDataConverter().FromPayloads(started.GetInput(), &args) != nil {
+		return false
+	}
+	return args.GetSchedule() != nil && args.GetState() != nil
 }
 
 func downloadHistoryLimited(parent context.Context, c client.Client, opts options, namespace, workflowID, runID string, limiter *rate.Limiter) (*historypb.History, error) {

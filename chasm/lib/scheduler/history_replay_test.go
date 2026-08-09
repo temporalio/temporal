@@ -302,6 +302,19 @@ func TestV1HistoryAgainstCHASM_TimeSkippingStart(t *testing.T) {
 	require.Contains(t, replayDivergenceKinds(result), "action_request_unavailable")
 }
 
+func TestV1HistoryAgainstCHASM_MissingInitialState(t *testing.T) {
+	history := &historypb.History{Events: []*historypb.HistoryEvent{{
+		EventId: 1, EventTime: timestamppb.Now(), EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+		},
+	}}}
+
+	result := replayV1HistoryAgainstCHASM(t, history)
+	require.Equal(t, replayClassificationUnsupported, result.Classification)
+	require.Equal(t, []string{"initial_state_unavailable"}, replayDivergenceKinds(result))
+}
+
 func TestCaptureV1LocalActivities(t *testing.T) {
 	history := readReplayHistory(t, filepath.Join(
 		"..", "..", "..", "service", "worker", "scheduler", "testdata", "replay_v1.21.3.json.gz",
@@ -368,6 +381,15 @@ func TestNormalizeScheduleForComparison(t *testing.T) {
 		State:    &schedulepb.ScheduleState{LimitedActions: true},
 	}
 	protorequire.ProtoEqual(t, normalizeScheduleForComparison(expected), normalizeScheduleForComparison(actual))
+}
+
+func TestApplyExpectedPatchHandlesUnavailableState(t *testing.T) {
+	applyExpectedPatch(nil, &schedulepb.SchedulePatch{Pause: "pause"})
+
+	schedule := &schedulepb.Schedule{}
+	applyExpectedPatch(schedule, &schedulepb.SchedulePatch{Pause: "pause"})
+	require.True(t, schedule.GetState().GetPaused())
+	require.Equal(t, "pause", schedule.GetState().GetNotes())
 }
 
 func TestResolveObservedWorkflowID(t *testing.T) {
@@ -454,6 +476,15 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 	}
 	for _, start := range trace.starts {
 		result.V1Starts = append(result.V1Starts, start.workflowID)
+	}
+	if trace.args.GetSchedule() == nil || trace.args.GetState() == nil {
+		result.Classification = replayClassificationUnsupported
+		result.Divergences = []replayDivergence{{
+			Classification: replayClassificationUnsupported,
+			Kind:           "initial_state_unavailable",
+			Message:        "V1 history does not contain the schedule and internal state required to initialize CHASM replay",
+		}}
+		return result
 	}
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	ctrl := gomock.NewController(t)
@@ -1347,6 +1378,12 @@ func applyV1Signal(
 }
 
 func applyExpectedPatch(schedule *schedulepb.Schedule, patch *schedulepb.SchedulePatch) {
+	if schedule == nil {
+		return
+	}
+	if schedule.GetState() == nil {
+		schedule.State = &schedulepb.ScheduleState{}
+	}
 	if patch.GetPause() != "" {
 		schedule.GetState().Paused = true
 		schedule.GetState().Notes = patch.GetPause()
