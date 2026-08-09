@@ -21,6 +21,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/interceptor"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -46,11 +49,22 @@ import (
 const downloadedHistoryDirectoryEnv = "SCHEDULE_V1_HISTORY_DIR"
 
 type observedStart struct {
-	runID string
+	workflowID string
+	runID      string
 }
 
 type scheduledWatch struct {
 	request *schedulespb.WatchWorkflowRequest
+}
+
+type observedWatchCompletion struct {
+	request  *schedulespb.WatchWorkflowRequest
+	response *schedulespb.WatchWorkflowResponse
+}
+
+type localActivityMarkerMetadata struct {
+	ActivityID   string
+	ActivityType string
 }
 
 type v1HistoryTrace struct {
@@ -58,11 +72,13 @@ type v1HistoryTrace struct {
 	history      *historypb.History
 	starts       []observedStart
 	watches      map[int64]scheduledWatch
+	localWatches map[int64]observedWatchCompletion
 	startTime    time.Time
 	expectedSpec *schedulepb.Schedule
 	searchAttrs  *commonpb.SearchAttributes
 	memo         *commonpb.Memo
 	baseActions  int64
+	capturedIDs  bool
 }
 
 func TestDownloadedV1HistoriesAgainstCHASM(t *testing.T) {
@@ -132,6 +148,53 @@ func TestV1HistoryAgainstCHASM_TimeSkippingStart(t *testing.T) {
 	replayV1HistoryAgainstCHASM(t, history)
 }
 
+func TestCaptureV1LocalActivities(t *testing.T) {
+	history := readReplayHistory(t, filepath.Join(
+		"..", "..", "..", "service", "worker", "scheduler", "testdata", "replay_v1.21.3.json.gz",
+	))
+	capture := captureV1LocalActivities(t, history)
+	require.Len(t, capture.startsByActivityID, 10)
+	require.Len(t, capture.watchesByActivityID, 9)
+	for _, request := range capture.startsByActivityID {
+		require.NotEmpty(t, request.GetRequest().GetWorkflowId())
+	}
+	for _, request := range capture.watchesByActivityID {
+		require.NotEmpty(t, request.GetExecution().GetWorkflowId())
+	}
+	trace := extractV1HistoryTrace(t, history)
+	require.Len(t, trace.localWatches, 9)
+	for _, start := range trace.starts {
+		require.NotEmpty(t, start.workflowID)
+	}
+}
+
+func TestNormalizeScheduleForComparison(t *testing.T) {
+	expected := &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{}}
+	actual := &schedulepb.Schedule{
+		Spec:     &schedulepb.ScheduleSpec{},
+		Policies: &schedulepb.SchedulePolicies{},
+		State:    &schedulepb.ScheduleState{},
+	}
+	protorequire.ProtoEqual(t, normalizeScheduleForComparison(expected), normalizeScheduleForComparison(actual))
+}
+
+func TestResolveObservedWorkflowID(t *testing.T) {
+	workflowIDMap := map[string]string{"v1-workflow": "chasm-workflow"}
+
+	workflowID, err := resolveObservedWorkflowID(workflowIDMap, true, "v1-workflow")
+	require.NoError(t, err)
+	require.Equal(t, "chasm-workflow", workflowID)
+
+	workflowID, err = resolveObservedWorkflowID(workflowIDMap, false, "unmapped-workflow")
+	require.NoError(t, err)
+	require.Equal(t, "unmapped-workflow", workflowID)
+
+	_, err = resolveObservedWorkflowID(workflowIDMap, true, "not-started")
+	require.EqualError(t, err,
+		`V1 workflow "not-started" completed before CHASM emitted its corresponding start; this is a scheduling/timing divergence`,
+	)
+}
+
 func mustPayloads(t *testing.T, values ...any) *commonpb.Payloads {
 	t.Helper()
 	payloads, err := converter.GetDefaultDataConverter().ToPayloads(values...)
@@ -149,14 +212,19 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) {
 
 	var startMu sync.Mutex
 	startIndex := 0
+	workflowIDMap := make(map[string]string)
 	frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes().
-		DoAndReturn(func(_ context.Context, _ *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+		DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
 			startMu.Lock()
 			defer startMu.Unlock()
 			if startIndex >= len(trace.starts) {
 				return nil, errors.New("CHASM emitted more workflow starts than V1 history")
 			}
-			result := &workflowservice.StartWorkflowExecutionResponse{RunId: trace.starts[startIndex].runID}
+			start := trace.starts[startIndex]
+			if start.workflowID != "" {
+				workflowIDMap[start.workflowID] = request.GetWorkflowId()
+			}
+			result := &workflowservice.StartWorkflowExecutionResponse{RunId: start.runID}
 			startIndex++
 			return result, nil
 		})
@@ -205,7 +273,13 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) {
 			_, err := engine.FirePureTasks(rootRef, now)
 			require.NoError(t, err)
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
-			applyObservedCompletion(engineCtx, t, rootRef, trace, event)
+			applyObservedCompletion(engineCtx, t, rootRef, trace, workflowIDMap, event)
+		case enumspb.EVENT_TYPE_MARKER_RECORDED:
+			if completion, ok := trace.localWatches[event.GetEventId()]; ok {
+				applyObservedWatchCompletion(
+					engineCtx, t, rootRef, workflowIDMap, trace.capturedIDs, completion.request, completion.response,
+				)
+			}
 		default:
 		}
 		drainCHASMTasks(t, engine, rootRef, now)
@@ -217,11 +291,26 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) {
 	require.Equal(t, len(trace.starts), observedStartCount, "CHASM workflow-start decisions differ from V1 history")
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, _ chasm.Context, _ struct{}) (struct{}, error) {
-			protorequire.ProtoEqual(t, trace.expectedSpec, s.GetSchedule())
+			protorequire.ProtoEqual(
+				t,
+				normalizeScheduleForComparison(trace.expectedSpec),
+				normalizeScheduleForComparison(s.GetSchedule()),
+			)
 			require.Equal(t, trace.baseActions+int64(len(trace.starts)), s.GetInfo().GetActionCount())
 			return struct{}{}, nil
 		}, struct{}{})
 	require.NoError(t, err)
+}
+
+func normalizeScheduleForComparison(schedule *schedulepb.Schedule) *schedulepb.Schedule {
+	normalized := proto.CloneOf(schedule)
+	if proto.Equal(normalized.GetPolicies(), &schedulepb.SchedulePolicies{}) {
+		normalized.Policies = nil
+	}
+	if proto.Equal(normalized.GetState(), &schedulepb.ScheduleState{}) {
+		normalized.State = nil
+	}
+	return normalized
 }
 
 func newHistoryReplayLibrary(
@@ -339,6 +428,7 @@ func applyObservedCompletion(
 	t *testing.T,
 	rootRef chasm.ComponentRef,
 	trace *v1HistoryTrace,
+	workflowIDMap map[string]string,
 	event *historypb.HistoryEvent,
 ) {
 	t.Helper()
@@ -352,22 +442,58 @@ func applyObservedCompletion(
 	if response.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return
 	}
-	_, _, err := chasm.UpdateComponent(ctx, rootRef,
+	applyObservedWatchCompletion(ctx, t, rootRef, workflowIDMap, trace.capturedIDs, watch.request, &response)
+}
+
+func applyObservedWatchCompletion(
+	ctx context.Context,
+	t *testing.T,
+	rootRef chasm.ComponentRef,
+	workflowIDMap map[string]string,
+	strictWorkflowMapping bool,
+	request *schedulespb.WatchWorkflowRequest,
+	response *schedulespb.WatchWorkflowResponse,
+) {
+	t.Helper()
+	if response.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return
+	}
+	observedWorkflowID := request.GetExecution().GetWorkflowId()
+	workflowID, err := resolveObservedWorkflowID(workflowIDMap, strictWorkflowMapping, observedWorkflowID)
+	require.NoError(t, err)
+	if err != nil {
+		return
+	}
+	_, _, err = chasm.UpdateComponent(ctx, rootRef,
 		func(s *scheduler.Scheduler, mutableCtx chasm.MutableContext, _ struct{}) (struct{}, error) {
 			invoker := s.Invoker.Get(mutableCtx)
 			var requestID string
 			for _, start := range invoker.GetBufferedStarts() {
-				if start.GetWorkflowId() == watch.request.GetExecution().GetWorkflowId() && start.GetCompleted() == nil {
+				if start.GetWorkflowId() == workflowID && start.GetCompleted() == nil {
 					requestID = start.GetRequestId()
 					break
 				}
 			}
 			if requestID == "" {
-				return struct{}{}, fmt.Errorf("running workflow %q not found in CHASM", watch.request.GetExecution().GetWorkflowId())
+				return struct{}{}, fmt.Errorf("running workflow %q (V1 workflow %q) not found in CHASM", workflowID, observedWorkflowID)
 			}
-			return struct{}{}, s.HandleNexusCompletion(mutableCtx, nexusCompletion(&response, requestID))
+			return struct{}{}, s.HandleNexusCompletion(mutableCtx, nexusCompletion(response, requestID))
 		}, struct{}{})
 	require.NoError(t, err)
+}
+
+func resolveObservedWorkflowID(workflowIDMap map[string]string, strict bool, observedWorkflowID string) (string, error) {
+	workflowID, mapped := workflowIDMap[observedWorkflowID]
+	if mapped {
+		return workflowID, nil
+	}
+	if !strict {
+		return observedWorkflowID, nil
+	}
+	return "", fmt.Errorf(
+		"V1 workflow %q completed before CHASM emitted its corresponding start; this is a scheduling/timing divergence",
+		observedWorkflowID,
+	)
 }
 
 func nexusCompletion(response *schedulespb.WatchWorkflowResponse, requestID string) *persistencespb.ChasmNexusCompletion {
@@ -411,21 +537,42 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 		args:         &args,
 		history:      history,
 		watches:      make(map[int64]scheduledWatch),
+		localWatches: make(map[int64]observedWatchCompletion),
 		startTime:    history.GetEvents()[0].GetEventTime().AsTime(),
 		expectedSpec: proto.CloneOf(args.GetSchedule()),
 		searchAttrs:  started.GetSearchAttributes(),
 		memo:         started.GetMemo(),
 		baseActions:  args.GetInfo().GetActionCount(),
 	}
+	localActivities := captureV1LocalActivities(t, history)
+	trace.capturedIDs = localActivities != nil
 	for _, event := range history.GetEvents() {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_MARKER_RECORDED:
-			activityType := localActivityType(t, event)
-			if activityType == "StartWorkflow" {
+			metadata := localActivityMetadata(t, event)
+			if metadata.ActivityType == "StartWorkflow" {
 				var response schedulespb.StartWorkflowResponse
 				details := event.GetMarkerRecordedEventAttributes().GetDetails()
 				require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(details["result"], &response))
-				trace.starts = append(trace.starts, observedStart{runID: response.GetRunId()})
+				start := observedStart{runID: response.GetRunId()}
+				if localActivities != nil {
+					request, ok := localActivities.startsByActivityID[metadata.ActivityID]
+					require.True(t, ok, "local StartWorkflow marker %q has no matching V1 invocation", metadata.ActivityID)
+					start.workflowID = request.GetRequest().GetWorkflowId()
+				}
+				trace.starts = append(trace.starts, start)
+			}
+			if metadata.ActivityType == "WatchWorkflow" {
+				require.NotNil(t, localActivities)
+				request, ok := localActivities.watchesByActivityID[metadata.ActivityID]
+				require.True(t, ok, "local WatchWorkflow marker %q has no matching V1 invocation", metadata.ActivityID)
+				var response schedulespb.WatchWorkflowResponse
+				details := event.GetMarkerRecordedEventAttributes().GetDetails()
+				require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(details["result"], &response))
+				trace.localWatches[event.GetEventId()] = observedWatchCompletion{
+					request:  request,
+					response: &response,
+				}
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 			attributes := event.GetActivityTaskScheduledEventAttributes()
@@ -440,17 +587,107 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 	return trace
 }
 
-func localActivityType(t *testing.T, event *historypb.HistoryEvent) string {
+type localActivityCapture struct {
+	interceptor.WorkerInterceptorBase
+
+	nextActivityID      int
+	startsByActivityID  map[string]*schedulespb.StartWorkflowRequest
+	watchesByActivityID map[string]*schedulespb.WatchWorkflowRequest
+}
+
+func (c *localActivityCapture) InterceptWorkflow(
+	_ workflow.Context,
+	next interceptor.WorkflowInboundInterceptor,
+) interceptor.WorkflowInboundInterceptor {
+	return &localActivityCaptureInbound{
+		WorkflowInboundInterceptorBase: interceptor.WorkflowInboundInterceptorBase{Next: next},
+		capture:                        c,
+	}
+}
+
+type localActivityCaptureInbound struct {
+	interceptor.WorkflowInboundInterceptorBase
+	capture *localActivityCapture
+}
+
+func (i *localActivityCaptureInbound) Init(outbound interceptor.WorkflowOutboundInterceptor) error {
+	return i.Next.Init(&localActivityCaptureOutbound{
+		WorkflowOutboundInterceptorBase: interceptor.WorkflowOutboundInterceptorBase{Next: outbound},
+		capture:                         i.capture,
+	})
+}
+
+type localActivityCaptureOutbound struct {
+	interceptor.WorkflowOutboundInterceptorBase
+	capture *localActivityCapture
+}
+
+func (o *localActivityCaptureOutbound) ExecuteLocalActivity(
+	ctx workflow.Context,
+	activityType string,
+	args ...interface{},
+) workflow.Future {
+	// Default local activity IDs follow invocation order; the fixture test verifies this
+	// association against the IDs persisted in LocalActivity markers.
+	o.capture.nextActivityID++
+	activityID := fmt.Sprint(o.capture.nextActivityID)
+	if len(args) == 1 {
+		switch request := args[0].(type) {
+		case *schedulespb.StartWorkflowRequest:
+			if activityType == "StartWorkflow" {
+				o.capture.startsByActivityID[activityID] = proto.CloneOf(request)
+			}
+		case *schedulespb.WatchWorkflowRequest:
+			if activityType == "WatchWorkflow" {
+				o.capture.watchesByActivityID[activityID] = proto.CloneOf(request)
+			}
+		default:
+		}
+	}
+	return o.Next.ExecuteLocalActivity(ctx, activityType, args...)
+}
+
+func captureV1LocalActivities(t *testing.T, history *historypb.History) *localActivityCapture {
+	t.Helper()
+	if !historyHasLocalWatchMarkers(t, history) {
+		return nil
+	}
+	capture := &localActivityCapture{
+		startsByActivityID:  make(map[string]*schedulespb.StartWorkflowRequest),
+		watchesByActivityID: make(map[string]*schedulespb.WatchWorkflowRequest),
+	}
+	replayer, err := worker.NewWorkflowReplayerWithOptions(worker.WorkflowReplayerOptions{
+		DataConverter: converter.GetDefaultDataConverter(),
+		Interceptors:  []interceptor.WorkerInterceptor{capture},
+	})
+	require.NoError(t, err)
+	replayer.RegisterWorkflowWithOptions(
+		legacyscheduler.SchedulerWorkflow,
+		workflow.RegisterOptions{Name: legacyscheduler.WorkflowType},
+	)
+	require.NoError(t, replayer.ReplayWorkflowHistory(log.NewSdkLogger(log.NewTestLogger()), proto.CloneOf(history)))
+	return capture
+}
+
+func historyHasLocalWatchMarkers(t *testing.T, history *historypb.History) bool {
+	t.Helper()
+	for _, event := range history.GetEvents() {
+		if event.GetEventType() == enumspb.EVENT_TYPE_MARKER_RECORDED && localActivityMetadata(t, event).ActivityType == "WatchWorkflow" {
+			return true
+		}
+	}
+	return false
+}
+
+func localActivityMetadata(t *testing.T, event *historypb.HistoryEvent) localActivityMarkerMetadata {
 	t.Helper()
 	attributes := event.GetMarkerRecordedEventAttributes()
 	if attributes.GetMarkerName() != "LocalActivity" {
-		return ""
+		return localActivityMarkerMetadata{}
 	}
-	var metadata struct {
-		ActivityType string
-	}
+	var metadata localActivityMarkerMetadata
 	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(attributes.GetDetails()["data"], &metadata))
-	return metadata.ActivityType
+	return metadata
 }
 
 func readReplayHistory(t *testing.T, path string) *historypb.History {

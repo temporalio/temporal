@@ -10,6 +10,17 @@ observed workflow-start results through mocked clients, and applies observed wor
 as CHASM callbacks. It compares workflow-start decisions, action counts, and final schedule
 configuration. Unsupported inputs fail the test instead of being silently ignored.
 
+V1 may record `WatchWorkflow` as either a normal activity or a local activity. For local
+activities, the marker contains the result but not the watched workflow ID. The harness therefore
+performs a deterministic V1 SDK replay with an outbound workflow interceptor, pairs each captured
+watch request with its marker, and applies the result at the marker's original timestamp. This
+preserves overlap-policy behavior without guessing which running workflow completed.
+
+The harness does not replace CHASM's scheduling calculations with V1 decisions. If an older V1
+version used different jitter or next-time semantics, the replay fails at the first completion for
+which CHASM has not emitted the corresponding start and reports it as a scheduling/timing
+divergence. This keeps completion-replay gaps separate from genuine generator behavior changes.
+
 No API that updates, signals, patches, pauses, or migrates a live schedule is called. The tool has
 no migration option.
 
