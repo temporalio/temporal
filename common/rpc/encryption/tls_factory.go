@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -37,6 +38,13 @@ type (
 		GetCertProvider(hostName string) (provider CertProvider, clientAuthRequired bool, err error)
 		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 		NumberOfHosts() int
+	}
+
+	// perHostTLSVersionsProvider is optionally implemented by a PerHostCertProviderMap to
+	// supply per-host TLS protocol version bounds. Implementations that do not provide them
+	// fall back to the bounds configured for the group.
+	perHostTLSVersionsProvider interface {
+		getTLSVersions(hostName string) (auth.TLSVersions, bool)
 	}
 
 	CertThumbprint [16]byte
@@ -82,7 +90,25 @@ func validateRootTLS(cfg *config.RootTLS) error {
 	if err := validateGroupTLS(&cfg.Frontend); err != nil {
 		return err
 	}
+	for name, groupTLS := range cfg.RemoteClusters {
+		// Remote cluster groups have never been covered by the checks above. Only the
+		// version bounds are validated here, so that configurations that pass today
+		// keep starting up.
+		if err := validateTLSVersions(&groupTLS); err != nil {
+			return fmt.Errorf("invalid TLS settings for remote cluster %q: %w", name, err)
+		}
+	}
 	return validateWorkerTLS(&cfg.SystemWorker)
+}
+
+func validateTLSVersions(cfg *config.GroupTLS) error {
+	if _, err := auth.NewTLSVersions(cfg.Server.MinVersion, cfg.Server.MaxVersion); err != nil {
+		return fmt.Errorf("invalid ServerTLS: %w", err)
+	}
+	if _, err := auth.NewTLSVersions(cfg.Client.MinVersion, cfg.Client.MaxVersion); err != nil {
+		return fmt.Errorf("invalid ClientTLS: %w", err)
+	}
+	return nil
 }
 
 func validateGroupTLS(cfg *config.GroupTLS) error {
@@ -130,6 +156,9 @@ func validateServerTLS(cfg *config.ServerTLS) error {
 	if len(cfg.ClientCAFiles) > 0 && len(cfg.ClientCAData) > 0 {
 		return fmt.Errorf("cannot specify ClientCAFiles and ClientCAData at the same time")
 	}
+	if _, err := auth.NewTLSVersions(cfg.MinVersion, cfg.MaxVersion); err != nil {
+		return fmt.Errorf("invalid ServerTLS: %w", err)
+	}
 	return nil
 }
 
@@ -142,6 +171,9 @@ func validateClientTLS(cfg *config.ClientTLS) error {
 	}
 	if len(cfg.RootCAData) > 0 && len(cfg.RootCAFiles) > 0 {
 		return fmt.Errorf("cannot specify RootCAFiles and RootCAData at the same time")
+	}
+	if _, err := auth.NewTLSVersions(cfg.MinVersion, cfg.MaxVersion); err != nil {
+		return fmt.Errorf("invalid ClientTLS: %w", err)
 	}
 	return nil
 }
