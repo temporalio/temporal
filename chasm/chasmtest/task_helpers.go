@@ -9,6 +9,31 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+// NextTaskTime returns the earliest non-visibility CHASM physical task after
+// the supplied time. Physical tasks can be stale; callers should execute task
+// validation when the returned time is reached.
+func (e *Engine) NextTaskTime(ref chasm.ComponentRef, after time.Time) (time.Time, bool, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+
+	var next time.Time
+	for category, categoryTasks := range exec.backend.TasksByCategory {
+		if category == tasks.CategoryVisibility {
+			continue
+		}
+		for _, task := range categoryTasks {
+			visibilityTime := task.GetVisibilityTime()
+			if !visibilityTime.After(after) || (!next.IsZero() && !visibilityTime.Before(next)) {
+				continue
+			}
+			next = visibilityTime
+		}
+	}
+	return next, !next.IsZero(), nil
+}
+
 // ExecutePureTask validates and executes a pure task atomically via [Engine.UpdateComponent].
 // It returns taskDropped set to true if [chasm.PureTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.

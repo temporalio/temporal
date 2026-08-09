@@ -55,6 +55,32 @@ func TestParseFlagsValidatesBatchOptions(t *testing.T) {
 	require.EqualError(t, err, "-sample-size must be greater than zero")
 	_, err = parseFlags([]string{"-migrate"})
 	require.ErrorContains(t, err, "flag provided but not defined: -migrate")
+
+	opts, err = parseFlags([]string{"-generate-scenarios", "-history-dir", t.TempDir()})
+	require.NoError(t, err)
+	require.True(t, opts.generateScenarios)
+	_, err = parseFlags([]string{"-generate-scenarios", "-batch"})
+	require.EqualError(t, err, "-batch and -generate-scenarios are mutually exclusive")
+}
+
+func TestFixtureScenariosCoverConformanceMatrix(t *testing.T) {
+	scenarios := fixtureScenarios()
+	names := make([]string, 0, len(scenarios))
+	for _, scenario := range scenarios {
+		names = append(names, scenario.name)
+		require.Positive(t, scenario.targetActions)
+	}
+	require.Equal(t, []string{
+		"interval",
+		"calendar",
+		"cron",
+		"jitter",
+		"update",
+		"pause-unpause",
+		"backfill-allow-all",
+		"buffer-all-running",
+		"skip-running",
+	}, names)
 }
 
 func TestReplayExistingScheduleHistories(t *testing.T) {

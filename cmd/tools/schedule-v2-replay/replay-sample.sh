@@ -9,9 +9,11 @@ history_dir="schedule-v1-replay-histories"
 timeout="1m"
 tls="false"
 tls_server_name=""
+report="schedule-v2-replay-report.json"
+fail_on="significant"
 
 usage() {
-  echo "Usage: $0 [--namespace NAME] [--sample-size N] [--history-dir DIR] [--address HOST:PORT] [--timeout DURATION] [--tls] [--tls-server-name NAME]"
+  echo "Usage: $0 [--namespace NAME] [--sample-size N] [--history-dir DIR] [--report FILE] [--fail-on significant|all|none] [--address HOST:PORT] [--timeout DURATION] [--tls] [--tls-server-name NAME]"
 }
 
 while (($# > 0)); do
@@ -36,6 +38,14 @@ while (($# > 0)); do
       timeout="$2"
       shift 2
       ;;
+    --report)
+      report="$2"
+      shift 2
+      ;;
+    --fail-on)
+      fail_on="$2"
+      shift 2
+      ;;
     --tls)
       tls="true"
       shift
@@ -55,6 +65,14 @@ while (($# > 0)); do
       ;;
   esac
 done
+
+case "$fail_on" in
+  significant|all|none) ;;
+  *)
+    echo "Invalid --fail-on value: $fail_on" >&2
+    exit 2
+    ;;
+esac
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../../.." && pwd)"
@@ -84,7 +102,17 @@ if ! "${args[@]}"; then
   exit 1
 fi
 
-export SCHEDULE_V1_HISTORY_DIR="$history_dir"
+history_test_dir="$history_dir"
+report_path="$report"
+if [[ "$history_test_dir" != /* ]]; then
+  history_test_dir="$repo_root/$history_test_dir"
+fi
+if [[ "$report_path" != /* ]]; then
+  report_path="$repo_root/$report_path"
+fi
+export SCHEDULE_V1_HISTORY_DIR="$history_test_dir"
+export SCHEDULE_V2_REPLAY_REPORT="$report_path"
+export SCHEDULE_V2_REPLAY_FAIL_ON="$fail_on"
 exec go test -tags test_dep ./chasm/lib/scheduler \
   -run '^TestDownloadedV1HistoriesAgainstCHASM$' \
   -count=1

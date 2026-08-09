@@ -29,18 +29,20 @@ import (
 )
 
 type options struct {
-	address       string
-	namespace     string
-	scheduleID    string
-	runID         string
-	historyOut    string
-	timeout       time.Duration
-	tls           bool
-	serverName    string
-	batch         bool
-	allNamespaces bool
-	sampleSize    int
-	historyDir    string
+	address           string
+	namespace         string
+	scheduleID        string
+	runID             string
+	historyOut        string
+	timeout           time.Duration
+	tls               bool
+	serverName        string
+	batch             bool
+	allNamespaces     bool
+	sampleSize        int
+	historyDir        string
+	generateScenarios bool
+	scenarioPrefix    string
 }
 
 type replayOutcome struct {
@@ -77,8 +79,13 @@ func parseFlags(args []string) (options, error) {
 	flags.BoolVar(&opts.allNamespaces, "all-namespaces", false, "sample schedules from every namespace (requires -batch)")
 	flags.IntVar(&opts.sampleSize, "sample-size", 10, "maximum V1 schedules to replay per namespace in batch mode")
 	flags.StringVar(&opts.historyDir, "history-dir", "schedule-v1-replay-histories", "batch history output directory")
+	flags.BoolVar(&opts.generateScenarios, "generate-scenarios", false, "create disposable V1 conformance scenarios and save their histories")
+	flags.StringVar(&opts.scenarioPrefix, "scenario-prefix", "schedule-v1-conformance", "schedule ID prefix for generated scenarios")
 	if err := flags.Parse(args); err != nil {
 		return options{}, err
+	}
+	if opts.batch && opts.generateScenarios {
+		return options{}, errors.New("-batch and -generate-scenarios are mutually exclusive")
 	}
 	if opts.batch {
 		if opts.scheduleID != "" || opts.runID != "" || opts.historyOut != "" {
@@ -92,6 +99,13 @@ func parseFlags(args []string) (options, error) {
 		}
 	} else if opts.allNamespaces {
 		return options{}, errors.New("-all-namespaces requires -batch")
+	} else if opts.generateScenarios {
+		if opts.historyDir == "" {
+			return options{}, errors.New("-history-dir is required with -generate-scenarios")
+		}
+		if opts.scenarioPrefix == "" {
+			return options{}, errors.New("-scenario-prefix is required with -generate-scenarios")
+		}
 	}
 	return opts, nil
 }
@@ -99,6 +113,9 @@ func parseFlags(args []string) (options, error) {
 func run(parent context.Context, opts options) error {
 	if opts.batch {
 		return runBatch(parent, opts)
+	}
+	if opts.generateScenarios {
+		return generateScenarioFixtures(parent, opts)
 	}
 	if opts.scheduleID == "" {
 		return errors.New("-schedule-id is required")

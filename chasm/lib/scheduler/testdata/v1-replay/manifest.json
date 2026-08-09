@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "source": {
+    "server": "1.30.2",
+    "goSdk": "1.44.0",
+    "scheduleImplementation": "v1"
+  },
+  "corpus": "current-v1",
+  "scenarios": [
+    "interval",
+    "calendar",
+    "cron",
+    "jitter",
+    "update",
+    "pause-unpause",
+    "backfill-allow-all",
+    "buffer-all-running",
+    "skip-running"
+  ]
+}
