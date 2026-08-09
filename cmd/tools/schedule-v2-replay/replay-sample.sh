@@ -5,15 +5,28 @@ set -u -o pipefail
 address="localhost:7233"
 namespace=""
 sample_size="10"
+cohort_size="2"
+sample_seed="schedule-v2-replay"
+max_runs="3"
+max_run_age="720h"
+max_scan="0"
+max_history_events="100000"
+max_history_bytes="52428800"
+requests_per_second="2"
+concurrency="2"
+resume="true"
 history_dir="schedule-v1-replay-histories"
 timeout="1m"
 tls="false"
 tls_server_name=""
 report="schedule-v2-replay-report.json"
 fail_on="significant"
+mode="both"
+redact="true"
+sensitive_data_ack="false"
 
 usage() {
-  echo "Usage: $0 [--namespace NAME] [--sample-size N] [--history-dir DIR] [--report FILE] [--fail-on significant|all|none] [--address HOST:PORT] [--timeout DURATION] [--tls] [--tls-server-name NAME]"
+  echo "Usage: $0 [--collect-only|--replay-only] [--acknowledge-sensitive-data] [--namespace NAME] [--sample-size N] [--cohort-size N] [--sample-seed SEED] [--max-runs N] [--max-run-age DURATION] [--max-scan N] [--requests-per-second N] [--concurrency N] [--history-dir DIR] [--report FILE] [--unredacted-report] [--fail-on significant|all|none] [--address HOST:PORT] [--timeout DURATION] [--tls] [--tls-server-name NAME]"
 }
 
 while (($# > 0)); do
@@ -30,6 +43,62 @@ while (($# > 0)); do
       sample_size="$2"
       shift 2
       ;;
+    --cohort-size)
+      cohort_size="$2"
+      shift 2
+      ;;
+    --sample-seed)
+      sample_seed="$2"
+      shift 2
+      ;;
+    --max-runs)
+      max_runs="$2"
+      shift 2
+      ;;
+    --max-run-age)
+      max_run_age="$2"
+      shift 2
+      ;;
+    --max-scan)
+      max_scan="$2"
+      shift 2
+      ;;
+    --max-history-events)
+      max_history_events="$2"
+      shift 2
+      ;;
+    --max-history-bytes)
+      max_history_bytes="$2"
+      shift 2
+      ;;
+    --requests-per-second)
+      requests_per_second="$2"
+      shift 2
+      ;;
+    --concurrency)
+      concurrency="$2"
+      shift 2
+      ;;
+    --no-resume)
+      resume="false"
+      shift
+      ;;
+    --collect-only)
+      if [[ "$mode" != "both" ]]; then
+        echo "--collect-only and --replay-only are mutually exclusive" >&2
+        exit 2
+      fi
+      mode="collect"
+      shift
+      ;;
+    --replay-only)
+      if [[ "$mode" != "both" ]]; then
+        echo "--collect-only and --replay-only are mutually exclusive" >&2
+        exit 2
+      fi
+      mode="replay"
+      shift
+      ;;
     --history-dir)
       history_dir="$2"
       shift 2
@@ -45,6 +114,14 @@ while (($# > 0)); do
     --fail-on)
       fail_on="$2"
       shift 2
+      ;;
+    --unredacted-report)
+      redact="false"
+      shift
+      ;;
+    --acknowledge-sensitive-data)
+      sensitive_data_ack="true"
+      shift
       ;;
     --tls)
       tls="true"
@@ -73,17 +150,36 @@ case "$fail_on" in
     exit 2
     ;;
 esac
+if [[ "$mode" != "replay" && "$sensitive_data_ack" != "true" ]]; then
+  echo "--acknowledge-sensitive-data is required when collecting production histories" >&2
+  exit 2
+fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../../.." && pwd)"
+collector_version="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || echo unknown)"
 args=(
   go run ./cmd/tools/schedule-v2-replay
   -batch
   -address "$address"
   -sample-size "$sample_size"
+  -cohort-size "$cohort_size"
+  -sample-seed "$sample_seed"
+  -max-runs "$max_runs"
+  -max-run-age "$max_run_age"
+  -max-scan "$max_scan"
+  -max-history-events "$max_history_events"
+  -max-history-bytes "$max_history_bytes"
+  -requests-per-second "$requests_per_second"
+  -concurrency "$concurrency"
+  -collector-version "$collector_version"
+  -resume="$resume"
   -history-dir "$history_dir"
   -timeout "$timeout"
 )
+if [[ "$sensitive_data_ack" == "true" ]]; then
+  args+=(-acknowledge-sensitive-data)
+fi
 
 if [[ -n "$namespace" ]]; then
   args+=(-namespace "$namespace")
@@ -98,8 +194,15 @@ if [[ -n "$tls_server_name" ]]; then
 fi
 
 cd "$repo_root" || exit 1
-if ! "${args[@]}"; then
-  exit 1
+collection_failed="false"
+if [[ "$mode" != "replay" ]]; then
+  if ! "${args[@]}"; then
+    collection_failed="true"
+  fi
+fi
+if [[ "$mode" == "collect" ]]; then
+  [[ "$collection_failed" == "false" ]]
+  exit $?
 fi
 
 history_test_dir="$history_dir"
@@ -113,6 +216,13 @@ fi
 export SCHEDULE_V1_HISTORY_DIR="$history_test_dir"
 export SCHEDULE_V2_REPLAY_REPORT="$report_path"
 export SCHEDULE_V2_REPLAY_FAIL_ON="$fail_on"
-exec go test -tags test_dep ./chasm/lib/scheduler \
+export SCHEDULE_V2_REPLAY_REDACT="$redact"
+replay_failed="false"
+if ! go test -tags test_dep ./chasm/lib/scheduler \
   -run '^TestDownloadedV1HistoriesAgainstCHASM$' \
-  -count=1
+  -count=1; then
+  replay_failed="true"
+fi
+if [[ "$collection_failed" == "true" || "$replay_failed" == "true" ]]; then
+  exit 1
+fi

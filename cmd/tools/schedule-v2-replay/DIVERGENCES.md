@@ -6,12 +6,14 @@ In this report, an **action** is an operation selected by a Temporal Schedule. E
 this corpus uses the `StartWorkflow` action, so an action difference means that one scheduler
 called `StartWorkflowExecution` for a workflow ID that the other scheduler did not.
 
-The corrected current-V1 corpus contains nine scenarios. Eight produce the same workflow-start
-decisions and differ only in when the result is observed. One scenario, `skip-running`, selects a
+The corrected current-V1 corpus contains nine scenarios. Two differ only in observation time. Six
+select the same workflow IDs but expose a different `TemporalScheduledStartTime` on their initial
+immediate action. The `skip-running` scenario has that request difference and also selects a
 different nominal occurrence:
 
 | Finding | V1 | CHASM | Compatibility impact | Likelihood of a V2 correctness bug |
 | --- | --- | --- | --- | --- |
+| Immediate-action scheduled time | Truncates to a whole second | Preserves the trigger timestamp | Low | Low |
 | `SKIP` completion near a deadline | Starts nominal `07:38:50` | Skips `07:38:50`, starts `07:38:51` | Medium | Low |
 | Pause near a deadline (original corpus) | Suppressed nominal `07:18:04` | Started nominal `07:18:04` | Low | Low |
 
@@ -34,10 +36,47 @@ in-memory CHASM state machines.
 - `inconclusive`: the history ends before an external input can be applied with confidence.
 - `unsupported`: the history contains an input the harness cannot safely model.
 
-The final comparison intentionally excludes `LimitedActions` and `RemainingActions`. Workflow
+The replay also compares normalized `StartWorkflowExecution` requests. It ignores generated RPC
+identity, request ID, callback plumbing, namespace injection, empty last-completion state, and
+search-attribute type metadata. Differences in workflow type, task queue, inputs, timeouts, retry
+policy, memo, headers, user metadata, and search-attribute values remain significant.
+
+The final state comparison intentionally excludes `LimitedActions` and `RemainingActions`. Workflow
 history exposes starts but does not always reveal whether a start was manual; triggers and
 backfills do not consume the scheduled-action limit. Workflow IDs and action counts remain in the
 oracle, and the JSON report includes CHASM's final state.
+
+## Confirmed difference: immediate-action scheduled time
+
+Seven fixtures use `TriggerImmediately` during schedule creation. For the initial action, V1 and
+CHASM start the same workflow ID, but the `TemporalScheduledStartTime` search attribute differs.
+For example:
+
+- Workflow ID nominal suffix: `2026-08-09T07:38:24Z`.
+- V1 search attribute: `2026-08-09T07:38:24Z`.
+- CHASM search attribute: `2026-08-09T07:38:24.750628Z`.
+
+V1 explicitly truncates every buffered start's nominal time to a whole second before constructing
+the workflow ID and scheduled-time search attribute in `service/worker/scheduler/workflow.go`.
+CHASM's immediate backfiller records the exact framework time and
+`chasm/lib/scheduler/scheduler.go` converts that nominal time directly into the search attribute.
+The workflow-ID builders still use the same whole-second suffix, so the difference was invisible
+to the earlier ID-only oracle.
+
+First-pass triage:
+
+- **Compatibility impact: Low.** Workflows or visibility queries that inspect
+  `TemporalScheduledStartTime` can observe a sub-second change for immediate actions. The selected
+  workflow and action count do not change.
+- **V2 correctness-bug likelihood: Low.** Preserving the actual immediate trigger time is more
+  precise; the whole-second V1 value follows its legacy workflow-ID truncation rather than a clear
+  API requirement.
+- **Confidence: High.** The normalized request comparison isolates the timestamp value after
+  removing transport and encoding representation differences.
+
+The production sweep should measure whether non-immediate schedules with sub-second interval
+phases expose the same compatibility difference before deciding whether CHASM should emulate the
+legacy truncation.
 
 ## Confirmed difference: `SKIP` near workflow completion
 
@@ -123,9 +162,10 @@ pause. V1 and CHASM now start the same two workflow IDs in the pause/unpause sce
    the documented overlap policy.
 2. Sample production V1 histories with `SKIP` and measure how often completion falls between a
    nominal deadline and V1 workflow-task processing.
-3. Expand the controlled corpus across interval lengths, workflow durations just before/after a
+3. Measure use of `TemporalScheduledStartTime`, immediate triggers, and sub-second interval phases.
+4. Expand the controlled corpus across interval lengths, workflow durations just before/after a
    deadline, jitter, and worker latency. This will quantify impact rather than change semantics.
-4. If strict compatibility is required, design an explicit grace/coalescing rule. Do not infer it
+5. If strict compatibility is required, design an explicit grace/coalescing rule. Do not infer it
    from V1 worker latency: doing so would make CHASM timing load-dependent and may contradict the
    API contract.
 
@@ -151,5 +191,5 @@ go test -tags test_dep ./chasm/lib/scheduler \
   -run '^TestDownloadedV1HistoriesAgainstCHASM$' -count=1
 ```
 
-Use `SCHEDULE_V2_REPLAY_FAIL_ON=significant` to make the confirmed `SKIP` difference fail the
-comparison command.
+Use `SCHEDULE_V2_REPLAY_FAIL_ON=significant` to make the confirmed `SKIP` and immediate-action
+request differences fail the comparison command.

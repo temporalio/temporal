@@ -2,13 +2,15 @@
 
 This read-only harness downloads legacy scheduler workflow histories through
 `GetWorkflowExecutionHistory`, verifies that they still replay against Schedule V1, and then
-drives fresh in-memory Schedule V2 instances with the CHASM test engine.
+drives fresh in-memory Schedule V2 instances with the CHASM test engine. Production history files
+contain raw payloads and must be treated as sensitive data.
 
 The CHASM replay starts from the `StartScheduleArgs` in event 1 and advances a virtual clock to
 each CHASM task deadline and V1 external input in chronological order. External inputs at a shared
 timestamp are applied before timer work. The harness applies update and patch signals, returns
 observed workflow-start results through mocked clients, and applies observed workflow completions
-as CHASM callbacks. It compares workflow IDs, action counts, and final schedule configuration.
+as CHASM callbacks. It compares workflow IDs, normalized `StartWorkflowExecution` requests, action
+counts, and final schedule configuration, and reports selected CHASM scheduler counters.
 In the current corpus every schedule action is `StartWorkflow`, so an action mismatch means a
 workflow execution was started by only one implementation. See [DIVERGENCES.md](DIVERGENCES.md)
 for the investigated findings and first-pass severity triage.
@@ -18,6 +20,9 @@ activities, the marker contains the result but not the watched workflow ID. The 
 performs a deterministic V1 SDK replay with an outbound workflow interceptor, pairs each captured
 watch request with its marker, and applies the result at the marker's original timestamp. This
 preserves overlap-policy behavior without guessing which running workflow completed.
+Final observed start failures are applied to CHASM. A successful local activity marker records its
+attempt count but not intermediate failure details, so histories with transient local-activity
+retries are classified as `inconclusive` instead of inventing an error sequence.
 
 The harness does not replace CHASM's scheduling calculations with V1 decisions. A completion that
 arrives before CHASM's corresponding start is held until that start occurs. Equal action decisions
@@ -42,28 +47,66 @@ Replay a sample from every namespace and save each history:
 
 ```sh
 ./cmd/tools/schedule-v2-replay/replay-sample.sh \
+  --acknowledge-sensitive-data \
   --address localhost:7233 \
   --sample-size 10 \
   --history-dir /tmp/schedule-v1-replay-histories \
   --report /tmp/schedule-v2-replay-report.json
 ```
 
+The history directory must be an approved encrypted local volume that is not synchronized or
+checked into source control. The collector creates directories with mode `0700`, writes histories
+and manifests atomically with mode `0600`, uses opaque hashed filenames, and records checksums. It
+rejects an existing history directory that is accessible by group or other users.
+Reports redact production identifiers by default; pass `--unredacted-report` only for restricted
+local triage.
+
 Restrict the sample to one namespace:
 
 ```sh
 ./cmd/tools/schedule-v2-replay/replay-sample.sh \
+  --acknowledge-sensitive-data \
   --namespace payments \
   --sample-size 25 \
   --history-dir /tmp/payments-schedule-histories
 ```
 
-Batch mode pages through schedules in server order until it finds the requested number of
-workflow-backed V1 schedules per namespace. V2-only schedules are skipped because they have no SDK
-workflow history. Histories are stored as gzip JSON under namespace-specific directories. After
-download and V1 replay, the script invokes `TestDownloadedV1HistoriesAgainstCHASM`; any download,
-V1 replay, unsupported event, CHASM error, or significant behavioral mismatch makes the script
-exit nonzero. Use `--fail-on all` to include timing-only and inconclusive results, or
-`--fail-on none` to collect evidence without failing the command.
+Batch mode lists the full namespace population and orders candidates by a deterministic hash of
+the seed, namespace, and schedule ID. It collects a uniform base sample, then continues scanning to
+top up behavioral cohorts for spec type, overlap policy, pause/update/backfill interactions,
+workflow completion, and start failures. V2-only schedules are skipped because they have no SDK
+workflow history. The defaults collect at most three continue-as-new runs from the last 30 days,
+inspect at most 20 times the base sample, run two namespaces concurrently, and issue at most two
+production API requests per second globally. Event and byte limits prevent unbounded histories.
+
+Each namespace has a resumable collection manifest containing the sampling parameters, population
+and scan counts, server and collector versions, run horizon, per-case errors, checksums, cohorts,
+and truncation status. Changing a fidelity-affecting option requires a new history directory or
+`--no-resume`.
+
+Collection and replay can run independently:
+
+```sh
+./cmd/tools/schedule-v2-replay/replay-sample.sh \
+  --collect-only --acknowledge-sensitive-data \
+  --namespace payments --sample-size 100 \
+  --history-dir /approved-encrypted-volume/payments
+
+./cmd/tools/schedule-v2-replay/replay-sample.sh \
+  --replay-only --history-dir /approved-encrypted-volume/payments \
+  --report /tmp/payments-redacted-report.json --fail-on none
+```
+
+In combined mode, replay still runs over successfully collected histories when individual
+collection cases fail, and the command exits nonzero after both phases. Use `--fail-on all` to
+include timing-only and inconclusive results, or `--fail-on none` to collect evidence without
+failing the replay phase. Targeted cohort counts are for finding bug classes and must not be used
+as fleet-wide prevalence estimates.
+
+The production identity needs only `ListNamespaces`, `ListSchedules`,
+`DescribeWorkflowExecution`, `GetWorkflowExecutionHistory`, and `GetSystemInfo`. The collector
+never calls a schedule mutation API. Remove raw histories according to the approved retention
+policy after triage.
 
 Generate the current-V1 conformance corpus against a disposable local server configured to create
 V1 schedules:

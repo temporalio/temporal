@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -10,14 +11,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -40,17 +38,22 @@ type options struct {
 	batch             bool
 	allNamespaces     bool
 	sampleSize        int
+	cohortSize        int
+	sampleSeed        string
+	maxRuns           int
+	maxRunAge         time.Duration
+	maxScan           int
+	maxHistoryEvents  int
+	maxHistoryBytes   int64
+	requestsPerSecond float64
+	concurrency       int
+	resume            bool
+	sensitiveDataAck  bool
+	collectorVersion  string
+	serverVersion     string
 	historyDir        string
 	generateScenarios bool
 	scenarioPrefix    string
-}
-
-type replayOutcome struct {
-	isV1        bool
-	runID       string
-	historyPath string
-	eventCount  int
-	err         error
 }
 
 func main() {
@@ -78,6 +81,18 @@ func parseFlags(args []string) (options, error) {
 	flags.BoolVar(&opts.batch, "batch", false, "replay a sample of V1 schedules")
 	flags.BoolVar(&opts.allNamespaces, "all-namespaces", false, "sample schedules from every namespace (requires -batch)")
 	flags.IntVar(&opts.sampleSize, "sample-size", 10, "maximum V1 schedules to replay per namespace in batch mode")
+	flags.IntVar(&opts.cohortSize, "cohort-size", 2, "targeted examples per behavioral cohort in batch mode")
+	flags.StringVar(&opts.sampleSeed, "sample-seed", "schedule-v2-replay", "deterministic batch sampling seed")
+	flags.IntVar(&opts.maxRuns, "max-runs", 3, "maximum continue-as-new runs to collect per schedule")
+	flags.DurationVar(&opts.maxRunAge, "max-run-age", 30*24*time.Hour, "maximum age of collected continue-as-new runs")
+	flags.IntVar(&opts.maxScan, "max-scan", 0, "maximum schedules to inspect per namespace; defaults to 20 times sample-size")
+	flags.IntVar(&opts.maxHistoryEvents, "max-history-events", 100000, "maximum events to collect per workflow run")
+	flags.Int64Var(&opts.maxHistoryBytes, "max-history-bytes", 50<<20, "maximum protobuf bytes to collect per workflow run")
+	flags.Float64Var(&opts.requestsPerSecond, "requests-per-second", 2, "maximum production API requests per second")
+	flags.IntVar(&opts.concurrency, "concurrency", 2, "maximum namespaces collected concurrently")
+	flags.BoolVar(&opts.resume, "resume", true, "resume collection from namespace manifests")
+	flags.BoolVar(&opts.sensitiveDataAck, "acknowledge-sensitive-data", false, "confirm that the history directory is approved for raw production data")
+	flags.StringVar(&opts.collectorVersion, "collector-version", currentBuildRevision(), "collector source revision recorded in manifests")
 	flags.StringVar(&opts.historyDir, "history-dir", "schedule-v1-replay-histories", "batch history output directory")
 	flags.BoolVar(&opts.generateScenarios, "generate-scenarios", false, "create disposable V1 conformance scenarios and save their histories")
 	flags.StringVar(&opts.scenarioPrefix, "scenario-prefix", "schedule-v1-conformance", "schedule ID prefix for generated scenarios")
@@ -94,8 +109,17 @@ func parseFlags(args []string) (options, error) {
 		if opts.sampleSize <= 0 {
 			return options{}, errors.New("-sample-size must be greater than zero")
 		}
+		if opts.cohortSize < 0 || opts.maxRuns <= 0 || opts.maxRunAge <= 0 || opts.maxScan < 0 || opts.maxHistoryEvents <= 0 || opts.maxHistoryBytes <= 0 {
+			return options{}, errors.New("batch limits must be positive; -cohort-size may be zero")
+		}
+		if opts.sampleSeed == "" || opts.requestsPerSecond <= 0 || opts.concurrency <= 0 {
+			return options{}, errors.New("batch sampling and rate-limit options must be positive and non-empty")
+		}
 		if opts.historyDir == "" {
 			return options{}, errors.New("-history-dir is required in batch mode")
+		}
+		if !opts.sensitiveDataAck {
+			return options{}, errors.New("-acknowledge-sensitive-data is required in batch mode")
 		}
 	} else if opts.allNamespaces {
 		return options{}, errors.New("-all-namespaces requires -batch")
@@ -163,37 +187,7 @@ func run(parent context.Context, opts options) error {
 }
 
 func runBatch(parent context.Context, opts options) error {
-	namespaces := []string{opts.namespace}
-	if opts.allNamespaces {
-		c, err := dialClient(opts, opts.namespace)
-		if err != nil {
-			return err
-		}
-		ctx, cancel := context.WithTimeout(parent, opts.timeout)
-		namespaces, err = listNamespaces(ctx, c)
-		cancel()
-		c.Close()
-		if err != nil {
-			return err
-		}
-	}
-	if err := os.MkdirAll(opts.historyDir, 0o755); err != nil {
-		return fmt.Errorf("create history directory: %w", err)
-	}
-
-	var failures int
-	for _, namespace := range namespaces {
-		failed, err := replayNamespaceSample(parent, opts, namespace)
-		failures += failed
-		if err != nil {
-			failures++
-			_, _ = fmt.Fprintf(os.Stderr, "namespace=%q: %v\n", namespace, err)
-		}
-	}
-	if failures != 0 {
-		return fmt.Errorf("batch replay completed with %d failure(s)", failures)
-	}
-	return nil
+	return runCollectionBatch(parent, opts)
 }
 
 func dialClient(opts options, namespace string) (client.Client, error) {
@@ -213,118 +207,6 @@ func dialClient(opts options, namespace string) (client.Client, error) {
 		return nil, fmt.Errorf("dial Temporal namespace %q: %w", namespace, err)
 	}
 	return c, nil
-}
-
-func listNamespaces(ctx context.Context, c client.Client) ([]string, error) {
-	var namespaces []string
-	var nextPageToken []byte
-	for {
-		response, err := c.WorkflowService().ListNamespaces(ctx, &workflowservice.ListNamespacesRequest{
-			PageSize:      1000,
-			NextPageToken: nextPageToken,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("list namespaces: %w", err)
-		}
-		for _, namespace := range response.GetNamespaces() {
-			if name := namespace.GetNamespaceInfo().GetName(); name != "" {
-				namespaces = append(namespaces, name)
-			}
-		}
-		nextPageToken = response.GetNextPageToken()
-		if len(nextPageToken) == 0 {
-			break
-		}
-	}
-	sort.Strings(namespaces)
-	return namespaces, nil
-}
-
-func replayNamespaceSample(parent context.Context, opts options, namespace string) (int, error) {
-	c, err := dialClient(opts, namespace)
-	if err != nil {
-		return 0, err
-	}
-	defer c.Close()
-
-	var nextPageToken []byte
-	var scanned, sampled, passed, failed int
-	for sampled < opts.sampleSize {
-		ctx, cancel := context.WithTimeout(parent, opts.timeout)
-		response, err := c.WorkflowService().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
-			Namespace:       namespace,
-			MaximumPageSize: 100,
-			NextPageToken:   nextPageToken,
-		})
-		cancel()
-		if err != nil {
-			return failed, fmt.Errorf("list schedules: %w", err)
-		}
-		for _, entry := range response.GetSchedules() {
-			if sampled == opts.sampleSize {
-				break
-			}
-			scanned++
-			scheduleID := entry.GetScheduleId()
-			outcome := replayScheduleSample(parent, c, opts, namespace, scheduleID)
-			if outcome.isV1 {
-				sampled++
-			}
-			if outcome.err != nil {
-				failed++
-				_, _ = fmt.Fprintf(os.Stderr, "namespace=%q schedule=%q run=%q: %v\n", namespace, scheduleID, outcome.runID, outcome.err)
-				continue
-			}
-			if !outcome.isV1 {
-				continue
-			}
-			passed++
-			fmt.Printf("V1_REPLAY_PASS namespace=%q schedule=%q run=%q events=%d history=%q\n", namespace, scheduleID, outcome.runID, outcome.eventCount, outcome.historyPath)
-		}
-		nextPageToken = response.GetNextPageToken()
-		if len(nextPageToken) == 0 {
-			break
-		}
-	}
-	fmt.Printf("SUMMARY namespace=%q scanned=%d sampled_v1=%d passed=%d failed=%d\n", namespace, scanned, sampled, passed, failed)
-	return failed, nil
-}
-
-func replayScheduleSample(parent context.Context, c client.Client, opts options, namespace, scheduleID string) replayOutcome {
-	ctx, cancel := context.WithTimeout(parent, opts.timeout)
-	defer cancel()
-
-	workflowID := primitives.ScheduleWorkflowIDPrefix + scheduleID
-	runID, err := resolveRunID(ctx, c, workflowID, "")
-	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			return replayOutcome{}
-		}
-		return replayOutcome{err: err}
-	}
-	outcome := replayOutcome{
-		isV1:        true,
-		runID:       runID,
-		historyPath: historyPath(opts.historyDir, namespace, scheduleID),
-	}
-	history, err := downloadHistory(ctx, c, workflowID, runID)
-	if err == nil {
-		err = writeHistory(outcome.historyPath, history)
-	}
-	if err == nil {
-		err = replayHistory(history)
-	}
-	if err != nil {
-		outcome.err = err
-		return outcome
-	}
-	outcome.eventCount = len(history.Events)
-	return outcome
-}
-
-func historyPath(root, namespace, scheduleID string) string {
-	return filepath.Join(root, safePathComponent(namespace), safePathComponent(scheduleID)+".json.gz")
 }
 
 func safePathComponent(value string) string {
@@ -380,36 +262,60 @@ func replayHistory(history *historypb.History) error {
 }
 
 func writeHistory(path string, history *historypb.History) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create history directory: %w", err)
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create history file: %w", err)
-	}
+	_, _, err := writeHistorySecure(path, history)
+	return err
+}
 
-	var writer interface {
-		Write([]byte) (int, error)
-	} = f
-	var gz *gzip.Writer
-	if len(path) >= 3 && path[len(path)-3:] == ".gz" {
-		gz = gzip.NewWriter(f)
-		writer = gz
-	}
+func writeHistorySecure(path string, history *historypb.History) (string, int64, error) {
 	data, err := (protojson.MarshalOptions{Indent: "  ", UseProtoNames: true}).Marshal(history)
-	if err == nil {
-		_, err = writer.Write(data)
-	}
-	if gz != nil {
-		if closeErr := gz.Close(); err == nil {
-			err = closeErr
-		}
-	}
-	if closeErr := f.Close(); err == nil {
-		err = closeErr
-	}
 	if err != nil {
-		return fmt.Errorf("write history file: %w", err)
+		return "", 0, fmt.Errorf("marshal history: %w", err)
+	}
+	if strings.HasSuffix(path, ".gz") {
+		var compressed bytes.Buffer
+		gz := gzip.NewWriter(&compressed)
+		if _, err := gz.Write(data); err != nil {
+			return "", 0, fmt.Errorf("compress history: %w", err)
+		}
+		if err := gz.Close(); err != nil {
+			return "", 0, fmt.Errorf("compress history: %w", err)
+		}
+		data = compressed.Bytes()
+	}
+	if err := atomicWrite(path, data, 0o600); err != nil {
+		return "", 0, err
+	}
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("%x", sum), int64(len(data)), nil
+}
+
+func atomicWrite(path string, data []byte, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create output directory: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".schedule-v2-replay-*")
+	if err != nil {
+		return fmt.Errorf("create temporary output: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer func() { _ = os.Remove(temporaryPath) }()
+	if err := temporary.Chmod(mode); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("secure temporary output: %w", err)
+	}
+	if _, err := temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("write temporary output: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("sync temporary output: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close temporary output: %w", err)
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("replace output: %w", err)
 	}
 	return nil
 }
