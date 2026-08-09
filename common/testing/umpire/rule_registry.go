@@ -186,9 +186,9 @@ type EntityResult[T any] struct {
 // check (respecting the rule's dirty-generation watermark and namespace scope).
 // Iteration stops early if the context is cancelled.
 //
-// It is a generic method (Go 1.27+), defined once on the embedded ruleContext and
-// promoted to both SafetyContext and LivenessContext — so a rule writes
-// c.Changed[model.WorkflowUpdate]() regardless of which context it holds.
+// It is a generic method (Go 1.27+), defined once on the embedded ruleContext.
+// SafetyContext and LivenessContext forward to it explicitly so external analyzers
+// see the method while rules keep the same c.Changed[model.WorkflowUpdate]() call.
 func (c *ruleContext) Changed[T any]() iter.Seq[EntityResult[T]] {
 	return func(yield func(EntityResult[T]) bool) {
 		et := EntityType(reflect.TypeOf((*T)(nil)).Elem().Name())
@@ -203,6 +203,16 @@ func (c *ruleContext) Changed[T any]() iter.Seq[EntityResult[T]] {
 			}
 		}
 	}
+}
+
+// Changed yields entities that changed since the safety rule's last check.
+func (c *SafetyContext) Changed[T any]() iter.Seq[EntityResult[T]] {
+	return c.ruleContext.Changed[T]()
+}
+
+// Changed yields entities that changed since the liveness rule's last check.
+func (c *LivenessContext) Changed[T any]() iter.Seq[EntityResult[T]] {
+	return c.ruleContext.Changed[T]()
 }
 
 // RuleStats holds per-rule evaluation statistics.

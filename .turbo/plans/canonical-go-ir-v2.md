@@ -189,12 +189,14 @@ Blend the established patterns: keep `protocolv2` as a Temporal-side leaf that o
 
 ## Verification Results
 
-- `go test -count=1 -tags test_dep ./tests/umpire/protocolv2 ./tests/umpire/action ./tests/umpire/model ./tests/umpire/planner` passed, including HTTP-level v1/v2 async-completion payload parity.
+- `go test -count=1 -tags test_dep ./common/testing/umpire ./tests/umpire/rule ./tests/umpire/protocolv2 ./tests/umpire/action ./tests/umpire/model ./tests/umpire/planner` passed, including HTTP-level v1/v2 async-completion payload parity.
 - `go test -count=1 -race -tags test_dep ./tests/umpire/protocolv2 -run TestDefaultProtocolSupportsConcurrentReads` passed.
-- The configured linters passed for `./tests/umpire/protocolv2/...` with zero issues.
+- The configured linters passed for `./tests/umpire/rule/...` and, with a fresh analyzer cache, `./tests/umpire/protocolv2/...` with zero issues. Explicit forwarding methods on the rule contexts work around golangci-lint's stale dependency analysis while preserving the rule API.
 - `make fmt-imports` completed; its unrelated repository-wide rewrites were restored, and the same formatter was applied directly to `tests/umpire/protocolv2`.
-- `make lint-code` is blocked by five existing `tests/umpire/rule` type errors where golangci-lint does not resolve promoted Go 1.27 generic `Changed` methods. Direct `go test` and `go vet` of that package pass, and the scoped configured linter reports zero `protocolv2` issues.
-- `git diff --name-only` is empty; no tracked Umpire source file was modified.
+- The rule-related blocker and the stale `service/frontend/workflow_handler_test.go` constructor call are resolved; the focused frontend suite passes.
+- The exact `make lint-code` command now reaches analysis completion and reports 253 pre-existing branch-wide findings because its default `--new-from-rev=main` scope includes unrelated WIP across the repository. Its automatic unrelated rewrites were restored.
+- `make GOLANGCI_LINT_FIX=false GOLANGCI_LINT_BASE_REV=HEAD lint-code` passes with zero task-scoped issues, including the repository vet phase.
+- The remaining worktree diff contains only the approved rule-context compatibility change, its rule-test lint fixes, the frontend test call-site repair, and this verification update.
 
 ## Context Files
 

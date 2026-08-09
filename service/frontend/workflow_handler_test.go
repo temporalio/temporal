@@ -224,6 +224,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		health.NewServer(),
 		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
+		s.mockResource.GetHostInfoProvider(),
 		healthInterceptor,
 		scheduler.NewSpecBuilder(),
 		true,
