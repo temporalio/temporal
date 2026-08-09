@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -40,6 +41,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -56,6 +58,12 @@ const (
 	replayReportPathEnv           = "SCHEDULE_V2_REPLAY_REPORT"
 	replayFailOnEnv               = "SCHEDULE_V2_REPLAY_FAIL_ON"
 	replayReportRedactEnv         = "SCHEDULE_V2_REPLAY_REDACT"
+	replayMaxDeadlinesEnv         = "SCHEDULE_V2_REPLAY_MAX_DEADLINES"
+	replayMaxTasksEnv             = "SCHEDULE_V2_REPLAY_MAX_TASKS"
+	replayMaxStartsEnv            = "SCHEDULE_V2_REPLAY_MAX_STARTS"
+	defaultReplayMaxDeadlines     = 10_000
+	defaultReplayMaxTasks         = 100_000
+	defaultReplayMaxStarts        = 10_000
 )
 
 type replayClassification string
@@ -69,13 +77,28 @@ const (
 )
 
 type replayDivergence struct {
-	Classification replayClassification `json:"classification"`
-	Kind           string               `json:"kind"`
-	Message        string               `json:"message"`
-	WorkflowID     string               `json:"workflowId,omitempty"`
-	V1Time         *time.Time           `json:"v1Time,omitempty"`
-	CHASMTime      *time.Time           `json:"chasmTime,omitempty"`
-	Fields         []string             `json:"fields,omitempty"`
+	Classification   replayClassification    `json:"classification"`
+	Kind             string                  `json:"kind"`
+	Message          string                  `json:"message"`
+	WorkflowID       string                  `json:"workflowId,omitempty"`
+	V1Time           *time.Time              `json:"v1Time,omitempty"`
+	CHASMTime        *time.Time              `json:"chasmTime,omitempty"`
+	Fields           []string                `json:"fields,omitempty"`
+	FieldDifferences []replayFieldDifference `json:"fieldDifferences,omitempty"`
+}
+
+type replayFieldDifference struct {
+	Field       string             `json:"field"`
+	V1          replayValueSummary `json:"v1"`
+	CHASM       replayValueSummary `json:"chasm"`
+	SafeDetails []string           `json:"safeDetails,omitempty"`
+}
+
+type replayValueSummary struct {
+	Present   bool     `json:"present"`
+	Count     int      `json:"count,omitempty"`
+	Encodings []string `json:"encodings,omitempty"`
+	Digest    string   `json:"digest,omitempty"`
 }
 
 type replayCaseResult struct {
@@ -89,7 +112,33 @@ type replayCaseResult struct {
 	V1ActionCount    int64                `json:"v1ActionCount"`
 	CHASMActionCount int64                `json:"chasmActionCount"`
 	CHASMState       replayStateSnapshot  `json:"chasmState"`
+	ReplayStats      replayStats          `json:"replayStats"`
 	Divergences      []replayDivergence   `json:"divergences,omitempty"`
+}
+
+type replayStats struct {
+	Deadlines       int    `json:"deadlines"`
+	PureTasks       int    `json:"pureTasks"`
+	SideEffectTasks int    `json:"sideEffectTasks"`
+	Starts          int    `json:"starts"`
+	BudgetExceeded  string `json:"budgetExceeded,omitempty"`
+}
+
+type replayBudget struct {
+	maxDeadlines int
+	maxTasks     int
+	maxStarts    int
+	stats        replayStats
+	exceeded     *replayBudgetExceededError
+}
+
+type replayBudgetExceededError struct {
+	dimension string
+	limit     int
+}
+
+func (e *replayBudgetExceededError) Error() string {
+	return fmt.Sprintf("replay %s budget exceeded limit %d", e.dimension, e.limit)
 }
 
 type replayStateSnapshot struct {
@@ -155,6 +204,33 @@ type observedStartFailure struct {
 type chasmStart struct {
 	workflowID string
 	time       time.Time
+}
+
+type workflowExecutionKey struct {
+	workflowID string
+	runID      string
+}
+
+type workflowExecutionMap map[workflowExecutionKey]workflowExecutionKey
+
+type workflowExecutionNotStartedError struct {
+	execution workflowExecutionKey
+}
+
+func (e *workflowExecutionNotStartedError) Error() string {
+	return fmt.Sprintf(
+		"V1 workflow %q run %q completed before CHASM emitted its corresponding start; this is a scheduling/timing divergence",
+		e.execution.workflowID,
+		e.execution.runID,
+	)
+}
+
+type ambiguousWorkflowExecutionError struct {
+	workflowID string
+}
+
+func (e *ambiguousWorkflowExecutionError) Error() string {
+	return fmt.Sprintf("V1 workflow %q completion does not identify a run and matches multiple CHASM executions", e.workflowID)
 }
 
 type scheduledWatch struct {
@@ -302,6 +378,48 @@ func TestV1HistoryAgainstCHASM_TimeSkippingStart(t *testing.T) {
 	require.Contains(t, replayDivergenceKinds(result), "action_request_unavailable")
 }
 
+func TestV1HistoryAgainstCHASM_ReplayBudgetExceeded(t *testing.T) {
+	t.Setenv(replayMaxDeadlinesEnv, "1")
+	startTime := time.Unix(100, 0).UTC()
+	args := &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(time.Second),
+			}}},
+			Action: &schedulepb.ScheduleAction{Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{WorkflowId: "action", WorkflowType: &commonpb.WorkflowType{Name: "type"}},
+			}},
+			State: &schedulepb.ScheduleState{},
+		},
+		Info: &schedulepb.ScheduleInfo{},
+		State: &schedulespb.InternalState{
+			Namespace: "namespace", NamespaceId: "namespace-id", ScheduleId: "schedule-id",
+			LastProcessedTime: timestamppb.New(startTime),
+		},
+	}
+	history := &historypb.History{Events: []*historypb.HistoryEvent{
+		{
+			EventId: 1, EventTime: timestamppb.New(startTime), EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{Input: mustPayloads(t, args)},
+			},
+		},
+		{
+			EventId: 2, EventTime: timestamppb.New(startTime.Add(5 * time.Second)), EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+			Attributes: &historypb.HistoryEvent_TimerFiredEventAttributes{
+				TimerFiredEventAttributes: &historypb.TimerFiredEventAttributes{},
+			},
+		},
+	}}
+
+	result := replayV1HistoryAgainstCHASM(t, history)
+	require.Equal(t, replayClassificationInconclusive, result.Classification)
+	require.Equal(t, []string{"replay_budget_exceeded"}, replayDivergenceKinds(result))
+	require.Equal(t, "deadlines", result.ReplayStats.BudgetExceeded)
+	require.Empty(t, result.V1Starts)
+	require.Len(t, result.CHASMStarts, 1)
+}
+
 func TestV1HistoryAgainstCHASM_MissingInitialState(t *testing.T) {
 	history := &historypb.History{Events: []*historypb.HistoryEvent{{
 		EventId: 1, EventTime: timestamppb.Now(), EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
@@ -392,21 +510,55 @@ func TestApplyExpectedPatchHandlesUnavailableState(t *testing.T) {
 	require.Equal(t, "pause", schedule.GetState().GetNotes())
 }
 
-func TestResolveObservedWorkflowID(t *testing.T) {
-	workflowIDMap := map[string]string{"v1-workflow": "chasm-workflow"}
+func TestResolveObservedWorkflowExecution(t *testing.T) {
+	executionMap := workflowExecutionMap{
+		{workflowID: "v1-workflow", runID: "v1-run"}: {workflowID: "chasm-workflow", runID: "chasm-run"},
+	}
 
-	workflowID, err := resolveObservedWorkflowID(workflowIDMap, true, "v1-workflow")
+	execution, err := resolveObservedWorkflowExecution(executionMap, true, workflowExecutionKey{workflowID: "v1-workflow", runID: "v1-run"})
 	require.NoError(t, err)
-	require.Equal(t, "chasm-workflow", workflowID)
+	require.Equal(t, workflowExecutionKey{workflowID: "chasm-workflow", runID: "chasm-run"}, execution)
 
-	workflowID, err = resolveObservedWorkflowID(workflowIDMap, false, "unmapped-workflow")
+	execution, err = resolveObservedWorkflowExecution(executionMap, false, workflowExecutionKey{workflowID: "unmapped-workflow", runID: "unmapped-run"})
 	require.NoError(t, err)
-	require.Equal(t, "unmapped-workflow", workflowID)
+	require.Equal(t, workflowExecutionKey{workflowID: "unmapped-workflow", runID: "unmapped-run"}, execution)
 
-	_, err = resolveObservedWorkflowID(workflowIDMap, true, "not-started")
+	_, err = resolveObservedWorkflowExecution(executionMap, true, workflowExecutionKey{workflowID: "not-started", runID: "not-started-run"})
 	require.EqualError(t, err,
-		`V1 workflow "not-started" completed before CHASM emitted its corresponding start; this is a scheduling/timing divergence`,
+		`V1 workflow "not-started" run "not-started-run" completed before CHASM emitted its corresponding start; this is a scheduling/timing divergence`,
 	)
+}
+
+func TestResolveObservedWorkflowExecutionWithoutRunID(t *testing.T) {
+	executionMap := workflowExecutionMap{
+		{workflowID: "v1-workflow", runID: "v1-run"}: {workflowID: "chasm-workflow", runID: "chasm-run"},
+	}
+
+	execution, err := resolveObservedWorkflowExecution(executionMap, true, workflowExecutionKey{workflowID: "v1-workflow"})
+	require.NoError(t, err)
+	require.Equal(t, workflowExecutionKey{workflowID: "chasm-workflow", runID: "chasm-run"}, execution)
+
+	executionMap[workflowExecutionKey{workflowID: "v1-workflow", runID: "v1-run-2"}] = workflowExecutionKey{workflowID: "chasm-workflow", runID: "chasm-run-2"}
+	_, err = resolveObservedWorkflowExecution(executionMap, true, workflowExecutionKey{workflowID: "v1-workflow"})
+	require.EqualError(t, err, `V1 workflow "v1-workflow" completion does not identify a run and matches multiple CHASM executions`)
+	divergence := replayCompletionErrorDivergence(err, &schedulespb.WatchWorkflowRequest{
+		Execution: &commonpb.WorkflowExecution{WorkflowId: "v1-workflow"},
+	}, time.Unix(100, 0), true)
+	require.Equal(t, replayClassificationInconclusive, divergence.Classification)
+	require.Equal(t, "ambiguous_completion", divergence.Kind)
+}
+
+func TestSeedCarriedWorkflowExecutions(t *testing.T) {
+	executionMap := make(workflowExecutionMap)
+	seedCarriedWorkflowExecutions(executionMap, []*schedulespb.BufferedStart{
+		{WorkflowId: "running", RunId: "running-run"},
+		{WorkflowId: "pending"},
+		{WorkflowId: "completed", RunId: "completed-run", Completed: &schedulespb.CompletedResult{}},
+	})
+
+	require.Equal(t, workflowExecutionMap{
+		{workflowID: "running", runID: "running-run"}: {workflowID: "running", runID: "running-run"},
+	}, executionMap)
 }
 
 func TestReplayReport(t *testing.T) {
@@ -424,7 +576,7 @@ func TestReplayReport(t *testing.T) {
 	require.NoError(t, err)
 	var report replayReport
 	require.NoError(t, json.Unmarshal(data, &report))
-	require.Equal(t, 2, report.Version)
+	require.Equal(t, 3, report.Version)
 	require.False(t, report.Redacted)
 	require.Equal(t, map[string]int{"match": 1, "significant": 1}, report.Summary)
 	require.Equal(t, map[string]map[string]int{"spec_interval": {"match": 1}}, report.CohortSummary)
@@ -458,6 +610,54 @@ func TestNormalizeStartWorkflowRequest(t *testing.T) {
 	require.False(t, proto.Equal(normalizeStartWorkflowRequest(v1), normalizeStartWorkflowRequest(chasmRequest)))
 }
 
+func TestStartWorkflowRequestFieldDifferences(t *testing.T) {
+	v1ScheduledTime := time.Unix(100, 0).UTC()
+	chasmScheduledTime := v1ScheduledTime.Add(500 * time.Millisecond)
+	v1ScheduledPayload, err := converter.GetDefaultDataConverter().ToPayload(v1ScheduledTime)
+	require.NoError(t, err)
+	chasmScheduledPayload, err := converter.GetDefaultDataConverter().ToPayload(chasmScheduledTime)
+	require.NoError(t, err)
+	v1 := &workflowservice.StartWorkflowExecutionRequest{
+		SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TemporalScheduledStartTime: v1ScheduledPayload,
+		}},
+		LastCompletionResult: mustPayloads(t, "one", "two"),
+		ContinuedFailure: &failurepb.Failure{
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{},
+		},
+	}
+	chasmRequest := &workflowservice.StartWorkflowExecutionRequest{
+		SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+			sadefs.TemporalScheduledStartTime: chasmScheduledPayload,
+		}},
+		LastCompletionResult: mustPayloads(t, "one"),
+		ContinuedFailure: &failurepb.Failure{
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{},
+		},
+	}
+	fields := startWorkflowRequestDifferenceFields(v1, chasmRequest)
+	differences := startWorkflowRequestFieldDifferences(v1, chasmRequest, fields)
+
+	require.ElementsMatch(t, []string{"continued_failure", "last_completion_result", "search_attributes"}, fields)
+	require.Len(t, differences, 3)
+	var searchDetails []string
+	for _, difference := range differences {
+		require.NotEmpty(t, difference.V1.Digest)
+		require.NotEmpty(t, difference.CHASM.Digest)
+		if difference.Field == "search_attributes" {
+			searchDetails = difference.SafeDetails
+		}
+	}
+	require.NotEmpty(t, searchDetails)
+	require.Contains(t, searchDetails[0], sadefs.TemporalScheduledStartTime)
+
+	redacted := redactReplayResults([]replayCaseResult{{Divergences: []replayDivergence{{FieldDifferences: differences}}}})
+	for _, difference := range redacted[0].Divergences[0].FieldDifferences {
+		require.Empty(t, difference.V1.Digest)
+		require.Empty(t, difference.CHASM.Digest)
+	}
+}
+
 func mustPayloads(t *testing.T, values ...any) *commonpb.Payloads {
 	t.Helper()
 	payloads, err := converter.GetDefaultDataConverter().ToPayloads(values...)
@@ -474,6 +674,7 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 		Classification: replayClassificationMatch,
 		Cohorts:        replayHistoryCohorts(trace),
 	}
+	budget := newReplayBudget(t)
 	for _, start := range trace.starts {
 		result.V1Starts = append(result.V1Starts, start.workflowID)
 	}
@@ -493,7 +694,7 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 
 	var startMu sync.Mutex
 	startIndex := 0
-	workflowIDMap := make(map[string]string)
+	executionMap := make(workflowExecutionMap)
 	var chasmStarts []chasmStart
 	var divergences []replayDivergence
 	if trace.startRetries != 0 {
@@ -521,20 +722,23 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 		DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
 			startMu.Lock()
 			defer startMu.Unlock()
+			budget.addStart()
 			workflowID := request.GetWorkflowId()
 			chasmTime := timeSource.Now().UTC()
 			if failures := failedStartsByWorkflowID[workflowID]; consumedFailedStarts[workflowID] < len(failures) {
 				failure := failures[consumedFailedStarts[workflowID]]
 				consumedFailedStarts[workflowID]++
 				if !proto.Equal(normalizeStartWorkflowRequest(failure.request), normalizeStartWorkflowRequest(request)) {
+					fields := startWorkflowRequestDifferenceFields(failure.request, request)
 					divergences = append(divergences, replayDivergence{
-						Classification: replayClassificationSignificant,
-						Kind:           "action_request",
-						Message:        "V1 and CHASM emitted different failed StartWorkflowExecution requests",
-						WorkflowID:     workflowID,
-						V1Time:         timePointer(failure.time),
-						CHASMTime:      timePointer(chasmTime),
-						Fields:         startWorkflowRequestDifferenceFields(failure.request, request),
+						Classification:   replayClassificationSignificant,
+						Kind:             "action_request",
+						Message:          "V1 and CHASM emitted different failed StartWorkflowExecution requests",
+						WorkflowID:       workflowID,
+						V1Time:           timePointer(failure.time),
+						CHASMTime:        timePointer(chasmTime),
+						Fields:           fields,
+						FieldDifferences: startWorkflowRequestFieldDifferences(failure.request, request, fields),
 					})
 				}
 				return nil, serviceerror.NewInvalidArgument("replayed V1 StartWorkflow failure")
@@ -554,19 +758,24 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 				}
 				start := starts[startPosition]
 				consumedStarts[workflowID]++
-				workflowIDMap[start.workflowID] = request.GetWorkflowId()
+				executionMap[workflowExecutionKey{workflowID: start.workflowID, runID: start.runID}] = workflowExecutionKey{
+					workflowID: request.GetWorkflowId(),
+					runID:      start.runID,
+				}
 				startIndex++
 				normalizedV1Request := normalizeStartWorkflowRequest(start.request)
 				normalizedCHASMRequest := normalizeStartWorkflowRequest(request)
 				if start.request != nil && !proto.Equal(normalizedV1Request, normalizedCHASMRequest) {
+					fields := startWorkflowRequestDifferenceFields(start.request, request)
 					divergences = append(divergences, replayDivergence{
-						Classification: replayClassificationSignificant,
-						Kind:           "action_request",
-						Message:        "V1 and CHASM emitted different StartWorkflowExecution requests",
-						WorkflowID:     workflowID,
-						V1Time:         timePointer(start.time),
-						CHASMTime:      timePointer(chasmTime),
-						Fields:         startWorkflowRequestDifferenceFields(start.request, request),
+						Classification:   replayClassificationSignificant,
+						Kind:             "action_request",
+						Message:          "V1 and CHASM emitted different StartWorkflowExecution requests",
+						WorkflowID:       workflowID,
+						V1Time:           timePointer(start.time),
+						CHASMTime:        timePointer(chasmTime),
+						Fields:           fields,
+						FieldDifferences: startWorkflowRequestFieldDifferences(start.request, request, fields),
 					})
 				}
 				if !start.time.IsZero() && !start.time.Equal(chasmTime) {
@@ -619,6 +828,7 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 		trace.memo,
 		trace.startTime,
 	)
+	seedCarriedWorkflowExecutions(executionMap, migrationRequest.GetState().GetInvokerState().GetBufferedStarts())
 	for _, start := range migrationRequest.GetState().GetInvokerState().GetBufferedStarts() {
 		if start.GetRunId() != "" {
 			start.HasCallback = true
@@ -638,10 +848,12 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 		})
 		require.NoError(t, err)
 	}
-	drainCHASMTasks(t, engine, rootRef, trace.startTime)
+	if err := drainCHASMTasks(engine, rootRef, trace.startTime, budget); err != nil {
+		return replayBudgetExceededResult(t, result, budget, chasmStarts, err)
+	}
 	currentTime := trace.startTime
 	var pendingCompletions []observedWatchCompletion
-	applyPendingCompletions := func(now time.Time) {
+	applyPendingCompletions := func(now time.Time) error {
 		for {
 			appliedAny := false
 			remaining := pendingCompletions[:0]
@@ -649,19 +861,13 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 				applied, err := applyObservedWatchCompletion(
 					engineCtx,
 					rootRef,
-					workflowIDMap,
+					executionMap,
 					trace.capturedIDs,
 					completion.request,
 					completion.response,
 				)
 				if err != nil {
-					divergences = append(divergences, replayDivergence{
-						Classification: replayClassificationSignificant,
-						Kind:           "completion_state",
-						Message:        err.Error(),
-						WorkflowID:     completion.request.GetExecution().GetWorkflowId(),
-						CHASMTime:      timePointer(now),
-					})
+					divergences = append(divergences, replayCompletionErrorDivergence(err, completion.request, now, false))
 					applied = true
 				}
 				if applied {
@@ -672,9 +878,11 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 			}
 			pendingCompletions = remaining
 			if !appliedAny {
-				return
+				return nil
 			}
-			drainCHASMTasks(t, engine, rootRef, now)
+			if err := drainCHASMTasks(engine, rootRef, now, budget); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -683,16 +891,18 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 		if now.Before(currentTime) {
 			now = currentTime
 		}
-		advanceCHASMTime(
-			t,
+		if err := advanceCHASMTime(
 			engine,
 			rootRef,
 			timeSource,
+			budget,
 			&currentTime,
 			now,
 			!isV1ExternalInput(trace, event),
 			applyPendingCompletions,
-		)
+		); err != nil {
+			return replayBudgetExceededResult(t, result, budget, chasmStarts, err)
+		}
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			if err := applyV1Signal(engineCtx, handler, trace, event); err != nil {
@@ -706,16 +916,10 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 			if completion, ok := observedActivityCompletion(t, trace, event); ok {
 				applied, err := applyObservedWatchCompletion(
-					engineCtx, rootRef, workflowIDMap, trace.capturedIDs, completion.request, completion.response,
+					engineCtx, rootRef, executionMap, trace.capturedIDs, completion.request, completion.response,
 				)
 				if err != nil {
-					divergences = append(divergences, replayDivergence{
-						Classification: replayClassificationSignificant,
-						Kind:           "completion_state",
-						Message:        err.Error(),
-						WorkflowID:     completion.request.GetExecution().GetWorkflowId(),
-						V1Time:         timePointer(now),
-					})
+					divergences = append(divergences, replayCompletionErrorDivergence(err, completion.request, now, true))
 					applied = true
 				}
 				if !applied {
@@ -732,16 +936,10 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 		case enumspb.EVENT_TYPE_MARKER_RECORDED:
 			if completion, ok := trace.localWatches[event.GetEventId()]; ok {
 				applied, err := applyObservedWatchCompletion(
-					engineCtx, rootRef, workflowIDMap, trace.capturedIDs, completion.request, completion.response,
+					engineCtx, rootRef, executionMap, trace.capturedIDs, completion.request, completion.response,
 				)
 				if err != nil {
-					divergences = append(divergences, replayDivergence{
-						Classification: replayClassificationSignificant,
-						Kind:           "completion_state",
-						Message:        err.Error(),
-						WorkflowID:     completion.request.GetExecution().GetWorkflowId(),
-						V1Time:         timePointer(now),
-					})
+					divergences = append(divergences, replayCompletionErrorDivergence(err, completion.request, now, true))
 					applied = true
 				}
 				if !applied {
@@ -757,8 +955,12 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 			}
 		default:
 		}
-		drainCHASMTasks(t, engine, rootRef, now)
-		applyPendingCompletions(now)
+		if err := drainCHASMTasks(engine, rootRef, now, budget); err != nil {
+			return replayBudgetExceededResult(t, result, budget, chasmStarts, err)
+		}
+		if err := applyPendingCompletions(now); err != nil {
+			return replayBudgetExceededResult(t, result, budget, chasmStarts, err)
+		}
 	}
 
 	startMu.Lock()
@@ -863,6 +1065,7 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 	require.NoError(t, err)
 	result.Divergences = deduplicateReplayDivergences(divergences)
 	result.Classification = classifyReplayDivergences(result.Divergences)
+	result.ReplayStats = budget.stats
 	return result
 }
 
@@ -882,29 +1085,38 @@ func isV1ExternalInput(trace *v1HistoryTrace, event *historypb.HistoryEvent) boo
 }
 
 func advanceCHASMTime(
-	t *testing.T,
 	engine *chasmtest.Engine,
 	rootRef chasm.ComponentRef,
 	timeSource *clock.EventTimeSource,
+	budget *replayBudget,
 	currentTime *time.Time,
 	target time.Time,
 	inclusive bool,
-	afterDrain func(time.Time),
-) {
-	t.Helper()
+	afterDrain func(time.Time) error,
+) error {
 	for {
 		next, ok, err := engine.NextTaskTime(rootRef, *currentTime)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 		if !ok || next.After(target) || (!inclusive && next.Equal(target)) {
 			break
 		}
+		if err := budget.addDeadline(); err != nil {
+			return err
+		}
 		timeSource.Update(next)
 		*currentTime = next
-		drainCHASMTasks(t, engine, rootRef, next)
-		afterDrain(next)
+		if err := drainCHASMTasks(engine, rootRef, next, budget); err != nil {
+			return err
+		}
+		if err := afterDrain(next); err != nil {
+			return err
+		}
 	}
 	timeSource.Update(target)
 	*currentTime = target
+	return nil
 }
 
 func normalizeScheduleForComparison(schedule *schedulepb.Schedule) *schedulepb.Schedule {
@@ -1006,6 +1218,177 @@ func startWorkflowRequestDifferenceFields(
 	return fields
 }
 
+func startWorkflowRequestFieldDifferences(
+	v1 *workflowservice.StartWorkflowExecutionRequest,
+	chasmRequest *workflowservice.StartWorkflowExecutionRequest,
+	fields []string,
+) []replayFieldDifference {
+	v1 = normalizeStartWorkflowRequest(v1)
+	chasmRequest = normalizeStartWorkflowRequest(chasmRequest)
+	differences := make([]replayFieldDifference, 0, len(fields))
+	for _, field := range fields {
+		difference := replayFieldDifference{
+			Field: field,
+			V1:    summarizeReplayValue(startWorkflowRequestFieldMessage(v1, field)),
+			CHASM: summarizeReplayValue(startWorkflowRequestFieldMessage(chasmRequest, field)),
+		}
+		switch field {
+		case "search_attributes":
+			difference.SafeDetails = searchAttributeSafeDifferences(v1.GetSearchAttributes(), chasmRequest.GetSearchAttributes())
+		case "continued_failure":
+			difference.SafeDetails = []string{
+				fmt.Sprintf("v1_failure_info=%T", v1.GetContinuedFailure().GetFailureInfo()),
+				fmt.Sprintf("chasm_failure_info=%T", chasmRequest.GetContinuedFailure().GetFailureInfo()),
+			}
+		default:
+		}
+		differences = append(differences, difference)
+	}
+	return differences
+}
+
+func startWorkflowRequestFieldMessage(
+	request *workflowservice.StartWorkflowExecutionRequest,
+	field string,
+) proto.Message {
+	if request == nil {
+		return nil
+	}
+	switch field {
+	case "workflow_type":
+		return request.GetWorkflowType()
+	case "task_queue":
+		return request.GetTaskQueue()
+	case "input":
+		return request.GetInput()
+	case "workflow_execution_timeout":
+		return request.GetWorkflowExecutionTimeout()
+	case "workflow_run_timeout":
+		return request.GetWorkflowRunTimeout()
+	case "workflow_task_timeout":
+		return request.GetWorkflowTaskTimeout()
+	case "retry_policy":
+		return request.GetRetryPolicy()
+	case "memo":
+		return request.GetMemo()
+	case "search_attributes":
+		return request.GetSearchAttributes()
+	case "header":
+		return request.GetHeader()
+	case "continued_failure":
+		return request.GetContinuedFailure()
+	case "last_completion_result":
+		return request.GetLastCompletionResult()
+	case "workflow_start_delay":
+		return request.GetWorkflowStartDelay()
+	case "user_metadata":
+		return request.GetUserMetadata()
+	case "versioning_override":
+		return request.GetVersioningOverride()
+	case "on_conflict_options":
+		return request.GetOnConflictOptions()
+	case "priority":
+		return request.GetPriority()
+	case "eager_worker_deployment_options":
+		return request.GetEagerWorkerDeploymentOptions()
+	case "time_skipping_config":
+		return request.GetTimeSkippingConfig()
+	default:
+		return nil
+	}
+}
+
+func summarizeReplayValue(message proto.Message) replayValueSummary {
+	if message == nil || !message.ProtoReflect().IsValid() {
+		return replayValueSummary{}
+	}
+	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(message)
+	if err != nil {
+		return replayValueSummary{Present: true}
+	}
+	digest := sha256.Sum256(data)
+	summary := replayValueSummary{Present: true, Count: 1, Digest: fmt.Sprintf("sha256:%x", digest[:12])}
+	var payloads []*commonpb.Payload
+	switch value := message.(type) {
+	case *commonpb.Payloads:
+		payloads = value.GetPayloads()
+		summary.Count = len(payloads)
+	case *commonpb.SearchAttributes:
+		summary.Count = len(value.GetIndexedFields())
+		for _, payload := range value.GetIndexedFields() {
+			payloads = append(payloads, payload)
+		}
+	case *commonpb.Memo:
+		summary.Count = len(value.GetFields())
+		for _, payload := range value.GetFields() {
+			payloads = append(payloads, payload)
+		}
+	case *commonpb.Header:
+		summary.Count = len(value.GetFields())
+		for _, payload := range value.GetFields() {
+			payloads = append(payloads, payload)
+		}
+	default:
+	}
+	encodings := make(map[string]struct{})
+	for _, payload := range payloads {
+		if encoding := string(payload.GetMetadata()["encoding"]); encoding != "" {
+			encodings[encoding] = struct{}{}
+		}
+	}
+	for encoding := range encodings {
+		summary.Encodings = append(summary.Encodings, encoding)
+	}
+	sort.Strings(summary.Encodings)
+	return summary
+}
+
+func searchAttributeSafeDifferences(v1, chasmValue *commonpb.SearchAttributes) []string {
+	keys := make(map[string]struct{})
+	for key := range v1.GetIndexedFields() {
+		keys[key] = struct{}{}
+	}
+	for key := range chasmValue.GetIndexedFields() {
+		keys[key] = struct{}{}
+	}
+	orderedKeys := make([]string, 0, len(keys))
+	for key := range keys {
+		orderedKeys = append(orderedKeys, key)
+	}
+	sort.Strings(orderedKeys)
+	result := make([]string, 0, len(orderedKeys))
+	for _, key := range orderedKeys {
+		v1Payload, v1Present := v1.GetIndexedFields()[key]
+		chasmPayload, chasmPresent := chasmValue.GetIndexedFields()[key]
+		if proto.Equal(v1Payload, chasmPayload) {
+			continue
+		}
+		keyReference := replayOpaqueID(key)
+		if sadefs.IsReserved(key) {
+			keyReference = key
+		}
+		if key == sadefs.TemporalScheduledStartTime {
+			v1Time, v1OK := decodeDateTimeSearchAttribute(v1Payload)
+			chasmTime, chasmOK := decodeDateTimeSearchAttribute(chasmPayload)
+			if v1OK && chasmOK {
+				result = append(result, fmt.Sprintf("%s:v1=%s,chasm=%s", key, v1Time.Format(time.RFC3339Nano), chasmTime.Format(time.RFC3339Nano)))
+				continue
+			}
+		}
+		result = append(result, fmt.Sprintf("%s:v1_present=%t,chasm_present=%t", keyReference, v1Present, chasmPresent))
+	}
+	return result
+}
+
+func decodeDateTimeSearchAttribute(payload *commonpb.Payload) (time.Time, bool) {
+	value, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_DATETIME, false)
+	if err != nil {
+		return time.Time{}, false
+	}
+	decoded, ok := value.(time.Time)
+	return decoded, ok
+}
+
 func replayHistoryCohorts(trace *v1HistoryTrace) []string {
 	cohorts := make(map[string]struct{})
 	if len(trace.failedStarts) != 0 {
@@ -1057,6 +1440,78 @@ func replayHistoryCohorts(trace *v1HistoryTrace) []string {
 func timePointer(value time.Time) *time.Time {
 	value = value.UTC()
 	return &value
+}
+
+func newReplayBudget(t *testing.T) *replayBudget {
+	t.Helper()
+	return &replayBudget{
+		maxDeadlines: replayLimitFromEnvironment(t, replayMaxDeadlinesEnv, defaultReplayMaxDeadlines),
+		maxTasks:     replayLimitFromEnvironment(t, replayMaxTasksEnv, defaultReplayMaxTasks),
+		maxStarts:    replayLimitFromEnvironment(t, replayMaxStartsEnv, defaultReplayMaxStarts),
+	}
+}
+
+func replayLimitFromEnvironment(t *testing.T, name string, defaultValue int) int {
+	t.Helper()
+	value := os.Getenv(name)
+	if value == "" {
+		return defaultValue
+	}
+	limit, err := strconv.Atoi(value)
+	require.NoError(t, err, "%s must be an integer", name)
+	require.Positive(t, limit, "%s must be positive", name)
+	return limit
+}
+
+func (b *replayBudget) addDeadline() error {
+	b.stats.Deadlines++
+	return b.check("deadlines", b.stats.Deadlines, b.maxDeadlines)
+}
+
+func (b *replayBudget) addTasks(pure, sideEffect int) error {
+	b.stats.PureTasks += pure
+	b.stats.SideEffectTasks += sideEffect
+	return b.check("tasks", b.stats.PureTasks+b.stats.SideEffectTasks, b.maxTasks)
+}
+
+func (b *replayBudget) addStart() {
+	b.stats.Starts++
+	_ = b.check("starts", b.stats.Starts, b.maxStarts)
+}
+
+func (b *replayBudget) check(dimension string, value, limit int) error {
+	if b.exceeded != nil {
+		return b.exceeded
+	}
+	if value <= limit {
+		return nil
+	}
+	b.exceeded = &replayBudgetExceededError{dimension: dimension, limit: limit}
+	b.stats.BudgetExceeded = dimension
+	return b.exceeded
+}
+
+func replayBudgetExceededResult(
+	t *testing.T,
+	result replayCaseResult,
+	budget *replayBudget,
+	chasmStarts []chasmStart,
+	err error,
+) replayCaseResult {
+	t.Helper()
+	var budgetErr *replayBudgetExceededError
+	require.ErrorAs(t, err, &budgetErr)
+	result.ReplayStats = budget.stats
+	for _, start := range chasmStarts {
+		result.CHASMStarts = append(result.CHASMStarts, start.workflowID)
+	}
+	result.Classification = replayClassificationInconclusive
+	result.Divergences = []replayDivergence{{
+		Classification: replayClassificationInconclusive,
+		Kind:           "replay_budget_exceeded",
+		Message:        budgetErr.Error(),
+	}}
+	return result
 }
 
 func deduplicateReplayDivergences(divergences []replayDivergence) []replayDivergence {
@@ -1166,7 +1621,7 @@ func writeReplayReportWithCollections(
 		collections = redactCollectionSummaries(collections)
 	}
 	report := replayReport{
-		Version:       2,
+		Version:       3,
 		Redacted:      redact,
 		Summary:       make(map[string]int),
 		CohortSummary: make(map[string]map[string]int),
@@ -1254,6 +1709,11 @@ func redactReplayResults(results []replayCaseResult) []replayCaseResult {
 			divergence := &redacted[index].Divergences[divergenceIndex]
 			divergence.WorkflowID = replayOpaqueID(divergence.WorkflowID)
 			divergence.Message = "redacted " + divergence.Kind + " divergence"
+			divergence.FieldDifferences = append([]replayFieldDifference(nil), divergence.FieldDifferences...)
+			for fieldIndex := range divergence.FieldDifferences {
+				divergence.FieldDifferences[fieldIndex].V1.Digest = ""
+				divergence.FieldDifferences[fieldIndex].CHASM.Digest = ""
+			}
 		}
 	}
 	return redacted
@@ -1314,18 +1774,24 @@ func newHistoryReplayLibrary(
 	)
 }
 
-func drainCHASMTasks(t *testing.T, engine *chasmtest.Engine, rootRef chasm.ComponentRef, now time.Time) {
-	t.Helper()
+func drainCHASMTasks(engine *chasmtest.Engine, rootRef chasm.ComponentRef, now time.Time, budget *replayBudget) error {
 	for range 1000 {
 		pure, err := engine.FirePureTasks(rootRef, now)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 		sideEffect, err := engine.FireSideEffectTasks(rootRef, now)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
+		if err := budget.addTasks(pure, sideEffect); err != nil {
+			return err
+		}
 		if pure+sideEffect == 0 {
-			return
+			return nil
 		}
 	}
-	require.FailNow(t, "CHASM task drain did not converge")
+	return errors.New("CHASM task drain did not converge")
 }
 
 func applyV1Signal(
@@ -1413,7 +1879,7 @@ func observedActivityCompletion(
 func applyObservedWatchCompletion(
 	ctx context.Context,
 	rootRef chasm.ComponentRef,
-	workflowIDMap map[string]string,
+	executionMap workflowExecutionMap,
 	strictWorkflowMapping bool,
 	request *schedulespb.WatchWorkflowRequest,
 	response *schedulespb.WatchWorkflowResponse,
@@ -1421,33 +1887,50 @@ func applyObservedWatchCompletion(
 	if response.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return true, nil
 	}
-	observedWorkflowID := request.GetExecution().GetWorkflowId()
-	workflowID, err := resolveObservedWorkflowID(workflowIDMap, strictWorkflowMapping, observedWorkflowID)
+	observedExecution := workflowExecutionKey{
+		workflowID: request.GetExecution().GetWorkflowId(),
+		runID:      request.GetExecution().GetRunId(),
+	}
+	targetExecution, err := resolveObservedWorkflowExecution(executionMap, strictWorkflowMapping, observedExecution)
 	if err != nil {
-		return false, nil
+		var notStartedErr *workflowExecutionNotStartedError
+		if errors.As(err, &notStartedErr) {
+			return false, nil
+		}
+		return false, err
 	}
 	_, _, err = chasm.UpdateComponent(ctx, rootRef,
 		func(s *scheduler.Scheduler, mutableCtx chasm.MutableContext, _ struct{}) (struct{}, error) {
 			invoker := s.Invoker.Get(mutableCtx)
 			var requestID string
+			matches := 0
 			bufferedState := make([]string, 0, len(invoker.GetBufferedStarts()))
 			for _, start := range invoker.GetBufferedStarts() {
 				bufferedState = append(bufferedState, fmt.Sprintf(
 					"%s(run=%s,completed=%t)", start.GetWorkflowId(), start.GetRunId(), start.GetCompleted() != nil,
 				))
-				if start.GetWorkflowId() == workflowID {
+				if start.GetWorkflowId() == targetExecution.workflowID &&
+					(targetExecution.runID == "" || start.GetRunId() == targetExecution.runID) {
 					if start.GetCompleted() != nil {
 						return struct{}{}, nil
 					}
+					matches++
 					requestID = start.GetRequestId()
-					break
 				}
+			}
+			if matches > 1 {
+				return struct{}{}, fmt.Errorf(
+					"running workflow %q completion matches multiple CHASM buffered starts",
+					targetExecution.workflowID,
+				)
 			}
 			if requestID == "" {
 				return struct{}{}, fmt.Errorf(
-					"running workflow %q (V1 workflow %q) not found in CHASM; buffered starts: %v",
-					workflowID,
-					observedWorkflowID,
+					"running workflow %q run %q (V1 workflow %q run %q) not found in CHASM; buffered starts: %v",
+					targetExecution.workflowID,
+					targetExecution.runID,
+					observedExecution.workflowID,
+					observedExecution.runID,
 					bufferedState,
 				)
 			}
@@ -1456,18 +1939,70 @@ func applyObservedWatchCompletion(
 	return err == nil, err
 }
 
-func resolveObservedWorkflowID(workflowIDMap map[string]string, strict bool, observedWorkflowID string) (string, error) {
-	workflowID, mapped := workflowIDMap[observedWorkflowID]
+func replayCompletionErrorDivergence(
+	err error,
+	request *schedulespb.WatchWorkflowRequest,
+	observedTime time.Time,
+	v1Time bool,
+) replayDivergence {
+	divergence := replayDivergence{
+		Classification: replayClassificationSignificant,
+		Kind:           "completion_state",
+		Message:        err.Error(),
+		WorkflowID:     request.GetExecution().GetWorkflowId(),
+	}
+	var ambiguousErr *ambiguousWorkflowExecutionError
+	if errors.As(err, &ambiguousErr) {
+		divergence.Classification = replayClassificationInconclusive
+		divergence.Kind = "ambiguous_completion"
+	}
+	if v1Time {
+		divergence.V1Time = timePointer(observedTime)
+	} else {
+		divergence.CHASMTime = timePointer(observedTime)
+	}
+	return divergence
+}
+
+func seedCarriedWorkflowExecutions(executionMap workflowExecutionMap, starts []*schedulespb.BufferedStart) {
+	for _, start := range starts {
+		if start.GetRunId() == "" || start.GetCompleted() != nil {
+			continue
+		}
+		execution := workflowExecutionKey{workflowID: start.GetWorkflowId(), runID: start.GetRunId()}
+		executionMap[execution] = execution
+	}
+}
+
+func resolveObservedWorkflowExecution(
+	executionMap workflowExecutionMap,
+	strict bool,
+	observed workflowExecutionKey,
+) (workflowExecutionKey, error) {
+	execution, mapped := executionMap[observed]
 	if mapped {
-		return workflowID, nil
+		return execution, nil
+	}
+	if observed.runID == "" {
+		var match workflowExecutionKey
+		matches := 0
+		for source, target := range executionMap {
+			if source.workflowID == observed.workflowID {
+				match = target
+				matches++
+			}
+		}
+		if matches == 1 {
+			return match, nil
+		}
+		if matches > 1 {
+			return workflowExecutionKey{}, &ambiguousWorkflowExecutionError{workflowID: observed.workflowID}
+		}
 	}
 	if !strict {
-		return observedWorkflowID, nil
+		return observed, nil
 	}
-	return "", fmt.Errorf(
-		"V1 workflow %q completed before CHASM emitted its corresponding start; this is a scheduling/timing divergence",
-		observedWorkflowID,
-	)
+	return workflowExecutionKey{}, &workflowExecutionNotStartedError{execution: observed}
 }
 
 func nexusCompletion(response *schedulespb.WatchWorkflowResponse, requestID string) *persistencespb.ChasmNexusCompletion {

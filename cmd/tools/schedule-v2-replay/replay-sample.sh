@@ -12,6 +12,9 @@ max_run_age="720h"
 max_scan="0"
 max_history_events="100000"
 max_history_bytes="52428800"
+max_replay_deadlines="10000"
+max_replay_tasks="100000"
+max_replay_starts="10000"
 requests_per_second="2"
 concurrency="2"
 resume="true"
@@ -26,7 +29,7 @@ redact="true"
 sensitive_data_ack="false"
 
 usage() {
-  echo "Usage: $0 [--collect-only|--replay-only] [--acknowledge-sensitive-data] [--namespace NAME] [--sample-size N] [--cohort-size N] [--sample-seed SEED] [--max-runs N] [--max-run-age DURATION] [--max-scan N] [--requests-per-second N] [--concurrency N] [--history-dir DIR] [--report FILE] [--unredacted-report] [--fail-on significant|all|none] [--address HOST:PORT] [--timeout DURATION] [--tls] [--tls-server-name NAME]"
+  echo "Usage: $0 [--collect-only|--replay-only] [--acknowledge-sensitive-data] [--namespace NAME] [--sample-size N] [--cohort-size N] [--sample-seed SEED] [--max-runs N] [--max-run-age DURATION] [--max-scan N] [--max-replay-deadlines N] [--max-replay-tasks N] [--max-replay-starts N] [--requests-per-second N] [--concurrency N] [--history-dir DIR] [--report FILE] [--unredacted-report] [--fail-on significant|all|none] [--address HOST:PORT] [--timeout DURATION] [--tls] [--tls-server-name NAME]"
 }
 
 while (($# > 0)); do
@@ -69,6 +72,18 @@ while (($# > 0)); do
       ;;
     --max-history-bytes)
       max_history_bytes="$2"
+      shift 2
+      ;;
+    --max-replay-deadlines)
+      max_replay_deadlines="$2"
+      shift 2
+      ;;
+    --max-replay-tasks)
+      max_replay_tasks="$2"
+      shift 2
+      ;;
+    --max-replay-starts)
+      max_replay_starts="$2"
       shift 2
       ;;
     --requests-per-second)
@@ -150,6 +165,12 @@ case "$fail_on" in
     exit 2
     ;;
 esac
+for replay_limit in "$max_replay_deadlines" "$max_replay_tasks" "$max_replay_starts"; do
+  if [[ ! "$replay_limit" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Replay limits must be positive integers" >&2
+    exit 2
+  fi
+done
 if [[ "$mode" != "replay" && "$sensitive_data_ack" != "true" ]]; then
   echo "--acknowledge-sensitive-data is required when collecting production histories" >&2
   exit 2
@@ -217,10 +238,13 @@ export SCHEDULE_V1_HISTORY_DIR="$history_test_dir"
 export SCHEDULE_V2_REPLAY_REPORT="$report_path"
 export SCHEDULE_V2_REPLAY_FAIL_ON="$fail_on"
 export SCHEDULE_V2_REPLAY_REDACT="$redact"
+export SCHEDULE_V2_REPLAY_MAX_DEADLINES="$max_replay_deadlines"
+export SCHEDULE_V2_REPLAY_MAX_TASKS="$max_replay_tasks"
+export SCHEDULE_V2_REPLAY_MAX_STARTS="$max_replay_starts"
 replay_failed="false"
 if ! go test -tags test_dep ./chasm/lib/scheduler \
   -run '^TestDownloadedV1HistoriesAgainstCHASM$' \
-  -count=1; then
+  -count=1 -timeout 10m; then
   replay_failed="true"
 fi
 if [[ "$collection_failed" == "true" || "$replay_failed" == "true" ]]; then

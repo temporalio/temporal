@@ -60,6 +60,19 @@ func TestIsV1ScheduleHistoryRequiresInitialState(t *testing.T) {
 	require.True(t, isV1ScheduleHistory(history))
 }
 
+func TestAppendUniqueScheduleCandidate(t *testing.T) {
+	seen := make(map[string]struct{})
+	var candidates []scheduleCandidate
+	candidates = appendUniqueScheduleCandidate(candidates, seen, "seed", "namespace", "schedule")
+	candidates = appendUniqueScheduleCandidate(candidates, seen, "seed", "namespace", "schedule")
+	candidates = appendUniqueScheduleCandidate(candidates, seen, "seed", "namespace", "")
+
+	require.Equal(t, []scheduleCandidate{{
+		scheduleID: "schedule",
+		key:        sampleKey("seed", "namespace", "schedule"),
+	}}, candidates)
+}
+
 func TestSafePathComponent(t *testing.T) {
 	component := safePathComponent("../team/schedule")
 	require.NotContains(t, component, "/")

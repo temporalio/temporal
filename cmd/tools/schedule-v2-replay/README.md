@@ -32,6 +32,11 @@ at different observed times are classified as `timing_only`; extra or missing wo
 counts, or final state are `significant`. An extra CHASM action receives a synthetic successful
 start response, so one mismatch does not create an artificial retry cascade.
 
+Continue-as-new histories can begin with running workflows. The harness seeds their workflow/run
+identity from the migrated buffered-start state before applying later completion events. A
+completion without a run ID is applied only when exactly one execution with that workflow ID is
+known; an ambiguous completion is `inconclusive` instead of being guessed.
+
 No API that updates, signals, patches, pauses, or migrates a live schedule is called. The tool has
 no migration option.
 
@@ -61,7 +66,9 @@ checked into source control. The collector creates directories with mode `0700`,
 and manifests atomically with mode `0600`, uses opaque hashed filenames, and records checksums. It
 rejects an existing history directory that is accessible by group or other users.
 Reports redact production identifiers by default; pass `--unredacted-report` only for restricted
-local triage.
+local triage. Report version 3 includes payload-safe request diagnostics: presence, element counts,
+encodings, reserved scheduled-time values, and failure-info types. The unredacted report also
+contains deterministic payload digests; neither report contains decoded user payload values.
 
 Restrict the sample to one namespace:
 
@@ -98,6 +105,12 @@ Collection and replay can run independently:
   --replay-only --history-dir /approved-encrypted-volume/payments \
   --report /tmp/payments-redacted-report.json --fail-on none
 ```
+
+Replay work is bounded independently of wall-clock test timeout. Defaults are 10,000 virtual
+deadlines, 100,000 CHASM tasks, and 10,000 workflow starts per history. Override them with
+`--max-replay-deadlines`, `--max-replay-tasks`, and `--max-replay-starts`. Exceeding a limit emits
+`replay_budget_exceeded` with counters and classifies the case as `inconclusive`; it does not emit
+partial missing-action comparisons.
 
 In combined mode, replay still runs over successfully collected histories when individual
 collection cases fail, and the command exits nonzero after both phases. Use `--fail-on all` to

@@ -325,6 +325,7 @@ func collectNamespace(parent context.Context, opts options, namespace string, li
 
 func listScheduleCandidates(parent context.Context, c client.Client, opts options, namespace string, limiter *rate.Limiter) ([]scheduleCandidate, error) {
 	var candidates []scheduleCandidate
+	seen := make(map[string]struct{})
 	var nextPageToken []byte
 	for {
 		ctx, cancel := context.WithTimeout(parent, opts.timeout)
@@ -338,19 +339,33 @@ func listScheduleCandidates(parent context.Context, c client.Client, opts option
 			return nil, fmt.Errorf("list schedules: %w", err)
 		}
 		for _, entry := range response.GetSchedules() {
-			if entry.GetScheduleId() == "" {
-				continue
-			}
-			candidates = append(candidates, scheduleCandidate{
-				scheduleID: entry.GetScheduleId(),
-				key:        sampleKey(opts.sampleSeed, namespace, entry.GetScheduleId()),
-			})
+			candidates = appendUniqueScheduleCandidate(candidates, seen, opts.sampleSeed, namespace, entry.GetScheduleId())
 		}
 		nextPageToken = response.GetNextPageToken()
 		if len(nextPageToken) == 0 {
 			return candidates, nil
 		}
 	}
+}
+
+func appendUniqueScheduleCandidate(
+	candidates []scheduleCandidate,
+	seen map[string]struct{},
+	seed string,
+	namespace string,
+	scheduleID string,
+) []scheduleCandidate {
+	if scheduleID == "" {
+		return candidates
+	}
+	if _, ok := seen[scheduleID]; ok {
+		return candidates
+	}
+	seen[scheduleID] = struct{}{}
+	return append(candidates, scheduleCandidate{
+		scheduleID: scheduleID,
+		key:        sampleKey(seed, namespace, scheduleID),
+	})
 }
 
 func inspectCurrentRun(parent context.Context, c client.Client, opts options, namespace, scheduleID string, limiter *rate.Limiter) (*historypb.History, string, bool, error) {
