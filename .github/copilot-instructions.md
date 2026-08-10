@@ -4,6 +4,8 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 
 ## 1. Remove Redundant Code (Highest Priority)
 
+- Review changes holistically as well as line by line
+- Prefer simpler designs that remove branches, special cases, indirection, or moving parts
 - Remove code that doesn't add value to tests or implementation
 - Don't add unnecessary activities/complexity in tests - test only what you need
 - Question randomness in tests - test explicitly what you want
@@ -91,3 +93,34 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Don't do IO while holding locks - use side effect tasks
 - Clone data before releasing locks if it might be modified
 - Proto message fields accessed outside the workflow lock must be cloned, not aliased: use `common.CloneProto(...)` rather than returning the pointer directly.
+
+## 10. Review Feedback
+
+### Comment format
+
+Format every actionable finding exactly as:
+
+```markdown
+**[nit|small|med|high]** — One-line summary.
+
+**Issue:** Detailed explanation of the problem — what's wrong and why it matters.
+
+**Suggestion:** Concrete fix or alternative.
+```
+
+### Severity levels
+
+- `nit` — Stylistic or trivial improvement. Preference-based. Non-blocking.
+- `small` — Minor issue: slightly misleading name, small readability concern, or minor best-practice deviation. Does not affect correctness. Non-blocking.
+- `med` — Moderate issue: missing error handling, logic that is likely wrong in edge cases, test gaps, or design concerns. Affects correctness or maintainability. Blocking.
+- `high` — Serious issue: security vulnerability, data loss risk, crash/panic, race condition, broken functionality, or architectural violation. Blocking.
+
+Report findings at all four severity levels.
+Prefer a small number of high-confidence findings.
+Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
+Report concrete `nit` and `small` findings selectively, and consolidate related symptoms into a single comment that addresses the root issue.
+
+### Feedback style
+
+Be direct and practical, without fluff.
+Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change, not just that it should.
