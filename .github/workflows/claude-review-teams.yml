@@ -277,8 +277,8 @@ jobs:
             - `high` — Serious issue: security vulnerability, data loss risk, crash/panic, race condition, broken functionality, or architectural violation. Blocking.
 
             Report findings at all four severity levels.
-            Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
             Prefer a small number of high-confidence findings.
+            Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
             Report concrete `nit` and `small` findings too, but do not flood the review with cosmetic comments or report multiple symptoms of the same root issue.
 
             ## Feedback style
