@@ -412,6 +412,9 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 				})
 			}
 			payload.TransitionHistory = entries
+			last := th[len(th)-1]
+			payload.FailoverVersion = last.GetNamespaceFailoverVersion()
+			payload.TransitionCount = last.GetTransitionCount()
 		}
 		if currentHistory, err := versionhistory.GetCurrentVersionHistory(info.GetVersionHistories()); err == nil {
 			if lastItem, itemErr := versionhistory.GetLastVersionHistoryItem(currentHistory); itemErr == nil {
