@@ -148,8 +148,6 @@ func TestLoadInvocationArgsUnsupportedVariant(t *testing.T) {
 			Callback: &callbackspb.Callback{},
 		},
 	}
-	// The bare mock has no parent component wired up, so loadInvocationArgs must reject the variant
-	// before it reaches for the completion source.
 	_, err := cb.loadInvocationArgs(&chasm.MockMutableContext{}, nil)
 
 	var unprocessableErr *queueserrors.UnprocessableTaskError

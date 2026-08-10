@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestInvocationDestination(t *testing.T) {
+func TestCallbackDestination(t *testing.T) {
 	cases := []struct {
 		name     string
 		callback *callbackspb.Callback
@@ -24,11 +24,11 @@ func TestInvocationDestination(t *testing.T) {
 			callback: &callbackspb.Callback{
 				Variant: &callbackspb.Callback_Nexus_{
 					Nexus: &callbackspb.Callback_Nexus{
-						Url: "http://address:666/path/to/callback?query=string",
+						Url: "http://address:1234/path/to/callback?query=string",
 					},
 				},
 			},
-			want: "http://address:666",
+			want: "http://address:1234",
 		},
 		{
 			name: "internal nexus callbacks group by their well-known address",

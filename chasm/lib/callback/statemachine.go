@@ -14,8 +14,7 @@ import (
 )
 
 // callbackDestination returns the "destination" the callback is targeting. This value is used for the
-// outbound queue's rate limits and circuit breaking. For Nexus deliveries it is the target URL's scheme and
-// host. For Worker callbacks, it is the target task queue.
+// outbound queue's rate limits and circuit breaking.
 func callbackDestination(cb *callbackspb.Callback) (string, error) {
 	switch variant := cb.GetVariant().(type) {
 	case *callbackspb.Callback_Nexus_:

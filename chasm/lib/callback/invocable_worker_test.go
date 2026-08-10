@@ -38,14 +38,12 @@ const (
 	testWorkerTaskQueue = "completions-task-queue"
 	testWorkerService   = "HTTPAdapter"
 	testWorkerOperation = "DeliverAsWebhook"
-	// The destination the invocation task is grouped under, mirroring what invocationDestination
+	// The destination the invocation task is grouped under, mirroring what callbackDestination
 	// produces for testWorkerTaskQueue.
 	testWorkerDestination = "worker://completions-task-queue"
 )
 
-func newWorkerCallback(t *testing.T) *Callback {
-	t.Helper()
-
+func newWorkerCallback() *Callback {
 	return &Callback{
 		CallbackState: &callbackspb.CallbackState{
 			RequestId:        "request-id",
@@ -337,7 +335,7 @@ func TestExecuteInvocationTaskWorker_Outcomes(t *testing.T) {
 				matchingClient:    matchingClient,
 			}
 
-			callback := newWorkerCallback(t)
+			callback := newWorkerCallback()
 			engineCtx, callbackRef := newInvocationTaskTest(t, handler, callback, nexusrpc.CompleteOperationOptions{})
 
 			executeErr := handler.Execute(
@@ -436,7 +434,7 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 				matchingClient:    matchingClient,
 			}
 
-			callback := newWorkerCallback(t)
+			callback := newWorkerCallback()
 			engineCtx, callbackRef := newInvocationTaskTest(t, handler, callback, tc.completion)
 			require.NoError(t, handler.Execute(
 				engineCtx,
@@ -482,7 +480,7 @@ func TestInvocableWorkerWithoutAMatchingClient(t *testing.T) {
 		metricsHandler: metrics.NoopMetricsHandler,
 		logger:         log.NewTestLogger(),
 	}
-	invocable := invocableWorker{callback: newWorkerCallback(t).GetCallback().GetWorker()}
+	invocable := invocableWorker{callback: newWorkerCallback().GetCallback().GetWorker()}
 
 	result := invocable.Invoke(context.Background(), newTestNamespace(t), handler, nil, chasm.TaskAttributes{})
 

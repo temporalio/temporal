@@ -271,8 +271,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacks()
 		s.NoError(err)
 
 		deliveries := s.awaitWorkerCallbackDeliveries(handler, 2)
-		// Every attempt carries the same completion, and the same Nexus request ID, so that a handler
-		// can deduplicate a redelivery.
+		// Every attempt carries the same completion.
 		protorequire.ProtoEqual(t, deliveries[0], deliveries[1])
 
 		infos := s.awaitCallbackInfos(env, operationID, 1, enumspb.CALLBACK_STATE_SUCCEEDED)
@@ -502,9 +501,23 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacksDi
 	})
 
 	s.Run("OnConflictAttachWorkerCallbackFails", func(s *NexusStandaloneTestSuite) {
-		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
-			OperationId:         testvars.New(s.T()).Any().String(),
+		// Attaching to a running operation is rejected too, not just starting a new one. The operation
+		// has to exist for this to exercise the attach path at all, so start it with a Nexus callback,
+		// which this namespace does allow.
+		operationID := testvars.New(s.T()).Any().String()
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
 			Endpoint:            endpointName,
+			RequestId:           "first-request",
+			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb")},
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		_, err = s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "second-request",
 			CompletionCallbacks: []*commonpb.Callback{workerCompletionCallback("completions-task-queue", nil)},
 			IdConflictPolicy:    enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
 			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
@@ -512,6 +525,8 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationWorkerCallbacksDi
 				AttachCompletionCallbacks: true,
 			},
 		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgErr)
 		s.ErrorContains(err, "worker completion callbacks are not enabled for this namespace")
 	})
 

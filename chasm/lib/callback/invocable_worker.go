@@ -35,10 +35,6 @@ type invocableWorker struct {
 	completion nexusrpc.CompleteOperationOptions
 	// requestID is sent as the Nexus request ID so that a redelivery of this callback is idempotent from
 	// the handler's perspective.
-	//
-	// The source request ID is from when the worker callback was attached. If multiple worker callbacks
-	// were added in a single request, the end handler would see multiple worker callback invocations
-	// using the same request ID.
 	requestID string
 	attempt   int32
 }
@@ -94,8 +90,6 @@ func (n invocableWorker) Invoke(
 	return result
 }
 
-// buildDispatchRequest builds the matching request that hands the completion to the worker as a Nexus
-// StartOperation task.
 func (n invocableWorker) buildDispatchRequest(ns *namespace.Namespace) (*matchingservice.DispatchNexusTaskRequest, error) {
 	taskQueueName := n.callback.GetTaskQueueName()
 	if taskQueueName == "" {
@@ -106,8 +100,8 @@ func (n invocableWorker) buildDispatchRequest(ns *namespace.Namespace) (*matchin
 	if err != nil {
 		return nil, err
 	}
-	// The handler is a lang-SDK Nexus operation, so encode the input with the standard Temporal payload
-	// format (json/protobuf) that its data converter decodes back into an OnCompleteRequest.
+	// The Nexus handler on the worker side must have the signature OnCompleteRequest -> OnCompleteResponse.
+	// We encode it with the standard Temporal payload format (json/protobuf).
 	//
 	// TODO(chrsmith): This needs to be tagged in such a way that any client-side encryption will NOT
 	// attempt to decode the payload. (Because it was constructed by the Temporal server, and not the
@@ -124,10 +118,7 @@ func (n invocableWorker) buildDispatchRequest(ns *namespace.Namespace) (*matchin
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Request: &nexuspb.Request{
-			Header: map[string]string{},
-			// The invoker here is the server itself, which always understands Temporal failures. Asking
-			// for them keeps a failure's message and stack trace intact; a worker too old to notice this
-			// field answers in the legacy wire format, which classifyDispatchResult also handles.
+			Header:       map[string]string{},
 			Capabilities: &nexuspb.Request_Capabilities{TemporalFailureResponses: true},
 			Variant: &nexuspb.Request_StartOperation{
 				StartOperation: &nexuspb.StartOperationRequest{
@@ -135,7 +126,10 @@ func (n invocableWorker) buildDispatchRequest(ns *namespace.Namespace) (*matchin
 					Operation: n.callback.GetOperation(),
 					RequestId: n.requestID,
 					Payload:   input,
-					Links:     commonnexus.ConvertLinksToProto(n.completion.Links),
+					// TODO(chrsmith): Do not use the completion's links, but instead upgrade them into a
+					// Link_NexusOperationCallback variant. This Nexus operation wasn't started by the source SANO,
+					// it was started by a worker callback ON the source SANO.
+					Links: commonnexus.ConvertLinksToProto(n.completion.Links),
 				},
 			},
 		},
@@ -197,8 +191,8 @@ func (n invocableWorker) classifyDispatchResult(
 		return invocationResultOK{}, "success"
 	}
 
-	if outcome, ok := resp.GetOutcome().(*matchingservice.DispatchNexusTaskResponse_Response); ok &&
-		commonnexus.StartOperationResponseFailed(outcome.Response.GetStartOperation()) {
+	outcome, gotResponseOutcome := resp.GetOutcome().(*matchingservice.DispatchNexusTaskResponse_Response)
+	if gotResponseOutcome && commonnexus.StartOperationResponseFailed(outcome.Response.GetStartOperation()) {
 		// The worker received the completion but its operation failed. That outcome is the handler's
 		// answer, not a delivery problem, so the callback fails permanently instead of retrying.
 		logger.Error("Worker callback operation failed", tag.Error(err))

@@ -190,6 +190,8 @@ func TestMatchingDispatchResponseToError_LegacyHandlerError(t *testing.T) {
 			var failureErr *nexus.FailureError
 			require.ErrorAs(t, handlerErr.Cause, &failureErr)
 			require.Equal(t, "worker said no", failureErr.Failure.Message)
+			require.Equal(t, "worker said no", handlerErr.Message)
+			require.Contains(t, handlerErr.Error(), "worker said no")
 		})
 	}
 }

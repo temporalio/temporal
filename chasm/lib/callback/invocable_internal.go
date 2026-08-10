@@ -33,8 +33,7 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
-// nexusToTemporalFailure converts an unsuccessful completion's nexus.Failure into a failurepb.Failure proto instead.
-// failure.
+// nexusToTemporalFailure converts an unsuccessful completion's nexus.Failure into a failurepb.Failure proto.
 func nexusToTemporalFailure(nexusErr *nexus.OperationError) (*failurepb.Failure, error) {
 	failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(nexusErr)
 	if err != nil {
