@@ -632,3 +632,105 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 	)
 	s.Require().NoError(err)
 }
+
+// The three cases below pin the force/gate/deleted interaction that the shared
+// ShouldReplicateNamespace refactor reordered (the DELETED check moved ahead of
+// the force/global/cluster gate). Every other test in this suite passes
+// forceReplicate=false and a non-deleted state, so these are the only ones that
+// exercise the reordered branch.
+
+// TestHandleTransmissionTask_ForceReplicate_BypassesGate: forceReplicate must
+// publish even for a non-global, single-cluster namespace that the replicate
+// gate would otherwise skip.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_ForceReplicate_BypassesGate() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "force-ns",
+		State: enumspb.NAMESPACE_STATE_REGISTERED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a"}, // non-global + single cluster: gate would skip
+	}
+
+	// Payload correctness is pinned by the other tests via the shared converter;
+	// here we only assert that forceReplicate overrides the gate and publishes.
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		false, // isGlobalNamespace
+		nil,
+		true, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+// TestHandleTransmissionTask_ForceReplicate_DeletedNotReplicated: a DELETED
+// namespace must never be replicated, even under forceReplicate. No Publish
+// expectation is set, so controller.Finish() fails if Publish is called.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_ForceReplicate_DeletedNotReplicated() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "deleted-ns",
+		State: enumspb.NAMESPACE_STATE_DELETED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a", "cluster-b"},
+	}
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		true, // isGlobalNamespace
+		nil,
+		true, // forceReplicate
+	)
+	s.Require().NoError(err)
+}
+
+// TestHandleTransmissionTask_DeletedNotReplicated: a DELETED global multi-cluster
+// namespace is not replicated on the normal (non-force) path either.
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_DeletedNotReplicated() {
+	info := &persistencespb.NamespaceInfo{
+		Id:    primitives.NewUUID().String(),
+		Name:  "deleted-ns",
+		State: enumspb.NAMESPACE_STATE_DELETED,
+	}
+	config := &persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "cluster-a",
+		Clusters:          []string{"cluster-a", "cluster-b"},
+	}
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		false, // replicationClusterListUpdated
+		int64(0),
+		int64(1),
+		true, // isGlobalNamespace
+		nil,
+		false, // forceReplicate
+	)
+	s.Require().NoError(err)
+}

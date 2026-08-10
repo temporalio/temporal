@@ -65,60 +65,130 @@ func (r *replicator) HandleTransmissionTask(
 	forceReplicate bool,
 ) error {
 
-	if !forceReplicate {
-		if !isGlobalNamespace {
-			return nil
-		}
-		if len(replicationConfig.Clusters) <= 1 && !replicationClusterListUpdated {
-			return nil
-		}
-	}
 	if info.State == enumspb.NAMESPACE_STATE_DELETED {
-		// Don't replicate deleted namespace changes.
+		// Deleted namespaces are never replicated through this path (even under
+		// forceReplicate); namespace deletion is coordinated separately.
+		return nil
+	}
+	if !forceReplicate && !ShouldReplicateNamespace(
+		isGlobalNamespace,
+		replicationConfig.GetClusters(),
+		replicationClusterListUpdated,
+		info.State,
+	) {
 		return nil
 	}
 
-	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
-	task := &replicationspb.ReplicationTask_NamespaceTaskAttributes{
-		NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
-			NamespaceOperation: namespaceOperation,
-			Id:                 info.Id,
-			Info: &namespacepb.NamespaceInfo{
-				Name:        info.Name,
-				State:       info.State,
-				Description: info.Description,
-				OwnerEmail:  info.Owner,
-				Data:        info.Data,
-			},
-			Config: &namespacepb.NamespaceConfig{
-				WorkflowExecutionRetentionTtl: config.Retention,
-				HistoryArchivalState:          config.HistoryArchivalState,
-				HistoryArchivalUri:            config.HistoryArchivalUri,
-				VisibilityArchivalState:       config.VisibilityArchivalState,
-				VisibilityArchivalUri:         config.VisibilityArchivalUri,
-				BadBinaries:                   config.BadBinaries,
-				CustomSearchAttributeAliases:  config.CustomSearchAttributeAliases,
-			},
-			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-				ActiveClusterName: replicationConfig.ActiveClusterName,
-				Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
-			},
-			ConfigVersion:   configVersion,
-			FailoverVersion: failoverVersion,
-			FailoverHistory: convertFailoverHistoryToReplicationProto(failoverHistoy),
+	// Build the wire payload through the shared converter. Extracting this build
+	// step is groundwork for an eventual CHASM-based namespace replication
+	// transport: when that path is added it will build its requests through this
+	// same converter, so the detail->wire conversion can never diverge between the
+	// two transports. Today only this legacy queue path calls it. FailoverHistory
+	// is threaded in explicitly because callers pass it separately from
+	// replicationConfig.
+	detail := &persistencespb.NamespaceDetail{
+		Info:   info,
+		Config: config,
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: replicationConfig.GetActiveClusterName(),
+			State:             replicationConfig.GetState(),
+			Clusters:          replicationConfig.GetClusters(),
+			FailoverHistory:   failoverHistoy,
 		},
-	}
-
-	if replicationConfig.State == enumspb.REPLICATION_STATE_NORMAL {
-		task.NamespaceTaskAttributes.ReplicationConfig.State = replicationConfig.State
+		ConfigVersion:   configVersion,
+		FailoverVersion: failoverVersion,
 	}
 
 	return r.namespaceReplicationQueue.Publish(
 		ctx,
 		&replicationspb.ReplicationTask{
-			TaskType:   taskType,
-			Attributes: task,
+			TaskType: enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+			Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+				NamespaceTaskAttributes: NamespaceDetailToTaskAttributes(namespaceOperation, detail),
+			},
 		})
+}
+
+// ShouldReplicateNamespace reports whether a namespace mutation must be
+// propagated to peer clusters at all. It is extracted from HandleTransmissionTask
+// as a standalone gate in preparation for an eventual CHASM-based namespace
+// replication transport: that path will share this exact replicate/skip decision
+// so the two transports can never diverge on which mutations replicate. Today
+// only the legacy queue path (HandleTransmissionTask) calls it.
+//
+// A mutation replicates only when the namespace is global, has a peer to
+// replicate to (more than one cluster, or the cluster list just changed), and
+// is not being deleted (namespace deletion is coordinated through a separate
+// path and must never be pushed to peers).
+func ShouldReplicateNamespace(
+	isGlobalNamespace bool,
+	clusters []string,
+	replicationClusterListUpdated bool,
+	state enumspb.NamespaceState,
+) bool {
+	if state == enumspb.NAMESPACE_STATE_DELETED {
+		return false
+	}
+	if !isGlobalNamespace {
+		return false
+	}
+	if len(clusters) <= 1 && !replicationClusterListUpdated {
+		return false
+	}
+	return true
+}
+
+// NamespaceDetailToTaskAttributes converts a namespace detail into the
+// NamespaceTaskAttributes wire shape consumed by the receiver-side
+// apply-if-higher logic (TaskExecutor).
+//
+// It is extracted here as the single source of truth for that conversion in
+// preparation for an eventual CHASM-based namespace replication transport: when
+// that path is added it will build its outbound requests through this same
+// function, so a replicated field can never be emitted by one transport and
+// silently dropped by the other. Today only the legacy queue path
+// (HandleTransmissionTask) calls it; the extraction itself is a pure
+// no-behavior-change refactor.
+func NamespaceDetailToTaskAttributes(
+	namespaceOperation enumsspb.NamespaceOperation,
+	detail *persistencespb.NamespaceDetail,
+) *replicationspb.NamespaceTaskAttributes {
+	info := detail.GetInfo()
+	config := detail.GetConfig()
+	replicationConfig := detail.GetReplicationConfig()
+
+	attributes := &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: namespaceOperation,
+		Id:                 info.GetId(),
+		Info: &namespacepb.NamespaceInfo{
+			Name:        info.GetName(),
+			State:       info.GetState(),
+			Description: info.GetDescription(),
+			OwnerEmail:  info.GetOwner(),
+			Data:        info.GetData(),
+		},
+		Config: &namespacepb.NamespaceConfig{
+			WorkflowExecutionRetentionTtl: config.GetRetention(),
+			HistoryArchivalState:          config.GetHistoryArchivalState(),
+			HistoryArchivalUri:            config.GetHistoryArchivalUri(),
+			VisibilityArchivalState:       config.GetVisibilityArchivalState(),
+			VisibilityArchivalUri:         config.GetVisibilityArchivalUri(),
+			BadBinaries:                   config.GetBadBinaries(),
+			CustomSearchAttributeAliases:  config.GetCustomSearchAttributeAliases(),
+		},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: replicationConfig.GetActiveClusterName(),
+			Clusters:          convertClusterReplicationConfigToProto(replicationConfig.GetClusters()),
+		},
+		ConfigVersion:   detail.GetConfigVersion(),
+		FailoverVersion: detail.GetFailoverVersion(),
+		FailoverHistory: convertFailoverHistoryToReplicationProto(replicationConfig.GetFailoverHistory()),
+	}
+
+	if replicationConfig.GetState() == enumspb.REPLICATION_STATE_NORMAL {
+		attributes.ReplicationConfig.State = replicationConfig.GetState()
+	}
+	return attributes
 }
 
 func convertClusterReplicationConfigToProto(
