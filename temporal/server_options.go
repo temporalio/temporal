@@ -67,15 +67,7 @@ type (
 		tokenProvider                   auth.TokenProvider
 		testHooks                       *testhooks.TestHooks
 	}
-
-	preResolvedServerOptions struct {
-		options *serverOptions
-	}
 )
-
-func (o preResolvedServerOptions) apply(target *serverOptions) {
-	*target = *o.options
-}
 
 func newServerOptions(opts []ServerOption) *serverOptions {
 	so := &serverOptions{

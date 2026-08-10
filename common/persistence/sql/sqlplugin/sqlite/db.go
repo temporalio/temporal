@@ -2,9 +2,7 @@ package sqlite
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/log"
@@ -17,10 +15,7 @@ type db struct {
 	dbKind sqlplugin.DbKind
 	dbName string
 
-	mu        sync.RWMutex
-	closeOnce sync.Once
-	closeErr  error
-	onClose   []func() error
+	onClose func() error
 
 	db        *sqlx.DB
 	tx        *sqlx.Tx
@@ -43,12 +38,11 @@ func newDB(
 	logger log.Logger,
 ) *db {
 	mdb := &db{
-		dbKind:  dbKind,
-		dbName:  dbName,
-		onClose: make([]func() error, 0),
-		db:      xdb,
-		tx:      tx,
-		logger:  logger,
+		dbKind: dbKind,
+		dbName: dbName,
+		db:     xdb,
+		tx:     tx,
+		logger: logger,
 	}
 	mdb.conn = xdb
 	if tx != nil {
@@ -78,25 +72,17 @@ func (mdb *db) Rollback() error {
 }
 
 func (mdb *db) OnClose(hook func() error) {
-	mdb.mu.Lock()
-	mdb.onClose = append(mdb.onClose, hook)
-	mdb.mu.Unlock()
+	mdb.onClose = hook
 }
 
 // Close closes the connection to the sqlite db
 func (mdb *db) Close() error {
-	mdb.closeOnce.Do(func() {
-		mdb.mu.RLock()
-		defer mdb.mu.RUnlock()
-
-		for _, hook := range mdb.onClose {
-			// de-registers the database from conn pool
-			mdb.closeErr = errors.Join(mdb.closeErr, hook())
-		}
-	})
-
 	// database connection will be automatically closed by the hook handler when all references are removed
-	return mdb.closeErr
+	if mdb.onClose == nil {
+		return nil
+	}
+	// de-registers the database from conn pool
+	return mdb.onClose()
 }
 
 // PluginName returns the name of the plugin

@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -106,7 +105,6 @@ type (
 		DefaultTestCluster        PersistenceTestCluster
 		Logger                    log.Logger
 		TracerProvider            trace.TracerProvider
-		databaseLease             sqlplugin.DatabaseLease
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -205,7 +203,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 
 	clusterName := clusterMetadataConfig.CurrentClusterName
 
-	s.SetupTestDatabase()
+	s.DefaultTestCluster.SetupTestDatabase()
 
 	cfg := s.DefaultTestCluster.Config()
 	serializer := serialization.NewSerializer()
@@ -293,23 +291,6 @@ func (s *TestBase) fatalOnError(msg string, err error) {
 	}
 }
 
-// SetupTestDatabase acquires database ownership before setting up the test database.
-func (s *TestBase) SetupTestDatabase() {
-	cfg := s.DefaultTestCluster.Config()
-	var err error
-	s.databaseLease, err = sql.AcquireDatabaseLeases(cfg)
-	s.fatalOnError("AcquireDatabaseLeases", err)
-	s.DefaultTestCluster.SetupTestDatabase()
-}
-
-// TearDownTestDatabase releases database ownership before tearing down the test database.
-func (s *TestBase) TearDownTestDatabase() {
-	if err := s.databaseLease.Close(); err != nil {
-		s.Logger.Error("Close database leases", tag.Error(err))
-	}
-	s.DefaultTestCluster.TearDownTestDatabase()
-}
-
 // TearDownWorkflowStore to cleanup
 func (s *TestBase) TearDownWorkflowStore() {
 	s.TaskMgr.Close()
@@ -321,7 +302,7 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.NexusEndpointManager.Close()
 	s.NamespaceReplicationQueue.Close()
 	s.Factory.Close()
-	s.TearDownTestDatabase()
+	s.DefaultTestCluster.TearDownTestDatabase()
 }
 
 // EqualTimesWithPrecision assertion that two times are equal within precision

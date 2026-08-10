@@ -10,8 +10,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/resolver"
 )
 
 func TestConnPoolLeaseKeepsDatabaseOpenAfterWrappersClose(t *testing.T) {
@@ -21,7 +19,7 @@ func TestConnPoolLeaseKeepsDatabaseOpenAfterWrappersClose(t *testing.T) {
 	lease, err := pool.AcquireLease(cfg)
 	require.NoError(t, err)
 
-	db, release, err := pool.Allocate(cfg, resolver.NewNoopResolver(), log.NewNoopLogger(), openConnPoolTestDB)
+	db, release, err := pool.Allocate(cfg, openConnPoolTestDB)
 	require.NoError(t, err)
 	require.NoError(t, db.Ping())
 	require.NoError(t, release())
@@ -107,42 +105,6 @@ func TestConnPoolWrapperReleaseUsesOriginalDSN(t *testing.T) {
 	require.Empty(t, pool.pool)
 }
 
-func TestConnPoolUsesOriginalDSNToCreateConnection(t *testing.T) {
-	pool := newConnPool()
-	cfg := newConnPoolTestConfig(t.Name())
-	originalDSN, err := buildDSN(cfg)
-	require.NoError(t, err)
-
-	db, release, err := pool.Allocate(
-		cfg,
-		resolver.NewNoopResolver(),
-		log.NewNoopLogger(),
-		func(
-			cfg *config.SQL,
-			_ resolver.ServiceResolver,
-			_ log.Logger,
-			dsn string,
-		) (*sqlx.DB, error) {
-			cfg.DatabaseName = "mutated"
-			return sqlx.Open(goSQLDriverName, dsn)
-		},
-	)
-	require.NoError(t, err)
-	_, err = db.Exec("CREATE TABLE sentinel (value INTEGER)")
-	require.NoError(t, err)
-
-	originalDB, err := sqlx.Open(goSQLDriverName, originalDSN)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, originalDB.Close()) })
-	var tables int
-	require.NoError(t, originalDB.Get(
-		&tables,
-		"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sentinel'",
-	))
-	require.Equal(t, 1, tables)
-	require.NoError(t, release())
-}
-
 func TestBuildDSNDoesNotMutateConfig(t *testing.T) {
 	cfg := &config.SQL{DatabaseName: t.Name()}
 
@@ -188,12 +150,7 @@ func TestConnPoolConcurrentAcquireAndRelease(t *testing.T) {
 				errs <- err
 				return
 			}
-			db, release, err := pool.Allocate(
-				cfg,
-				resolver.NewNoopResolver(),
-				log.NewNoopLogger(),
-				openConnPoolTestDB,
-			)
+			db, release, err := pool.Allocate(cfg, openConnPoolTestDB)
 			if err == nil {
 				err = db.Ping()
 			}
@@ -259,12 +216,7 @@ func allocateConnPoolTestDB(
 	cfg *config.SQL,
 ) (*sqlx.DB, func() error) {
 	t.Helper()
-	db, release, err := pool.Allocate(
-		cfg,
-		resolver.NewNoopResolver(),
-		log.NewNoopLogger(),
-		openConnPoolTestDB,
-	)
+	db, release, err := pool.Allocate(cfg, openConnPoolTestDB)
 	require.NoError(t, err)
 	require.NoError(t, db.Ping())
 	return db, release
@@ -282,9 +234,6 @@ func newConnPoolTestConfig(databaseName string) *config.SQL {
 }
 
 func openConnPoolTestDB(
-	_ *config.SQL,
-	_ resolver.ServiceResolver,
-	_ log.Logger,
 	dsn string,
 ) (*sqlx.DB, error) {
 	return sqlx.Open(goSQLDriverName, dsn)
