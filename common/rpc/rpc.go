@@ -68,12 +68,8 @@ type RPCFactory struct {
 	// A OnceValue wrapper for createLocalFrontendGRPCConnection.
 	localFrontendGRPCConn func() *grpc.ClientConn
 
-	// remoteFrontendGRPCConns caches connections created by
-	// CreateRemoteFrontendGRPCConnection, keyed by rpcAddress, so that repeated
-	// calls for the same remote cluster reuse a connection instead of leaking
-	// one per call. A sync.Map is used instead of a mutex-guarded map so that
-	// lookups for one rpcAddress never block on dialing (or on the TLS config
-	// provider's disk I/O) for a different, unrelated rpcAddress.
+	// Remote frontend connections, keyed by rpcAddress. Dialing one address
+	// must not block lookups for another.
 	remoteFrontendGRPCConns sync.Map // map[string]*grpc.ClientConn
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
@@ -237,32 +233,25 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	return ip
 }
 
-// CreateRemoteFrontendGRPCConnection returns a cached gRPC connection for cross-cluster
-// calls to rpcAddress, dialing and caching one on first use. Connections are reused for
-// the lifetime of the process rather than being re-dialed on every call.
+// CreateRemoteFrontendGRPCConnection returns the shared connection for cross-cluster
+// calls to rpcAddress, dialing it on first use. Callers must not close it.
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	if conn, ok := d.remoteFrontendGRPCConns.Load(rpcAddress); ok {
-		return conn.(*grpc.ClientConn)
+		return conn.(*grpc.ClientConn) //nolint:revive // unchecked-type-assertion
 	}
 
 	conn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
-	// dial() only returns nil after calling logger.Fatal, which terminates the
-	// process. Avoid caching a nil connection in case that ever changes (e.g.
-	// under a non-fatal test logger), which would otherwise permanently wedge
-	// this address.
+	// Fatal may return under a non-fatal logger; caching nil would wedge this address.
 	if conn == nil {
 		return nil
 	}
 
-	// Dialing happens outside of any lock, so two goroutines can race to dial
-	// the same rpcAddress concurrently. LoadOrStore resolves the race: the
-	// loser closes its redundant connection and both callers converge on the
-	// same cached one.
+	// Dialed outside the lock, so concurrent callers can race; the loser closes its own.
 	actual, loaded := d.remoteFrontendGRPCConns.LoadOrStore(rpcAddress, conn)
 	if loaded {
 		_ = conn.Close()
 	}
-	return actual.(*grpc.ClientConn)
+	return actual.(*grpc.ClientConn) //nolint:revive // unchecked-type-assertion
 }
 
 func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
@@ -309,9 +298,8 @@ func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.C
 	return d.dial(rpcAddress, tlsClientConfig, append(additionalDialOptions, keepAliveOption)...)
 }
 
-// CreateLocalFrontendGRPCConnection returns a cached connection for internal frontend
-// calls, dialing it on first use. d.frontendURL never changes for the lifetime of the
-// factory, so the connection is reused rather than re-dialed on every call.
+// CreateLocalFrontendGRPCConnection returns the shared connection for internal frontend
+// calls, dialing it on first use. Callers must not close it.
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 	return d.localFrontendGRPCConn()
 }
