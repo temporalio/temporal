@@ -137,6 +137,7 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		serializer                 serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		parentResends              verifychildworkflowcompletionrecorded.InFlightResends
 		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
 		versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
@@ -742,7 +743,7 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	req *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.workflowConsistencyChecker, e.shardContext)
+	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.workflowConsistencyChecker, e.shardContext, &e.parentResends)
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(

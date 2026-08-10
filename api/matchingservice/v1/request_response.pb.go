@@ -2008,8 +2008,12 @@ type DescribeTaskQueuePartitionRequest struct {
 	// Report list of pollers for requested task queue types and versions
 	ReportPollers                 bool `protobuf:"varint,5,opt,name=report_pollers,json=reportPollers,proto3" json:"report_pollers,omitempty"`
 	ReportInternalTaskQueueStatus bool `protobuf:"varint,6,opt,name=report_internal_task_queue_status,json=reportInternalTaskQueueStatus,proto3" json:"report_internal_task_queue_status,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	// Only process the request if the task queue partition is already loaded, and do not refresh
+	// the idle timeout of described physical task queues. Explicitly requested physical task queues
+	// may still be loaded to serve the request.
+	OnlyIfLoaded  bool `protobuf:"varint,7,opt,name=only_if_loaded,json=onlyIfLoaded,proto3" json:"only_if_loaded,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DescribeTaskQueuePartitionRequest) Reset() {
@@ -2080,6 +2084,13 @@ func (x *DescribeTaskQueuePartitionRequest) GetReportPollers() bool {
 func (x *DescribeTaskQueuePartitionRequest) GetReportInternalTaskQueueStatus() bool {
 	if x != nil {
 		return x.ReportInternalTaskQueueStatus
+	}
+	return false
+}
+
+func (x *DescribeTaskQueuePartitionRequest) GetOnlyIfLoaded() bool {
+	if x != nil {
+		return x.OnlyIfLoaded
 	}
 	return false
 }
@@ -6249,14 +6260,15 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x15stats_by_priority_key\x18\x04 \x03(\v2t.temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.StatsByPriorityKeyEntryR\x12statsByPriorityKey\x1ap\n" +
 	"\x17StatsByPriorityKeyEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12?\n" +
-	"\x05value\x18\x02 \x01(\v2).temporal.api.taskqueue.v1.TaskQueueStatsR\x05value:\x028\x01\"\x94\x03\n" +
+	"\x05value\x18\x02 \x01(\v2).temporal.api.taskqueue.v1.TaskQueueStatsR\x05value:\x028\x01\"\xba\x03\n" +
 	"!DescribeTaskQueuePartitionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12f\n" +
 	"\x14task_queue_partition\x18\x02 \x01(\v24.temporal.server.api.taskqueue.v1.TaskQueuePartitionR\x12taskQueuePartition\x12P\n" +
 	"\bversions\x18\x03 \x01(\v24.temporal.api.taskqueue.v1.TaskQueueVersionSelectionR\bversions\x12!\n" +
 	"\freport_stats\x18\x04 \x01(\bR\vreportStats\x12%\n" +
 	"\x0ereport_pollers\x18\x05 \x01(\bR\rreportPollers\x12H\n" +
-	"!report_internal_task_queue_status\x18\x06 \x01(\bR\x1dreportInternalTaskQueueStatus\"\xa0\x03\n" +
+	"!report_internal_task_queue_status\x18\x06 \x01(\bR\x1dreportInternalTaskQueueStatus\x12$\n" +
+	"\x0eonly_if_loaded\x18\a \x01(\bR\fonlyIfLoaded\"\xa0\x03\n" +
 	"\"DescribeTaskQueuePartitionResponse\x12\x9a\x01\n" +
 	"\x16versions_info_internal\x18\x01 \x03(\v2d.temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntryR\x14versionsInfoInternal\x12S\n" +
 	"\n" +
