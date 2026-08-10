@@ -15,9 +15,8 @@ import (
 const defaultCallTimeout = 30 * time.Second
 
 type Caller struct {
-	Scheme string
-	Host   string
-	// Timeout bounds a single Call. Zero means defaultCallTimeout.
+	Scheme  string
+	Host    string
 	Timeout time.Duration
 }
 
