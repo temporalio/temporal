@@ -66,6 +66,17 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
+	// Version 13 bundles two fixes so only a single activation deploy is
+	// needed for both -- see the TODO on CurrentTweakablePolicies below.
+	//   - RefreshBeforeMigrationCheck: reconcile running-workflow status before
+	//     evaluating CHASM migration eligibility, so an actively-firing
+	//     schedule can observe an empty RunningWorkflows window and migrate
+	//     instead of deferring forever.
+	//   - PreserveMigratedStartIDs: preserve workflow/request IDs already
+	//     assigned to starts migrated from CHASM, preserving idempotency
+	//     identity across the migration handoff.
+	RefreshBeforeMigrationCheck = 13
+	PreserveMigratedStartIDs    = 13
 )
 
 const (
@@ -215,7 +226,15 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           TriggerImmediatelyTimestamp,
+		// TODO: bump to RefreshBeforeMigrationCheck/PreserveMigratedStartIDs (13)
+		// in a follow-up deploy to activate both v13 fixes at once. Activating a
+		// new version in the same deploy that introduces it is unsafe: workflows
+		// would record the new version, and a rollback to the prior release
+		// (which has no knowledge of it) could not deterministically replay those
+		// histories, wedging the scheduler workflows. This release only needs to
+		// *understand* v13 so it is a safe rollback target for the follow-up
+		// deploy that activates it.
+		Version: TriggerImmediatelyTimestamp,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -332,6 +351,13 @@ func (s *scheduler) run() error {
 				false,
 				nil,
 			)
+		}
+
+		if s.hasMinVersion(RefreshBeforeMigrationCheck) &&
+			s.tweakables.EnableCHASMMigration && !s.State.PendingMigration &&
+			s.State.NeedRefresh {
+			s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
+			s.State.NeedRefresh = false
 		}
 
 		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
@@ -1473,8 +1499,15 @@ func (s *scheduler) startWorkflow(
 	newWorkflow *workflowpb.NewWorkflowExecutionInfo,
 ) (*schedulepb.ScheduleActionResult, error) {
 	nominalTimeSec := start.NominalTime.AsTime().UTC().Truncate(time.Second)
-	workflowID := newWorkflow.WorkflowId
-	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp {
+	workflowID := ""
+	if s.hasMinVersion(PreserveMigratedStartIDs) {
+		workflowID = start.WorkflowId
+	}
+	if workflowID == "" {
+		workflowID = newWorkflow.WorkflowId
+	}
+	if (!s.hasMinVersion(PreserveMigratedStartIDs) || start.WorkflowId == "") &&
+		(start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp) {
 		// must match AppendedTimestampForValidation
 		workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
 	}
@@ -1510,6 +1543,13 @@ func (s *scheduler) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
+	requestID := ""
+	if s.hasMinVersion(PreserveMigratedStartIDs) {
+		requestID = start.RequestId
+	}
+	if requestID == "" {
+		requestID = s.newUUIDString()
+	}
 	req := &schedulespb.StartWorkflowRequest{
 		Request: &workflowservice.StartWorkflowExecutionRequest{
 			WorkflowId:               workflowID,
@@ -1520,7 +1560,7 @@ func (s *scheduler) startWorkflow(
 			WorkflowRunTimeout:       newWorkflow.WorkflowRunTimeout,
 			WorkflowTaskTimeout:      newWorkflow.WorkflowTaskTimeout,
 			Identity:                 s.identity(),
-			RequestId:                s.newUUIDString(),
+			RequestId:                requestID,
 			WorkflowIdReusePolicy:    reusePolicy,
 			RetryPolicy:              newWorkflow.RetryPolicy,
 			Memo:                     newWorkflow.Memo,
