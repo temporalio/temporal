@@ -268,7 +268,8 @@ jobs:
 
             ## Tone
 
-            Be direct and practical, without fluff. Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change, not just that it should.
+            Be direct and practical, without fluff.
+            Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change, not just that it should.
 
             ## Posting rules
 
