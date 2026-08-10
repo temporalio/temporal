@@ -261,7 +261,7 @@ jobs:
 
             Format every actionable finding, whether inline or top-level, exactly as:
             ```markdown
-            **severity** — One-line summary.
+            **[severity]** — One-line summary.
 
             **Issue:** Detailed explanation of the problem — what's wrong and why it matters.
 
