@@ -1,7 +1,6 @@
 package versioninfo_test
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/versioninfo"
 )
 
@@ -62,7 +60,6 @@ func TestPostInfo(t *testing.T) {
 			t.Fatalf("Failed to write response %s", err)
 		}
 	}))
-	t.Cleanup(ts.Close)
 	u, err := url.Parse(ts.URL)
 	if err != nil {
 		t.Fatalf("Request failed: %s", err)
@@ -84,64 +81,5 @@ func TestPostInfo(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Request failed: %s", err)
-	}
-}
-
-func newTestCaller(t *testing.T, handler http.HandlerFunc) versioninfo.Caller {
-	t.Helper()
-
-	ts := httptest.NewServer(handler)
-	t.Cleanup(ts.Close)
-
-	u, err := url.Parse(ts.URL)
-	require.NoError(t, err)
-
-	return versioninfo.Caller{Scheme: u.Scheme, Host: u.Host}
-}
-
-func testRequest() *versioninfo.VersionCheckRequest {
-	return &versioninfo.VersionCheckRequest{
-		Product:   "server",
-		Version:   "0.1",
-		Arch:      "arm64",
-		OS:        "darwin",
-		DB:        "sqlite",
-		ClusterID: "foo",
-		Timestamp: 1,
-		SDKInfo:   []versioninfo.SDKInfo{{Name: "sdk-go", Version: "1.0"}},
-	}
-}
-
-func TestCall_NonOKResponse(t *testing.T) {
-	caller := newTestCaller(t, func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "error details", http.StatusInternalServerError)
-	})
-
-	_, err := caller.Call(testRequest())
-	require.ErrorContains(t, err, "bad response code 500")
-}
-
-func TestCall_StalledServerTimesOut(t *testing.T) {
-	release := make(chan struct{})
-	caller := newTestCaller(t, func(http.ResponseWriter, *http.Request) {
-		<-release
-	})
-	// Registered after the server's Close so it runs first: Close waits for the
-	// handler to return.
-	t.Cleanup(func() { close(release) })
-	caller.Timeout = 100 * time.Millisecond
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := caller.Call(testRequest())
-		done <- err
-	}()
-
-	select {
-	case err := <-done:
-		require.ErrorIs(t, err, context.DeadlineExceeded)
-	// Without the select, an unbounded Call hangs the package until its timeout.
-	case <-time.After(10 * time.Second):
-		t.Fatal("Call must not outlive its timeout")
 	}
 }

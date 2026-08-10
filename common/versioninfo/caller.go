@@ -9,19 +9,15 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"time"
 )
 
-const defaultCallTimeout = 30 * time.Second
-
 type Caller struct {
-	Scheme  string
-	Host    string
-	Timeout time.Duration
+	Scheme string
+	Host   string
 }
 
 func NewCaller() Caller {
-	return Caller{Scheme: "https", Host: "version-info.temporal.io"}
+	return Caller{"https", "version-info.temporal.io"}
 }
 
 func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
@@ -37,11 +33,7 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	if c.Scheme == "https" {
 		tr.TLSClientConfig = &tls.Config{}
 	}
-	timeout := c.Timeout
-	if timeout == 0 {
-		timeout = defaultCallTimeout
-	}
-	client := &http.Client{Transport: tr, Timeout: timeout}
+	client := &http.Client{Transport: tr}
 	reqBody, err := json.Marshal(r)
 	if err != nil {
 		return nil, err
