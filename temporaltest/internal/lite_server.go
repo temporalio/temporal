@@ -5,7 +5,6 @@ package temporalite
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -22,8 +21,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	persistencesql "go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/schema/sqlite"
@@ -207,7 +204,6 @@ func (cfg *LiteServerConfig) validate() error {
 type LiteServer struct {
 	internal         temporal.Server
 	frontendHostPort string
-	databaseLease    sqlplugin.DatabaseLease
 }
 
 // NewLiteServer initializes a Server with a SQLite backend.
@@ -217,24 +213,13 @@ type LiteServer struct {
 //
 // Always use BaseConfig instead of the WithConfig server option, as WithConfig overrides all
 // LiteServer specific settings.
-func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) (_ *LiteServer, retErr error) {
+func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) (*LiteServer, error) {
 	liteConfig.applyDefaults()
 	if err := liteConfig.validate(); err != nil {
 		return nil, err
 	}
 
 	liteConfig.apply(liteConfig.BaseConfig)
-
-	databaseLease, err := persistencesql.AcquireDatabaseLeases(liteConfig.BaseConfig.Persistence)
-	if err != nil {
-		return nil, fmt.Errorf("unable to acquire database lease: %w", err)
-	}
-	leaseTransferred := false
-	defer func() {
-		if !leaseTransferred {
-			retErr = errors.Join(retErr, databaseLease.Close())
-		}
-	}()
 
 	sqlConfig := liteConfig.BaseConfig.Persistence.DataStores[sqliteplugin.PluginName].SQL
 
@@ -311,10 +296,8 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 	s := &LiteServer{
 		internal:         srv,
 		frontendHostPort: liteConfig.BaseConfig.PublicClient.HostPort,
-		databaseLease:    databaseLease,
 	}
 
-	leaseTransferred = true
 	return s, nil
 }
 
@@ -322,20 +305,14 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 func (s *LiteServer) Start() error {
 	// We wrap Server instead of simply embedding it in the LiteServer struct so
 	// that it's possible to add additional lifecycle hooks here if necessary.
-	if err := s.internal.Start(); err != nil {
-		return errors.Join(err, s.databaseLease.Close())
-	}
-	return nil
+	return s.internal.Start()
 }
 
 // Stop the server.
 func (s *LiteServer) Stop() error {
 	// We wrap Server instead of simply embedding it in the LiteServer struct so
 	// that it's possible to add additional lifecycle hooks here if necessary.
-	return errors.Join(
-		s.internal.Stop(),
-		s.databaseLease.Close(),
-	)
+	return s.internal.Stop()
 }
 
 // NewClient initializes a client ready to communicate with the Temporal
