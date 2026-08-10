@@ -279,7 +279,7 @@ jobs:
             Report findings at all four severity levels.
             Prefer a small number of high-confidence findings.
             Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
-            Report concrete `nit` and `small` findings too, but do not flood the review with cosmetic comments or report multiple symptoms of the same root issue.
+            Report concrete `nit` and `small` findings selectively, and consolidate related symptoms into a single comment that addresses the root issue.
 
             ## Feedback style
 
