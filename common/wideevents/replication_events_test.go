@@ -159,6 +159,8 @@ func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePaylo
 		FirstEventID:        1,
 		NextEventID:         8,
 		Attempt:             2,
+		ToCluster:           9,
+		Priority:            "TASK_PRIORITY_HIGH",
 		EventVersionHistory: []VersionHistoryEntry{{EventID: 9, Version: 5}},
 		State:               "Running",
 		Status:              "Unspecified",
@@ -233,6 +235,14 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 			"user_timer_count":      int64(3),
 			"child_execution_count": int64(2),
 			"update_count":          int64(1),
+		}),
+		ReplicationSkipped: mergeFields(base, map[string]any{
+			"phase":          "skipped",
+			"to_cluster":     int64(9),
+			"priority":       "TASK_PRIORITY_HIGH",
+			"source_task_id": int64(42),
+			"attempt":        int64(2),
+			"error":          "boom",
 		}),
 	}
 

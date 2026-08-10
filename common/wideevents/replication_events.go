@@ -15,6 +15,11 @@ const (
 	ReplicationSent      ReplicationPhase = "sent"
 	ReplicationExecuting ReplicationPhase = "executing"
 	ReplicationApplied   ReplicationPhase = "applied"
+	// ReplicationSkipped is a terminal source-side phase: the sender could not build ("convert")
+	// the task after exhausting retries and skipped it (advanced the watermark past it) instead of
+	// wedging the stream. Such a task never reaches executing/applied, so this is where its trace
+	// ends. See StreamSenderImpl.recordStuckTaskSkipped.
+	ReplicationSkipped ReplicationPhase = "skipped"
 )
 
 const (
@@ -51,6 +56,13 @@ type ReplicationLifecyclePayload struct {
 	NextEventID  int64
 	// received-only
 	Attempt int32
+	// skipped-only
+	// ToCluster is the target (client) cluster the sender stream feeds; Priority is the task's
+	// replication priority tier. Both are recorded on a skip because a skipped task emits no
+	// downstream events: ToCluster identifies which passive is missing the dropped state, and
+	// Priority tells whether it was live traffic (high) or force replication (low).
+	ToCluster int32
+	Priority  string
 	// event_version_history is the (event_id, version) branch. It is emitted on executing (from the
 	// task) and applied (from the resulting mutable state); the version disambiguates which history
 	// branch the events are on.
@@ -128,6 +140,8 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 		attrs = append(attrs, log.Int64("attempt", int64(p.Attempt)))
 	case ReplicationApplied:
 		attrs = p.appendApplied(attrs)
+	case ReplicationSkipped:
+		attrs = p.appendSkipped(attrs)
 	default:
 	}
 	return attrs
@@ -146,6 +160,24 @@ func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyV
 	}
 	if p.NextEventID != 0 {
 		attrs = append(attrs, log.Int64("next_event_id", p.NextEventID))
+	}
+	return attrs
+}
+
+// appendSkipped emits the fields for a terminal "skipped" event: source_task_id ties it back to
+// the source cluster's replication queue, attempt records how many convert attempts were exhausted
+// before giving up, and error carries the last convert failure so an operator can investigate.
+func (p ReplicationLifecyclePayload) appendSkipped(attrs []log.KeyValue) []log.KeyValue {
+	attrs = append(attrs, log.Int64("to_cluster", int64(p.ToCluster)))
+	if p.Priority != "" {
+		attrs = append(attrs, log.String("priority", p.Priority))
+	}
+	if p.SourceTaskID != 0 {
+		attrs = append(attrs, log.Int64("source_task_id", p.SourceTaskID))
+	}
+	attrs = append(attrs, log.Int64("attempt", int64(p.Attempt)))
+	if p.Error != "" {
+		attrs = append(attrs, log.String("error", p.Error))
 	}
 	return attrs
 }

@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -25,6 +27,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -1091,6 +1094,9 @@ func (s *streamSenderSuite) setupSingleFailingTask(convertErr error) (beginInclu
 		nil, nil, &persistencespb.NamespaceReplicationConfig{
 			Clusters: []string{"source_cluster", "target_cluster"},
 		}, 100), nil).AnyTimes()
+	// Only exercised when EmitReplicationLifecycleEvents is on (the skipped wide event resolves the
+	// namespace name); harmless for tests that keep lifecycle events off.
+	mockRegistry.EXPECT().GetNamespaceName(namespace.ID("1")).Return(namespace.Name("test-ns"), nil).AnyTimes()
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
@@ -1121,6 +1127,39 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_Enabled() {
 		endExclusiveWatermark,
 	)
 	s.NoError(err)
+}
+
+func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_EmitsWideEvent() {
+	s.config.ReplicationStreamSenderSkipStuckTask = func() bool { return true }
+	// With lifecycle events on, skipping a stuck task must emit exactly one terminal "skipped"
+	// ReplicationLifecycle event carrying the source_task_id join key.
+	s.config.EmitReplicationLifecycleEvents = func() bool { return true }
+	capture := &eventCaptureLogger{}
+	s.shardContext.EXPECT().GetEventLogger().Return(capture).AnyTimes()
+
+	beginInclusiveWatermark, _ := s.setupSingleFailingTask(errors.New("boom"))
+	s.server.EXPECT().Send(gomock.Any()).Return(nil).Times(1)
+
+	err := s.streamSender.sendTasks(
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		beginInclusiveWatermark,
+		beginInclusiveWatermark+100,
+	)
+	s.NoError(err)
+
+	s.Require().Len(capture.records, 1)
+	rec := capture.records[0]
+	s.Equal(wideevents.ReplicationLifecycleEventName, rec.EventName())
+	fields := map[string]otellog.Value{}
+	rec.WalkAttributes(func(kv otellog.KeyValue) bool {
+		fields[kv.Key] = kv.Value
+		return true
+	})
+	s.Equal(string(wideevents.ReplicationSkipped), fields["phase"].AsString())
+	s.Equal(beginInclusiveWatermark, fields["source_task_id"].AsInt64())
+	s.Equal("convert: boom", fields["error"].AsString())
+	s.Equal(int64(s.clientShardKey.ClusterID), fields["to_cluster"].AsInt64())
+	s.Equal(enumsspb.TASK_PRIORITY_UNSPECIFIED.String(), fields["priority"].AsString())
 }
 
 func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_Disabled() {
@@ -1306,4 +1345,18 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_SendFailureNotSkipped() 
 		endExclusiveWatermark,
 	)
 	s.Error(err)
+}
+
+// eventCaptureLogger is a minimal OTEL logger that records emitted wide-event records for
+// assertions in tests that exercise the ReplicationLifecycle "skipped" event.
+type eventCaptureLogger struct {
+	embedded.Logger
+	records []otellog.Record
+}
+
+func (c *eventCaptureLogger) Emit(_ context.Context, r otellog.Record) {
+	c.records = append(c.records, r)
+}
+func (c *eventCaptureLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
 }

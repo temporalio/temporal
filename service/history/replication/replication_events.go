@@ -134,6 +134,51 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	wideevents.Emit(logger, payload)
 }
 
+// emitReplicationSkipped emits a best-effort terminal "skipped" ReplicationLifecycle event when the
+// sender gives up building ("converting") a task and skips it. It mirrors emitReplicationSent but is
+// driven by the raw source task: conversion failed, so there is no built replication task to read
+// task-type/versioned-transition/parent detail from. It records the source task type, the
+// source_task_id join key, the exhausted attempt count, and the last convert error. It never
+// affects control flow.
+func (s *StreamSenderImpl) emitReplicationSkipped(
+	item tasks.Task,
+	attempt int64,
+	priority enumsspb.TaskPriority,
+	err error,
+) {
+	logger := s.shardContext.GetEventLogger()
+	if logger == nil {
+		return
+	}
+
+	nsID := item.GetNamespaceID()
+	nsName, nsErr := s.shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(nsID))
+	if nsErr != nil {
+		nsName = namespace.EmptyName
+	}
+
+	payload := wideevents.ReplicationLifecyclePayload{
+		Phase:    wideevents.ReplicationSkipped,
+		TaskType: item.GetType().String(),
+		Shard:    s.serverShardKey.ShardID,
+		// ToCluster is the target (client) cluster this stream feeds. Recorded because a skipped
+		// task emits no "applied" event on the target, so this is the only place the destination
+		// is captured — it identifies which passive is now missing this task's state.
+		ToCluster:    s.clientShardKey.ClusterID,
+		Priority:     priority.String(),
+		Namespace:    nsName.String(),
+		NamespaceID:  nsID,
+		WorkflowID:   item.GetWorkflowID(),
+		RunID:        item.GetRunID(),
+		SourceTaskID: item.GetTaskID(),
+		Attempt:      int32(attempt),
+	}
+	if err != nil {
+		payload.Error = err.Error()
+	}
+	wideevents.Emit(logger, payload)
+}
+
 // populateSentParentInfo records the child->parent identity from the mutable state carried in the
 // task payload, when present. Task types that ship no mutable state (e.g. verify) are a no-op.
 func populateSentParentInfo(payload *wideevents.ReplicationLifecyclePayload, task *replicationspb.ReplicationTask) {

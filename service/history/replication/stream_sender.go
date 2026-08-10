@@ -677,7 +677,7 @@ Loop:
 			// transport-layer message-size fix, and remain observable via the throttled skip log
 			// and the ReplicationTaskSendSkipped metric.
 			if s.config.ReplicationStreamSenderSkipStuckTask() && isSkippable(err) {
-				s.recordStuckTaskSkipped(item, attempt, err)
+				s.recordStuckTaskSkipped(item, attempt, priority, err)
 				metrics.ReplicationTaskSendSkipped.With(s.metrics).Record(
 					int64(1),
 					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
@@ -798,6 +798,7 @@ func (s *StreamSenderImpl) recordRetry(
 func (s *StreamSenderImpl) recordStuckTaskSkipped(
 	item tasks.Task,
 	attempt int64,
+	priority enumsspb.TaskPriority,
 	err error,
 ) {
 	s.shardContext.GetThrottledLogger().Error("Replication task could not be built after exhausting retries, skipping task",
@@ -808,6 +809,11 @@ func (s *StreamSenderImpl) recordStuckTaskSkipped(
 		tag.Counter(int(attempt)),
 		tag.Error(err),
 	)
+	// Emit a terminal "skipped" ReplicationLifecycle wide event so the drop is traceable alongside
+	// the task's sent/executing/applied events. Gated by the same config as the "sent" event.
+	if s.config.EmitReplicationLifecycleEvents() {
+		s.emitReplicationSkipped(item, attempt, priority, err)
+	}
 }
 
 // convertError marks a failure to build ("convert") a replication task from its source task info.
