@@ -49,7 +49,7 @@ func TestCreateRemoteFrontendGRPCConnection_ConcurrentSameAddressConverges(t *te
 	conns := make([]*grpc.ClientConn, goroutines)
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		go func(i int) {
 			defer wg.Done()
 			conns[i] = f.CreateRemoteFrontendGRPCConnection("remote-concurrent:7233")
