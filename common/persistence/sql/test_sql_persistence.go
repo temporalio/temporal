@@ -27,6 +27,7 @@ type TestCluster struct {
 	cfg            config.SQL
 	faultInjection *config.FaultInjection
 	logger         log.Logger
+	databaseLease  sqlplugin.DatabaseLease
 }
 
 type forceDatabaseDropper interface {
@@ -73,6 +74,11 @@ func (s *TestCluster) DatabaseName() string {
 
 // SetupTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) SetupTestDatabase() {
+	lease, err := acquireDatabaseLease(&s.cfg)
+	if err != nil {
+		s.logger.Fatal("AcquireDatabaseLease", tag.Error(err))
+	}
+	s.databaseLease = lease
 	s.CreateDatabase()
 
 	if s.schemaDir == "" {
@@ -105,6 +111,9 @@ func (s *TestCluster) Config() config.Persistence {
 
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
+	if err := s.databaseLease.Close(); err != nil {
+		s.logger.Fatal("Close database lease", tag.Error(err))
+	}
 	s.DropDatabase()
 }
 

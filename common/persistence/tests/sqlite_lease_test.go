@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -18,7 +19,12 @@ func TestSQLiteDatabaseLeasePreservesNamespaceAcrossWrapperChurn(t *testing.T) {
 	t.Parallel()
 	const namespace = "lease-test"
 	cfg := NewSQLiteMemoryConfig()
-	lease, err := sql.AcquireDatabaseLease(cfg)
+	lease, err := sql.AcquireDatabaseLeases(config.Persistence{
+		DefaultStore: "test",
+		DataStores: map[string]config.DataStore{
+			"test": {SQL: cfg},
+		},
+	})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, lease.Close()) })
 

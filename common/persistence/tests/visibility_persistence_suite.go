@@ -56,7 +56,7 @@ type (
 
 // SetupSuite implementation
 func (s *VisibilityPersistenceSuite) SetupSuite() {
-	s.SetupTestDatabase()
+	s.DefaultTestCluster.SetupTestDatabase()
 	cfg := s.DefaultTestCluster.Config()
 
 	var err error
@@ -108,7 +108,7 @@ func (s *VisibilityPersistenceSuite) TearDownTest() {
 // TearDownSuite implementation
 func (s *VisibilityPersistenceSuite) TearDownSuite() {
 	s.VisibilityMgr.Close()
-	s.TearDownTestDatabase()
+	s.DefaultTestCluster.TearDownTestDatabase()
 }
 
 // TestBasicVisibility test

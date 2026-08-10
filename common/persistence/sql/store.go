@@ -26,36 +26,36 @@ func RegisterPlugin(pluginName string, plugin sqlplugin.Plugin) {
 	supportedPlugins[pluginName] = plugin
 }
 
-// AcquireDatabaseLease keeps the configured database available until the returned lease is closed.
-func AcquireDatabaseLease(cfg *config.SQL) (sqlplugin.DatabaseLease, error) {
+type databaseLeaseProvider interface {
+	AcquireDatabaseLease(cfg *config.SQL) (sqlplugin.DatabaseLease, error)
+}
+
+func acquireDatabaseLease(cfg *config.SQL) (sqlplugin.DatabaseLease, error) {
 	plugin, err := getPlugin(cfg.PluginName)
 	if err != nil {
 		return nil, err
 	}
-	if provider, ok := plugin.(sqlplugin.DatabaseLeaseProvider); ok {
+	if provider, ok := plugin.(databaseLeaseProvider); ok {
 		return provider.AcquireDatabaseLease(cfg)
 	}
 	return noopDatabaseLease{}, nil
 }
 
 // AcquireDatabaseLeases keeps every active SQL database available until the returned lease is closed.
+// Non-SQL stores are ignored.
 func AcquireDatabaseLeases(cfg config.Persistence) (sqlplugin.DatabaseLease, error) {
 	leases := &databaseLeases{}
-	seen := make(map[string]struct{})
-	for _, name := range []string{cfg.DefaultStore, cfg.VisibilityStore, cfg.SecondaryVisibilityStore} {
-		if name == "" {
+	names := [...]string{cfg.DefaultStore, cfg.VisibilityStore, cfg.SecondaryVisibilityStore}
+	for i, name := range names {
+		if name == "" || slices.Contains(names[:i], name) {
 			continue
 		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
 
 		sqlCfg := cfg.DataStores[name].SQL
 		if sqlCfg == nil {
 			continue
 		}
-		lease, err := AcquireDatabaseLease(sqlCfg)
+		lease, err := acquireDatabaseLease(sqlCfg)
 		if err != nil {
 			return nil, errors.Join(err, leases.Close())
 		}

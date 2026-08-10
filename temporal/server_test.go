@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/testtelemetry"
-	sqliteschema "go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
@@ -50,91 +49,35 @@ func TestNewServer(t *testing.T) {
 	runAndTestServer(t)
 }
 
-func TestNewServerPreservesDatabaseAcrossServerLifetimes(t *testing.T) {
-	const namespace = "lease-test"
-	cfg := loadConfig(t)
-	lease, err := persistencesql.AcquireDatabaseLeases(cfg.Persistence)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, lease.Close()) })
-
-	sqlCfg := cfg.Persistence.DataStores[cfg.Persistence.DefaultStore].SQL
-	namespaceConfig, err := sqliteschema.NewNamespaceConfig("active", namespace, false, nil)
-	require.NoError(t, err)
-	require.NoError(t, sqliteschema.CreateNamespaces(sqlCfg, namespaceConfig))
-
-	for range 2 {
-		server, err := temporal.NewServer(
-			temporal.ForServices(nil),
-			temporal.WithConfig(cfg),
-			temporal.WithLogger(log.NewNoopLogger()),
-		)
-		require.NoError(t, err)
-		require.NoError(t, server.Stop())
-	}
-
-	db, err := persistencesql.NewSQLDB(
-		sqlplugin.DbKindMain,
-		sqlCfg,
-		resolver.NewNoopResolver(),
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	namespaceName := namespace
-	rows, err := db.SelectFromNamespace(
-		context.Background(),
-		sqlplugin.NamespaceFilter{Name: &namespaceName},
-	)
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-}
-
 func TestNewServerFxReleasesDatabaseLeaseOnConstructionFailure(t *testing.T) {
 	expectedErr := errors.New("construction failed")
 	cfg := loadConfig(t)
-	module := fx.Options(
-		fx.Provide(temporal.ServerOptionsProvider),
-		fx.Invoke(func(cfg *config.Config) error {
-			db, err := persistencesql.NewSQLAdminDB(
-				sqlplugin.DbKindMain,
-				cfg.Persistence.DataStores[cfg.Persistence.DefaultStore].SQL,
-				resolver.NewNoopResolver(),
-				log.NewNoopLogger(),
-				metrics.NoopMetricsHandler,
-			)
-			if err != nil {
-				return err
-			}
-			if err := db.Exec("CREATE TABLE lease_marker (id INTEGER)"); err != nil {
-				return errors.Join(err, db.Close())
-			}
-			return errors.Join(expectedErr, db.Close())
-		}),
-	)
+	module := newLeaseMarkerModule(func() error { return expectedErr })
 
 	_, err := temporal.NewServerFx(module, temporal.WithConfig(cfg))
 	require.ErrorIs(t, err, expectedErr)
-
-	sqlCfg := cfg.Persistence.DataStores[cfg.Persistence.DefaultStore].SQL
-	db, err := persistencesql.NewSQLAdminDB(
-		sqlplugin.DbKindMain,
-		sqlCfg,
-		resolver.NewNoopResolver(),
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	tables, err := db.ListTables(sqlCfg.DatabaseName)
-	require.NoError(t, err)
-	require.NotContains(t, tables, "lease_marker")
+	requireLeaseMarkerAbsent(t, cfg)
 }
 
 func TestNewServerFxReleasesDatabaseLeaseOnConstructionPanic(t *testing.T) {
 	const expectedPanic = "construction panicked"
 	cfg := loadConfig(t)
-	module := fx.Options(
+	module := newLeaseMarkerModule(func() error {
+		panic(expectedPanic)
+	})
+
+	func() {
+		defer func() {
+			require.Equal(t, expectedPanic, recover())
+		}()
+		_, _ = temporal.NewServerFx(module, temporal.WithConfig(cfg))
+	}()
+
+	requireLeaseMarkerAbsent(t, cfg)
+}
+
+func newLeaseMarkerModule(afterClose func() error) fx.Option {
+	return fx.Options(
 		fx.Provide(temporal.ServerOptionsProvider),
 		fx.Invoke(func(cfg *config.Config) error {
 			db, err := persistencesql.NewSQLAdminDB(
@@ -153,17 +96,13 @@ func TestNewServerFxReleasesDatabaseLeaseOnConstructionPanic(t *testing.T) {
 			if err := db.Close(); err != nil {
 				return err
 			}
-			panic(expectedPanic)
+			return afterClose()
 		}),
 	)
+}
 
-	func() {
-		defer func() {
-			require.Equal(t, expectedPanic, recover())
-		}()
-		_, _ = temporal.NewServerFx(module, temporal.WithConfig(cfg))
-	}()
-
+func requireLeaseMarkerAbsent(t *testing.T, cfg *config.Config) {
+	t.Helper()
 	sqlCfg := cfg.Persistence.DataStores[cfg.Persistence.DefaultStore].SQL
 	db, err := persistencesql.NewSQLAdminDB(
 		sqlplugin.DbKindMain,

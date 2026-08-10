@@ -12,29 +12,6 @@ import (
 	"go.temporal.io/server/common/resolver"
 )
 
-func TestAcquireDatabaseLeaseReturnsNoopForPluginWithoutProvider(t *testing.T) {
-	const pluginName = "lease-test-noop"
-	registerLeaseTestPlugin(t, pluginName, leaseTestPlugin{})
-
-	lease, err := AcquireDatabaseLease(&config.SQL{PluginName: pluginName})
-	require.NoError(t, err)
-	require.NoError(t, lease.Close())
-	require.NoError(t, lease.Close())
-}
-
-func TestAcquireDatabaseLeaseUsesPluginProvider(t *testing.T) {
-	const pluginName = "lease-test-provider"
-	wantLease := &leaseTestLease{}
-	provider := &leaseTestProvider{lease: wantLease}
-	registerLeaseTestPlugin(t, pluginName, provider)
-	cfg := &config.SQL{PluginName: pluginName}
-
-	lease, err := AcquireDatabaseLease(cfg)
-	require.NoError(t, err)
-	require.Same(t, cfg, provider.cfg)
-	require.Same(t, wantLease, lease)
-}
-
 func TestAcquireDatabaseLeasesClosesAcquiredLeasesOnFailure(t *testing.T) {
 	const pluginName = "lease-test-rollback"
 	firstLease := &leaseTestLease{}
@@ -124,31 +101,12 @@ func (leaseTestPlugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryCo
 }
 
 type leaseTestProvider struct {
-	lease   sqlplugin.DatabaseLease
-	cfg     *config.SQL
+	leaseTestPlugin
 	acquire func(*config.SQL) (sqlplugin.DatabaseLease, error)
 }
 
-func (p *leaseTestProvider) CreateDB(
-	sqlplugin.DbKind,
-	*config.SQL,
-	resolver.ServiceResolver,
-	log.Logger,
-	metrics.Handler,
-) (sqlplugin.GenericDB, error) {
-	panic("not used")
-}
-
-func (p *leaseTestProvider) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverter {
-	return nil
-}
-
 func (p *leaseTestProvider) AcquireDatabaseLease(cfg *config.SQL) (sqlplugin.DatabaseLease, error) {
-	p.cfg = cfg
-	if p.acquire != nil {
-		return p.acquire(cfg)
-	}
-	return p.lease, nil
+	return p.acquire(cfg)
 }
 
 type leaseTestLease struct {

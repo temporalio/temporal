@@ -65,7 +65,9 @@ func (p *plugin) CreateDB(
 	logger log.Logger,
 	_ metrics.Handler,
 ) (sqlplugin.GenericDB, error) {
-	conn, release, err := p.connPool.Allocate(cfg, r, logger, p.createDBConnection)
+	conn, release, err := p.connPool.Allocate(cfg, func(dsn string) (*sqlx.DB, error) {
+		return p.createDBConnection(cfg, r, logger, dsn)
+	})
 	if err != nil {
 		return nil, err
 	}

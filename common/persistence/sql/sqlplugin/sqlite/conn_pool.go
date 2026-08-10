@@ -6,9 +6,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/resolver"
 )
 
 // This pool properly enabled the support for SQLite in the temporal server.
@@ -25,17 +23,10 @@ type entry struct {
 	leases     int
 }
 
-type releaseHandle struct {
-	once    sync.Once
-	release func() error
-	err     error
-}
+type databaseLease func() error
 
-func (h *releaseHandle) Close() error {
-	h.once.Do(func() {
-		h.err = h.release()
-	})
-	return h.err
+func (l databaseLease) Close() error {
+	return l()
 }
 
 func newConnPool() *connPool {
@@ -60,20 +51,16 @@ func (cp *connPool) AcquireLease(cfg *config.SQL) (sqlplugin.DatabaseLease, erro
 	}
 	e.leases++
 
-	return &releaseHandle{
-		release: func() error {
-			return cp.releaseLease(dsn)
-		},
-	}, nil
+	return databaseLease(sync.OnceValue(func() error {
+		return cp.releaseLease(dsn)
+	})), nil
 }
 
 // Allocate allocates the shared database in the pool or returns already exists instance with the same DSN. If instance
 // for such DSN already exists, it will be returned instead. Each request counts as reference until Close.
 func (cp *connPool) Allocate(
 	cfg *config.SQL,
-	resolver resolver.ServiceResolver,
-	logger log.Logger,
-	create func(*config.SQL, resolver.ServiceResolver, log.Logger, string) (*sqlx.DB, error),
+	create func(string) (*sqlx.DB, error),
 ) (db *sqlx.DB, release func() error, err error) {
 	dsn, err := buildDSN(cfg)
 	if err != nil {
@@ -90,7 +77,7 @@ func (cp *connPool) Allocate(
 	}
 
 	if e.db == nil {
-		e.db, err = create(cfg, resolver, logger, dsn)
+		e.db, err = create(dsn)
 		if err != nil {
 			if e.leases == 0 {
 				delete(cp.pool, dsn)
@@ -100,12 +87,9 @@ func (cp *connPool) Allocate(
 	}
 	e.references++
 
-	handle := &releaseHandle{
-		release: func() error {
-			return cp.releaseReference(dsn)
-		},
-	}
-	return e.db, handle.Close, nil
+	return e.db, sync.OnceValue(func() error {
+		return cp.releaseReference(dsn)
+	}), nil
 }
 
 // releaseReference closes a virtual connection to the database. It only closes the shared database once no
