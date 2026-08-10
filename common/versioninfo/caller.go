@@ -12,18 +12,17 @@ import (
 	"time"
 )
 
-// The only bound on a version check: the request carries no context and Stop does
-// not wait, so a server that withholds a response would otherwise strand the
-// transport's goroutines. Overridden in tests.
-var callTimeout = 30 * time.Second
+const defaultCallTimeout = 30 * time.Second
 
 type Caller struct {
 	Scheme string
 	Host   string
+	// Timeout bounds a single Call. Zero means defaultCallTimeout.
+	Timeout time.Duration
 }
 
 func NewCaller() Caller {
-	return Caller{"https", "version-info.temporal.io"}
+	return Caller{Scheme: "https", Host: "version-info.temporal.io"}
 }
 
 func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
@@ -39,7 +38,11 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	if c.Scheme == "https" {
 		tr.TLSClientConfig = &tls.Config{}
 	}
-	client := &http.Client{Transport: tr, Timeout: callTimeout}
+	timeout := c.Timeout
+	if timeout == 0 {
+		timeout = defaultCallTimeout
+	}
+	client := &http.Client{Transport: tr, Timeout: timeout}
 	reqBody, err := json.Marshal(r)
 	if err != nil {
 		return nil, err

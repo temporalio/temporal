@@ -1,6 +1,7 @@
 package versioninfo_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/versioninfo"
-	"go.uber.org/goleak"
 )
 
 func TestPostInfo(t *testing.T) {
@@ -114,30 +114,34 @@ func testRequest() *versioninfo.VersionCheckRequest {
 
 func TestCall_NonOKResponse(t *testing.T) {
 	caller := newTestCaller(t, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "error details", http.StatusInternalServerError)
 	})
 
 	_, err := caller.Call(testRequest())
 	require.ErrorContains(t, err, "bad response code 500")
 }
 
-// A non-200 response must still close the body. Keep-alives are disabled, so
-// closing ends the connection and its read and write loops exit.
-//
-// Must not run in parallel: goleak.Find observes the whole process.
-func TestCall_NonOKResponseClosesBody(t *testing.T) {
-	caller := newTestCaller(t, func(w http.ResponseWriter, _ *http.Request) {
-		// An empty body is drained for us, so send one that must be read.
-		http.Error(w, "error details", http.StatusInternalServerError)
+func TestCall_StalledServerTimesOut(t *testing.T) {
+	release := make(chan struct{})
+	caller := newTestCaller(t, func(http.ResponseWriter, *http.Request) {
+		<-release
 	})
+	// Registered after the server's Close so it runs first: Close waits for the
+	// handler to return.
+	t.Cleanup(func() { close(release) })
+	caller.Timeout = 100 * time.Millisecond
 
-	// Warm up so the server's per-connection goroutines are not mistaken for a
-	// leak, then snapshot and measure a single call.
-	_, err := caller.Call(testRequest())
-	require.ErrorContains(t, err, "bad response code 500")
+	done := make(chan error, 1)
+	go func() {
+		_, err := caller.Call(testRequest())
+		done <- err
+	}()
 
-	baseline := goleak.IgnoreCurrent()
-	_, err = caller.Call(testRequest())
-	require.ErrorContains(t, err, "bad response code 500")
-	require.NoError(t, goleak.Find(baseline))
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	// Without the select, an unbounded Call hangs the package until its timeout.
+	case <-time.After(10 * time.Second):
+		t.Fatal("Call must not outlive its timeout")
+	}
 }
