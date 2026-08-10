@@ -118,6 +118,16 @@ type (
 		RewriteSchemaStatements(statements []string) []string
 	}
 
+	// DatabaseLease keeps a database available until it is closed.
+	DatabaseLease interface {
+		Close() error
+	}
+
+	// DatabaseLeaseProvider optionally extends a Plugin with explicit database ownership.
+	DatabaseLeaseProvider interface {
+		AcquireDatabaseLease(cfg *config.SQL) (DatabaseLease, error)
+	}
+
 	GenericDB interface {
 		DbName() string
 		PluginName() string

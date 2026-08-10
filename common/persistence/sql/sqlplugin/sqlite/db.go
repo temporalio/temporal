@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -16,8 +17,10 @@ type db struct {
 	dbKind sqlplugin.DbKind
 	dbName string
 
-	mu      sync.RWMutex
-	onClose []func()
+	mu        sync.RWMutex
+	closeOnce sync.Once
+	closeErr  error
+	onClose   []func() error
 
 	db        *sqlx.DB
 	tx        *sqlx.Tx
@@ -42,7 +45,7 @@ func newDB(
 	mdb := &db{
 		dbKind:  dbKind,
 		dbName:  dbName,
-		onClose: make([]func(), 0),
+		onClose: make([]func() error, 0),
 		db:      xdb,
 		tx:      tx,
 		logger:  logger,
@@ -74,7 +77,7 @@ func (mdb *db) Rollback() error {
 	return mdb.tx.Rollback()
 }
 
-func (mdb *db) OnClose(hook func()) {
+func (mdb *db) OnClose(hook func() error) {
 	mdb.mu.Lock()
 	mdb.onClose = append(mdb.onClose, hook)
 	mdb.mu.Unlock()
@@ -82,16 +85,18 @@ func (mdb *db) OnClose(hook func()) {
 
 // Close closes the connection to the sqlite db
 func (mdb *db) Close() error {
-	mdb.mu.RLock()
-	defer mdb.mu.RUnlock()
+	mdb.closeOnce.Do(func() {
+		mdb.mu.RLock()
+		defer mdb.mu.RUnlock()
 
-	for _, hook := range mdb.onClose {
-		// de-registers the database from conn pool
-		hook()
-	}
+		for _, hook := range mdb.onClose {
+			// de-registers the database from conn pool
+			mdb.closeErr = errors.Join(mdb.closeErr, hook())
+		}
+	})
 
 	// database connection will be automatically closed by the hook handler when all references are removed
-	return nil
+	return mdb.closeErr
 }
 
 // PluginName returns the name of the plugin
