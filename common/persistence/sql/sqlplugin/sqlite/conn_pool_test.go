@@ -182,9 +182,7 @@ func TestConnPoolConcurrentAcquireAndRelease(t *testing.T) {
 	var wg sync.WaitGroup
 
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			lease, err := pool.AcquireLease(cfg)
 			if err != nil {
 				errs <- err
@@ -203,7 +201,7 @@ func TestConnPoolConcurrentAcquireAndRelease(t *testing.T) {
 				err = errors.Join(err, release())
 			}
 			errs <- errors.Join(err, lease.Close())
-		}()
+		})
 	}
 
 	wg.Wait()

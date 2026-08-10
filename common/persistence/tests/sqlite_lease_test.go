@@ -15,6 +15,7 @@ import (
 )
 
 func TestSQLiteDatabaseLeasePreservesNamespaceAcrossWrapperChurn(t *testing.T) {
+	t.Parallel()
 	const namespace = "lease-test"
 	cfg := NewSQLiteMemoryConfig()
 	lease, err := sql.AcquireDatabaseLease(cfg)
