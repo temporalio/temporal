@@ -17,6 +17,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
@@ -506,6 +507,68 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 	_, err := wh.StartWorkflowExecution(context.Background(), nil)
 	s.Error(err)
 	s.Equal(errRequestNotSet, err)
+}
+
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverride() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_AutoUpgrade{},
+		},
+	})
+
+	s.ErrorContains(err, "auto-upgrade override must be true")
+}
+
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_InvalidVersioningOverrideAllowedWhenDisabled() {
+	config := s.newConfig()
+	config.DisabledScheduleValidations = func(namespace string) []string {
+		s.Equal(s.testNamespace.String(), namespace)
+		return []string{"VERSIONING-OVERRIDE"}
+	}
+	wh := s.getWorkflowHandler(config)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(s.testNamespace).Return(nil, nil)
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_AutoUpgrade{},
+		},
+	})
+
+	s.Require().NoError(err)
+}
+
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverrideVersion() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  &deploymentpb.WorkerDeploymentVersion{BuildId: "build-id"},
+				},
+			},
+		},
+	})
+
+	s.ErrorContains(err, "WorkerDeploymentName cannot be empty")
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet() {
@@ -5390,7 +5453,7 @@ func TestCanonicalizeScheduleSpec_IntervalDurationValidation(t *testing.T) {
 				},
 			}
 
-			err := wh.canonicalizeScheduleSpec(schedule)
+			err := wh.canonicalizeScheduleSpec(schedule, "test-namespace")
 			if tc.errContains == "" {
 				require.NoError(t, err)
 				return
@@ -5402,9 +5465,9 @@ func TestCanonicalizeScheduleSpec_IntervalDurationValidation(t *testing.T) {
 	}
 }
 
-// The duration validation is enforced by default, but operators can turn enforcement off
-// with frontend.enforceScheduleDurationValidation. With it off, a malformed duration is
-// logged and allowed through, and the spec still compiles on its normalized value.
+// The duration validation is enforced by default, but operators can disable it for a
+// namespace with frontend.disabledScheduleValidations. When disabled, a malformed duration
+// is logged and allowed through, and the spec still compiles on its normalized value.
 func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -5417,16 +5480,21 @@ func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 			errContains: "interval is not a valid duration",
 		},
 		{
-			name: "enforcement explicitly enabled",
+			name: "unrelated validation disabled",
 			configure: func(c *Config) {
-				c.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(true)
+				c.DisabledScheduleValidations = dc.GetTypedPropertyFnFilteredByNamespace(
+					[]string{scheduleValidationVersioningOverride},
+				)
 			},
 			errContains: "interval is not a valid duration",
 		},
 		{
-			name: "enforcement disabled",
+			name: "duration validation disabled",
 			configure: func(c *Config) {
-				c.EnforceScheduleDurationValidation = dc.GetBoolPropertyFn(false)
+				c.DisabledScheduleValidations = func(namespace string) []string {
+					require.Equal(t, "test-namespace", namespace)
+					return []string{"Scheduler-Duration"}
+				}
 			},
 		},
 	}
@@ -5443,7 +5511,7 @@ func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 				},
 			}
 
-			err := wh.canonicalizeScheduleSpec(schedule)
+			err := wh.canonicalizeScheduleSpec(schedule, "test-namespace")
 			if tc.errContains != "" {
 				var invalidArgument *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgument)
@@ -5647,6 +5715,50 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
 	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+}
+
+func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.testNamespace.String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+			Request: &updatepb.Request{
+				Meta:                &updatepb.Meta{UpdateId: "update-id"},
+				Input:               &updatepb.Input{Name: "update-name"},
+				RequestId:           "request-id",
+				CompletionCallbacks: callbacks,
+			},
+		}
+	}
+
+	s.Run("invalid callback", func() {
+		err := wh.prepareUpdateWorkflowRequest(
+			context.Background(),
+			s.testNamespace,
+			newRequest([]*commonpb.Callback{{}}),
+		)
+
+		var unimplemented *serviceerror.Unimplemented
+		s.ErrorAs(err, &unimplemented)
+		s.ErrorContains(err, "unknown callback variant")
+	})
+
+	s.Run("normalizes callback headers", func() {
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url:    "http://localhost/callback",
+					Header: map[string]string{"X-Request-ID": "value"},
+				},
+			},
+		}})
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		s.NoError(err)
+		s.Equal(map[string]string{"x-request-id": "value"}, request.GetRequest().GetCompletionCallbacks()[0].GetNexus().GetHeader())
+	})
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {

@@ -804,6 +804,28 @@ func ValidateVersioningOverrideStructure(override *workflowpb.VersioningOverride
 	return nil
 }
 
+// ValidateVersioningOverride validates both the override structure and its v0.32 deployment version fields.
+func ValidateVersioningOverride(override *workflowpb.VersioningOverride, maxIDLengthLimit int) error {
+	if err := ValidateVersioningOverrideStructure(override); err != nil {
+		return err
+	}
+
+	var version *deploymentpb.WorkerDeploymentVersion
+	switch o := override.GetOverride().(type) {
+	case *workflowpb.VersioningOverride_Pinned:
+		version = o.Pinned.GetVersion()
+	case *workflowpb.VersioningOverride_OneTime:
+		version = o.OneTime.GetTargetDeploymentVersion()
+	default:
+		return nil
+	}
+
+	if err := ValidateDeploymentVersionFields(WorkerDeploymentNameFieldName, version.GetDeploymentName(), maxIDLengthLimit); err != nil {
+		return err
+	}
+	return ValidateDeploymentVersionFields(WorkerDeploymentBuildIDFieldName, version.GetBuildId(), maxIDLengthLimit)
+}
+
 func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context,
 	override *workflowpb.VersioningOverride,
 	matchingClient resource.MatchingClient,
