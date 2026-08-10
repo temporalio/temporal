@@ -2,7 +2,7 @@
 
 Apply these patterns when reviewing PRs or suggesting code changes.
 
-## 1. Remove Redundant Code (Highest Priority)
+## 1. Structural Simplicity (Highest Priority)
 
 - Review changes holistically as well as line by line
 - Prefer simpler designs that remove branches, special cases, indirection, or moving parts
