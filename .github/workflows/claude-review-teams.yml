@@ -245,7 +245,8 @@ jobs:
             The trusted base branch is checked out in the current working directory.
             The PR head is checked out in `pr-head/`.
             Review the changes in `pr-head/`.
-            Review the changes holistically as well as line by line. Look for simpler designs that remove branches, special cases, indirection, or moving parts. Keep logic in its canonical layer and reuse existing utilities.
+            Review the changes holistically as well as line by line.
+            Look for simpler designs that remove branches, special cases, indirection, or moving parts.
 
             ## Posting rules
 
