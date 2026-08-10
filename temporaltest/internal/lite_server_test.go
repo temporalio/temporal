@@ -17,6 +17,7 @@ import (
 )
 
 func TestNewLiteServerLeasePreservesPrecreatedNamespaces(t *testing.T) {
+	t.Parallel()
 	const namespace = "lease-test"
 	cfg := &LiteServerConfig{
 		Ephemeral:  true,
@@ -48,6 +49,7 @@ func TestNewLiteServerLeasePreservesPrecreatedNamespaces(t *testing.T) {
 }
 
 func TestNewLiteServerReleasesDatabaseLeaseOnConstructionPanic(t *testing.T) {
+	t.Parallel()
 	const (
 		expectedPanic = "construction panicked"
 		namespace     = "lease-test"
