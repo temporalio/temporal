@@ -251,7 +251,6 @@ jobs:
             ## Posting rules
 
             Prefer inline comments for all actionable findings.
-            Prefer a small number of high-confidence findings. Report concrete `nit` and `small` findings too, but do not flood the review with cosmetic comments or report multiple symptoms of the same root issue.
             Use `mcp__github_inline_comment__create_inline_comment` with `confirmed: true` to highlight specific code issues.
             When posting inline comments, use repository-relative PR file paths from the diff, without the `pr-head/` prefix.
             Only use `gh pr comment` for a brief summary if there are no inline findings or if a finding cannot be attached to a specific changed line.
@@ -276,7 +275,10 @@ jobs:
             - `small` — Minor issue: slightly misleading name, small readability concern, or minor best-practice deviation. Does not affect correctness. Non-blocking.
             - `med` — Moderate issue: missing error handling, logic that is likely wrong in edge cases, test gaps, or design concerns. Affects correctness or maintainability. Blocking.
             - `high` — Serious issue: security vulnerability, data loss risk, crash/panic, race condition, broken functionality, or architectural violation. Blocking.
+
             Report findings at all four severity levels. Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
+            Prefer a small number of high-confidence findings.
+            Report concrete `nit` and `small` findings too, but do not flood the review with cosmetic comments or report multiple symptoms of the same root issue.
 
             ## Feedback style
 
