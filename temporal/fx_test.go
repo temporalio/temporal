@@ -14,8 +14,31 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 )
+
+func TestNewServerFxAppliesOptionsOnce(t *testing.T) {
+	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
+	cfg, err := config.Load(
+		config.WithEnv("development-sqlite"),
+		config.WithConfigDir(configDir),
+	)
+	require.NoError(t, err)
+	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-sql.yaml")
+
+	applyCount := 0
+	server, err := NewServerFx(
+		fx.Options(fx.Provide(ServerOptionsProvider)),
+		applyFunc(func(options *serverOptions) {
+			applyCount++
+			options.config = cfg
+		}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, server.Stop())
+	require.Equal(t, 1, applyCount)
+}
 
 func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
