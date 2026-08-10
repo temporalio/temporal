@@ -38,7 +38,6 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/maruel/panicparse/v2 v2.5.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nexus-rpc/nexus-proto-annotations v0.1.0
 	github.com/nexus-rpc/sdk-go v0.6.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
@@ -104,6 +103,7 @@ require (
 	github.com/go-openapi/swag/typeutils v0.26.0 // indirect
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
+	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.56.0 // indirect
 	golang.org/x/perf v0.0.0-20260709024250-82a0b07e230d // indirect
 )
@@ -219,7 +219,7 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	google.golang.org/genproto v0.0.0-20260420184626-e10c466a9529 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260420184626-e10c466a9529 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260420184626-e10c466a9529
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260420184626-e10c466a9529 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

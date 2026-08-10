@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
+	"go.temporal.io/server/service/worker/adminbatcher"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
@@ -52,6 +53,7 @@ var Module = fx.Options(
 	callback.Module,
 	scheduler.Module,
 	batcher.Module,
+	adminbatcher.Module,
 	workerdeployment.Module,
 	wcicomponent.Module,
 	dlq.Module,

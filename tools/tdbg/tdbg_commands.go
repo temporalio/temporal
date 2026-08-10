@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/multierr"
 )
@@ -210,6 +211,14 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 				&cli.StringFlag{
 					Name:  FlagJobID,
 					Usage: "Optional job ID (auto-generated if not provided)",
+				},
+				&cli.StringFlag{
+					Name: FlagJobNamespace,
+					Usage: "Required with --" + FlagVisibilityQuery + ". Namespace that hosts the batch job workflow: " +
+						"'system' runs it in " + primitives.SystemLocalNamespace + " on the system worker, which works even when " +
+						"--" + FlagNamespace + " is passive in this cluster; " +
+						"'user' runs it in --" + FlagNamespace + " on the per-namespace worker, which requires that " +
+						"namespace to be active here. This only changes where the job runs, never which executions it acts on.",
 				},
 			},
 			Action: func(c *cli.Context) error {

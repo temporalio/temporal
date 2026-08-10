@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.api.adminservice.v1;
 
+import "google/api/field_behavior.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
@@ -621,6 +622,22 @@ message GetTaskQueueUserDataResponse {
 // StartAdminBatchOperationRequest starts an admin batch operation.
 // WARNING: Batch Operations are exposed to all users of the namespace. Admin Batch Operations should be exercised with caution.
 message StartAdminBatchOperationRequest {
+  // JobNamespace selects the namespace that hosts the batch operation's control
+  // workflow. It is independent of `namespace`, which selects the executions the
+  // operation acts on.
+  enum JobNamespace {
+    JOB_NAMESPACE_UNSPECIFIED = 0;
+    // Run the control workflow in the `temporal-system` namespace, on the system
+    // worker. `temporal-system` is a local namespace and is therefore active in
+    // every cluster, so this works even when `namespace` is passive here.
+    JOB_NAMESPACE_SYSTEM = 1;
+    // Run the control workflow in the user namespace given by `namespace`, on that
+    // namespace's per-namespace worker. Only works when `namespace` is active in this
+    // cluster: creating a workflow in a passive global namespace is rejected with
+    // NamespaceNotActive.
+    JOB_NAMESPACE_USER = 2;
+  }
+
   // Namespace that contains the batch operation.
   string namespace = 1;
 
@@ -641,13 +658,24 @@ message StartAdminBatchOperationRequest {
   // The identity of the worker/client.
   string identity = 6;
 
+  // Where to run the control workflow. JOB_NAMESPACE_UNSPECIFIED is rejected so that
+  // callers state their intent explicitly rather than inheriting a default that
+  // silently fails in passive clusters.
+  JobNamespace job_namespace = 7 [(google.api.field_behavior) = REQUIRED];
+
   // The admin batch operation to perform.
   oneof operation {
     BatchOperationRefreshTasks refresh_tasks_operation = 10;
   }
 }
 
-message StartAdminBatchOperationResponse {}
+message StartAdminBatchOperationResponse {
+  // Workflow ID of the control workflow that was started, and the namespace it
+  // runs in. For JOB_NAMESPACE_SYSTEM these are derived from `job_id`, so callers
+  // must use them rather than `job_id` to look the job up afterwards.
+  string job_workflow_id = 1;
+  string job_namespace = 2;
+}
 
 // BatchOperationRefreshTasks refreshes tasks for batch executions.
 // This regenerates all pending tasks for each execution.

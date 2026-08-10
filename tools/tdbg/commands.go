@@ -765,6 +765,11 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 		return err
 	}
 
+	jobNamespace, jobNamespaceStr, err := parseJobNamespace(c)
+	if err != nil {
+		return err
+	}
+
 	jobID := c.String(FlagJobID)
 	if jobID == "" {
 		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
@@ -782,16 +787,21 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 		return fmt.Errorf("unable to count workflow executions: %w", err)
 	}
 
-	msg := fmt.Sprintf("Will refresh tasks for %d execution(s) matching query %q in namespace %q. Continue Y/N?",
-		countResp.GetCount(), query, nsName)
+	msg := fmt.Sprintf(
+		"Will refresh tasks for %d execution(s) matching query %q in namespace %q.\n"+
+			"The batch job itself will run in %s (--%s=%s).\n"+
+			"Continue Y/N?",
+		countResp.GetCount(), query, nsName,
+		jobNamespaceDescription(jobNamespace, nsName), FlagJobNamespace, jobNamespaceStr)
 	prompter.Prompt(msg)
 
-	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	resp, err := adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,
 		VisibilityQuery: query,
 		JobId:           jobID,
 		Reason:          reason,
 		Identity:        getCurrentUserFromEnv(),
+		JobNamespace:    jobNamespace,
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
 			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},
@@ -800,8 +810,13 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 		return fmt.Errorf("unable to start batch refresh workflow tasks: %w", err)
 	}
 
+	// The server derives the control workflow's ID from the job ID, so report what
+	// it actually started rather than what was requested.
 	// nolint:errcheck // assuming that write will succeed.
-	fmt.Fprintf(c.App.Writer, "Batch Refresh Workflow Tasks started successfully for Job ID: %s\n", jobID)
+	fmt.Fprintf(c.App.Writer,
+		"Batch Refresh Workflow Tasks started successfully for Job ID: %s\n"+
+			"Track it with: tdbg --%s %s execution describe --%s %s\n",
+		jobID, FlagNamespace, resp.GetJobNamespace(), FlagBusinessID, resp.GetJobWorkflowId())
 	return nil
 }
 
@@ -918,6 +933,42 @@ func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
 		return migrateSchedulesFromStdin(c, clientFactory, target, targetStr)
 	default:
 		return fmt.Errorf("specify one of: --%s, --%s, or pipe JSON lines on stdin", FlagScheduleID, FlagFromVisibility)
+	}
+}
+
+// parseJobNamespace resolves the required --job-namespace flag. It is required rather than
+// defaulted because the wrong choice fails in ways that are not obvious: "user" cannot start
+// a job at all in a cluster where the namespace is passive.
+func parseJobNamespace(c *cli.Context) (adminservice.StartAdminBatchOperationRequest_JobNamespace, string, error) {
+	value, err := getRequiredOption(c, FlagJobNamespace)
+	if err != nil {
+		return 0, "", err
+	}
+	switch strings.ToLower(value) {
+	case "system":
+		return adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_SYSTEM, value, nil
+	case "user":
+		return adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_USER, value, nil
+	default:
+		return 0, "", fmt.Errorf("invalid %s %q, valid values are: system, user", FlagJobNamespace, value)
+	}
+}
+
+func jobNamespaceDescription(
+	jobNamespace adminservice.StartAdminBatchOperationRequest_JobNamespace,
+	targetNamespace string,
+) string {
+	switch jobNamespace {
+	case adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_SYSTEM:
+		return fmt.Sprintf("the %q namespace, so it runs in this cluster even if %q is passive here",
+			primitives.SystemLocalNamespace, targetNamespace)
+	case adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_USER:
+		return fmt.Sprintf("user namespace %q on its per-namespace worker, which requires %q to be active in this cluster",
+			targetNamespace, targetNamespace)
+	case adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_UNSPECIFIED:
+		return "an unspecified namespace"
+	default:
+		return jobNamespace.String()
 	}
 }
 

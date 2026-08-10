@@ -59,9 +59,11 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/adminbatcher"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/dummy"
@@ -1280,17 +1282,38 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		return nil, err
 	}
 
+	// job namespace and task queues control where the batch workflow will run in,
+	// data namespace controls whose data the batch workflow will operate on
+	useSystemNS := request.GetJobNamespace() == adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_SYSTEM
+	jobTaskQueue := primitives.PerNSWorkerTaskQueue
+	jobWorkflowType := batcher.BatchWFTypeProtobufName
+	jobWorkflowID := request.GetJobId()
+	jobNSID, jobNS := namespaceID, request.GetNamespace()
+	dataNSID, dataNS := namespaceID, request.GetNamespace()
+	// Every user namespace's jobs share the one temporal-system namespace, so the
+	// open-job count must be narrowed to the namespace this request is for.
+	openJobsQuery := batcher.OpenAdminBatchOperationQuery
+	if useSystemNS {
+		jobTaskQueue = primitives.DefaultWorkerTaskQueue
+		jobWorkflowType = adminbatcher.WorkflowTypeName
+		jobWorkflowID = adminbatcher.JobWorkflowID(dataNSID.String(), request.GetJobId())
+		jobNS, jobNSID = primitives.SystemLocalNamespace, primitives.SystemNamespaceID
+		openJobsQuery = fmt.Sprintf("%s AND %s STARTS_WITH '%s'",
+			batcher.OpenAdminBatchOperationQuery,
+			sadefs.WorkflowID,
+			adminbatcher.JobWorkflowIDPrefix(dataNSID.String()))
+	}
+
 	// Validate concurrent batch operation
 	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation(request.GetNamespace())
 	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespaceID,
-		Namespace:   namespace.Name(request.GetNamespace()),
-		Query:       batcher.OpenAdminBatchOperationQuery,
+		NamespaceID: jobNSID,
+		Namespace:   namespace.Name(jobNS),
+		Query:       openJobsQuery,
 	})
 	if err != nil {
 		return nil, err
 	}
-
 	openAdminBatchOperationCount := int(countResp.Count)
 	if openAdminBatchOperationCount >= maxConcurrentBatchOperation {
 		return nil, &serviceerror.ResourceExhausted{
@@ -1302,10 +1325,11 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 
 	input := &batchspb.BatchOperationInput{
 		AdminRequest: request,
-		NamespaceId:  namespaceID.String(),
+		NamespaceId:  dataNSID.String(),
 	}
 
 	identity := request.GetIdentity()
+
 	var batchTypeMemo string
 	switch op := request.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
@@ -1325,7 +1349,12 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
 		},
 	}
+	// todo: check if it is safe to add this to memo
+	if useSystemNS {
+		memo.Fields[batcher.AdminBatchUserNamespaceMemo] = payload.EncodeString(dataNS)
+	}
 
+	// todo: add data namespaces to the custom search attributes
 	var searchAttributes *commonpb.SearchAttributes
 	searchattribute.AddSearchAttributes(
 		&searchAttributes,
@@ -1334,10 +1363,10 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	)
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                request.Namespace,
-		WorkflowId:               request.GetJobId(),
-		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Namespace:                jobNS,
+		WorkflowId:               jobWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: jobWorkflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: jobTaskQueue},
 		Input:                    inputPayload,
 		Identity:                 identity,
 		RequestId:                uuid.NewString(),
@@ -1350,7 +1379,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	_, err = adh.historyClient.StartWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(
-			namespaceID.String(),
+			jobNSID.String(),
 			startReq,
 			nil,
 			nil,
@@ -1360,7 +1389,10 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.StartAdminBatchOperationResponse{}, nil
+	return &adminservice.StartAdminBatchOperationResponse{
+		JobWorkflowId: jobWorkflowID,
+		JobNamespace:  jobNS,
+	}, nil
 }
 
 func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRequest) error {
@@ -1376,6 +1408,15 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	}
 	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
 		return serviceerror.NewInvalidArgument("batch query and executions are mutually exclusive")
+	}
+
+	switch params.GetJobNamespace() {
+	case adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_SYSTEM,
+		adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_USER:
+	case adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_UNSPECIFIED:
+		return serviceerror.NewInvalidArgument("JobNamespace is not set on request. Set JOB_NAMESPACE_SYSTEM to run the job in temporal-system (works in passive clusters), or JOB_NAMESPACE_USER to run it in the user namespace on the per-namespace worker.")
+	default:
+		return serviceerror.NewInvalidArgumentf("unknown JobNamespace %v", params.GetJobNamespace())
 	}
 
 	switch op := params.GetOperation().(type) {

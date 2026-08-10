@@ -41,6 +41,9 @@ const (
 	// Workflow batch operation memo type strings retain their legacy persisted
 	// values so pre-upgrade frontends can read jobs started during a rollout.
 
+	// AdminBatchUserNamespaceMemo stores the user namespace of this admin batch job in memo.
+	AdminBatchUserNamespaceMemo = "admin_batch_user_namespace"
+
 	// BatchTypeTerminateWorkflows is batch type for terminating workflows
 	BatchTypeTerminateWorkflows = "terminate"
 	// BatchTypeCancelWorkflows is batch type for canceling workflows
@@ -126,25 +129,36 @@ var (
 		BackoffCoefficient: 1.7,
 		MaximumInterval:    5 * time.Minute,
 	}
-
-	batchActivityOptions = workflow.ActivityOptions{
-		ScheduleToStartTimeout: 5 * time.Minute,
-		StartToCloseTimeout:    infiniteDuration,
-		RetryPolicy:            &batchActivityRetryPolicy,
-	}
 )
 
 // BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
 func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+	return RunBatchWorkflow(ctx, batchParams, "")
+}
+
+// RunBatchWorkflow executes the batch activity and records its stats, scheduling
+// the activity on activityTaskQueue when set and on the workflow's own task queue
+// otherwise. Hosts other than the per-namespace worker build their workflow on
+// top of this.
+func RunBatchWorkflow(
+	ctx workflow.Context,
+	batchParams *batchspb.BatchOperationInput,
+	activityTaskQueue string,
+) (HeartBeatDetails, error) {
 	if batchParams == nil {
 		return HeartBeatDetails{}, errors.New("batchParams is nil")
 	}
 
 	batchParams = setDefaultParams(batchParams)
-	batchActivityOptions.HeartbeatTimeout = batchParams.ActivityHeartbeatTimeout.AsDuration()
-	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
+	opt := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		TaskQueue:              activityTaskQueue,
+		ScheduleToStartTimeout: 5 * time.Minute,
+		StartToCloseTimeout:    infiniteDuration,
+		RetryPolicy:            &batchActivityRetryPolicy,
+		HeartbeatTimeout:       batchParams.ActivityHeartbeatTimeout.AsDuration(),
+	})
 	var result HeartBeatDetails
-	var ac *activities
+	var ac *Activities
 	err := workflow.ExecuteActivity(opt, ac.BatchActivityWithProtobuf, batchParams).Get(ctx, &result)
 	if err != nil {
 		return HeartBeatDetails{}, err

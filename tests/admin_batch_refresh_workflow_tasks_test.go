@@ -75,10 +75,11 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 
 	// Start admin batch operation to refresh workflow tasks using executions list
 	resp, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
-		Namespace: env.Namespace().String(),
-		JobId:     uuid.NewString(),
-		Reason:    "test refresh workflow tasks",
-		Identity:  "test-identity",
+		Namespace:    env.Namespace().String(),
+		JobId:        uuid.NewString(),
+		Reason:       "test refresh workflow tasks",
+		Identity:     "test-identity",
+		JobNamespace: adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_USER,
 		Executions: []*commonpb.WorkflowExecution{
 			{WorkflowId: workflowRun1.GetID(), RunId: workflowRun1.GetRunID()},
 			{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()},
@@ -124,6 +125,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 		JobId:           uuid.NewString(),
 		Reason:          "test refresh workflow tasks with query",
 		Identity:        "test-identity",
+		JobNamespace:    adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_USER,
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
 			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},
@@ -244,9 +246,10 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0
 		Executions: []*commonpb.WorkflowExecution{
 			{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()},
 		},
-		JobId:    uuid.NewString(),
-		Reason:   "test admin batch",
-		Identity: "test-identity",
+		JobId:        uuid.NewString(),
+		Reason:       "test admin batch",
+		Identity:     "test-identity",
+		JobNamespace: adminservice.StartAdminBatchOperationRequest_JOB_NAMESPACE_USER,
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
 			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},

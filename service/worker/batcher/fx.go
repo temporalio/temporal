@@ -31,12 +31,12 @@ type (
 	AdminBatcherRateLimiter quotas.RequestRateLimiter
 
 	workerComponent struct {
-		activityDeps   activityDeps
+		activityDeps   ActivityDeps
 		dc             *dynamicconfig.Collection
 		enabledFeature dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
-	activityDeps struct {
+	ActivityDeps struct {
 		fx.In
 		MetricsHandler          metrics.Handler
 		Logger                  log.Logger
@@ -79,11 +79,11 @@ func AdminBatcherRateLimiterProvider(
 
 func NewResult(
 	dc *dynamicconfig.Collection,
-	params activityDeps,
+	activityDeps ActivityDeps,
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			activityDeps:   params,
+			activityDeps:   activityDeps,
 			dc:             dc,
 			enabledFeature: dynamicconfig.EnableBatcherNamespace.Get(dc),
 		},
@@ -104,16 +104,6 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	registry.RegisterWorkflowWithOptions(BatchWorkflowProtobuf, workflow.RegisterOptions{Name: BatchWFTypeName})
 	// Newer version of the batch workflow which was rewritten to accept a proto struct as input.
 	registry.RegisterWorkflowWithOptions(BatchWorkflowProtobuf, workflow.RegisterOptions{Name: BatchWFTypeProtobufName})
-	registry.RegisterActivity(s.activities(ns.Name(), ns.ID()))
+	registry.RegisterActivity(NewActivities(s.activityDeps, s.dc, validateAndResolveNSForUserBatch(ns.Name(), ns.ID())))
 	return nil
-}
-
-func (s *workerComponent) activities(name namespace.Name, id namespace.ID) *activities {
-	return &activities{
-		activityDeps: s.activityDeps,
-		namespace:    name,
-		namespaceID:  id,
-		rps:          dynamicconfig.BatcherRPS.Get(s.dc),
-		concurrency:  dynamicconfig.BatcherConcurrency.Get(s.dc),
-	}
 }

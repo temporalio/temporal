@@ -38,7 +38,7 @@ func (s *batcherSuite) TearDownTest() {
 }
 
 func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
-	var ac *activities
+	var ac *Activities
 	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
 		SuccessCount: 42,
 		ErrorCount:   27,
@@ -70,7 +70,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 }
 
 func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
-	var ac *activities
+	var ac *Activities
 	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
 		SuccessCount: 42,
 		ErrorCount:   27,

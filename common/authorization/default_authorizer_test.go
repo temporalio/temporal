@@ -71,6 +71,10 @@ var (
 		APIName:   "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes",
 		Namespace: testNamespace,
 	}
+	targetStartAdminBatchOperation = CallTarget{
+		APIName:   "/temporal.server.api.adminservice.v1.AdminService/StartAdminBatchOperation",
+		Namespace: testNamespace,
+	}
 )
 
 type (
@@ -140,6 +144,16 @@ func (s *defaultAuthorizerSuite) TestAuthorize() {
 		{"NamespaceReaderOnFooBar", claimsNamespaceReader, targetNamespaceWriteBar, DecisionDeny}, // namespace mismatch
 		{"NamespaceReaderOnListWorkflow", claimsNamespaceReader, targetGetSystemInfo, DecisionAllow},
 		{"NamespaceReaderOnOperatorNamespaceRead", claimsNamespaceReader, targetOperatorNamespaceRead, DecisionAllow},
+
+		// StartAdminBatchOperation can refresh tasks for any execution in the target
+		// namespace, so it is cluster-scoped admin only. Being admin of the namespace
+		// the batch acts on is not enough, and there is no WorkflowService equivalent.
+		{"SystemAdminOnStartAdminBatchOperation", claimsSystemAdmin, targetStartAdminBatchOperation, DecisionAllow},
+		{"SystemWriterOnStartAdminBatchOperation", claimsSystemWriter, targetStartAdminBatchOperation, DecisionDeny},
+		{"SystemReaderOnStartAdminBatchOperation", claimsSystemReader, targetStartAdminBatchOperation, DecisionDeny},
+		{"NamespaceAdminOnStartAdminBatchOperation", claimsNamespaceAdmin, targetStartAdminBatchOperation, DecisionDeny},
+		{"NamespaceWriterOnStartAdminBatchOperation", claimsNamespaceWriter, targetStartAdminBatchOperation, DecisionDeny},
+		{"RoleNoneOnStartAdminBatchOperation", claimsNone, targetStartAdminBatchOperation, DecisionDeny},
 
 		// healthcheck allowed to everyone
 		{"RoleNoneOnGetSystemInfo", claimsNone, targetGetSystemInfo, DecisionAllow},

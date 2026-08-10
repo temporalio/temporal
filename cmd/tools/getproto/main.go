@@ -43,10 +43,7 @@ func findProtoImports() []string {
 			fatalIfErr(err)
 			for line := range strings.SplitSeq(string(protoFile), "\n") {
 				if match := matchImport.FindStringSubmatch(line); len(match) > 0 {
-					i := match[1]
-					if strings.HasPrefix(i, "temporal/api/") ||
-						strings.HasPrefix(i, "google/") ||
-						strings.HasPrefix(i, "nexus/") {
+					if i := match[1]; isExternalImport(i) {
 						importMap[i] = struct{}{}
 					}
 				}
@@ -55,6 +52,18 @@ func findProtoImports() []string {
 		return nil
 	}))
 	return expmaps.Keys(importMap)
+}
+
+// isExternalImport reports whether a proto import is resolved from a Go module
+// rather than from proto/internal. A prefix missing from this list is never added
+// to the descriptor set, and protoc then fails with "File not found".
+func isExternalImport(path string) bool {
+	for _, prefix := range []string{"temporal/api/", "google/", "nexus/", "nexusannotations/"} {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func getImportName(i string) string {
@@ -82,6 +91,12 @@ func genFileList(protoImports []string) {
 			importName := getImportName(goImport)
 			goImportsMap[goImport] = importName
 			protoToPackage[i] = importName
+		} else if strings.HasPrefix(i, "google/api/") {
+			// The googleapis annotations all live in one Go package, which is not
+			// under types/known like the well-known types below.
+			const goImport = "google.golang.org/genproto/googleapis/api/annotations"
+			goImportsMap[goImport] = "annotations"
+			protoToPackage[i] = "annotations"
 		} else if strings.HasPrefix(i, "google/") {
 			base := strings.TrimSuffix(filepath.Base(i), ".proto") + "pb"
 			base = strings.ReplaceAll(base, "field_mask", "fieldmask")
@@ -157,7 +172,7 @@ func checkImports(files map[string]protoreflect.FileDescriptor) {
 		num := imports.Len()
 		for i := range num {
 			imp := imports.Get(i).Path()
-			if strings.HasPrefix(imp, "temporal/api/") || strings.HasPrefix(imp, "google/") || strings.HasPrefix(imp, "nexus/") {
+			if isExternalImport(imp) {
 				if _, ok := files[imp]; !ok {
 					missing[imp] = struct{}{}
 				}

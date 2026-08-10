@@ -229,7 +229,7 @@ func fetchPage(
 
 // processWorkflowsWithProactiveFetching handles the core logic for both batch activity functions
 // nolint:revive,cognitive-complexity
-func (a *activities) processWorkflowsWithProactiveFetching(
+func (a *Activities) processWorkflowsWithProactiveFetching(
 	ctx context.Context,
 	config batchProcessorConfig,
 	startWorkerProcessor batchWorkerProcessor,
@@ -374,45 +374,64 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	return hbd, nil
 }
 
-type activities struct {
-	activityDeps
-	namespace   namespace.Name
-	namespaceID namespace.ID
-	rps         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter
+type Activities struct {
+	ActivityDeps
+	validateAndResolveNamespace validateAndResolveNamespace
+	rps                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	concurrency                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-// checkNamespace validates that batchParams targets the worker's own namespace.
-// The NamespaceId, Request.Namespace (if set), and AdminRequest.Namespace (if set)
-// must all agree with the worker's bound namespace. This prevents cross-namespace
-// escalation via the privileged internal-frontend connection (NoopClaimMapper → RoleAdmin).
-func (a *activities) checkNamespace(batchParams *batchspb.BatchOperationInput) error {
-	if batchParams.NamespaceId != a.namespaceID.String() {
-		return errNamespaceMismatch
+func NewActivities(
+	deps ActivityDeps,
+	dc *dynamicconfig.Collection,
+	validateAndResolve validateAndResolveNamespace,
+) *Activities {
+	return &Activities{
+		ActivityDeps:                deps,
+		validateAndResolveNamespace: validateAndResolve,
+		rps:                         dynamicconfig.BatcherRPS.Get(dc),
+		concurrency:                 dynamicconfig.BatcherConcurrency.Get(dc),
 	}
-	ns := a.namespace.String()
-	if req := batchParams.GetRequest(); req != nil && req.GetNamespace() != ns {
-		return errNamespaceMismatch
+}
+
+type validateAndResolveNamespace func(*batchspb.BatchOperationInput) (namespace.Name, error)
+
+// validateAndResolveNSForUserBatch serves the per-namespace worker, which runs in
+// the user namespace it acts on. It covers both user batches and admin batches
+// started with JOB_NAMESPACE_USER, so NamespaceId, Request.Namespace (if set), and
+// AdminRequest.Namespace (if set) must all agree with that namespace. This prevents
+// cross-namespace escalation via the privileged internal-frontend connection
+// (NoopClaimMapper → RoleAdmin).
+func validateAndResolveNSForUserBatch(name namespace.Name, id namespace.ID) validateAndResolveNamespace {
+	return func(batchParams *batchspb.BatchOperationInput) (namespace.Name, error) {
+		if batchParams.GetNamespaceId() != id.String() {
+			return "", errNamespaceMismatch
+		}
+		ns := name.String()
+		if req := batchParams.GetRequest(); req != nil && req.GetNamespace() != ns {
+			return "", errNamespaceMismatch
+		}
+		if req := batchParams.GetAdminRequest(); req != nil && req.GetNamespace() != ns {
+			return "", errNamespaceMismatch
+		}
+		return name, nil
 	}
-	if req := batchParams.GetAdminRequest(); req != nil && req.GetNamespace() != ns {
-		return errNamespaceMismatch
-	}
-	return nil
 }
 
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
 // nolint:revive,cognitive-complexity
-func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+func (a *Activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
 
-	if err := a.checkNamespace(batchParams); err != nil {
+	nsName, err := a.validateAndResolveNamespace(batchParams)
+	if err != nil {
 		metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
-		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
+		logger.Error("Failed to resolve the namespace of a batch operation", tag.Error(err))
 		return hbd, err
 	}
-	ns := a.namespace.String()
+	ns := nsName.String()
 
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
 		Namespace:     ns,
@@ -494,7 +513,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		namespace:               ns,
 		adjustedQuery:           visibilityQuery,
 		batchType:               batchParams.BatchType,
-		concurrency:             a.getOperationConcurrency(int(batchParams.Concurrency)),
+		concurrency:             a.getOperationConcurrency(ns, int(batchParams.Concurrency)),
 		initialPageToken:        hbd.PageToken,
 		initialExecutions:       executions,
 		initialTargetExecutions: targetExecutions,
@@ -517,7 +536,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, rateLimiter, sdkClient, metricsHandler, logger, hbd)
 }
 
-func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
+func (a *Activities) getActivityLogger(ctx context.Context) log.Logger {
 	wfInfo := activity.GetInfo(ctx)
 	return log.With(
 		a.Logger,
@@ -527,7 +546,7 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 	)
 }
 
-func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.BatchOperationType) string {
+func (a *Activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.BatchOperationType) string {
 	if len(query) == 0 {
 		// don't add anything if query is empty
 		return query
@@ -547,15 +566,15 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 	}
 }
 
-func (a *activities) adjustQueryAdminBatchType(adminReq *adminservice.StartAdminBatchOperationRequest) string {
+func (a *Activities) adjustQueryAdminBatchType(adminReq *adminservice.StartAdminBatchOperationRequest) string {
 	// RefreshWorkflowTasks applies to both open and closed workflows,
 	// so no additional filter is needed - return query as-is.
 	return adminReq.GetVisibilityQuery()
 }
 
-func (a *activities) getOperationConcurrency(concurrency int) int {
+func (a *Activities) getOperationConcurrency(ns string, concurrency int) int {
 	if concurrency <= 0 {
-		return a.concurrency(a.namespace.String())
+		return a.concurrency(ns)
 	}
 	return concurrency
 }
@@ -571,7 +590,7 @@ func taskTimeoutContext(ctx context.Context) (context.Context, context.CancelFun
 	return context.WithTimeout(ctx, defaultTaskTimeout)
 }
 
-func (a *activities) startTaskProcessor(
+func (a *Activities) startTaskProcessor(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	namespace string,
@@ -615,7 +634,7 @@ func deterministicRequestID(jobID string, parts ...string) string {
 // processSingleTask processes a single batch task, bounding its execution with a
 // per-task timeout so that one hung operation cannot block the task processor.
 // nolint:revive,cognitive-complexity
-func (a *activities) processSingleTask(
+func (a *Activities) processSingleTask(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	namespace string,
@@ -881,7 +900,7 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 
 // processTaskWithRetries runs the task's operation, retrying retryable failures in place on
 // this goroutine, and sends exactly one response on respCh per task.
-func (a *activities) processTaskWithRetries(
+func (a *Activities) processTaskWithRetries(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	ns string,
@@ -927,7 +946,7 @@ func isRetryableTaskError(err error, batchOperation *batchspb.BatchOperationInpu
 	return !nonRetryable
 }
 
-func (a *activities) processAdminTask(
+func (a *Activities) processAdminTask(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
 	task task,

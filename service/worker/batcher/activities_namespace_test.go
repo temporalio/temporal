@@ -25,41 +25,40 @@ import (
 // The per-NS worker's frontendClient dials internal-frontend (NoopClaimMapper →
 // RoleAdmin), so the activity MUST NOT forward a user-controlled namespace string
 // to frontendClient calls. The namespace for all downstream operations must be
-// the worker's bound namespace.
+// the job's user namespace.
 
 const (
-	boundNSName = "bound-ns"
-	boundNSID   = "bound-ns-id"
+	userNSName  = "user-ns"
+	userNSID    = "user-ns-id"
 	otherNSName = "other-ns"
 )
 
-func newBoundActivities(frontend workflowservice.WorkflowServiceClient) *activities {
-	return &activities{
-		activityDeps: activityDeps{
+func newUserNamespaceActivities(frontend workflowservice.WorkflowServiceClient) *Activities {
+	return &Activities{
+		ActivityDeps: ActivityDeps{
 			MetricsHandler: metrics.NoopMetricsHandler,
 			Logger:         log.NewTestLogger(),
 			FrontendClient: frontend,
 		},
-		namespace:   namespace.Name(boundNSName),
-		namespaceID: namespace.ID(boundNSID),
-		rps:         dynamicconfig.GetIntPropertyFnFilteredByNamespace(50),
-		concurrency: dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
+		validateAndResolveNamespace: validateAndResolveNSForUserBatch(namespace.Name(userNSName), namespace.ID(userNSID)),
+		rps:                         dynamicconfig.GetIntPropertyFnFilteredByNamespace(50),
+		concurrency:                 dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
 	}
 }
 
 // TestBatchActivityWithProtobuf_RejectsMismatchedRequestNamespace verifies that
 // BatchActivityWithProtobuf rejects a request whose Request.Namespace differs
-// from the worker's bound namespace, even when NamespaceId is valid.
+// from the job's user namespace, even when NamespaceId is valid.
 // This blocks the cross-namespace attack where an attacker submits a valid
 // NamespaceId for their own namespace but sets Request.Namespace to a victim's.
 func TestBatchActivityWithProtobuf_RejectsMismatchedRequestNamespace(t *testing.T) {
 	ts := testsuite.WorkflowTestSuite{}
 	env := ts.NewTestActivityEnvironment()
-	a := newBoundActivities(nil)
+	a := newUserNamespaceActivities(nil)
 	env.RegisterActivity(a.BatchActivityWithProtobuf)
 
 	input := &batchspb.BatchOperationInput{
-		NamespaceId: boundNSID, // ID check passes; name check must catch the mismatch
+		NamespaceId: userNSID, // ID check passes; name check must catch the mismatch
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace: otherNSName, // mismatched — must be rejected
 			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
@@ -79,11 +78,11 @@ func TestBatchActivityWithProtobuf_RejectsMismatchedRequestNamespace(t *testing.
 func TestBatchActivityWithProtobuf_RejectsMismatchedAdminRequestNamespace(t *testing.T) {
 	ts := testsuite.WorkflowTestSuite{}
 	env := ts.NewTestActivityEnvironment()
-	a := newBoundActivities(nil)
+	a := newUserNamespaceActivities(nil)
 	env.RegisterActivity(a.BatchActivityWithProtobuf)
 
 	input := &batchspb.BatchOperationInput{
-		NamespaceId: boundNSID,
+		NamespaceId: userNSID,
 		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
 			Namespace:  otherNSName, // mismatched — must be rejected
 			Executions: []*commonpb.WorkflowExecution{{WorkflowId: "w"}},
@@ -95,12 +94,12 @@ func TestBatchActivityWithProtobuf_RejectsMismatchedAdminRequestNamespace(t *tes
 	require.ErrorContains(t, err, errNamespaceMismatch.Error())
 }
 
-// TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal verifies that when
+// TestStartTaskProcessor_UsesUserNamespaceForSignal verifies that when
 // BatchActivityWithProtobuf dispatches via startTaskProcessor, the namespace
-// delivered to frontendClient.SignalWorkflowExecution is the worker's bound
+// delivered to frontendClient.SignalWorkflowExecution is the job's user
 // namespace. This is a belt-and-suspenders check: even if the early validation
-// above is ever relaxed, the namespace used in operations stays worker-bound.
-func TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal(t *testing.T) {
+// above is ever relaxed, the namespace used in operations stays that namespace.
+func TestStartTaskProcessor_UsesUserNamespaceForSignal(t *testing.T) {
 	r := require.New(t)
 	ctrl := gomock.NewController(t)
 	mockFE := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
@@ -113,13 +112,13 @@ func TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal(t *testing.T) {
 			return &workflowservice.SignalWorkflowExecutionResponse{}, nil
 		})
 
-	a := newBoundActivities(mockFE)
+	a := newUserNamespaceActivities(mockFE)
 
 	// Simulate the namespace that BatchActivityWithProtobuf derives —
-	// with the fix this is always a.namespace.String().
-	ns := a.namespace.String()
+	// with the fix this is always the job's user namespace.
+	ns := userNSName
 	batchOp := &batchspb.BatchOperationInput{
-		NamespaceId: boundNSID,
+		NamespaceId: userNSID,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace: ns,
 			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
@@ -151,6 +150,6 @@ func TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal(t *testing.T) {
 	<-done
 
 	r.NotNil(captured)
-	r.Equal(boundNSName, captured.Namespace,
-		"frontendClient.SignalWorkflowExecution must receive the worker's bound namespace")
+	r.Equal(userNSName, captured.Namespace,
+		"frontendClient.SignalWorkflowExecution must receive the job's user namespace")
 }

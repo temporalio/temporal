@@ -7,7 +7,6 @@ package main
 import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	nexusannotations "github.com/nexus-rpc/nexus-proto-annotations/go/nexusannotations/v1"
 	activity "go.temporal.io/api/activity/v1"
 	batch "go.temporal.io/api/batch/v1"
 	callback "go.temporal.io/api/callback/v1"
@@ -33,6 +32,7 @@ import (
 	worker "go.temporal.io/api/worker/v1"
 	workflow "go.temporal.io/api/workflow/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
+	annotations "google.golang.org/genproto/googleapis/api/annotations"
 	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -44,6 +44,7 @@ import (
 
 func init() {
 	importMap = make(map[string]protoreflect.FileDescriptor)
+	importMap["google/api/field_behavior.proto"] = annotations.File_google_api_field_behavior_proto
 	importMap["google/protobuf/any.proto"] = anypb.File_google_protobuf_any_proto
 	importMap["google/protobuf/descriptor.proto"] = descriptorpb.File_google_protobuf_descriptor_proto
 	importMap["google/protobuf/duration.proto"] = durationpb.File_google_protobuf_duration_proto
@@ -51,7 +52,6 @@ func init() {
 	importMap["google/protobuf/field_mask.proto"] = fieldmaskpb.File_google_protobuf_field_mask_proto
 	importMap["google/protobuf/timestamp.proto"] = timestamppb.File_google_protobuf_timestamp_proto
 	importMap["google/protobuf/wrappers.proto"] = wrapperspb.File_google_protobuf_wrappers_proto
-	importMap["nexusannotations/v1/options.proto"] = nexusannotations.File_nexusannotations_v1_options_proto
 	importMap["temporal/api/activity/v1/message.proto"] = activity.File_temporal_api_activity_v1_message_proto
 	importMap["temporal/api/batch/v1/message.proto"] = batch.File_temporal_api_batch_v1_message_proto
 	importMap["temporal/api/callback/v1/message.proto"] = callback.File_temporal_api_callback_v1_message_proto

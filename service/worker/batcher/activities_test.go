@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
@@ -510,7 +512,7 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 	}
 	for _, testRun := range tests {
 		s.Run(testRun.name, func() {
-			a := activities{}
+			a := Activities{}
 			adjustedQuery := a.adjustQueryBatchTypeEnum(testRun.query, testRun.batchType)
 			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
@@ -518,7 +520,7 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 }
 
 func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
-	a := activities{}
+	a := Activities{}
 
 	s.Run("Empty query", func() {
 		adminReq := &adminservice.StartAdminBatchOperationRequest{
@@ -569,8 +571,8 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
 	ctx := context.Background()
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
 
-	a := &activities{
-		activityDeps: activityDeps{
+	a := &Activities{
+		ActivityDeps: ActivityDeps{
 			HistoryClient: mockHistoryClient,
 		},
 	}
@@ -619,8 +621,8 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks_Error() {
 	ctx := context.Background()
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
 
-	a := &activities{
-		activityDeps: activityDeps{
+	a := &Activities{
+		ActivityDeps: ActivityDeps{
 			HistoryClient: mockHistoryClient,
 		},
 	}
@@ -782,8 +784,8 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	a := &activities{
-		activityDeps: activityDeps{
+	a := &Activities{
+		ActivityDeps: ActivityDeps{
 			FrontendClient: s.mockFrontendClient,
 			Logger:         log.NewTestLogger(),
 			MetricsHandler: metrics.NoopMetricsHandler,
@@ -848,8 +850,8 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	a := &activities{
-		activityDeps: activityDeps{
+	a := &Activities{
+		ActivityDeps: ActivityDeps{
 			FrontendClient: s.mockFrontendClient,
 			Logger:         log.NewTestLogger(),
 			MetricsHandler: metrics.NoopMetricsHandler,
@@ -916,8 +918,8 @@ func (s *activitiesSuite) TestStartTaskProcessor_ActivityTerminalStateIsNotRetri
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	a := &activities{
-		activityDeps: activityDeps{
+	a := &Activities{
+		ActivityDeps: ActivityDeps{
 			FrontendClient: s.mockFrontendClient,
 			Logger:         log.NewTestLogger(),
 			MetricsHandler: metrics.NoopMetricsHandler,
@@ -1082,7 +1084,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 		}
 	}
 
-	a := &activities{}
+	a := &Activities{}
 	config := batchProcessorConfig{
 		adjustedQuery: "ExecutionStatus = 'Completed'",
 		concurrency:   3,
@@ -1176,7 +1178,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 		}
 	}
 
-	a := &activities{}
+	a := &Activities{}
 	config := batchProcessorConfig{
 		namespace:     "test-namespace",
 		adjustedQuery: "ActivityType = 'test-activity'",
@@ -1265,7 +1267,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialTarge
 				}
 			}
 
-			a := &activities{}
+			a := &Activities{}
 			config := batchProcessorConfig{
 				batchType:               tt.batchType,
 				concurrency:             1,
@@ -1329,7 +1331,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_LegacyActivi
 		}
 	}
 
-	a := &activities{}
+	a := &Activities{}
 	config := batchProcessorConfig{
 		batchType:         enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
 		concurrency:       1,
@@ -1362,7 +1364,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_LegacyActivi
 func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	ctx := context.Background()
 
-	a := &activities{}
+	a := &Activities{}
 
 	// AdminRequest with nil operation
 	batchOperation := &batchspb.BatchOperationInput{
@@ -1386,4 +1388,41 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "unknown admin batch type")
+}
+
+func TestValidateAndResolveNSForUserBatch(t *testing.T) {
+	resolve := validateAndResolveNSForUserBatch(namespace.Name(userNSName), namespace.ID(userNSID))
+
+	t.Run("resolves to the job's user namespace", func(t *testing.T) {
+		ns, err := resolve(&batchspb.BatchOperationInput{
+			NamespaceId: userNSID,
+			Request:     &workflowservice.StartBatchOperationRequest{Namespace: userNSName},
+		})
+		require.NoError(t, err)
+		require.Equal(t, namespace.Name(userNSName), ns)
+	})
+
+	t.Run("rejects another namespace id", func(t *testing.T) {
+		_, err := resolve(&batchspb.BatchOperationInput{
+			NamespaceId: "other-ns-id",
+			Request:     &workflowservice.StartBatchOperationRequest{Namespace: userNSName},
+		})
+		require.ErrorIs(t, err, errNamespaceMismatch)
+	})
+
+	t.Run("rejects another namespace name on a request", func(t *testing.T) {
+		_, err := resolve(&batchspb.BatchOperationInput{
+			NamespaceId: userNSID,
+			Request:     &workflowservice.StartBatchOperationRequest{Namespace: otherNSName},
+		})
+		require.ErrorIs(t, err, errNamespaceMismatch)
+	})
+
+	t.Run("rejects another namespace name on an admin request", func(t *testing.T) {
+		_, err := resolve(&batchspb.BatchOperationInput{
+			NamespaceId:  userNSID,
+			AdminRequest: &adminservice.StartAdminBatchOperationRequest{Namespace: otherNSName},
+		})
+		require.ErrorIs(t, err, errNamespaceMismatch)
+	})
 }

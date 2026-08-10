@@ -20,6 +20,7 @@ const (
 	AddSearchAttributesActivityTQ = "temporal-sys-add-search-attributes-activity-tq"
 	DeleteNamespaceActivityTQ     = "temporal-sys-delete-namespace-activity-tq"
 	DLQActivityTQ                 = "temporal-sys-dlq-activity-tq"
+	AdminBatchActivityTQ          = "temporal-sys-admin-batch-tq"
 )
 
 // IsInternalTaskQueueKind returns true if the task queue kind identifies a

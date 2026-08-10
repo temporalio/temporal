@@ -76,6 +76,7 @@ var (
 	FlagMinPass                    = "min-pass"
 	FlagVisibilityQuery            = "query"
 	FlagJobID                      = "job-id"
+	FlagJobNamespace               = "job-namespace"
 	FlagDecode                     = "decode"
 	FlagScheduleID                 = "schedule-id"
 	FlagScheduleIDAlias            = []string{"sid"}
