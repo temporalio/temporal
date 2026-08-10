@@ -89,7 +89,7 @@ func (s *jitterSuite) TestJitter_CoefficientNegative() {
 	// coefficient < 0 clamps to 0, so Jitter returns the input unchanged (and does not panic).
 	s.Equal(time.Duration(1), Jitter(time.Duration(1), -0.5))
 	s.Equal(int64(1), Jitter(int64(1), -0.5))
-	s.Equal(float64(1), Jitter(float64(1), -0.5))
+	s.InDelta(float64(1), Jitter(float64(1), -0.5), 0) // exact: clamped to 0 returns input unchanged
 	s.Equal(int64(1), Jitter(int64(1), -100.0))
 }
 
