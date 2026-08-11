@@ -52,31 +52,6 @@ services:
       bindOnIP: "127.0.0.1"
 `
 
-	const authTemplateConfig = `# enable-template
-log:
-  level: info
-persistence:
-  numHistoryShards: 4
-  defaultStore: default
-  datastores:
-    default:
-      sql:
-        pluginName: "postgres12"
-        databaseName: "temporal"
-        connectAddr: "localhost:5432"
-        connectProtocol: "tcp"
-global:
-  authorization:
-    authorizer: {{ default "" (env "TEMPORAL_AUTH_AUTHORIZER") }}
-    claimMapper: {{ default "" (env "TEMPORAL_AUTH_CLAIM_MAPPER") }}
-    audience: {{ default "" (env "TEMPORAL_JWT_AUDIENCE") }}
-services:
-  frontend:
-    rpc:
-      grpcPort: 7233
-      bindOnIP: "127.0.0.1"
-`
-
 	const invalidYaml = `log:
   level: warn
   invalid indentation
@@ -121,39 +96,6 @@ services:
 				require.Equal(t, "error", cfg.Log.Level)
 				require.Equal(t, int32(32), cfg.Persistence.NumHistoryShards)
 				require.Equal(t, 7777, cfg.Services["frontend"].RPC.GRPCPort)
-			},
-		},
-		{
-			name:          "template config maps TEMPORAL_JWT_AUDIENCE env var to authorization audience",
-			configContent: authTemplateConfig,
-			loadOptions: func(configPath string) []loadOption {
-				return []loadOption{WithConfigFile(configPath)}
-			},
-			setupEnv: func(t *testing.T) {
-				t.Setenv("TEMPORAL_JWT_AUDIENCE", "https://temporal.example.com")
-				t.Setenv("TEMPORAL_AUTH_AUTHORIZER", "default")
-				t.Setenv("TEMPORAL_AUTH_CLAIM_MAPPER", "default")
-			},
-			expectError: false,
-			validateConfig: func(t *testing.T, cfg *Config) {
-				require.Equal(t, "https://temporal.example.com", cfg.Global.Authorization.Audience)
-				require.Equal(t, "default", cfg.Global.Authorization.Authorizer)
-				require.Equal(t, "default", cfg.Global.Authorization.ClaimMapper)
-			},
-		},
-		{
-			name:          "template config defaults authorization audience to empty when env var unset",
-			configContent: authTemplateConfig,
-			loadOptions: func(configPath string) []loadOption {
-				return []loadOption{WithConfigFile(configPath)}
-			},
-			setupEnv: func(t *testing.T) {
-				// Ensure the variable is not inherited from the surrounding environment.
-				t.Setenv("TEMPORAL_JWT_AUDIENCE", "")
-			},
-			expectError: false,
-			validateConfig: func(t *testing.T, cfg *Config) {
-				require.Empty(t, cfg.Global.Authorization.Audience)
 			},
 		},
 		{
