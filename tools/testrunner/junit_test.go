@@ -10,6 +10,7 @@ import (
 
 	"github.com/jstemmer/go-junit-report/v2/junit"
 	"github.com/stretchr/testify/require"
+	commonjunit "go.temporal.io/server/tools/common/junit"
 )
 
 func TestReadJUnitReport(t *testing.T) {
@@ -29,8 +30,7 @@ func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 		"TestCallbacksSuite/TestWorkflowCallbacks_2",
 	}
 	j := generateReport(testNames, "timeout", failureTypeTimeout)
-	j.path = out.Name()
-	require.NoError(t, j.write())
+	require.NoError(t, commonjunit.Write(out.Name(), &j.Testsuites))
 	requireReportEquals(t, "testdata/junit-timeout-output.xml", out.Name())
 }
 
@@ -73,8 +73,7 @@ func TestAppendAlertsSuite(t *testing.T) {
 		require.NoError(t, os.Remove(out.Name()))
 	}()
 
-	j.path = out.Name()
-	require.NoError(t, j.write())
+	require.NoError(t, commonjunit.Write(out.Name(), &j.Testsuites))
 
 	// Compare against the expected output file
 	requireReportEquals(t, "testdata/junit-alerts-output.xml", out.Name())
@@ -300,10 +299,8 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 
 			// Setup the report
 			j := tt.setup()
-			j.path = out.Name()
-
 			// Write the report
-			require.NoError(t, j.write())
+			require.NoError(t, commonjunit.Write(out.Name(), &j.Testsuites))
 
 			// Read the written file
 			content, err := os.ReadFile(out.Name())
@@ -315,8 +312,9 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 			require.NoError(t, err, "Written XML should be well-formed and parseable")
 
 			// Additional validation: ensure we can re-parse it using our own read method
-			j2 := &junitReport{path: out.Name()}
-			require.NoError(t, j2.read(), "Should be able to re-read the written XML")
+			testsuites, err := commonjunit.Read(out.Name())
+			require.NoError(t, err, "Should be able to re-read the written XML")
+			require.NotEmpty(t, testsuites.Suites)
 
 			// Validate that the structure is reasonable
 			require.NotEmpty(t, parsed.Suites, "Should have at least one test suite")
@@ -326,7 +324,7 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 
 func mustReadReportFixture(t *testing.T, path string) *junitReport {
 	t.Helper()
-	report := &junitReport{path: path}
-	require.NoError(t, report.read())
-	return report
+	testsuites, err := commonjunit.Read(path)
+	require.NoError(t, err)
+	return &junitReport{Testsuites: *testsuites}
 }

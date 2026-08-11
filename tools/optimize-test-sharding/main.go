@@ -2,7 +2,6 @@ package optimizetestsharding
 
 import (
 	"context"
-	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,8 +15,8 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
-	"github.com/jstemmer/go-junit-report/v2/junit"
 	"go.temporal.io/server/tools/common/github"
+	commonjunit "go.temporal.io/server/tools/common/junit"
 )
 
 const (
@@ -195,14 +194,8 @@ func loadTestData(dir string) (map[string][]float64, error) {
 }
 
 func processJUnitReport(filename string, tmap map[string][]float64) error {
-	file, err := os.Open(filename)
+	testsuites, err := commonjunit.Read(filename)
 	if err != nil {
-		return err
-	}
-	defer func() { _ = file.Close() }()
-
-	var testsuites junit.Testsuites
-	if err := xml.NewDecoder(file).Decode(&testsuites); err != nil {
 		return err
 	}
 

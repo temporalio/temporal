@@ -1,9 +1,7 @@
 package flakereport
 
 import (
-	"encoding/xml"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -15,36 +13,6 @@ import (
 
 var finalRegex = regexp.MustCompile(`\s*\(final\)$`)
 var trailingSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
-
-// parseJUnitFile reads and parses a single JUnit XML file
-func parseJUnitFile(filePath string) (*junit.Testsuites, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Printf("Warning: Failed to close file %s: %v\n", filePath, err)
-		}
-	}()
-
-	var testsuites junit.Testsuites
-	decoder := xml.NewDecoder(file)
-	if err := decoder.Decode(&testsuites); err != nil {
-		// Try parsing as a single testsuite
-		if _, seekErr := file.Seek(0, 0); seekErr != nil {
-			return nil, fmt.Errorf("failed to seek file %s: %w", filePath, seekErr)
-		}
-		var testsuite junit.Testsuite
-		decoder = xml.NewDecoder(file)
-		if err := decoder.Decode(&testsuite); err != nil {
-			return nil, fmt.Errorf("failed to parse JUnit XML %s: %w", filePath, err)
-		}
-		testsuites.Suites = []junit.Testsuite{testsuite}
-	}
-
-	return &testsuites, nil
-}
 
 // topLevelTestName extracts the suite/top-level test name from a test name.
 // For "TestSuiteV0/TestMethod" returns "TestSuiteV0".
