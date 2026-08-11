@@ -55,6 +55,7 @@ func Read(path string) (*Testsuites, error) {
 				Tests:    testsuite.Tests,
 				Errors:   testsuite.Errors,
 				Failures: testsuite.Failures,
+				Skipped:  testsuite.Skipped,
 				Time:     testsuite.Time,
 				Suites:   []Testsuite{testsuite},
 			}, nil
