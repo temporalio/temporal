@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jstemmer/go-junit-report/v2/junit"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 // alertsSuiteName is the JUnit suite name used for structural alerts (data

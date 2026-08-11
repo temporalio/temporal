@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	junitxml "github.com/jstemmer/go-junit-report/v2/junit"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,7 +13,7 @@ func TestRead(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
-		want    junitxml.Testsuites
+		want    Testsuites
 	}{
 		{
 			name: "testsuites root",
@@ -23,7 +22,7 @@ func TestRead(t *testing.T) {
         <testcase name="TestOne" classname="example.com/tests"></testcase>
     </testsuite>
 </testsuites>`,
-			want: junitxml.Testsuites{
+			want: Testsuites{
 				XMLName: xml.Name{Local: "testsuites"},
 				Tests:   1,
 			},
@@ -33,7 +32,7 @@ func TestRead(t *testing.T) {
 			content: `<testsuite name="suite" tests="1" failures="0" errors="0" id="0" time="">
     <testcase name="TestOne" classname="example.com/tests"></testcase>
 </testsuite>`,
-			want: junitxml.Testsuites{},
+			want: Testsuites{Tests: 1},
 		},
 	}
 
@@ -44,14 +43,14 @@ func TestRead(t *testing.T) {
 
 			report, err := Read(path)
 			require.NoError(t, err)
-			tt.want.Suites = []junitxml.Testsuite{{
+			tt.want.Suites = []Testsuite{{
 				Name:     "suite",
 				Tests:    1,
 				Failures: 0,
 				Errors:   0,
 				ID:       0,
 				Time:     "",
-				Testcases: []junitxml.Testcase{{
+				Testcases: []Testcase{{
 					Name:      "TestOne",
 					Classname: "example.com/tests",
 				}},
@@ -63,16 +62,16 @@ func TestRead(t *testing.T) {
 
 func TestWrite(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "junit.xml")
-	report := &junitxml.Testsuites{
+	report := &Testsuites{
 		Tests: 1,
-		Suites: []junitxml.Testsuite{{
+		Suites: []Testsuite{{
 			Name:     "suite",
 			Tests:    1,
 			Failures: 0,
 			Errors:   0,
 			ID:       0,
 			Time:     "",
-			Testcases: []junitxml.Testcase{{
+			Testcases: []Testcase{{
 				Name:      "TestOne",
 				Classname: "example.com/tests",
 			}},

@@ -8,8 +8,26 @@ import (
 	junitxml "github.com/jstemmer/go-junit-report/v2/junit"
 )
 
+// Testsuites is a JUnit test-suite collection.
+type Testsuites = junitxml.Testsuites
+
+// Testsuite is a JUnit test suite.
+type Testsuite = junitxml.Testsuite
+
+// Testcase is a JUnit test case.
+type Testcase = junitxml.Testcase
+
+// Property is a JUnit test-suite property.
+type Property = junitxml.Property
+
+// Result is a JUnit test-case failure or error.
+type Result = junitxml.Result
+
+// Output is captured JUnit test output.
+type Output = junitxml.Output
+
 // Read reads a JUnit XML file with either a testsuites or testsuite root.
-func Read(path string) (*junitxml.Testsuites, error) {
+func Read(path string) (*Testsuites, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open JUnit report file: %w", err)
@@ -29,22 +47,22 @@ func Read(path string) (*junitxml.Testsuites, error) {
 
 		switch root.Name.Local {
 		case "testsuites":
-			var testsuites junitxml.Testsuites
+			var testsuites Testsuites
 			if err := decoder.DecodeElement(&testsuites, &root); err != nil {
 				return nil, fmt.Errorf("failed to read JUnit report file: %w", err)
 			}
 			return &testsuites, nil
 		case "testsuite":
-			var testsuite junitxml.Testsuite
+			var testsuite Testsuite
 			if err := decoder.DecodeElement(&testsuite, &root); err != nil {
 				return nil, fmt.Errorf("failed to read JUnit report file: %w", err)
 			}
-			return &junitxml.Testsuites{
+			return &Testsuites{
 				Tests:    testsuite.Tests,
 				Errors:   testsuite.Errors,
 				Failures: testsuite.Failures,
 				Time:     testsuite.Time,
-				Suites:   []junitxml.Testsuite{testsuite},
+				Suites:   []Testsuite{testsuite},
 			}, nil
 		default:
 			return nil, fmt.Errorf("failed to read JUnit report file: unexpected root element %q", root.Name.Local)
@@ -53,7 +71,7 @@ func Read(path string) (*junitxml.Testsuites, error) {
 }
 
 // Write writes a JUnit XML file.
-func Write(path string, testsuites *junitxml.Testsuites) error {
+func Write(path string, testsuites *Testsuites) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to open JUnit report file: %w", err)

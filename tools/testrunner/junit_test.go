@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jstemmer/go-junit-report/v2/junit"
 	"github.com/stretchr/testify/require"
 	commonjunit "go.temporal.io/server/tools/common/junit"
 )
@@ -213,7 +212,7 @@ func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *
 	require.Equal(t, "plain failure output with no recognizable block", merged.Suites[0].Testcases[0].Failure.Data)
 }
 
-func collectTestNames(suites []junit.Testsuite) []string {
+func collectTestNames(suites []commonjunit.Testsuite) []string {
 	var testNames []string
 	for _, suite := range suites {
 		for _, test := range suite.Testcases {
@@ -307,12 +306,12 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 			require.NoError(t, err)
 
 			// Validate that the content is well-formed XML
-			var parsed junit.Testsuites
+			var parsed commonjunit.Testsuites
 			err = xml.Unmarshal(content, &parsed)
 			require.NoError(t, err, "Written XML should be well-formed and parseable")
 
 			// Additional validation: ensure we can re-parse it using our own read method
-			testsuites, err := commonjunit.Read(out.Name())
+			_, err = commonjunit.Read(out.Name())
 			require.NoError(t, err, "Should be able to re-read the written XML")
 
 			// Validate that the structure is reasonable
