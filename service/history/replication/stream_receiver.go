@@ -45,13 +45,21 @@ type (
 		serverShardKey          ClusterShardKey
 		highPriorityTaskTracker ExecutableTaskTracker
 		lowPriorityTaskTracker  ExecutableTaskTracker
-		shutdownChan            channel.ShutdownOnce
-		logger                  log.Logger
-		stream                  Stream
-		taskConverter           ExecutableTaskConverter
-		receiverMode            ReceiverMode
-		flowController          ReceiverFlowController
-		recvSignalChan          chan struct{}
+		// memberLanes holds one lane per isolated namespace, created lazily as the
+		// sender tags messages with isolated_namespace_id. Each lane is its own
+		// monotonic stream for the life of the stream connection; a retired lane
+		// (the sender merged the namespace back) is dropped once its pending work
+		// drains. Tasks are still scheduled at the message's priority.
+		memberLaneMu      sync.Mutex
+		memberLanes       map[string]*memberLane
+		memberLanesClosed bool // set by Stop; late-created lanes are pre-cancelled
+		shutdownChan      channel.ShutdownOnce
+		logger            log.Logger
+		stream            Stream
+		taskConverter     ExecutableTaskConverter
+		receiverMode      ReceiverMode
+		flowController    ReceiverFlowController
+		recvSignalChan    chan struct{}
 
 		slowSubmissionMu         sync.RWMutex
 		slowSubmissionTimestamps map[enumsspb.TaskPriority]time.Time
@@ -60,6 +68,14 @@ type (
 	executeInterceptedTask struct {
 		TrackableExecutableTask
 		execute func() error
+	}
+
+	// memberLane is the receiver-side state of one isolated namespace's lane.
+	memberLane struct {
+		tracker ExecutableTaskTracker
+		// retiring is set when the sender marks the lane retired; the lane is
+		// dropped once its tracker drains.
+		retiring bool
 	}
 )
 
@@ -100,6 +116,7 @@ func NewStreamReceiver(
 		serverShardKey:          serverShardKey,
 		highPriorityTaskTracker: highPriorityTaskTracker,
 		lowPriorityTaskTracker:  lowPriorityTaskTracker,
+		memberLanes:             make(map[string]*memberLane),
 		shutdownChan:            channel.NewShutdownOnce(),
 		logger:                  logger,
 		stream: newStream(
@@ -115,7 +132,10 @@ func NewStreamReceiver(
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
 	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:  highPriorityTaskTracker.Size(),
+			// Include the isolated per-namespace lane trackers: isolation splits the
+			// HIGH lane, so flow control protects against total HIGH backlog (default
+			// lane + member lanes).
+			taskTrackingCount:  receiver.highFamilyTrackingCount(),
 			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
 		}
 	}
@@ -173,6 +193,12 @@ func (r *StreamReceiverImpl) Stop() {
 	r.stream.Close()
 	r.highPriorityTaskTracker.Cancel()
 	r.lowPriorityTaskTracker.Cancel()
+	r.memberLaneMu.Lock()
+	r.memberLanesClosed = true
+	for _, lane := range r.memberLanes {
+		lane.tracker.Cancel()
+	}
+	r.memberLaneMu.Unlock()
 
 	r.logger.Info("StreamReceiver shutting down.")
 }
@@ -241,9 +267,10 @@ func (r *StreamReceiverImpl) ackMessage(
 ) (int64, error) {
 	highPriorityWaterMarkInfo := r.highPriorityTaskTracker.LowWatermark()
 	lowPriorityWaterMarkInfo := r.lowPriorityTaskTracker.LowWatermark()
-	size := r.highPriorityTaskTracker.Size() + r.lowPriorityTaskTracker.Size()
+	size := r.highFamilyTrackingCount() + r.lowPriorityTaskTracker.Size()
 
 	var highPriorityWatermark, lowPriorityWatermark *replicationspb.ReplicationState
+	var isolatedLaneStates map[string]*replicationspb.ReplicationState
 	inclusiveLowWaterMark := int64(-1)
 	var inclusiveLowWaterMarkTime time.Time
 
@@ -286,6 +313,24 @@ func (r *StreamReceiverImpl) ackMessage(
 			inclusiveLowWaterMark = lowPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = lowPriorityWaterMarkInfo.Timestamp
 		}
+		// Fold isolated member lanes into the overall min so Scopes[0] on the sender
+		// (and thus cleanup) accounts for a lagging lane: the overall min must be the
+		// lowest point in flight across every lane. Report each lane's watermark keyed
+		// by namespace so the sender can anchor per-member state on applied points.
+		memberWms := r.memberLaneWatermarks()
+		if len(memberWms) > 0 {
+			isolatedLaneStates = make(map[string]*replicationspb.ReplicationState, len(memberWms))
+		}
+		for ns, wm := range memberWms {
+			if wm.Watermark < inclusiveLowWaterMark {
+				inclusiveLowWaterMark = wm.Watermark
+				inclusiveLowWaterMarkTime = wm.Timestamp
+			}
+			isolatedLaneStates[ns] = &replicationspb.ReplicationState{
+				InclusiveLowWatermark:     wm.Watermark,
+				InclusiveLowWatermarkTime: timestamppb.New(wm.Timestamp),
+			}
+		}
 	case ReceiverModeSingleStack:
 		if highPriorityWaterMarkInfo == nil { // This should not happen, more for a safety check
 			return 0, NewStreamError("Single stack mode. High priority tracker does not have low watermark info", serviceerror.NewInternal("Invalid tracker state"))
@@ -300,6 +345,10 @@ func (r *StreamReceiverImpl) ackMessage(
 		return 0, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
 	}
 
+	var pauseHighNamespaceIDs []string
+	if receiverMode == ReceiverModeTieredStack {
+		pauseHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
+	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &replicationspb.SyncReplicationState{
@@ -307,6 +356,12 @@ func (r *StreamReceiverImpl) ackMessage(
 				InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
 				HighPriorityState:         highPriorityWatermark,
 				LowPriorityState:          lowPriorityWatermark,
+				PauseHighNamespaceIds:     pauseHighNamespaceIDs,
+				IsolatedLaneStates:        isolatedLaneStates,
+				// Advertise that this receiver routes isolated_namespace_id-tagged
+				// messages, so the sender may safely emit lane traffic to it.
+				// Isolation only applies to the tiered stack.
+				SupportsNamespaceIsolation: receiverMode == ReceiverModeTieredStack,
 			},
 		},
 	}); err != nil {
@@ -370,18 +425,39 @@ func (r *StreamReceiverImpl) processMessages(
 		)
 		exclusiveHighWatermark := messages.ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(messages.ExclusiveHighWatermarkTime)
-		taskTracker, err := r.getTaskTracker(priority)
+		// Route to the per-lane tracker: an isolated namespace's lane gets its own
+		// monotonic tracker; unset routes by priority (HIGH / default-LOW).
+		taskTracker, err := r.getTaskTrackerForLane(priority, messages.GetIsolatedNamespaceId(), messages.GetRetireIsolatedLane())
 		if err != nil {
 			// Todo: Change to write Tasks to DLQ. As resend task will not help here
 			return NewStreamError("ReplicationTask wrong priority", err)
 		}
 
+		if priority == enumsspb.TASK_PRIORITY_HIGH {
+			// Isolation acts on HIGH (live) traffic: feed the throttler every HIGH task,
+			// including isolated-lane tasks, so an isolated namespace stays observable
+			// and is released once its HIGH rate drops. Load is scoped to the local shard.
+			for _, task := range convertedTasks {
+				if nsID := task.ReplicationTask().GetRawTaskInfo().GetNamespaceId(); nsID != "" {
+					r.NamespaceThrottler.RecordTask(r.clientShardKey.ShardID, nsID)
+				}
+			}
+		}
+
 		submissionThreshold := r.Config.ReplicationReceiverSlowSubmissionLatencyThreshold()
 
-		for _, task := range taskTracker.TrackTasks(WatermarkInfo{
+		trackedTasks := taskTracker.TrackTasks(WatermarkInfo{
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
-		}, convertedTasks...) {
+		}, convertedTasks...)
+		// Retire strictly AFTER TrackTasks: marking first would let the concurrent
+		// ack loop observe "retiring + empty tracker" mid-batch and delete the lane
+		// while its final batch is about to be tracked in the orphaned tracker —
+		// dropping those tasks from the ack fold.
+		if messages.GetRetireIsolatedLane() && messages.GetIsolatedNamespaceId() != "" {
+			r.retireMemberLane(messages.GetIsolatedNamespaceId())
+		}
+		for _, task := range trackedTasks {
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
 			if err != nil {
 				return err
@@ -437,6 +513,91 @@ func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (Exe
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
 	}
+}
+
+// getTaskTrackerForLane returns the tracker for a message's lane: an isolated
+// namespace's lane gets its own lazily-created tracker so each lane stays a single
+// monotonic stream; an empty namespace routes by priority (HIGH / default-LOW).
+func (r *StreamReceiverImpl) getTaskTrackerForLane(priority enumsspb.TaskPriority, isolatedNamespaceID string, retire bool) (ExecutableTaskTracker, error) {
+	if isolatedNamespaceID == "" {
+		return r.getTaskTracker(priority)
+	}
+	if priority != enumsspb.TASK_PRIORITY_HIGH {
+		// Isolation splits the HIGH lane only. Lane-tagged traffic at any other
+		// priority (including single-stack UNSPECIFIED, whose ack path would never
+		// fold a member lane) is a sender bug — fail the stream rather than
+		// silently mis-acking.
+		return nil, serviceerror.NewInternalf("isolated lane traffic must be HIGH priority, got %v", priority)
+	}
+	r.memberLaneMu.Lock()
+	defer r.memberLaneMu.Unlock()
+	lane, ok := r.memberLanes[isolatedNamespaceID]
+	if !ok {
+		lane = &memberLane{tracker: NewExecutableTaskTracker(r.logger, r.MetricsHandler)}
+		if r.memberLanesClosed {
+			// Lost the race with Stop(): pre-cancel so tracked tasks are
+			// cancelled rather than executed after shutdown.
+			lane.tracker.Cancel()
+		}
+		r.memberLanes[isolatedNamespaceID] = lane
+	}
+	if !retire && lane.retiring {
+		// Non-retire traffic on a retired lane means the sender re-isolated the
+		// namespace before the lane drained: the lane is live again. Without this,
+		// the stale retiring flag would delete an active lane at the first
+		// transient drain, dropping its watermark from the ack fold.
+		lane.retiring = false
+	}
+	return lane.tracker, nil
+}
+
+// retireMemberLane marks an isolated namespace's lane retired: the sender has merged
+// the namespace back to the shared lane and will send no further traffic on it. The
+// lane keeps reporting until its pending work drains, then is dropped — so a retired
+// lane can never pin the overall ack minimum.
+func (r *StreamReceiverImpl) retireMemberLane(isolatedNamespaceID string) {
+	r.memberLaneMu.Lock()
+	defer r.memberLaneMu.Unlock()
+	if lane, ok := r.memberLanes[isolatedNamespaceID]; ok {
+		lane.retiring = true
+	}
+}
+
+// highFamilyTrackingCount is the total tracked-task count across the default HIGH lane
+// and all isolated member lanes (used for HIGH flow control — isolation splits the
+// HIGH lane).
+func (r *StreamReceiverImpl) highFamilyTrackingCount() int {
+	count := r.highPriorityTaskTracker.Size()
+	r.memberLaneMu.Lock()
+	for _, lane := range r.memberLanes {
+		count += lane.tracker.Size()
+	}
+	r.memberLaneMu.Unlock()
+	return count
+}
+
+// memberLaneWatermarks snapshots the low watermark of every isolated member lane that
+// has received at least one batch, keyed by namespace id. Retired lanes are dropped
+// once drained.
+func (r *StreamReceiverImpl) memberLaneWatermarks() map[string]WatermarkInfo {
+	r.memberLaneMu.Lock()
+	defer r.memberLaneMu.Unlock()
+	out := make(map[string]WatermarkInfo, len(r.memberLanes))
+	for ns, lane := range r.memberLanes {
+		wm := lane.tracker.LowWatermark()
+		// Drop only lanes that are retiring, drained, AND have tracked at least one
+		// batch (wm != nil): a retiring lane whose retire batch hasn't reached
+		// TrackTasks yet is momentarily empty with no watermark, and deleting it
+		// then would orphan that batch outside the ack fold.
+		if lane.retiring && lane.tracker.Size() == 0 && wm != nil {
+			delete(r.memberLanes, ns)
+			continue
+		}
+		if wm != nil {
+			out[ns] = *wm
+		}
+	}
+	return out
 }
 
 func (r *StreamReceiverImpl) getTaskSchedulerPriority(priority enumsspb.TaskPriority, task TrackableExecutableTask) (enumsspb.TaskPriority, error) {
