@@ -3,12 +3,8 @@ package frontend
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"net/http/httptrace"
 	"net/url"
-	"runtime/debug"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,7 +14,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
@@ -43,25 +38,27 @@ const nexusCompletionAPIName = configs.CompleteNexusOperation
 const nexusCompletionMethodName = "CompleteNexusOperation"
 
 type nexusCompletionHandler struct {
-	ClusterMetadata                      cluster.Metadata
-	NamespaceRegistry                    namespace.Registry
-	Logger                               log.Logger
-	MetricsHandler                       metrics.Handler
-	Config                               *Config
-	CallbackTokenGenerator               *commonnexus.CallbackTokenGenerator
-	HistoryClient                        resource.HistoryClient
-	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
-	RequestErrorHandler                  *interceptor.RequestErrorHandler
-	NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	NamespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
-	NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
-	RateLimitInterceptor                 *interceptor.RateLimitInterceptor
-	AuthInterceptor                      *authorization.Interceptor
-	RedirectionInterceptor               *interceptor.Redirection
-	ForwardingClients                    *cluster.FrontendHTTPClientCache
-	HTTPTraceProvider                    commonnexus.HTTPClientTraceProvider
-	clientVersionChecker                 headers.VersionChecker
-	preProcessErrorsCounter              metrics.CounterIface
+	ClusterMetadata        cluster.Metadata
+	NamespaceRegistry      namespace.Registry
+	Logger                 log.Logger
+	MetricsHandler         metrics.Handler
+	Config                 *Config
+	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
+	HistoryClient          resource.HistoryClient
+	// TelemetryInterceptor                 *interceptor.TelemetryInterceptor
+	RequestErrorHandler *interceptor.RequestErrorHandler
+	// NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
+	// NamespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
+	// NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
+	// RateLimitInterceptor                 *interceptor.RateLimitInterceptor
+	AuthInterceptor *authorization.Interceptor
+	// RedirectionInterceptor               *interceptor.Redirection
+	ForwardingClients       *cluster.FrontendHTTPClientCache
+	HTTPTraceProvider       commonnexus.HTTPClientTraceProvider
+	NexusForwarder          *nexusForwardingInterceptor
+	nexusInterceptors       []interceptor.NexusInterceptor
+	clientVersionChecker    headers.VersionChecker
+	preProcessErrorsCounter metrics.CounterIface
 }
 
 type nexusCompletionHTTPHandler struct {
@@ -86,27 +83,47 @@ func newNexusCompletionHandler(
 	redirectionInterceptor *interceptor.Redirection,
 	forwardingClients *cluster.FrontendHTTPClientCache,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
+	nexusForwarder *nexusForwardingInterceptor,
+	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
+	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
+	customNexusInterceptors []interceptor.NexusInterceptor,
 ) *nexusCompletionHandler {
+	nexusInterceptors := []interceptor.NexusInterceptor{
+		telemetryInterceptor.InterceptNexus,
+		authInterceptor.InterceptNexus,
+		nexusForwarder.InterceptNexus,
+		namespaceValidationInterceptor.InterceptNexus,
+		namespaceConcurrencyLimitInterceptor.InterceptNexus,
+		namespaceRateLimitInterceptor.InterceptNexus,
+		rateLimitInterceptor.InterceptNexus,
+		sdkVersionInterceptor.InterceptNexus,
+		callerInfoInterceptor.InterceptNexus,
+	}
+	// draft-review: check if the customNexusInterceptors should be in the middle of
+	// the chain instead. Interleaved howver, is out of scope and will not be supported
+	nexusInterceptors = append(nexusInterceptors, customNexusInterceptors...)
 	return &nexusCompletionHandler{
-		ClusterMetadata:                      clusterMetadata,
-		NamespaceRegistry:                    namespaceRegistry,
-		Logger:                               logger,
-		MetricsHandler:                       metricsHandler,
-		Config:                               serviceConfig,
-		CallbackTokenGenerator:               callbackTokenGenerator,
-		HistoryClient:                        historyClient,
-		TelemetryInterceptor:                 telemetryInterceptor,
-		RequestErrorHandler:                  requestErrorHandler,
-		NamespaceValidationInterceptor:       namespaceValidationInterceptor,
-		NamespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
-		NamespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
-		RateLimitInterceptor:                 rateLimitInterceptor,
-		AuthInterceptor:                      authInterceptor,
-		RedirectionInterceptor:               redirectionInterceptor,
-		ForwardingClients:                    forwardingClients,
-		HTTPTraceProvider:                    httpTraceProvider,
-		clientVersionChecker:                 headers.NewDefaultVersionChecker(),
-		preProcessErrorsCounter:              metricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
+		ClusterMetadata:        clusterMetadata,
+		NamespaceRegistry:      namespaceRegistry,
+		Logger:                 logger,
+		MetricsHandler:         metricsHandler,
+		Config:                 serviceConfig,
+		CallbackTokenGenerator: callbackTokenGenerator,
+		HistoryClient:          historyClient,
+		// TelemetryInterceptor:                 telemetryInterceptor,
+		RequestErrorHandler: requestErrorHandler,
+		// NamespaceValidationInterceptor:       namespaceValidationInterceptor,
+		// NamespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
+		// NamespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
+		// RateLimitInterceptor:                 rateLimitInterceptor,
+		AuthInterceptor: authInterceptor,
+		// RedirectionInterceptor:               redirectionInterceptor,
+		ForwardingClients:       forwardingClients,
+		HTTPTraceProvider:       httpTraceProvider,
+		NexusForwarder:          nexusForwarder,
+		nexusInterceptors:       nexusInterceptors,
+		clientVersionChecker:    headers.NewDefaultVersionChecker(),
+		preProcessErrorsCounter: metricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
 	}
 }
 
@@ -179,7 +196,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		rCtx.originalHeaders = r.HTTPRequest.Header.Clone()
 	}
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
-	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
+	defer captureOperationPanic(rCtx.logger, &retErr)
 
 	if r.HTTPRequest.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
 		nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
@@ -197,13 +214,37 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 		}
 	}
+	ctx, err = rCtx.parseTLSAndAuthInfo(ctx, r)
+	if err != nil {
+		return err
+	}
 
-	if err := rCtx.interceptRequest(ctx, r); err != nil {
-		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
-			return h.forwardCompleteOperation(ctx, r, rCtx)
+	interceptorInput := interceptor.NewCompleteNexusOpInput(ns.Name().String(), r)
+	interceptorInput.WithForwardingInfo(interceptor.NexusForwardingInfo{
+		OriginalRequestHeaders: rCtx.originalHeaders,
+		BusinessID:             rCtx.businessID,
+	})
+	finalHandler := func(ctx context.Context, _ interceptor.NexusInterceptorInput) (any, error) {
+		return nil, h.completeOperationRequest(ctx, logger, completion, r, rCtx)
+	}
+	_, err = interceptor.ChainNexusInterceptors(finalHandler, h.nexusInterceptors)(ctx, interceptorInput)
+	if err != nil {
+		if taggedErr, ok := errors.AsType[*interceptor.InterceptorError](err); ok {
+			return taggedErr.Err
 		}
 		return err
 	}
+	return nil
+}
+
+func (h *nexusCompletionHandler) completeOperationRequest(
+	ctx context.Context,
+	logger log.Logger,
+	completion *tokenspb.NexusOperationCompletion,
+	r *nexusrpc.CompletionRequest,
+	rCtx *requestContext,
+) error {
+	ns := rCtx.namespace
 	tokenLimit := h.Config.MaxNexusOperationTokenLength(ns.Name().String())
 	if len(r.OperationToken) > tokenLimit {
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
@@ -232,7 +273,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 
-	err = h.completeOperation(ctx, logger, completion, successPayload, r, links, h.Config.EnableChasm(ns.Name().String()))
+	err := h.completeOperation(ctx, logger, completion, successPayload, r, links, h.Config.EnableChasm(ns.Name().String()))
 	if err == nil {
 		return nil
 	}
@@ -398,68 +439,6 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 	return err
 }
 
-func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
-	targetCluster := rCtx.namespace.ActiveClusterName(namespace.RoutingKey{ID: rCtx.businessID})
-	logger := log.With(
-		rCtx.logger,
-		tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()),
-		tag.TargetCluster(targetCluster),
-	)
-
-	client, err := h.ForwardingClients.Get(targetCluster)
-	if err != nil {
-		logger.Error("unable to get HTTP client for forward request", tag.Error(err))
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-	}
-
-	forwardURL, err := url.JoinPath(client.BaseURL(), commonnexus.RouteCompletionCallback.Path(rCtx.namespace.Name().String()))
-	if err != nil {
-		logger.Error("failed to construct forwarding request URL", tag.Error(err))
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-	}
-
-	if h.HTTPTraceProvider != nil {
-		traceLogger := log.With(logger, tag.AttemptStart(time.Now().UTC()))
-		if trace := h.HTTPTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
-			ctx = httptrace.WithClientTrace(ctx, trace)
-		}
-	}
-
-	var completion nexusrpc.CompleteOperationOptions
-	switch r.State {
-	case nexus.OperationStateSucceeded:
-		completion = nexusrpc.CompleteOperationOptions{
-			Result:         r.Result.Reader,
-			OperationToken: r.OperationToken,
-			StartTime:      r.StartTime,
-			CloseTime:      r.CloseTime,
-			Links:          r.Links,
-		}
-	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		// For unsuccessful operations, the Nexus framework reads and closes the original request body to deserialize
-		// the failure, so we must construct a new completion to forward.
-		completion = nexusrpc.CompleteOperationOptions{
-			Error:          r.Error,
-			OperationToken: r.OperationToken,
-			StartTime:      r.StartTime,
-			CloseTime:      r.CloseTime,
-			Links:          r.Links,
-		}
-	default:
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
-	}
-
-	rCtx.originalHeaders.Set(interceptor.DCRedirectionAPIHeaderName, "true")
-	rCtx.originalHeaders.Set(interceptor.DCRedirectionSourceCellHeaderName, h.ClusterMetadata.GetCurrentClusterName())
-	cc := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
-		HTTPCaller: (&forwardingHTTPHeaderWrapper{
-			client:                 client,
-			originalRequestHeaders: rCtx.originalHeaders,
-		}).Do,
-	})
-	return cc.CompleteOperation(ctx, forwardURL, completion)
-}
-
 func (h *nexusCompletionHTTPHandler) RegisterRoutes(r *mux.Router) {
 	r.Path("/" + commonnexus.RouteCompletionCallback.Representation()).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
@@ -471,21 +450,6 @@ func (h *nexusCompletionHTTPHandler) RegisterRoutes(r *mux.Router) {
 	})
 }
 
-type forwardingHTTPHeaderWrapper struct {
-	client                 *common.FrontendHTTPClient
-	originalRequestHeaders http.Header
-}
-
-func (f *forwardingHTTPHeaderWrapper) Do(req *http.Request) (*http.Response, error) {
-	// For forwarded requests, copy the original HTTP headers without sanitization.
-	for k, v := range f.originalRequestHeaders {
-		if req.Header.Get(k) == "" {
-			req.Header.Set(k, v[0])
-		}
-	}
-	return f.client.Do(req)
-}
-
 type requestContext struct {
 	*nexusCompletionHandler
 	logger                        log.Logger
@@ -493,21 +457,16 @@ type requestContext struct {
 	metricsHandlerForInterceptors metrics.Handler
 	namespace                     *namespace.Namespace
 	businessID                    string
-	cleanupFunctions              []func(error)
 	requestStartTime              time.Time
 	outcomeTag                    metrics.Tag
-	forwarded                     bool
 	originalHeaders               http.Header
 }
 
 func (c *requestContext) augmentContext(ctx context.Context, header http.Header) context.Context {
-	ctx = metrics.AddMetricsContext(ctx)
-	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
-	ctx = interceptor.PopulateCallerInfo(
-		ctx,
-		func() string { return c.namespace.Name().String() },
-		func() string { return nexusCompletionMethodName },
-	)
+	ctx = interceptor.WithTelemetryContext(ctx, c)
+	ctx = interceptor.WithNexusAPIName(ctx, nexusCompletionAPIName)
+	ctx = interceptor.WithNexusNamespace(ctx, c.namespace)
+	ctx = interceptor.WithNexusEndpointName(ctx, "")
 	if userAgent := header.Get(headerUserAgent); userAgent != "" {
 		// Preserve original strict behavior: only process if exactly one delimiter present.
 		if strings.Count(userAgent, clientNameVersionDelim) == 1 {
@@ -523,52 +482,55 @@ func (c *requestContext) augmentContext(ctx context.Context, header http.Header)
 			}
 		}
 	}
-	return headers.Propagate(ctx)
+	return ctx
 }
 
-func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
-	recovered := recover() //nolint:revive
-	if recovered != nil {
-		err, ok := recovered.(error)
-		if !ok {
-			err = fmt.Errorf("panic: %v", recovered)
-		}
-
-		st := string(debug.Stack())
-		c.logger.Error("Panic captured", tag.SysStackTrace(st), tag.Error(err))
-		*errPtr = err
+func (c *requestContext) MetricsHandler(err error) metrics.Handler {
+	if c.outcomeTag.Key != "" {
+		return c.metricsHandler.WithTags(c.outcomeTag)
 	}
-	if *errPtr == nil {
-		if c.forwarded {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarded"))
-		} else {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("success"))
-		}
-	} else if c.outcomeTag.Key != "" {
-		c.metricsHandler = c.metricsHandler.WithTags(c.outcomeTag)
-	} else {
-		if he, ok := errors.AsType[*nexus.HandlerError](*errPtr); ok {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("error_" + strings.ToLower(string(he.Type))))
-		} else {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("error_internal"))
-		}
+	if err == nil {
+		return c.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 	}
-
-	// Record Nexus-specific metrics
-	c.metricsHandler.Counter(metrics.NexusCompletionRequests.Name()).Record(1)
-	c.metricsHandler.Histogram(metrics.NexusCompletionLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
-
-	// Record general telemetry metrics
-	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
-	c.TelemetryInterceptor.RecordLatencyMetrics(*ctxPtr, c.requestStartTime, c.metricsHandlerForInterceptors)
-
-	for _, fn := range c.cleanupFunctions {
-		fn(*errPtr)
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](err); ok {
+		return c.metricsHandler.WithTags(metrics.OutcomeTag("error_" + strings.ToLower(string(handlerErr.Type))))
 	}
+	return c.metricsHandler.WithTags(metrics.OutcomeTag("error_internal"))
 }
 
-// TODO(bergundy): Merge this with the interceptRequest method in nexus_handler.go.
-func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc.CompletionRequest) error {
+func (c *requestContext) MetricsHandlerForInterceptors() metrics.Handler {
+	return c.metricsHandlerForInterceptors
+}
+
+func (c *requestContext) MetricsLogger() log.Logger {
+	return c.logger
+}
+
+func (c *requestContext) SetMetricsOutcome(outcome string) {
+	c.outcomeTag = metrics.OutcomeTag(outcome)
+}
+
+// no-op for completion as it doesnt report back via headers
+func (c *requestContext) SetFailureSource(string) {}
+
+func (c *requestContext) HandleRequestError(err error) {
+	if err == nil {
+		return
+	}
+	c.RequestErrorHandler.HandleError(
+		// The request is only read to extract workflow log tags, which is keyed off the
+		// gRPC full method. Nexus has none, so it is never used.
+		nil,
+		"",
+		c.metricsHandlerForInterceptors,
+		[]tag.Tag{tag.Operation(nexusCompletionMethodNameForMetrics), tag.WorkflowNamespace(c.namespace.Name().String())},
+		err,
+		c.namespace.Name(),
+	)
+}
+
+// enrich context with authInfo
+func (c *requestContext) parseTLSAndAuthInfo(ctx context.Context, request *nexusrpc.CompletionRequest) (context.Context, error) {
 	var tlsInfo *credentials.TLSInfo
 	if request.HTTPRequest.TLS != nil {
 		tlsInfo = &credentials.TLSInfo{
@@ -580,112 +542,12 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 	authInfo := c.AuthInterceptor.GetAuthInfo(tlsInfo, request.HTTPRequest.Header, func() string {
 		return "" // TODO: support audience getter
 	})
-
-	var claims *authorization.Claims
-	var err error
-	if authInfo != nil {
-		claims, err = c.AuthInterceptor.GetClaims(authInfo)
-		if err != nil {
-			return err
-		}
-		// Make the auth info and claims available on the context.
-		ctx = c.AuthInterceptor.EnhanceContext(ctx, authInfo, claims)
+	if authInfo == nil {
+		return ctx, nil
 	}
-
-	_, err = c.AuthInterceptor.Authorize(ctx, claims, &authorization.CallTarget{
-		APIName:   nexusCompletionAPIName,
-		Namespace: c.namespace.Name().String(),
-		Request:   request,
-	})
+	claims, err := c.AuthInterceptor.GetClaims(authInfo)
 	if err != nil {
-		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
-		// "Request unauthorized." message.
-		// Otherwise, expose the underlying error.
-		if permissionDeniedError, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
-			c.outcomeTag = metrics.OutcomeTag("unauthorized")
-			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
-		}
-		c.outcomeTag = metrics.OutcomeTag("internal_auth_error")
-		c.logger.Error("Authorization internal error with processing nexus callback", tag.Error(err))
-		return commonnexus.ConvertGRPCError(err, false)
+		return nil, err
 	}
-
-	if err := c.NamespaceValidationInterceptor.ValidateState(c.namespace, nexusCompletionAPIName, c.businessID); err != nil {
-		c.outcomeTag = metrics.OutcomeTag("invalid_namespace_state")
-		return commonnexus.ConvertGRPCError(err, false)
-	}
-
-	// Redirect if current cluster is passive for this namespace.
-	if c.namespace.ActiveClusterName(namespace.RoutingKey{ID: c.businessID}) != c.ClusterMetadata.GetCurrentClusterName() {
-		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header, c.businessID) {
-			c.forwarded = true
-			handler, forwardStartTime := c.RedirectionInterceptor.BeforeCall(nexusCompletionMethodName)
-			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
-				c.RedirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(namespace.RoutingKey{ID: c.businessID}), c.namespace.Name().String(), retErr)
-			})
-			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
-			return serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName(namespace.RoutingKey{ID: c.businessID}))
-		}
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_inactive_forwarding_disabled"))
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
-	}
-
-	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
-		if retErr != nil {
-			c.RequestErrorHandler.HandleError(
-				request,
-				"",
-				c.metricsHandlerForInterceptors,
-				[]tag.Tag{tag.Operation(nexusCompletionMethodName), tag.WorkflowNamespace(c.namespace.Name().String())},
-				retErr,
-				c.namespace.Name(),
-			)
-		}
-	})
-
-	cleanup, err := c.NamespaceConcurrencyLimitInterceptor.Allow(c.namespace.Name(), nexusCompletionAPIName, c.metricsHandlerForInterceptors, request)
-	c.cleanupFunctions = append(c.cleanupFunctions, func(error) { cleanup() })
-	if err != nil {
-		c.outcomeTag = metrics.OutcomeTag("namespace_concurrency_limited")
-		return commonnexus.ConvertGRPCError(err, false)
-	}
-
-	if err := c.NamespaceRateLimitInterceptor.Allow(
-		ctx,
-		c.namespace.Name(),
-		nexusCompletionAPIName,
-		request.HTTPRequest.Header,
-	); err != nil {
-		c.outcomeTag = metrics.OutcomeTag("namespace_rate_limited")
-		return commonnexus.ConvertGRPCError(err, true)
-	}
-
-	if err := c.RateLimitInterceptor.Allow(nexusCompletionAPIName, request.HTTPRequest.Header); err != nil {
-		c.outcomeTag = metrics.OutcomeTag("global_rate_limited")
-		return commonnexus.ConvertGRPCError(err, true)
-	}
-
-	if err := c.clientVersionChecker.ClientSupported(ctx); err != nil {
-		c.outcomeTag = metrics.OutcomeTag("unsupported_client")
-		return commonnexus.ConvertGRPCError(err, true)
-	}
-
-	return nil
-}
-
-// TODO: copied from nexus_handler.go; should be combined with other intercept logic.
-// Combines logic from RedirectionInterceptor.redirectionAllowed and some from
-// SelectedAPIsForwardingRedirectionPolicy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding so all
-// redirection conditions can be checked at once. If either of those methods are updated, this should
-// be kept in sync.
-func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.Header, businessID string) bool {
-	redirectHeader := header.Get(interceptor.DCRedirectionContextHeaderName)
-	redirectAllowed, err := strconv.ParseBool(redirectHeader)
-	if err != nil {
-		redirectAllowed = true
-	}
-	return redirectAllowed &&
-		c.RedirectionInterceptor.RedirectionAllowed(ctx) &&
-		c.namespace.IsGlobalNamespace() &&
-		c.Config.EnableNamespaceNotActiveAutoForwarding(c.namespace.Name().String())
+	return c.AuthInterceptor.EnhanceContext(ctx, authInfo, claims), nil
 }

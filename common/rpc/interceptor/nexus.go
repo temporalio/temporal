@@ -90,7 +90,7 @@ func NexusHeaderFromInterceptorInput(in NexusInterceptorInput) (headers.HeaderGe
 		return opts.CancelOperationOptions.Header, nil
 	case CompleteNexusOpInput:
 		if opts.CompletionRequest == nil || opts.CompletionRequest.HTTPRequest == nil {
-			return nil, errors.New("Nexus completion request not found")
+			return nil, errors.New("nexus completion request not found")
 		}
 		return opts.CompletionRequest.HTTPRequest.Header, nil
 	default:
@@ -99,6 +99,8 @@ func NexusHeaderFromInterceptorInput(in NexusInterceptorInput) (headers.HeaderGe
 }
 
 // draft-review: verify that these are the "right" methods/names
+//
+//nolint:staticcheck
 func NexusMethodName(in NexusInterceptorInput) string {
 	switch in.(type) {
 	case StartNexusOpInput:
@@ -166,6 +168,8 @@ type CompleteNexusOpInput struct {
 }
 
 // draft-review: Complete doesnt need servicename/op - verify
+//
+//nolint:staticcheck
 func NewCompleteNexusOpInput(
 	namespaceName string,
 	request *nexusrpc.CompletionRequest,
@@ -202,7 +206,7 @@ func WithNexusAPIName(ctx context.Context, apiName string) context.Context {
 func NexusAPINameFromContext(ctx context.Context) (string, error) {
 	apiName, ok := ctx.Value(nexusAPINameContextKey{}).(string)
 	if !ok {
-		return "", errors.New("Nexus API name not found in context")
+		return "", errors.New("nexus API name not found in context")
 	}
 	return apiName, nil
 }
@@ -215,7 +219,7 @@ func WithNexusEndpointName(ctx context.Context, endpointName string) context.Con
 func NexusEndpointNameFromContext(ctx context.Context) (string, error) {
 	endpointName, ok := ctx.Value(nexusEndpointNameContextKey{}).(string)
 	if !ok {
-		return "", errors.New("Nexus endpoint name not found in context")
+		return "", errors.New("nexus endpoint name not found in context")
 	}
 	return endpointName, nil
 }
@@ -225,11 +229,13 @@ func WithNexusNamespace(ctx context.Context, namespaceEntry *namespace.Namespace
 	return context.WithValue(ctx, nexusNamespaceContextKey{}, namespaceEntry)
 }
 
-// darft-review: ideally, there is some utility to lookup by name -> Namespace
+// draft-review: ideally, there is some utility to lookup by name -> Namespace
+//
+//nolint:staticcheck
 func NexusNamespaceFromContext(ctx context.Context) (*namespace.Namespace, error) {
 	namespaceEntry, ok := ctx.Value(nexusNamespaceContextKey{}).(*namespace.Namespace)
 	if !ok {
-		return nil, errors.New("Nexus namespace not found in context")
+		return nil, errors.New("nexus namespace not found in context")
 	}
 	return namespaceEntry, nil
 }
