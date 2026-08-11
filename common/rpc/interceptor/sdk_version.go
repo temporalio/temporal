@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/headers"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/versioninfo"
 	"google.golang.org/grpc"
 )
@@ -42,6 +43,26 @@ func (vi *SDKVersionInterceptor) Intercept(
 		}
 	}
 	return handler(ctx, req)
+}
+
+// InterceptNexus records and validates the SDK version for a Nexus request.
+func (vi *SDKVersionInterceptor) InterceptNexus(
+	ctx context.Context,
+	in NexusInterceptorInput,
+	next NexusHandlerFunc,
+) (any, error) {
+	// draft-review: RecordSDKInfo didnt exist before, nice to add
+	sdkName, sdkVersion := headers.GetClientNameAndVersion(ctx)
+	if sdkName != "" && sdkVersion != "" {
+		vi.RecordSDKInfo(sdkName, sdkVersion)
+	}
+	if err := vi.versionChecker.ClientSupported(ctx); err != nil {
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, true),
+			Outcome: "unsupported_client",
+		}
+	}
+	return next(ctx, in)
 }
 
 // RecordSDKInfo records name and version tuple in memory

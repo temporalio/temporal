@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
@@ -75,6 +76,8 @@ type (
 			headerGetter headers.HeaderGetter,
 			numToken int,
 		) error
+
+		InterceptNexus(ctx context.Context, in NexusInterceptorInput, next NexusHandlerFunc) (resp any, err error)
 	}
 
 	NamespaceRateLimitInterceptorImpl struct {
@@ -223,6 +226,29 @@ func (ni *NamespaceRateLimitInterceptorImpl) AllowN(
 		return ErrNamespaceRateLimitServerBusy
 	}
 	return nil
+}
+
+// InterceptNexus enforces the namespace rate limit for a Nexus request.
+func (ni *NamespaceRateLimitInterceptorImpl) InterceptNexus(
+	ctx context.Context,
+	in NexusInterceptorInput,
+	next NexusHandlerFunc,
+) (any, error) {
+	apiName, err := NexusAPINameFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	header, err := NexusHeaderFromInterceptorInput(in)
+	if err != nil {
+		return nil, err
+	}
+	if err := ni.Allow(namespace.Name(in.NamespaceName()), apiName, header); err != nil {
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, true),
+			Outcome: "namespace_rate_limited",
+		}
+	}
+	return next(ctx, in)
 }
 
 func IsLongPollGetWorkflowExecutionHistoryRequest(
