@@ -17,7 +17,7 @@ type (
 	// Factory vends store objects backed by MySQL
 	Factory struct {
 		cfg         config.SQL
-		mainDBConn  DbConn
+		mainDBConn  *DbConn
 		clusterName string
 		logger      log.Logger
 		serializer  serialization.Serializer
@@ -55,8 +55,21 @@ func NewFactory(
 		clusterName: clusterName,
 		logger:      logger,
 		serializer:  serializer,
-		mainDBConn:  NewRefCountedDBConn(sqlplugin.DbKindMain, &cfg, r, logger, metricsHandler),
+		mainDBConn:  newFactoryDBConn(sqlplugin.DbKindMain, &cfg, r, logger, metricsHandler),
 	}
+}
+
+func newFactoryDBConn(
+	dbKind sqlplugin.DbKind,
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) *DbConn {
+	conn := NewRefCountedDBConn(dbKind, cfg, r, logger, metricsHandler)
+	// The factory owns the initial reference; stores borrow additional references.
+	conn.refCnt = 1
+	return &conn
 }
 
 // GetDB return a new SQL DB connection
@@ -181,7 +194,7 @@ func NewRefCountedDBConn(
 func (c *DbConn) Get() (sqlplugin.DB, error) {
 	c.Lock()
 	defer c.Unlock()
-	if c.refCnt == 0 {
+	if c.DB == nil || c.refCnt == 0 {
 		conn, err := NewSQLDB(c.dbKind, c.cfg, c.resolver, c.logger, c.metrics)
 		if err != nil {
 			return nil, err
