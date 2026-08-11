@@ -386,6 +386,26 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 	return connection
 }
 
+func (d *RPCFactory) Close() {
+	d.internodeConnCleanupTicker.Stop()
+
+	d.internodeGRPCConnections.Lock()
+	for _, conn := range d.internodeGRPCConnections.conns {
+		_ = conn.Close()
+	}
+	clear(d.internodeGRPCConnections.conns)
+	d.internodeGRPCConnections.Unlock()
+
+	d.remoteFrontendGRPCConns.Range(func(_, v any) bool {
+		if conn, ok := v.(*grpc.ClientConn); ok {
+			_ = conn.Close()
+		}
+		return true
+	})
+
+	_ = d.localFrontendGRPCConn().Close()
+}
+
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {
 	// default keepalive settings for clients
 	params := keepalive.ClientParameters{
