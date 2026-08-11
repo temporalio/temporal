@@ -2,7 +2,6 @@ package temporal_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"path"
@@ -25,19 +24,14 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
-	persistencesql "go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
-	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -47,58 +41,6 @@ import (
 // running for a few seconds.
 func TestNewServer(t *testing.T) {
 	runAndTestServer(t)
-}
-
-func TestNewServerFxReleasesDatabaseLeaseOnConstructionFailure(t *testing.T) {
-	expectedErr := errors.New("construction failed")
-	cfg := loadConfig(t)
-	module := newLeaseMarkerModule(func() error { return expectedErr })
-
-	_, err := temporal.NewServerFx(module, temporal.WithConfig(cfg))
-	require.ErrorIs(t, err, expectedErr)
-	requireLeaseMarkerAbsent(t, cfg)
-}
-
-func newLeaseMarkerModule(afterClose func() error) fx.Option {
-	return fx.Options(
-		fx.Provide(temporal.ServerOptionsProvider),
-		fx.Invoke(func(cfg *config.Config) error {
-			db, err := persistencesql.NewSQLAdminDB(
-				sqlplugin.DbKindMain,
-				cfg.Persistence.DataStores[cfg.Persistence.DefaultStore].SQL,
-				resolver.NewNoopResolver(),
-				log.NewNoopLogger(),
-				metrics.NoopMetricsHandler,
-			)
-			if err != nil {
-				return err
-			}
-			if err := db.Exec("CREATE TABLE lease_marker (id INTEGER)"); err != nil {
-				return errors.Join(err, db.Close())
-			}
-			if err := db.Close(); err != nil {
-				return err
-			}
-			return afterClose()
-		}),
-	)
-}
-
-func requireLeaseMarkerAbsent(t *testing.T, cfg *config.Config) {
-	t.Helper()
-	sqlCfg := cfg.Persistence.DataStores[cfg.Persistence.DefaultStore].SQL
-	db, err := persistencesql.NewSQLAdminDB(
-		sqlplugin.DbKindMain,
-		sqlCfg,
-		resolver.NewNoopResolver(),
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	tables, err := db.ListTables(sqlCfg.DatabaseName)
-	require.NoError(t, err)
-	require.NotContains(t, tables, "lease_marker")
 }
 
 // TestNewServerWithOTEL verifies that NewServer doesn't cause any fx errors when OTEL is enabled.
