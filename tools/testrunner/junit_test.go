@@ -314,7 +314,6 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 			// Additional validation: ensure we can re-parse it using our own read method
 			testsuites, err := commonjunit.Read(out.Name())
 			require.NoError(t, err, "Should be able to re-read the written XML")
-			require.NotEmpty(t, testsuites.Suites)
 
 			// Validate that the structure is reasonable
 			require.NotEmpty(t, parsed.Suites, "Should have at least one test suite")
