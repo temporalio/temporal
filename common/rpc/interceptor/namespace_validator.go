@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 )
@@ -228,6 +229,29 @@ func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace
 		return err
 	}
 	return ni.checkReplicationState(namespaceEntry, fullMethod, businessID)
+}
+
+// InterceptNexus validates the namespace state for a Nexus request.
+func (ni *NamespaceValidatorInterceptor) InterceptNexus(
+	ctx context.Context,
+	in NexusInterceptorInput,
+	next NexusHandlerFunc,
+) (any, error) {
+	namespaceEntry, err := NexusNamespaceFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	apiName, err := NexusAPINameFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := ni.ValidateState(namespaceEntry, apiName, in.ForwardingInfo().BusinessID); err != nil {
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "invalid_namespace_state",
+		}
+	}
+	return next(ctx, in)
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req any) (*namespace.Namespace, error) {

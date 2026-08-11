@@ -3,8 +3,8 @@ package authorization
 import (
 	"cmp"
 	"context"
-	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -18,9 +18,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/rpc/tlsinfo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/peer"
 )
 
 type (
@@ -53,32 +55,6 @@ var (
 	MappedClaims contextKeyMappedClaims
 	AuthHeader   contextKeyAuthHeader
 )
-
-// TLSInfoFromContext extracts TLS information from the context's peer value.
-func TLSInfoFromContext(ctx context.Context) *credentials.TLSInfo {
-	p, ok := peer.FromContext(ctx)
-	if !ok {
-		return nil
-	}
-	if tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-		return &tlsInfo
-	}
-	return nil
-}
-
-// PeerCert extracts an x509 certificate from given tlsInfo.
-func PeerCert(tlsInfo *credentials.TLSInfo) *x509.Certificate {
-	if tlsInfo == nil || len(tlsInfo.State.VerifiedChains) == 0 || len(tlsInfo.State.VerifiedChains[0]) == 0 {
-		return nil
-	}
-	// The assumption here is that we only expect a single verified chain of certs (first[0]).
-	// It's unclear how we should handle a situation when more than one chain is presented,
-	// which subject to use. It's okay for us to limit ourselves to one chain.
-	// We can always extend this logic later.
-	// We take the first element in the chain ([0]) because that's the client cert
-	// (at the beginning of the chain), not intermediary CAs or the root CA (at the end of the chain).
-	return tlsInfo.State.VerifiedChains[0][0]
-}
 
 type Interceptor struct {
 	claimMapper                  ClaimMapper
@@ -132,7 +108,7 @@ func (a *Interceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
-	tlsConnection := TLSInfoFromContext(ctx)
+	tlsConnection := tlsinfo.FromContext(ctx)
 
 	authInfo := a.GetAuthInfo(tlsConnection, headers.NewGRPCHeaderGetter(ctx), func() string {
 		if a.audienceGetter != nil {
@@ -184,6 +160,66 @@ func (a *Interceptor) Intercept(
 	return handler(ctx, req)
 }
 
+func (a *Interceptor) InterceptNexus(
+	ctx context.Context,
+	in interceptor.NexusInterceptorInput,
+	next interceptor.NexusHandlerFunc,
+) (any, error) {
+	a.logger.Debug("authorizing request")
+	if a.authorizer == nil {
+		return next(ctx, in)
+	}
+	namespaceName := in.NamespaceName()
+	apiName, err := interceptor.NexusAPINameFromContext(ctx)
+	if err != nil {
+		return nil, &interceptor.InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "internal_auth_error",
+		}
+	}
+	endpointName, err := interceptor.NexusEndpointNameFromContext(ctx)
+	if err != nil {
+		return nil, &interceptor.InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "internal_auth_error",
+		}
+	}
+	claims, _ := ctx.Value(MappedClaims).(*Claims)
+	var req any
+	// draft-review: check if this might be required to preserve compatibility for custom authorizers
+	// or if its ok since an interface was not already used instead
+	// switch in.(type) {
+	// case interceptor.StartNexusOpInput, interceptor.CancelNexusOpInput:
+	// case *interceptor.CancelNexusOpInput:
+	// }
+	req = in
+	ct := &CallTarget{
+		APIName:           apiName,
+		NexusEndpointName: endpointName,
+		Namespace:         namespaceName,
+		Request:           req,
+	}
+	principal, err := a.Authorize(ctx, claims, ct)
+	if err != nil {
+		if permissionDeniedError, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
+			a.logger.Debug("Request unauthorized")
+			return nil, &interceptor.InterceptorError{
+				Err:     commonnexus.AdaptAuthorizeError(permissionDeniedError),
+				Outcome: "unauthorized",
+			}
+		}
+		a.logger.Error("Authorization internal error with processing nexus request", tag.Error(err))
+		return nil, &interceptor.InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "internal_auth_error",
+		}
+	}
+	if a.enablePrincipalPropagation != nil && a.enablePrincipalPropagation(namespaceName) && principal != nil {
+		ctx = headers.SetPrincipal(ctx, principal)
+	}
+	return next(ctx, in)
+}
+
 // InterceptStream is a gRPC stream server interceptor that enforces authorization.
 func (a *Interceptor) InterceptStream(
 	srv any,
@@ -194,7 +230,7 @@ func (a *Interceptor) InterceptStream(
 	ctx := ss.Context()
 	bypassAuth := a.disableStreamingAuthorizer()
 	if !bypassAuth {
-		tlsConnection := TLSInfoFromContext(ctx)
+		tlsConnection := tlsinfo.FromContext(ctx)
 		headerGetter := headers.NewGRPCHeaderGetter(ctx)
 
 		authInfo := a.GetAuthInfo(tlsConnection, headerGetter, func() string {
@@ -260,7 +296,7 @@ func (a *Interceptor) GetAuthInfo(tlsConnection *credentials.TLSInfo, header hea
 		authHeader = header.Get(a.authHeaderName)
 		authExtraHeader = header.Get(a.authExtraHeaderName)
 	}
-	clientCert := PeerCert(tlsConnection)
+	clientCert := tlsinfo.PeerCert(tlsConnection)
 	if clientCert != nil {
 		tlsSubject = &clientCert.Subject
 	}

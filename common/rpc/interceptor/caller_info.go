@@ -40,6 +40,20 @@ func (i *CallerInfoInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus adds caller information for a Nexus request.
+func (i *CallerInfoInterceptor) InterceptNexus(
+	ctx context.Context,
+	in NexusInterceptorInput,
+	next NexusHandlerFunc,
+) (any, error) {
+	ctx = PopulateCallerInfo(
+		ctx,
+		in.NamespaceName,
+		func() string { return NexusMethodName(in) },
+	)
+	return next(headers.Propagate(ctx), in)
+}
+
 // PopulateCallerInfo gets current caller info value from the context and updates any that are missing.
 // Namespace name and method are passed as functions to avoid expensive lookups if those values are already set.
 func PopulateCallerInfo(

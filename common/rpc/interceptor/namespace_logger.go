@@ -6,10 +6,10 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/common/api"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/tlsinfo"
 	"google.golang.org/grpc"
 )
 
@@ -40,12 +40,12 @@ func (nli *NamespaceLogInterceptor) Intercept(
 	if nli.logger != nil {
 		methodName := api.MethodName(info.FullMethod)
 		namespace := MustGetNamespaceName(nli.namespaceRegistry, req)
-		tlsInfo := authorization.TLSInfoFromContext(ctx)
+		tlsInfo := tlsinfo.FromContext(ctx)
 		var serverName string
 		var certThumbprint string
 		if tlsInfo != nil {
 			serverName = tlsInfo.State.ServerName
-			cert := authorization.PeerCert(tlsInfo)
+			cert := tlsinfo.PeerCert(tlsInfo)
 			if cert != nil {
 				certThumbprint = fmt.Sprintf("%x", md5.Sum(cert.Raw))
 			}
