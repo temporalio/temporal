@@ -13,26 +13,19 @@ import (
 )
 
 func TestFactoryOwnsDatabaseUntilClose(t *testing.T) {
-	const pluginName = "factory-ownership-test"
 	closeCount := 0
-	RegisterPlugin(pluginName, &factoryTestPlugin{
-		db: &factoryTestDB{close: func() error {
-			closeCount++
-			return nil
-		}},
-	})
-	t.Cleanup(func() {
-		delete(supportedPlugins, pluginName)
-	})
-
 	factory := NewFactory(
-		config.SQL{PluginName: pluginName},
+		config.SQL{},
 		resolver.NewNoopResolver(),
 		"cluster",
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 		serialization.NewSerializer(),
 	)
+	factory.mainDBConn.DB = &factoryTestDB{close: func() error {
+		closeCount++
+		return nil
+	}}
 	db, err := factory.GetDB()
 	require.NoError(t, err)
 	require.NoError(t, db.Close())
@@ -40,24 +33,6 @@ func TestFactoryOwnsDatabaseUntilClose(t *testing.T) {
 
 	factory.Close()
 	require.Equal(t, 1, closeCount)
-}
-
-type factoryTestPlugin struct {
-	db sqlplugin.GenericDB
-}
-
-func (p *factoryTestPlugin) CreateDB(
-	_ sqlplugin.DbKind,
-	_ *config.SQL,
-	_ resolver.ServiceResolver,
-	_ log.Logger,
-	_ metrics.Handler,
-) (sqlplugin.GenericDB, error) {
-	return p.db, nil
-}
-
-func (*factoryTestPlugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverter {
-	return nil
 }
 
 type factoryTestDB struct {
