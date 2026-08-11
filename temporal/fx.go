@@ -390,6 +390,7 @@ func (s *ServerFx) provideBootstrapPersistenceFactory(
 // This function should be called only once, Server doesn't support multiple restarts.
 func (s *ServerFx) Start() error {
 	err := s.app.Start(context.Background())
+	// Release bootstrap persistence when service startup returns; running services use their own factories.
 	s.closeBootstrapPersistenceFactory()
 	if err != nil {
 		return err
@@ -706,7 +707,7 @@ func ApplyClusterMetadataConfigProvider(
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
-	// The manager borrows persistence resources that are closed with the factory.
+	// Do not close the manager here because the factory owns and closes its persistence resources.
 
 	visCSAOverride := map[enumspb.IndexedValueType]int{}
 	for tpName, value := range svc.Visibility.PersistenceCustomSearchAttributes {
