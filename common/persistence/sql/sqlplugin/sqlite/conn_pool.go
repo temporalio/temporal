@@ -7,7 +7,7 @@ import (
 	"go.temporal.io/server/common/config"
 )
 
-// connPool shares one *sqlx.DB per DSN across independently constructed stores.
+// connPool shares one *sqlx.DB for each DSN.
 type connPool struct {
 	mu   sync.Mutex
 	pool map[string]*entry
