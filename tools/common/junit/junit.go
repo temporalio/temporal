@@ -17,14 +17,8 @@ type Testsuite = junitxml.Testsuite
 // Testcase is a JUnit test case.
 type Testcase = junitxml.Testcase
 
-// Property is a JUnit test-suite property.
-type Property = junitxml.Property
-
 // Result is a JUnit test-case failure or error.
 type Result = junitxml.Result
-
-// Output is captured JUnit test output.
-type Output = junitxml.Output
 
 // Read reads a JUnit XML file with either a testsuites or testsuite root.
 func Read(path string) (*Testsuites, error) {
