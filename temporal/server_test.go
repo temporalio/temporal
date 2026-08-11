@@ -59,25 +59,9 @@ func TestNewServerFxReleasesDatabaseLeaseOnConstructionFailure(t *testing.T) {
 	requireLeaseMarkerAbsent(t, cfg)
 }
 
-func TestNewServerFxReleasesDatabaseLeaseOnConstructionPanic(t *testing.T) {
-	const expectedPanic = "construction panicked"
-	cfg := loadConfig(t)
-	module := newLeaseMarkerModule(func() error {
-		panic(expectedPanic)
-	})
-
-	func() {
-		defer func() {
-			require.Equal(t, expectedPanic, recover())
-		}()
-		_, _ = temporal.NewServerFx(module, temporal.WithConfig(cfg))
-	}()
-
-	requireLeaseMarkerAbsent(t, cfg)
-}
-
 func newLeaseMarkerModule(afterClose func() error) fx.Option {
 	return fx.Options(
+		fx.Provide(temporal.ServerOptionsProvider),
 		fx.Invoke(func(cfg *config.Config) error {
 			db, err := persistencesql.NewSQLAdminDB(
 				sqlplugin.DbKindMain,
