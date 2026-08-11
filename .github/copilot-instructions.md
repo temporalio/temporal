@@ -108,7 +108,8 @@ Format every actionable finding exactly as:
 **Suggestion:** Concrete fix or alternative.
 ```
 
-Keep the issue and suggestion self-contained. When supporting material would make the visible comment long, place it after the suggestion in an optional `<details>` block:
+Keep the issue and suggestion self-contained.
+When supporting material would make the visible comment long, place it after the suggestion in an optional `<details>` block:
 
 ```markdown
 <details>
