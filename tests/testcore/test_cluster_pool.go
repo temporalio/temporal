@@ -60,10 +60,7 @@ func init() {
 		dedicated: newClusterPool(dedicatedSize, true, maxLeases),
 	}
 
-	mode := os.Getenv("TEMPORAL_TEST_CLUSTER_MODE")
-	if mode == "" {
-		mode = clusterModePooled
-	}
+	mode := configuredClusterMode(os.Getenv("TEMPORAL_TEST_CLUSTER_MODE"))
 	switch mode {
 	case clusterModePooled:
 	case clusterModePerTest:
@@ -80,6 +77,13 @@ func init() {
 		panic("TEMPORAL_TEST_CLUSTER_MODE must be pooled or per-test")
 	}
 	testClusterRouter = router
+}
+
+func configuredClusterMode(mode string) string {
+	if mode == "" {
+		return clusterModePerTest
+	}
+	return mode
 }
 
 func positiveEnv(name string, defaultValue int) int {

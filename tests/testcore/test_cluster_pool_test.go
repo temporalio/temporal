@@ -11,6 +11,11 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
+func TestConfiguredClusterMode(t *testing.T) {
+	require.Equal(t, clusterModePerTest, configuredClusterMode(""))
+	require.Equal(t, clusterModePooled, configuredClusterMode(clusterModePooled))
+}
+
 func TestClusterPool_GlobalOverridesSurviveTestCleanup(t *testing.T) {
 	dc := dynamicconfig.NewMemoryClient()
 

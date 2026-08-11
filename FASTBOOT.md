@@ -27,8 +27,8 @@ Gate 2 acquire-latency and RSS limits. Independent core and worker fillers bring
 warm-eligible p99 to 17–33 ms across those shards. Race-enabled per-test and
 pooled controls still overload this machine at the CI scheduler width, so neither
 is valid flake-rate evidence. CI-class race validation and the repeated Phase 3
-runs are still pending; pooled mode remains the default and the sharing machinery
-has not been deleted.
+runs are still pending. Per-test mode is now the default; pooled mode remains an
+explicit escape hatch and the sharing machinery has not been deleted.
 
 ### Changes implemented
 
@@ -260,13 +260,14 @@ reports custom boots and total latency separately.
   failure block was lost in truncated expected-error logs; an immediately repeated
   JSON-filtered run passed. Until the repeat sweep quantifies or reproduces that
   failure, the flake-rate criterion is unproven.
-- The default per-test settings are still experimental. They must not be flipped
-  until all three shards pass repeatedly with and without `-race`.
+- Per-test mode is now the default, but its settings remain experimental because
+  all three shards have not passed repeatedly with and without `-race`.
+  CI-class race validation remains outstanding.
 - The Phase 3 leak check now passes without a SQLite connection-opener exemption,
   and provider tests prove each released cluster is destroyed rather than reused.
   The 10-run A/B comparison and flake-rate quantification are still missing, so
-  the default flip and deletion of pool reuse, poison tracking, shared log fanout
-  and dedicated-cluster guards remain blocked.
+  deletion of pool reuse, poison tracking, shared log fanout and
+  dedicated-cluster guards remains blocked.
 - Lazy task-scheduler growth and lazy per-namespace workers were deliberately
   skipped. The test-only scheduler ceiling remains 64, so the boot benchmark is
   still roughly 500 goroutines per core cluster rather than the plan's 200 target.
