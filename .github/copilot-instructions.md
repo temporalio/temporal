@@ -98,24 +98,25 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 
 ### Comment format
 
-Format every actionable finding exactly as:
+Use this core structure for every actionable finding.
+Replace `SEVERITY` with `nit`, `small`, `med`, or `high`:
 
 ```markdown
-**[nit|small|med|high]** — One-line summary.
+**SEVERITY** — One-line summary.
 
-**Issue:** Clear explanation of the problem — what's wrong and why it matters. Short and to the point.
+**Issue:** Concise explanation of what is wrong and why it matters.
 
 **Suggestion:** Concrete fix or alternative.
 ```
 
 Keep the issue and suggestion self-contained.
-When supporting material would make the visible comment long, place it after the suggestion in an optional `<details>` block:
+Put supplementary evidence, examples, or implementation notes in an optional collapsible block:
 
 ```markdown
 <details>
 <summary>Additional details</summary>
 
-Supporting evidence, examples, or implementation notes.
+Supporting material.
 
 </details>
 ```
