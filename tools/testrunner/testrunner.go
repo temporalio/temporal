@@ -323,7 +323,6 @@ func (r *runner) writeCurrentReport() {
 	}
 	if err := r.writeReport(merged); err != nil {
 		log.Printf("warning: failed to write intermediate report: %v", err)
-		return
 	}
 }
 
