@@ -36,18 +36,23 @@ func TestRead(t *testing.T) {
 			},
 		},
 		{
-			name: "testsuite root",
-			content: `<testsuite name="suite" tests="1" failures="0" errors="0" id="0" time="">
-    <testcase name="TestOne" classname="example.com/tests"></testcase>
+			name: "testsuite root with skipped testcase",
+			content: `<testsuite name="suite" tests="1" failures="0" errors="0" skipped="1" id="0" time="">
+	<testcase name="TestOne" classname="example.com/tests">
+		<skipped></skipped>
+	</testcase>
 </testsuite>`,
 			want: Testsuites{
-				Tests: 1,
+				Tests:   1,
+				Skipped: 1,
 				Suites: []Testsuite{{
-					Name:  "suite",
-					Tests: 1,
+					Name:    "suite",
+					Tests:   1,
+					Skipped: 1,
 					Testcases: []Testcase{{
 						Name:      "TestOne",
 						Classname: "example.com/tests",
+						Skipped:   &Result{},
 					}},
 				}},
 			},
