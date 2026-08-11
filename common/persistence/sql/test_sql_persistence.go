@@ -27,7 +27,7 @@ type TestCluster struct {
 	cfg            config.SQL
 	faultInjection *config.FaultInjection
 	logger         log.Logger
-	databases      []sqlplugin.GenericDB
+	database       sqlplugin.DB
 }
 
 type forceDatabaseDropper interface {
@@ -75,16 +75,17 @@ func (s *TestCluster) DatabaseName() string {
 // SetupTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) SetupTestDatabase() {
 	s.CreateDatabase()
-	databases, err := OpenDatabases(
-		s.Config(),
+	database, err := NewSQLDB(
+		sqlplugin.DbKindMain,
+		&s.cfg,
 		resolver.NewNoopResolver(),
 		s.logger,
 		metrics.NoopMetricsHandler,
 	)
 	if err != nil {
-		s.logger.Fatal("OpenDatabases", tag.Error(err))
+		s.logger.Fatal("Open database", tag.Error(err))
 	}
-	s.databases = databases
+	s.database = database
 
 	if s.schemaDir == "" {
 		s.logger.Info("No schema directory provided, skipping schema setup")
@@ -116,7 +117,7 @@ func (s *TestCluster) Config() config.Persistence {
 
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
-	if err := CloseDatabases(s.databases); err != nil {
+	if err := s.database.Close(); err != nil {
 		s.logger.Fatal("Close databases", tag.Error(err))
 	}
 	s.DropDatabase()
