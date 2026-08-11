@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.namespacereplication.proto.v1;
+
+import "chasm/lib/namespacereplication/proto/v1/message.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpb";
+
+// NamespaceReplicationService is the internal (frontend → history) RPC that
+// frontend uses to trigger namespace mutations through the CHASM-based
+// replication transport. The history-side handler starts the per-namespace
+// NamespaceMutationComponent and waits for the local apply (ApplyLocalTask) to
+// complete. Peer fan-out (ApplyPeerTask) continues asynchronously after the
+// RPC returns.
+service NamespaceReplicationService {
+  rpc TriggerNamespaceMutation(TriggerNamespaceMutationRequest) returns (TriggerNamespaceMutationResponse) {
+    // Route by the SAME (namespace, business_id) pair the handler uses to build
+    // the component's ExecutionKey, so the RPC lands on the history host that
+    // actually owns the execution's shard. Both routing inputs are request
+    // fields the frontend fills in before the call:
+    //   system_namespace_id -> ExecutionKey.NamespaceID (always the system namespace)
+    //   business_id         -> ExecutionKey.BusinessID  (namespace_id + ":" + uuid)
+    // Routing here MUST stay in lockstep with handler.go's executionKey(); the
+    // TestTriggerNamespaceMutationRoutingMatchesExecution test pins that.
+    option (temporal.server.api.routing.v1.routing).namespace_id = "system_namespace_id";
+    option (temporal.server.api.routing.v1.routing).business_id = "business_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+}
+
+message TriggerNamespaceMutationRequest {
+  // The target namespace being mutated. Informational: the authoritative copy is
+  // in mutation.namespace_detail.info.id; kept here for validation and logging.
+  string namespace_id = 1;
+
+  NamespaceMutation mutation = 2;
+
+  // Shard-routing key. Set by the frontend (invokeCHASMNamespaceMutation) so the
+  // layered client routes the RPC to the exact shard the component will live on.
+  // The handler builds ExecutionKey{NamespaceID: system_namespace_id,
+  // BusinessID: business_id} from these SAME fields — see the routing directive.
+  //
+  // system_namespace_id is always the temporal-system namespace: the component is
+  // system-owned infra and must be creatable even when the target namespace does
+  // not exist yet on this cell (CREATE).
+  string system_namespace_id = 3;
+  // business_id is namespace_id + ":" + uuid, unique per mutation invocation, so
+  // concurrent mutations on the same namespace each get their own component
+  // rather than colliding on a single current run.
+  string business_id = 4;
+}
+
+message TriggerNamespaceMutationResponse {
+  // The new notification_version after a successful local CAS write.
+  int64 new_version = 1;
+}
