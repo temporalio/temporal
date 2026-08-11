@@ -37,10 +37,6 @@ var goleakOpts = []goleak.Option{
 	goleak.IgnoreAnyFunction("google.golang.org/grpc.(*addrConn).resetTransportAndUnlock"),
 	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/balancer/gracefulswitch.(*Balancer).updateSubConnState"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/membership.(*grpcResolver).listen"),
-
-	// TODO: worker-service and persistence goroutine leaks.
-	goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
-	goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
 }
 
 var objectLeakOpts = []objectleak.Option{
