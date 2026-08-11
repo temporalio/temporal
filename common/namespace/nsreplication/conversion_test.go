@@ -19,10 +19,13 @@ import (
 // TestShouldReplicateNamespace pins the replicate/skip gate that an eventual
 // CHASM-based transport will share with the legacy queue path. In particular it
 // locks in that a DELETED namespace is never replicated regardless of
-// globalness/cluster count, so both transports make the identical decision.
+// globalness/cluster count or forceReplicate, so both transports make the
+// identical decision. forceReplicate lives inside the gate (ahead of every other
+// rule except DELETED) so no caller can bypass the DELETED short-circuit.
 func TestShouldReplicateNamespace(t *testing.T) {
 	testCases := []struct {
 		name               string
+		forceReplicate     bool
 		isGlobal           bool
 		clusters           []string
 		clusterListChanged bool
@@ -35,6 +38,22 @@ func TestShouldReplicateNamespace(t *testing.T) {
 			clusters: []string{"a", "b"},
 			state:    enumspb.NAMESPACE_STATE_REGISTERED,
 			want:     false,
+		},
+		{
+			name:           "forceReplicate replicates non-global single cluster",
+			forceReplicate: true,
+			isGlobal:       false,
+			clusters:       []string{"a"},
+			state:          enumspb.NAMESPACE_STATE_REGISTERED,
+			want:           true,
+		},
+		{
+			name:           "forceReplicate never replicates DELETED",
+			forceReplicate: true,
+			isGlobal:       true,
+			clusters:       []string{"a", "b"},
+			state:          enumspb.NAMESPACE_STATE_DELETED,
+			want:           false,
 		},
 		{
 			name:     "global single cluster, no list change",
@@ -84,7 +103,7 @@ func TestShouldReplicateNamespace(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ShouldReplicateNamespace(tc.isGlobal, tc.clusters, tc.clusterListChanged, tc.state)
+			got := ShouldReplicateNamespace(tc.forceReplicate, tc.isGlobal, tc.clusters, tc.clusterListChanged, tc.state)
 			require.Equal(t, tc.want, got)
 		})
 	}
