@@ -32,6 +32,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// completionHandler is a nexusrpc completion handler that hands each delivered completion to the
+// test on requestCh, then waits on requestCompleteCh for the error to return to the caller.
 type completionHandler struct {
 	requestCh         chan *nexusrpc.CompletionRequest
 	requestCompleteCh chan error
@@ -40,6 +42,27 @@ type completionHandler struct {
 func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexusrpc.CompletionRequest) error {
 	h.requestCh <- request
 	return <-h.requestCompleteCh
+}
+
+// newNexusCompletionHandler returns a completion handler along with the URL of an HTTP server that
+// delivers completions to it, for use as the target of a completion callback. The server shuts
+// down when t cleans up.
+func newNexusCompletionHandler(t *testing.T) (*completionHandler, string) {
+	// Buffered so tests can queue up multiple completion requests for convenience.
+	ch := &completionHandler{
+		requestCh:         make(chan *nexusrpc.CompletionRequest, 4),
+		requestCompleteCh: make(chan error, 4),
+	}
+
+	httpHandler := nexusrpc.CompletionHandlerOptions{Handler: ch}
+	srv := httptest.NewServer(nexusrpc.NewCompletionHTTPHandler(httpHandler))
+
+	t.Cleanup(func() {
+		// Unblock any handler still waiting on a response; srv.Close waits for in-flight requests.
+		close(ch.requestCompleteCh)
+		srv.Close()
+	})
+	return ch, srv.URL
 }
 
 type CallbacksSuite struct {
@@ -55,15 +78,6 @@ func TestCallbacksSuiteCHASM(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 	})
-}
-
-func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
-	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
-	srv := httptest.NewServer(hh)
-	t.Cleanup(func() {
-		srv.Close()
-	})
-	return srv.URL
 }
 
 func (s *CallbacksSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
@@ -322,15 +336,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 			workflowType := "test"
 			workflowID := env.Tv().WorkflowID()
 
-			ch := &completionHandler{
-				requestCh:         make(chan *nexusrpc.CompletionRequest, 2),
-				requestCompleteCh: make(chan error, 2),
-			}
-			defer func() {
-				close(ch.requestCh)
-				close(ch.requestCompleteCh)
-			}()
-			callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
+			ch, callbackAddress := newNexusCompletionHandler(s.T())
 
 			env.SdkWorker().RegisterWorkflowWithOptions(tc.wf, workflow.RegisterOptions{Name: workflowType})
 
@@ -523,15 +529,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback(opts []testcore.Test
 	taskQueue := &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	workflowID := env.Tv().WorkflowID()
 
-	ch := &completionHandler{
-		requestCh:         make(chan *nexusrpc.CompletionRequest, 2),
-		requestCompleteCh: make(chan error, 2),
-	}
-	defer func() {
-		close(ch.requestCh)
-		close(ch.requestCompleteCh)
-	}()
-	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
+	ch, callbackAddress := newNexusCompletionHandler(s.T())
 
 	// A workflow that completes once it has been reset.
 	longRunningWorkflow := func(ctx workflow.Context) error {
@@ -707,15 +705,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(op
 	taskQueue := &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	workflowID := env.Tv().WorkflowID()
 
-	ch := &completionHandler{
-		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-		requestCompleteCh: make(chan error, 1),
-	}
-	defer func() {
-		close(ch.requestCh)
-		close(ch.requestCompleteCh)
-	}()
-	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
+	ch, callbackAddress := newNexusCompletionHandler(s.T())
 
 	env.SdkWorker().RegisterWorkflow(blockingWorkflow)
 
