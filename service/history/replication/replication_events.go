@@ -28,6 +28,7 @@ func emitReplicationExecuting(
 	key definition.WorkflowKey,
 	taskType string,
 	attempt int32,
+	sourceCluster string,
 ) {
 	shardContext, err := toolBox.ShardController.GetShardByNamespaceWorkflow(namespace.ID(key.NamespaceID), key.WorkflowID)
 	if err != nil {
@@ -44,14 +45,16 @@ func emitReplicationExecuting(
 	}
 
 	payload := wideevents.ReplicationLifecyclePayload{
-		Phase:       wideevents.ReplicationExecuting,
-		TaskType:    taskType,
-		Shard:       shardContext.GetShardID(),
-		Namespace:   nsName,
-		NamespaceID: key.NamespaceID,
-		WorkflowID:  key.WorkflowID,
-		RunID:       key.RunID,
-		Attempt:     attempt,
+		Phase:         wideevents.ReplicationExecuting,
+		TaskType:      taskType,
+		Shard:         shardContext.GetShardID(),
+		Namespace:     nsName,
+		NamespaceID:   key.NamespaceID,
+		WorkflowID:    key.WorkflowID,
+		RunID:         key.RunID,
+		Attempt:       attempt,
+		SourceCluster: sourceCluster,
+		SourceTaskID:  task.GetSourceTaskId(),
 	}
 	// Record what this attempt will try to apply, taken from the task itself: its target versioned
 	// transition and, for verify, the expected event version history. This lets a reader correlate
@@ -96,14 +99,15 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	}
 
 	payload := wideevents.ReplicationLifecyclePayload{
-		Phase:        wideevents.ReplicationSent,
-		TaskType:     taskType,
-		Shard:        s.serverShardKey.ShardID,
-		Namespace:    nsName.String(),
-		NamespaceID:  nsID,
-		WorkflowID:   item.GetWorkflowID(),
-		RunID:        item.GetRunID(),
-		SourceTaskID: item.GetTaskID(),
+		Phase:         wideevents.ReplicationSent,
+		TaskType:      taskType,
+		Shard:         s.serverShardKey.ShardID,
+		Namespace:     nsName.String(),
+		NamespaceID:   nsID,
+		WorkflowID:    item.GetWorkflowID(),
+		RunID:         item.GetRunID(),
+		SourceCluster: s.shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		SourceTaskID:  item.GetTaskID(),
 	}
 	if vt := task.GetVersionedTransition(); vt != nil {
 		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
@@ -195,15 +199,17 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	}
 
 	payload := wideevents.ReplicationLifecyclePayload{
-		Phase:       wideevents.ReplicationApplied,
-		TaskType:    wideevents.ReplTaskVerifyVersionedTransition,
-		Shard:       shardContext.GetShardID(),
-		Namespace:   nsName,
-		NamespaceID: e.NamespaceID,
-		WorkflowID:  e.WorkflowID,
-		RunID:       e.RunID,
-		Outcome:     outcome,
-		Error:       errStr,
+		Phase:         wideevents.ReplicationApplied,
+		TaskType:      wideevents.ReplTaskVerifyVersionedTransition,
+		Shard:         shardContext.GetShardID(),
+		Namespace:     nsName,
+		NamespaceID:   e.NamespaceID,
+		WorkflowID:    e.WorkflowID,
+		RunID:         e.RunID,
+		Outcome:       outcome,
+		Error:         errStr,
+		SourceCluster: e.SourceClusterName(),
+		SourceTaskID:  e.TaskID(),
 	}
 	if vt := e.ReplicationTask().GetVersionedTransition(); vt != nil {
 		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()

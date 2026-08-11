@@ -76,7 +76,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	e.MarkExecutionStart()
 
 	if e.Config.EmitReplicationLifecycleEvents() {
-		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskSyncVersionedTransition, int32(e.Attempt()))
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskSyncVersionedTransition, int32(e.Attempt()), e.SourceClusterName())
 	}
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
@@ -103,6 +103,8 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
+	// Not in newTaskContext: the HandleErr resend paths apply a re-fetched artifact, not this task's.
+	ctx = wideevents.SetReplicationSourceTaskID(ctx, e.TaskID())
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
