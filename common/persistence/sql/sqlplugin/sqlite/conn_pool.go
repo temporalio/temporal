@@ -26,8 +26,7 @@ func newConnPool() *connPool {
 	}
 }
 
-// acquire allocates the shared database in the pool or returns already exists instance with the same DSN. If instance
-// for such DSN already exists, it will be returned instead. Each request counts as reference until Close.
+// acquire returns the shared database for cfg and an idempotent function that releases this acquisition.
 func (cp *connPool) acquire(
 	cfg *config.SQL,
 	create func(string) (*sqlx.DB, error),
