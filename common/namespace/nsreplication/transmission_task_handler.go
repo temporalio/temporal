@@ -65,14 +65,10 @@ func (r *replicator) HandleTransmissionTask(
 	forceReplicate bool,
 ) error {
 
-	if info.State == enumspb.NAMESPACE_STATE_DELETED {
-		// Deleted namespaces are never replicated through this path (even under
-		// forceReplicate); namespace deletion is coordinated separately.
-		return nil
-	}
-	if !forceReplicate && !ShouldReplicateNamespace(
+	if !ShouldReplicateNamespace(
+		forceReplicate,
 		isGlobalNamespace,
-		replicationConfig.GetClusters(),
+		replicationConfig.Clusters,
 		replicationClusterListUpdated,
 		info.State,
 	) {
@@ -90,9 +86,9 @@ func (r *replicator) HandleTransmissionTask(
 		Info:   info,
 		Config: config,
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: replicationConfig.GetActiveClusterName(),
-			State:             replicationConfig.GetState(),
-			Clusters:          replicationConfig.GetClusters(),
+			ActiveClusterName: replicationConfig.ActiveClusterName,
+			State:             replicationConfig.State,
+			Clusters:          replicationConfig.Clusters,
 			FailoverHistory:   failoverHistoy,
 		},
 		ConfigVersion:   configVersion,
@@ -110,17 +106,25 @@ func (r *replicator) HandleTransmissionTask(
 }
 
 // ShouldReplicateNamespace reports whether a namespace mutation must be
-// propagated to peer clusters at all. It is extracted from HandleTransmissionTask
-// as a standalone gate in preparation for an eventual CHASM-based namespace
-// replication transport: that path will share this exact replicate/skip decision
-// so the two transports can never diverge on which mutations replicate. Today
-// only the legacy queue path (HandleTransmissionTask) calls it.
+// propagated to peer clusters at all. It is the single replicate/skip gate,
+// extracted from HandleTransmissionTask in preparation for an eventual
+// CHASM-based namespace replication transport: that path will share this exact
+// decision so the two transports can never diverge on which mutations replicate.
+// Today only the legacy queue path (HandleTransmissionTask) calls it.
 //
-// A mutation replicates only when the namespace is global, has a peer to
-// replicate to (more than one cluster, or the cluster list just changed), and
-// is not being deleted (namespace deletion is coordinated through a separate
-// path and must never be pushed to peers).
+// The entire force/deleted/global/peer decision lives here, in one place, so no
+// caller can accidentally bypass part of it:
+//
+//   - A DELETED namespace is never replicated, even under forceReplicate:
+//     namespace deletion is coordinated through a separate path and must never be
+//     pushed to peers. This is checked first, ahead of forceReplicate, so force
+//     cannot bypass it.
+//   - forceReplicate then replicates unconditionally (a non-deleted namespace).
+//   - Otherwise a mutation replicates only when the namespace is global and has a
+//     peer to replicate to (more than one cluster, or the cluster list just
+//     changed).
 func ShouldReplicateNamespace(
+	forceReplicate bool,
 	isGlobalNamespace bool,
 	clusters []string,
 	replicationClusterListUpdated bool,
@@ -128,6 +132,9 @@ func ShouldReplicateNamespace(
 ) bool {
 	if state == enumspb.NAMESPACE_STATE_DELETED {
 		return false
+	}
+	if forceReplicate {
+		return true
 	}
 	if !isGlobalNamespace {
 		return false
@@ -153,40 +160,40 @@ func NamespaceDetailToTaskAttributes(
 	namespaceOperation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
 ) *replicationspb.NamespaceTaskAttributes {
-	info := detail.GetInfo()
-	config := detail.GetConfig()
-	replicationConfig := detail.GetReplicationConfig()
+	info := detail.Info
+	config := detail.Config
+	replicationConfig := detail.ReplicationConfig
 
 	attributes := &replicationspb.NamespaceTaskAttributes{
 		NamespaceOperation: namespaceOperation,
-		Id:                 info.GetId(),
+		Id:                 info.Id,
 		Info: &namespacepb.NamespaceInfo{
-			Name:        info.GetName(),
-			State:       info.GetState(),
-			Description: info.GetDescription(),
-			OwnerEmail:  info.GetOwner(),
-			Data:        info.GetData(),
+			Name:        info.Name,
+			State:       info.State,
+			Description: info.Description,
+			OwnerEmail:  info.Owner,
+			Data:        info.Data,
 		},
 		Config: &namespacepb.NamespaceConfig{
-			WorkflowExecutionRetentionTtl: config.GetRetention(),
-			HistoryArchivalState:          config.GetHistoryArchivalState(),
-			HistoryArchivalUri:            config.GetHistoryArchivalUri(),
-			VisibilityArchivalState:       config.GetVisibilityArchivalState(),
-			VisibilityArchivalUri:         config.GetVisibilityArchivalUri(),
-			BadBinaries:                   config.GetBadBinaries(),
-			CustomSearchAttributeAliases:  config.GetCustomSearchAttributeAliases(),
+			WorkflowExecutionRetentionTtl: config.Retention,
+			HistoryArchivalState:          config.HistoryArchivalState,
+			HistoryArchivalUri:            config.HistoryArchivalUri,
+			VisibilityArchivalState:       config.VisibilityArchivalState,
+			VisibilityArchivalUri:         config.VisibilityArchivalUri,
+			BadBinaries:                   config.BadBinaries,
+			CustomSearchAttributeAliases:  config.CustomSearchAttributeAliases,
 		},
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			ActiveClusterName: replicationConfig.GetActiveClusterName(),
-			Clusters:          convertClusterReplicationConfigToProto(replicationConfig.GetClusters()),
+			ActiveClusterName: replicationConfig.ActiveClusterName,
+			Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 		},
-		ConfigVersion:   detail.GetConfigVersion(),
-		FailoverVersion: detail.GetFailoverVersion(),
-		FailoverHistory: convertFailoverHistoryToReplicationProto(replicationConfig.GetFailoverHistory()),
+		ConfigVersion:   detail.ConfigVersion,
+		FailoverVersion: detail.FailoverVersion,
+		FailoverHistory: convertFailoverHistoryToReplicationProto(replicationConfig.FailoverHistory),
 	}
 
-	if replicationConfig.GetState() == enumspb.REPLICATION_STATE_NORMAL {
-		attributes.ReplicationConfig.State = replicationConfig.GetState()
+	if replicationConfig.State == enumspb.REPLICATION_STATE_NORMAL {
+		attributes.ReplicationConfig.State = replicationConfig.State
 	}
 	return attributes
 }

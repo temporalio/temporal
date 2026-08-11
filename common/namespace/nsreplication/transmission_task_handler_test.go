@@ -633,11 +633,12 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 	s.Require().NoError(err)
 }
 
-// The three cases below pin the force/gate/deleted interaction that the shared
-// ShouldReplicateNamespace refactor reordered (the DELETED check moved ahead of
-// the force/global/cluster gate). Every other test in this suite passes
+// The three cases below pin, at the HandleTransmissionTask level, the
+// force/deleted/gate interaction now owned entirely by the shared
+// ShouldReplicateNamespace gate (DELETED is checked ahead of forceReplicate, so
+// force cannot bypass it). Every other test in this suite passes
 // forceReplicate=false and a non-deleted state, so these are the only ones that
-// exercise the reordered branch.
+// exercise the force and deleted branches end to end.
 
 // TestHandleTransmissionTask_ForceReplicate_BypassesGate: forceReplicate must
 // publish even for a non-global, single-cluster namespace that the replicate
