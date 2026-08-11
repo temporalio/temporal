@@ -172,7 +172,6 @@ func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (server *Server
 	s.app = fx.New(
 		topLevelModule,
 		fx.Supply(opts),
-		// Record ownership when Fx constructs the factory so it can be closed if a later invoke fails.
 		fx.Provide(s.provideBootstrapPersistenceFactory),
 		fx.Populate(&s.startupSynchronizationMode),
 		fx.Populate(&s.logger),
