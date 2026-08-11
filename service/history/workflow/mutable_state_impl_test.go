@@ -6793,6 +6793,163 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 	s.Equal(expectedWorkerControlTaskQueue, updatedActivityInfo.WorkerControlTaskQueue)
 }
 
+func (s *mutableStateSuite) TestAddActivityTaskStartedEventApproximateSize() {
+	for _, tc := range []struct {
+		name        string
+		retryPolicy *commonpb.RetryPolicy
+	}{
+		{
+			// Transient start: routes through UpdateActivity.
+			name:        "WithRetryPolicy",
+			retryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 5},
+		},
+		{
+			// Routes through ApplyActivityTaskStartedEvent instead; no UpdateActivity callback.
+			name:        "WithoutRetryPolicy",
+			retryPolicy: nil,
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+			_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+				&historyservice.StartWorkflowExecutionRequest{
+					NamespaceId: tests.NamespaceID.String(),
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue"},
+						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+					},
+				},
+			)
+			s.NoError(err)
+
+			di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			s.NoError(err)
+			_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+				di.ScheduledEventID,
+				di.RequestID,
+				di.TaskQueue,
+				"identity",
+				nil,
+				nil,
+				nil,
+				false,
+				nil,
+				0,
+			)
+			s.NoError(err)
+			completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+				di,
+				&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "identity"},
+				workflowTaskCompletionLimits,
+			)
+			s.NoError(err)
+
+			_, ai, err := s.mutableState.AddActivityTaskScheduledEvent(
+				completedEvent.GetEventId(),
+				&commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:   "test-activity-1",
+					ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					RetryPolicy:  tc.retryPolicy,
+				},
+				false,
+			)
+			s.NoError(err)
+			s.Equal(tc.retryPolicy != nil, ai.HasRetryPolicy)
+
+			sizeBeforeWithoutActivityInfo := s.mutableState.approximateSize - ai.Size()
+
+			_, err = s.mutableState.AddActivityTaskStartedEvent(
+				ai,
+				ai.ScheduledEventId,
+				uuid.NewString(),
+				"worker-identity",
+				nil,
+				deployment1,
+				nil,
+				"worker-control-task-queue",
+				&clockspb.VectorClock{},
+			)
+			s.NoError(err)
+
+			s.Equal(
+				sizeBeforeWithoutActivityInfo+ai.Size(),
+				s.mutableState.approximateSize,
+			)
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestUpdateActivityProgressApproximateSize() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue"},
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		di.ScheduledEventID,
+		di.RequestID,
+		di.TaskQueue,
+		"identity",
+		nil,
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+	)
+	s.NoError(err)
+	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+		di,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "identity"},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	_, ai, err := s.mutableState.AddActivityTaskScheduledEvent(
+		completedEvent.GetEventId(),
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "test-activity-1",
+			ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			RetryPolicy:  &commonpb.RetryPolicy{MaximumAttempts: 5},
+		},
+		false,
+	)
+	s.NoError(err)
+	s.Empty(ai.RetryLastWorkerIdentity)
+
+	sizeBeforeWithoutActivityInfo := s.mutableState.approximateSize - ai.Size()
+
+	s.mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		Identity: "worker-identity",
+		Details:  payloads.EncodeString("heartbeat-details"),
+	})
+
+	s.Equal("worker-identity", ai.RetryLastWorkerIdentity)
+	s.Equal(
+		sizeBeforeWithoutActivityInfo+ai.Size(),
+		s.mutableState.approximateSize,
+	)
+}
+
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
 	for _, tc := range []struct {
 		name   string
