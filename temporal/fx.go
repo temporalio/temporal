@@ -1221,8 +1221,6 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
-	case *fxevent.Invoking:
-		// Do not log stack as it will make logs hard to read.
 	case *fxevent.Invoked:
 		if e.Err != nil {
 			l.logger.Error(
