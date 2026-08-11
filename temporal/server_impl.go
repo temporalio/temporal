@@ -7,19 +7,12 @@ import (
 	"slices"
 	"time"
 
-	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/telemetry"
 	"go.uber.org/multierr"
 )
 
@@ -32,12 +25,7 @@ type (
 		logger           log.Logger
 		namespaceLogger  resource.NamespaceLogger
 
-		persistenceConfig          config.Persistence
-		clusterMetadata            *cluster.Config
-		persistenceFactoryProvider persistenceClient.FactoryProviderFn
-		metricsHandler             metrics.Handler
-		tracerProvider             trace.TracerProvider
-		serializer                 serialization.Serializer
+		bootstrapPersistenceFactory persistenceClient.Factory
 	}
 )
 
@@ -59,29 +47,20 @@ func NewServerFxImpl(
 	namespaceLogger resource.NamespaceLogger,
 	stoppedCh chan any,
 	servicesGroup ServicesGroupIn,
-	persistenceConfig config.Persistence,
-	clusterMetadata *cluster.Config,
-	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
-	metricsHandler metrics.Handler,
-	serializer serialization.Serializer,
+	bootstrapPersistenceFactory persistenceClient.Factory,
 ) *ServerImpl {
 	s := &ServerImpl{
-		so:                         opts,
-		stoppedCh:                  stoppedCh,
-		logger:                     logger,
-		namespaceLogger:            namespaceLogger,
-		persistenceConfig:          persistenceConfig,
-		clusterMetadata:            clusterMetadata,
-		persistenceFactoryProvider: persistenceFactoryProvider,
-		metricsHandler:             metricsHandler,
+		so:                          opts,
+		stoppedCh:                   stoppedCh,
+		logger:                      logger,
+		namespaceLogger:             namespaceLogger,
+		bootstrapPersistenceFactory: bootstrapPersistenceFactory,
 	}
 	for _, svcMeta := range servicesGroup.Services {
 		if svcMeta != nil {
 			s.servicesMetadata = append(s.servicesMetadata, svcMeta)
 		}
 	}
-	// Store serializer for use in Start()
-	s.serializer = serializer
 	return s
 }
 
@@ -91,14 +70,8 @@ func (s *ServerImpl) Start(ctx context.Context) error {
 
 	if err := initSystemNamespaces(
 		ctx,
-		&s.persistenceConfig,
-		s.clusterMetadata.CurrentClusterName,
-		s.so.persistenceServiceResolver,
-		s.persistenceFactoryProvider,
-		s.logger,
-		s.so.customDataStoreFactory,
-		s.metricsHandler,
-		s.serializer,
+		s.so.config.ClusterMetadata.CurrentClusterName,
+		s.bootstrapPersistenceFactory,
 	); err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
@@ -147,39 +120,9 @@ func (s *ServerImpl) startServices() error {
 
 func initSystemNamespaces(
 	ctx context.Context,
-	cfg *config.Persistence,
 	currentClusterName string,
-	persistenceServiceResolver resolver.ServiceResolver,
-	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
-	logger log.Logger,
-	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
-	metricsHandler metrics.Handler,
-	serializer serialization.Serializer,
+	factory persistenceClient.Factory,
 ) error {
-	clusterName := persistenceClient.ClusterName(currentClusterName)
-	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
-	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
-		clusterName,
-		persistenceServiceResolver,
-		cfg,
-		customDataStoreFactory,
-		logger,
-		metricsHandler,
-		telemetry.NoopTracerProvider,
-		serializer,
-	)
-	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
-		DataStoreFactory:           dataStoreFactory,
-		Cfg:                        cfg,
-		PersistenceMaxQPS:          nil,
-		PersistenceNamespaceMaxQPS: nil,
-		ClusterName:                persistenceClient.ClusterName(currentClusterName),
-		MetricsHandler:             metricsHandler,
-		Logger:                     logger,
-		Serializer:                 serializer,
-	})
-	defer factory.Close()
-
 	metadataManager, err := factory.NewMetadataManager()
 	if err != nil {
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)

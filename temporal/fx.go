@@ -90,9 +90,10 @@ type (
 	}
 
 	ServerFx struct {
-		app                        *fx.App
-		startupSynchronizationMode synchronizationModeParams
-		logger                     log.Logger
+		app                         *fx.App
+		startupSynchronizationMode  synchronizationModeParams
+		logger                      log.Logger
+		bootstrapPersistenceFactory persistenceClient.Factory
 	}
 
 	serverOptionsProvider struct {
@@ -134,6 +135,18 @@ type (
 		TestHooks                  testhooks.TestHooks
 		EventLoggerProvider        otellog.LoggerProvider
 	}
+
+	bootstrapPersistenceFactoryParams struct {
+		fx.In
+
+		Config                     *config.Config
+		ServiceResolver            resolver.ServiceResolver
+		CustomDataStoreFactory     persistenceClient.AbstractDataStoreFactory
+		Logger                     log.Logger
+		MetricsHandler             metrics.Handler
+		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
+		Serializer                 serialization.Serializer
+	}
 )
 
 var (
@@ -160,28 +173,35 @@ var (
 	)
 )
 
-func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (*ServerFx, error) {
-	var s ServerFx
+func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (server *ServerFx, err error) {
+	s := &ServerFx{}
+	defer func() {
+		if server == nil {
+			s.closeBootstrapPersistenceFactory()
+		}
+	}()
+
 	s.app = fx.New(
 		topLevelModule,
 		fx.Supply(opts),
+		fx.Provide(func(params bootstrapPersistenceFactoryParams) persistenceClient.Factory {
+			s.bootstrapPersistenceFactory = newBootstrapPersistenceFactory(params)
+			return s.bootstrapPersistenceFactory
+		}),
 		fx.Populate(&s.startupSynchronizationMode),
 		fx.Populate(&s.logger),
 	)
 	if err := s.app.Err(); err != nil {
 		return nil, err
 	}
-	return &s, nil
+	return s, nil
 }
 
 func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	so := newServerOptions(opts)
-
-	err := so.loadAndValidate()
-	if err != nil {
+	if err := so.loadAndValidate(); err != nil {
 		return serverOptionsProvider{}, err
 	}
-
 	// Logger
 	logger := so.logger
 	if logger == nil {
@@ -189,7 +209,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	persistenceConfig := so.config.Persistence
-	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
+	err := verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
 	if err != nil {
 		return serverOptionsProvider{}, err
 	}
@@ -346,11 +366,35 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}, nil
 }
 
+func newBootstrapPersistenceFactory(params bootstrapPersistenceFactoryParams) persistenceClient.Factory {
+	persistenceMetricsHandler := params.MetricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
+	clusterName := persistenceClient.ClusterName(params.Config.ClusterMetadata.CurrentClusterName)
+	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
+		clusterName,
+		params.ServiceResolver,
+		&params.Config.Persistence,
+		params.CustomDataStoreFactory,
+		params.Logger,
+		persistenceMetricsHandler,
+		telemetry.NoopTracerProvider,
+		params.Serializer,
+	)
+	return params.PersistenceFactoryProvider(persistenceClient.NewFactoryParams{
+		DataStoreFactory: dataStoreFactory,
+		Cfg:              &params.Config.Persistence,
+		ClusterName:      clusterName,
+		MetricsHandler:   persistenceMetricsHandler,
+		Logger:           params.Logger,
+		Serializer:       params.Serializer,
+	})
+}
+
 // Start temporal server.
 // This function should be called only once, Server doesn't support multiple restarts.
 func (s *ServerFx) Start() error {
 	err := s.app.Start(context.Background())
 	if err != nil {
+		s.closeBootstrapPersistenceFactory()
 		return err
 	}
 
@@ -366,7 +410,17 @@ func (s *ServerFx) Start() error {
 
 // Stop stops the server.
 func (s *ServerFx) Stop() error {
-	return s.app.Stop(context.Background())
+	err := s.app.Stop(context.Background())
+	s.closeBootstrapPersistenceFactory()
+	return err
+}
+
+func (s *ServerFx) closeBootstrapPersistenceFactory() {
+	factory := s.bootstrapPersistenceFactory
+	s.bootstrapPersistenceFactory = nil
+	if factory != nil {
+		factory.Close()
+	}
 }
 
 func (svc *ServicesMetadata) Stop(ctx context.Context) {
@@ -646,38 +700,10 @@ func WorkerServiceProvider(
 func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
 	svc *config.Config,
-	persistenceServiceResolver resolver.ServiceResolver,
-	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
-	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
-	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
-	metricsHandler metrics.Handler,
-	serializer serialization.Serializer,
+	factory persistenceClient.Factory,
 ) (*cluster.Config, config.Persistence, error) {
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
-	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
-	clusterName := persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName)
-	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
-		clusterName,
-		persistenceServiceResolver,
-		&svc.Persistence,
-		customDataStoreFactory,
-		logger,
-		metricsHandler,
-		telemetry.NoopTracerProvider,
-		serializer,
-	)
-	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
-		DataStoreFactory:           dataStoreFactory,
-		Cfg:                        &svc.Persistence,
-		PersistenceMaxQPS:          nil,
-		PersistenceNamespaceMaxQPS: nil,
-		ClusterName:                persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName),
-		MetricsHandler:             metricsHandler,
-		Logger:                     logger,
-		Serializer:                 serializer,
-	})
-	defer factory.Close()
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
