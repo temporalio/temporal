@@ -103,9 +103,20 @@ Format every actionable finding exactly as:
 ```markdown
 **[nit|small|med|high]** — One-line summary.
 
-**Issue:** Clear and concise explanation of the problem — what's wrong and why it matters.
+**Issue:** Clear explanation of the problem — what's wrong and why it matters. Short and to the point.
 
 **Suggestion:** Concrete fix or alternative.
+```
+
+Keep the issue and suggestion self-contained. When supporting material would make the visible comment long, place it after the suggestion in an optional `<details>` block:
+
+```markdown
+<details>
+<summary>Additional details</summary>
+
+Supporting evidence, examples, or implementation notes.
+
+</details>
 ```
 
 ### Severity levels
