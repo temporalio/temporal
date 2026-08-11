@@ -238,3 +238,41 @@ func (mr *MockSkipLoggerMockRecorder) Skip(extraSkip any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Skip", reflect.TypeOf((*MockSkipLogger)(nil).Skip), extraSkip)
 }
+
+// MockdebugEnabledLogger is a mock of debugEnabledLogger interface.
+type MockdebugEnabledLogger struct {
+	ctrl     *gomock.Controller
+	recorder *MockdebugEnabledLoggerMockRecorder
+	isgomock struct{}
+}
+
+// MockdebugEnabledLoggerMockRecorder is the mock recorder for MockdebugEnabledLogger.
+type MockdebugEnabledLoggerMockRecorder struct {
+	mock *MockdebugEnabledLogger
+}
+
+// NewMockdebugEnabledLogger creates a new mock instance.
+func NewMockdebugEnabledLogger(ctrl *gomock.Controller) *MockdebugEnabledLogger {
+	mock := &MockdebugEnabledLogger{ctrl: ctrl}
+	mock.recorder = &MockdebugEnabledLoggerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockdebugEnabledLogger) EXPECT() *MockdebugEnabledLoggerMockRecorder {
+	return m.recorder
+}
+
+// DebugEnabled mocks base method.
+func (m *MockdebugEnabledLogger) DebugEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DebugEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// DebugEnabled indicates an expected call of DebugEnabled.
+func (mr *MockdebugEnabledLoggerMockRecorder) DebugEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DebugEnabled", reflect.TypeOf((*MockdebugEnabledLogger)(nil).DebugEnabled))
+}

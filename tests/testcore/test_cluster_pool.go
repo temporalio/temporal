@@ -435,6 +435,9 @@ func (p *clusterRouter) createClusterWithOwnerAndReadiness(
 		withWorkerService(req.needWorkerService),
 		withBootPhaseObserver(phases.record),
 	}
+	if p.perTest != nil {
+		opts = append(opts, withReusablePersistenceDatabase())
+	}
 	if req.kind != clusterKindDedicated {
 		opts = append(opts, WithSharedCluster())
 	}

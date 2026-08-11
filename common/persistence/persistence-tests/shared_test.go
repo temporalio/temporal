@@ -26,6 +26,10 @@ func (*partialSetupTestCluster) Config() config.Persistence {
 	return config.Persistence{}
 }
 
+func (*partialSetupTestCluster) StoreType() string {
+	return config.StoreTypeSQL
+}
+
 func TestTearDownWorkflowStoreAllowsPartialSetup(t *testing.T) {
 	cluster := &partialSetupTestCluster{}
 	testBase := &TestBase{DefaultTestCluster: cluster}

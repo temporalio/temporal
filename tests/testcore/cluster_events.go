@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 )
 
 const (
@@ -179,6 +181,10 @@ func RunTests(run func() int) int {
 	exitCode := run()
 	if testClusterRouter.perTest != nil {
 		testClusterRouter.perTest.close()
+	}
+	if err := persistencetests.CloseReusableCassandraDatabases(); err != nil {
+		log.Printf("failed to close reusable Cassandra databases: %v", err)
+		exitCode = 1
 	}
 	if recorder != nil {
 		stopRuntimeSampler()

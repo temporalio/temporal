@@ -109,6 +109,7 @@ type (
 		EnableHistoryTaskRecorder bool
 		EnableReplicationRecorder bool
 		EnableArchival            bool
+		ReusePersistenceDatabase  bool
 		AdditionalServerOptions   []temporal.ServerOption
 		bootPhaseObserver         func(string, time.Duration)
 	}
@@ -196,6 +197,12 @@ func withWorkerService(enabled bool) TestClusterOption {
 func withBootPhaseObserver(observer func(string, time.Duration)) TestClusterOption {
 	return func(params *testClusterParams) {
 		params.bootPhaseObserver = observer
+	}
+}
+
+func withReusablePersistenceDatabase() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.ReusePersistenceDatabase = true
 	}
 }
 
@@ -363,6 +370,9 @@ func (s *FunctionalTestBase) setupClusterWithOwner(owner clusterTest, options ..
 
 	s.testClusterConfig = &TestClusterConfig{
 		FaultInjection: params.FaultInjectionConfig,
+		Persistence: persistencetests.TestBaseOptions{
+			ReuseDatabase: params.ReusePersistenceDatabase,
+		},
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},

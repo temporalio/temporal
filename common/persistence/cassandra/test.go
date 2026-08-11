@@ -1,7 +1,9 @@
 package cassandra
 
 import (
+	"fmt"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -95,6 +97,10 @@ func (s *TestCluster) Config() config.Persistence {
 	}
 }
 
+func (s *TestCluster) StoreType() string {
+	return config.StoreTypeNoSQL
+}
+
 // DatabaseName from PersistenceTestCluster interface
 func (s *TestCluster) DatabaseName() string {
 	return s.keyspace
@@ -119,18 +125,25 @@ func (s *TestCluster) SetupTestDatabase() {
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
 	s.DropDatabase()
-	s.session.Close()
+	s.CloseSession()
 }
 
 // CreateSession from PersistenceTestCluster interface
 func (s *TestCluster) CreateSession(
 	keyspace string,
 ) {
+	if err := s.OpenSession(keyspace); err != nil {
+		s.logger.Fatal("CreateSession", tag.Error(err))
+	}
+}
+
+// OpenSession connects the test cluster to keyspace.
+func (s *TestCluster) OpenSession(keyspace string) error {
 	if s.session != nil {
 		s.session.Close()
+		s.session = nil
 	}
 
-	var err error
 	op := func() error {
 		session, err := commongocql.NewSession(
 			func() (*gocql.ClusterConfig, error) {
@@ -159,15 +172,29 @@ func (s *TestCluster) CreateSession(
 		}
 		return err
 	}
-	err = backoff.ThrottleRetry(
+	err := backoff.ThrottleRetry(
 		op,
 		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
 		nil,
 	)
 	if err != nil {
-		s.logger.Fatal("CreateSession", tag.Error(err))
+		return err
 	}
 	s.logger.Debug("created session", tag.String("keyspace", keyspace))
+	return nil
+}
+
+// OpenTestDatabase reconnects to an existing test database.
+func (s *TestCluster) OpenTestDatabase() error {
+	return s.OpenSession(s.DatabaseName())
+}
+
+// CloseSession closes the current Cassandra session.
+func (s *TestCluster) CloseSession() {
+	if s.session != nil {
+		s.session.Close()
+		s.session = nil
+	}
 }
 
 // CreateDatabase from PersistenceTestCluster interface
@@ -181,11 +208,46 @@ func (s *TestCluster) CreateDatabase() {
 
 // DropDatabase from PersistenceTestCluster interface
 func (s *TestCluster) DropDatabase() {
-	err := DropCassandraKeyspace(s.session, s.DatabaseName(), s.logger)
+	err := s.DropTestDatabase()
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		s.logger.Fatal("DropCassandraKeyspace", tag.Error(err))
 	}
+}
+
+// DropTestDatabase drops the Cassandra keyspace owned by the test cluster.
+func (s *TestCluster) DropTestDatabase() error {
+	err := DropCassandraKeyspace(s.session, s.DatabaseName(), s.logger)
+	if err != nil {
+		return err
+	}
 	s.logger.Info("dropped database", tag.String("database", s.DatabaseName()))
+	return nil
+}
+
+// ResetTestDatabase removes test data while preserving the installed schema.
+func (s *TestCluster) ResetTestDatabase() error {
+	iter := s.session.Query(
+		"SELECT table_name FROM system_schema.tables WHERE keyspace_name = ?",
+		s.DatabaseName(),
+	).Iter()
+	var tableNames []string
+	var tableName string
+	for iter.Scan(&tableName) {
+		if tableName != "schema_version" && tableName != "schema_update_history" {
+			tableNames = append(tableNames, tableName)
+		}
+	}
+	if err := iter.Close(); err != nil {
+		return fmt.Errorf("list Cassandra tables: %w", err)
+	}
+
+	sort.Strings(tableNames)
+	for _, tableName := range tableNames {
+		if err := s.session.Query("TRUNCATE " + tableName).Exec(); err != nil {
+			return fmt.Errorf("truncate Cassandra table %q: %w", tableName, err)
+		}
+	}
+	return nil
 }
 
 // LoadSchema from PersistenceTestCluster interface

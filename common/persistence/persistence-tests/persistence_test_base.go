@@ -63,6 +63,7 @@ type (
 		SchemaDir         string `yaml:"-"`
 		FaultInjection    *config.FaultInjection
 		Logger            log.Logger `yaml:"-"`
+		ReuseDatabase     bool       `yaml:"-"`
 	}
 )
 
@@ -115,6 +116,7 @@ type (
 		SetupTestDatabase()
 		TearDownTestDatabase()
 		Config() config.Persistence
+		StoreType() string
 	}
 
 	// TestTransferTaskIDGenerator helper
@@ -126,6 +128,9 @@ type (
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
 func NewTestBaseWithCassandra(options *TestBaseOptions) *TestBase {
 	logger := log.NewTestLogger()
+	if options.ReuseDatabase {
+		return NewTestBaseForCluster(newReusableCassandraDatabase(options, logger), logger)
+	}
 	testCluster := NewTestClusterForCassandra(options, logger)
 	return NewTestBaseForCluster(testCluster, logger)
 }
