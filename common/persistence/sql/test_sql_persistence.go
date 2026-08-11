@@ -28,7 +28,7 @@ type TestCluster struct {
 	faultInjection *config.FaultInjection
 	logger         log.Logger
 	// databaseHandle keeps an in-memory SQLite database alive until teardown.
-	databaseHandle sqlplugin.DB
+	databaseHandle sqlplugin.AdminDB
 }
 
 type forceDatabaseDropper interface {
@@ -76,17 +76,7 @@ func (s *TestCluster) DatabaseName() string {
 // SetupTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) SetupTestDatabase() {
 	s.CreateDatabase()
-	database, err := NewSQLDB(
-		sqlplugin.DbKindMain,
-		&s.cfg,
-		resolver.NewNoopResolver(),
-		s.logger,
-		metrics.NoopMetricsHandler,
-	)
-	if err != nil {
-		s.logger.Fatal("Open database", tag.Error(err))
-	}
-	s.databaseHandle = database
+	s.databaseHandle = s.newAdminDB(sqlplugin.DbKindMain, &s.cfg)
 
 	if s.schemaDir == "" {
 		s.logger.Info("No schema directory provided, skipping schema setup")
@@ -98,9 +88,9 @@ func (s *TestCluster) SetupTestDatabase() {
 		temporalPackageDir := testutils.GetRepoRootDirectory()
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
-	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.sql"))
-	s.LoadSchema(path.Join(schemaDir, "visibility", "schema.sql"))
-	s.loadSchemaVersion()
+	s.loadSchema(s.databaseHandle, path.Join(schemaDir, "temporal", "schema.sql"))
+	s.loadSchema(s.databaseHandle, path.Join(schemaDir, "visibility", "schema.sql"))
+	s.loadSchemaVersion(s.databaseHandle)
 }
 
 // Config returns the persistence config for connecting to this test cluster
@@ -118,9 +108,7 @@ func (s *TestCluster) Config() config.Persistence {
 
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
-	if err := s.databaseHandle.Close(); err != nil {
-		s.logger.Fatal("Close databases", tag.Error(err))
-	}
+	s.closeAdminDB(s.databaseHandle)
 	s.DropDatabase()
 }
 
@@ -174,6 +162,12 @@ func (s *TestCluster) DropDatabase() {
 
 // LoadSchema from PersistenceTestCluster interface
 func (s *TestCluster) LoadSchema(schemaFile string) {
+	db := s.newAdminDB(sqlplugin.DbKindUnknown, &s.cfg)
+	defer s.closeAdminDB(db)
+	s.loadSchema(db, schemaFile)
+}
+
+func (s *TestCluster) loadSchema(db sqlplugin.AdminDB, schemaFile string) {
 	statements, err := p.LoadAndSplitQuery([]string{schemaFile})
 	if err != nil {
 		s.logger.Fatal(
@@ -183,9 +177,6 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 			tag.String("schema-file", schemaFile),
 		)
 	}
-
-	db := s.newAdminDB(sqlplugin.DbKindUnknown, &s.cfg)
-	defer s.closeAdminDB(db)
 
 	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
 		statements = rewriter.RewriteSchemaStatements(statements)
@@ -206,10 +197,7 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 	s.logger.Info("loaded schema")
 }
 
-func (s *TestCluster) loadSchemaVersion() {
-	db := s.newAdminDB(sqlplugin.DbKindMain, &s.cfg)
-	defer s.closeAdminDB(db)
-
+func (s *TestCluster) loadSchemaVersion(db sqlplugin.AdminDB) {
 	expectedVersion := db.ExpectedVersion()
 	if err := db.CreateSchemaVersionTables(); err != nil {
 		s.logger.Fatal("CreateSchemaVersionTables", tag.Error(err))
