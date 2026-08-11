@@ -16,6 +16,22 @@ func TestConfiguredClusterMode(t *testing.T) {
 	require.Equal(t, clusterModePooled, configuredClusterMode(clusterModePooled))
 }
 
+func TestConfiguredPerTestClusterLimits(t *testing.T) {
+	t.Setenv("TEMPORAL_TEST_LIVE_CLUSTERS", "")
+	t.Setenv("TEMPORAL_TEST_WARM_SPARES", "")
+
+	maxLiveTests, warmSpares := configuredPerTestClusterLimits()
+	require.Equal(t, 40, maxLiveTests)
+	require.Zero(t, warmSpares)
+
+	t.Setenv("TEMPORAL_TEST_LIVE_CLUSTERS", "7")
+	t.Setenv("TEMPORAL_TEST_WARM_SPARES", "3")
+
+	maxLiveTests, warmSpares = configuredPerTestClusterLimits()
+	require.Equal(t, 7, maxLiveTests)
+	require.Equal(t, 3, warmSpares)
+}
+
 func TestClusterPool_GlobalOverridesSurviveTestCleanup(t *testing.T) {
 	dc := dynamicconfig.NewMemoryClient()
 

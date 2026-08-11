@@ -64,8 +64,7 @@ func init() {
 	switch mode {
 	case clusterModePooled:
 	case clusterModePerTest:
-		maxLiveTests := positiveEnv("TEMPORAL_TEST_LIVE_CLUSTERS", min(12, runtime.GOMAXPROCS(0)))
-		warmSpares := nonNegativeEnv("TEMPORAL_TEST_WARM_SPARES", maxLiveTests)
+		maxLiveTests, warmSpares := configuredPerTestClusterLimits()
 		router.perTest = newPerTestClusterProvider(
 			maxLiveTests,
 			warmSpares,
@@ -84,6 +83,12 @@ func configuredClusterMode(mode string) string {
 		return clusterModePerTest
 	}
 	return mode
+}
+
+func configuredPerTestClusterLimits() (maxLiveTests int, warmSpares int) {
+	maxLiveTests = positiveEnv("TEMPORAL_TEST_LIVE_CLUSTERS", 40)
+	warmSpares = nonNegativeEnv("TEMPORAL_TEST_WARM_SPARES", 0)
+	return maxLiveTests, warmSpares
 }
 
 func positiveEnv(name string, defaultValue int) int {
