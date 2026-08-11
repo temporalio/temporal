@@ -55,18 +55,17 @@ func NewFactory(
 		clusterName: clusterName,
 		logger:      logger,
 		serializer:  serializer,
-		mainDBConn:  newFactoryDBConn(sqlplugin.DbKindMain, &cfg, r, logger, metricsHandler),
+		mainDBConn:  newFactoryDBConn(&cfg, r, logger, metricsHandler),
 	}
 }
 
 func newFactoryDBConn(
-	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *DbConn {
-	conn := NewRefCountedDBConn(dbKind, cfg, r, logger, metricsHandler)
+	conn := NewRefCountedDBConn(sqlplugin.DbKindMain, cfg, r, logger, metricsHandler)
 	// The factory owns the initial reference; stores borrow additional references.
 	conn.refCnt = 1
 	return &conn

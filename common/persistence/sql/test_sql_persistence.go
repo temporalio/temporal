@@ -27,7 +27,8 @@ type TestCluster struct {
 	cfg            config.SQL
 	faultInjection *config.FaultInjection
 	logger         log.Logger
-	database       sqlplugin.DB
+	// databaseHandle keeps an in-memory SQLite database alive until teardown.
+	databaseHandle sqlplugin.DB
 }
 
 type forceDatabaseDropper interface {
@@ -85,7 +86,7 @@ func (s *TestCluster) SetupTestDatabase() {
 	if err != nil {
 		s.logger.Fatal("Open database", tag.Error(err))
 	}
-	s.database = database
+	s.databaseHandle = database
 
 	if s.schemaDir == "" {
 		s.logger.Info("No schema directory provided, skipping schema setup")
@@ -117,7 +118,7 @@ func (s *TestCluster) Config() config.Persistence {
 
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
-	if err := s.database.Close(); err != nil {
+	if err := s.databaseHandle.Close(); err != nil {
 		s.logger.Fatal("Close databases", tag.Error(err))
 	}
 	s.DropDatabase()
