@@ -39,59 +39,6 @@ func NewSQLDB(
 	return createDB[sqlplugin.DB](dbKind, cfg, r, logger, mh)
 }
 
-// OpenDatabases opens each active SQL database. The caller owns the returned handles.
-func OpenDatabases(
-	cfg config.Persistence,
-	r resolver.ServiceResolver,
-	logger log.Logger,
-	mh metrics.Handler,
-) ([]sqlplugin.GenericDB, error) {
-	stores := [...]struct {
-		name string
-		kind sqlplugin.DbKind
-	}{
-		{cfg.DefaultStore, sqlplugin.DbKindMain},
-		{cfg.VisibilityStore, sqlplugin.DbKindVisibility},
-		{cfg.SecondaryVisibilityStore, sqlplugin.DbKindVisibility},
-	}
-
-	var databases []sqlplugin.GenericDB
-	seen := make(map[string]struct{}, len(stores))
-	for _, store := range stores {
-		if store.name == "" {
-			continue
-		}
-		if _, ok := seen[store.name]; ok {
-			continue
-		}
-		seen[store.name] = struct{}{}
-
-		sqlCfg := cfg.DataStores[store.name].SQL
-		if sqlCfg == nil {
-			continue
-		}
-		plugin, err := getPlugin(sqlCfg.PluginName)
-		if err != nil {
-			return nil, errors.Join(err, CloseDatabases(databases))
-		}
-		db, err := plugin.CreateDB(store.kind, sqlCfg, r, logger, mh)
-		if err != nil {
-			return nil, errors.Join(err, CloseDatabases(databases))
-		}
-		databases = append(databases, db)
-	}
-	return databases, nil
-}
-
-// CloseDatabases closes database handles in reverse order.
-func CloseDatabases(databases []sqlplugin.GenericDB) error {
-	var err error
-	for _, database := range slices.Backward(databases) {
-		err = errors.Join(err, database.Close())
-	}
-	return err
-}
-
 // NewSQLAdminDB returns a AdminDB.
 func NewSQLAdminDB(
 	dbKind sqlplugin.DbKind,
