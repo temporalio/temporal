@@ -103,7 +103,7 @@ Format every actionable finding exactly as:
 ```markdown
 **[nit|small|med|high]** — One-line summary.
 
-**Issue:** Detailed explanation of the problem — what's wrong and why it matters.
+**Issue:** Clear and concise explanation of the problem — what's wrong and why it matters.
 
 **Suggestion:** Concrete fix or alternative.
 ```
