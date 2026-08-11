@@ -19,14 +19,14 @@ func TestSQLiteDatabaseLeasePreservesNamespaceAcrossWrapperChurn(t *testing.T) {
 	t.Parallel()
 	const namespace = "lease-test"
 	cfg := NewSQLiteMemoryConfig()
-	lease, err := sql.AcquireDatabaseLeases(config.Persistence{
+	release, err := sql.AcquireDatabaseLease(config.Persistence{
 		DefaultStore: "test",
 		DataStores: map[string]config.DataStore{
 			"test": {SQL: cfg},
 		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, lease.Close()) })
+	t.Cleanup(func() { require.NoError(t, release()) })
 
 	namespaceConfig, err := sqliteschema.NewNamespaceConfig("active", namespace, false, nil)
 	require.NoError(t, err)

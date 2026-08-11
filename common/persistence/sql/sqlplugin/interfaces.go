@@ -118,11 +118,6 @@ type (
 		RewriteSchemaStatements(statements []string) []string
 	}
 
-	// DatabaseLease keeps a database available until it is closed.
-	DatabaseLease interface {
-		Close() error
-	}
-
 	GenericDB interface {
 		DbName() string
 		PluginName() string

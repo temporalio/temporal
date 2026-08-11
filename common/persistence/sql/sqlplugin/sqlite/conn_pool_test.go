@@ -25,7 +25,7 @@ func TestConnPoolLeaseKeepsDatabaseOpenAfterWrappersClose(t *testing.T) {
 	require.NoError(t, release())
 	require.NoError(t, db.Ping())
 
-	require.NoError(t, lease.Close())
+	require.NoError(t, lease())
 	require.Error(t, db.Ping())
 	require.Empty(t, pool.pool)
 }
@@ -53,7 +53,7 @@ func TestConnPoolDefersCloseUntilWrapperReleases(t *testing.T) {
 	require.NoError(t, err)
 	db, release := allocateConnPoolTestDB(t, pool, cfg)
 
-	require.NoError(t, lease.Close())
+	require.NoError(t, lease())
 	require.NoError(t, db.Ping())
 	require.NoError(t, release())
 	require.Error(t, db.Ping())
@@ -71,9 +71,9 @@ func TestConnPoolRequiresEveryLeaseToClose(t *testing.T) {
 	db, release := allocateConnPoolTestDB(t, pool, cfg)
 	require.NoError(t, release())
 
-	require.NoError(t, lease1.Close())
+	require.NoError(t, lease1())
 	require.NoError(t, db.Ping())
-	require.NoError(t, lease2.Close())
+	require.NoError(t, lease2())
 	require.Error(t, db.Ping())
 	require.Empty(t, pool.pool)
 }
@@ -88,8 +88,8 @@ func TestConnPoolReleaseHandlesAreIdempotent(t *testing.T) {
 
 	require.NoError(t, release())
 	require.NoError(t, release())
-	require.NoError(t, lease.Close())
-	require.NoError(t, lease.Close())
+	require.NoError(t, lease())
+	require.NoError(t, lease())
 	require.Empty(t, pool.pool)
 }
 
@@ -124,7 +124,7 @@ func TestConnPoolCreatesFreshDatabaseAfterFinalClose(t *testing.T) {
 	_, err = db.Exec("CREATE TABLE sentinel (value INTEGER)")
 	require.NoError(t, err)
 	require.NoError(t, release())
-	require.NoError(t, lease.Close())
+	require.NoError(t, lease())
 
 	nextLease, err := pool.AcquireLease(cfg)
 	require.NoError(t, err)
@@ -133,7 +133,7 @@ func TestConnPoolCreatesFreshDatabaseAfterFinalClose(t *testing.T) {
 	err = nextDB.Get(&value, "SELECT value FROM sentinel")
 	require.ErrorContains(t, err, "no such table")
 	require.NoError(t, nextRelease())
-	require.NoError(t, nextLease.Close())
+	require.NoError(t, nextLease())
 }
 
 func TestConnPoolConcurrentAcquireAndRelease(t *testing.T) {
@@ -157,7 +157,7 @@ func TestConnPoolConcurrentAcquireAndRelease(t *testing.T) {
 			if release != nil {
 				err = errors.Join(err, release())
 			}
-			errs <- errors.Join(err, lease.Close())
+			errs <- errors.Join(err, lease())
 		})
 	}
 
@@ -166,20 +166,6 @@ func TestConnPoolConcurrentAcquireAndRelease(t *testing.T) {
 	for err := range errs {
 		require.NoError(t, err)
 	}
-	require.Empty(t, pool.pool)
-}
-
-func TestConnPoolUnderflowIsObservable(t *testing.T) {
-	pool := newConnPool()
-	cfg := newConnPoolTestConfig(t.Name())
-	dsn, err := buildDSN(cfg)
-	require.NoError(t, err)
-
-	require.Error(t, pool.releaseReference(dsn))
-	_, err = pool.AcquireLease(cfg)
-	require.NoError(t, err)
-	require.NoError(t, pool.releaseLease(dsn))
-	require.Error(t, pool.releaseLease(dsn))
 	require.Empty(t, pool.pool)
 }
 
@@ -200,7 +186,7 @@ func TestConnPoolFinalCloseReleasesFileDatabase(t *testing.T) {
 	_, err = db.Exec("CREATE TABLE sentinel (value INTEGER)")
 	require.NoError(t, err)
 	require.NoError(t, release())
-	require.NoError(t, lease.Close())
+	require.NoError(t, lease())
 	require.Empty(t, pool.pool)
 
 	require.NoError(t, os.Remove(databasePath))

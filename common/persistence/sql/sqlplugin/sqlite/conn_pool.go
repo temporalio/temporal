@@ -1,12 +1,10 @@
 package sqlite
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 // This pool properly enabled the support for SQLite in the temporal server.
@@ -18,15 +16,8 @@ type connPool struct {
 }
 
 type entry struct {
-	db         *sqlx.DB
-	references int
-	leases     int
-}
-
-type databaseLease func() error
-
-func (l databaseLease) Close() error {
-	return l()
+	db       *sqlx.DB
+	refCount int
 }
 
 func newConnPool() *connPool {
@@ -35,7 +26,7 @@ func newConnPool() *connPool {
 	}
 }
 
-func (cp *connPool) AcquireLease(cfg *config.SQL) (sqlplugin.DatabaseLease, error) {
+func (cp *connPool) AcquireLease(cfg *config.SQL) (func() error, error) {
 	dsn, err := buildDSN(cfg)
 	if err != nil {
 		return nil, err
@@ -49,11 +40,7 @@ func (cp *connPool) AcquireLease(cfg *config.SQL) (sqlplugin.DatabaseLease, erro
 		e = &entry{}
 		cp.pool[dsn] = e
 	}
-	e.leases++
-
-	return databaseLease(sync.OnceValue(func() error {
-		return cp.releaseLease(dsn)
-	})), nil
+	return cp.retainLocked(dsn, e), nil
 }
 
 // Allocate allocates the shared database in the pool or returns already exists instance with the same DSN. If instance
@@ -79,54 +66,30 @@ func (cp *connPool) Allocate(
 	if e.db == nil {
 		e.db, err = create(dsn)
 		if err != nil {
-			if e.leases == 0 {
+			if e.refCount == 0 {
 				delete(cp.pool, dsn)
 			}
 			return nil, nil, err
 		}
 	}
-	e.references++
-
-	return e.db, sync.OnceValue(func() error {
-		return cp.releaseReference(dsn)
-	}), nil
+	return e.db, cp.retainLocked(dsn, e), nil
 }
 
-// releaseReference closes a virtual connection to the database. It only closes the shared database once no
-// references or leases remain.
-func (cp *connPool) releaseReference(dsn string) error {
+func (cp *connPool) retainLocked(dsn string, e *entry) func() error {
+	e.refCount++
+	return sync.OnceValue(func() error {
+		return cp.release(dsn)
+	})
+}
+
+// release removes one retention. It only closes the shared database once no references remain.
+func (cp *connPool) release(dsn string) error {
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
 
-	e, ok := cp.pool[dsn]
-	if !ok {
-		// no such database
-		return errors.New("cannot release SQLite database reference for unknown DSN")
-	}
-	if e.references == 0 {
-		return errors.New("cannot release SQLite database reference with zero references")
-	}
-	e.references--
-	return cp.closeIfUnusedLocked(dsn, e)
-}
-
-func (cp *connPool) releaseLease(dsn string) error {
-	cp.mu.Lock()
-	defer cp.mu.Unlock()
-
-	e, ok := cp.pool[dsn]
-	if !ok {
-		return errors.New("cannot release SQLite database lease for unknown DSN")
-	}
-	if e.leases == 0 {
-		return errors.New("cannot release SQLite database lease with zero leases")
-	}
-	e.leases--
-	return cp.closeIfUnusedLocked(dsn, e)
-}
-
-func (cp *connPool) closeIfUnusedLocked(dsn string, e *entry) error {
-	if e.references != 0 || e.leases != 0 {
+	e := cp.pool[dsn]
+	e.refCount--
+	if e.refCount != 0 {
 		return nil
 	}
 

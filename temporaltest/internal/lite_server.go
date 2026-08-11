@@ -22,7 +22,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	persistencesql "go.temporal.io/server/common/persistence/sql"
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/schema/sqlite"
@@ -215,21 +214,13 @@ type LiteServer struct {
 //
 // Always use BaseConfig instead of the WithConfig server option, as WithConfig overrides all
 // LiteServer specific settings.
-func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) (_ *LiteServer, retErr error) {
+func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) (*LiteServer, error) {
 	liteConfig.applyDefaults()
 	if err := liteConfig.validate(); err != nil {
 		return nil, err
 	}
 
 	liteConfig.apply(liteConfig.BaseConfig)
-	// Keep the in-memory database alive until NewServer acquires its own lease.
-	databaseLease, err := persistencesql.AcquireDatabaseLeases(liteConfig.BaseConfig.Persistence)
-	if err != nil {
-		return nil, fmt.Errorf("unable to acquire database lease: %w", err)
-	}
-	defer func() {
-		retErr = errors.Join(retErr, databaseLease.Close())
-	}()
 
 	sqlConfig := liteConfig.BaseConfig.Persistence.DataStores[sqliteplugin.PluginName].SQL
 
@@ -262,10 +253,6 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 		}
 		namespaces = append(namespaces, nsConfig)
 	}
-	if err := sqlite.CreateNamespaces(sqlConfig, namespaces...); err != nil {
-		return nil, fmt.Errorf("error creating namespaces: %w", err)
-	}
-
 	authorizer, err := authorization.GetAuthorizerFromConfig(&liteConfig.BaseConfig.Global.Authorization)
 	if err != nil {
 		return nil, fmt.Errorf("unable to instantiate authorizer: %w", err)
@@ -301,6 +288,9 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 	srv, err := temporal.NewServer(serverOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to instantiate server: %w", err)
+	}
+	if err := sqlite.CreateNamespaces(sqlConfig, namespaces...); err != nil {
+		return nil, errors.Join(fmt.Errorf("error creating namespaces: %w", err), srv.Stop())
 	}
 
 	s := &LiteServer{

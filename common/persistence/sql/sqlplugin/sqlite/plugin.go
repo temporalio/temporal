@@ -53,7 +53,7 @@ func (p *plugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverte
 	return p.queryConverter
 }
 
-func (p *plugin) AcquireDatabaseLease(cfg *config.SQL) (sqlplugin.DatabaseLease, error) {
+func (p *plugin) AcquireDatabaseLease(cfg *config.SQL) (func() error, error) {
 	return p.connPool.AcquireLease(cfg)
 }
 
@@ -72,7 +72,7 @@ func (p *plugin) CreateDB(
 		return nil, err
 	}
 	db := newDB(dbKind, cfg.DatabaseName, conn, nil, logger)
-	db.OnClose(release) // remove reference
+	db.release = release // remove reference
 	return db, nil
 }
 
