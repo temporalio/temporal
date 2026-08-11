@@ -40,7 +40,7 @@ func GetTestClusterOption(storeType, driver string) *TestBaseOptions {
 		case postgresql.PluginName, postgresql.PluginNamePGX:
 			return GetPostgreSQLTestClusterOption(driver, nil)
 		case sqlite.PluginName:
-			return GetSQLiteMemoryTestClusterOption()
+			return GetSQLiteTemplateTestClusterOption()
 		default:
 			panic(fmt.Sprintf("unknown sql driver: %v", driver))
 		}
@@ -121,6 +121,31 @@ func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 			"busy_timeout": "30000",
 			"journal_mode": "wal",
 			"synchronous":  "normal",
+		},
+	}
+}
+
+// GetSQLiteTemplateTestClusterOption returns test options for a file-backed SQLite
+// database seeded from a process-wide schema template. This is the default for
+// tests: unlike the in-memory option it does not re-run the schema DDL for every
+// database, which dominates test cluster startup (see FASTBOOT.md).
+func GetSQLiteTemplateTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName: sqlite.PluginName,
+		DBName:          filepath.Join(sqliteTestDir(), GenerateRandomDBName()+".db"),
+		DBUsername:      testSQLiteUser,
+		DBPassword:      testSQLitePassword,
+		DBHost:          environment.GetLocalhostIP(),
+		DBPort:          0,
+		SchemaDir:       "", // seeded from the template, so there is nothing to load
+		StoreType:       config.StoreTypeSQL,
+		ConnectAttributes: map[string]string{
+			"cache":        "shared",
+			"busy_timeout": "30000",
+			"journal_mode": "wal",
+			// Tests do not need to survive a crash, and fsync is the dominant cost
+			// of a file-backed database.
+			"synchronous": "off",
 		},
 	}
 }

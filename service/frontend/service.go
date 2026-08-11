@@ -547,7 +547,7 @@ func (s *Service) Stop() {
 	// 4. Wait for X second
 	// 5. Stop everything forcefully and return
 
-	requestDrainTime := max(time.Second, s.config.ShutdownDrainDuration())
+	requestDrainTime := shutdownDrainDuration(s.config.ShutdownDrainDuration())
 	failureDetectionTime := max(0, s.config.ShutdownFailHealthCheckDuration())
 
 	s.logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
@@ -586,4 +586,8 @@ func (s *Service) Stop() {
 	}
 
 	s.logger.Info("frontend stopped")
+}
+
+func shutdownDrainDuration(configured time.Duration) time.Duration {
+	return max(0, configured)
 }

@@ -1,9 +1,11 @@
 package testcore
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -17,21 +19,37 @@ import (
 type sharedClusterT struct {
 	name string
 	// In CI, fanout Log/Logf to every active t
-	logFanout bool
+	logFanout      bool
+	bufferWhenIdle bool
 
 	mu          sync.Mutex
 	activeTests []testlogger.CleanupCapableT
 	cleanups    []func()
+	pendingLogs []string
+	bootFailure error
 
-	failed atomic.Bool
+	failed  atomic.Bool
+	booting atomic.Bool
 }
 
 var _ testlogger.CleanupCapableT = (*sharedClusterT)(nil)
+
+type clusterBootAbort struct{}
+
+func newDetachedClusterT(name string) *sharedClusterT {
+	owner := &sharedClusterT{name: name, bufferWhenIdle: true}
+	owner.booting.Store(true)
+	return owner
+}
 
 func (s *sharedClusterT) addTest(t testlogger.CleanupCapableT) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.activeTests = append(s.activeTests, t)
+	for _, line := range s.pendingLogs {
+		t.Log(line)
+	}
+	s.pendingLogs = nil
 }
 
 // removeTest drops t from the active set and reports whether the set is now empty.
@@ -65,6 +83,10 @@ func (s *sharedClusterT) Logf(format string, args ...any) {
 	defer s.mu.Unlock()
 	targets := s.logTargets()
 	if targets == nil {
+		if s.bufferWhenIdle {
+			s.pendingLogs = append(s.pendingLogs, fmt.Sprintf(format, args...))
+			return
+		}
 		fmt.Fprintf(os.Stderr, format+"\n", args...)
 		return
 	}
@@ -78,6 +100,10 @@ func (s *sharedClusterT) Log(args ...any) {
 	defer s.mu.Unlock()
 	targets := s.logTargets()
 	if targets == nil {
+		if s.bufferWhenIdle {
+			s.pendingLogs = append(s.pendingLogs, strings.TrimSuffix(fmt.Sprintln(args...), "\n"))
+			return
+		}
 		fmt.Fprintln(os.Stderr, args...)
 		return
 	}
@@ -89,6 +115,15 @@ func (s *sharedClusterT) Log(args ...any) {
 func (s *sharedClusterT) Errorf(format string, args ...any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.activeTests) == 0 && s.bufferWhenIdle {
+		s.failed.Store(true)
+		message := fmt.Sprintf(format, args...)
+		if s.bootFailure == nil {
+			s.bootFailure = fmt.Errorf("cluster boot failed: %s", message)
+		}
+		s.pendingLogs = append(s.pendingLogs, message)
+		return
+	}
 	for _, t := range s.activeTests {
 		t.Errorf(format, args...)
 	}
@@ -97,6 +132,13 @@ func (s *sharedClusterT) Errorf(format string, args ...any) {
 func (s *sharedClusterT) Fail() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.activeTests) == 0 && s.bufferWhenIdle {
+		s.failed.Store(true)
+		if s.bootFailure == nil {
+			s.bootFailure = errors.New("cluster boot failed")
+		}
+		return
+	}
 	for _, t := range s.activeTests {
 		t.Fail()
 	}
@@ -105,25 +147,58 @@ func (s *sharedClusterT) Fail() {
 // FailNow does not forward to the underlying tests, since we do not know what test
 // we are targetting or what goroutine we are calling FailNow from.
 func (s *sharedClusterT) FailNow() {
-	s.failed.Store(true)
+	s.Fail()
+	if s.booting.Load() {
+		panic(clusterBootAbort{})
+	}
 }
 
 // Fatalf does not forward to the underlying tests, since we do not know what test
 // we are targetting or what goroutine we are calling Fatalf from.
 func (s *sharedClusterT) Fatalf(format string, args ...any) {
+	message := fmt.Sprintf(format, args...)
+	s.mu.Lock()
 	s.failed.Store(true)
-	fmt.Fprintf(os.Stderr, "FATAL: "+format+"\n", args...)
+	if s.bootFailure == nil {
+		s.bootFailure = fmt.Errorf("cluster boot failed: %s", message)
+	}
+	s.pendingLogs = append(s.pendingLogs, "FATAL: "+message)
+	s.mu.Unlock()
+	fmt.Fprintln(os.Stderr, "FATAL: "+message)
+	if s.booting.Load() {
+		panic(clusterBootAbort{})
+	}
 }
 
 // Fatal does not forward to the underlying tests, since we do not know what test
 // we are targetting or what goroutine we are calling Fatal from.
 func (s *sharedClusterT) Fatal(args ...any) {
+	message := strings.TrimSuffix(fmt.Sprintln(args...), "\n")
+	s.mu.Lock()
 	s.failed.Store(true)
-	fmt.Fprintln(os.Stderr, append([]any{"FATAL:"}, args...)...)
+	if s.bootFailure == nil {
+		s.bootFailure = fmt.Errorf("cluster boot failed: %s", message)
+	}
+	s.pendingLogs = append(s.pendingLogs, "FATAL: "+message)
+	s.mu.Unlock()
+	fmt.Fprintln(os.Stderr, "FATAL: "+message)
+	if s.booting.Load() {
+		panic(clusterBootAbort{})
+	}
 }
 
 func (s *sharedClusterT) Failed() bool {
 	return s.failed.Load()
+}
+
+func (s *sharedClusterT) bootError() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.bootFailure
+}
+
+func (s *sharedClusterT) finishBoot() {
+	s.booting.Store(false)
 }
 
 func (s *sharedClusterT) Helper() {}

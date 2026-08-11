@@ -1417,7 +1417,9 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
 		}
-		time.Sleep(1 * time.Second) //nolint:forbidigo
+		// Signal only after the one-second server timeout has had time to commit. Signaling at the same deadline made
+		// the redirect below race the timeout and occasionally retain an extra workflow-task-started event.
+		time.Sleep(2 * time.Second) //nolint:forbidigo
 		timedoutTask <- struct{}{}
 		time.Sleep(100 * time.Second) //nolint:forbidigo
 		return "return after long sleep", nil
@@ -1429,7 +1431,9 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 		// since the WF cache is shared by all workers in this process, we need to set this in a way that ensures
 		// WFTs will timeout in w2 but not in w3
-		DeadlockDetectionTimeout: 1500 * time.Millisecond,
+		// Leave enough scheduling margin for the one-second server timeout to win under full-suite load. The
+		// intentional 100-second sleep still exceeds this timeout and detects a workflow that remains stuck.
+		DeadlockDetectionTimeout: 5 * time.Second,
 	})
 	w11.RegisterWorkflowWithOptions(wf11, workflow.RegisterOptions{Name: "wf"})
 	w11.RegisterActivity(act)

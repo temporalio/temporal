@@ -1066,6 +1066,7 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	capture := s.StartNamespaceMetricCapture()
 
 	activityStarted := make(chan struct{})
+	pollersDone := make(chan error, 2)
 
 	// Poll and handle the workflow task: schedule an activity.
 	go func() {
@@ -1088,7 +1089,7 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 				}, nil
 			},
 		)
-		s.NoError(err)
+		pollersDone <- err
 	}()
 
 	// Poll and handle the activity task.
@@ -1101,7 +1102,7 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 				}, nil
 			},
 		)
-		s.NoError(err)
+		pollersDone <- err
 	}()
 
 	// Wait for pollers to arrive at root partition 0 for both task queue types
@@ -1148,6 +1149,8 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	s.NoError(err)
 
 	<-activityStarted
+	s.Require().NoError(<-pollersDone)
+	s.Require().NoError(<-pollersDone)
 	// Filter recordings for our specific task queue to avoid interference from other activity.
 	tqName := tv.TaskQueue().GetName()
 	recordings := capture.CollectMetric("task_dispatch_latency", func(rec *metricstest.CapturedRecording) bool {

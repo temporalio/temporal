@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
 )
@@ -209,4 +210,12 @@ func TestTestLogger_Failure_NoMatch(t *testing.T) {
 
 	tl.Error("ignored")
 	require.Nil(t, tl.Failure())
+}
+
+func TestTestLogger_DebugEnabledUsesEffectiveEnvironmentLevel(t *testing.T) {
+	t.Setenv(log.TestLogLevelEnvVar, "error")
+	t.Setenv(log.TestLogFileEnvVar, "")
+
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	require.False(t, log.DebugEnabled(tl))
 }

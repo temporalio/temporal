@@ -2,9 +2,18 @@ package frontend
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestShutdownDrainDuration(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, time.Duration(0), shutdownDrainDuration(0))
+	require.Equal(t, time.Duration(0), shutdownDrainDuration(-time.Second))
+	require.Equal(t, 250*time.Millisecond, shutdownDrainDuration(250*time.Millisecond))
+}
 
 func TestConfig_IsExperimentAllowed(t *testing.T) {
 	t.Parallel()

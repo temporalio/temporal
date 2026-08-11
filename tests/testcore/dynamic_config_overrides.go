@@ -1,6 +1,7 @@
 package testcore
 
 import (
+	"maps"
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -48,7 +49,7 @@ var (
 		dynamicconfig.HistoryScannerEnabled.Key():                               false,
 		dynamicconfig.TaskQueueScannerEnabled.Key():                             false,
 		dynamicconfig.ExecutionsScannerEnabled.Key():                            false,
-		dynamicconfig.BuildIdScavengerEnabled.Key():                             false,
+		dynamicconfig.BuildIdScavengerEnabled.Key(): false,
 		// Functional test clusters don't need production-scale scheduler concurrency.
 		// Keep these pools small to reduce per-cluster goroutine and memory overhead.
 		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key():               64,
@@ -89,3 +90,12 @@ var (
 		dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Key(): 100,
 	}
 )
+
+func defaultDynamicConfigOverridesForCluster(globalNamespacesEnabled bool) map[dynamicconfig.Key]any {
+	overrides := maps.Clone(defaultDynamicConfigOverrides)
+	if globalNamespacesEnabled {
+		delete(overrides, dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Key())
+		delete(overrides, dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Key())
+	}
+	return overrides
+}

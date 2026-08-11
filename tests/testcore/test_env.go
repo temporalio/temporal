@@ -259,11 +259,13 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
+	var requiresStartupConfig bool
 	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
 		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
 		for _, override := range options.dynamicConfigSettings {
 			if !canBeNamespaceScoped(override.setting.Precedence()) {
 				dedicatedGuard.record("global dynamic config used")
+				requiresStartupConfig = true
 			}
 			startupConfig[override.setting.Key()] = override.value
 		}
@@ -271,26 +273,33 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Obtain the test cluster from the router.
 	base := testClusterRouter.get(t, clusterRequest{
-		dedicated:         options.dedicatedCluster,
-		needWorkerService: options.needWorkerService,
-		dedicatedReason:   options.dedicatedReason,
-		dynamicConfig:     startupConfig,
-		clusterOpts:       options.clusterOptions,
+		dedicated:             options.dedicatedCluster,
+		needWorkerService:     options.needWorkerService,
+		dedicatedReason:       options.dedicatedReason,
+		dynamicConfig:         startupConfig,
+		requiresStartupConfig: requiresStartupConfig,
+		clusterOpts:           options.clusterOptions,
 	})
 	cluster := base.GetTestCluster()
 
-	// Create a dedicated namespace for the test to help with test isolation.
-	baseName := strings.ReplaceAll(t.Name(), "/", "-")
-	ns := namespace.Name(RandomizeStr(baseName))
-	nsID, err := base.RegisterNamespace(
-		ns,
-		1, // 1 day retention
-		enumspb.ARCHIVAL_STATE_DISABLED,
-		"",
-		"",
-	)
-	if err != nil {
-		t.Fatalf("Failed to register namespace: %v", err)
+	// Per-test clusters already have a pristine namespace seeded before the
+	// server starts. Shared clusters still need a distinct namespace per test.
+	ns := base.Namespace()
+	nsID := base.NamespaceID()
+	if !base.usePreseededNamespace {
+		baseName := strings.ReplaceAll(t.Name(), "/", "-")
+		ns = namespace.Name(RandomizeStr(baseName))
+		var err error
+		nsID, err = base.RegisterNamespace(
+			ns,
+			1, // 1 day retention
+			enumspb.ARCHIVAL_STATE_DISABLED,
+			"",
+			"",
+		)
+		if err != nil {
+			t.Fatalf("Failed to register namespace: %v", err)
+		}
 	}
 
 	tv := testvars.New(t)
@@ -365,7 +374,7 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
+		if e.isShared {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")

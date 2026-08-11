@@ -22,7 +22,7 @@ type WorkerRegistryTestSuite struct {
 }
 
 func TestWorkerRegistryTestSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                                //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	testcore.UseWorkerServiceForSuite(t, "worker registry APIs")
 	parallelsuite.RunLegacySequential(t, &WorkerRegistryTestSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 

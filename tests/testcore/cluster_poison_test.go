@@ -20,6 +20,7 @@ type mockSubtestT struct {
 	mu       sync.Mutex
 	cleanups []func()
 	errs     []string
+	logs     []string
 }
 
 func (f *mockSubtestT) Cleanup(fn func()) {
@@ -32,6 +33,18 @@ func (f *mockSubtestT) Errorf(format string, args ...any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.errs = append(f.errs, fmt.Sprintf(format, args...))
+}
+
+func (f *mockSubtestT) Logf(format string, args ...any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logs = append(f.logs, fmt.Sprintf(format, args...))
+}
+
+func (f *mockSubtestT) Log(args ...any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logs = append(f.logs, fmt.Sprint(args...))
 }
 
 func (f *mockSubtestT) Fail()    {}
@@ -84,6 +97,17 @@ func TestSharedClusterT_LogfForwardsWhileLocked(t *testing.T) {
 
 	close(sub.release)
 	<-done
+}
+
+func TestSharedClusterT_BuffersLogsAndFailuresUntilHandoff(t *testing.T) {
+	s := &sharedClusterT{name: "warm-spare", bufferWhenIdle: true}
+	s.Logf("boot phase %d", 1)
+	s.Errorf("boot failed: %s", "bad config")
+
+	require.True(t, s.Failed())
+	sub := &mockSubtestT{T: t}
+	s.addTest(sub)
+	require.Equal(t, []string{"boot phase 1", "boot failed: bad config"}, sub.logs)
 }
 
 func TestSharedClusterPoison(t *testing.T) {

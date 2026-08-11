@@ -64,6 +64,7 @@ type (
 
 		replicationStreamRecorder *ReplicationStreamRecorder
 		historyTaskRecorder       *HistoryTaskRecorder
+		bootPhaseObserver         func(string, time.Duration)
 
 		callbackLock sync.RWMutex
 		onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
@@ -109,13 +110,14 @@ type (
 		EnableHistoryTaskRecorder bool
 		EnableReplicationRecorder bool
 		AdditionalServerOptions   []temporal.ServerOption
+		bootPhaseObserver         func(string, time.Duration)
 	}
 )
 
 const NamespaceCacheRefreshInterval = time.Second
 
 // newTemporal returns an instance that hosts full temporal in one process
-func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
+func newTemporal(t clusterTest, params *temporalParams) *temporalImpl {
 	impl := &temporalImpl{
 		logger:                    params.Logger,
 		serverConfig:              params.Config,
@@ -128,6 +130,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		hostsByProtocolByService:  params.HostsByProtocolByService,
 		workerConfig:              params.WorkerConfig,
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
+		bootPhaseObserver:         params.bootPhaseObserver,
 	}
 
 	// Base options are independent of which services this test cluster starts.
@@ -200,7 +203,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 	impl.replicationStreamRecorder.SetOutputFile(outputFile)
 
 	// Global defaults: applied without cleanup so they persist across cluster reuse.
-	for k, v := range defaultDynamicConfigOverrides {
+	for k, v := range defaultDynamicConfigOverridesForCluster(params.Config.ClusterMetadata.EnableGlobalNamespace) {
 		impl.overrideDynamicConfigForClusterLifetime(k, v)
 	}
 
@@ -291,14 +294,18 @@ func (c *temporalImpl) Start() error {
 	)
 	defer cleanupHooks()
 
+	fxGraphStart := time.Now()
 	server, err := temporal.NewServer(options...)
 	if err != nil {
 		return fmt.Errorf("unable to construct temporal server: %w", err)
 	}
+	recordBootPhase(c.bootPhaseObserver, bootPhaseFxGraph, fxGraphStart)
 
+	serviceStart := time.Now()
 	if err := server.Start(); err != nil {
 		return fmt.Errorf("unable to start temporal server: %w", err)
 	}
+	recordBootPhase(c.bootPhaseObserver, bootPhaseServiceStart, serviceStart)
 	c.server = server
 	return nil
 }
@@ -452,7 +459,7 @@ func (c *temporalImpl) overrideDynamicConfigForClusterLifetime(name dynamicconfi
 }
 
 // overrideDynamicConfigForTest overrides a dynamic config value for the duration of the test.
-func (c *temporalImpl) overrideDynamicConfigForTest(t *testing.T, name dynamicconfig.Key, value any) func() {
+func (c *temporalImpl) overrideDynamicConfigForTest(t clusterTest, name dynamicconfig.Key, value any) func() {
 	cleanup := c.dcClient.PartialOverrideValue(name, value)
 	t.Cleanup(cleanup)
 	return cleanup

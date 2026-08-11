@@ -70,11 +70,14 @@ type (
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
-		testClusterConfig *TestClusterConfig
+		testClusterConfig    *TestClusterConfig
+		clusterEventID       int64
+		clusterEventRecorder *clusterEventRecorder
 
-		namespace         namespace.Name
-		namespaceID       namespace.ID
-		externalNamespace namespace.Name
+		namespace             namespace.Name
+		namespaceID           namespace.ID
+		externalNamespace     namespace.Name
+		usePreseededNamespace bool
 
 		// Fields used by SDK based tests.
 		sdkClient sdkclient.Client
@@ -88,6 +91,10 @@ type (
 		// Certain operations (e.g. InjectHook, CloseShard) are not safe on shared clusters
 		// and will panic if called.
 		isShared bool
+	}
+	preseededNamespace struct {
+		name namespace.Name
+		id   namespace.ID
 	}
 	// testClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	testClusterParams struct {
@@ -103,9 +110,47 @@ type (
 		EnableReplicationRecorder bool
 		EnableArchival            bool
 		AdditionalServerOptions   []temporal.ServerOption
+		bootPhaseObserver         func(string, time.Duration)
 	}
 	TestClusterOption func(params *testClusterParams)
 )
+
+func newPreseededNamespace(name namespace.Name) preseededNamespace {
+	return preseededNamespace{name: name, id: namespace.ID(uuid.NewString())}
+}
+
+func (n preseededNamespace) createRequest(activeClusterName string) *persistence.CreateNamespaceRequest {
+	aliases := make(map[string]string)
+	expectedSearchAttributes := searchattribute.TestSearchAttributesToRegister()
+	for field, alias := range searchattribute.TestAliases {
+		if _, ok := expectedSearchAttributes[alias]; ok {
+			aliases[field] = alias
+		}
+	}
+	return &persistence.CreateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:          n.id.String(),
+				Name:        n.name.String(),
+				State:       enumspb.NAMESPACE_STATE_REGISTERED,
+				Description: "namespace for functional tests",
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:                    timestamp.DurationFromDays(1),
+				HistoryArchivalState:         enumspb.ARCHIVAL_STATE_DISABLED,
+				VisibilityArchivalState:      enumspb.ARCHIVAL_STATE_DISABLED,
+				BadBinaries:                  &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+				CustomSearchAttributeAliases: aliases,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: activeClusterName,
+				Clusters:          []string{activeClusterName},
+			},
+			FailoverVersion: common.EmptyVersion,
+		},
+		IsGlobalNamespace: false,
+	}
+}
 
 func init() {
 	// By default, the SDK worker will calculate a checksum of the binary and use that as an identifier.
@@ -145,6 +190,12 @@ func withMTLS() TestClusterOption {
 func withWorkerService(enabled bool) TestClusterOption {
 	return func(params *testClusterParams) {
 		params.EnableWorkerService = enabled
+	}
+}
+
+func withBootPhaseObserver(observer func(string, time.Duration)) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.bootPhaseObserver = observer
 	}
 }
 
@@ -264,16 +315,28 @@ func (s *FunctionalTestBase) TearDownSuite() {
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
 	// Reserve a slot from the dedicated test cluster pool.
 	testClusterRouter.dedicated.reserveSlot(s.T())
-	s.setupCluster(options...)
-	clusterRequest{
+	request := clusterRequest{
 		kind:              clusterKindDedicated,
 		dedicatedReason:   "legacy-suite",
 		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
-	}.recordCreation(s.T())
+	}
+	createdAt := time.Now()
+	phases := newBootPhaseDurations()
+	s.setupCluster(append(options, withBootPhaseObserver(phases.record))...)
+	testClusterRouter.recordClusterCreation(s.T().Name(), s, request, createdAt, phases.snapshot())
 }
 
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
+	s.Require().NoError(s.setupClusterWithOwner(s.T(), options...))
+}
+
+func (s *FunctionalTestBase) setupClusterWithOwner(owner clusterTest, options ...TestClusterOption) error {
 	params := ApplyTestClusterOptions(options)
+	primaryNamespace := newPreseededNamespace(namespace.Name(RandomizeStr("namespace")))
+	externalNamespace := newPreseededNamespace(namespace.Name(RandomizeStr("external-namespace")))
+	s.namespace = primaryNamespace.name
+	s.namespaceID = primaryNamespace.id
+	s.externalNamespace = externalNamespace.name
 
 	// A custom logger supplied via WithClusterLogger takes precedence.
 	if params.Logger != nil {
@@ -284,9 +347,13 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	if s.Logger == nil {
 		// The cluster outlives any single test and s.T() changes as different tests use it,
 		// but the proxy T's Name() must be stable, so this is never updated.
-		s.t = &sharedClusterT{
-			name:      s.T().Name(),
-			logFanout: os.Getenv("CI") != "",
+		if proxy, ok := owner.(*sharedClusterT); ok {
+			s.t = proxy
+		} else {
+			s.t = &sharedClusterT{
+				name:      owner.Name(),
+				logFanout: os.Getenv("CI") != "",
+			}
 		}
 		tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 		// Fail tests when a soft assertion fires (see `softassert` package).
@@ -308,6 +375,8 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableArchival:            params.EnableArchival,
 		AdditionalServerOptions:   params.AdditionalServerOptions,
 		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
+		preseededNamespaces:       []preseededNamespace{primaryNamespace, externalNamespace},
+		bootPhaseObserver:         params.bootPhaseObserver,
 	}
 
 	// Apply configuration for shared clusters.
@@ -330,22 +399,21 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	var err error
 	testClusterFactory := NewTestClusterFactory()
-	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
-	s.Require().NoError(err)
-
-	// Setup test cluster namespaces.
-	s.namespace = namespace.Name(RandomizeStr("namespace"))
-	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.Require().NoError(err)
-
-	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
-	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.Require().NoError(err)
+	clusterOwner := owner
+	if s.t != nil {
+		clusterOwner = s.t
+	}
+	s.testCluster, err = testClusterFactory.NewCluster(clusterOwner, s.testClusterConfig, s.Logger)
+	return err
 }
 
 func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
-	if defaults.StoreType == config.StoreTypeSQL && defaults.SQLDBPluginName == sqlite.PluginName {
-		// Use file-based SQLite for shared clusters to support parallel test access.
+	if defaults.StoreType == config.StoreTypeSQL &&
+		defaults.SQLDBPluginName == sqlite.PluginName &&
+		defaults.ConnectAttributes["mode"] == "memory" {
+		// Shared clusters need file-based SQLite to support parallel test access.
+		// The default is already file-based; this only covers an explicit opt back
+		// into the in-memory option.
 		return *persistencetests.GetSQLiteFileTestClusterOption()
 	}
 	return defaults
@@ -461,6 +529,10 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 	}
 	err := s.testCluster.TearDownCluster()
 	s.testCluster = nil
+	if s.clusterEventRecorder != nil {
+		s.clusterEventRecorder.recordClusterDestroyed(s.clusterEventID)
+		s.clusterEventRecorder = nil
+	}
 	return err
 }
 
@@ -583,6 +655,9 @@ func (s *FunctionalTestBase) RegisterNamespace(
 		tag.WorkflowNamespace(nsName.String()),
 		tag.WorkflowNamespaceID(nsID.String()),
 	)
+	if s.clusterEventRecorder != nil {
+		s.clusterEventRecorder.recordNamespaceRegistered(s.clusterEventID, nsName.String())
+	}
 	return nsID, nil
 }
 

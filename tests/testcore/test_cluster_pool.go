@@ -1,7 +1,9 @@
 package testcore
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -9,11 +11,23 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.uber.org/multierr"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var testClusterRouter *clusterRouter
+
+const (
+	clusterModePooled  = "pooled"
+	clusterModePerTest = "per-test"
+)
 
 func init() {
 	sharedSize := max(1, runtime.GOMAXPROCS(0)/2)
@@ -41,20 +55,55 @@ func init() {
 		maxLeases = 50
 	}
 
-	var eventsFile *os.File
-	if path := os.Getenv("TEMPORAL_TEST_CLUSTER_EVENTS_FILE"); path != "" {
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			log.Printf("cluster events disabled: cannot open %q: %v", path, err)
-		}
-		eventsFile = f
+	router := &clusterRouter{
+		shared:    newClusterPool(sharedSize, false, maxLeases),
+		dedicated: newClusterPool(dedicatedSize, true, maxLeases),
 	}
 
-	testClusterRouter = &clusterRouter{
-		shared:     newClusterPool(sharedSize, false, maxLeases),
-		dedicated:  newClusterPool(dedicatedSize, true, maxLeases),
-		eventsFile: eventsFile,
+	mode := os.Getenv("TEMPORAL_TEST_CLUSTER_MODE")
+	if mode == "" {
+		mode = clusterModePooled
 	}
+	switch mode {
+	case clusterModePooled:
+	case clusterModePerTest:
+		maxLiveTests := positiveEnv("TEMPORAL_TEST_LIVE_CLUSTERS", min(12, runtime.GOMAXPROCS(0)))
+		warmSpares := nonNegativeEnv("TEMPORAL_TEST_WARM_SPARES", maxLiveTests)
+		router.perTest = newPerTestClusterProvider(
+			maxLiveTests,
+			warmSpares,
+			router.createClusterWithOwner,
+			router.createReadyClusterWithOwner,
+			func(cluster *FunctionalTestBase) error { return cluster.tearDownTestCluster() },
+		)
+	default:
+		panic("TEMPORAL_TEST_CLUSTER_MODE must be pooled or per-test")
+	}
+	testClusterRouter = router
+}
+
+func positiveEnv(name string, defaultValue int) int {
+	value := os.Getenv(name)
+	if value == "" {
+		return defaultValue
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n <= 0 {
+		panic(name + " must be a positive integer")
+	}
+	return n
+}
+
+func nonNegativeEnv(name string, defaultValue int) int {
+	value := os.Getenv(name)
+	if value == "" {
+		return defaultValue
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 {
+		panic(name + " must be a non-negative integer")
+	}
+	return n
 }
 
 // clusterPool manages a fixed number of test [clusterPoolSlot]s.
@@ -175,63 +224,47 @@ func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 	s.leaseCount = 0
 }
 
-// clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
+// clusterRouter routes tests to shared/dedicated [clusterPool]s or the per-test provider.
 type clusterRouter struct {
-	shared      *clusterPool
-	dedicated   *clusterPool
-	suiteScoped sync.Map
+	shared              *clusterPool
+	dedicated           *clusterPool
+	perTest             *perTestClusterProvider
+	suiteWorkerServices sync.Map
 
-	eventsFile *os.File
+	events *clusterEventRecorder
 }
 
-// suiteScopedCluster owns one lazily created legacy suite cluster.
-type suiteScopedCluster struct {
-	once    sync.Once
-	cluster *FunctionalTestBase
-}
-
-// UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
-// The cluster is created on first use and torn down when `t` completes.
-//
-// Deprecated: this only exists for backwards-compatibility with legacy sequential
-// suite execution.
-func UseSuiteScopedCluster(t *testing.T) {
+// UseWorkerServiceForSuite enables the system worker on every test environment
+// created below the top-level test t. Each leaf still receives its own cluster
+// when the provider is in per-test mode.
+func UseWorkerServiceForSuite(t *testing.T, reason string) {
 	t.Helper()
 	rootName, _, _ := strings.Cut(t.Name(), "/")
 	if t.Name() != rootName {
-		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
+		t.Fatalf("UseWorkerServiceForSuite must be called from a top-level test, got %q", t.Name())
 	}
-	testClusterRouter.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
-
-	t.Cleanup(func() {
-		suiteClusterAny, ok := testClusterRouter.suiteScoped.Load(rootName)
-		if ok {
-			suiteCluster := suiteClusterAny.(*suiteScopedCluster)
-			if suiteCluster.cluster != nil {
-				if err := suiteCluster.cluster.tearDownTestCluster(); err != nil {
-					t.Logf("Failed to tear down suite-scoped cluster: %v", err)
-				}
-			}
-		}
-		testClusterRouter.suiteScoped.Delete(rootName)
-	})
+	if reason == "" {
+		t.Fatal("UseWorkerServiceForSuite requires a reason")
+	}
+	testClusterRouter.suiteWorkerServices.Store(rootName, reason)
+	t.Cleanup(func() { testClusterRouter.suiteWorkerServices.Delete(rootName) })
 }
 
 // Cluster kinds recorded in creation events.
 const (
-	clusterKindShared      = "shared"
-	clusterKindDedicated   = "dedicated"
-	clusterKindSuiteScoped = "suite-scoped"
+	clusterKindShared    = "shared"
+	clusterKindDedicated = "dedicated"
 )
 
 // clusterRequest describes what a test needs from the cluster router.
 type clusterRequest struct {
-	kind              string // set by the router: shared, dedicated, or suite-scoped
-	dedicated         bool
-	dedicatedReason   string
-	needWorkerService bool
-	dynamicConfig     map[dynamicconfig.Key]any
-	clusterOpts       []TestClusterOption
+	kind                  string // set by the router: shared or dedicated
+	dedicated             bool
+	dedicatedReason       string
+	needWorkerService     bool
+	dynamicConfig         map[dynamicconfig.Key]any
+	requiresStartupConfig bool
+	clusterOpts           []TestClusterOption
 }
 
 // mustBeFresh reports whether the request requires a brand-new cluster that
@@ -252,8 +285,6 @@ func (r clusterRequest) reason() string {
 	switch r.kind {
 	case clusterKindShared:
 		return "shared pool"
-	case clusterKindSuiteScoped:
-		return "suite-scoped"
 	}
 	switch {
 	case r.dedicatedReason != "":
@@ -268,11 +299,11 @@ func (r clusterRequest) reason() string {
 // recordCreation appends one JSON Lines event per test-cluster creation so a CI
 // run can be queried for which suite created how many clusters of each kind, and
 // why. Events fall back to the test log when no events file is configured.
-func (r clusterRequest) recordCreation(t *testing.T) {
-	suite, _, _ := strings.Cut(t.Name(), "/")
+func (r clusterRequest) recordCreation(testName string) {
+	suite, _, _ := strings.Cut(testName, "/")
 	line, err := json.Marshal(map[string]any{
 		"suite":  suite,
-		"test":   t.Name(),
+		"test":   testName,
 		"kind":   r.kind,
 		"reason": r.reason(),
 		"worker": r.needWorkerService,
@@ -281,58 +312,66 @@ func (r clusterRequest) recordCreation(t *testing.T) {
 		return
 	}
 
-	if testClusterRouter.eventsFile == nil {
-		log.Printf("CLUSTEREVENT %s", line)
-		return
-	}
-	// O_APPEND makes each write land atomically at EOF and os.File serializes
-	// concurrent writes, so lines from parallel tests don't interleave.
-	_, _ = testClusterRouter.eventsFile.Write(append(line, '\n'))
+	log.Printf("CLUSTEREVENT %s", line)
 }
 
 func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTestBase) {
+	rootName, _, _ := strings.Cut(t.Name(), "/")
+	if reason, ok := p.suiteWorkerServices.Load(rootName); ok {
+		req.needWorkerService = true
+		if req.dedicatedReason == "" {
+			req.dedicatedReason = "worker service required: " + reason.(string)
+		}
+	}
+	acquireStart := time.Now()
+	acquireSource := clusterAcquireSourcePooled
 	defer func() {
 		if tb != nil {
 			tb.RegisterTest(t)
+			if p.events != nil {
+				p.events.recordClusterAcquire(
+					tb.clusterEventID,
+					t.Name(),
+					time.Since(acquireStart),
+					acquireSource,
+				)
+			}
 		}
 	}()
+	if p.perTest != nil {
+		tb, acquireSource = p.getPerTest(t, req)
+		return tb
+	}
 	if req.needsDedicated() {
 		return p.getDedicated(t, req)
 	}
-	if cluster := p.getSuiteScoped(t); cluster != nil {
-		return cluster
-	}
 	return p.getShared(t)
+}
+
+func (p *clusterRouter) getPerTest(
+	t *testing.T,
+	req clusterRequest,
+) (*FunctionalTestBase, clusterAcquireSource) {
+	req.kind = clusterKindDedicated
+	if req.dedicatedReason == "" {
+		req.dedicatedReason = "per-test"
+	}
+	lease, err := p.perTest.acquire(t.Name(), req)
+	require.NoError(t, err)
+	cluster := lease.cluster
+	cluster.SetT(t)
+	t.Cleanup(func() {
+		if err := lease.release(); err != nil {
+			t.Logf("Failed to tear down per-test cluster: %v", err)
+		}
+	})
+	return cluster, lease.acquireSource
 }
 
 func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
 	return p.shared.get(t, func() *FunctionalTestBase {
 		return p.createCluster(t, clusterRequest{kind: clusterKindShared})
 	})
-}
-
-func (p *clusterRouter) hasSuiteScoped(t *testing.T) bool {
-	rootName, _, _ := strings.Cut(t.Name(), "/")
-	_, ok := p.suiteScoped.Load(rootName)
-	return ok
-}
-
-func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
-	rootName, _, _ := strings.Cut(t.Name(), "/")
-	if _, ok := p.suiteScoped.Load(rootName); !ok {
-		return nil
-	}
-
-	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
-	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
-	suiteCluster.once.Do(func() {
-		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
-		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
-		// worker for worker-deployment APIs.
-		suiteCluster.cluster = p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped, needWorkerService: true})
-	})
-	suiteCluster.cluster.SetT(t)
-	return suiteCluster.cluster
 }
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
@@ -359,11 +398,34 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *Function
 }
 
 func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *FunctionalTestBase {
-	tbase := &FunctionalTestBase{}
+	tbase, err := p.createClusterWithOwner(t, req)
+	require.NoError(t, err)
 	tbase.SetT(t)
+	return tbase
+}
+
+func (p *clusterRouter) createClusterWithOwner(owner clusterTest, req clusterRequest) (*FunctionalTestBase, error) {
+	return p.createClusterWithOwnerAndReadiness(owner, req, false)
+}
+
+func (p *clusterRouter) createReadyClusterWithOwner(owner clusterTest, req clusterRequest) (*FunctionalTestBase, error) {
+	return p.createClusterWithOwnerAndReadiness(owner, req, true)
+}
+
+func (p *clusterRouter) createClusterWithOwnerAndReadiness(
+	owner clusterTest,
+	req clusterRequest,
+	waitUntilReady bool,
+) (*FunctionalTestBase, error) {
+	tbase := &FunctionalTestBase{}
+	createdAt := time.Now()
+	phases := newBootPhaseDurations()
 
 	// The worker service is off unless the request explicitly needs it.
-	opts := []TestClusterOption{withWorkerService(req.needWorkerService)}
+	opts := []TestClusterOption{
+		withWorkerService(req.needWorkerService),
+		withBootPhaseObserver(phases.record),
+	}
 	if req.kind != clusterKindDedicated {
 		opts = append(opts, WithSharedCluster())
 	}
@@ -372,8 +434,69 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 	}
 	opts = append(opts, req.clusterOpts...)
 
-	tbase.setupCluster(opts...)
-	req.recordCreation(t)
+	if err := tbase.setupClusterWithOwner(owner, opts...); err != nil {
+		return nil, err
+	}
+	if waitUntilReady {
+		readyAt := time.Now()
+		if err := waitForFrontendReady(tbase.FrontendGRPCAddress()); err != nil {
+			return nil, multierr.Combine(err, tbase.tearDownTestCluster())
+		}
+		phases.record("frontend-ready", time.Since(readyAt))
+	}
+	p.recordClusterCreation(owner.Name(), tbase, req, createdAt, phases.snapshot())
 
-	return tbase
+	return tbase, nil
+}
+
+func waitForFrontendReady(address string) error {
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("create frontend health client: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	frontendClient := workflowservice.NewWorkflowServiceClient(conn)
+	err = backoff.ThrottleRetryContext(
+		ctx,
+		func(ctx context.Context) error {
+			_, err := frontendClient.GetSystemInfo(ctx, &workflowservice.GetSystemInfoRequest{})
+			return err
+		},
+		backoff.NewConstantDelayRetryPolicy(20*time.Millisecond),
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("wait for frontend readiness: %w", err)
+	}
+	return nil
+}
+
+func (p *clusterRouter) recordClusterCreation(
+	testName string,
+	tbase *FunctionalTestBase,
+	req clusterRequest,
+	createdAt time.Time,
+	phases map[string]time.Duration,
+) {
+	if p.events == nil {
+		req.recordCreation(testName)
+		return
+	}
+	clusterID := p.events.nextClusterID()
+	tbase.clusterEventID = clusterID
+	tbase.clusterEventRecorder = p.events
+	suite, _, _ := strings.Cut(testName, "/")
+	p.events.recordClusterCreated(clusterID, clusterCreationEvent{
+		suite:      suite,
+		test:       testName,
+		kind:       req.kind,
+		reason:     req.reason(),
+		worker:     req.needWorkerService,
+		duration:   time.Since(createdAt),
+		namespaces: len(tbase.testClusterConfig.preseededNamespaces),
+		phases:     phases,
+	})
 }

@@ -494,6 +494,10 @@ func (tl *TestLogger) Debug(msg string, tags ...tag.Tag) {
 	tl.wrapped.Debug(msg, tags...)
 }
 
+func (tl *TestLogger) DebugEnabled() bool {
+	return log.DebugEnabled(tl.wrapped)
+}
+
 // Error implements log.Logger.
 func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 	tl.state.mu.RLock()

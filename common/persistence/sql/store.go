@@ -17,6 +17,10 @@ var ErrPluginNotSupported = errors.New("plugin not supported")
 
 var supportedPlugins = map[string]sqlplugin.Plugin{}
 
+type noopDatabaseLease struct{}
+
+func (noopDatabaseLease) Close() error { return nil }
+
 // RegisterPlugin will register a SQL plugin
 func RegisterPlugin(pluginName string, plugin sqlplugin.Plugin) {
 	if _, ok := supportedPlugins[pluginName]; ok {
@@ -48,6 +52,39 @@ func NewSQLAdminDB(
 	mh metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
 	return createDB[sqlplugin.AdminDB](dbKind, cfg, r, logger, mh)
+}
+
+// AcquireDatabaseLease pins the underlying database when the selected plugin
+// supports explicit lifetime management. Other plugins return a no-op lease.
+func AcquireDatabaseLease(
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+	logger log.Logger,
+	mh metrics.Handler,
+) (sqlplugin.DatabaseLease, error) {
+	plugin, err := getPlugin(cfg.PluginName)
+	if err != nil {
+		return nil, err
+	}
+	provider, ok := plugin.(sqlplugin.DatabaseLeaseProvider)
+	if !ok {
+		return noopDatabaseLease{}, nil
+	}
+	return provider.AcquireDatabaseLease(cfg, r, logger, mh)
+}
+
+// GetDatabaseLeaseStats returns diagnostics when the selected plugin exposes them.
+func GetDatabaseLeaseStats(cfg *config.SQL) (sqlplugin.DatabaseLeaseStats, bool, error) {
+	plugin, err := getPlugin(cfg.PluginName)
+	if err != nil {
+		return sqlplugin.DatabaseLeaseStats{}, false, err
+	}
+	provider, ok := plugin.(sqlplugin.DatabaseLeaseStatsProvider)
+	if !ok {
+		return sqlplugin.DatabaseLeaseStats{}, false, nil
+	}
+	stats, err := provider.DatabaseLeaseStats(cfg)
+	return stats, true, err
 }
 
 func createDB[T any](
