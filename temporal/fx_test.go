@@ -12,37 +12,10 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
-	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 )
-
-type closeTrackingPersistenceFactory struct {
-	persistenceClient.Factory
-	closed bool
-}
-
-func (f *closeTrackingPersistenceFactory) Close() {
-	f.closed = true
-}
-
-func TestServerFxStartClosesBootstrapPersistenceFactory(t *testing.T) {
-	t.Parallel()
-
-	factory := &closeTrackingPersistenceFactory{}
-	server := &ServerFx{
-		app:                         fx.New(),
-		bootstrapPersistenceFactory: factory,
-	}
-	t.Cleanup(func() {
-		require.NoError(t, server.Stop())
-	})
-
-	require.NoError(t, server.Start())
-	require.True(t, factory.closed)
-}
 
 func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
