@@ -66,10 +66,8 @@ func newFactoryDBConn(
 	metricsHandler metrics.Handler,
 ) *DbConn {
 	conn := NewRefCountedDBConn(sqlplugin.DbKindMain, cfg, r, logger, metricsHandler)
-	if cfg.PluginName == "sqlite" {
-		// The factory owns the initial reference; stores borrow additional references.
-		conn.refCnt = 1
-	}
+	// The factory owns the initial reference; stores borrow additional references.
+	conn.refCnt = 1
 	return &conn
 }
 

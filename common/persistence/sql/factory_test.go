@@ -12,10 +12,10 @@ import (
 	"go.temporal.io/server/common/resolver"
 )
 
-func TestSQLiteFactoryOwnsDatabaseUntilClose(t *testing.T) {
+func TestFactoryOwnsDatabaseUntilClose(t *testing.T) {
 	closeCount := 0
 	factory := NewFactory(
-		config.SQL{PluginName: "sqlite"},
+		config.SQL{},
 		resolver.NewNoopResolver(),
 		"cluster",
 		log.NewNoopLogger(),
