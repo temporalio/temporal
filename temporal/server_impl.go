@@ -127,7 +127,6 @@ func initSystemNamespaces(
 	if err != nil {
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
-	defer metadataManager.Close()
 	ctx, cancel := context.WithTimeout(
 		headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo),
 		30*time.Second,

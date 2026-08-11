@@ -709,7 +709,6 @@ func ApplyClusterMetadataConfigProvider(
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
-	defer clusterMetadataManager.Close()
 
 	visCSAOverride := map[enumspb.IndexedValueType]int{}
 	for tpName, value := range svc.Visibility.PersistenceCustomSearchAttributes {
