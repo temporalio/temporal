@@ -54,7 +54,7 @@ func (p *plugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverte
 }
 
 func (p *plugin) AcquireDatabaseLease(cfg *config.SQL) (func() error, error) {
-	return p.connPool.AcquireLease(cfg)
+	return p.connPool.acquireLease(cfg)
 }
 
 // CreateDB initialize the db object

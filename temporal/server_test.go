@@ -78,7 +78,6 @@ func TestNewServerFxReleasesDatabaseLeaseOnConstructionPanic(t *testing.T) {
 
 func newLeaseMarkerModule(afterClose func() error) fx.Option {
 	return fx.Options(
-		fx.Provide(temporal.ServerOptionsProvider),
 		fx.Invoke(func(cfg *config.Config) error {
 			db, err := persistencesql.NewSQLAdminDB(
 				sqlplugin.DbKindMain,
