@@ -12,21 +12,21 @@ import (
 	"go.temporal.io/server/common/resolver"
 )
 
-func TestAcquireDatabaseLeaseClosesAcquiredLeasesOnFailure(t *testing.T) {
-	const pluginName = "lease-test-rollback"
+func TestOpenDatabasesClosesOpenedDatabasesOnFailure(t *testing.T) {
+	const pluginName = "database-test-rollback"
 	firstCloseCount := 0
-	provider := &leaseTestProvider{
-		acquire: func(cfg *config.SQL) (func() error, error) {
+	plugin := &databaseTestPlugin{
+		create: func(cfg *config.SQL) (sqlplugin.GenericDB, error) {
 			if cfg.DatabaseName == "second" {
-				return nil, errors.New("second lease failed")
+				return nil, errors.New("second database failed")
 			}
-			return func() error {
+			return &databaseTestDB{close: func() error {
 				firstCloseCount++
 				return nil
-			}, nil
+			}}, nil
 		},
 	}
-	registerLeaseTestPlugin(t, pluginName, provider)
+	registerDatabaseTestPlugin(t, pluginName, plugin)
 	cfg := config.Persistence{
 		DefaultStore:    "a",
 		VisibilityStore: "b",
@@ -37,55 +37,39 @@ func TestAcquireDatabaseLeaseClosesAcquiredLeasesOnFailure(t *testing.T) {
 		},
 	}
 
-	release, err := AcquireDatabaseLease(cfg)
-	require.EqualError(t, err, "second lease failed")
-	require.Nil(t, release)
+	databases, err := OpenDatabases(
+		cfg,
+		resolver.NewNoopResolver(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	require.EqualError(t, err, "second database failed")
+	require.Nil(t, databases)
 	require.Equal(t, 1, firstCloseCount)
 }
 
-func TestAcquireDatabaseLeaseClosesInReverseOrderAndJoinsErrors(t *testing.T) {
-	const pluginName = "lease-test-close"
+func TestCloseDatabasesClosesInReverseOrderAndJoinsErrors(t *testing.T) {
 	firstErr := errors.New("first close failed")
 	secondErr := errors.New("second close failed")
 	var order []string
-	provider := &leaseTestProvider{
-		acquire: func(cfg *config.SQL) (func() error, error) {
-			return func() error {
-				order = append(order, cfg.DatabaseName)
-				switch cfg.DatabaseName {
-				case "first":
-					return firstErr
-				case "second":
-					return secondErr
-				default:
-					return nil
-				}
-			}, nil
-		},
-	}
-	registerLeaseTestPlugin(t, pluginName, provider)
-	cfg := config.Persistence{
-		DefaultStore:    "a",
-		VisibilityStore: "b",
-		DataStores: map[string]config.DataStore{
-			"a": {SQL: &config.SQL{PluginName: pluginName, DatabaseName: "first"}},
-			"b": {SQL: &config.SQL{PluginName: pluginName, DatabaseName: "second"}},
-		},
+	databases := []sqlplugin.GenericDB{
+		&databaseTestDB{name: "first", close: func() error {
+			order = append(order, "first")
+			return firstErr
+		}},
+		&databaseTestDB{name: "second", close: func() error {
+			order = append(order, "second")
+			return secondErr
+		}},
 	}
 
-	release, err := AcquireDatabaseLease(cfg)
-	require.NoError(t, err)
-
-	err = release()
+	err := CloseDatabases(databases)
 	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, secondErr)
 	require.Equal(t, []string{"second", "first"}, order)
-
-	require.Equal(t, err, release())
-	require.Equal(t, []string{"second", "first"}, order)
 }
 
-func registerLeaseTestPlugin(t *testing.T, name string, plugin sqlplugin.Plugin) {
+func registerDatabaseTestPlugin(t *testing.T, name string, plugin sqlplugin.Plugin) {
 	t.Helper()
 	RegisterPlugin(name, plugin)
 	t.Cleanup(func() {
@@ -93,27 +77,38 @@ func registerLeaseTestPlugin(t *testing.T, name string, plugin sqlplugin.Plugin)
 	})
 }
 
-type leaseTestPlugin struct{}
-
-func (leaseTestPlugin) CreateDB(
-	sqlplugin.DbKind,
-	*config.SQL,
-	resolver.ServiceResolver,
-	log.Logger,
-	metrics.Handler,
-) (sqlplugin.GenericDB, error) {
-	panic("not used")
+type databaseTestPlugin struct {
+	create func(*config.SQL) (sqlplugin.GenericDB, error)
 }
 
-func (leaseTestPlugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverter {
+func (p *databaseTestPlugin) CreateDB(
+	_ sqlplugin.DbKind,
+	cfg *config.SQL,
+	_ resolver.ServiceResolver,
+	_ log.Logger,
+	_ metrics.Handler,
+) (sqlplugin.GenericDB, error) {
+	return p.create(cfg)
+}
+
+func (*databaseTestPlugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryConverter {
 	return nil
 }
 
-type leaseTestProvider struct {
-	leaseTestPlugin
-	acquire func(*config.SQL) (func() error, error)
+type databaseTestDB struct {
+	name  string
+	close func() error
 }
 
-func (p *leaseTestProvider) AcquireDatabaseLease(cfg *config.SQL) (func() error, error) {
-	return p.acquire(cfg)
+//nolint:staticcheck // Implements sqlplugin.GenericDB.DbName.
+func (d *databaseTestDB) DbName() string {
+	return d.name
+}
+
+func (*databaseTestDB) PluginName() string {
+	return "database-test"
+}
+
+func (d *databaseTestDB) Close() error {
+	return d.close()
 }
