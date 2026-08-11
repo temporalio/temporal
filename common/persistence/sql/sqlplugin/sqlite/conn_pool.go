@@ -7,9 +7,7 @@ import (
 	"go.temporal.io/server/common/config"
 )
 
-// This pool properly enabled the support for SQLite in the temporal server.
-// Internal Temporal services are highly isolated, each will create at least a single connection to the database violating
-// the SQLite concept of safety only within a single thread.
+// connPool shares one *sqlx.DB per DSN across independently constructed stores.
 type connPool struct {
 	mu   sync.Mutex
 	pool map[string]*entry
@@ -26,7 +24,7 @@ func newConnPool() *connPool {
 	}
 }
 
-// acquire returns the shared database for cfg and an idempotent function that releases this acquisition.
+// acquire returns the shared connection pool for cfg and an idempotent release function.
 func (cp *connPool) acquire(
 	cfg *config.SQL,
 	create func(string) (*sqlx.DB, error),
@@ -55,7 +53,6 @@ func (cp *connPool) acquire(
 	return e.db, release, nil
 }
 
-// release removes one retention. It only closes the shared database once no references remain.
 func (cp *connPool) release(dsn string) error {
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
@@ -66,8 +63,6 @@ func (cp *connPool) release(dsn string) error {
 		return nil
 	}
 
-	// temporal will start and stop DB connections multiple times. A factory-owned database handle keeps the
-	// database alive across that churn and prevents loss of the cache and "db is closed" errors.
 	delete(cp.pool, dsn)
 	return e.db.Close()
 }
