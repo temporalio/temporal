@@ -250,10 +250,9 @@ func Main() {
 // nolint:revive,deep-exit
 func (r *runner) reportCrash() {
 	jr := generateReport([]string{r.crashName}, "crash", failureTypeCrash)
-	if err := commonjunit.Write(r.junitOutputPath, &jr.Testsuites); err != nil {
+	if err := r.writeReport(jr); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("wrote junit report to %s", r.junitOutputPath)
 }
 
 func (r *runner) generateSummary() error {
@@ -296,6 +295,14 @@ func (r *runner) generateSummary() error {
 	return nil
 }
 
+func (r *runner) writeReport(report *junitReport) error {
+	if err := commonjunit.Write(r.junitOutputPath, &report.Testsuites); err != nil {
+		return err
+	}
+	log.Printf("wrote junit report to %s", r.junitOutputPath)
+	return nil
+}
+
 // writeCurrentReport writes the merged report from all completed attempts to the
 // final output path. It is called after each attempt so that partial results
 // survive if the process is killed externally between attempts.
@@ -314,11 +321,10 @@ func (r *runner) writeCurrentReport() {
 	if len(r.alerts) > 0 {
 		merged.appendAlertsSuite(r.alerts)
 	}
-	if err := commonjunit.Write(r.junitOutputPath, &merged.Testsuites); err != nil {
+	if err := r.writeReport(merged); err != nil {
 		log.Printf("warning: failed to write intermediate report: %v", err)
 		return
 	}
-	log.Printf("wrote junit report to %s", r.junitOutputPath)
 }
 
 // nolint:revive,deep-exit
@@ -431,10 +437,9 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	if len(r.alerts) > 0 {
 		mergedReport.appendAlertsSuite(r.alerts)
 	}
-	if err = commonjunit.Write(r.junitOutputPath, &mergedReport.Testsuites); err != nil {
+	if err = r.writeReport(mergedReport); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("wrote junit report to %s", r.junitOutputPath)
 
 	// Skip the strict rerun-coverage check when the total timeout fired: the
 	// in-progress attempt was killed before it could execute all expected tests.
