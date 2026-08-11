@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	commonjunit "go.temporal.io/server/tools/common/junit"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 func TestReadJUnitReport(t *testing.T) {
@@ -29,7 +29,7 @@ func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 		"TestCallbacksSuite/TestWorkflowCallbacks_2",
 	}
 	j := generateReport(testNames, "timeout", failureTypeTimeout)
-	require.NoError(t, commonjunit.Write(out.Name(), &j.Testsuites))
+	require.NoError(t, junit.Write(out.Name(), &j.Testsuites))
 	requireReportEquals(t, "testdata/junit-timeout-output.xml", out.Name())
 }
 
@@ -72,7 +72,7 @@ func TestAppendAlertsSuite(t *testing.T) {
 		require.NoError(t, os.Remove(out.Name()))
 	}()
 
-	require.NoError(t, commonjunit.Write(out.Name(), &j.Testsuites))
+	require.NoError(t, junit.Write(out.Name(), &j.Testsuites))
 
 	// Compare against the expected output file
 	requireReportEquals(t, "testdata/junit-alerts-output.xml", out.Name())
@@ -212,7 +212,7 @@ func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *
 	require.Equal(t, "plain failure output with no recognizable block", merged.Suites[0].Testcases[0].Failure.Data)
 }
 
-func collectTestNames(suites []commonjunit.Testsuite) []string {
+func collectTestNames(suites []junit.Testsuite) []string {
 	var testNames []string
 	for _, suite := range suites {
 		for _, test := range suite.Testcases {
@@ -299,19 +299,19 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 			// Setup the report
 			j := tt.setup()
 			// Write the report
-			require.NoError(t, commonjunit.Write(out.Name(), &j.Testsuites))
+			require.NoError(t, junit.Write(out.Name(), &j.Testsuites))
 
 			// Read the written file
 			content, err := os.ReadFile(out.Name())
 			require.NoError(t, err)
 
 			// Validate that the content is well-formed XML
-			var parsed commonjunit.Testsuites
+			var parsed junit.Testsuites
 			err = xml.Unmarshal(content, &parsed)
 			require.NoError(t, err, "Written XML should be well-formed and parseable")
 
 			// Additional validation: ensure we can re-parse it using our own read method
-			_, err = commonjunit.Read(out.Name())
+			_, err = junit.Read(out.Name())
 			require.NoError(t, err, "Should be able to re-read the written XML")
 
 			// Validate that the structure is reasonable
@@ -322,7 +322,7 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 
 func mustReadReportFixture(t *testing.T, path string) *junitReport {
 	t.Helper()
-	testsuites, err := commonjunit.Read(path)
+	testsuites, err := junit.Read(path)
 	require.NoError(t, err)
 	return &junitReport{Testsuites: *testsuites}
 }

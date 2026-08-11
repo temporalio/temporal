@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	commonjunit "go.temporal.io/server/tools/common/junit"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 const (
@@ -264,7 +264,7 @@ func (r *runner) generateSummary() error {
 
 	reports := make([]*junitReport, 0, len(paths))
 	for _, path := range paths {
-		testsuites, err := commonjunit.Read(path)
+		testsuites, err := junit.Read(path)
 		if err != nil {
 			return fmt.Errorf("failed to read junit report %q: %w", path, err)
 		}
@@ -296,7 +296,7 @@ func (r *runner) generateSummary() error {
 }
 
 func (r *runner) writeReport(report *junitReport) error {
-	if err := commonjunit.Write(r.junitOutputPath, &report.Testsuites); err != nil {
+	if err := junit.Write(r.junitOutputPath, &report.Testsuites); err != nil {
 		return err
 	}
 	log.Printf("wrote junit report to %s", r.junitOutputPath)
@@ -348,7 +348,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
 			totalTimeoutFired = true
 			// Try to read whatever gotestsum managed to write before it was killed.
-			testsuites, readErr := commonjunit.Read(currentAttempt.junitPath)
+			testsuites, readErr := junit.Read(currentAttempt.junitPath)
 			if readErr != nil {
 				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
 				// stdout for any "--- FAIL:" lines that completed before the kill.
@@ -385,7 +385,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		}
 
 		// All tests were run, parse JUnit XML output.
-		testsuites, err := commonjunit.Read(currentAttempt.junitPath)
+		testsuites, err := junit.Read(currentAttempt.junitPath)
 		if err != nil {
 			log.Fatal(err)
 		}

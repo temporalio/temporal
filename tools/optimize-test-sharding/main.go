@@ -16,7 +16,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"go.temporal.io/server/tools/common/github"
-	commonjunit "go.temporal.io/server/tools/common/junit"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 const (
@@ -194,7 +194,7 @@ func loadTestData(dir string) (map[string][]float64, error) {
 }
 
 func processJUnitReport(filename string, tmap map[string][]float64) error {
-	testsuites, err := commonjunit.Read(filename)
+	testsuites, err := junit.Read(filename)
 	if err != nil {
 		return err
 	}

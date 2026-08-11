@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	commonjunit "go.temporal.io/server/tools/common/junit"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 func TestRunnerSanitizeAndParseArgs(t *testing.T) {
@@ -197,7 +197,7 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	r.writeCurrentReport()
 
-	testsuites, err := commonjunit.Read(out.Name())
+	testsuites, err := junit.Read(out.Name())
 	require.NoError(t, err)
 	result := &junitReport{Testsuites: *testsuites}
 	require.Equal(t, 2, result.Failures)
@@ -212,7 +212,7 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	r.writeCurrentReport()
 
-	testsuites, err = commonjunit.Read(out.Name())
+	testsuites, err = junit.Read(out.Name())
 	require.NoError(t, err)
 	result2 := &junitReport{Testsuites: *testsuites}
 	require.Equal(t, 4, result2.Failures) // 2 from attempt 1 + 2 from attempt 2
@@ -241,13 +241,13 @@ func TestRunnerPrintSummary(t *testing.T) {
 	report1.Suites[0].Testcases[0].Name = "TestAlpha"
 	report1.Suites[0].Testcases[0].Failure.Type = string(failureTypeFailed)
 	report1.Suites[0].Testcases[0].Failure.Data = "alpha failure"
-	require.NoError(t, commonjunit.Write(filepath.Join(dir, "junit.alpha.xml"), &report1.Testsuites))
+	require.NoError(t, junit.Write(filepath.Join(dir, "junit.alpha.xml"), &report1.Testsuites))
 	report2 := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 	report2.Suites[0].Name = "SuiteB"
 	report2.Suites[0].Testcases[0].Name = "TestBeta"
 	report2.Suites[0].Testcases[0].Failure.Type = string(failureTypeFailed)
 	report2.Suites[0].Testcases[0].Failure.Data = "beta failure"
-	require.NoError(t, commonjunit.Write(filepath.Join(dir, "junit.beta.xml"), &report2.Testsuites))
+	require.NoError(t, junit.Write(filepath.Join(dir, "junit.beta.xml"), &report2.Testsuites))
 
 	r := newRunner()
 	summaryMarkdownPath := filepath.Join(dir, "test-summary.md")
@@ -274,7 +274,7 @@ func TestRunnerPrintSummary(t *testing.T) {
 func TestRunnerPrintSummarySkipsEmptySummary(t *testing.T) {
 	dir := t.TempDir()
 	report := mustReadReportFixture(t, "testdata/junit-empty.xml")
-	require.NoError(t, commonjunit.Write(filepath.Join(dir, "junit.empty.xml"), &report.Testsuites))
+	require.NoError(t, junit.Write(filepath.Join(dir, "junit.empty.xml"), &report.Testsuites))
 
 	r := newRunner()
 	_, err := r.sanitizeAndParseArgs(summaryCommand, []string{
