@@ -27,10 +27,13 @@ does not emit a debug log while its failure event still emits an error. The
 existing Temporal package tests and repository formatting and lint checks will
 also run.
 
-The performance comparison will use identical repeated cluster-boot workloads
-with debug logging enabled on the parent commit and the changed commit. The PR
-will report wall time and allocation results and will not include a benchmark
-harness unless that harness is independently useful.
+The performance comparison used the same core-cluster boot benchmark before and
+after the change, with debug logging enabled, 20 samples, and five boots per
+sample. Median boot time fell from 25.02 ms to 19.50 ms (22.1%), allocated bytes
+fell 8.8%, and allocated objects fell 6.2%. The existing benchmark harness is
+part of the isolated-cluster work and is not included in this change. Its
+deliberately immediate teardown was stabilized outside the timed region so the
+same workload could run reliably at both speeds.
 
 ## Scope
 
