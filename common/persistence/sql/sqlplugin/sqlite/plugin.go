@@ -68,7 +68,7 @@ func (p *plugin) CreateDB(
 		return nil, err
 	}
 	db := newDB(dbKind, cfg.DatabaseName, conn, nil, logger)
-	db.release = release // remove reference
+	db.release = release
 	return db, nil
 }
 
