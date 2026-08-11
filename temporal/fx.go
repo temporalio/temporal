@@ -135,18 +135,6 @@ type (
 		TestHooks                  testhooks.TestHooks
 		EventLoggerProvider        otellog.LoggerProvider
 	}
-
-	bootstrapPersistenceFactoryParams struct {
-		fx.In
-
-		Config                     *config.Config
-		ServiceResolver            resolver.ServiceResolver
-		CustomDataStoreFactory     persistenceClient.AbstractDataStoreFactory
-		Logger                     log.Logger
-		MetricsHandler             metrics.Handler
-		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
-		Serializer                 serialization.Serializer
-	}
 )
 
 var (
@@ -184,10 +172,8 @@ func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (server *Server
 	s.app = fx.New(
 		topLevelModule,
 		fx.Supply(opts),
-		fx.Provide(func(params bootstrapPersistenceFactoryParams) persistenceClient.Factory {
-			s.bootstrapPersistenceFactory = newBootstrapPersistenceFactory(params)
-			return s.bootstrapPersistenceFactory
-		}),
+		// Record ownership when Fx constructs the factory so it can be closed if a later invoke fails.
+		fx.Provide(s.provideBootstrapPersistenceFactory),
 		fx.Populate(&s.startupSynchronizationMode),
 		fx.Populate(&s.logger),
 	)
@@ -199,9 +185,12 @@ func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (server *Server
 
 func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	so := newServerOptions(opts)
-	if err := so.loadAndValidate(); err != nil {
+
+	err := so.loadAndValidate()
+	if err != nil {
 		return serverOptionsProvider{}, err
 	}
+
 	// Logger
 	logger := so.logger
 	if logger == nil {
@@ -209,7 +198,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	persistenceConfig := so.config.Persistence
-	err := verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
+	err = verifyPersistenceCompatibleVersion(persistenceConfig, so.persistenceServiceResolver, logger)
 	if err != nil {
 		return serverOptionsProvider{}, err
 	}
@@ -366,27 +355,36 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}, nil
 }
 
-func newBootstrapPersistenceFactory(params bootstrapPersistenceFactoryParams) persistenceClient.Factory {
-	persistenceMetricsHandler := params.MetricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
-	clusterName := persistenceClient.ClusterName(params.Config.ClusterMetadata.CurrentClusterName)
+func (s *ServerFx) provideBootstrapPersistenceFactory(
+	cfg *config.Config,
+	serviceResolver resolver.ServiceResolver,
+	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
+	serializer serialization.Serializer,
+) persistenceClient.Factory {
+	persistenceMetricsHandler := metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
+	clusterName := persistenceClient.ClusterName(cfg.ClusterMetadata.CurrentClusterName)
 	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
-		params.ServiceResolver,
-		&params.Config.Persistence,
-		params.CustomDataStoreFactory,
-		params.Logger,
+		serviceResolver,
+		&cfg.Persistence,
+		customDataStoreFactory,
+		logger,
 		persistenceMetricsHandler,
 		telemetry.NoopTracerProvider,
-		params.Serializer,
+		serializer,
 	)
-	return params.PersistenceFactoryProvider(persistenceClient.NewFactoryParams{
+	s.bootstrapPersistenceFactory = persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory: dataStoreFactory,
-		Cfg:              &params.Config.Persistence,
+		Cfg:              &cfg.Persistence,
 		ClusterName:      clusterName,
 		MetricsHandler:   persistenceMetricsHandler,
-		Logger:           params.Logger,
-		Serializer:       params.Serializer,
+		Logger:           logger,
+		Serializer:       serializer,
 	})
+	return s.bootstrapPersistenceFactory
 }
 
 // Start temporal server.
@@ -709,6 +707,7 @@ func ApplyClusterMetadataConfigProvider(
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
+	// Do not close the manager: its store shares resources owned by the bootstrap factory.
 
 	visCSAOverride := map[enumspb.IndexedValueType]int{}
 	for tpName, value := range svc.Visibility.PersistenceCustomSearchAttributes {

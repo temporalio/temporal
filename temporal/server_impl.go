@@ -127,6 +127,7 @@ func initSystemNamespaces(
 	if err != nil {
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
+	// Do not close the manager: its store shares resources owned by the bootstrap factory.
 	ctx, cancel := context.WithTimeout(
 		headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo),
 		30*time.Second,
