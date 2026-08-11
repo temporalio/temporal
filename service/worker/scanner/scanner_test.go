@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -224,6 +225,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().Start()
+				worker.EXPECT().Stop()
 				mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
 				mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 				mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), sc.WFTypeName,
@@ -299,6 +301,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().Start()
+	worker.EXPECT().Stop()
 	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -316,4 +319,68 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	s.NoError(err)
 	wg.Wait()
 	scanner.Stop()
+}
+
+func (s *scannerTestSuite) TestScannerStartFailureStopsStartedWorkers() {
+	ctrl := gomock.NewController(s.T())
+
+	mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
+	mockSdkClient := mocksdk.NewMockClient(ctrl)
+	startedWorker := mocksdk.NewMockWorker(ctrl)
+	failedWorker := mocksdk.NewMockWorker(ctrl)
+	startErr := errors.New("worker start failed")
+
+	scanner := New(
+		log.NewNoopLogger(),
+		&Config{
+			MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+			HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(true),
+			ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(false),
+			TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
+			BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(true),
+			ScheduleInvariantsScannerOptions:       dynamicconfig.GetTypedPropertyFn(dynamicconfig.DefaultScheduleInvariantsScannerParams),
+			Persistence: &config.Persistence{
+				DefaultStore: config.StoreTypeNoSQL,
+				DataStores: map[string]config.DataStore{
+					config.StoreTypeNoSQL: {},
+				},
+			},
+		},
+		mockSdkClientFactory,
+		metrics.NoopMetricsHandler,
+		p.NewMockExecutionManager(ctrl),
+		p.NewMockMetadataManager(ctrl),
+		nil,
+		p.NewMockTaskManager(ctrl),
+		historyservicemock.NewMockHistoryServiceClient(ctrl),
+		adminservicemock.NewMockAdminServiceClient(ctrl),
+		nil,
+		namespace.NewMockRegistry(ctrl),
+		"active-cluster",
+		membership.NewHostInfoFromAddress("localhost"),
+		serialization.NewSerializer(),
+	)
+
+	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, startErr).AnyTimes()
+
+	startedWorker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	startedWorker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	startedWorker.EXPECT().Start().Return(nil)
+	startedWorker.EXPECT().Stop()
+	mockSdkClientFactory.EXPECT().
+		NewWorker(gomock.Any(), build_ids.BuildIdScavengerTaskQueueName, gomock.Any()).
+		Return(startedWorker)
+
+	failedWorker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	failedWorker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	failedWorker.EXPECT().Start().Return(startErr)
+	mockSdkClientFactory.EXPECT().
+		NewWorker(gomock.Any(), historyScannerTaskQueueName, gomock.Any()).
+		Return(failedWorker)
+
+	s.Require().ErrorIs(scanner.Start(), startErr)
 }
