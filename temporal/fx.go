@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	rpcinterceptor "go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
@@ -120,6 +121,8 @@ type (
 		AudienceGetter               authorization.JWTAudienceMapper
 		TokenProvider                auth.TokenProvider
 		ServiceHosts                 map[primitives.ServiceName]static.Hosts
+
+		CustomFrontendNexusInterceptors []rpcinterceptor.NexusInterceptor
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                     log.Logger
@@ -323,6 +326,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		CustomVisibilityStore:           so.customVisibilityStoreFactory,
 		CustomHistoryArchiverFactory:    so.customHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: so.customVisibilityArchiverFactory,
+		CustomFrontendNexusInterceptors: so.customFrontendNexusInterceptors,
 
 		SearchAttributesMapper:       so.searchAttributesMapper,
 		CustomFrontendInterceptors:   so.customFrontendInterceptors,
@@ -397,6 +401,7 @@ type (
 		PersistenceFactoryProvider      persistenceClient.FactoryProviderFn
 		SearchAttributesMapper          searchattribute.Mapper
 		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
+		CustomFrontendNexusInterceptors []rpcinterceptor.NexusInterceptor
 		AdditionalStreamInterceptors    []grpc.StreamServerInterceptor
 		Authorizer                      authorization.Authorizer
 		ClaimMapper                     authorization.ClaimMapper
@@ -594,6 +599,7 @@ func genericFrontendServiceProvider(
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
 		fx.Supply(params.CustomFrontendInterceptors),
+		fx.Supply(params.CustomFrontendNexusInterceptors),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:

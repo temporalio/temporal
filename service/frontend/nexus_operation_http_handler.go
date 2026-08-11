@@ -66,11 +66,34 @@ func NewNexusOperationHTTPHandler(
 	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
+	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
+	nexusForwarder *nexusForwardingInterceptor,
+	customNexusInterceptors []interceptor.NexusInterceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
 ) *NexusOperationHTTPHandler {
 	logger = log.With(logger, tag.NexusStageHandlerInbound)
+
+	// draft-review: should we also just make an interceptors provider fx
+	// so it can be shared/declared in a single place. Maybe not worth it as
+	// eventual goal is to remove the completion handler and move that into the
+	// http handler as well
+
+	nexusInterceptors := []interceptor.NexusInterceptor{
+		telemetryInterceptor.InterceptNexus,
+		authInterceptor.InterceptNexus,
+		nexusForwarder.InterceptNexus,
+		namespaceValidationInterceptor.InterceptNexus,
+		namespaceConcurrencyLimitInterceptor.InterceptNexus,
+		namespaceRateLimitInterceptor.InterceptNexus,
+		rateLimitInterceptor.InterceptNexus,
+		sdkVersionInterceptor.InterceptNexus,
+		callerInfoInterceptor.InterceptNexus,
+	}
+	nexusInterceptors = append(nexusInterceptors, customNexusInterceptors...)
+
 	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
@@ -88,15 +111,15 @@ func NewNexusOperationHTTPHandler(
 		httpServerHandlerInstrumenter:        httpServerHandlerInstrumenter,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
-				logger:                        logger,
-				metricsHandler:                metricsHandler,
-				clusterMetadata:               clusterMetadata,
-				namespaceRegistry:             namespaceRegistry,
-				matchingClient:                matchingservice.MatchingServiceClient(matchingClient),
-				auth:                          authInterceptor,
-				telemetryInterceptor:          telemetryInterceptor,
-				requestErrorHandler:           requestErrorHandler,
-				redirectionInterceptor:        redirectionInterceptor,
+				logger:            logger,
+				metricsHandler:    metricsHandler,
+				clusterMetadata:   clusterMetadata,
+				namespaceRegistry: namespaceRegistry,
+				matchingClient:    matchingservice.MatchingServiceClient(matchingClient),
+				auth:              authInterceptor,
+				// telemetryInterceptor:          telemetryInterceptor,
+				// requestErrorHandler:           requestErrorHandler,
+				// redirectionInterceptor:        redirectionInterceptor,
 				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
 				forwardingClients:             clientCache,
 				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
@@ -104,6 +127,7 @@ func NewNexusOperationHTTPHandler(
 				useForwardByEndpoint:          serviceConfig.NexusForwardRequestUseEndpoint,
 				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
 				httpTraceProvider:             httpTraceProvider,
+				nexusInterceptors:             nexusInterceptors,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),
