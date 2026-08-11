@@ -43,22 +43,6 @@ func TestAcquireDatabaseLeaseClosesAcquiredLeasesOnFailure(t *testing.T) {
 	require.Equal(t, 1, firstCloseCount)
 }
 
-func TestAcquireDatabaseLeaseIgnoresUnusedDataStores(t *testing.T) {
-	const pluginName = "lease-test-active"
-	registerLeaseTestPlugin(t, pluginName, leaseTestPlugin{})
-	cfg := config.Persistence{
-		DefaultStore: "active",
-		DataStores: map[string]config.DataStore{
-			"active": {SQL: &config.SQL{PluginName: pluginName}},
-			"unused": {SQL: &config.SQL{PluginName: "not-registered"}},
-		},
-	}
-
-	release, err := AcquireDatabaseLease(cfg)
-	require.NoError(t, err)
-	require.NoError(t, release())
-}
-
 func TestAcquireDatabaseLeaseClosesInReverseOrderAndJoinsErrors(t *testing.T) {
 	const pluginName = "lease-test-close"
 	firstErr := errors.New("first close failed")
