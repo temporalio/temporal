@@ -390,8 +390,8 @@ func (s *ServerFx) provideBootstrapPersistenceFactory(
 // This function should be called only once, Server doesn't support multiple restarts.
 func (s *ServerFx) Start() error {
 	err := s.app.Start(context.Background())
+	s.closeBootstrapPersistenceFactory()
 	if err != nil {
-		s.closeBootstrapPersistenceFactory()
 		return err
 	}
 
