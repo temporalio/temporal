@@ -148,6 +148,10 @@ func maxLifetimeMonitor(
 	stopStream func(),
 	logger log.Logger,
 ) {
+	// Guard against a panic in this goroutine taking down the whole process.
+	var panicErr error
+	defer log.CapturePanic(logger, &panicErr)
+
 	maxLifetime := maxLifetimeFn()
 	if maxLifetime <= 0 {
 		return
