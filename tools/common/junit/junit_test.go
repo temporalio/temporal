@@ -25,6 +25,14 @@ func TestRead(t *testing.T) {
 			want: Testsuites{
 				XMLName: xml.Name{Local: "testsuites"},
 				Tests:   1,
+				Suites: []Testsuite{{
+					Name:  "suite",
+					Tests: 1,
+					Testcases: []Testcase{{
+						Name:      "TestOne",
+						Classname: "example.com/tests",
+					}},
+				}},
 			},
 		},
 		{
@@ -32,7 +40,17 @@ func TestRead(t *testing.T) {
 			content: `<testsuite name="suite" tests="1" failures="0" errors="0" id="0" time="">
     <testcase name="TestOne" classname="example.com/tests"></testcase>
 </testsuite>`,
-			want: Testsuites{Tests: 1},
+			want: Testsuites{
+				Tests: 1,
+				Suites: []Testsuite{{
+					Name:  "suite",
+					Tests: 1,
+					Testcases: []Testcase{{
+						Name:      "TestOne",
+						Classname: "example.com/tests",
+					}},
+				}},
+			},
 		},
 	}
 
@@ -43,18 +61,6 @@ func TestRead(t *testing.T) {
 
 			report, err := Read(path)
 			require.NoError(t, err)
-			tt.want.Suites = []Testsuite{{
-				Name:     "suite",
-				Tests:    1,
-				Failures: 0,
-				Errors:   0,
-				ID:       0,
-				Time:     "",
-				Testcases: []Testcase{{
-					Name:      "TestOne",
-					Classname: "example.com/tests",
-				}},
-			}}
 			require.Equal(t, tt.want, *report)
 		})
 	}
