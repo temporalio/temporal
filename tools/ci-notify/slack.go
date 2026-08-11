@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"go.temporal.io/server/tools/common/github"
 	"go.temporal.io/server/tools/common/slack"
 )
 
@@ -68,6 +69,68 @@ func FormatMessageForDebug(report *FailureReport) string {
 	fmt.Fprintf(&sb, "Failed jobs (%d/%d): %s\n", len(report.FailedJobs), report.TotalJobs, strings.Join(failedJobNames, ", "))
 	fmt.Fprintf(&sb, "\nView Run: %s\n", report.Run.URL)
 	return sb.String()
+}
+
+// maxDataRaceDetail caps the race detector output included per race so the code
+// block (including its closing fence) stays within Slack's section text limit.
+const maxDataRaceDetail = 2500
+
+// BuildDataRaceMessage creates a Slack message announcing data races on main.
+func BuildDataRaceMessage(report *DataRaceReport) *slack.Message {
+	commitURL := github.CommitURL(temporalRepository, report.Run.HeadSHA)
+
+	message := slack.NewMessage(fmt.Sprintf("Data Race Detected on Main (%d)", len(report.DataRaces)))
+	message.AddSection(":rotating_light: *Data Race Detected on Main Branch* :rotating_light:")
+	message.AddFields(
+		fmt.Sprintf("*Commit:*\n<%s|%s>", commitURL, report.Run.ShortSHA()),
+		fmt.Sprintf("*Author:*\n%s", orUnknown(report.Author)),
+	)
+	if report.Title != "" {
+		message.AddSection(fmt.Sprintf("*Commit message:*\n%s", report.Title))
+	}
+
+	for _, race := range report.DataRaces {
+		var sb strings.Builder
+		if race.Location != "" {
+			fmt.Fprintf(&sb, "*%s*\n", race.Location)
+		}
+		if race.Details != "" {
+			fmt.Fprintf(&sb, "```%s```", truncateDataRaceDetail(race.Details))
+		}
+		message.AddSection(sb.String())
+	}
+
+	message.AddSection(fmt.Sprintf("<%s|View Run>", report.Run.URL))
+	return message
+}
+
+// FormatDataRaceForDebug formats the data race report for console output.
+func FormatDataRaceForDebug(report *DataRaceReport) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "🏁 Data Race Detected on Main Branch (%d) 🏁\n\n", len(report.DataRaces))
+	fmt.Fprintf(&sb, "Commit: %s (%s)\n", report.Run.ShortSHA(), orUnknown(report.Author))
+	if report.Title != "" {
+		fmt.Fprintf(&sb, "Commit message: %s\n", report.Title)
+	}
+	for i, race := range report.DataRaces {
+		fmt.Fprintf(&sb, "\n[%d] %s\n%s\n", i+1, race.Location, truncateDataRaceDetail(race.Details))
+	}
+	fmt.Fprintf(&sb, "\nView Run: %s\n", report.Run.URL)
+	return sb.String()
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "Unknown"
+	}
+	return s
+}
+
+func truncateDataRaceDetail(s string) string {
+	if len(s) <= maxDataRaceDetail {
+		return s
+	}
+	return s[:maxDataRaceDetail] + "\n… (truncated — see full output in job logs)"
 }
 
 // BuildSuccessReportMessage creates a Slack message for success report

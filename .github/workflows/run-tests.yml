@@ -564,3 +564,36 @@ jobs:
           go run ./cmd/tools/ci-notify alert \
             --run-id "${{ github.run_id }}" \
             --slack-webhook "$SLACK_WEBHOOK"
+
+  notify-data-race:
+    name: Notify Slack on Data Race
+    # Runs on both passing and failing main runs: the race detector can trip on
+    # one attempt and pass on a retry, leaving the run green while a data race
+    # was still recorded in the test-summary artifacts.
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      (needs.test-status.result == 'success' || needs.test-status.result == 'failure')
+    needs: test-status
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          go run ./cmd/tools/ci-notify data-race \
+            --run-id "${{ github.run_id }}" \
+            --slack-webhook "$SLACK_WEBHOOK"
