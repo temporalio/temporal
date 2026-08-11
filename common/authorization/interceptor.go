@@ -184,20 +184,18 @@ func (a *Interceptor) InterceptNexus(
 			Outcome: "interceptor_failed",
 		}
 	}
-	claims, _ := ctx.Value(MappedClaims).(*Claims)
-	var req any
+	claims, _ := ctx.Value(MappedClaims).(*Claims) //nolint:revive // unchecked-type-assertion: empty claims will 403
 	// draft-review: check if this might be required to preserve compatibility for custom authorizers
 	// or if its ok since an interface was not already used instead
 	// switch in.(type) {
 	// case interceptor.StartNexusOpInput, interceptor.CancelNexusOpInput:
 	// case *interceptor.CancelNexusOpInput:
 	// }
-	req = in
 	ct := &CallTarget{
 		APIName:           apiName,
 		NexusEndpointName: endpointName,
 		Namespace:         namespaceName,
-		Request:           req,
+		Request:           in,
 	}
 	principal, err := a.Authorize(ctx, claims, ct)
 	if err != nil {
