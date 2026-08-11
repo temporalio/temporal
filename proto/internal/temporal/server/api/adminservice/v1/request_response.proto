@@ -199,6 +199,37 @@ message GetNamespaceReplicationMessagesResponse {
   temporal.server.api.replication.v1.ReplicationMessages messages = 1;
 }
 
+// ApplyNamespaceMutationRequest is the input to the receiver-side admin RPC
+// for the CHASM-based namespace replication transport.
+message ApplyNamespaceMutationRequest {
+  // The mutation to apply. Reuses the existing NamespaceTaskAttributes shape so the
+  // receiver-side apply-if-higher logic (replication_task_executor.go) can be reused
+  // unchanged.
+  temporal.server.api.replication.v1.NamespaceTaskAttributes namespace_task = 1;
+}
+
+message ApplyNamespaceMutationResponse {
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    // An existing namespace was updated (incoming ConfigVersion or
+    // FailoverVersion was strictly higher than current).
+    OUTCOME_APPLIED = 1;
+    // The receiver's current state is >= incoming state on both versions.
+    // No write was performed. Success outcome.
+    OUTCOME_NO_OP_STALE = 2;
+    // The namespace did not exist on this cell and was created from the
+    // incoming state.
+    OUTCOME_CREATED = 3;
+    // CreateNamespace failed because a matching record (same id and name)
+    // already existed. Treated as a duplicate request; not a failure.
+    OUTCOME_DUPLICATE = 4;
+    // The admitter rejected the namespace (cluster's admission policy says
+    // not to accept this namespace). No write was performed.
+    OUTCOME_NOT_ADMITTED = 5;
+  }
+  Outcome outcome = 1;
+}
+
 message GetDLQReplicationMessagesRequest {
   repeated temporal.server.api.replication.v1.ReplicationTaskInfo task_infos = 1;
 }

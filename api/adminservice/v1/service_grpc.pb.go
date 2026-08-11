@@ -32,6 +32,7 @@ const (
 	AdminService_GetWorkflowExecutionRawHistory_FullMethodName      = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory"
 	AdminService_GetReplicationMessages_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/GetReplicationMessages"
 	AdminService_GetNamespaceReplicationMessages_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
+	AdminService_ApplyNamespaceMutation_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ApplyNamespaceMutation"
 	AdminService_GetDLQReplicationMessages_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
 	AdminService_ReapplyEvents_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents"
 	AdminService_AddSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"
@@ -98,6 +99,11 @@ type AdminServiceClient interface {
 	GetReplicationMessages(ctx context.Context, in *GetReplicationMessagesRequest, opts ...grpc.CallOption) (*GetReplicationMessagesResponse, error)
 	// GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
 	GetNamespaceReplicationMessages(ctx context.Context, in *GetNamespaceReplicationMessagesRequest, opts ...grpc.CallOption) (*GetNamespaceReplicationMessagesResponse, error)
+	// ApplyNamespaceMutation is the receiver-side entry point for the CHASM-based
+	// namespace replication transport. The originating cell's NamespaceMutationComponent
+	// calls this RPC against each peer cell after its local apply commits.
+	// Apply semantics are apply-if-higher (config_version / failover_version).
+	ApplyNamespaceMutation(ctx context.Context, in *ApplyNamespaceMutationRequest, opts ...grpc.CallOption) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(ctx context.Context, in *GetDLQReplicationMessagesRequest, opts ...grpc.CallOption) (*GetDLQReplicationMessagesResponse, error)
 	// ReapplyEvents applies stale events to the current workflow and current run.
@@ -273,6 +279,15 @@ func (c *adminServiceClient) GetReplicationMessages(ctx context.Context, in *Get
 func (c *adminServiceClient) GetNamespaceReplicationMessages(ctx context.Context, in *GetNamespaceReplicationMessagesRequest, opts ...grpc.CallOption) (*GetNamespaceReplicationMessagesResponse, error) {
 	out := new(GetNamespaceReplicationMessagesResponse)
 	err := c.cc.Invoke(ctx, AdminService_GetNamespaceReplicationMessages_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ApplyNamespaceMutation(ctx context.Context, in *ApplyNamespaceMutationRequest, opts ...grpc.CallOption) (*ApplyNamespaceMutationResponse, error) {
+	out := new(ApplyNamespaceMutationResponse)
+	err := c.cc.Invoke(ctx, AdminService_ApplyNamespaceMutation_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -637,6 +652,11 @@ type AdminServiceServer interface {
 	GetReplicationMessages(context.Context, *GetReplicationMessagesRequest) (*GetReplicationMessagesResponse, error)
 	// GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
 	GetNamespaceReplicationMessages(context.Context, *GetNamespaceReplicationMessagesRequest) (*GetNamespaceReplicationMessagesResponse, error)
+	// ApplyNamespaceMutation is the receiver-side entry point for the CHASM-based
+	// namespace replication transport. The originating cell's NamespaceMutationComponent
+	// calls this RPC against each peer cell after its local apply commits.
+	// Apply semantics are apply-if-higher (config_version / failover_version).
+	ApplyNamespaceMutation(context.Context, *ApplyNamespaceMutationRequest) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(context.Context, *GetDLQReplicationMessagesRequest) (*GetDLQReplicationMessagesResponse, error)
 	// ReapplyEvents applies stale events to the current workflow and current run.
@@ -742,6 +762,9 @@ func (UnimplementedAdminServiceServer) GetReplicationMessages(context.Context, *
 }
 func (UnimplementedAdminServiceServer) GetNamespaceReplicationMessages(context.Context, *GetNamespaceReplicationMessagesRequest) (*GetNamespaceReplicationMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNamespaceReplicationMessages not implemented")
+}
+func (UnimplementedAdminServiceServer) ApplyNamespaceMutation(context.Context, *ApplyNamespaceMutationRequest) (*ApplyNamespaceMutationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyNamespaceMutation not implemented")
 }
 func (UnimplementedAdminServiceServer) GetDLQReplicationMessages(context.Context, *GetDLQReplicationMessagesRequest) (*GetDLQReplicationMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQReplicationMessages not implemented")
@@ -1070,6 +1093,24 @@ func _AdminService_GetNamespaceReplicationMessages_Handler(srv interface{}, ctx 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).GetNamespaceReplicationMessages(ctx, req.(*GetNamespaceReplicationMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ApplyNamespaceMutation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyNamespaceMutationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ApplyNamespaceMutation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ApplyNamespaceMutation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ApplyNamespaceMutation(ctx, req.(*ApplyNamespaceMutationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1748,6 +1789,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetNamespaceReplicationMessages",
 			Handler:    _AdminService_GetNamespaceReplicationMessages_Handler,
+		},
+		{
+			MethodName: "ApplyNamespaceMutation",
+			Handler:    _AdminService_ApplyNamespaceMutation_Handler,
 		},
 		{
 			MethodName: "GetDLQReplicationMessages",

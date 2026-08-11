@@ -71,6 +71,14 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
+  // ApplyNamespaceMutation is the receiver-side entry point for the CHASM-based
+  // namespace replication transport. The originating cell's NamespaceMutationComponent
+  // calls this RPC against each peer cell after its local apply commits.
+  // Apply semantics are apply-if-higher (config_version / failover_version).
+  rpc ApplyNamespaceMutation(ApplyNamespaceMutationRequest) returns (ApplyNamespaceMutationResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
   // GetDLQReplicationMessages return replication messages based on DLQ info.
   rpc GetDLQReplicationMessages(GetDLQReplicationMessagesRequest) returns (GetDLQReplicationMessagesResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;

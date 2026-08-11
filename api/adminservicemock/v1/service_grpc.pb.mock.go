@@ -103,6 +103,26 @@ func (mr *MockAdminServiceClientMockRecorder) AddTasks(ctx, in any, opts ...any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).AddTasks), varargs...)
 }
 
+// ApplyNamespaceMutation mocks base method.
+func (m *MockAdminServiceClient) ApplyNamespaceMutation(ctx context.Context, in *adminservice.ApplyNamespaceMutationRequest, opts ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ApplyNamespaceMutation", varargs...)
+	ret0, _ := ret[0].(*adminservice.ApplyNamespaceMutationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyNamespaceMutation indicates an expected call of ApplyNamespaceMutation.
+func (mr *MockAdminServiceClientMockRecorder) ApplyNamespaceMutation(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyNamespaceMutation", reflect.TypeOf((*MockAdminServiceClient)(nil).ApplyNamespaceMutation), varargs...)
+}
+
 // CancelDLQJob mocks base method.
 func (m *MockAdminServiceClient) CancelDLQJob(ctx context.Context, in *adminservice.CancelDLQJobRequest, opts ...grpc.CallOption) (*adminservice.CancelDLQJobResponse, error) {
 	m.ctrl.T.Helper()
@@ -1168,6 +1188,21 @@ func (m *MockAdminServiceServer) AddTasks(arg0 context.Context, arg1 *adminservi
 func (mr *MockAdminServiceServerMockRecorder) AddTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).AddTasks), arg0, arg1)
+}
+
+// ApplyNamespaceMutation mocks base method.
+func (m *MockAdminServiceServer) ApplyNamespaceMutation(arg0 context.Context, arg1 *adminservice.ApplyNamespaceMutationRequest) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyNamespaceMutation", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ApplyNamespaceMutationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyNamespaceMutation indicates an expected call of ApplyNamespaceMutation.
+func (mr *MockAdminServiceServerMockRecorder) ApplyNamespaceMutation(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyNamespaceMutation", reflect.TypeOf((*MockAdminServiceServer)(nil).ApplyNamespaceMutation), arg0, arg1)
 }
 
 // CancelDLQJob mocks base method.
