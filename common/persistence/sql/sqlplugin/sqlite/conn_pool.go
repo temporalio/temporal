@@ -58,23 +58,6 @@ func (cp *connPool) Allocate(
 	return e.db, cp.retainLocked(dsn, e), nil
 }
 
-func (cp *connPool) acquireLease(cfg *config.SQL) (func() error, error) {
-	dsn, err := buildDSN(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	cp.mu.Lock()
-	defer cp.mu.Unlock()
-
-	e, ok := cp.pool[dsn]
-	if !ok {
-		e = &entry{}
-		cp.pool[dsn] = e
-	}
-	return cp.retainLocked(dsn, e), nil
-}
-
 func (cp *connPool) retainLocked(dsn string, e *entry) func() error {
 	e.refCount++
 	return sync.OnceValue(func() error {
@@ -93,7 +76,7 @@ func (cp *connPool) release(dsn string) error {
 		return nil
 	}
 
-	// temporal will start and stop DB connections multiple times. An outer lease keeps the
+	// temporal will start and stop DB connections multiple times. An outer database handle keeps the
 	// database alive across that churn and prevents loss of the cache and "db is closed" errors.
 	delete(cp.pool, dsn)
 	if e.db == nil {

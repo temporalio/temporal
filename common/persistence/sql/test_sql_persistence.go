@@ -22,12 +22,12 @@ import (
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	dbName          string
-	schemaDir       string
-	cfg             config.SQL
-	faultInjection  *config.FaultInjection
-	logger          log.Logger
-	releaseDatabase func() error
+	dbName         string
+	schemaDir      string
+	cfg            config.SQL
+	faultInjection *config.FaultInjection
+	logger         log.Logger
+	databases      []sqlplugin.GenericDB
 }
 
 type forceDatabaseDropper interface {
@@ -74,12 +74,17 @@ func (s *TestCluster) DatabaseName() string {
 
 // SetupTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) SetupTestDatabase() {
-	releaseDatabase, err := AcquireDatabaseLease(s.Config())
-	if err != nil {
-		s.logger.Fatal("AcquireDatabaseLease", tag.Error(err))
-	}
-	s.releaseDatabase = releaseDatabase
 	s.CreateDatabase()
+	databases, err := OpenDatabases(
+		s.Config(),
+		resolver.NewNoopResolver(),
+		s.logger,
+		metrics.NoopMetricsHandler,
+	)
+	if err != nil {
+		s.logger.Fatal("OpenDatabases", tag.Error(err))
+	}
+	s.databases = databases
 
 	if s.schemaDir == "" {
 		s.logger.Info("No schema directory provided, skipping schema setup")
@@ -111,8 +116,8 @@ func (s *TestCluster) Config() config.Persistence {
 
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
-	if err := s.releaseDatabase(); err != nil {
-		s.logger.Fatal("Close database lease", tag.Error(err))
+	if err := CloseDatabases(s.databases); err != nil {
+		s.logger.Fatal("Close databases", tag.Error(err))
 	}
 	s.DropDatabase()
 }
