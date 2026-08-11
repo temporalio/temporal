@@ -76,7 +76,7 @@ func (cp *connPool) release(dsn string) error {
 		return nil
 	}
 
-	// temporal will start and stop DB connections multiple times. An outer database handle keeps the
+	// temporal will start and stop DB connections multiple times. A factory-owned database handle keeps the
 	// database alive across that churn and prevents loss of the cache and "db is closed" errors.
 	delete(cp.pool, dsn)
 	if e.db == nil {
