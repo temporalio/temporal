@@ -1152,8 +1152,10 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	switch e := e.(type) {
 	case *fxevent.OnStartExecuting,
 		*fxevent.OnStopExecuting,
+		*fxevent.Invoking,
 		*fxevent.BeforeRun:
-		// Successful Fx lifecycle events are intentionally not logged.
+		// These events only signal that work is about to start. The
+		// corresponding completion events are logged if they fail.
 	case *fxevent.OnStartExecuted:
 		if e.Err != nil {
 			l.logger.Error(
