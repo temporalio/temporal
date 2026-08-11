@@ -15,7 +15,7 @@ type db struct {
 	dbKind sqlplugin.DbKind
 	dbName string
 
-	onClose func() error
+	release func() error
 
 	db        *sqlx.DB
 	tx        *sqlx.Tx
@@ -71,18 +71,14 @@ func (mdb *db) Rollback() error {
 	return mdb.tx.Rollback()
 }
 
-func (mdb *db) OnClose(hook func() error) {
-	mdb.onClose = hook
-}
-
 // Close closes the connection to the sqlite db
 func (mdb *db) Close() error {
-	// database connection will be automatically closed by the hook handler when all references are removed
-	if mdb.onClose == nil {
+	// database connection will be automatically closed by the release function when all references are removed
+	if mdb.release == nil {
 		return nil
 	}
 	// de-registers the database from conn pool
-	return mdb.onClose()
+	return mdb.release()
 }
 
 // PluginName returns the name of the plugin

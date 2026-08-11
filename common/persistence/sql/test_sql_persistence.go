@@ -22,12 +22,12 @@ import (
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	dbName         string
-	schemaDir      string
-	cfg            config.SQL
-	faultInjection *config.FaultInjection
-	logger         log.Logger
-	databaseLease  sqlplugin.DatabaseLease
+	dbName          string
+	schemaDir       string
+	cfg             config.SQL
+	faultInjection  *config.FaultInjection
+	logger          log.Logger
+	releaseDatabase func() error
 }
 
 type forceDatabaseDropper interface {
@@ -74,11 +74,11 @@ func (s *TestCluster) DatabaseName() string {
 
 // SetupTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) SetupTestDatabase() {
-	lease, err := acquireDatabaseLease(&s.cfg)
+	releaseDatabase, err := AcquireDatabaseLease(s.Config())
 	if err != nil {
 		s.logger.Fatal("AcquireDatabaseLease", tag.Error(err))
 	}
-	s.databaseLease = lease
+	s.releaseDatabase = releaseDatabase
 	s.CreateDatabase()
 
 	if s.schemaDir == "" {
@@ -111,7 +111,7 @@ func (s *TestCluster) Config() config.Persistence {
 
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
-	if err := s.databaseLease.Close(); err != nil {
+	if err := s.releaseDatabase(); err != nil {
 		s.logger.Fatal("Close database lease", tag.Error(err))
 	}
 	s.DropDatabase()

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sync"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -24,44 +23,6 @@ func RegisterPlugin(pluginName string, plugin sqlplugin.Plugin) {
 		panic("plugin " + pluginName + " already registered")
 	}
 	supportedPlugins[pluginName] = plugin
-}
-
-type databaseLeaseProvider interface {
-	AcquireDatabaseLease(cfg *config.SQL) (sqlplugin.DatabaseLease, error)
-}
-
-func acquireDatabaseLease(cfg *config.SQL) (sqlplugin.DatabaseLease, error) {
-	plugin, err := getPlugin(cfg.PluginName)
-	if err != nil {
-		return nil, err
-	}
-	if provider, ok := plugin.(databaseLeaseProvider); ok {
-		return provider.AcquireDatabaseLease(cfg)
-	}
-	return noopDatabaseLease{}, nil
-}
-
-// AcquireDatabaseLeases keeps every active SQL database available until the returned lease is closed.
-// Non-SQL stores are ignored.
-func AcquireDatabaseLeases(cfg config.Persistence) (sqlplugin.DatabaseLease, error) {
-	leases := &databaseLeases{}
-	names := [...]string{cfg.DefaultStore, cfg.VisibilityStore, cfg.SecondaryVisibilityStore}
-	for i, name := range names {
-		if name == "" || slices.Contains(names[:i], name) {
-			continue
-		}
-
-		sqlCfg := cfg.DataStores[name].SQL
-		if sqlCfg == nil {
-			continue
-		}
-		lease, err := acquireDatabaseLease(sqlCfg)
-		if err != nil {
-			return nil, errors.Join(err, leases.Close())
-		}
-		leases.leases = append(leases.leases, lease)
-	}
-	return leases, nil
 }
 
 // NewSQLDB creates a returns a reference to a logical connection to the
@@ -131,25 +92,4 @@ func GetPluginVisibilityQueryConverter(pluginName string) (sqlplugin.VisibilityQ
 		return nil, err
 	}
 	return plugin.GetVisibilityQueryConverter(), nil
-}
-
-type noopDatabaseLease struct{}
-
-func (noopDatabaseLease) Close() error {
-	return nil
-}
-
-type databaseLeases struct {
-	once   sync.Once
-	leases []sqlplugin.DatabaseLease
-	err    error
-}
-
-func (l *databaseLeases) Close() error {
-	l.once.Do(func() {
-		for i := len(l.leases) - 1; i >= 0; i-- {
-			l.err = errors.Join(l.err, l.leases[i].Close())
-		}
-	})
-	return l.err
 }

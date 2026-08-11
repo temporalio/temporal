@@ -12,15 +12,18 @@ import (
 	"go.temporal.io/server/common/resolver"
 )
 
-func TestAcquireDatabaseLeasesClosesAcquiredLeasesOnFailure(t *testing.T) {
+func TestAcquireDatabaseLeaseClosesAcquiredLeasesOnFailure(t *testing.T) {
 	const pluginName = "lease-test-rollback"
-	firstLease := &leaseTestLease{}
+	firstCloseCount := 0
 	provider := &leaseTestProvider{
-		acquire: func(cfg *config.SQL) (sqlplugin.DatabaseLease, error) {
+		acquire: func(cfg *config.SQL) (func() error, error) {
 			if cfg.DatabaseName == "second" {
 				return nil, errors.New("second lease failed")
 			}
-			return firstLease, nil
+			return func() error {
+				firstCloseCount++
+				return nil
+			}, nil
 		},
 	}
 	registerLeaseTestPlugin(t, pluginName, provider)
@@ -34,13 +37,13 @@ func TestAcquireDatabaseLeasesClosesAcquiredLeasesOnFailure(t *testing.T) {
 		},
 	}
 
-	lease, err := AcquireDatabaseLeases(cfg)
+	release, err := AcquireDatabaseLease(cfg)
 	require.EqualError(t, err, "second lease failed")
-	require.Nil(t, lease)
-	require.Equal(t, 1, firstLease.closeCount)
+	require.Nil(t, release)
+	require.Equal(t, 1, firstCloseCount)
 }
 
-func TestAcquireDatabaseLeasesIgnoresUnusedDataStores(t *testing.T) {
+func TestAcquireDatabaseLeaseIgnoresUnusedDataStores(t *testing.T) {
 	const pluginName = "lease-test-active"
 	registerLeaseTestPlugin(t, pluginName, leaseTestPlugin{})
 	cfg := config.Persistence{
@@ -51,28 +54,50 @@ func TestAcquireDatabaseLeasesIgnoresUnusedDataStores(t *testing.T) {
 		},
 	}
 
-	lease, err := AcquireDatabaseLeases(cfg)
+	release, err := AcquireDatabaseLease(cfg)
 	require.NoError(t, err)
-	require.NoError(t, lease.Close())
+	require.NoError(t, release())
 }
 
-func TestDatabaseLeasesCloseInReverseOrderAndJoinErrors(t *testing.T) {
+func TestAcquireDatabaseLeaseClosesInReverseOrderAndJoinsErrors(t *testing.T) {
+	const pluginName = "lease-test-close"
 	firstErr := errors.New("first close failed")
 	secondErr := errors.New("second close failed")
 	var order []string
-	leases := &databaseLeases{
-		leases: []sqlplugin.DatabaseLease{
-			&recordingLease{name: "first", order: &order, err: firstErr},
-			&recordingLease{name: "second", order: &order, err: secondErr},
+	provider := &leaseTestProvider{
+		acquire: func(cfg *config.SQL) (func() error, error) {
+			return func() error {
+				order = append(order, cfg.DatabaseName)
+				switch cfg.DatabaseName {
+				case "first":
+					return firstErr
+				case "second":
+					return secondErr
+				default:
+					return nil
+				}
+			}, nil
+		},
+	}
+	registerLeaseTestPlugin(t, pluginName, provider)
+	cfg := config.Persistence{
+		DefaultStore:    "a",
+		VisibilityStore: "b",
+		DataStores: map[string]config.DataStore{
+			"a": {SQL: &config.SQL{PluginName: pluginName, DatabaseName: "first"}},
+			"b": {SQL: &config.SQL{PluginName: pluginName, DatabaseName: "second"}},
 		},
 	}
 
-	err := leases.Close()
+	release, err := AcquireDatabaseLease(cfg)
+	require.NoError(t, err)
+
+	err = release()
 	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, secondErr)
 	require.Equal(t, []string{"second", "first"}, order)
 
-	require.Equal(t, err, leases.Close())
+	require.Equal(t, err, release())
 	require.Equal(t, []string{"second", "first"}, order)
 }
 
@@ -102,29 +127,9 @@ func (leaseTestPlugin) GetVisibilityQueryConverter() sqlplugin.VisibilityQueryCo
 
 type leaseTestProvider struct {
 	leaseTestPlugin
-	acquire func(*config.SQL) (sqlplugin.DatabaseLease, error)
+	acquire func(*config.SQL) (func() error, error)
 }
 
-func (p *leaseTestProvider) AcquireDatabaseLease(cfg *config.SQL) (sqlplugin.DatabaseLease, error) {
+func (p *leaseTestProvider) AcquireDatabaseLease(cfg *config.SQL) (func() error, error) {
 	return p.acquire(cfg)
-}
-
-type leaseTestLease struct {
-	closeCount int
-}
-
-func (l *leaseTestLease) Close() error {
-	l.closeCount++
-	return nil
-}
-
-type recordingLease struct {
-	name  string
-	order *[]string
-	err   error
-}
-
-func (l *recordingLease) Close() error {
-	*l.order = append(*l.order, l.name)
-	return l.err
 }
