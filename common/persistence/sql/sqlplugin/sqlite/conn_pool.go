@@ -26,23 +26,6 @@ func newConnPool() *connPool {
 	}
 }
 
-func (cp *connPool) AcquireLease(cfg *config.SQL) (func() error, error) {
-	dsn, err := buildDSN(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	cp.mu.Lock()
-	defer cp.mu.Unlock()
-
-	e, ok := cp.pool[dsn]
-	if !ok {
-		e = &entry{}
-		cp.pool[dsn] = e
-	}
-	return cp.retainLocked(dsn, e), nil
-}
-
 // Allocate allocates the shared database in the pool or returns already exists instance with the same DSN. If instance
 // for such DSN already exists, it will be returned instead. Each request counts as reference until Close.
 func (cp *connPool) Allocate(
@@ -73,6 +56,23 @@ func (cp *connPool) Allocate(
 		}
 	}
 	return e.db, cp.retainLocked(dsn, e), nil
+}
+
+func (cp *connPool) acquireLease(cfg *config.SQL) (func() error, error) {
+	dsn, err := buildDSN(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	e, ok := cp.pool[dsn]
+	if !ok {
+		e = &entry{}
+		cp.pool[dsn] = e
+	}
+	return cp.retainLocked(dsn, e), nil
 }
 
 func (cp *connPool) retainLocked(dsn string, e *entry) func() error {
