@@ -227,12 +227,12 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+        # Credentials stay: the action's own `git fetch` runs before it configures git auth.
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
           path: pr-head
+          # Untrusted PR head in its own repository; the action never fetches through it.
           persist-credentials: false
       - name: Claude PR review
         uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1.0.183
