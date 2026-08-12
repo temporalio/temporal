@@ -1,0 +1,9 @@
+=== RUN   TestFatalExample
+fatal error: concurrent map writes
+
+goroutine 18 [running]:
+mypackage.TestFatalExample(0xc000102e00)
+        /path/to/test_file.go:42 +0x100
+testing.tRunner(0xc000102e00, 0x1006992b0)
+        /opt/homebrew/go/src/testing/testing.go:1792 +0x184
+FAIL    mypackage    0.311s

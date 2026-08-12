@@ -346,6 +346,9 @@ func parseFailedTestsFromOutput(stdout string) []string {
 func parseFailureDetails(data string) string {
 	lines := normalizedFailureLines(data)
 
+	if block, ok := findLastAwaitFailureBlock(lines); ok {
+		return block
+	}
 	// Prefer assertion blocks because they contain the useful testify failure
 	// detail and can be selected from the end while ignoring trailing logs.
 	if block, ok := findLastAssertionFailureBlock(lines); ok {
@@ -369,6 +372,27 @@ func normalizedFailureLines(data string) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
+}
+
+func findLastAwaitFailureBlock(lines []string) (string, bool) {
+	for start := len(lines) - 1; start >= 0; start-- {
+		if !strings.Contains(lines[start], "await stats:") {
+			continue
+		}
+		end := len(lines)
+		for i := start + 1; i < len(lines); i++ {
+			if strings.HasPrefix(strings.TrimSpace(lines[i]), goTestFailLinePrefix) {
+				end = i + 1
+				break
+			}
+			if strings.TrimSpace(lines[i]) == "FAIL" {
+				end = i
+				break
+			}
+		}
+		return strings.Join(lines[start:end], "\n"), true
+	}
+	return "", false
 }
 
 func findLastAssertionFailureBlock(lines []string) (string, bool) {

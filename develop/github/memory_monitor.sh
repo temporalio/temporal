@@ -204,7 +204,7 @@ snapshot() {
   now="$(date +%s)"
 
   local status_line
-  status_line="$(printf "%s used=%s%% mem=%sMB procs=[%s]" "$timestamp" "$memory_pct" "$memory_used_mb" "$top_processes")"
+  status_line="$(printf "[monitor] %s used=%s%% mem=%sMB procs=[%s]" "$timestamp" "$memory_pct" "$memory_used_mb" "$top_processes")"
   ensure_snapshot_dirs
   echo "$status_line" >> "$SNAPSHOT_HISTORY_FILE"
   print_snapshot_status "$now" "$status_line"
