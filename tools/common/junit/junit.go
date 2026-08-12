@@ -64,7 +64,7 @@ func Read(path string) (*Testsuites, error) {
 func Write(path string, testsuites *Testsuites) error {
 	f, err := os.Create(path)
 	if err != nil {
-		return fmt.Errorf("failed to open JUnit report file: %w", err)
+		return fmt.Errorf("failed to create JUnit report file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 
