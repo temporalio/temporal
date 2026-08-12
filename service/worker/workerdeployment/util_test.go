@@ -535,3 +535,58 @@ func (d *deploymentWorkflowClientSuite) TestSignalVersionReactivation_FailureAll
 		Times(1)
 	d.NoError(d.deploymentClient.SignalVersionReactivation(context.Background(), d.ns, dep, build, 5))
 }
+
+func TestCheckForMissingTaskQueues(t *testing.T) {
+	t.Parallel()
+	client := &ClientImpl{}
+
+	mkTQ := func(name string, tqType enumspb.TaskQueueType) *deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo {
+		return &deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
+			Name: name,
+			Type: tqType,
+		}
+	}
+	mkVersion := func(tqs ...*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo) *deploymentpb.WorkerDeploymentVersionInfo {
+		return &deploymentpb.WorkerDeploymentVersionInfo{TaskQueueInfos: tqs}
+	}
+
+	t.Run("worker commands TQ in prev version is excluded from missing list", func(t *testing.T) {
+		prev := mkVersion(
+			mkTQ("user-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+			mkTQ("temporal-sys/worker-commands/my-ns/some-key", enumspb.TASK_QUEUE_TYPE_NEXUS),
+		)
+		next := mkVersion(
+			mkTQ("user-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		)
+		missing, err := client.checkForMissingTaskQueues(prev, next)
+		require.NoError(t, err)
+		require.Empty(t, missing)
+	})
+
+	t.Run("user TQ missing from new version is reported", func(t *testing.T) {
+		prev := mkVersion(
+			mkTQ("user-tq-1", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+			mkTQ("user-tq-2", enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		)
+		next := mkVersion(
+			mkTQ("user-tq-1", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		)
+		missing, err := client.checkForMissingTaskQueues(prev, next)
+		require.NoError(t, err)
+		require.Len(t, missing, 1)
+		require.Equal(t, "user-tq-2", missing[0].GetName())
+	})
+
+	t.Run("all TQs present returns empty", func(t *testing.T) {
+		prev := mkVersion(
+			mkTQ("tq-a", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		)
+		next := mkVersion(
+			mkTQ("tq-a", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		)
+		missing, err := client.checkForMissingTaskQueues(prev, next)
+		require.NoError(t, err)
+		require.Empty(t, missing)
+	})
+
+}

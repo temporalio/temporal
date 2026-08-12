@@ -15,6 +15,7 @@ const (
 	WorkerControllerPerNSWorkerTaskQueue = "temporal-sys-worker-controller-per-ns-tq"
 	internalTaskQueuePrefix              = "temporal-sys-"
 	internalTaskQueuePerNSPrefix         = "temporal-sys-per-ns-"
+	workerCommandsTaskQueuePrefix        = "temporal-sys/worker-commands/"
 
 	MigrationActivityTQ           = "temporal-sys-migration-activity-tq"
 	AddSearchAttributesActivityTQ = "temporal-sys-add-search-attributes-activity-tq"
@@ -37,9 +38,16 @@ func IsInternalTaskQueueKind(kind enumspb.TaskQueueKind) bool {
 	return false
 }
 
-// IsInternalTaskQueue returns true if the task queue name belongs to an internal system task queue.
+// IsInternalTaskQueue returns true if the task queue name belongs to an internal system task queue
+// (e.g. temporal-sys-per-ns-tq).
 func IsInternalTaskQueue(taskQueue string) bool {
 	return strings.HasPrefix(taskQueue, internalTaskQueuePrefix)
+}
+
+// IsWorkerCommandsTaskQueue returns true if the task queue name is a worker commands control queue
+// (e.g. temporal-sys/worker-commands/{ns}/{key}).
+func IsWorkerCommandsTaskQueue(taskQueue string) bool {
+	return strings.HasPrefix(taskQueue, workerCommandsTaskQueuePrefix)
 }
 
 // IsInternalPerNsTaskQueue returns true if the task queue name belongs to a per-namespace internal system worker

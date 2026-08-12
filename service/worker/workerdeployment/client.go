@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -1955,6 +1956,12 @@ func (d *ClientImpl) checkForMissingTaskQueues(prevCurrentVersionInfo, newCurren
 
 	missingTaskQueues := []*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{}
 	for _, prevTaskQueue := range prevCurrentVersionTaskQueues {
+		// Defensive check: worker commands task queues (temporal-sys/worker-commands/...)
+		// don't support versioning but may have been incorrectly registered in a version.
+		// Exclude them from the missing TQ check.
+		if primitives.IsWorkerCommandsTaskQueue(prevTaskQueue.GetName()) {
+			continue
+		}
 		found := false
 		for _, newTaskQueue := range newCurrentVersionTaskQueues {
 			if prevTaskQueue.GetName() == newTaskQueue.GetName() && prevTaskQueue.GetType() == newTaskQueue.GetType() {
