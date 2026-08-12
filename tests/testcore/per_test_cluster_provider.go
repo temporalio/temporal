@@ -82,7 +82,11 @@ func (p *perTestClusterProvider) createCluster(
 }
 
 func (p *perTestClusterProvider) testParallelism(configured int) int {
-	return min(configured, cap(p.live))
+	parallelism := min(configured, cap(p.live)/2)
+	if parallelism < 1 {
+		panic("per-test cluster limit must be at least 2")
+	}
+	return parallelism
 }
 
 func (l *perTestClusterLease) release() error {

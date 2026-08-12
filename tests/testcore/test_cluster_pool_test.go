@@ -66,6 +66,16 @@ func TestPerTestClusterProviderBoundsOwnedClusters(t *testing.T) {
 	require.NoError(t, second.release())
 }
 
+func TestPerTestClusterProviderLeavesHeadroomForParallelTests(t *testing.T) {
+	provider := &perTestClusterProvider{live: make(chan struct{}, 4)}
+	require.Equal(t, 2, provider.testParallelism(4))
+}
+
+func TestPerTestClusterProviderRejectsLimitWithoutHeadroom(t *testing.T) {
+	provider := &perTestClusterProvider{live: make(chan struct{}, 1)}
+	require.Panics(t, func() { provider.testParallelism(1) })
+}
+
 func TestPerTestClusterProviderCleansUpFailedCreation(t *testing.T) {
 	wantErr := errors.New("boot failed")
 	var destroyed atomic.Int32

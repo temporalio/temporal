@@ -16,7 +16,7 @@ import (
 var testClusterRouter *clusterRouter
 
 func init() {
-	maxLive := positiveEnv("TEMPORAL_TEST_LIVE_CLUSTERS", runtime.GOMAXPROCS(0))
+	maxLive := positiveEnv("TEMPORAL_TEST_LIVE_CLUSTERS", 2*runtime.GOMAXPROCS(0))
 	router := &clusterRouter{
 		legacySlots: make(chan struct{}, runtime.GOMAXPROCS(0)),
 	}

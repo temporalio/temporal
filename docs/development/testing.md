@@ -17,7 +17,7 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_LOG_FILE_FORMAT`: Output format for the log file. Available options: `json` (default) or `console`
 - `TEMPORAL_TEST_LOG_FILE_LEVEL`: Minimum verbosity level written to the log file. Available levels: `debug` (default), `info`, `warn`, `error`, `fatal`
 - `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
-- `TEMPORAL_TEST_LIVE_CLUSTERS`: Maximum number of per-test clusters that may be live concurrently. Defaults to `GOMAXPROCS`.
+- `TEMPORAL_TEST_LIVE_CLUSTERS`: Maximum number of per-test clusters that may be live concurrently. Defaults to twice `GOMAXPROCS` and must be at least 2. Test parallelism is limited to at most half this value so nested parallel tests cannot deadlock cluster admission.
 - `TEMPORAL_TEST_TIMEOUT`: Sets the duration timeout per test (e.g., `90s` for 90 seconds). This can be overridden per-test using `testcore.WithTimeout()`. The timeout is multiplied by `debug.TimeoutMultiplier` when debugging.
 - `TEMPORAL_TEST_DATA_ENCODING`: Controls the encoding used for persistence DataBlobs. Available options: `proto3` (default) or `json`.
 

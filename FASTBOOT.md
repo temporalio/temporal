@@ -26,9 +26,18 @@ The implementation is based on PR #10643, which provides smaller CI runners,
 five functional-test shards, bounded test scheduler worker counts, and
 factory-owned SQLite connections. On top of that base, every `NewEnv` now creates
 and owns one cluster until its test cleanup. There is no pooled/shared execution
-mode and no warm-spare inventory. A semaphore, defaulting to `GOMAXPROCS` and
+mode and no warm-spare inventory. A semaphore, defaulting to `2 * GOMAXPROCS` and
 configurable with `TEMPORAL_TEST_LIVE_CLUSTERS`, bounds concurrent cluster
 ownership. CI-class `-race` validation on all persistence backends is pending.
+
+The first four-core CI run exposed a scheduling deadlock when both the live
+cluster bound and `-test.parallel` were four. A parent test can retain its
+cluster while its parallel children wait to run; if four unrelated tests then
+occupy all Go test slots while waiting for those clusters, neither side can
+progress. Live-cluster admission therefore keeps one additional cluster slot
+per parallel test: the default is `2 * GOMAXPROCS`, and `RunTests` limits
+`-test.parallel` to at most half the configured live-cluster bound. This keeps
+four-way test execution on four-core CI while bounding ownership at eight.
 
 ### Changes implemented
 
@@ -46,8 +55,8 @@ ownership. CI-class `-race` validation on all persistence backends is pending.
   their connections, so test teardown can release an in-memory database without
   a second lease abstraction in the test runner.
 - The per-test provider owns a live-cluster semaphore. A lease holds its slot
-  through cluster destruction, and `RunTests` caps `-test.parallel` to the same
-  bound.
+  through cluster destruction, and `RunTests` preserves one admission slot of
+  headroom per parallel test to avoid nested-subtest lock inversion.
 - Every test option and dynamic-config override is applied while its new cluster
   boots. The old shared-cluster scoping rules and `WithDedicatedCluster` marker
   are gone.
