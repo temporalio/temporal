@@ -22,16 +22,18 @@ var _ umpire.Lifecycled = (*NexusOperation)(nil)
 // "<callerWorkflowID>:<scheduledEventID>" and it is rooted under the caller
 // Workflow (see UMPIRE_NEXUS.md).
 type NexusOperation struct {
-	ScheduledEventID    string
-	WorkflowID          string
-	Outcome             string // set on a terminal transition, from the span's nexus.outcome
-	Attempt             int    // observed retry attempt, from chasm.transition telemetry
-	NamespaceID         string
-	Links               []*commonpb.Link
-	StartToCloseTimeout time.Duration
-	TimeoutType         enumspb.TimeoutType
-	TimeoutMessage      string
-	FSM                 *umpire.Lifecycle
+	ScheduledEventID         string
+	WorkflowID               string
+	Outcome                  string // set on a terminal transition, from the span's nexus.outcome
+	Attempt                  int    // observed retry attempt, from chasm.transition telemetry
+	NamespaceID              string
+	Links                    []*commonpb.Link
+	StartToCloseTimeout      time.Duration
+	TimeoutType              enumspb.TimeoutType
+	TimeoutMessage           string
+	CancelRequestFailures    int
+	LastCancelRequestFailure string
+	FSM                      *umpire.Lifecycle
 }
 
 func NewNexusOperation() *NexusOperation {
@@ -212,6 +214,11 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			if op.FSM.Fire(ctx, NexusReject) {
 				op.Outcome = e.Code
 			}
+		case *fact.NexusOperationCancelRequestFailed:
+			op.capture(e.ScheduledEventID, e.WorkflowID)
+			op.NamespaceID = e.NamespaceID
+			op.CancelRequestFailures++
+			op.LastCancelRequestFailure = e.FailureMessage
 		case *fact.ChasmTransition:
 			// A real CHASM operation, observed via the generic chasm.transition
 			// telemetry. Its stable request ID is the operation's identity (present
@@ -229,6 +236,10 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			op.capture("", e.OperationID)
 			op.NamespaceID = e.NamespaceID
 			op.Links = e.Links
+			if e.CancellationState == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED && op.CancelRequestFailures == 0 {
+				op.CancelRequestFailures++
+				op.LastCancelRequestFailure = e.CancellationFailure
+			}
 		case *fact.NexusOperationHistorySnapshot:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
 			op.NamespaceID = e.NamespaceID

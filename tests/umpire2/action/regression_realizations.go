@@ -20,6 +20,7 @@ const (
 	RegressionNexusCompleteStarted                    = "nexus.complete.started"
 	RegressionNexusCompleteCallbackFailed             = "nexus.complete.callback_failed"
 	RegressionNexusCancel                             = "nexus.cancel"
+	RegressionNexusCancelWithRetry                    = "nexus.cancel_with_retry"
 	RegressionNexusTimeout                            = "nexus.timeout"
 	RegressionNexusStartNewHandler                    = "nexus.start.new_handler"
 	RegressionNexusStartAttachHandler                 = "nexus.start.attach_handler"

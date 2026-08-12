@@ -103,6 +103,55 @@ func TestProtocolActionDefensivelyCopiesDeclaration(t *testing.T) {
 	require.IsType(t, compilerRealizer{}, again.Realize)
 }
 
+func TestProtocolRelationsAreValidatedAndDefensivelyCopied(t *testing.T) {
+	declaration := activeDeclaration()
+	declaration.Relations = []umpire.RelationSchema{{
+		Type:              "compiler-parent",
+		Source:            "CompilerLifecycleEntity",
+		Target:            "CompilerLifecycleEntity",
+		SourceCardinality: umpire.RelationMany,
+		TargetCardinality: umpire.RelationOne,
+	}}
+	protocol, err := Compile(declaration)
+	require.NoError(t, err)
+
+	declaration.Relations[0].Target = "mutated"
+	schemas := protocol.RelationSchemas()
+	require.Equal(t, []umpire.RelationSchema{{
+		Type:              "compiler-parent",
+		Source:            "CompilerLifecycleEntity",
+		Target:            "CompilerLifecycleEntity",
+		SourceCardinality: umpire.RelationMany,
+		TargetCardinality: umpire.RelationOne,
+	}}, schemas)
+	schemas[0].Target = "changed after read"
+	require.Equal(t, umpire.EntityType("CompilerLifecycleEntity"), protocol.RelationSchemas()[0].Target)
+
+	store, err := protocol.NewRelationStore()
+	require.NoError(t, err)
+	added, err := store.Add(umpire.RelationEdge{
+		Type:   "compiler-parent",
+		Source: umpire.NewEntityID("CompilerLifecycleEntity", "parent"),
+		Target: umpire.NewEntityID("CompilerLifecycleEntity", "child"),
+	})
+	require.NoError(t, err)
+	require.True(t, added)
+}
+
+func TestProtocolRelationsRejectUnknownEndpoints(t *testing.T) {
+	declaration := activeDeclaration()
+	declaration.Relations = []umpire.RelationSchema{{
+		Type:   "compiler-missing",
+		Source: "CompilerLifecycleEntity",
+		Target: "MissingEntity",
+	}}
+
+	protocol, err := Compile(declaration)
+
+	require.Nil(t, protocol)
+	require.ErrorContains(t, err, `relation "compiler-missing" targets unknown entity "MissingEntity"`)
+}
+
 func TestProtocolRegisterCreatesEntitiesFromDeclaredFacts(t *testing.T) {
 	target := &umpire.EntityPath{EntityID: umpire.NewEntityID("CompilerEntity", "entity-id")}
 	fact := &CompilerFact{target: target}

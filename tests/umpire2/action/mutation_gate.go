@@ -16,9 +16,9 @@ import (
 
 // deferredMutationKinds are scalar proto field kinds whose invalid-input domains are not yet
 // modeled (tracked as follow-ups in UMPIRE_ERR.md). A field of such a kind is out of scope on
-// purpose; a covered kind (string / Duration) must be enumerated; anything else is a gap.
+// purpose; a covered kind (string / enum / Duration / Payload) must be enumerated; anything else
+// is a gap.
 var deferredMutationKinds = map[protoreflect.Kind]bool{
-	protoreflect.EnumKind:     true,
 	protoreflect.Int32Kind:    true,
 	protoreflect.Int64Kind:    true,
 	protoreflect.Uint32Kind:   true,
@@ -37,10 +37,10 @@ var deferredMutationKinds = map[protoreflect.Kind]bool{
 
 // ValidateMutationCoverage checks that the invalid-input enumeration is exhaustive over each
 // mutation-covered request descriptor: every scalar field is either enumerated (reflection
-// produced a Domain for it — string / Duration today) or of a consciously-deferred kind. A
-// covered-kind field reflection missed, or a field of an unclassified kind, is a gap — so a new
-// request field can't be silently untested. Non-scalar messages (Payload, metadata) and
-// collections are deferred as a whole.
+// produced a Domain for it — string / enum / Duration / Payload today) or of a consciously-deferred
+// kind. A covered-kind field reflection missed, or a field of an unclassified kind, is a gap — so
+// a new request field can't be silently untested. Other non-scalar messages and collections are
+// deferred as a whole.
 func ValidateMutationCoverage() error {
 	var problems []string
 	for _, req := range mutationRequests() {
@@ -75,12 +75,12 @@ func fieldGaps(req protoreflect.ProtoMessage, covered map[string]bool) []string 
 		}
 		name := string(fd.Name())
 		switch {
-		case fd.Kind() == protoreflect.StringKind || isDurationField(fd):
+		case fd.Kind() == protoreflect.StringKind || fd.Kind() == protoreflect.EnumKind || isDurationField(fd) || isPayloadField(fd):
 			if !covered[name] {
 				gaps = append(gaps, fmt.Sprintf("%s (%s: covered kind but not enumerated)", name, fd.Kind()))
 			}
 		case fd.Kind() == protoreflect.MessageKind:
-			// Non-Duration messages (Payload, user metadata, search attributes) are deferred.
+			// Other messages (user metadata, search attributes) are deferred.
 		case deferredMutationKinds[fd.Kind()]:
 			// Consciously out of scope.
 		default:

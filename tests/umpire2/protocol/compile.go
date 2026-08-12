@@ -18,6 +18,8 @@ func Compile(declaration Declaration) (*Protocol, error) {
 		entities:    make(map[umpire.EntityType]compiledEntity, len(declaration.Entities)),
 		actions:     make(map[ActionKey]umpire.Action),
 		gaps:        make(map[ActionKey]string),
+		relations:   slices.Clone(declaration.Relations),
+		derivers:    slices.Clone(declaration.RelationDerivers),
 		regression:  declaration.Regression.Clone(),
 	}
 	factTypes := make(map[reflect.Type]struct{}, len(declaration.Facts))
@@ -91,6 +93,22 @@ func Compile(declaration Declaration) (*Protocol, error) {
 			if err := protocol.addGap(entity.Type, lifecycle, gap); err != nil {
 				return nil, err
 			}
+		}
+	}
+	if _, err := umpire.NewRelationStore(protocol.relations...); err != nil {
+		return nil, fmt.Errorf("protocol: relations: %w", err)
+	}
+	for _, relation := range protocol.relations {
+		if _, exists := protocol.entities[relation.Source]; !exists {
+			return nil, fmt.Errorf("protocol: relation %q sources unknown entity %q", relation.Type, relation.Source)
+		}
+		if _, exists := protocol.entities[relation.Target]; !exists {
+			return nil, fmt.Errorf("protocol: relation %q targets unknown entity %q", relation.Type, relation.Target)
+		}
+	}
+	for index, derive := range protocol.derivers {
+		if derive == nil {
+			return nil, fmt.Errorf("protocol: relation deriver %d is nil", index)
 		}
 	}
 	return protocol, nil

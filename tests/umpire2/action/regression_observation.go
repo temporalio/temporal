@@ -160,6 +160,10 @@ func (p *regressionPath) awaitAtoms(ctx context.Context, atoms []coreregress.Com
 }
 
 func (p *regressionPath) atomSatisfied(ctx context.Context, atom coreregress.CompletedAtom, bindings coreregress.Bindings, historical bool) bool {
+	if atom.Predicate == "nexus.cancel_request_failed" && len(atom.Arguments) == 1 {
+		operationID, ok := bindingString(bindings, atom.Arguments[0].SymbolName)
+		return ok && (p.standaloneCancellationFailed(ctx, operationID) || p.historyContainsNexusEvent(ctx, operationID, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED))
+	}
 	if atom.Predicate == "workflow.state" && len(atom.Arguments) == 2 {
 		return p.workflowStateSatisfied(ctx, atom, bindings, historical)
 	}
@@ -206,6 +210,31 @@ func (p *regressionPath) atomSatisfied(ctx context.Context, atom coreregress.Com
 		}
 	}
 	return p.historyNexusStateReached(ctx, identity, state)
+}
+
+func (p *regressionPath) standaloneCancellationFailed(ctx context.Context, operationID string) bool {
+	response, err := p.environment.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+		Namespace:   p.environment.Namespace().String(),
+		OperationId: operationID,
+		RunId:       p.context.RunID,
+	})
+	return err == nil && response.GetInfo().GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED
+}
+
+func (p *regressionPath) historyContainsNexusEvent(ctx context.Context, workflowID string, eventType enumspb.EventType) bool {
+	response, err := p.environment.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: p.environment.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+	})
+	if err != nil {
+		return false
+	}
+	for _, event := range response.GetHistory().GetEvents() {
+		if event.GetEventType() == eventType {
+			return true
+		}
+	}
+	return false
 }
 
 func observeWorkflowRunID(

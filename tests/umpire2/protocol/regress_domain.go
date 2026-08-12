@@ -20,6 +20,7 @@ func defaultRegressionDomain() *coreregress.Domain {
 	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.HandlerWorkflowSchema(), ExclusiveBy: []int{0}})
 	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.ChildOfSchema(), ExclusiveBy: []int{0}})
 	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.StartToCloseSchema(), ExclusiveBy: []int{0}})
+	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.CancelRequestFailedSchema(), ExclusiveBy: []int{0}})
 
 	mustAddResource(domain, coreregress.ResourceCapability{Name: "namespace", Realization: action.RegressionResourceNamespace})
 	mustAddResource(domain, coreregress.ResourceCapability{Name: "task-queue", DependsOn: []string{"namespace"}, Realization: action.RegressionResourceTaskQueue})
@@ -150,6 +151,16 @@ func registerNexusActions(domain *coreregress.Domain) {
 		Preconditions: []coreregress.AtomTemplate{nexusState("operation", nexus.Started)},
 		Effects:       []coreregress.AtomTemplate{nexusState("operation", nexus.Canceled)},
 		Realization:   action.RegressionNexusCancel,
+	})
+	mustAddAction(domain, coreregress.ActionCapability{
+		Schema:        nexus.CancelWithRetrySchema(),
+		Variables:     []coreregress.Variable{op},
+		Preconditions: []coreregress.AtomTemplate{nexusState("operation", nexus.Started)},
+		Effects: []coreregress.AtomTemplate{
+			coreregress.Atom("nexus.cancel_request_failed", coreregress.TemplateVar("operation")),
+			nexusState("operation", nexus.Canceled),
+		},
+		Realization: action.RegressionNexusCancelWithRetry,
 	})
 	mustAddAction(domain, coreregress.ActionCapability{
 		Schema:    coreregress.ActionSchema("nexus.timeout", coreregress.SymbolParameter("operation", nexus.OperationType)),

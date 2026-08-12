@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	testmonitor "go.temporal.io/server/tests/testcore/monitor"
+	"go.temporal.io/server/tests/umpire2"
 )
 
 type TestEnvSuite struct {
@@ -71,4 +72,11 @@ func TestUmpireMonitorFactoryRequiresDedicatedCluster(t *testing.T) {
 	require.Nil(t, monitor)
 	require.ErrorIs(t, err, wantErr)
 	require.Equal(t, 1, calls)
+}
+
+func TestDefaultUmpireMonitorFactoryUsesV2(t *testing.T) {
+	monitor, err := defaultUmpireMonitorFactory(log.NewNoopLogger())
+
+	require.NoError(t, err)
+	require.IsType(t, &umpire2.Monitor{}, monitor)
 }

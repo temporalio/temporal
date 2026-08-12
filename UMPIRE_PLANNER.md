@@ -1,5 +1,10 @@
 # Umpire — Planner (the brains): spec & how a developer writes a test
 
+> **Status: component reference; implemented for per-entity route planning.** The pure planner,
+> action-plan integration, and sparse regression compiler are built. Cross-entity authoring is
+> available in sparse regressions, and the protocol now has a typed runtime relation model;
+> relation-aware general planning remains planned.
+
 The Planner is Umpire's active **brains**. Where the **Driver**
 ([`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md)) is the mechanics that turn abstract events into real
 traffic, the Planner decides *what* to reach and *how*: given a target state or a set of

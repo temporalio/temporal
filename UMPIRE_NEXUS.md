@@ -1,5 +1,10 @@
 # Umpire — Nexus Coverage Plan
 
+> **Status: design with a substantial implemented base.** Nexus facts, lifecycle models, actions,
+> link/timeout rules, and sparse regression proofs exist in v2. Generic CHASM transition telemetry
+> covers CHASM-backed operations; the older HSM-specific instrumentation proposal below remains
+> historical context and may still apply to non-CHASM paths.
+
 How to extend the umpire from workflow-update coverage to **Nexus operations**. For the *why*
 read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md); for *how it fits together* read
 [`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md); for current status read [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).

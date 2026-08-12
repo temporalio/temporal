@@ -1,5 +1,8 @@
 # Umpire — Prior Art
 
+> **Status: historical/research.** This document preserves internal predecessor analysis and must
+> not be used as the current implementation inventory; see `UMPIRE_PLAN.md` for status.
+
 External designs Umpire draws from, consolidated. Each section is a self-contained reading of
 one prior effort, ranked by value to Umpire; the table below is the synthesis — what we adopted
 from each and what we deliberately left behind. For the system itself read

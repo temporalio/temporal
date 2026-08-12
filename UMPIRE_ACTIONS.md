@@ -1,7 +1,8 @@
 # UMPIRE — The Actions Model
 
-> **Status: implemented (Phases 1–5).** This document is both the design and, now, a description
-> of working code — see the **Implementation** section below and `PLAN.md` for the phased build
+> **Status: component reference; implemented (Phases 1–5).** This document is both the design and,
+> now, a description of working code — see the **Implementation** section below and
+> `UMPIRE_PLAN.md` for the phased build
 > and what remains. The hand-coded `EnvFunc`s the "Why" describes have largely been retired in
 > favour of a generic runtime + declared actions + a planner that computes the drives.
 
@@ -248,7 +249,7 @@ synthesized, not written.
 
 ## Implementation
 
-Built as `PLAN.md` describes, split along umpire's existing framework/registration seam.
+Built as `UMPIRE_PLAN.md` describes, split along umpire's existing framework/registration seam.
 
 **`common/testing/umpire/action.go`** — the domain-agnostic schema and runtime:
 - `Action`, `Ref`, `Pre`, `Effect`, `Kind` (`ClientRPC` / `WorkerCommand` / `HandlerResponse` /

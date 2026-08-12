@@ -1,5 +1,10 @@
 # Umpire — Tracing & Trace-Derived Fault Injection
 
+> **Status: design with a focused implementation.** Dynamic footprint learning, reconciliation,
+> novelty-guided fault scheduling, bounded normalized semantic recording, atomic persistence, and
+> ordered/causal refinement comparison are implemented. Checked-in operational golden traces and
+> cross-task causal association remain planned.
+
 How Umpire can learn, cache, and fault-test the *underlying operations* a model transition
 actually performs — **without hard-coding either the faults or the gRPC/persistence calls they
 target**. The calls are **observed** from a happy-path run over OTEL + interceptors, **checked

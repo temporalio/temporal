@@ -25,6 +25,7 @@ import (
 	umpirefw "go.temporal.io/server/common/testing/umpire"
 	coreregress "go.temporal.io/server/common/testing/umpire/regress"
 	regressnexus "go.temporal.io/server/tests/umpire2/regress/nexus"
+	regressrpc "go.temporal.io/server/tests/umpire2/regress/rpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -107,7 +108,7 @@ func (p *regressionPath) InstallAction(_ context.Context, step coreregress.Compl
 		p.policy.setStart(&nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil)
 	case RegressionNexusScheduleDefault, RegressionNexusScheduleEmbedded, RegressionNexusSchedule,
 		RegressionNexusCompleteScheduled, RegressionNexusCompleteStarted, RegressionNexusCompleteCallbackFailed,
-		RegressionNexusCancel, RegressionNexusTimeout, RegressionNexusStartNewHandler, RegressionNexusStartAttachHandler,
+		RegressionNexusCancel, RegressionNexusCancelWithRetry, RegressionNexusTimeout, RegressionNexusStartNewHandler, RegressionNexusStartAttachHandler,
 		RegressionNexusCompleteFromHandler, RegressionWorkflowComplete, RegressionWorkflowObserveRunID:
 		// Proactive realizations perform their work in Fire.
 	case RegressionNexusStartActivity:
@@ -128,6 +129,13 @@ func (p *regressionPath) ArmPolicy(_ context.Context, policy coreregress.Complet
 		return nil, fmt.Errorf("policy %s requires one RPC literal", policy.Name)
 	}
 	method := fmt.Sprint(policy.Arguments[0].Value)
+	if policy.Realization == RegressionPolicyNexusFailNext && method == string(regressrpc.CancelNexusOperation) {
+		p.policy.setNextCancelError(nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "umpire regression: injected cancellation rejection"))
+		return func(context.Context) error {
+			p.policy.setNextCancelError(nil)
+			return nil
+		}, nil
+	}
 	transient := policy.Realization == RegressionPolicyNexusFailNext
 	cleanup, err := armRegressionFault(p.context, method, transient)
 	if err != nil {
@@ -168,7 +176,7 @@ func (p *regressionPath) Fire(ctx context.Context, step coreregress.CompletedSte
 		return err
 	case RegressionNexusTimeout, RegressionNexusCompleteFromHandler, RegressionNexusStartActivity:
 		return nil
-	case RegressionNexusCancel:
+	case RegressionNexusCancel, RegressionNexusCancelWithRetry:
 		return p.cancelOperation(ctx, step.Action, bindings)
 	case RegressionNexusStartNewHandler, RegressionNexusStartAttachHandler:
 		return p.startHandlerOperation(ctx, step.Action, bindings)
@@ -304,7 +312,36 @@ func (p *regressionPath) cancelOperation(ctx context.Context, action coreregress
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+	if action.Realization == RegressionNexusCancelWithRetry {
+		if err := p.awaitStandaloneCancellationState(ctx, operationID, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED); err != nil {
+			return err
+		}
+	}
 	return (completion{opErr: nexus.NewOperationCanceledErrorf("umpire sparse regression cancellation")}).Fire(ctx, p.context, umpirefw.Action{})
+}
+
+func (p *regressionPath) awaitStandaloneCancellationState(
+	ctx context.Context,
+	operationID string,
+	want enumspb.NexusOperationCancellationState,
+) error {
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		response, err := p.environment.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   p.environment.Namespace().String(),
+			OperationId: operationID,
+			RunId:       p.context.RunID,
+		})
+		if err == nil && response.GetInfo().GetCancellationInfo().GetState() == want {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w waiting for cancellation state %s", ctx.Err(), want)
+		case <-ticker.C:
+		}
+	}
 }
 
 func (p *regressionPath) startStandalone(ctx context.Context, step coreregress.CompletedStep, bindings coreregress.Bindings) error {

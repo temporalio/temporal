@@ -3,16 +3,30 @@
 package protocol
 
 import (
+	"errors"
+	"fmt"
+
 	"go.temporal.io/server/common/testing/umpire"
 	coreregress "go.temporal.io/server/common/testing/umpire/regress"
 )
 
 // Declaration is the authoring form of a protocol.
 type Declaration struct {
-	Facts      []umpire.Fact
-	Entities   []EntityDeclaration
-	Regression *coreregress.Domain
+	Facts            []umpire.Fact
+	Entities         []EntityDeclaration
+	Relations        []umpire.RelationSchema
+	RelationDerivers []RelationDeriver
+	Regression       *coreregress.Domain
 }
+
+// RelationMutation is one fact-derived change to runtime relation state.
+type RelationMutation struct {
+	Edge   umpire.RelationEdge
+	Remove bool
+}
+
+// RelationDeriver translates one observed fact into zero or more relation mutations.
+type RelationDeriver func(umpire.Fact) []RelationMutation
 
 // EntityDeclaration associates an entity factory with its fact subscriptions and actions.
 type EntityDeclaration struct {
@@ -55,5 +69,41 @@ type Protocol struct {
 	entities    map[umpire.EntityType]compiledEntity
 	actions     map[ActionKey]umpire.Action
 	gaps        map[ActionKey]string
+	relations   []umpire.RelationSchema
+	derivers    []RelationDeriver
 	regression  *coreregress.Domain
+}
+
+// RelationSchemas returns a defensive copy of the protocol's relation declarations.
+func (p *Protocol) RelationSchemas() []umpire.RelationSchema {
+	return append([]umpire.RelationSchema(nil), p.relations...)
+}
+
+// NewRelationStore creates empty runtime relation state for this protocol.
+func (p *Protocol) NewRelationStore() (*umpire.RelationStore, error) {
+	return umpire.NewRelationStore(p.relations...)
+}
+
+// ApplyRelations derives and atomically applies relation mutations from observed facts.
+func (p *Protocol) ApplyRelations(store *umpire.RelationStore, facts []umpire.Fact) []error {
+	if store == nil {
+		return []error{errors.New("protocol: relation store is nil")}
+	}
+	var errs []error
+	for _, observed := range facts {
+		for _, derive := range p.derivers {
+			for _, mutation := range derive(observed) {
+				var err error
+				if mutation.Remove {
+					_, err = store.Remove(mutation.Edge)
+				} else {
+					_, err = store.Add(mutation.Edge)
+				}
+				if err != nil {
+					errs = append(errs, fmt.Errorf("protocol: derive relation from %s: %w", observed.Name(), err))
+				}
+			}
+		}
+	}
+	return errs
 }

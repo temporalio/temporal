@@ -44,8 +44,9 @@ func TestRepresentativePlansCompileAgainstDefaultDomain(t *testing.T) {
 			nexus.State("op", nexus.Started),
 			coreregress.During(
 				nexus.FailNext(rpc.CancelNexusOperation),
-				nexus.Cancel("op"),
+				nexus.CancelWithRetry("op"),
 			),
+			nexus.CancelRequestFailed("op"),
 			nexus.State("op", nexus.Canceled),
 		),
 		"start to close timeout": coreregress.OnePath(

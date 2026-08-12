@@ -66,6 +66,7 @@ func TestDefaultMatchesModelStateFactSet(t *testing.T) {
 		"NexusOperationCanceled",
 		"NexusOperationTimedOut",
 		"NexusOperationRejected",
+		"NexusOperationCancelRequestFailed",
 		"NexusOperationExecutionSnapshot",
 		"NexusOperationHistorySnapshot",
 		"ActivityExecutionSnapshot",

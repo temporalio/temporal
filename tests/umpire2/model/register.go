@@ -51,6 +51,7 @@ func DefaultEntities() []DefaultEntity {
 				&fact.NexusOperationCanceled{},
 				&fact.NexusOperationTimedOut{},
 				&fact.NexusOperationRejected{},
+				&fact.NexusOperationCancelRequestFailed{},
 				&fact.NexusOperationExecutionSnapshot{},
 				&fact.NexusOperationHistorySnapshot{},
 			},

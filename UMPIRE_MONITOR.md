@@ -1,5 +1,10 @@
 # Umpire — Monitor (the passive half): architecture
 
+> **Status: current architecture.** The protocol-backed v2 monitor is the suite-wide `testcore`
+> default; v1 remains explicitly selectable for compatibility. V2 adds WorkflowRun, Activity,
+> Nexus link/timeout/cancellation observations, typed runtime relations, and opt-in semantic
+> coverage and normalized tracing. `UMPIRE_PLAN.md` tracks the remaining adoption work.
+
 How the pieces fit together. For *why* it exists read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md);
 for current status, gaps, and the rule inventory read [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).
 
@@ -27,7 +32,8 @@ Wire formats and change-tracking live in one place; rules just read entity state
 | Package | Role | Knows about |
 |---|---|---|
 | `common/testing/umpire/` | **Framework** — generic machinery | facts, entities, routing, rules — *not* Temporal |
-| `tests/umpirev1/` | **Domain** — Temporal specifics | workflows, updates, task queues, gRPC/span shapes |
+| `tests/umpirev1/` | **V1 domain** — compatibility implementation | workflows, tasks, Nexus operations, gRPC/span shapes |
+| `tests/umpire2/` | **V2 domain** — canonical direction | protocol catalog, WorkflowRun, Activity, richer Nexus rules, sparse regressions |
 
 The framework never imports the domain. Adding a rule or entity is a domain change; the
 framework stays put.
@@ -38,11 +44,11 @@ framework stays put.
 
 ### Addressing — who a fact is about
 
-- **`EntityType`** — a string tag for a kind of entity (`"Workflow"`, `"WorkflowUpdate"`, …).
+- **`EntityType`** — a string tag for a kind of entity (`"Workflow"`, `"WorkflowRun"`, …).
 - **`EntityID`** = `{Type, ID}` — one entity of a type.
-- **`EntityPath`** = `{EntityID, ParentID *EntityID}` — an `EntityID` optionally qualified
-  by its parent. This is what a fact *targets*. `EntityPathKey(path)` serialises it to the
-  canonical registry key (`type:id` or `type:id@parentType:parentID`).
+- **`EntityPath`** = `{EntityID, Ancestors []EntityID}` — an `EntityID` qualified by zero or more
+  root-first ancestors. This is what a fact *targets*. `EntityPathKey(path)` serialises it to the
+  canonical root-first registry key (`ancestorType:id@type:id`).
 
 ### `Fact` — the unit of observation (`entity.go`)
 
@@ -73,12 +79,10 @@ type EntityFactory func() Entity
 An entity interprets a stream of facts and holds the resulting state. Rules read that
 state; they never see facts directly.
 
-### `ModelState` — routing + dirty tracking (`registry.go`)
+### `ModelState` — routing + dirty tracking (`model_state.go`)
 
-The heart of the model layer — the runtime `*State` counterpart to the declared `*Registry`s.
-(Today one `registry.go` type plays both the `ModelState` role below *and* the `EntityRegistry`
-role — the `RegisterEntity`/`RegisterFact` declarations at the end. The split is conceptual; the
-code merges them.) It:
+The heart of the model layer — the runtime `*State` counterpart to the protocol's declarations.
+It:
 
 1. **Stores** entities keyed by `EntityPathKey`, each wrapped in an `entityRecord`
    `{entity, generation}`.
@@ -94,7 +98,7 @@ Registration (the `EntityRegistry` role) is validated at wire-up time:
 - `RegisterEntity(factory, …)` panics unless `entity.Type() == structName`.
 - `RegisterFact(probes…)` panics unless `fact.Name() == structName`.
 
-### `RuleRegistry` — the judges (`rulebook.go`)
+### `RuleRegistry` — the judges (`rule_registry.go`)
 
 Two rule kinds, mapping to strong vs. eventual consistency:
 
@@ -113,8 +117,8 @@ Both context types embed `ruleContext` (the registry, logger, `sinceGeneration` 
 per-rule `ruleState`) and expose entities through one generic query:
 
 ```go
-for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
-    wu := r.Entity   // *entity.WorkflowUpdate, only if changed since last check
+for r := range umpire.ChangedEntities[model.NexusOperation](c) {
+    op := r.Entity   // *model.NexusOperation, only if changed since last check
     ...
 }
 ```
@@ -133,20 +137,21 @@ A **`Violation`** is `{Rule, Message, Tags}` — the framework's only output.
 
 - **`FactLog`** (`fact_log.go`) — an append-only, queryable record of every fact
   (`QueryByType`, `QueryByID`, `All`). Independent of the FSMs; useful for test assertions.
-- **`interceptor.go`** — a gRPC unary interceptor built from two optional hooks:
+- **`interceptor.go`** — a gRPC unary interceptor built from optional hooks:
   `FactRecorder.RecordFact` (observe requests), `ResponseRecorder.RecordResponse` (observe
-  responses), and `FaultInjector.Inject` (the dormant "active" hook — no logic yet).
+  responses), `RejectionRecorder.RecordRejection` (observe errors), and `FaultInjector.Inject`
+  (apply configured transport faults).
 - **`instrument.go`** — helpers for *producing* observations from inside the server:
   `Instrument`/`RecordFact` emit OTEL spans/events under `TracerName`, `EntityTag` stamps a
   span with the entity it concerns.
-- **`Flag`** (`flag.go`) — a named boolean an entity FSM sets/clears on transitions
-  (`Admitted`, `Accepted`, …); a small observable that rules and debugging can read.
+- **`Lifecycle`** (`lifecycle.go`) — the total transition oracle, transition history, traits,
+  and stable declared/visited edge catalogs used by planning, conformance, and coverage.
 
 ---
 
-## Domain layer (`tests/umpirev1/`)
+## Domain layers (`tests/umpirev1/`, `tests/umpire2/`)
 
-### `Umpire` — the orchestrator (`umpire.go`)
+### `Monitor` — the orchestrator (`monitor.go`)
 
 Wires the framework to Temporal and is the object tests hold. It owns a `ModelState`, a
 `FactDecoder`, a `RuleRegistry` (with all default rules registered), and a `FactLog`.
@@ -157,9 +162,8 @@ It plugs into the server two ways:
 - **gRPC** — implements `FactRecorder`/`ResponseRecorder`. `RecordFact`/`RecordResponse`
   decode the request/response → append to `FactLog` → `RouteFacts`.
 
-Tests call `Check(ctx, final…)` to collect violations, and at teardown `settleWorkflows`
-broadcasts a `WorkflowTerminated` for every seen workflow so child FSMs reach terminal
-states before the final liveness sweep.
+Tests call `CheckNamespace` at teardown to promote unresolved liveness conditions for one
+namespace, then `PurgeNamespace` to remove that namespace's entities, facts, and rule state.
 
 ### `FactDecoder` — wire/span → `Fact` (`model/fact_decoder.go`)
 
@@ -173,20 +177,17 @@ tries each:
 
 ### Entities — Temporal FSMs (`model/`)
 
-`Workflow`, `WorkflowTask`, `WorkflowUpdate`, `TaskQueue` (with `Namespace` also defined).
-Each implements `Entity`, backs its state with a `looplab/fsm` machine, and exposes `Flag`s
-and timestamps that rules read. Example: `WorkflowUpdate` transitions
-`unspecified → admitted → accepted → completed` (or `rejected`/`aborted`), setting the
-matching `Flag` and `…At` timestamp on each step. `register.go`'s `RegisterDefaultEntities`
-wires the default entities and the fact types, declaring which facts each entity subscribes
-to.
+V2 declares `Workflow`, `WorkflowRun`, `WorkflowTask`, `TaskQueue`, `NexusOperation`, and
+`Activity` (with `Namespace` as a scoping identity). Each implements `Entity` and uses
+`umpire.Lifecycle` for executable state. `model.DefaultEntities` and `model.DefaultFacts` feed the
+compiled protocol, which declares subscriptions and executable actions together.
 
 ### Facts and rules
 
 - **`fact/`** — one struct per observable thing, implementing `SpanFact` or `RequestFact`.
   Its `Name()` equals the struct name (and, for span facts, the OTEL event name).
-- **`rule/`** — 14 rules (5 safety, 9 liveness). Each reads entity state via
-  `ChangedEntities[T]` and emits `Violation`s. See `UMPIRE_PLAN.md` for the full inventory.
+- **`rule/`** — v1 registers two safety and two liveness rules; v2 registers four safety and two
+  liveness rules. Each reads entity state via `ChangedEntities[T]` and emits `Violation`s.
 - **`entity_key.go`** — a small fluent builder (`Workflow(id).Update(id)` / `.Task(…)`)
   that produces the same registry key strings the router uses, so tests can name the exact
   entity a rule should have passed (`RequireRulePassed`).
@@ -196,15 +197,15 @@ to.
 ## End-to-end: the life of one observation
 
 1. The server handles a gRPC call or emits an instrumented OTEL span.
-2. The interceptor / `SpanProcessor` hands it to `Umpire`.
+2. The interceptor / `SpanProcessor` hands it to `Monitor`.
 3. `FactDecoder` turns it into a `Fact` targeting an `EntityPath` (or nothing, if
    unrecognised — most traffic is ignored).
 4. `ModelState.RouteFacts` finds/creates the target entity (and parents), delivers the fact
    via `OnFact`, and bumps that entity's **generation**.
 5. On the next `RuleRegistry.Check`, each rule queries only entities changed since its last run
    (`ChangedEntities[T]`), then asserts (safety) or records `Pending`/`Resolve` (liveness).
-6. At teardown, `Check(ctx, true)` promotes any unresolved liveness conditions to
-   violations. The test fails on any violation.
+6. At teardown, `CheckNamespace(ctx, namespaceID)` promotes unresolved liveness conditions to
+   violations, and `PurgeNamespace` isolates the next test.
 
 ## Naming conventions (enforced at registration)
 

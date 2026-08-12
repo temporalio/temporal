@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/tests/umpire2/fact"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -56,4 +57,50 @@ func TestImportHistoryResponseCapturesNexusTimeoutSemantics(t *testing.T) {
 		TimeoutMessage:      "operation timed out",
 		EntityPath:          snapshot.EntityPath,
 	}, snapshot)
+}
+
+func TestImportHistoryResponseCapturesNexusCancelRequestFailure(t *testing.T) {
+	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id"},
+	}
+	response := &workflowservice.GetWorkflowExecutionHistoryResponse{History: &historypb.History{Events: []*historypb.HistoryEvent{
+		{
+			EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED,
+			Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+				NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
+					ScheduledEventId: 5,
+					RequestedEventId: 7,
+					Failure:          &failurepb.Failure{Message: "cancel failed"},
+				},
+			},
+		},
+	}}}
+
+	decoded := fromResponse(request, response, "namespace-id")
+	observed, ok := decoded.(*fact.NexusOperationCancelRequestFailed)
+	require.True(t, ok)
+	require.Equal(t, &fact.NexusOperationCancelRequestFailed{
+		NamespaceID:      "namespace-id",
+		WorkflowID:       "workflow-id",
+		ScheduledEventID: "5",
+		RequestedEventID: "7",
+		FailureMessage:   "cancel failed",
+		EntityPath:       observed.EntityPath,
+	}, observed)
+}
+
+func TestImportDescribeResponseCapturesStandaloneNexusCancelRequestFailure(t *testing.T) {
+	request := &workflowservice.DescribeNexusOperationExecutionRequest{OperationId: "operation-id"}
+	response := &workflowservice.DescribeNexusOperationExecutionResponse{Info: &nexuspb.NexusOperationExecutionInfo{
+		CancellationInfo: &nexuspb.NexusOperationExecutionCancellationInfo{
+			State:              enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
+			LastAttemptFailure: &failurepb.Failure{Message: "cancel failed"},
+		},
+	}}
+
+	decoded := fromResponse(request, response, "namespace-id")
+	snapshot, ok := decoded.(*fact.NexusOperationExecutionSnapshot)
+	require.True(t, ok)
+	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, snapshot.CancellationState)
+	require.Equal(t, "cancel failed", snapshot.CancellationFailure)
 }

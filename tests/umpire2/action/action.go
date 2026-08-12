@@ -180,6 +180,7 @@ type ResponsePolicy struct {
 	release        chan struct{}
 	releaseOnce    sync.Once
 	onStartHook    func(context.Context, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
+	cancelErr      error
 	captured       chan callback
 	cancelObserved chan struct{}
 }
@@ -226,7 +227,11 @@ func (p *ResponsePolicy) Handler() nexustest.Handler {
 			case p.cancelObserved <- struct{}{}:
 			default:
 			}
-			return nil
+			p.mu.Lock()
+			err := p.cancelErr
+			p.cancelErr = nil
+			p.mu.Unlock()
+			return err
 		},
 	}
 }
@@ -241,6 +246,12 @@ func (p *ResponsePolicy) setStartHook(hook func(context.Context, nexus.StartOper
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.onStartHook = hook
+}
+
+func (p *ResponsePolicy) setNextCancelError(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cancelErr = err
 }
 
 func (p *ResponsePolicy) setBlock() {

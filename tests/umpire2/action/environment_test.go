@@ -1,5 +1,8 @@
-package action
+package action_test
 
-import "go.temporal.io/server/tests/testcore"
+import (
+	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/server/tests/umpire2/action"
+)
 
-var _ Environment = (*testcore.TestEnv)(nil)
+var _ action.Environment = (*testcore.TestEnv)(nil)

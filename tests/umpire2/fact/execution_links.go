@@ -22,10 +22,12 @@ func (e *ActivityExecutionSnapshot) TargetEntity() *umpire.EntityPath { return e
 
 // NexusOperationExecutionSnapshot carries the public links returned by DescribeNexusOperationExecution.
 type NexusOperationExecutionSnapshot struct {
-	NamespaceID string
-	OperationID string
-	Links       []*commonpb.Link
-	EntityPath  *umpire.EntityPath
+	NamespaceID         string
+	OperationID         string
+	Links               []*commonpb.Link
+	CancellationState   enumspb.NexusOperationCancellationState
+	CancellationFailure string
+	EntityPath          *umpire.EntityPath
 }
 
 func (*NexusOperationExecutionSnapshot) Name() string                       { return "NexusOperationExecutionSnapshot" }

@@ -1,10 +1,61 @@
 # Umpire — Status & Plan
 
+> **Status: authoritative roadmap.** This opening section supersedes older snapshots and proposals
+> retained later in this document for design history.
+
 Current state, a critical read against the goals, gap analysis, and rule inventory. For the
 *why* read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md); for *how it fits together* read
 [`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md).
 
-## Snapshot
+## Current snapshot
+
+- **Framework:** `common/testing/umpire` provides entity routing, lifecycle conformance,
+  safety/liveness rules, facts, actions/planning, rejection capture, and the sparse regression
+  compiler/executor under `common/testing/umpire/regress`.
+- **V1:** `tests/umpirev1` remains an explicit compatibility and reference implementation. Its
+  active monitor registers two safety and two liveness rules and is selectable through
+  `WithUmpireMonitorFactory(umpirev1.NewMonitor)`.
+- **V2:** `tests/umpire2` is the suite-wide `testcore` default. Its protocol compiles the fact,
+  entity, action, action-gap, relation, and sparse-regression catalogs before monitor
+  construction. Its active monitor registers four safety and two liveness rules and adds
+  WorkflowRun, Activity, richer Nexus observations, and relation-backed link consistency.
+- **Parity:** focused contracts cover active v1 plans, representative routing and completion
+  payloads, rule registration, and the default-factory cutover. V2 is intentionally a strict
+  superset; v1 stays available for explicit compatibility runs.
+- **Sparse regressions:** seven functional proofs cover ordinary completion,
+  completion-before-start, cancellation failure followed by terminal cancellation, shared
+  handlers, timeout, standalone Activity links, and callback-after-caller-completion. Deeper
+  imperative assertions still need callback-reference/idempotency and payload/link plus
+  terminal-storage predicates before those tests can be retired.
+- **Reusable slices:** typed runtime relations, semantic coverage, deterministic pairwise
+  generation, bounded normalized tracing/refinement, and enum/integer/payload error domains are
+  implemented. Broader Temporal adapters and external validator-backed domains remain follow-ups.
+
+## Ordered next steps
+
+1. Run broader functional-suite triage under the v2 default and classify any model-fidelity gaps;
+   use explicit v1 only for a documented compatibility exception.
+2. Model callback-to-operation and callback-to-handler references plus duplicate-response
+   idempotency, then retire the corresponding imperative mechanics.
+3. Add hashed payload/link predicates and an explicit terminal-storage observation for ordinary
+   completion without persisting raw payload data.
+4. Wire action coverage and action/verdict trace events at the executor boundary, and add a small
+   Temporal catalog adapter over the generic pairwise generator.
+5. Extend trace association toward checked-in causal footprints and add validator-backed error
+   domains only when the server exposes a reusable validator registry.
+
+## Useful parity gate
+
+V2 must cover every entity, fact, registered rule, and active planner action used by the v1
+default monitor; representative shared observations must yield equivalent state and verdicts.
+V2 may remain a strict superset. Retired `_old.go` experiments and source-layout equality are not
+part of parity. V1 stays in the repository and remains selectable through
+`WithUmpireMonitorFactory`.
+
+## Historical snapshot and design record
+
+The material below captures earlier implementation snapshots and rationale. Where it conflicts
+with the current snapshot above, the current snapshot is authoritative.
 
 The pipeline is built and, as of the latest changes, **enforced suite-wide**:
 

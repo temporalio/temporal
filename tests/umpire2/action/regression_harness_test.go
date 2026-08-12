@@ -59,6 +59,16 @@ func TestResponsePolicyDefersStartResponseUntilReleased(t *testing.T) {
 	}
 }
 
+func TestResponsePolicyFailsOneCancellationRequest(t *testing.T) {
+	policy := NewResponsePolicy()
+	policy.setNextCancelError(nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "cancel rejected"))
+	handler := policy.Handler()
+
+	err := handler.OnCancelOperation(context.Background(), "service", "operation", "token", nexus.CancelOperationOptions{})
+	require.Error(t, err)
+	require.NoError(t, handler.OnCancelOperation(context.Background(), "service", "operation", "token", nexus.CancelOperationOptions{}))
+}
+
 func TestAwaitAtomsStopsAtFirstSafetyViolation(t *testing.T) {
 	monitor := &safetyViolationMonitor{
 		state:      umpirefw.NewModelState(),

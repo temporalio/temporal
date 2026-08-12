@@ -1,14 +1,18 @@
 # Umpire — Driver (the mechanics): spec & plan
 
+> **Status: component reference; implemented for current Umpire workflows.** Concrete workflow
+> and kitchensink drivers, action realizers, the generic `Drive` runtime, and the sparse regression
+> harness are built. The remaining work is broader protocol adoption and new realizers, not a
+> first concrete driver.
+
 The Driver is Umpire's active **mechanics** — the arm, not the brain. The **Planner**
 (see [`UMPIRE_PLANNER.md`](./UMPIRE_PLANNER.md)) decides *what* states to reach and plans
 routes over the model; the Driver realizes each abstract route step as real traffic against
 the running server, and injects faults. The **Monitor** ([`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md))
 then judges the result. For the whole-system pitch read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md).
 
-This document is a plan, not built code — it names the seam, the reach discipline, and the
-order to build them. The `Driver` interface itself is defined (the Planner's `Plan.Run` calls
-it); the concrete Temporal driver is the next thing to build.
+This document records the driver seam and reach discipline implemented by the current action and
+sparse-regression runtimes. Some proposed realizers remain future work.
 
 ## The seam
 
@@ -116,18 +120,12 @@ These already exist or are half-built in the Umpire code; the Driver consumes th
 
 ## Status & build order
 
-- **The `Driver` interface is defined** and `Plan.Run(ctx, driver)` calls it (see
-  `UMPIRE_PLANNER.md`); the planner drives it with abstract events today.
-- **Next seam — a concrete Temporal driver** (events → RPCs / worker polls), wired to the same
-  client and namespace the Monitor scopes, so `Run` drives a real cluster and the Monitor
-  judges. Build order:
-  0. **Black-box RPC driver for one entity** (update): realize `admit`/`accept`/`complete` as
-     frontend calls + worker polls; wire as the driver for *one* existing functional test; let
-     the Monitor judge. Proves plan→drive→judge end-to-end with no framework change.
-  1. **Fault events.** Implement `FaultInjector`; add drop/delay/error events; realize a route
-     that provokes a rule the Monitor already has (e.g. task starvation via dropped WFT). First
-     real chaos, grey-box, functional-test only.
-  2. **Timing events (later).** Deadline/timer interceptors for white-box timing routes.
+- **Implemented:** `Driver`, `Plan.Run`, the generic action `Drive` runtime, Workflow and Nexus
+  realizers, kitchensink drivers, footprint-derived fault scheduling, and the sparse regression
+  harness.
+- **Next extensions:** add realizers only when a protocol action gap or migrated regression needs
+  one; keep deadline/timer control as explicit future work rather than a prerequisite for the
+  existing driver.
 
 ## Open questions / risks
 

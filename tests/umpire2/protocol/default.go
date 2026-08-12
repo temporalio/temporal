@@ -32,9 +32,11 @@ func defaultDeclaration() Declaration {
 		entities = append(entities, declaration)
 	}
 	return Declaration{
-		Facts:      model.DefaultFacts(),
-		Entities:   entities,
-		Regression: defaultRegressionDomain(),
+		Facts:            model.DefaultFacts(),
+		Entities:         entities,
+		Relations:        defaultRelationSchemas(),
+		RelationDerivers: defaultRelationDerivers(),
+		Regression:       defaultRegressionDomain(),
 	}
 }
 

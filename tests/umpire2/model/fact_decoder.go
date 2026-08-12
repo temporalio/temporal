@@ -110,7 +110,10 @@ func fromResponse(req, resp any, namespaceID string) umpire.Fact {
 		if !ok || response.GetInfo() == nil {
 			return nil
 		}
-		return fact.NewNexusOperationExecutionSnapshot(namespaceID, req.GetOperationId(), response.GetInfo().GetLinks())
+		snapshot := fact.NewNexusOperationExecutionSnapshot(namespaceID, req.GetOperationId(), response.GetInfo().GetLinks())
+		snapshot.CancellationState = response.GetInfo().GetCancellationInfo().GetState()
+		snapshot.CancellationFailure = response.GetInfo().GetCancellationInfo().GetLastAttemptFailure().GetMessage()
+		return snapshot
 	case *workflowservice.GetWorkflowExecutionHistoryRequest:
 		response, ok := resp.(*workflowservice.GetWorkflowExecutionHistoryResponse)
 		if !ok || response.GetHistory() == nil {
@@ -121,6 +124,19 @@ func fromResponse(req, resp any, namespaceID string) umpire.Fact {
 			if attributes := event.GetNexusOperationScheduledEventAttributes(); attributes != nil {
 				startToClose[event.GetEventId()] = attributes.GetStartToCloseTimeout().AsDuration()
 			}
+		}
+		for _, event := range response.GetHistory().GetEvents() {
+			attributes := event.GetNexusOperationCancelRequestFailedEventAttributes()
+			if attributes == nil {
+				continue
+			}
+			return fact.NewNexusOperationCancelRequestFailed(
+				namespaceID,
+				req.GetExecution().GetWorkflowId(),
+				strconv.FormatInt(attributes.GetScheduledEventId(), 10),
+				strconv.FormatInt(attributes.GetRequestedEventId(), 10),
+				attributes.GetFailure().GetMessage(),
+			)
 		}
 		for _, event := range response.GetHistory().GetEvents() {
 			attributes := event.GetNexusOperationTimedOutEventAttributes()

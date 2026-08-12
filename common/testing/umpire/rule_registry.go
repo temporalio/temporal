@@ -85,7 +85,9 @@ type LivenessRule interface {
 }
 
 // RuleConfig holds configuration overrides for rules.
-type RuleConfig struct{}
+type RuleConfig struct {
+	Relations *RelationStore
+}
 
 // Dedup reporting constants.
 const (

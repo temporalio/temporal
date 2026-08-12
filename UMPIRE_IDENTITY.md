@@ -8,7 +8,7 @@ mechanism but three, because the ids have three different origins. For the whole
 for the driver read [`UMPIRE_ACTIONS.md`](./UMPIRE_ACTIONS.md); the rejection resolution this
 generalises is in [`UMPIRE_ERR.md`](./UMPIRE_ERR.md).
 
-> **Status: implemented (all four phases).** Run identity and lineage come entirely from
+> **Status: component reference; implemented (all four phases).** Run identity and lineage come entirely from
 > observation: the server emits run-lifecycle telemetry with lineage at every run-creation site
 > (first / continue-as-new / reset / retry-cron); the Monitor builds a typed run graph
 > (`WorkflowRun` nodes keyed by RunID under `Workflow`, edges labelled continued_as_new / retry /

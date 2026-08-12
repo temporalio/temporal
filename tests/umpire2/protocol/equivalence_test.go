@@ -12,18 +12,36 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/log"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/umpire"
+	umpirev2 "go.temporal.io/server/tests/umpire2"
 	v2action "go.temporal.io/server/tests/umpire2/action"
 	v2fact "go.temporal.io/server/tests/umpire2/fact"
 	v2model "go.temporal.io/server/tests/umpire2/model"
 	"go.temporal.io/server/tests/umpire2/protocol"
+	"go.temporal.io/server/tests/umpirev1"
 	v1action "go.temporal.io/server/tests/umpirev1/action"
 	v1fact "go.temporal.io/server/tests/umpirev1/fact"
 	v1model "go.temporal.io/server/tests/umpirev1/model"
 	v1planner "go.temporal.io/server/tests/umpirev1/planner"
 )
+
+func TestDefaultMonitorRulesContainActiveV1Rules(t *testing.T) {
+	v1, err := umpirev1.NewMonitor(log.NewNoopLogger())
+	require.NoError(t, err)
+	v2, err := umpirev2.NewMonitor(log.NewNoopLogger())
+	require.NoError(t, err)
+
+	v2Rules := make(map[string]string)
+	for _, stats := range v2.RuleStats() {
+		v2Rules[stats.Name] = stats.Kind
+	}
+	for _, stats := range v1.RuleStats() {
+		require.Equalf(t, stats.Kind, v2Rules[stats.Name], "missing or mismatched v1 rule %s", stats.Name)
+	}
+}
 
 func TestDefaultNexusPlansMatchV1ForEveryEdgeAndHosting(t *testing.T) {
 	protocol, err := protocol.Default()

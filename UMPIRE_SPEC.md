@@ -1,5 +1,10 @@
 # Umpire — Spec
 
+> **Status: current architecture.** The monitor, per-entity planner/driver, action realizers,
+> sparse regression compiler/executor, typed relations, semantic coverage, pairwise generation,
+> and bounded trace refinement are implemented. Protocol-backed v2 is the suite default; v1
+> remains explicitly selectable, while broader adapters and model-completeness work continue.
+
 Umpire is model-based acceptance testing for Temporal: a closed loop that **drives** a running
 server, **observes** it, builds an *executable model* of its entities, **judges** that model,
 and **steers** toward the states worth judging — without tests hand-writing assertions.
@@ -13,14 +18,15 @@ pair that drives:
 - **Planner — the active brains (planning core built).** Given a target state or constraints,
   plans routes over the Monitor's model; coverage-guided fuzzing is its most advanced mode. See
   [`UMPIRE_PLANNER.md`](./UMPIRE_PLANNER.md).
-- **Driver — the active mechanics (specced, unbuilt).** Realizes each planned route step as real
-  traffic against the server through pluggable **realizers** (raw RPC/SDK, Omes-kitchensink in any
+- **Driver — the active mechanics (implemented for current workflows).** Realizes each planned
+  route step as real traffic against the server through pluggable **realizers** (raw RPC/SDK,
+  Omes-kitchensink in any
   SDK language, direct CHASM), injects faults, and applies input mutations. See [`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md).
 
 The parts close a cycle: **plan → drive → observe → model → judge → steer**. The Planner plans
 over the same model the Monitor builds; the Driver realizes those routes as traffic; the Monitor
-judges the result; and the Monitor's coverage catalog (`Coverage.Unmet()` — the states nobody
-reached) is what the Planner's guided mode steers toward. The server under test is the SUT.
+judges the result. Lifecycle edge coverage and novelty-guided fault scheduling exist today; a
+unified `Coverage.Unmet()` catalog remains planned. The server under test is the SUT.
 Workloads are reused from **Omes** (kitchensink workflows; see [`UMPIRE_PRIOR_ART.md` (Omes)](./UMPIRE_PRIOR_ART.md#what-umpire-can-learn-from-omes-kitchen-sink-approach)) rather
 than a bespoke DSL.
 
@@ -48,8 +54,9 @@ than a bespoke DSL.
 - **RuleRegistry** *(declared)* — the name-validated registry of rules.
 - **Violation** — a rule's output when an invariant fails; the Monitor's only product.
 - **Coverpoint** — a named, interesting condition worth reaching at least once (e.g. a rule's precondition, or a notable state).
-- **CoverpointRegistry** *(declared)* — the name-validated registry of coverpoints (mirrors the `RuleRegistry`).
-- **Coverage** *(runtime)* — the tally of which coverpoints have been hit; `Coverage.Unmet()` is what nobody has reached yet (the reward signal).
+- **CoverpointRegistry** *(planned)* — a name-validated registry of semantic coverpoints.
+- **Coverage** *(partially implemented)* — lifecycle-edge and fault-pair tallies exist; a unified
+  semantic catalog and `Unmet()` reward signal remain planned.
 
 **Planning (Planner) — high-level, over the model**
 - **target** — the state you ask the Planner to reach, fully-qualified by entity (e.g. `WorkflowUpdate:completed`).

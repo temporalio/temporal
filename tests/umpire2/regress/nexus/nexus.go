@@ -65,6 +65,14 @@ var (
 		"nexus.cancel",
 		regress.SymbolParameter("operation", OperationType),
 	)
+	cancelWithRetrySchema = regress.ActionSchema(
+		"nexus.cancel_with_retry",
+		regress.SymbolParameter("operation", OperationType),
+	)
+	cancelRequestFailedSchema = regress.OutcomeSchema(
+		"nexus.cancel_request_failed",
+		regress.SymbolParameter("operation", OperationType),
+	)
 	scheduleSchema = regress.ActionSchema(
 		"nexus.schedule",
 		regress.SymbolParameter("operation", OperationType),
@@ -126,6 +134,14 @@ func Cancel(operation string) regress.Instruction {
 	return regress.Action(cancelSchema, regress.Symbol(operation))
 }
 
+func CancelWithRetry(operation string) regress.Instruction {
+	return regress.Action(cancelWithRetrySchema, regress.Symbol(operation))
+}
+
+func CancelRequestFailed(operation string) regress.Instruction {
+	return regress.Outcome(cancelRequestFailedSchema, regress.Symbol(operation))
+}
+
 type ScheduleOption struct {
 	startToClose time.Duration
 }
@@ -168,10 +184,14 @@ func FailNext(name rpc.Name) regress.Instruction {
 	return regress.Policy(failNextSchema, regress.Literal(name))
 }
 
-func StateSchema() regress.Schema            { return stateSchema }
-func CompleteSchema() regress.Schema         { return completeSchema }
-func RespondStartSchema() regress.Schema     { return respondStartSchema }
-func CancelSchema() regress.Schema           { return cancelSchema }
+func StateSchema() regress.Schema           { return stateSchema }
+func CompleteSchema() regress.Schema        { return completeSchema }
+func RespondStartSchema() regress.Schema    { return respondStartSchema }
+func CancelSchema() regress.Schema          { return cancelSchema }
+func CancelWithRetrySchema() regress.Schema { return cancelWithRetrySchema }
+func CancelRequestFailedSchema() regress.Schema {
+	return cancelRequestFailedSchema
+}
 func ScheduleSchema() regress.Schema         { return scheduleSchema }
 func StartSchema() regress.Schema            { return startSchema }
 func StartActivitySchema() regress.Schema    { return startActivitySchema }

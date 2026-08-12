@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/payloads"
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/model"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -80,6 +82,7 @@ func (c *Ctx) validStartBase() *workflowservice.StartNexusOperationExecutionRequ
 		Operation:              "operation",
 		RequestId:              opID,
 		ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+		Input:                  payloads.MustEncodeSingle("input"),
 	}
 }
 
@@ -111,10 +114,28 @@ func isDurationField(fd protoreflect.FieldDescriptor) bool {
 	return fd.Kind() == protoreflect.MessageKind && fd.Message().FullName() == "google.protobuf.Duration"
 }
 
+// isPayloadField reports whether fd is a scalar Temporal payload field.
+func isPayloadField(fd protoreflect.FieldDescriptor) bool {
+	return fd.Kind() == protoreflect.MessageKind && fd.Message().FullName() == "temporal.api.common.v1.Payload"
+}
+
+func reflectedEnumDomain(fd protoreflect.FieldDescriptor) umpire.Domain {
+	values := fd.Enum().Values()
+	numbers := make([]int32, values.Len())
+	for i := 0; i < values.Len(); i++ {
+		numbers[i] = int32(values.Get(i).Number())
+	}
+	domain, err := umpire.NewEnumDomain(numbers)
+	if err != nil {
+		return umpire.NewUnsupportedDomain(err.Error())
+	}
+	return domain
+}
+
 // reflectStartParams walks a request message's descriptor and returns a Param per scalar field the
-// reflection understands — string fields (stringDomain) and Duration fields (durationDomain). This
-// is the pillar-1 enumeration (UMPIRE_ERR.md §0): the variant set falls out of the descriptor, not
-// hand authoring. Enum / int / payload domains are further follow-ups.
+// reflection understands — string, enum, Duration, and Payload fields. This is the pillar-1
+// enumeration (UMPIRE_ERR.md §0): the variant set falls out of the descriptor, not hand
+// authoring. Integer domains remain a follow-up until request-specific bounds are declared.
 func reflectStartParams(msg protoreflect.ProtoMessage) []umpire.Param {
 	var params []umpire.Param
 	fields := msg.ProtoReflect().Descriptor().Fields()
@@ -126,8 +147,12 @@ func reflectStartParams(msg protoreflect.ProtoMessage) []umpire.Param {
 		switch {
 		case fd.Kind() == protoreflect.StringKind:
 			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: stringDomain{overLen: 4096}})
+		case fd.Kind() == protoreflect.EnumKind:
+			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: reflectedEnumDomain(fd)})
 		case isDurationField(fd):
 			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: durationDomain{}})
+		case isPayloadField(fd):
+			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: umpire.NewPayloadDomain(2 * 1024 * 1024)})
 		}
 	}
 	return params
@@ -135,7 +160,7 @@ func reflectStartParams(msg protoreflect.ProtoMessage) []umpire.Param {
 
 // rpcStartMutated issues a StartNexusOperationExecution built from the valid base with a single
 // field (path) replaced per mutate. Reflection sets the field by its proto name and kind, so the
-// same realizer serves every reflected param (string or Duration) without a per-field realizer.
+// same realizer serves every reflected param without a per-field realizer.
 type rpcStartMutated struct {
 	path   string
 	mutate func(valid any) any
@@ -154,13 +179,18 @@ func (r rpcStartMutated) Fire(ctx context.Context, rc umpire.RealizeContext, a u
 	return err
 }
 
-// currentValue extracts a field's current value as the Go type a Mutate expects (a string for
-// string fields; nil for Duration fields, whose mutants are absolute).
+// currentValue extracts a field's current value as the Go type its Domain expects.
 func currentValue(fd protoreflect.FieldDescriptor, m protoreflect.Message) any {
-	if fd.Kind() == protoreflect.StringKind {
+	switch {
+	case fd.Kind() == protoreflect.StringKind:
 		return m.Get(fd).String()
+	case fd.Kind() == protoreflect.EnumKind:
+		return int32(m.Get(fd).Enum())
+	case isPayloadField(fd):
+		return m.Get(fd).Message().Interface()
+	default:
+		return nil
 	}
-	return nil
 }
 
 // protoValue converts a Mutate's result back to a protoreflect.Value for the field's kind.
@@ -168,15 +198,19 @@ func protoValue(fd protoreflect.FieldDescriptor, v any) protoreflect.Value {
 	switch val := v.(type) {
 	case string:
 		return protoreflect.ValueOfString(val)
+	case int32:
+		return protoreflect.ValueOfEnum(protoreflect.EnumNumber(val))
 	case *durationpb.Duration:
+		return protoreflect.ValueOfMessage(val.ProtoReflect())
+	case *commonpb.Payload:
 		return protoreflect.ValueOfMessage(val.ProtoReflect())
 	default:
 		panic(fmt.Sprintf("umpire: unsupported mutated value %T for field %s", v, fd.Name()))
 	}
 }
 
-// StartFieldVariant builds the invalid action for one (string field, variant) pair: mutate that
-// field on the valid base and expect the variant's outcome. The rejection is modeled as the op
+// StartFieldVariant builds the invalid action for one (field, variant) pair: mutate that field on
+// the valid base and expect the variant's outcome. The rejection is modeled as the op
 // reaching the `rejected` terminal (the reject Effect), judged by Reconcile; Reject lets Drive
 // treat the RPC error as the expected outcome.
 func StartFieldVariant(path string, v umpire.Variant) umpire.Action {
@@ -191,10 +225,10 @@ func StartFieldVariant(path string, v umpire.Variant) umpire.Action {
 }
 
 // StartFieldVariants enumerates the invalid actions for every reflected param × variant of
-// StartNexusOperationExecution — the negative-space action set derived from the descriptor (string
-// and Duration fields). E4 (the differential validator oracle) will decide which of these actually
-// reject vs. are normalized/optional; today the enumeration is proven and specific known-rejecting
-// variants round-trip.
+// StartNexusOperationExecution — the negative-space action set derived from the descriptor. E4
+// (the differential validator oracle) will decide which of these actually reject vs. are
+// normalized/optional; today the enumeration is proven and specific known-rejecting variants
+// round-trip.
 func StartFieldVariants() []umpire.Action {
 	var actions []umpire.Action
 	for _, p := range reflectStartParams(&workflowservice.StartNexusOperationExecutionRequest{}) {

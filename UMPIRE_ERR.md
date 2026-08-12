@@ -1,5 +1,10 @@
 # UMPIRE — The Error / Divergence Model
 
+> **Status: component reference; partially implemented.** Synchronous rejection capture,
+> string/duration/enum domains, reusable integer bounds, bounded payload mutations, canonical
+> non-sensitive normalization, rejection facts, and grounded contracts are built. Request-specific
+> integer overlays and validator-registry-backed domains remain explicit follow-ups.
+
 ## Why
 
 The [Actions model](./UMPIRE_ACTIONS.md) makes the *happy path* declarative: an `Action` has

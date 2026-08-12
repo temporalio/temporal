@@ -1,5 +1,8 @@
 # Umpire — Research (external prior art)
 
+> **Status: historical/research.** This is strategy input, not a current implementation inventory;
+> see `UMPIRE_PLAN.md` for status and ordering.
+
 External projects, papers, tools, and ideas that pursue Umpire's goals, and what to borrow from
 each. This is the **outward-facing** companion to [`UMPIRE_PRIOR_ART.md`](./UMPIRE_PRIOR_ART.md),
 which covers **internal** Temporal prototypes (SAA, STAMP, Omes, the schedule PBT). For the system

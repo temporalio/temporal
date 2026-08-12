@@ -8,9 +8,10 @@ whole-system pitch read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md); for the pieces thi
 [Planner](./UMPIRE_PLANNER.md), and [Trace-derived faults](./UMPIRE_TRACING.md); for status read
 [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).
 
-> **Status: design.** The axes below already exist as separate mechanisms (see *Mapping onto
-> existing code*); this document proposes the layer that composes them into a single, declarative,
-> bounded test space. Not yet implemented.
+> **Status: design with an implemented core.** `common/testing/umpire` now provides a deterministic,
+> constraint-aware, bounded pairwise generator with explicit invalid/unsatisfiable/limit errors.
+> Sparse path expansion and deterministic fault scheduling remain separate existing mechanisms;
+> the declarative axis-selection surface and Temporal catalog adapter below remain planned.
 
 ## Why
 

@@ -1,9 +1,9 @@
 # Umpire — Sparse Regression Plans
 
-> **Status: implemented; adoption ongoing.** The typed authoring API, compiler, executor,
+> **Status: current architecture; implemented with adoption ongoing.** The typed authoring API, compiler, executor,
 > canonical Temporal protocol extension, artifacts, global rules, and functional proofs are
-> implemented under `common/testing/umpire/regress` and `tests/umpire2`. Three legacy Nexus cases
-> now use sparse plans; the remaining migration blockers are inventoried below.
+> implemented under `common/testing/umpire/regress` and `tests/umpire2`. Seven functional sparse
+> proofs run today; deeper legacy-oracle retirement blockers are inventoried below.
 
 ## Thesis
 
@@ -679,15 +679,18 @@ regress.OnePath(
 	nexus.State("op", nexus.Started),
 	regress.During(
 		nexus.FailNext(rpc.CancelNexusOperation),
-		nexus.Cancel("op"),
+		nexus.CancelWithRetry("op"),
 	),
+	nexus.CancelRequestFailed("op"),
 	nexus.State("op", nexus.Canceled),
 )
 ```
 
-The one-shot policy is armed across the cancellation action and consumed by its first matching RPC.
-The later synthesized retry runs under normal delivery. The model must provide the invariant that a
-retryable cancel failure cannot strand the operation.
+The one-shot policy is armed across the cancellation action and makes the handler reject the first
+cancel request non-retryably. The public standalone cancellation snapshot proves the failed request
+before the harness delivers the operation's terminal cancellation outcome. Embedded operations use
+the corresponding public-history event. Transport-retry coverage remains distinct because a
+retryable delivery failure deliberately does not emit `NexusOperationCancelRequestFailed`.
 
 ### Start-to-close timeout
 
@@ -857,15 +860,16 @@ Current migration inventory:
   Nexus link snapshots feed reusable relation predicates and the bidirectional consistency rule.
 - `TestNexusCallbackAfterCallerComplete` is migrated. Caller/handler ordering and callback failure
   are expressed by lifecycle outcomes and the completion action.
+- A focused sparse cancellation proof now observes a failed cancel request before terminal
+  cancellation. The model imports both the embedded public-history event and the standalone public
+  cancellation snapshot; the original imperative test remains because it additionally compares
+  two embedded operations' cancellation state and event metadata.
 - Ordinary sync completion retains its imperative test for result payload, handler-supplied
   workflow-event links, and state-machine deletion. These need modeled payload/link predicates and
   a terminal-storage invariant before that test can be removed.
 - Completion-before-start and shared-handler coverage retain their imperative test for callback
   attachment request references, event timestamps, and duplicate start-response idempotency. These
   need typed callback-reference predicates and an idempotency rule.
-- Cancellation retry retains its imperative test for the intermediate
-  `NexusOperationCancelRequestFailed` history event. That event needs a modeled transition/fact;
-  the sparse proof already covers one-shot transport failure followed by eventual cancellation.
 
 ## Trade-offs
 

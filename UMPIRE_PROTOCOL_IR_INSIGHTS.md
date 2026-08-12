@@ -1,5 +1,10 @@
 # Umpire — Protocol IR Insights
 
+> **Status: current architecture and forward design.** The v2 protocol, sparse regression domain,
+> typed runtime relation store, focused semantic coverage/pairwise exploration, and normalized
+> trace refinement are implemented. Richer constraints, causal refinement, and exporters remain
+> subsequent phases.
+
 Insights distilled from the shared ChatGPT discussion
 [“Declarative vs Imperative Programming”](https://chatgpt.com/share/6a78d045-b678-83ea-85c2-09886bd17384),
 interpreted in the context of Umpire's existing design documents and implementation.
@@ -37,13 +42,14 @@ Monitor registers its model state from that declaration, and cross-version
 tests compare its catalogs, plans, payloads, and fact routing with the renamed
 `tests/umpirev1` baseline.
 
-This completes catalog unification for the copied Umpire 2 implementation, not
-the broader semantic IR described below. `UmpireTestSuite` now runs its four
-plan-drive-judge tests against dedicated Umpire 2 clusters, while other
-functional suites retain the v1 default. A neutral testcore monitor boundary
-and an action-owned environment interface remove Umpire 2's temporary
-transitive v1 coupling. Relations, generic constraints, refinement
-declarations, the deterministic explorer, and exporters have not started.
+This completes catalog unification for Umpire 2 and establishes v2 as the
+default `testcore` monitor while retaining v1 as an explicit compatibility
+factory. A neutral testcore monitor boundary and an action-owned environment
+interface remove Umpire 2's temporary transitive v1 coupling. Protocol-declared
+relations now feed an indexed runtime store and the first lineage/link consumers;
+focused coverage, pairwise generation, and trace refinement primitives are also
+available. Generic constraints, relation-aware exploration, causal refinement,
+and exporters remain future work.
 
 This model can remain executable in Go while eventually supporting exporters to model checkers or
 proof tools. The source of truth is the IR, not any one backend's syntax or worldview.
