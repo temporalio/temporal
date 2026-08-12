@@ -29,6 +29,7 @@ func emitReplicationExecuting(
 	taskType string,
 	attempt int32,
 	sourceCluster string,
+	sourceShard int32,
 ) {
 	shardContext, err := toolBox.ShardController.GetShardByNamespaceWorkflow(namespace.ID(key.NamespaceID), key.WorkflowID)
 	if err != nil {
@@ -54,6 +55,7 @@ func emitReplicationExecuting(
 		RunID:         key.RunID,
 		Attempt:       attempt,
 		SourceCluster: sourceCluster,
+		SourceShard:   sourceShard,
 		SourceTaskID:  task.GetSourceTaskId(),
 	}
 	// Record what this attempt will try to apply, taken from the task itself: its target versioned
@@ -107,6 +109,7 @@ func (s *StreamSenderImpl) emitReplicationSent(
 		WorkflowID:    item.GetWorkflowID(),
 		RunID:         item.GetRunID(),
 		SourceCluster: s.shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		SourceShard:   s.serverShardKey.ShardID,
 		SourceTaskID:  item.GetTaskID(),
 	}
 	if vt := task.GetVersionedTransition(); vt != nil {
@@ -209,6 +212,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 		Outcome:       outcome,
 		Error:         errStr,
 		SourceCluster: e.SourceClusterName(),
+		SourceShard:   e.SourceShardKey().ShardID,
 		SourceTaskID:  e.TaskID(),
 	}
 	if vt := e.ReplicationTask().GetVersionedTransition(); vt != nil {

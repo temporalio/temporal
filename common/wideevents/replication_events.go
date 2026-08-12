@@ -42,6 +42,7 @@ type ReplicationLifecyclePayload struct {
 	ParentInitiatedID int64
 	Details           map[string]any
 	SourceCluster     string
+	SourceShard       int32
 	SourceTaskID      int64
 	// sent-only
 	NewRunID     string
@@ -116,6 +117,9 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 	}
 	if p.SourceCluster != "" {
 		attrs = append(attrs, log.String("source_cluster", p.SourceCluster))
+	}
+	if p.SourceShard != 0 {
+		attrs = append(attrs, log.Int64("source_shard", int64(p.SourceShard)))
 	}
 	if p.SourceTaskID != 0 {
 		attrs = append(attrs, log.Int64("source_task_id", p.SourceTaskID))

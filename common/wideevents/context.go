@@ -2,18 +2,24 @@ package wideevents
 
 import "context"
 
-type sourceTaskIDCtxKey struct{}
+type replicationTaskOriginCtxKey struct{}
 
-// SetReplicationSourceTaskID stamps the source cluster's replication-queue task id onto ctx for wide
-// events emitted below the replication task. Diagnostic only: it must never affect control flow.
-func SetReplicationSourceTaskID(ctx context.Context, sourceTaskID int64) context.Context {
-	return context.WithValue(ctx, sourceTaskIDCtxKey{}, sourceTaskID)
+// ReplicationTaskOrigin identifies where a replicated artifact came from; diagnostic only. TaskID is
+// unset when the applied artifact was re-fetched rather than being that queue entry's own payload.
+type ReplicationTaskOrigin struct {
+	ShardID int32
+	TaskID  int64
 }
 
-// ReplicationSourceTaskIDFromContext returns the stamped id, or 0 when ctx carries none.
-func ReplicationSourceTaskIDFromContext(ctx context.Context) int64 {
-	if sourceTaskID, ok := ctx.Value(sourceTaskIDCtxKey{}).(int64); ok {
-		return sourceTaskID
+// SetReplicationTaskOrigin stamps origin onto ctx.
+func SetReplicationTaskOrigin(ctx context.Context, origin ReplicationTaskOrigin) context.Context {
+	return context.WithValue(ctx, replicationTaskOriginCtxKey{}, origin)
+}
+
+// ReplicationTaskOriginFromContext returns the stamped origin, or the zero value when ctx has none.
+func ReplicationTaskOriginFromContext(ctx context.Context) ReplicationTaskOrigin {
+	if origin, ok := ctx.Value(replicationTaskOriginCtxKey{}).(ReplicationTaskOrigin); ok {
+		return origin
 	}
-	return 0
+	return ReplicationTaskOrigin{}
 }

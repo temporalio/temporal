@@ -248,10 +248,10 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	// live ms after the lock is released would race with the next writer.
 	var ms historyi.MutableState
 	var appliedMS *persistencespb.WorkflowMutableState
-	sourceTaskID := wideevents.ReplicationSourceTaskIDFromContext(ctx)
+	origin := wideevents.ReplicationTaskOriginFromContext(ctx)
 	defer func() {
 		if emitApplied && retError == nil {
-			r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS, sourceClusterName, sourceTaskID)
+			r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS, sourceClusterName, origin)
 		}
 	}()
 
@@ -377,14 +377,13 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 // emitReplicationVersionedTransitionApplied emits a best-effort "applied" ReplicationLifecycle
 // event summarizing post-apply mutable state. ms may be nil (e.g. a fresh apply via the NotFound
 // path) in which case only identity fields are populated. It never affects control flow.
-// sourceTaskID is 0 when the artifact did not arrive as a replication task.
 func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	ms *persistencespb.WorkflowMutableState,
 	sourceClusterName string,
-	sourceTaskID int64,
+	origin wideevents.ReplicationTaskOrigin,
 ) {
 	var nsName string
 	if name, err := r.namespaceRegistry.GetNamespaceName(namespaceID); err == nil {
@@ -401,7 +400,8 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		RunID:         runID,
 		Outcome:       "applied",
 		SourceCluster: sourceClusterName,
-		SourceTaskID:  sourceTaskID,
+		SourceShard:   origin.ShardID,
+		SourceTaskID:  origin.TaskID,
 	}
 	if ms != nil {
 		info := ms.GetExecutionInfo()

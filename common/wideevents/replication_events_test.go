@@ -155,6 +155,7 @@ func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePaylo
 		Details:             map[string]any{"k": "v"},
 		NewRunID:            "new-run",
 		SourceCluster:       "source-cluster",
+		SourceShard:         11,
 		SourceTaskID:        42,
 		IsFirstSync:         true,
 		FirstEventID:        1,
@@ -200,6 +201,7 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 		"parent_initiated_id":   int64(3),
 		"details":               `{"k":"v"}`,
 		"source_cluster":        "source-cluster",
+		"source_shard":          int64(11),
 		"source_task_id":        int64(42),
 		"event_version_history": `[{"event_id":9,"version":5}]`,
 	}
