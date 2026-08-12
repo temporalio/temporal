@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
@@ -121,6 +122,42 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 
 		actualCallerName := headers.GetCallerInfo(resultingCtx).CallerName
 		s.Equal(testCase.expectedCallerName, actualCallerName)
+	}
+}
+
+func (s *callerInfoSuite) TestInterceptNexus() {
+	for _, tc := range []struct {
+		name           string
+		input          NexusInterceptorInput
+		callerInfo     headers.CallerInfo
+		expectedOrigin string
+	}{
+		{
+			name:           "start",
+			input:          NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil),
+			expectedOrigin: "StartNexusOperation",
+		},
+		{
+			name:       "cancel - preserves background origin",
+			input:      NewCancelNexusOpInput("s", "o", testNamespace, nexus.CancelOperationOptions{}, "t"),
+			callerInfo: headers.SystemBackgroundHighCallerInfo,
+		},
+		{
+			name:           "complete",
+			input:          NewCompleteNexusOpInput(testNamespace, nil),
+			expectedOrigin: "CompleteNexusOperation",
+		},
+	} {
+		s.Run(tc.name, func() {
+			ctx := headers.SetCallerInfo(context.Background(), tc.callerInfo)
+			_, err := s.interceptor.InterceptNexus(ctx, tc.input, func(ctx context.Context, _ NexusInterceptorInput) (any, error) {
+				callerInfo := headers.GetCallerInfo(ctx)
+				s.Equal(testNamespace, callerInfo.CallerName)
+				s.Equal(tc.expectedOrigin, callerInfo.CallOrigin)
+				return nil, nil
+			})
+			s.NoError(err)
+		})
 	}
 }
 

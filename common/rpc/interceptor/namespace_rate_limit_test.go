@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
@@ -29,6 +30,53 @@ type namespaceRateLimitInterceptorSuite struct {
 	controller      *gomock.Controller
 	mockRateLimiter *quotas.MockRequestRateLimiter
 	mockRegistry    *namespace.MockRegistry
+}
+
+func (s *namespaceRateLimitInterceptorSuite) TestInterceptNexus() {
+	for _, tc := range []struct {
+		name            string
+		apiName         string
+		input           NexusInterceptorInput
+		allow           *bool
+		nextCalled      bool
+		expectedOutcome string
+	}{
+		{name: "allowed", apiName: "NexusOperation", input: NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil), allow: new(true), nextCalled: true},
+		{name: "rate limited", apiName: "NexusOperation", input: NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil), allow: new(false), expectedOutcome: "namespace_rate_limited"},
+		{name: "missing API name", expectedOutcome: "interceptor_failed"},
+		{name: "missing request header", apiName: "NexusOperation", input: NewCompleteNexusOpInput(testNamespace, nil), expectedOutcome: "interceptor_failed"},
+	} {
+		s.Run(tc.name, func() {
+			ctx := context.Background()
+			if tc.apiName != "" {
+				ctx = WithNexusAPIName(ctx, tc.apiName)
+			}
+			if tc.allow != nil {
+				s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).Return(*tc.allow)
+			}
+			input := tc.input
+			if input == nil {
+				input = NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
+			}
+			nextCalled := false
+			_, err := s.newImpl(false).InterceptNexus(
+				ctx,
+				input,
+				func(context.Context, NexusInterceptorInput) (any, error) {
+					nextCalled = true
+					return nil, nil
+				},
+			)
+			if tc.expectedOutcome != "" {
+				var interceptorErr *InterceptorError
+				s.ErrorAs(err, &interceptorErr)
+				s.Equal(tc.expectedOutcome, interceptorErr.Outcome)
+			} else {
+				s.NoError(err)
+			}
+			s.Equal(tc.nextCalled, nextCalled)
+		})
+	}
 }
 
 func TestNamespaceRateLimitInterceptorSuite(t *testing.T) {

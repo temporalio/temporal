@@ -9,6 +9,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -66,6 +68,91 @@ type (
 func TestAuthorizerInterceptorSuite(t *testing.T) {
 	s := new(authorizerInterceptorSuite)
 	suite.Run(t, s)
+}
+
+func (s *authorizerInterceptorSuite) TestInterceptNexus() {
+	input := interceptor.NewStartNexusOpInput(
+		"service",
+		"operation",
+		testNamespace,
+		nexus.StartOperationOptions{},
+		nil,
+	)
+	apiName, endpoint := "NexusAPI", "endpoint"
+	expectedTarget := &CallTarget{
+		APIName:           apiName,
+		NexusEndpointName: endpoint,
+		Namespace:         testNamespace,
+		Request:           input,
+	}
+	for _, tc := range []struct {
+		name                string
+		ctx                 context.Context
+		authorizationResult *Result
+		nextCalled          bool
+		expectedError       error
+	}{
+		{
+			name: "authorized",
+			ctx: interceptor.WithNexusEndpointName(
+				interceptor.WithNexusAPIName(context.Background(), apiName),
+				endpoint,
+			),
+			authorizationResult: &Result{Decision: DecisionAllow},
+			nextCalled:          true,
+		},
+		{
+			name: "unauthorized",
+			ctx: interceptor.WithNexusEndpointName(
+				interceptor.WithNexusAPIName(context.Background(), apiName),
+				endpoint,
+			),
+			authorizationResult: &Result{Decision: DecisionDeny},
+			expectedError: &interceptor.InterceptorError{
+				Err:     nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied"),
+				Outcome: "unauthorized",
+			},
+		},
+		{
+			name: "missing API name",
+			ctx:  interceptor.WithNexusEndpointName(context.Background(), endpoint),
+			expectedError: &interceptor.InterceptorError{
+				Err:     errors.New("nexus API name not found in context"),
+				Outcome: "interceptor_failed",
+			},
+		},
+		{
+			name: "missing endpoint name",
+			ctx:  interceptor.WithNexusAPIName(context.Background(), apiName),
+			expectedError: &interceptor.InterceptorError{
+				Err:     errors.New("nexus endpoint name not found in context"),
+				Outcome: "interceptor_failed",
+			},
+		},
+	} {
+		s.Run(tc.name, func() {
+			if tc.authorizationResult != nil {
+				s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, expectedTarget).
+					Return(*tc.authorizationResult, nil)
+				if tc.authorizationResult.Decision == DecisionDeny {
+					s.mockMetricsHandler.EXPECT().
+						Counter(metrics.ServiceErrUnauthorizedCounter.Name()).
+						Return(metrics.NoopCounterMetricFunc)
+				}
+			}
+
+			nextCalled := false
+			_, err := s.interceptor.InterceptNexus(
+				tc.ctx,
+				input,
+				func(context.Context, interceptor.NexusInterceptorInput) (any, error) {
+					nextCalled = true
+					return nil, nil
+				})
+			s.Equal(tc.expectedError, err)
+			s.Equal(tc.nextCalled, nextCalled)
+		})
+	}
 }
 
 func (s *authorizerInterceptorSuite) SetupTest() {
