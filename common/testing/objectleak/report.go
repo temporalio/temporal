@@ -20,46 +20,19 @@ const (
 type report struct {
 	retained               [retentionClassCount]retentionStats
 	trackedRoots           int
-	totalRetainedObjects   int
-	baselineSettleTimedOut bool
-	checkSettleTimedOut    bool
-	unmatchedExpected      []string
-	unmatchedPrunes        []string
-}
-
-func newReport(
-	objects []trackedObject,
-	baseline Baseline,
-	checkSettleTimedOut bool,
-	trackedRoots int,
-	expected patterns,
-	pruneTypes patterns,
-) report {
-	r := report{
-		trackedRoots:           trackedRoots,
-		baselineSettleTimedOut: baseline.settleTimedOut,
-		checkSettleTimedOut:    checkSettleTimedOut,
-	}
-
-	// Matching mutates pattern.matched for stale-expected pattern detection.
-	activeExpected := slices.Clone(expected)
-
-	retainedAddresses := make(map[uintptr]struct{})
-
 	// Record each classified retained object and fold equivalent normalized
 	// path and type pairs into a single report row.
 	for obj := range retainedObjects(baseline.objects) {
-		path := obj.path.normalized()
 		retainedAddresses[obj.addr] = struct{}{}
-		r.retained[retentionBaseline].add(obj, path)
+		retained[retentionBaseline].add(obj)
 	}
 	for obj := range retainedObjects(objects) {
-		path := obj.path.normalized()
-		class := classifyRetention(obj, path, baseline, activeExpected)
-		if class != retentionBaseline {
-			retainedAddresses[obj.addr] = struct{}{}
-			r.retained[class].add(obj, path)
+		class := classifyRetention(obj, baseline, activeExpected)
+		if class == retentionBaseline {
+			continue
 		}
+		retainedAddresses[obj.addr] = struct{}{}
+		retained[class].add(obj)
 	}
 	r.totalRetainedObjects = len(retainedAddresses)
 
