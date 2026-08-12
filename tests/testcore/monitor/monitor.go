@@ -18,9 +18,11 @@ type Monitor interface {
 	umpire.RejectionRecorder
 
 	SetNamespaceID(name, id string)
+	CheckNamespaceSafety(context.Context, string) []umpire.Violation
 	CheckNamespace(context.Context, string) []umpire.Violation
 	PurgeNamespace(string)
 	ModelState() *umpire.ModelState
+	FactLog() *umpire.FactLog
 	RequireRulePassed(testing.TB, interface{ Name() string }, string)
 }
 

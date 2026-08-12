@@ -6,6 +6,8 @@ import (
 	"iter"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/fact"
 )
@@ -20,11 +22,16 @@ var _ umpire.Lifecycled = (*NexusOperation)(nil)
 // "<callerWorkflowID>:<scheduledEventID>" and it is rooted under the caller
 // Workflow (see UMPIRE_NEXUS.md).
 type NexusOperation struct {
-	ScheduledEventID string
-	WorkflowID       string
-	Outcome          string // set on a terminal transition, from the span's nexus.outcome
-	Attempt          int    // observed retry attempt, from chasm.transition telemetry
-	FSM              *umpire.Lifecycle
+	ScheduledEventID    string
+	WorkflowID          string
+	Outcome             string // set on a terminal transition, from the span's nexus.outcome
+	Attempt             int    // observed retry attempt, from chasm.transition telemetry
+	NamespaceID         string
+	Links               []*commonpb.Link
+	StartToCloseTimeout time.Duration
+	TimeoutType         enumspb.TimeoutType
+	TimeoutMessage      string
+	FSM                 *umpire.Lifecycle
 }
 
 func NewNexusOperation() *NexusOperation {
@@ -218,9 +225,32 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 					op.Outcome = e.Destination
 				}
 			}
+		case *fact.NexusOperationExecutionSnapshot:
+			op.capture("", e.OperationID)
+			op.NamespaceID = e.NamespaceID
+			op.Links = e.Links
+		case *fact.NexusOperationHistorySnapshot:
+			op.capture(e.ScheduledEventID, e.WorkflowID)
+			op.NamespaceID = e.NamespaceID
+			op.StartToCloseTimeout = e.StartToCloseTimeout
+			op.TimeoutType = e.TimeoutType
+			op.TimeoutMessage = e.TimeoutMessage
+			op.advanceToTimeout(ctx, e.TimeoutType)
 		}
 	}
 	return nil
+}
+
+func (op *NexusOperation) advanceToTimeout(ctx context.Context, timeoutType enumspb.TimeoutType) {
+	if op.FSM.Current() == NexusUnspecified {
+		op.FSM.Fire(ctx, NexusSchedule)
+	}
+	if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE && op.FSM.Current() == NexusScheduled {
+		op.FSM.Fire(ctx, NexusStart)
+	}
+	if !op.FSM.IsTerminal() {
+		op.FSM.Fire(ctx, NexusTimeout)
+	}
 }
 
 // nexusEventForStatus maps a CHASM OperationStatus destination to the FSM event

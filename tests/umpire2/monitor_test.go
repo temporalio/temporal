@@ -69,3 +69,17 @@ func TestMonitor_CheckNamespace_IsScopedAndPurgeable(t *testing.T) {
 	// A re-check of the purged namespace finds nothing.
 	require.Empty(t, u.CheckNamespace(ctx, nsA))
 }
+
+func TestMonitor_CheckNamespaceSafetyDoesNotPromotePendingLiveness(t *testing.T) {
+	ctx := context.Background()
+	u, err := NewMonitor(log.NewNoopLogger())
+	require.NoError(t, err)
+
+	const namespaceID = "ns"
+	require.NoError(t, u.ModelState().RouteFacts(ctx, []umpirefw.Fact{
+		startedWorkflowIn(namespaceID, "in-flight"),
+	}))
+
+	require.Empty(t, u.CheckNamespaceSafety(ctx, namespaceID))
+	require.NotEmpty(t, u.CheckNamespace(ctx, namespaceID))
+}

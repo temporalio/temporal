@@ -51,42 +51,45 @@ func DefaultEntities() []DefaultEntity {
 				&fact.NexusOperationCanceled{},
 				&fact.NexusOperationTimedOut{},
 				&fact.NexusOperationRejected{},
+				&fact.NexusOperationExecutionSnapshot{},
+				&fact.NexusOperationHistorySnapshot{},
 			},
+		},
+		{
+			New:   func() umpire.Entity { return NewActivity() },
+			Facts: []umpire.Fact{&fact.ActivityExecutionSnapshot{}},
 		},
 	}
 }
 
-// defaultFacts is the full set of fact probes the decoder must recognize. It is a
+// DefaultFacts is the full set of fact probes the decoder must recognize. It is a
 // superset of the per-entity subscriptions in DefaultEntities: it also includes
 // broadcast / settle facts (e.g. WorkflowTerminated) that no
 // single entity subscribes to but entities still handle in OnFact.
-func defaultFacts() []umpire.Fact {
-	return []umpire.Fact{
-		&fact.WorkflowStarted{},
-		&fact.WorkflowExecutionCompleted{},
-		&fact.WorkflowRunStarted{},
-		&fact.WorkflowRunCompleted{},
-		&fact.WorkflowRunContinuedAsNew{},
-		&fact.WorkflowTaskAdded{},
-		&fact.WorkflowTaskPolled{},
-		&fact.WorkflowTaskStored{},
+func DefaultFacts() []umpire.Fact {
+	result := []umpire.Fact{
 		&fact.WorkflowTaskDiscarded{},
 		&fact.WorkflowTerminated{},
-		&fact.SpeculativeWorkflowTaskScheduled{},
-		&fact.NexusOperationScheduled{},
-		&fact.NexusOperationAttemptFailed{},
-		&fact.NexusOperationStarted{},
-		&fact.NexusOperationSucceeded{},
-		&fact.NexusOperationFailed{},
-		&fact.NexusOperationCanceled{},
-		&fact.NexusOperationTimedOut{},
-		&fact.NexusOperationRejected{},
 	}
+	seen := map[string]bool{
+		"WorkflowTaskDiscarded": true,
+		"WorkflowTerminated":    true,
+	}
+	for _, entity := range DefaultEntities() {
+		for _, observed := range entity.Facts {
+			if seen[observed.Name()] {
+				continue
+			}
+			seen[observed.Name()] = true
+			result = append(result, observed)
+		}
+	}
+	return result
 }
 
 // RegisterDefaultEntities registers the default facts and entities with a registry.
 func RegisterDefaultEntities(r *umpire.ModelState) {
-	r.RegisterFact(defaultFacts()...)
+	r.RegisterFact(DefaultFacts()...)
 	for _, e := range DefaultEntities() {
 		r.RegisterEntity(e.New, e.Facts...)
 	}

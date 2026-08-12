@@ -2,12 +2,16 @@
 // validated protocol catalog.
 package protocol
 
-import "go.temporal.io/server/common/testing/umpire"
+import (
+	"go.temporal.io/server/common/testing/umpire"
+	coreregress "go.temporal.io/server/common/testing/umpire/regress"
+)
 
 // Declaration is the authoring form of a protocol.
 type Declaration struct {
-	Facts    []umpire.Fact
-	Entities []EntityDeclaration
+	Facts      []umpire.Fact
+	Entities   []EntityDeclaration
+	Regression *coreregress.Domain
 }
 
 // EntityDeclaration associates an entity factory with its fact subscriptions and actions.
@@ -51,4 +55,5 @@ type Protocol struct {
 	entities    map[umpire.EntityType]compiledEntity
 	actions     map[ActionKey]umpire.Action
 	gaps        map[ActionKey]string
+	regression  *coreregress.Domain
 }

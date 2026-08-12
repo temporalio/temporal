@@ -1,8 +1,12 @@
 package model
 
 import (
+	"strconv"
+	"time"
+
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.temporal.io/api/workflowservice/v1"
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/umpire"
@@ -77,8 +81,8 @@ func (d *FactDecoder) ImportRequest(request any) umpire.Fact {
 }
 
 // ImportResponse converts a gRPC request+response pair to a fact, or nil.
-func (d *FactDecoder) ImportResponse(req, resp any) umpire.Fact {
-	return fromResponse(req, resp)
+func (d *FactDecoder) ImportResponse(req, resp any, namespaceID string) umpire.Fact {
+	return fromResponse(req, resp, namespaceID)
 }
 
 // ImportRejection converts a rejected gRPC request (request + error + resolved namespace id) to a
@@ -93,8 +97,47 @@ func (d *FactDecoder) ImportRejection(req any, err error, namespaceID string) um
 }
 
 // fromResponse creates a fact from a gRPC request+response pair, or nil if unrecognized.
-func fromResponse(req, resp any) umpire.Fact {
+func fromResponse(req, resp any, namespaceID string) umpire.Fact {
 	switch req := req.(type) {
+	case *workflowservice.DescribeActivityExecutionRequest:
+		response, ok := resp.(*workflowservice.DescribeActivityExecutionResponse)
+		if !ok || response.GetInfo() == nil {
+			return nil
+		}
+		return fact.NewActivityExecutionSnapshot(namespaceID, req.GetActivityId(), response.GetInfo().GetStatus(), response.GetInfo().GetLinks())
+	case *workflowservice.DescribeNexusOperationExecutionRequest:
+		response, ok := resp.(*workflowservice.DescribeNexusOperationExecutionResponse)
+		if !ok || response.GetInfo() == nil {
+			return nil
+		}
+		return fact.NewNexusOperationExecutionSnapshot(namespaceID, req.GetOperationId(), response.GetInfo().GetLinks())
+	case *workflowservice.GetWorkflowExecutionHistoryRequest:
+		response, ok := resp.(*workflowservice.GetWorkflowExecutionHistoryResponse)
+		if !ok || response.GetHistory() == nil {
+			return nil
+		}
+		startToClose := make(map[int64]time.Duration)
+		for _, event := range response.GetHistory().GetEvents() {
+			if attributes := event.GetNexusOperationScheduledEventAttributes(); attributes != nil {
+				startToClose[event.GetEventId()] = attributes.GetStartToCloseTimeout().AsDuration()
+			}
+		}
+		for _, event := range response.GetHistory().GetEvents() {
+			attributes := event.GetNexusOperationTimedOutEventAttributes()
+			if attributes == nil {
+				continue
+			}
+			cause := attributes.GetFailure().GetCause()
+			return fact.NewNexusOperationHistorySnapshot(
+				namespaceID,
+				req.GetExecution().GetWorkflowId(),
+				strconv.FormatInt(attributes.GetScheduledEventId(), 10),
+				startToClose[attributes.GetScheduledEventId()],
+				cause.GetTimeoutFailureInfo().GetTimeoutType(),
+				cause.GetMessage(),
+			)
+		}
+		return nil
 	case *matchingservice.PollWorkflowTaskQueueRequest:
 		r, ok := resp.(*matchingservice.PollWorkflowTaskQueueResponse)
 		if !ok || r == nil || len(r.GetTaskToken()) == 0 {

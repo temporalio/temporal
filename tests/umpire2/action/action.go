@@ -172,18 +172,26 @@ func (Resolver) Destination(t umpire.EntityType, event string) (string, bool) {
 // start result, and it records the first callback URL/token so a CompletionCallback action can
 // complete the operation.
 type ResponsePolicy struct {
-	mu       sync.Mutex
-	onStart  nexus.HandlerStartOperationResult[any]
-	startErr error
-	block    bool // hold the start attempt (keeps the operation scheduled) until ctx is done
-	captured chan callback
+	mu             sync.Mutex
+	onStart        nexus.HandlerStartOperationResult[any]
+	startErr       error
+	block          bool // hold the start attempt (keeps the operation scheduled) until ctx is done
+	deferred       bool
+	release        chan struct{}
+	releaseOnce    sync.Once
+	onStartHook    func(context.Context, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
+	captured       chan callback
+	cancelObserved chan struct{}
 }
 
 type callback struct{ url, token string }
 
 // NewResponsePolicy returns a policy with no configured response yet (an action installs one).
 func NewResponsePolicy() *ResponsePolicy {
-	return &ResponsePolicy{captured: make(chan callback, 1)}
+	return &ResponsePolicy{
+		captured:       make(chan callback, 1),
+		cancelObserved: make(chan struct{}, 1),
+	}
 }
 
 // Handler adapts the policy to a nexustest.Handler for env.createRandomExternalNexusServer.
@@ -195,15 +203,31 @@ func (p *ResponsePolicy) Handler() nexustest.Handler {
 			default: // already captured (a retry); keep the first
 			}
 			p.mu.Lock()
-			r, err, block := p.onStart, p.startErr, p.block
+			r, err, block, deferred, release, hook := p.onStart, p.startErr, p.block, p.deferred, p.release, p.onStartHook
 			p.mu.Unlock()
+			if hook != nil {
+				return hook(hctx, opts)
+			}
 			if block {
 				<-hctx.Done() // hold the attempt so the operation stays scheduled
 				return nil, hctx.Err()
 			}
+			if deferred {
+				select {
+				case <-release:
+				case <-hctx.Done():
+					return nil, hctx.Err()
+				}
+			}
 			return r, err
 		},
-		OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error { return nil },
+		OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error {
+			select {
+			case p.cancelObserved <- struct{}{}:
+			default:
+			}
+			return nil
+		},
 	}
 }
 
@@ -213,10 +237,33 @@ func (p *ResponsePolicy) setStart(r nexus.HandlerStartOperationResult[any], err 
 	p.onStart, p.startErr = r, err
 }
 
+func (p *ResponsePolicy) setStartHook(hook func(context.Context, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.onStartHook = hook
+}
+
 func (p *ResponsePolicy) setBlock() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.block = true
+}
+
+func (p *ResponsePolicy) setDeferredStart(r nexus.HandlerStartOperationResult[any], err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.onStart, p.startErr = r, err
+	p.deferred = true
+	p.release = make(chan struct{})
+}
+
+func (p *ResponsePolicy) releaseDeferredStart() {
+	p.mu.Lock()
+	release := p.release
+	p.mu.Unlock()
+	if release != nil {
+		p.releaseOnce.Do(func() { close(release) })
+	}
 }
 
 // ---- Realizers ----

@@ -66,6 +66,9 @@ func TestDefaultMatchesModelStateFactSet(t *testing.T) {
 		"NexusOperationCanceled",
 		"NexusOperationTimedOut",
 		"NexusOperationRejected",
+		"NexusOperationExecutionSnapshot",
+		"NexusOperationHistorySnapshot",
+		"ActivityExecutionSnapshot",
 	}
 	got := make([]string, len(protocol.facts))
 	for i, fact := range protocol.facts {

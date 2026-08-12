@@ -115,6 +115,7 @@ func (u *Monitor) OnEnd(span sdktrace.ReadOnlySpan) {
 	if len(facts) == 0 {
 		return
 	}
+	u.factLog.AddAll(facts)
 	if err := u.registry.RouteFacts(context.Background(), facts); err != nil {
 		u.logger.Warn("monitor: failed to route OTEL facts", tag.Error(err))
 	}
@@ -179,6 +180,12 @@ func (u *Monitor) RecordRejection(ctx context.Context, req any, err error) {
 func (u *Monitor) CheckNamespace(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
 	return u.rulebook.Check(ctx, true, &root)
+}
+
+// CheckNamespaceSafety applies the global rulebook without promoting pending liveness obligations.
+func (u *Monitor) CheckNamespaceSafety(ctx context.Context, namespaceID string) []umpirefw.Violation {
+	root := u.namespaceRoot(namespaceID)
+	return u.rulebook.Check(ctx, false, &root)
 }
 
 // PurgeNamespace removes all entities, facts, and rule state collected for the

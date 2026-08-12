@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/action"
-	"go.temporal.io/server/tests/umpire2/fact"
 	"go.temporal.io/server/tests/umpire2/model"
 )
 
@@ -17,86 +16,25 @@ func Default() (*Protocol, error) {
 }
 
 func defaultDeclaration() Declaration {
-	return Declaration{
-		Facts: defaultFacts(),
-		Entities: []EntityDeclaration{
-			{
-				Type: model.WorkflowType,
-				New:  func() umpire.Entity { return model.NewWorkflow() },
-				Facts: []umpire.Fact{
-					&fact.WorkflowStarted{},
-					&fact.WorkflowExecutionCompleted{},
-				},
-				Actions: workflowActions(),
-			},
-			{
-				Type: model.WorkflowRunType,
-				New:  func() umpire.Entity { return model.NewWorkflowRun() },
-				Facts: []umpire.Fact{
-					&fact.WorkflowRunStarted{},
-					&fact.WorkflowRunCompleted{},
-					&fact.WorkflowRunContinuedAsNew{},
-				},
-			},
-			{
-				Type: model.TaskQueueType,
-				New:  func() umpire.Entity { return model.NewTaskQueue() },
-				Facts: []umpire.Fact{
-					&fact.WorkflowTaskAdded{},
-					&fact.WorkflowTaskPolled{},
-				},
-			},
-			{
-				Type: model.WorkflowTaskType,
-				New:  func() umpire.Entity { return model.NewWorkflowTask() },
-				Facts: []umpire.Fact{
-					&fact.WorkflowTaskAdded{},
-					&fact.WorkflowTaskPolled{},
-					&fact.WorkflowTaskStored{},
-					&fact.SpeculativeWorkflowTaskScheduled{},
-				},
-			},
-			{
-				Type: model.NexusOperationType,
-				New:  func() umpire.Entity { return model.NewNexusOperation() },
-				Facts: []umpire.Fact{
-					&fact.NexusOperationScheduled{},
-					&fact.NexusOperationAttemptFailed{},
-					&fact.NexusOperationStarted{},
-					&fact.NexusOperationSucceeded{},
-					&fact.NexusOperationFailed{},
-					&fact.NexusOperationCanceled{},
-					&fact.NexusOperationTimedOut{},
-					&fact.NexusOperationRejected{},
-				},
-				Actions:    nexusActions(),
-				ActionGaps: nexusActionGaps(),
-			},
-		},
+	entities := make([]EntityDeclaration, 0, len(model.DefaultEntities()))
+	for _, registered := range model.DefaultEntities() {
+		entityType := registered.New().Type()
+		declaration := EntityDeclaration{Type: entityType, New: registered.New, Facts: registered.Facts}
+		switch entityType {
+		case model.WorkflowType:
+			declaration.Actions = workflowActions()
+		case model.NexusOperationType:
+			declaration.Actions = nexusActions()
+			declaration.ActionGaps = nexusActionGaps()
+		default:
+			declaration.Actions = nil
+		}
+		entities = append(entities, declaration)
 	}
-}
-
-func defaultFacts() []umpire.Fact {
-	return []umpire.Fact{
-		&fact.WorkflowStarted{},
-		&fact.WorkflowExecutionCompleted{},
-		&fact.WorkflowRunStarted{},
-		&fact.WorkflowRunCompleted{},
-		&fact.WorkflowRunContinuedAsNew{},
-		&fact.WorkflowTaskAdded{},
-		&fact.WorkflowTaskPolled{},
-		&fact.WorkflowTaskStored{},
-		&fact.WorkflowTaskDiscarded{},
-		&fact.WorkflowTerminated{},
-		&fact.SpeculativeWorkflowTaskScheduled{},
-		&fact.NexusOperationScheduled{},
-		&fact.NexusOperationAttemptFailed{},
-		&fact.NexusOperationStarted{},
-		&fact.NexusOperationSucceeded{},
-		&fact.NexusOperationFailed{},
-		&fact.NexusOperationCanceled{},
-		&fact.NexusOperationTimedOut{},
-		&fact.NexusOperationRejected{},
+	return Declaration{
+		Facts:      model.DefaultFacts(),
+		Entities:   entities,
+		Regression: defaultRegressionDomain(),
 	}
 }
 

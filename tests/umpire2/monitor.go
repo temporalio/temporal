@@ -58,6 +58,8 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	// Safety rules — checked on every observation.
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.SpeculativeTaskCreation{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusOperationClosure{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusActivityLinkConsistency{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusOperationTimeoutSemantics{} })
 	// Illegal-transition conformance is not registered as a rule: it is a built-in
 	// framework check (RuleRegistry.Check → checkConformance) that surfaces, for every
 	// Lifecycled entity, the illegal transitions Lifecycle.Fire records at fire-time —
@@ -120,6 +122,7 @@ func (u *Monitor) OnEnd(span sdktrace.ReadOnlySpan) {
 	if len(facts) == 0 {
 		return
 	}
+	u.factLog.AddAll(facts)
 	if err := u.registry.RouteFacts(context.Background(), facts); err != nil {
 		u.logger.Warn("monitor: failed to route OTEL facts", tag.Error(err))
 	}
@@ -145,7 +148,11 @@ func (u *Monitor) RecordFact(ctx context.Context, request any) {
 
 // RecordResponse converts a gRPC response to an event (if any) and routes it.
 func (u *Monitor) RecordResponse(ctx context.Context, req, resp any) {
-	ev := u.decoder.ImportResponse(req, resp)
+	var namespaceID string
+	if named, ok := req.(interface{ GetNamespace() string }); ok {
+		namespaceID = u.resolveNamespaceID(named.GetNamespace())
+	}
+	ev := u.decoder.ImportResponse(req, resp, namespaceID)
 	if ev == nil {
 		return
 	}
@@ -184,6 +191,12 @@ func (u *Monitor) RecordRejection(ctx context.Context, req any, err error) {
 func (u *Monitor) CheckNamespace(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
 	return u.rulebook.Check(ctx, true, &root)
+}
+
+// CheckNamespaceSafety applies the global rulebook without promoting pending liveness obligations.
+func (u *Monitor) CheckNamespaceSafety(ctx context.Context, namespaceID string) []umpirefw.Violation {
+	root := u.namespaceRoot(namespaceID)
+	return u.rulebook.Check(ctx, false, &root)
 }
 
 // PurgeNamespace removes all entities, facts, and rule state collected for the

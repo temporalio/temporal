@@ -18,6 +18,7 @@ func Compile(declaration Declaration) (*Protocol, error) {
 		entities:    make(map[umpire.EntityType]compiledEntity, len(declaration.Entities)),
 		actions:     make(map[ActionKey]umpire.Action),
 		gaps:        make(map[ActionKey]string),
+		regression:  declaration.Regression.Clone(),
 	}
 	factTypes := make(map[reflect.Type]struct{}, len(declaration.Facts))
 	for i, fact := range declaration.Facts {

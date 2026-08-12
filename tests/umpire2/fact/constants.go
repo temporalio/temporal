@@ -9,4 +9,5 @@ const (
 	TaskQueueType      umpire.EntityType = "TaskQueue"
 	NamespaceType      umpire.EntityType = "Namespace"
 	NexusOperationType umpire.EntityType = "NexusOperation"
+	ActivityType       umpire.EntityType = "Activity"
 )

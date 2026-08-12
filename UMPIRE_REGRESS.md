@@ -1,7 +1,9 @@
 # Umpire — Sparse Regression Plans
 
-> **Status: design.** This document defines a proposed typed-Go authoring API and its semantics.
-> It does not describe implemented code.
+> **Status: implemented; adoption ongoing.** The typed authoring API, compiler, executor,
+> canonical Temporal protocol extension, artifacts, global rules, and functional proofs are
+> implemented under `common/testing/umpire/regress` and `tests/umpire2`. Three legacy Nexus cases
+> now use sparse plans; the remaining migration blockers are inventoried below.
 
 ## Thesis
 
@@ -112,7 +114,9 @@ A test compiles the sparse value against the canonical model domain and a declar
 profile, then hands the completed suite to the functional-test harness:
 
 ```go
-suite, err := regress.Compile(plan, model.DefaultDomain(), profile)
+domain, err := protocol.DefaultRegressionDomain()
+require.NoError(t, err)
+suite, err := regress.Compile(plan, domain, profile)
 require.NoError(t, err)
 require.NoError(t, regress.Run(ctx, suite, harness))
 ```
@@ -385,8 +389,9 @@ variants, or cross a policy boundary differently.
 By default `AllPaths` enumerates simple paths between explicit key frames: a normalized abstract
 world state is not revisited within a gap. This gives “all” a finite meaning in cyclic models.
 
-Repeated behavior must be requested explicitly, for example by listing the action twice or by a
-typed bound supplied to the relevant instruction. The compiler rejects an unbounded cyclic request.
+Repeated behavior must be requested explicitly, for example by listing the action twice or with
+`regress.Repeat(3, action)`. `Repeat` requires a positive finite count; the compiler rejects a
+zero or negative count as an unbounded cyclic request.
 It never silently caps depth, path count, runtime, or combinations. If complete enumeration is too
 large, it reports the exact or conservatively proven lower-bound size and asks the author to narrow
 the plan or choose `OnePath`.
@@ -754,8 +759,9 @@ Responsibilities:
 - environment requirements; and
 - action independence declarations used by partial-order reduction.
 
-This extends the canonical Umpire model and Actions model. It must not become a second registry
-whose semantics can drift from the Monitor.
+This extends the canonical Umpire protocol declaration compiled by `protocol.Default`. Monitor
+facts/entities, executable Actions, and sparse capabilities are exposed by that one protocol;
+realization identifiers are shared with the harness rather than repeated as string switches.
 
 ### Compiler
 
@@ -842,6 +848,24 @@ Migrate a deliberately varied slice of Nexus tests:
 Each migration should delete equivalent imperative mechanics. If it cannot, classify the blocker
 as a missing predicate, action, relation, resource, policy, or global rule. That inventory measures
 model completeness more honestly than counting translated test functions.
+
+Current migration inventory:
+
+- `TestNexusOperationStartToCloseTimeout` is migrated. Its start-to-close configuration, timeout
+  kind, and failure metadata are now public-history facts checked by a global rule.
+- `TestNexusOperationStartsStandaloneActivityBidirectionalLinks` is migrated. Public Activity and
+  Nexus link snapshots feed reusable relation predicates and the bidirectional consistency rule.
+- `TestNexusCallbackAfterCallerComplete` is migrated. Caller/handler ordering and callback failure
+  are expressed by lifecycle outcomes and the completion action.
+- Ordinary sync completion retains its imperative test for result payload, handler-supplied
+  workflow-event links, and state-machine deletion. These need modeled payload/link predicates and
+  a terminal-storage invariant before that test can be removed.
+- Completion-before-start and shared-handler coverage retain their imperative test for callback
+  attachment request references, event timestamps, and duplicate start-response idempotency. These
+  need typed callback-reference predicates and an idempotency rule.
+- Cancellation retry retains its imperative test for the intermediate
+  `NexusOperationCancelRequestFailed` history event. That event needs a modeled transition/fact;
+  the sparse proof already covers one-shot transport failure followed by eventual cancellation.
 
 ## Trade-offs
 
