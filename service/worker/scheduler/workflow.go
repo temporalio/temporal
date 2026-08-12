@@ -66,17 +66,16 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
-	// Version 13 bundles two fixes so only a single activation deploy is
-	// needed for both -- see the TODO on CurrentTweakablePolicies below.
-	//   - RefreshBeforeMigrationCheck: reconcile running-workflow status before
-	//     evaluating CHASM migration eligibility, so an actively-firing
-	//     schedule can observe an empty RunningWorkflows window and migrate
-	//     instead of deferring forever.
-	//   - PreserveMigratedStartIDs: preserve workflow/request IDs already
-	//     assigned to starts migrated from CHASM, preserving idempotency
-	//     identity across the migration handoff.
-	RefreshBeforeMigrationCheck = 13
-	PreserveMigratedStartIDs    = 13
+	// MigrationHandoffFixes bundles two V1<->V2 migration-handoff fixes under a
+	// single version so only one activation deploy is needed for both -- see
+	// the TODO on CurrentTweakablePolicies below.
+	//   - Reconcile running-workflow status before evaluating CHASM migration
+	//     eligibility, so an actively-firing schedule can observe an empty
+	//     RunningWorkflows window and migrate instead of deferring forever.
+	//   - Preserve workflow/request IDs already assigned to starts migrated
+	//     from CHASM, preserving idempotency identity across the migration
+	//     handoff.
+	MigrationHandoffFixes = 13
 )
 
 const (
@@ -226,14 +225,8 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		// TODO: bump to RefreshBeforeMigrationCheck/PreserveMigratedStartIDs (13)
-		// in a follow-up deploy to activate both v13 fixes at once. Activating a
-		// new version in the same deploy that introduces it is unsafe: workflows
-		// would record the new version, and a rollback to the prior release
-		// (which has no knowledge of it) could not deterministically replay those
-		// histories, wedging the scheduler workflows. This release only needs to
-		// *understand* v13 so it is a safe rollback target for the follow-up
-		// deploy that activates it.
+		// TODO: bump to MigrationHandoffFixes (13) in a follow-up deploy to
+		// activate both v13 fixes at once.
 		Version: TriggerImmediatelyTimestamp,
 	}
 
@@ -353,7 +346,7 @@ func (s *scheduler) run() error {
 			)
 		}
 
-		if s.hasMinVersion(RefreshBeforeMigrationCheck) &&
+		if s.hasMinVersion(MigrationHandoffFixes) &&
 			s.tweakables.EnableCHASMMigration && !s.State.PendingMigration &&
 			s.State.NeedRefresh {
 			s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
@@ -1500,13 +1493,13 @@ func (s *scheduler) startWorkflow(
 ) (*schedulepb.ScheduleActionResult, error) {
 	nominalTimeSec := start.NominalTime.AsTime().UTC().Truncate(time.Second)
 	workflowID := ""
-	if s.hasMinVersion(PreserveMigratedStartIDs) {
+	if s.hasMinVersion(MigrationHandoffFixes) {
 		workflowID = start.WorkflowId
 	}
 	if workflowID == "" {
 		workflowID = newWorkflow.WorkflowId
 	}
-	if (!s.hasMinVersion(PreserveMigratedStartIDs) || start.WorkflowId == "") &&
+	if (!s.hasMinVersion(MigrationHandoffFixes) || start.WorkflowId == "") &&
 		(start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp) {
 		// must match AppendedTimestampForValidation
 		workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
@@ -1544,7 +1537,7 @@ func (s *scheduler) startWorkflow(
 	}
 
 	requestID := ""
-	if s.hasMinVersion(PreserveMigratedStartIDs) {
+	if s.hasMinVersion(MigrationHandoffFixes) {
 		requestID = start.RequestId
 	}
 	if requestID == "" {

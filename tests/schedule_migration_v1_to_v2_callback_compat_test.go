@@ -100,7 +100,7 @@ func TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory(t *
 //
 //  1. It migrates. A continuously-firing schedule must eventually move from V1
 //     to V2 once migration is enabled via dynamic config. Regression guard for
-//     the eligibility-check ordering fix (RefreshBeforeMigrationCheck): the check
+//     the eligibility-check ordering fix (MigrationHandoffFixes): the check
 //     previously read len(RunningWorkflows) before the same run-loop iteration's
 //     processBuffer() reconciled it, so a busy schedule -- which always started a
 //     replacement action before any later iteration observed the previous one
@@ -117,13 +117,13 @@ func TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory(t *
 // TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory).
 func TestScheduleMigrationV1ToV2_RolloutMigration(t *testing.T) {
 	// The eligibility-check ordering fix (property 1) is gated on
-	// RefreshBeforeMigrationCheck, which is intentionally not yet the shipped
+	// MigrationHandoffFixes, which is intentionally not yet the shipped
 	// CurrentTweakablePolicies.Version -- it is activated in a follow-up deploy for
 	// rollback safety (see the TODO on CurrentTweakablePolicies in
 	// service/worker/scheduler/workflow.go). Until then an actively-firing schedule
 	// still never observes an idle window, so migration never completes here.
 	// Remove this skip in the deploy that bumps the current version.
-	t.Skip("arms once CurrentTweakablePolicies.Version is bumped to RefreshBeforeMigrationCheck " +
+	t.Skip("arms once CurrentTweakablePolicies.Version is bumped to MigrationHandoffFixes " +
 		"(deferred to a follow-up deploy for rollback safety)")
 
 	env := testcore.NewEnv(t, testcore.WithWorkerService("V1 scheduler"))
