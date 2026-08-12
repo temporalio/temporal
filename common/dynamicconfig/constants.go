@@ -7,6 +7,7 @@ import (
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
@@ -259,6 +260,11 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		"system.historyHealthSignalPercentileLatencySettings",
 		LatencyHealthChecksPerPercentile{},
 		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
+	)
+	HealthCheckHistoryGRPCSettings = NewGlobalTypedSetting(
+		"system.healthCheckHistoryGRPCSettings",
+		health.Settings{},
+		"controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables the group checks",
 	)
 	// TODO: This should be removed once percentiles are the default.
 	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
@@ -665,6 +671,11 @@ ScheduleInvariantsScannerParams comments for details.`,
 		[]string(nil),
 		`FrontendAllowedExperiments is a list of experiment names that can be enabled via the temporal-experiment header for a specific namespace.`,
 	)
+	FrontendDisabledScheduleValidations = NewNamespaceTypedSetting(
+		"frontend.disabledScheduleValidations",
+		[]string(nil),
+		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration.`,
+	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
 		ConvertWildcardStringListToRegexp,
@@ -978,13 +989,6 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		"frontend.enableSchedules",
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
-	)
-	FrontendEnforceScheduleDurationValidation = NewGlobalBoolSetting(
-		"frontend.enforceScheduleDurationValidation",
-		true,
-		`FrontendEnforceScheduleDurationValidation rejects CreateSchedule/UpdateSchedule requests whose
-interval or phase durations are not valid google.protobuf.Duration messages. When disabled, such
-requests are logged and allowed through instead of being rejected.`,
 	)
 	// [cleanup-wv-pre-release]
 	EnableDeployments = NewNamespaceBoolSetting(
@@ -1494,6 +1498,15 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.deploymentWorkflowVersion",
 		2,
 		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
+	)
+	// Enabling this without caution might leave old Deployment Versions in a bad state.
+	// Version workflows started before the demote-version signal handler was introduced do not register
+	// it until they Continue-As-New. A demotion signal sent before then is ignored, leaving the version
+	// stuck in Draining and requiring manual intervention to fix the workflow.
+	MatchingEnableWorkerDeploymentVersionDemotionSignal = NewGlobalBoolSetting(
+		"matching.enableWorkerDeploymentVersionDemotionSignal",
+		false,
+		`MatchingEnableWorkerDeploymentVersionDemotionSignal enables the new signal-based implementation for propagating Worker Deployment Version demotions. When disabled, the existing update-based implementation is used.`,
 	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
@@ -2623,6 +2636,12 @@ When the this config is zero or lower we will only update shard info at most onc
 		false,
 		`EmitShardLagLog whether emit the shard lag log`,
 	)
+	EmitImmediateQueueBacklogAge = NewGlobalBoolSetting(
+		"history.emitImmediateQueueBacklogAge",
+		true,
+		`EmitImmediateQueueBacklogAge whether to emit shardinfo_immediate_queue_backlog_age, which reads
+the oldest task of each immediate queue category that has a backlog`,
+	)
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
 		retrypolicy.DefaultDefaultRetrySettings,
@@ -2740,7 +2759,22 @@ the number of children greater than or equal to this threshold`,
 	ReplicationTaskApplyTimeout = NewGlobalDurationSetting(
 		"history.ReplicationTaskApplyTimeout",
 		20*time.Second,
-		`ReplicationTaskApplyTimeout is the context timeout for replication task apply`,
+		`ReplicationTaskApplyTimeout is the context timeout for replication task apply, and for the
+standby CloseExecutionTask's child-to-parent completion verification`,
+	)
+	ParentWorkflowResendMaxInFlight = NewGlobalIntSetting(
+		"history.parentWorkflowResendMaxInFlight",
+		8,
+		`ParentWorkflowResendMaxInFlight caps how many parent workflow resends a shard may run
+concurrently when EnableAsyncParentWorkflowResend is on. Attempts beyond the cap are dropped; the
+verifying task retries. This bounds the goroutines this path can create per shard.`,
+	)
+	EnableAsyncParentWorkflowResend = NewGlobalBoolSetting(
+		"history.enableAsyncParentWorkflowResend",
+		false,
+		`EnableAsyncParentWorkflowResend controls whether the standby child-to-parent completion
+verification resends the parent workflow in the background rather than inline, so the verifying task
+is not held for the duration of the cross-cluster sync.`,
 	)
 	ReplicationTaskFetcherParallelism = NewGlobalIntSetting(
 		"history.ReplicationTaskFetcherParallelism",
@@ -2976,6 +3010,22 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		"history.ReplicationStreamSenderLivenessMultiplier",
 		10,
 		"ReplicationStreamSenderLivenessMultiplier is the multiplier of liveness check interval on stream sender",
+	)
+	ReplicationStreamMaxLifetime = NewGlobalDurationSetting(
+		"history.ReplicationStreamMaxLifetime",
+		0,
+		`ReplicationStreamMaxLifetime, if greater than 0, bounds how long a single replication
+stream may live before the stream receiver gracefully recycles it (stops it, after which the
+stream receiver monitor reopens a fresh stream). A jitter is applied to spread recycling across
+streams. This lets proxies (e.g. Envoy) gracefully drain connections that would otherwise be
+pinned open indefinitely by endless replication streams. 0 disables the max lifetime (default).`,
+	)
+	ReplicationStreamMaxLifetimeJitter = NewGlobalFloatSetting(
+		"history.ReplicationStreamMaxLifetimeJitter",
+		0.1,
+		`ReplicationStreamMaxLifetimeJitter is the +/- jitter coefficient applied to
+ReplicationStreamMaxLifetime so that streams sharing a connection do not all recycle at the same
+time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are clamped.`,
 	)
 	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
 		"history.EnableHistoryReplicationRateLimiter",

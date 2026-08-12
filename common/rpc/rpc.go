@@ -65,6 +65,12 @@ type RPCFactory struct {
 		conns map[string]*grpc.ClientConn
 	}
 	internodeConnCleanupTicker *time.Ticker
+	// A OnceValue wrapper for createLocalFrontendGRPCConnection.
+	localFrontendGRPCConn func() *grpc.ClientConn
+
+	// Remote frontend connections, keyed by rpcAddress. Dialing one address
+	// must not block lookups for another.
+	remoteFrontendGRPCConns sync.Map // map[string]*grpc.ClientConn
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -115,6 +121,7 @@ func NewFactory(
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
 	f.internodeGRPCConnections.conns = make(map[string]*grpc.ClientConn)
 	f.internodeConnCleanupTicker = time.NewTicker(internodeConnCleanupInterval)
+	f.localFrontendGRPCConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
 	return f
 }
 
@@ -226,14 +233,35 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	return ip
 }
 
-// CreateRemoteFrontendGRPCConnection creates a gRPC connection for cross-cluster calls.
+// CreateRemoteFrontendGRPCConnection returns the shared connection for cross-cluster
+// calls to rpcAddress, dialing it on first use. Callers must not close it.
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+	if conn, ok := d.remoteFrontendGRPCConns.Load(rpcAddress); ok {
+		return conn.(*grpc.ClientConn) //nolint:revive // unchecked-type-assertion
+	}
+
+	conn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
+	// Fatal may return under a non-fatal logger; caching nil would wedge this address.
+	if conn == nil {
+		return nil
+	}
+
+	// Dialed outside the lock, so concurrent callers can race; the loser closes its own.
+	actual, loaded := d.remoteFrontendGRPCConns.LoadOrStore(rpcAddress, conn)
+	if loaded {
+		_ = conn.Close()
+	}
+	return actual.(*grpc.ClientConn) //nolint:revive // unchecked-type-assertion
+}
+
+func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
 		hostname, _, err2 := net.SplitHostPort(rpcAddress)
 		if err2 != nil {
 			d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err2))
+			return nil
 		}
 		tlsClientConfig, err = d.tlsFactory.GetRemoteClusterClientConfig(hostname)
 		if err != nil {
@@ -270,8 +298,13 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	return d.dial(rpcAddress, tlsClientConfig, append(additionalDialOptions, keepAliveOption)...)
 }
 
-// CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
+// CreateLocalFrontendGRPCConnection returns the shared connection for internal frontend
+// calls, dialing it on first use. Callers must not close it.
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+	return d.localFrontendGRPCConn()
+}
+
+func (d *RPCFactory) createLocalFrontendGRPCConnection() *grpc.ClientConn {
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
 
 	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
@@ -351,6 +384,26 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 	}
 
 	return connection
+}
+
+func (d *RPCFactory) Close() {
+	d.internodeConnCleanupTicker.Stop()
+
+	d.internodeGRPCConnections.Lock()
+	for _, conn := range d.internodeGRPCConnections.conns {
+		_ = conn.Close()
+	}
+	clear(d.internodeGRPCConnections.conns)
+	d.internodeGRPCConnections.Unlock()
+
+	d.remoteFrontendGRPCConns.Range(func(_, v any) bool {
+		if conn, ok := v.(*grpc.ClientConn); ok {
+			_ = conn.Close()
+		}
+		return true
+	})
+
+	_ = d.localFrontendGRPCConn().Close()
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {

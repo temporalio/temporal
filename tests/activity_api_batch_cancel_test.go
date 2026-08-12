@@ -116,17 +116,9 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Excludes
 	// Query intentionally omits ExecutionStatus = 'Running'.
 	query := fmt.Sprintf("ActivityType = '%s'", activityType)
 
-	// Wait for both activities (one Running, one Completed) to be indexed.
-	//nolint:forbidigo // tests with waits
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		listResp, err := env.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
-			Namespace: env.Namespace().String(),
-			PageSize:  10,
-			Query:     query,
-		})
-		require.NoError(c, err)
-		require.Len(c, listResp.GetExecutions(), 2)
-	}, testcore.WaitForESToSettle, 100*time.Millisecond)
+	// Wait for both activities to be indexed *and* for the completed one to no
+	// longer be indexed as Running, so the batch sees exactly one target.
+	waitForRunningFilterToSettle(ctx, t, env, query, 2, 1)
 
 	jobID := uuid.NewString()
 	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
