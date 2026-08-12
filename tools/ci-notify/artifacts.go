@@ -36,10 +36,10 @@ type summaryRow struct {
 }
 
 // forEachSummaryZip downloads every test-summary artifact for the run and
-// invokes fn with the local path of each downloaded zip. Artifacts that fail to
-// download are skipped. All downloads share a single temp dir that is removed
-// when the function returns.
-func forEachSummaryZip(ctx context.Context, runID int64, fn func(zipPath string)) error {
+// invokes fn with each artifact's name and the local path of its downloaded zip.
+// Artifacts that fail to download are skipped. All downloads share a single temp
+// dir that is removed when the function returns.
+func forEachSummaryZip(ctx context.Context, runID int64, fn func(artifactName, zipPath string)) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
@@ -63,7 +63,7 @@ func forEachSummaryZip(ctx context.Context, runID int64, fn func(zipPath string)
 		if err != nil {
 			continue
 		}
-		fn(zipPath)
+		fn(artifact.Name, zipPath)
 	}
 
 	return nil
@@ -71,7 +71,7 @@ func forEachSummaryZip(ctx context.Context, runID int64, fn func(zipPath string)
 
 func getFailures(ctx context.Context, runID int64) ([]string, error) {
 	var failures []string
-	err := forEachSummaryZip(ctx, runID, func(zipPath string) {
+	err := forEachSummaryZip(ctx, runID, func(_, zipPath string) {
 		artifactFailures, err := failuresFromZip(zipPath)
 		if err != nil {
 			return

@@ -2,6 +2,7 @@ package cinotify
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"go.temporal.io/server/tools/common/github"
@@ -71,12 +72,9 @@ func FormatMessageForDebug(report *FailureReport) string {
 	return sb.String()
 }
 
-// maxDataRaceDetail caps the race detector output included per race so the code
-// block (including its closing fence) stays within Slack's section text limit.
-const maxDataRaceDetail = 2500
-
 // BuildDataRaceMessage creates a Slack message announcing data races on main.
 func BuildDataRaceMessage(report *DataRaceReport) *slack.Message {
+	runID := strconv.FormatInt(report.Run.DatabaseID, 10)
 	commitURL := github.CommitURL(temporalRepository, report.Run.HeadSHA)
 
 	message := slack.NewMessage(fmt.Sprintf("Data Race Detected on Main (%d)", len(report.DataRaces)))
@@ -92,31 +90,16 @@ func BuildDataRaceMessage(report *DataRaceReport) *slack.Message {
 	for _, race := range report.DataRaces {
 		var sb strings.Builder
 		if race.Location != "" {
-			fmt.Fprintf(&sb, "*%s*\n", race.Location)
+			fmt.Fprintf(&sb, "*%s*", race.Location)
 		}
-		if race.Details != "" {
-			fmt.Fprintf(&sb, "```%s```", truncateDataRaceDetail(race.Details))
+		for _, site := range raceSites(race.Details) {
+			fmt.Fprintf(&sb, "\n• %s", site)
 		}
+		fmt.Fprintf(&sb, "\n<%s|View job logs>", raceLink(runID, race))
 		message.AddSection(sb.String())
 	}
 
-	message.AddSection(fmt.Sprintf("<%s|View Run>", report.Run.URL))
 	return message
-}
-
-// FormatDataRaceForDebug formats the data race report for console output.
-func FormatDataRaceForDebug(report *DataRaceReport) string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "🏁 Data Race Detected on Main Branch (%d) 🏁\n\n", len(report.DataRaces))
-	fmt.Fprintf(&sb, "Commit: %s (%s)\n", report.Run.ShortSHA(), orUnknown(report.Author))
-	if report.Title != "" {
-		fmt.Fprintf(&sb, "Commit message: %s\n", report.Title)
-	}
-	for i, race := range report.DataRaces {
-		fmt.Fprintf(&sb, "\n[%d] %s\n%s\n", i+1, race.Location, truncateDataRaceDetail(race.Details))
-	}
-	fmt.Fprintf(&sb, "\nView Run: %s\n", report.Run.URL)
-	return sb.String()
 }
 
 func orUnknown(s string) string {
@@ -126,11 +109,13 @@ func orUnknown(s string) string {
 	return s
 }
 
-func truncateDataRaceDetail(s string) string {
-	if len(s) <= maxDataRaceDetail {
-		return s
+// raceLink points at the specific job that reported the race so the alert is
+// directly actionable, falling back to the run when the job is unknown.
+func raceLink(runID string, race DataRace) string {
+	if race.JobID != "" {
+		return github.JobURL(temporalRepository, runID, race.JobID)
 	}
-	return s[:maxDataRaceDetail] + "\n… (truncated — see full output in job logs)"
+	return github.RunURL(temporalRepository, runID)
 }
 
 // BuildSuccessReportMessage creates a Slack message for success report

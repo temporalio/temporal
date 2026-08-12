@@ -220,9 +220,9 @@ func runDataRaceCommand(c *cli.Context) error {
 	// Handle dry-run mode
 	if dryRun {
 		logger.Info("Dry-run mode: printing message to stdout")
-		fmt.Println(FormatDataRaceForDebug(report))
-		fmt.Println("\n--- Slack JSON Payload ---")
 		message := BuildDataRaceMessage(report)
+		fmt.Println(message.RenderMarkdown())
+		fmt.Println("\n--- Slack JSON Payload ---")
 		payload, err := marshalIndent(message)
 		if err != nil {
 			logger.Error("Failed to marshal message for display", zap.Error(err))

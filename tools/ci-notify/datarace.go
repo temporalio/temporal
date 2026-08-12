@@ -3,21 +3,46 @@ package cinotify
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"go.temporal.io/server/tools/common/github"
 )
 
+// maxRaceSites caps how many conflicting-access lines we surface per race in
+// case the test-runner merged several race reports into one alert.
+const maxRaceSites = 6
+
+var (
+	// raceAccessRegex matches a race detector access header. The current access
+	// is "Read at"/"Write at"; the conflicting one is "Previous read at"/
+	// "Previous write at". At least one is always a write, but a race can be
+	// write/write, so both kinds must be matched.
+	raceAccessRegex = regexp.MustCompile(`^(Read|Write|Previous read|Previous write) at 0x[0-9a-fA-F]+ by (goroutine \d+|main goroutine)`)
+	// raceFileLineRegex matches a "<path>.go:<line>" stack frame location.
+	raceFileLineRegex = regexp.MustCompile(`(\S+\.go):(\d+)`)
+	// repoPathPrefixRegex strips the CI checkout prefix (e.g.
+	// /home/runner/work/temporal/temporal/) so paths read as service/history/….
+	repoPathPrefixRegex = regexp.MustCompile(`^.*/temporal/temporal/`)
+)
+
+// temporalModulePrefix is trimmed from race locations so we show, e.g.,
+// "service/history.TestFoo" instead of the fully-qualified package path.
+const temporalModulePrefix = "go.temporal.io/server/"
+
 // DataRace is a single data race detected by the Go race detector during a CI
 // run. The test-runner surfaces these into the JUnit ALERTS suite and the
 // test-summary.json artifact (see tools/testrunner/junit.go).
 type DataRace struct {
-	// Location is a human-readable description of where the race was detected,
-	// e.g. "Data race detected — in go.temporal.io/server/service/history.TestFoo".
+	// Location is the package-qualified test where the race was detected,
+	// e.g. "service/history.TestFoo".
 	Location string
 	// Details is the race detector's report (stacktraces), possibly truncated.
 	Details string
+	// JobID is the GitHub Actions job that reported the race, used to link
+	// directly to the offending job. Empty when it can't be determined.
+	JobID string
 }
 
 // DataRaceReport aggregates the data races found in a single CI run along with
@@ -66,12 +91,12 @@ func BuildDataRaceReport(runID string) (*DataRaceReport, error) {
 // set of data races reported across all of them.
 func getDataRaces(ctx context.Context, runID int64) ([]DataRace, error) {
 	var races []DataRace
-	err := forEachSummaryZip(ctx, runID, func(zipPath string) {
+	err := forEachSummaryZip(ctx, runID, func(artifactName, zipPath string) {
 		rows, err := summaryRowsFromZip(zipPath)
 		if err != nil {
 			return
 		}
-		races = append(races, dataRacesFromRows(rows)...)
+		races = append(races, dataRacesFromRows(rows, jobIDFromArtifactName(artifactName))...)
 	})
 	if err != nil {
 		return nil, err
@@ -79,8 +104,9 @@ func getDataRaces(ctx context.Context, runID int64) ([]DataRace, error) {
 	return uniqueDataRaces(races), nil
 }
 
-// dataRacesFromRows extracts data race rows from a parsed test summary.
-func dataRacesFromRows(rows []summaryRow) []DataRace {
+// dataRacesFromRows extracts data race rows from a parsed test summary, tagging
+// each with the job that produced the artifact.
+func dataRacesFromRows(rows []summaryRow, jobID string) []DataRace {
 	var races []DataRace
 	for _, row := range rows {
 		if row.Kind != summaryKindDataRace {
@@ -89,15 +115,82 @@ func dataRacesFromRows(rows []summaryRow) []DataRace {
 		races = append(races, DataRace{
 			Location: dataRaceLocation(row.Name),
 			Details:  row.Details,
+			JobID:    jobID,
 		})
 	}
 	return races
 }
 
-// dataRaceLocation strips the redundant "DATA RACE: " prefix that the test-runner
-// prepends to alert names, leaving just the descriptive location.
+// dataRaceLocation reduces a test-runner alert name like
+// "DATA RACE: Data race detected — in go.temporal.io/server/service/history.TestFoo"
+// to just the package-qualified test, e.g. "service/history.TestFoo".
 func dataRaceLocation(name string) string {
-	return strings.TrimSpace(strings.TrimPrefix(name, summaryKindDataRace+":"))
+	loc := strings.TrimSpace(strings.TrimPrefix(name, summaryKindDataRace+":"))
+	if _, after, ok := strings.Cut(loc, "— in "); ok {
+		loc = strings.TrimSpace(after)
+	}
+	return strings.TrimPrefix(loc, temporalModulePrefix)
+}
+
+// raceSites reduces a race detector report to the conflicting memory accesses
+// and the source line each occurred at, e.g.
+//
+//	Read at (goroutine 8): service/history/mutable_state.go:127
+//	Previous write at (goroutine 7): service/history/mutable_state.go:130
+//
+// It handles read/write and write/write races. Returns nil when the report can't
+// be parsed, so callers can degrade to just the location and job link.
+func raceSites(details string) []string {
+	lines := strings.Split(details, "\n")
+	var sites []string
+	for i, line := range lines {
+		m := raceAccessRegex.FindStringSubmatch(strings.TrimSpace(line))
+		if m == nil {
+			continue
+		}
+		if loc := firstGoFrame(lines[i+1:]); loc != "" {
+			sites = append(sites, fmt.Sprintf("%s at (%s): %s", m[1], m[2], loc))
+			if len(sites) == maxRaceSites {
+				break
+			}
+		}
+	}
+	return sites
+}
+
+// firstGoFrame returns "<path>.go:<line>" for the first application stack frame
+// following an access header, skipping the race detector's runtime shim frames
+// (e.g. runtime.raceread in race_amd64.s). It stops at the blank line that ends
+// the access's stack.
+func firstGoFrame(lines []string) string {
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			return "" // end of this access's stack; no application frame found
+		}
+		m := raceFileLineRegex.FindStringSubmatch(trimmed)
+		if m == nil || strings.Contains(m[1], "/src/runtime/") {
+			continue // function-name line, assembly shim, or Go runtime internals
+		}
+		return trimRepoPath(m[1]) + ":" + m[2]
+	}
+	return ""
+}
+
+// trimRepoPath strips the CI checkout prefix from an absolute source path.
+func trimRepoPath(path string) string {
+	return repoPathPrefixRegex.ReplaceAllString(path, "")
+}
+
+// jobIDFromArtifactName extracts the job ID from a test-summary artifact name of
+// the form "test-summary-json--<run_id>--<job_id>--<run_attempt>--<suffix>".
+// Returns "" when the name doesn't carry a job ID.
+func jobIDFromArtifactName(name string) string {
+	parts := strings.Split(name, "--")
+	if len(parts) < 3 {
+		return ""
+	}
+	return parts[2]
 }
 
 // uniqueDataRaces removes duplicate races (the same race is reported by every
