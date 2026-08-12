@@ -26,7 +26,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -97,7 +96,6 @@ func (s *streamSenderSuite) SetupTest() {
 		s.clientShardKey,
 		s.serverShardKey,
 		s.config,
-		testhooks.NewTestHooks(),
 	)
 	s.senderFlowController = NewMockSenderFlowController(s.controller)
 	s.streamSender.flowController = s.senderFlowController

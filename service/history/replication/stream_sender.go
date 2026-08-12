@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -66,7 +65,6 @@ type (
 		flowController          SenderFlowController
 		sendLock                sync.Mutex
 		ssRateLimiter           ServerSchedulerRateLimiter
-		testHooks               testhooks.TestHooks
 	}
 )
 
@@ -81,7 +79,6 @@ func NewStreamSender(
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
 	config *configs.Config,
-	testHooks testhooks.TestHooks,
 ) *StreamSenderImpl {
 	logger := log.With(
 		shardContext.GetLogger(),
@@ -113,7 +110,6 @@ func NewStreamSender(
 		readerGroup:             newReaderGroupIfEnabled(config.EnableReplicationReaderGroup, shardContext, clientShardKey, tieredStackEnabled, logger),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
-		testHooks:               testHooks,
 	}
 }
 
@@ -590,19 +586,8 @@ Loop:
 					metrics.ReplicationTaskPriorityTag(priority),
 				)
 			}()
-			var task *replicationspb.ReplicationTask
-			convert := func() error {
-				var convertErr error
-				task, convertErr = s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
-				return convertErr
-			}
-			// Tests use this hook to force a task's conversion to fail, exercising the
-			// stuck-task skip path (see isSkippable). No-op in production.
-			if hook, ok := testhooks.Get(s.testHooks, testhooks.ReplicationStreamSenderTaskInterceptor, testhooks.GlobalScope); ok {
-				originalConvert := convert
-				convert = func() error { return hook(item, originalConvert) }
-			}
-			if err := convert(); err != nil {
+			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
+			if err != nil {
 				// Wrap as convertError so isSkippable can tell "the task could not be built"
 				// (its source info is corrupt/unusable) apart from transient send/rate-limit
 				// failures, which must not be skipped.
