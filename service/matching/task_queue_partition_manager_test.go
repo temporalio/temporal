@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -2293,6 +2294,11 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
 	engine := createTestMatchingEngine(logger, ctrl, config, matchingClient, registry)
 
+	// Use a fixed time source so rate calculations are deterministic across reads.
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Now())
+	engine.timeSource = ts
+
 	// Create a sticky partition (like a real worker's sticky queue)
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	require.NoError(t, err)
@@ -2355,6 +2361,11 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 		dbqImpl.incTaskTracker(dbqImpl.tasksDispatched, 3, 1)
 	}
 
+	// Advance time so the task tracker has positive elapsed time for rate calculation.
+	// Must be less than the bucket size (totalInterval/buckets = 30s/10 = 3s) to keep
+	// tasks in the current bucket.
+	ts.Advance(time.Second)
+
 	// Verify the raw stats on the physical queue have non-zero rates.
 	rawStats := dbq.GetStatsByPriority(true)
 	require.NotEmpty(t, rawStats, "raw stats should be populated")
@@ -2371,21 +2382,13 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	adjustedStats := pm.GetPhysicalQueueAdjustedStats(context.Background(), dbq)
 
 	// Versioning attribution is skipped for sticky queues, so adjusted rates should
-	// remain positive (not zeroed out by current/ramping version share subtraction).
-	// Note: exact values may differ from raw stats due to EWMA decay between calls,
-	// but they must be in the same order of magnitude.
+	// exactly match the raw rates (time source is fixed, so no drift between reads).
 	require.NotNil(t, adjustedStats, "adjusted stats should not be nil")
 	t.Logf("Raw rates: add=%.4f dispatch=%.4f", rawAddRate, rawDispatchRate)
 	t.Logf("Adjusted rates: add=%.4f dispatch=%.4f", adjustedStats.TasksAddRate, adjustedStats.TasksDispatchRate)
 
-	require.Greater(t, adjustedStats.TasksAddRate, float32(0),
-		"adjusted add rate should be positive for sticky queues (versioning attribution must be skipped)")
-	require.Greater(t, adjustedStats.TasksDispatchRate, float32(0),
-		"adjusted dispatch rate should be positive for sticky queues (versioning attribution must be skipped)")
-	// Adjusted rates should be within the same order of magnitude as raw rates — not
-	// zeroed out by attribution.
-	require.Greater(t, adjustedStats.TasksAddRate, rawAddRate/100,
-		"adjusted add rate should not be drastically reduced for sticky queues")
-	require.Greater(t, adjustedStats.TasksDispatchRate, rawDispatchRate/100,
-		"adjusted dispatch rate should not be drastically reduced for sticky queues")
+	require.Equal(t, rawAddRate, adjustedStats.TasksAddRate,
+		"adjusted add rate should equal raw rate for sticky queues (versioning attribution must be skipped)")
+	require.Equal(t, rawDispatchRate, adjustedStats.TasksDispatchRate,
+		"adjusted dispatch rate should equal raw rate for sticky queues (versioning attribution must be skipped)")
 }
