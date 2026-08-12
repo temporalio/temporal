@@ -1459,20 +1459,24 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 			isRampingDescribe := deploymentVersion.GetDeploymentName() == rampingVersion.GetDeploymentName() &&
 				deploymentVersion.GetBuildId() == rampingVersion.GetBuildId()
 
-			if isUnversionedDescribe {
-				// Reduce unversioned stats by any shares attributed to versioned queues.
-				if currentExists {
-					subtractStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+			// Skip versioning attribution for sticky queues: sticky queues don't route
+			// by version, so their stats belong entirely to the queue itself.
+			if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+				if isUnversionedDescribe {
+					// Reduce unversioned stats by any shares attributed to versioned queues.
+					if currentExists {
+						subtractStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+					}
+					// Only subtract the ramping share when ramping is to a versioned deployment. If ramping is to
+					// unversioned, that share should remain part of the unversioned queue stats.
+					if rampingExists && !isRampingToUnversioned {
+						subtractStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
+					}
+				} else if isCurrentDescribe && currentExists {
+					mergeStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+				} else if isRampingDescribe && rampingExists {
+					mergeStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
 				}
-				// Only subtract the ramping share when ramping is to a versioned deployment. If ramping is to
-				// unversioned, that share should remain part of the unversioned queue stats.
-				if rampingExists && !isRampingToUnversioned {
-					subtractStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
-				}
-			} else if isCurrentDescribe && currentExists {
-				mergeStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
-			} else if isRampingDescribe && rampingExists {
-				mergeStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
 			}
 
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = adjustedStatsByPriority

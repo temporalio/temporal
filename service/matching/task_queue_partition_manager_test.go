@@ -2276,12 +2276,10 @@ func TestSplitTaskQueueStatsByRampPercentage_RateLimitingFalse(t *testing.T) {
 	require.False(t, rampShare.RateLimitingActive)
 }
 
-// TestStickyQueueAdjustedStats_VersioningAttributionZeroesRates demonstrates that when a
-// sticky queue has a current deployment version in user data, the versioning attribution
-// logic in Describe subtracts 100% of the unversioned stats from itself, resulting in
-// zero add/dispatch rates. This prevents poller autoscaling from ever sending +1 signals
-// for sticky queues.
-func TestStickyQueueAdjustedStats_VersioningAttributionZeroesRates(t *testing.T) {
+// TestStickyQueueAdjustedStats_VersioningAttributionSkipped verifies that the versioning
+// attribution logic in Describe is skipped for sticky queues. Sticky queues don't route
+// by version, so their stats should not be reduced by the current/ramping version shares.
+func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -2372,18 +2370,22 @@ func TestStickyQueueAdjustedStats_VersioningAttributionZeroesRates(t *testing.T)
 	// the versioning attribution logic.
 	adjustedStats := pm.GetPhysicalQueueAdjustedStats(context.Background(), dbq)
 
-	// BUG: The adjusted stats have zero rates because the attribution logic subtracts
-	// 100% of the unversioned stats (since currentExists=true and isUnversionedDescribe=true).
-	// For sticky queues, this subtraction is incorrect — sticky queues don't route by version.
+	// Versioning attribution is skipped for sticky queues, so adjusted rates should
+	// remain positive (not zeroed out by current/ramping version share subtraction).
+	// Note: exact values may differ from raw stats due to EWMA decay between calls,
+	// but they must be in the same order of magnitude.
 	require.NotNil(t, adjustedStats, "adjusted stats should not be nil")
 	t.Logf("Raw rates: add=%.4f dispatch=%.4f", rawAddRate, rawDispatchRate)
 	t.Logf("Adjusted rates: add=%.4f dispatch=%.4f", adjustedStats.TasksAddRate, adjustedStats.TasksDispatchRate)
 
-	// This assertion demonstrates the bug: adjusted rates are near-zero despite
-	// the physical queue having significant traffic.
-	// When fixed, these rates should be equal to the raw rates.
 	require.Greater(t, adjustedStats.TasksAddRate, float32(0),
-		"BUG: adjusted add rate is zero because versioning attribution subtracts all stats from sticky queue")
+		"adjusted add rate should be positive for sticky queues (versioning attribution must be skipped)")
 	require.Greater(t, adjustedStats.TasksDispatchRate, float32(0),
-		"BUG: adjusted dispatch rate is zero because versioning attribution subtracts all stats from sticky queue")
+		"adjusted dispatch rate should be positive for sticky queues (versioning attribution must be skipped)")
+	// Adjusted rates should be within the same order of magnitude as raw rates — not
+	// zeroed out by attribution.
+	require.Greater(t, adjustedStats.TasksAddRate, rawAddRate/100,
+		"adjusted add rate should not be drastically reduced for sticky queues")
+	require.Greater(t, adjustedStats.TasksDispatchRate, rawDispatchRate/100,
+		"adjusted dispatch rate should not be drastically reduced for sticky queues")
 }
