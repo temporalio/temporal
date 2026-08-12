@@ -239,11 +239,17 @@ func (ni *NamespaceValidatorInterceptor) InterceptNexus(
 ) (any, error) {
 	namespaceEntry, err := NexusNamespaceFromContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "interceptor_failed",
+		}
 	}
 	apiName, err := NexusAPINameFromContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "interceptor_failed",
+		}
 	}
 	if err := ni.ValidateState(namespaceEntry, apiName, in.ForwardingInfo().BusinessID); err != nil {
 		return nil, &InterceptorError{

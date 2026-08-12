@@ -100,11 +100,17 @@ func (i *RateLimitInterceptor) InterceptNexus(
 ) (any, error) {
 	apiName, err := NexusAPINameFromContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, true),
+			Outcome: "interceptor_failed",
+		}
 	}
 	header, err := NexusHeaderFromInterceptorInput(in)
 	if err != nil {
-		return nil, err
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, true),
+			Outcome: "interceptor_failed",
+		}
 	}
 	if err := i.Allow(apiName, header); err != nil {
 		return nil, &InterceptorError{

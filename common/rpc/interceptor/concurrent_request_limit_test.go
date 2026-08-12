@@ -2,9 +2,12 @@ package interceptor
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -137,6 +140,64 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			tc.run(t)
 		})
 	}
+}
+
+func TestConcurrentRequestLimitInterceptor_InterceptNexus(t *testing.T) {
+	interceptor := NewConcurrentRequestLimitInterceptor(
+		nil,
+		quotastest.NewFakeMemberCounter(1),
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
+		map[string]int{"NexusAPI": 1},
+	)
+	input := NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
+	t.Run("missing API name", func(t *testing.T) {
+		nextCalled := false
+		_, err := interceptor.InterceptNexus(context.Background(), input, func(context.Context, NexusInterceptorInput) (any, error) {
+			nextCalled = true
+			return nil, nil
+		})
+		var interceptorErr *InterceptorError
+		require.ErrorAs(t, err, &interceptorErr)
+		require.Equal(t, "interceptor_failed", interceptorErr.Outcome)
+		require.False(t, nextCalled)
+	})
+
+	ctx := WithNexusAPIName(context.Background(), "NexusAPI")
+
+	blockUntilFirstReqStarted := make(chan struct{})
+	unblockFirstRequest := make(chan struct{})
+	firstReqErrorCh := make(chan error, 1)
+
+	go func() {
+		_, err := interceptor.InterceptNexus(
+			ctx,
+			input,
+			func(context.Context, NexusInterceptorInput) (any, error) {
+				close(blockUntilFirstReqStarted)
+				<-unblockFirstRequest
+				return nil, nil
+			},
+		)
+		firstReqErrorCh <- err
+	}()
+	<-blockUntilFirstReqStarted
+	// second req should never proceed to calling next
+	_, err := interceptor.InterceptNexus(
+		ctx,
+		input,
+		func(context.Context, NexusInterceptorInput) (any, error) {
+			t.Fatal("second request reached handler")
+			return nil, errors.New("throttled request reached")
+		},
+	)
+	var interceptorErr *InterceptorError
+	require.ErrorAs(t, err, &interceptorErr)
+	require.Equal(t, "namespace_concurrency_limited", interceptorErr.Outcome)
+
+	close(unblockFirstRequest)
+	require.NoError(t, <-firstReqErrorCh)
 }
 
 // run the test case by simulating a bunch of blocked pollers, sending a final request, and verifying that it is either

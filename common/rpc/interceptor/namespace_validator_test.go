@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -108,6 +109,77 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotSet(
 			s.NoError(err)
 			s.True(handlerCalled)
 		}
+	}
+}
+
+func (s *namespaceValidatorSuite) TestInterceptNexus() {
+	validator := NewNamespaceValidatorInterceptor(
+		s.mockRegistry,
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetIntPropertyFn(100),
+		nil,
+	)
+	input := NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
+	for _, tc := range []struct {
+		name            string
+		ctx             context.Context
+		nextCalled      bool
+		expectedOutcome string
+	}{
+		{
+			name: "resolved namespace",
+			ctx: WithNexusAPIName(WithNexusNamespace(context.Background(), namespace.NewNamespaceForTest(
+				&persistencespb.NamespaceInfo{Name: testNamespace, State: enumspb.NAMESPACE_STATE_REGISTERED},
+				nil,
+				false,
+				nil,
+				0,
+			)), api.NexusServicePrefix+"DispatchNexusTask"),
+			nextCalled: true,
+		},
+		{
+			name: "invalid namespace state",
+			ctx: WithNexusAPIName(WithNexusNamespace(context.Background(), namespace.NewNamespaceForTest(
+				&persistencespb.NamespaceInfo{Name: testNamespace, State: enumspb.NAMESPACE_STATE_DEPRECATED},
+				nil,
+				false,
+				nil,
+				0,
+			)), api.NexusServicePrefix+"DispatchNexusTask"),
+			expectedOutcome: "invalid_namespace_state",
+		},
+		{name: "missing namespace", ctx: WithNexusAPIName(context.Background(), "NexusAPI"), expectedOutcome: "interceptor_failed"},
+		{
+			name: "missing API name",
+			ctx: WithNexusNamespace(context.Background(), namespace.NewNamespaceForTest(
+				&persistencespb.NamespaceInfo{Name: testNamespace, State: enumspb.NAMESPACE_STATE_REGISTERED},
+				nil,
+				false,
+				nil,
+				0,
+			)),
+			expectedOutcome: "interceptor_failed",
+		},
+	} {
+		s.Run(tc.name, func() {
+			nextCalled := false
+			_, err := validator.InterceptNexus(
+				tc.ctx,
+				input,
+				func(context.Context, NexusInterceptorInput) (any, error) {
+					nextCalled = true
+					return nil, nil
+				},
+			)
+			if tc.expectedOutcome != "" {
+				var interceptorErr *InterceptorError
+				s.ErrorAs(err, &interceptorErr)
+				s.Equal(tc.expectedOutcome, interceptorErr.Outcome)
+			} else {
+				s.NoError(err)
+			}
+			s.Equal(tc.nextCalled, nextCalled)
+		})
 	}
 }
 
