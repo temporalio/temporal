@@ -349,6 +349,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}, nil
 }
 
+// provideBootstrapPersistenceFactory records the factory as soon as Fx constructs it so it can
+// be closed if later graph construction fails.
 func (s *ServerFx) provideBootstrapPersistenceFactory(
 	cfg *config.Config,
 	serviceResolver resolver.ServiceResolver,
@@ -700,7 +702,7 @@ func ApplyClusterMetadataConfigProvider(
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
-	// Do not close the manager because the factory owns and closes its persistence resources.
+	// Do not close the manager: it shares the factory's data store, which the factory's owner closes.
 
 	visCSAOverride := map[enumspb.IndexedValueType]int{}
 	for tpName, value := range svc.Visibility.PersistenceCustomSearchAttributes {
