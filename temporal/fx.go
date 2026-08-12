@@ -408,7 +408,6 @@ func (s *ServerFx) Start() error {
 // Stop stops the server.
 func (s *ServerFx) Stop() error {
 	err := s.app.Stop(context.Background())
-	s.closeBootstrapPersistenceFactory()
 	return err
 }
 
