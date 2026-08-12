@@ -25,9 +25,13 @@ type nexusForwardingInterceptor struct {
 	logger                 log.Logger
 	clusterMetadata        cluster.Metadata
 	redirectionInterceptor *interceptor.Redirection
-	forwardingClients      *cluster.FrontendHTTPClientCache
+	forwardingClients      frontendHTTPClientCache
 	serviceConfig          *Config
 	httpTraceProvider      commonnexus.HTTPClientTraceProvider
+}
+
+type frontendHTTPClientCache interface {
+	Get(targetClusterName string) (*common.FrontendHTTPClient, error)
 }
 
 func newNexusForwardingInterceptor(
@@ -56,11 +60,17 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 	info := in.ForwardingInfo()
 	header, err := interceptor.NexusHeaderFromInterceptorInput(in)
 	if err != nil {
-		return nil, err
+		return nil, &interceptor.InterceptorError{
+			Err:     err,
+			Outcome: "interceptor_failed",
+		}
 	}
 	namespaceEntry, err := interceptor.NexusNamespaceFromContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, &interceptor.InterceptorError{
+			Err:     err,
+			Outcome: "interceptor_failed",
+		}
 	}
 	currentCluster := i.clusterMetadata.GetCurrentClusterName()
 	targetCluster := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: info.BusinessID})
@@ -76,7 +86,10 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 
 	telemetryContext, err := interceptor.TelemetryContextFromContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, &interceptor.InterceptorError{
+			Err:     err,
+			Outcome: "interceptor_failed",
+		}
 	}
 	telemetryContext.SetMetricsOutcome("request_forwarded")
 
