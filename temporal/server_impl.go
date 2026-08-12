@@ -25,6 +25,7 @@ type (
 		logger           log.Logger
 		namespaceLogger  resource.NamespaceLogger
 
+		// bootstrapPersistenceFactory must only be used during Start; ServerFx closes it after startup.
 		bootstrapPersistenceFactory persistenceClient.Factory
 	}
 )
@@ -127,7 +128,7 @@ func initSystemNamespaces(
 	if err != nil {
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
-	// Do not close the manager because the factory owns and closes its persistence resources.
+	// Do not close the manager: it shares the factory's data store, which the factory's owner closes.
 	ctx, cancel := context.WithTimeout(
 		headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo),
 		30*time.Second,
