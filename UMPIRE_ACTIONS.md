@@ -262,7 +262,7 @@ Built as `PLAN.md` describes, split along umpire's existing framework/registrati
 - `Reconcile` — returns declared effects the run did not produce (drift), same intent as the FSM
   conformance check, one layer up.
 
-**`tests/umpire/action/`** — the Temporal concretions:
+**`tests/umpirev1/action/`** — the Temporal concretions:
 - `action.go` — `Ctx` (the `RealizeContext`, with fault cleanups), `Oracle` (`StateOracle` +
   `VisitedOracle` over the Monitor's `ModelState`), `Resolver` (`EffectResolver` over the
   lifecycles), `ResponsePolicy` (a programmable mock Nexus handler), the realizers, and the
@@ -291,14 +291,14 @@ fires on the attempt, not once started).
   budget-bounded drive list: each distinct fault target is scheduled once (breadth) before any
   repeat, and the overflow is reported as `dropped` — never a silent truncation. It is the
   deterministic upgrade of the uniform-random `TestProbeNexusRandomized`. See
-  `tests/umpire/action/schedule.go` and `TestProbeNexusCoverageGuidedFaults`. (Smarter novelty —
+  `tests/umpirev1/action/schedule.go` and `TestProbeNexusCoverageGuidedFaults`. (Smarter novelty —
   weighting a fault by the *new edges* it would exercise — remains a future upgrade, and feeds the
   "coverage-guided sampling" open question in [`UMPIRE_MATRIX.md`](./UMPIRE_MATRIX.md).)
 - ~~**`Faultable` from the learned footprint**~~ **(done)** — the static field was renamed
   `Action.Entry` (the client-entry RPCs a Drop just fails on) and fault targeting now derives from
   the *observed* footprint: `LearnFootprint` drives a plan under observation, `FaultTargets` reduces
   the result (observed − entry − ambient) to the internal calls, and `FaultVariants(plan, learned)`
-  builds one Drop-variant per target. See `tests/umpire/action/fault.go` and
+  builds one Drop-variant per target. See `tests/umpirev1/action/fault.go` and
   `TestProbeNexusLearnedFootprint`.
 - **Beyond `NexusOperation`** — a second entity is now driven by the same generic runtime. The
   Nexus-specific `actionFor`/`PlanEdge`/`settlingEdges` were split into an entity-agnostic core
@@ -334,17 +334,17 @@ fires on the attempt, not once started).
   (`Action.Footprint`), and `ReconcileFootprint(plan, observed)` grounds it against the learned
   footprint: an expected internal call that never fired, or an observed non-ambient call outside the
   plan's `Entry ∪ Footprint`, is wire-level drift (the analog of `Reconcile`'s effect drift). Opt-in
-  per action. See `tests/umpire/action/footprint.go` and `TestProbeNexusLearnedFootprint`.
+  per action. See `tests/umpirev1/action/footprint.go` and `TestProbeNexusLearnedFootprint`.
 
 ## Relationship to the other umpire pieces
 
-- **Entity models** (`common/testing/umpire/lifecycle.go`, `tests/umpire/model/*`) — the state
+- **Entity models** (`common/testing/umpire/lifecycle.go`, `tests/umpirev1/model/*`) — the state
   space the actions move through.
 - **Footprint / Mechanism** (see UMPIRE_TRACING.md) — the RPC-level realization an action
   references; the actions model is the semantic operator, the footprint is its wire-level
   detail.
-- **Planner** (`tests/umpire/planner`) — routes over entity edges with capability and hosting
-  constraints; `PlanEdge` (in `tests/umpire/action`) reuses it, mapping each route event to an
+- **Planner** (`tests/umpirev1/planner`) — routes over entity edges with capability and hosting
+  constraints; `PlanEdge` (in `tests/umpirev1/action`) reuses it, mapping each route event to an
   action.
 - **Probe / drivers** (`tests/probe`, `tests/umpire_probe_test.go`) — the probe's judge /
   coverage / verdict machinery is unchanged; only the drive is now generated

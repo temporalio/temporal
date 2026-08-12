@@ -20,9 +20,9 @@ import (
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/server/tests/umpire/action"
-	"go.temporal.io/server/tests/umpire/model"
-	"go.temporal.io/server/tests/umpire/planner"
+	"go.temporal.io/server/tests/umpirev1/action"
+	"go.temporal.io/server/tests/umpirev1/model"
+	"go.temporal.io/server/tests/umpirev1/planner"
 )
 
 // TEMPORAL_OTEL_DEBUG enables the generic chasm.transition telemetry the umpire Monitor

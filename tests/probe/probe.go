@@ -24,8 +24,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/server/tests/umpire/model"
-	"go.temporal.io/server/tests/umpire/planner"
+	"go.temporal.io/server/tests/umpirev1/model"
+	"go.temporal.io/server/tests/umpirev1/planner"
 )
 
 // defaultMaxFaults bounds how many observed calls become fault scenarios, so a

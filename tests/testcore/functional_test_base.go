@@ -45,9 +45,11 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testtelemetry"
+	umpirefw "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
-	umpiretest "go.temporal.io/server/tests/umpire"
+	testmonitor "go.temporal.io/server/tests/testcore/monitor"
+	"go.temporal.io/server/tests/umpirev1"
 	"google.golang.org/grpc"
 )
 
@@ -68,7 +70,7 @@ type (
 
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
-		monitor      *umpiretest.Monitor
+		monitor      testmonitor.Monitor
 		// monitorViolationsExpected suppresses teardown enforcement for the current
 		// test (set via AllowMonitorViolations). Used only by the monitor's own
 		// detector tests, which deliberately drive the system into a bad state.
@@ -112,6 +114,7 @@ type (
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		AdditionalInterceptors          []grpc.UnaryServerInterceptor
+		UmpireMonitorFactory            testmonitor.Factory
 	}
 	TestClusterOption func(params *testClusterParams)
 )
@@ -207,6 +210,12 @@ func WithAdditionalGrpcInterceptors(interceptors ...grpc.UnaryServerInterceptor)
 	}
 }
 
+func withUmpireMonitorFactory(factory testmonitor.Factory) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.UmpireMonitorFactory = factory
+	}
+}
+
 func (s *FunctionalTestBase) GetTestCluster() *TestCluster {
 	return s.testCluster
 }
@@ -267,7 +276,7 @@ func (s *FunctionalTestBase) TaskPoller() *taskpoller.TaskPoller {
 	return s.taskPoller
 }
 
-func (s *FunctionalTestBase) GetMonitor() *umpiretest.Monitor {
+func (s *FunctionalTestBase) GetMonitor() testmonitor.Monitor {
 	if s.monitor == nil {
 		panic("Monitor not initialized - did you forget to call SetupSuite()?")
 	}
@@ -329,11 +338,18 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	// The monitor (property-based test observer) is enabled by default on every
 	// cluster: it observes gRPC calls and OTEL spans and validates property rules.
 	// Access it via GetMonitor().
-	s.monitor, err = umpiretest.NewMonitor(s.Logger)
+	monitorFactory := params.UmpireMonitorFactory
+	if monitorFactory == nil {
+		monitorFactory = func(logger log.Logger) (testmonitor.Monitor, error) {
+			return umpirev1.NewMonitor(logger)
+		}
+	}
+	s.monitor, err = monitorFactory(s.Logger)
 	s.Require().NoError(err)
+	s.Require().NotNil(s.monitor)
 
 	additionalInterceptors := make([]grpc.UnaryServerInterceptor, 0, len(params.AdditionalInterceptors)+1)
-	additionalInterceptors = append(additionalInterceptors, umpiretest.NewUnaryServerInterceptor(s.monitor, nil))
+	additionalInterceptors = append(additionalInterceptors, umpirefw.NewUnaryServerInterceptor(s.monitor, nil))
 	additionalInterceptors = append(additionalInterceptors, params.AdditionalInterceptors...)
 
 	s.testClusterConfig = &TestClusterConfig{

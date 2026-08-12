@@ -26,11 +26,13 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	testmonitor "go.temporal.io/server/tests/testcore/monitor"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -108,6 +110,20 @@ type versionHeadersContextKey struct{}
 func WithDedicatedCluster() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
+	}
+}
+
+// WithUmpireMonitorFactory selects the Monitor implementation for a dedicated test cluster.
+func WithUmpireMonitorFactory[T testmonitor.Monitor](factory func(log.Logger) (T, error)) TestOption {
+	if factory == nil {
+		panic("Umpire monitor factory is required")
+	}
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.dedicatedReason = "custom Umpire monitor used"
+		o.clusterOptions = append(o.clusterOptions, withUmpireMonitorFactory(func(logger log.Logger) (testmonitor.Monitor, error) {
+			return factory(logger)
+		}))
 	}
 }
 
@@ -348,6 +364,11 @@ func (e *TestEnv) Namespace() namespace.Name {
 
 func (e *TestEnv) NamespaceID() namespace.ID {
 	return e.nsID
+}
+
+// GetFaultInjector returns the cluster's RPC fault generator.
+func (e *TestEnv) GetFaultInjector() *faultinjection.RPCFaultGenerator {
+	return e.cluster.Host().GetFaultInjector()
 }
 
 // InjectHook sets a test hook inside the cluster.

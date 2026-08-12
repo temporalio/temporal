@@ -28,6 +28,23 @@ Protocol model
 └── refinement mappings
 ```
 
+## Implementation status (2026-08-12)
+
+The compatibility-backed Phase 1 slice now lives in `tests/umpire2/protocol`.
+Its compiled declaration owns the current fact/entity catalog, lifecycle
+planning, executable edge actions, and explicit action gaps. The Umpire 2
+Monitor registers its model state from that declaration, and cross-version
+tests compare its catalogs, plans, payloads, and fact routing with the renamed
+`tests/umpirev1` baseline.
+
+This completes catalog unification for the copied Umpire 2 implementation, not
+the broader semantic IR described below. `UmpireTestSuite` now runs its four
+plan-drive-judge tests against dedicated Umpire 2 clusters, while other
+functional suites retain the v1 default. A neutral testcore monitor boundary
+and an action-owned environment interface remove Umpire 2's temporary
+transitive v1 coupling. Relations, generic constraints, refinement
+declarations, the deterministic explorer, and exporters have not started.
+
 This model can remain executable in Go while eventually supporting exporters to model checkers or
 proof tools. The source of truth is the IR, not any one backend's syntax or worldview.
 

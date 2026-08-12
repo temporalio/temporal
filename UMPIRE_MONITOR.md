@@ -27,7 +27,7 @@ Wire formats and change-tracking live in one place; rules just read entity state
 | Package | Role | Knows about |
 |---|---|---|
 | `common/testing/umpire/` | **Framework** — generic machinery | facts, entities, routing, rules — *not* Temporal |
-| `tests/umpire/` | **Domain** — Temporal specifics | workflows, updates, task queues, gRPC/span shapes |
+| `tests/umpirev1/` | **Domain** — Temporal specifics | workflows, updates, task queues, gRPC/span shapes |
 
 The framework never imports the domain. Adding a rule or entity is a domain change; the
 framework stays put.
@@ -144,7 +144,7 @@ A **`Violation`** is `{Rule, Message, Tags}` — the framework's only output.
 
 ---
 
-## Domain layer (`tests/umpire/`)
+## Domain layer (`tests/umpirev1/`)
 
 ### `Umpire` — the orchestrator (`umpire.go`)
 

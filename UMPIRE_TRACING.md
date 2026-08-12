@@ -60,7 +60,7 @@ hand-written "this call must happen" assertion — both fall out of the footprin
    request IDs, host, attempt counters bucketed) — the SAA `Fingerprint`/`mask` discipline
    ([`UMPIRE_PRIOR_ART.md`](./UMPIRE_PRIOR_ART.md#what-umpire-can-learn-from-the-saa-behavioral-model)). A footprint must be **deterministic** to be checked in.
 3. **Store.** Serialize per entity to a reviewed golden file
-   (`tests/umpire/footprints/<entity>.json`), one entry per edge. Human-diffable.
+   (`tests/umpirev1/footprints/<entity>.json`), one entry per edge. Human-diffable.
 4. **Conform (drift).** A test re-derives footprints from a fresh happy path and diffs against
    the golden. A diff is either an intended behavior change (update the golden in the same PR,
    reviewed) or an accidental one (a new persistence write crept into the update path) — caught
@@ -226,7 +226,7 @@ clock, the second because isolated-namespace driving removes the ambiguity at th
 ## Storage format (sketch)
 
 ```jsonc
-// tests/umpire/footprints/workflow_update.json  (checked in, reviewed)
+// tests/umpirev1/footprints/workflow_update.json  (checked in, reviewed)
 {
   "entity": "WorkflowUpdate",
   "edges": {

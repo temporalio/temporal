@@ -1,7 +1,7 @@
 // Package umpire is a generic, Temporal-agnostic framework for property-based test
 // monitoring: it observes a running system, builds an executable model of its entities from a
 // stream of facts, and judges that model with rules. The Temporal-specific entities, facts,
-// and rules live in tests/umpire; the whole-system pitch — the Monitor / Driver / Planner
+// and rules live in tests/umpirev1; the whole-system pitch — the Monitor / Driver / Planner
 // parts and the environment/capability model — lives in the repo-root UMPIRE_SPEC.md and its
 // siblings.
 //

@@ -18,10 +18,11 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/testcore"
-	ksworker "go.temporal.io/server/tests/umpire/kitchensink/worker"
-	"go.temporal.io/server/tests/umpire/ksdriver"
-	"go.temporal.io/server/tests/umpire/model"
-	"go.temporal.io/server/tests/umpire/planner"
+	"go.temporal.io/server/tests/umpire2"
+	ksworker "go.temporal.io/server/tests/umpire2/kitchensink/worker"
+	"go.temporal.io/server/tests/umpire2/ksdriver"
+	"go.temporal.io/server/tests/umpire2/model"
+	"go.temporal.io/server/tests/umpire2/planner"
 )
 
 // UmpireTestSuite is an end-to-end test of both halves of the umpire together:
@@ -77,7 +78,7 @@ func (d *workflowDriver) Do(ctx context.Context, a planner.Step) error {
 
 func (s *UmpireTestSuite) TestPlanAndDriveWorkflowToCompletion() {
 	t := s.T()
-	env := testcore.NewEnv(t)
+	env := testcore.NewEnv(t, testcore.WithUmpireMonitorFactory(umpire2.NewMonitor))
 	env.SdkWorker().RegisterWorkflow(signalThenComplete)
 
 	// 1) PLAN: describe the target state; the Driver computes the route. No traffic yet.
@@ -113,7 +114,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveWorkflowToCompletion() {
 // kitchensink-described behaviour and still judge it with zero hand-written assertions.
 func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkWorkflow() {
 	t := s.T()
-	env := testcore.NewEnv(t)
+	env := testcore.NewEnv(t, testcore.WithUmpireMonitorFactory(umpire2.NewMonitor))
 	env.SdkWorker().RegisterWorkflow(ksworker.KitchenSinkWorkflow)
 
 	// 1) PLAN: describe the target state; the Planner computes the route.
@@ -155,6 +156,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 	t := s.T()
 
 	env := newNexusTestEnv(t, true,
+		testcore.WithUmpireMonitorFactory(umpire2.NewMonitor),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, true),
@@ -231,6 +233,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkNexusOperation() {
 	t := s.T()
 
 	env := newNexusTestEnv(t, true,
+		testcore.WithUmpireMonitorFactory(umpire2.NewMonitor),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, true),

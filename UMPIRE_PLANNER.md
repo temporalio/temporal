@@ -220,7 +220,7 @@ There is a spectrum:
 
 ## Status
 
-- **Built and tested today** (`tests/umpire/planner`, no server needed): the `DefaultModels()`
+- **Built and tested today** (`tests/umpirev1/planner`, no server needed): the `DefaultModels()`
   catalog (fully-qualified `(entity, state)` targets) and the planner it fronts —
   `PlanTo` (Shortest/AllRoutes/Random), `Explore`, `Constraints` (enforced by construction),
   fail-fast reachability, and `Plan.Run` over a `Driver`. The examples above are taken from the

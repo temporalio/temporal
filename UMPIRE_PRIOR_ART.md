@@ -186,7 +186,7 @@ Umpire = broad, opportunistic, cheap, many entities, portable.** Complementary, 
    kept the generic conformance rule unregistered. The generic `EntityTransitionLegality` is now
    registered and **replaces** `WorkflowUpdateStageMonotone` (deleted) — a regression is just not
    a legal edge — checking every `Lifecycled` type at once. `States`/`Events`/`Reachable`/
-   `Validate` expose the graph for **Tier-1 static validation** (`tests/umpire/model` proves each
+   `Validate` expose the graph for **Tier-1 static validation** (`tests/umpirev1/model` proves each
    default lifecycle is sound and `Classify` total, server-free in ms — the analog of the SAA
    `validate` package). Predicting the *API result* per edge (item 5) was considered next but does
    **not** fit: SAA's events *are* API calls, so an edge has an API outcome; Umpire's events are
@@ -199,7 +199,7 @@ Umpire = broad, opportunistic, cheap, many entities, portable.** Complementary, 
    A reachability walk over the entity FSMs produces that target set for free — no hand-curated
    equivalence classes. ✅ **Foundation built:** `Lifecycle.Reachable()` + `Cells()` give the
    per-entity coverage denominator (the decision table) with zero server, and
-   `tests/umpire/model` renders each model as a living-doc table and asserts no dead events. Still
+   `tests/umpirev1/model` renders each model as a living-doc table and asserts no dead events. Still
    to do: track *exercised* cells at runtime and aggregate across purges (the process-global
    `Coverage` sink) to turn the denominator into a real coverage/dead-rule report. Adopt
    `Fingerprint`-style bucketing so retry/attempt loops converge.

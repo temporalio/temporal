@@ -101,7 +101,7 @@ Driver's per-environment realizer enforces them.)
 These already exist or are half-built in the Umpire code; the Driver consumes them.
 
 1. **`FaultInjector` (the active hook).** `interceptor.go` already threads an `inj FaultInjector`
-   through `NewUnaryServerInterceptor`; `tests/umpire`'s `NewUnaryServerInterceptor(u, inj)`
+   through `NewUnaryServerInterceptor`; `tests/umpirev1`'s `NewUnaryServerInterceptor(u, inj)`
    accepts it and passes `nil` today. *Need:* a driver implementing `Inject`, passed where `nil`
    is now. **No framework change to start** — the cleanest entry point.
 2. **A client handle.** RPC events need a frontend client (and, for worker-based realizations, an

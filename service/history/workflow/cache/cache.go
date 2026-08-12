@@ -28,7 +28,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/tests/umpire/model"
+	"go.temporal.io/server/tests/umpirev1/model"
 )
 
 type (

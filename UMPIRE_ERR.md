@@ -338,7 +338,7 @@ Rule of thumb: **prefer the registry oracle where the field is covered and the e
 ## Implementation
 
 Built on top of the actions model (`UMPIRE_ACTIONS.md`). The Temporal concretions live in
-`tests/umpire/action/reject.go`; the abstract schema is in `common/testing/umpire`.
+`tests/umpirev1/action/reject.go`; the abstract schema is in `common/testing/umpire`.
 
 - **E1 — rejection round-trip (done).** `umpire.Action.Reject` + the `RejectSink` seam: `Drive`
   records a Fire outcome on a `Reject` action (error, or nil if accepted) and continues instead of
@@ -392,7 +392,7 @@ Built on top of the actions model (`UMPIRE_ACTIONS.md`). The Temporal concretion
 - **Monitor decoder** (`UMPIRE_MONITOR.md`, `UMPIRE_TRACING.md`) — teaches wire error-responses to
   become lifecycle facts keyed by `RequestID`; the seam that lets rejections be judged as
   transitions.
-- **Planner** (`tests/umpire/planner`) — variant coverage becomes a planning goal alongside edge
+- **Planner** (`tests/umpirev1/planner`) — variant coverage becomes a planning goal alongside edge
   coverage.
 - **Faults** (`UMPIRE_SPEC.md` mutation-vs-fault split) — the same `{target, perturbation, Expect}`
   shape with a footprint target instead of a param target.

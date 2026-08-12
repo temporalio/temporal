@@ -10,7 +10,7 @@ The pipeline is built and, as of the latest changes, **enforced suite-wide**:
 
 - **Framework** (`common/testing/umpire/`): registry + generation dirty-tracking,
   safety/liveness `RuleRegistry`, `FactLog`, gRPC interceptor, OTEL span processor. Unit-tested.
-- **Domain** (`tests/umpire/`): 4 entities, 14 facts, 11 registered rules (3 safety,
+- **Domain** (`tests/umpirev1/`): 4 entities, 14 facts, 11 registered rules (3 safety,
   8 liveness), each with a positive + negative test. The generic
   `EntityTransitionLegality` is built + unit-tested but **not registered**: a functional
   suite run surfaced a false positive (a `Workflow` sees `complete` while still in
@@ -231,7 +231,7 @@ forward edge), `NoOp` (a benign duplicate / late / out-of-order / post-terminal
 re-observation), or `Illegal` (impossible given the observed history) — and `Fire` is defined
 in terms of it. Modelling the benign re-observations as `NoOp` (rather than lumping every
 non-edge into "illegal") is what removed the false-positive vector. `States`/`Events`/
-`Reachable`/`Validate` expose the graph for Tier-1 static validation (`tests/umpire/model`
+`Reachable`/`Validate` expose the graph for Tier-1 static validation (`tests/umpirev1/model`
 checks every default lifecycle is sound and `Classify` is total, server-free in ms — the
 analog of the SAA model's `validate` package). This realizes item #1 of `UMPIRE_PRIOR_ART.md` (SAA).
 

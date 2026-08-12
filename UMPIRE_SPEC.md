@@ -223,7 +223,7 @@ than a bespoke DSL.
   interesting states nobody reached — the seam the Planner's guided-fuzz mode steers toward.
 - **Pluggable registries.** Rules register in a name-validated `RuleRegistry`, coverpoints in a
   `CoverpointRegistry`, and routes in a `RouteRegistry`. Adding one ≠ touching the framework.
-- **Framework / domain split.** `common/testing/umpire` is generic and reusable; `tests/umpire`
+- **Framework / domain split.** `common/testing/umpire` is generic and reusable; `tests/umpirev1`
   holds all Temporal specifics (entities, facts, rules, and — later — actions).
 
 ## Shape

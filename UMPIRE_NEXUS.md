@@ -106,7 +106,7 @@ executor call sites, not from inside the transition closures. Emit where node me
 workflow key) is accessible — the executor / event-handler layer in `executors.go` and
 `events.go`. This is the part with design risk; everything else is additive test-only code.
 
-### 3. Facts — `tests/umpire/fact/`
+### 3. Facts — `tests/umpirev1/fact/`
 
 Add `NexusOperationType umpire.EntityType = "NexusOperation"` to `constants.go`. A shared
 decoder `nexus_span.go` (mirroring `update_span.go`), plus one `SpanFact` per event:
@@ -145,7 +145,7 @@ func (e *NexusOperationStarted) ImportSpanEvent(attrs attribute.Set) bool {
 Terminal facts (`NexusOperationSucceeded/Failed/Canceled/TimedOut`) additionally read
 `AttrNexusOutcome` to record the outcome on the entity.
 
-### 4. Entity — `tests/umpire/model/nexus_operation.go`
+### 4. Entity — `tests/umpirev1/model/nexus_operation.go`
 
 A `Lifecycled` entity mirroring the HSM (same shape as `WorkflowUpdate`):
 
@@ -174,17 +174,17 @@ func NewNexusOperation() *NexusOperation {
 `OnFact` fires the matching event per fact type — the exact shape of `WorkflowUpdate.OnFact`,
 deriving `*At` accessors from `FSM.EnteredAt(...)` so state ⇔ timestamp holds by construction.
 
-### 5. Registration — `tests/umpire/model/register.go`
+### 5. Registration — `tests/umpirev1/model/register.go`
 
 Register the 7 span facts and `NewNexusOperation` (subscribing to those facts).
 
-### 6. Key helper — `tests/umpire/entity_key.go`
+### 6. Key helper — `tests/umpirev1/entity_key.go`
 
 Add `WorkflowPath.NexusOperation(scheduledEventID) string` returning the registry key
 `namespace:…@Workflow:wf@NexusOperation:wf:<schedEventID>`, so tests can assert
 `RequireRulePassed`.
 
-### 7. Rules — `tests/umpire/rule/`
+### 7. Rules — `tests/umpirev1/rule/`
 
 Two new rules; the generic `EntityProgress` (already registered) covers *stuck* operations for
 free via `MustProgress`:

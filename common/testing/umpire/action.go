@@ -10,7 +10,7 @@ import (
 // operator with preconditions over entity states and effects that fire lifecycle transitions
 // (possibly on several entities). A planner assembles actions into sequences that cover the
 // edge set; the generic Drive runtime here executes a sequence. This file is domain-agnostic —
-// the concrete Temporal actions and their realizers live in tests/umpire/action. See
+// the concrete Temporal actions and their realizers live in tests/umpirev1/action. See
 // UMPIRE_ACTIONS.md.
 
 // Kind is how an action is physically realized against a live environment. It also fixes the
@@ -53,7 +53,7 @@ type Effect struct {
 }
 
 // Action is a declarative driver operator. It is domain-agnostic; concrete actions (with
-// Temporal realizers) are declared in tests/umpire/action.
+// Temporal realizers) are declared in tests/umpirev1/action.
 type Action struct {
 	Name     string
 	Kind     Kind
@@ -64,14 +64,14 @@ type Action struct {
 	// Entry names the RPC(s) / HTTP path(s) this action issues directly. A Drop of an entry call
 	// fails the drive rather than testing resilience, so entry calls are *excluded* from a plan's
 	// learned fault targets — the internal/retryable calls a fault can meaningfully perturb are
-	// discovered by observing a drive, not declared here (see tests/umpire/action fault.go:
+	// discovered by observing a drive, not declared here (see tests/umpirev1/action fault.go:
 	// LearnFootprint / FaultTargets).
 	Entry []string
 	// Footprint names the internal RPC(s) / HTTP path(s) this action is *expected* to trigger
 	// downstream (beyond the Entry call it issues directly). It is the wire-level analog of Effects:
 	// where Effects declare the lifecycle transitions an action causes, Footprint declares the calls
 	// it should make to cause them, reconciled against the observed footprint (see
-	// tests/umpire/action footprint.go: ReconcileFootprint) to catch drift a refactor introduces —
+	// tests/umpirev1/action footprint.go: ReconcileFootprint) to catch drift a refactor introduces —
 	// a new or removed internal call — that the effect-level check would miss. Opt-in: a nil
 	// Footprint is not reconciled.
 	Footprint []string
