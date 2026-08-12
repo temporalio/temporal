@@ -20,10 +20,19 @@ type graphNode struct {
 
 type graphLeaf struct {
 	Value int
+	_     [8]byte
+}
+
+type tinyValue byte
+
+type tinyZeroLengthPointerArrayValue struct {
+	Pointers [0]*byte
+	Value    byte
 }
 
 type aliasOuter struct {
 	aliasInner
+	_ [8]byte
 }
 
 type aliasInner struct {
@@ -387,4 +396,44 @@ baseline retained objects:
 			require.Equal(t, tc.wantReport, report)
 		})
 	}
+}
+
+func TestObjectLeak_CheckSkipsTinyPointerFreeObjects(t *testing.T) {
+	values := []any{
+		new(tinyValue),
+		new(tinyZeroLengthPointerArrayValue),
+	}
+	check, err := NewObjectLeakCheck(WithGCSettleTimeout(checkGCMinWait + time.Second))
+	require.NoError(t, err)
+	for _, value := range values {
+		check.Track(value)
+	}
+
+	report, err := check.Check(Baseline{})
+	runtime.KeepAlive(values)
+	require.NoError(t, err)
+	require.Equal(t, `object leak report
+
+tracked root objects: 2
+retained paths: 0 total, 0 baseline, 0 expected, 0 unexpected
+retained objects: 0 total, 0 baseline, 0 expected, 0 unexpected
+
+unexpected retained objects:
+  none
+
+expected retained objects:
+  none
+
+baseline retained objects:
+  none`, report)
+}
+
+func TestSettleGCToZeroSucceedsWhenObjectsDrainNearTimeout(t *testing.T) {
+	start := time.Now()
+	require.True(t, settleGCToZero(checkGCMinWait+100*time.Millisecond, func() int {
+		if time.Since(start) < checkGCMinWait {
+			return 1
+		}
+		return 0
+	}))
 }

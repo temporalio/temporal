@@ -58,15 +58,10 @@ func newReport(
 		addRetained(obj, path, retentionBaseline)
 	}
 	for obj := range retainedObjects(objects) {
-		if baseline.contains(obj) {
-			continue
-		}
 		path := obj.path.normalized()
-		isExpected := activeExpected.matchObject(path, obj.typeName)
-		if isExpected {
-			addRetained(obj, path, retentionExpected)
-		} else {
-			addRetained(obj, path, retentionUnexpected)
+		class := classifyRetention(obj, baseline, activeExpected)
+		if class != retentionBaseline {
+			addRetained(obj, path, class)
 		}
 	}
 	r.totalRetainedObjects = len(retainedAddresses)
@@ -83,6 +78,16 @@ func newReport(
 	slices.Sort(r.unmatchedExpected)
 	slices.Sort(r.unmatchedPrunes)
 	return r
+}
+
+func classifyRetention(obj trackedObject, baseline Baseline, expected patterns) retentionClass {
+	if baseline.contains(obj) {
+		return retentionBaseline
+	}
+	if expected.matchObject(obj.path.normalized(), obj.typeName) {
+		return retentionExpected
+	}
+	return retentionUnexpected
 }
 
 func (r report) failures() error {

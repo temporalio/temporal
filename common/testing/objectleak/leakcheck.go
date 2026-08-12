@@ -5,6 +5,7 @@ import (
 	"iter"
 	"runtime"
 	runtimedebug "runtime/debug"
+	"slices"
 	"sync/atomic"
 	"time"
 )
@@ -129,11 +130,22 @@ func (t *ObjectLeakCheck) Track(root any) {
 // tracking, GC settling that timed out during Check, or a timeout recorded in
 // the supplied baseline.
 func (t *ObjectLeakCheck) Check(baseline Baseline) (string, error) {
-	settled := settleGC(t.gcSettleTimeout, func() int {
-		return countRetained(t.objects, baseline.objects)
+	settled := settleGCToZero(t.gcSettleTimeout, func() int {
+		return countUnexpected(t.objects, baseline, t.expected)
 	})
 	report := newReport(t.objects, baseline, !settled, t.roots, t.expected, t.pruneTypes)
 	return report.string(), report.failures()
+}
+
+func countUnexpected(objects []trackedObject, baseline Baseline, expected patterns) int {
+	activeExpected := slices.Clone(expected)
+	count := 0
+	for obj := range retainedObjects(objects) {
+		if classifyRetention(obj, baseline, activeExpected) == retentionUnexpected {
+			count++
+		}
+	}
+	return count
 }
 
 func countRetained(objectSets ...[]trackedObject) int {
@@ -157,6 +169,14 @@ func retainedObjects(objects []trackedObject) iter.Seq[trackedObject] {
 }
 
 func settleGC(timeout time.Duration, snapshot func() int) bool {
+	return settleGCWhen(timeout, snapshot, false)
+}
+
+func settleGCToZero(timeout time.Duration, snapshot func() int) bool {
+	return settleGCWhen(timeout, snapshot, true)
+}
+
+func settleGCWhen(timeout time.Duration, snapshot func() int, requireZero bool) bool {
 	start := time.Now()
 	minWaitDeadline := start.Add(checkGCMinWait)
 	deadline := start.Add(timeout)
@@ -164,6 +184,7 @@ func settleGC(timeout time.Duration, snapshot func() int) bool {
 
 	var lastSnapshot int
 	var haveLastSnapshot bool
+	var hadUnexpected bool
 	for {
 		// AddCleanup callbacks run after GC proves tracked objects are
 		// unreachable. Run a small burst and yield so callbacks can mark tracked
@@ -181,13 +202,30 @@ func settleGC(timeout time.Duration, snapshot func() int) bool {
 		// Wait for the snapshot to stop changing instead of returning on the
 		// first passing state. This lets delayed cleanup callbacks finish before
 		// we decide.
-		if currentSnapshot := snapshot(); !haveLastSnapshot || currentSnapshot != lastSnapshot {
+		currentSnapshot := snapshot()
+		if requireZero {
+			if currentSnapshot == 0 && hadUnexpected {
+				return true
+			}
+			hadUnexpected = hadUnexpected || currentSnapshot != 0
+		}
+		if !haveLastSnapshot || currentSnapshot != lastSnapshot {
 			lastSnapshot = currentSnapshot
 			haveLastSnapshot = true
 			settledDeadline = now.Add(checkGCQuiet)
 			if minWaitDeadline.After(settledDeadline) {
 				settledDeadline = minWaitDeadline
 			}
+		}
+		if requireZero && currentSnapshot != 0 {
+			// Unexpected objects can remain reachable while asynchronous shutdown
+			// callbacks drain. Give them the full configured timeout, but still
+			// distinguish a stable leak from GC settling that never became quiet.
+			if now.After(deadline) {
+				return haveLastSnapshot && now.After(settledDeadline)
+			}
+			time.Sleep(checkGCPause)
+			continue
 		}
 
 		// Unless the timeout expires first, the minimum wait gives cleanup
