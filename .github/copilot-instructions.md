@@ -64,7 +64,18 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Match existing metric tag formats (CONSTANT_CASE for enum values)
 - Use the same error message style (no punctuation for single sentences)
 
-## 7. API and Proto Design
+## 7. Code comments
+
+- A comment should be removed if the behavior of the code without the comment should be apparent to a reader familiar with the codebase.
+- If the benefit of a comment can be achieved by improving variable/function names then suggest that.
+- A comment must not give unnecessary or verbose explanation.
+- A comment must not use language that is metaphorical or alien to the codebase.
+- Sentence structure in comments should be simple. Prefer several plain statements over one sentence built from subordinate clauses, parentheticals, or stacked qualifications.
+- A comment should typically not refer to counterfactuals, or to discussions or decision processes that occurred when the code was written.
+- A comment should typically not explain how upstream callers use the code.
+- In a code review, give the concrete replacement text as a code suggestion. If the clearer and shorter fix is to restructure the code rather than reword the comment, suggest that code instead.
+
+## 8. API and Proto Design
 
 - Document all proto fields with comments
 - Use proper field names: `request_id` not `requestId`, `schedule_time` not `scheduledTime`
@@ -72,7 +83,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Accept event attributes structs instead of growing function signatures
 - Prefer enums over int/string for well-known values
 
-## 8. Concurrency and Safety
+## 9. Concurrency and Safety
 
 - Prefer immutable data patterns (for normal structs and especially proto messages) to avoid data races and synchronization
 - Default to `sync.Mutex` for synchronization; atomics are an advanced tool for specific patterns or performance concerns

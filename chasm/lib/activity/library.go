@@ -62,6 +62,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				TypeSearchAttribute,
 				StatusSearchAttribute,
 				chasm.SearchAttributeTaskQueue,
+				chasm.SearchAttributeExecutionTime,
 			),
 			chasm.WithBusinessIDAlias("ActivityId"),
 			chasm.WithContextValues(map[any]any{

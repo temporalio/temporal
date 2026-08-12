@@ -55,7 +55,7 @@ type chasmTestEnv struct {
 
 // newChasmTestEnv creates a chasmTestEnv backed by a dedicated cluster with
 // EnableChasm and VisibilityEnableUnifiedQueryConverter overridden for the test.
-func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
+func newChasmTestEnv(suiteContext func() context.Context, t *testing.T, unified bool) chasmTestEnv {
 	t.Helper()
 
 	// WithDedicatedCluster acquires an exclusive pooled slot — no fresh cluster
@@ -69,7 +69,7 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
 	)
 
-	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(env.Context())
+	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(suiteContext())
 	require.NoError(t, err)
 
 	return chasmTestEnv{TestEnv: env, chasmCtx: chasmCtx}
@@ -81,7 +81,8 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 func (s *ChasmSuite) forBothConverters(fn func(*ChasmSuite, chasmTestEnv)) {
 	for _, unified := range []bool{false, true} {
 		s.Run(fmt.Sprintf("unified=%v", unified), func(ss *ChasmSuite) {
-			fn(ss, newChasmTestEnv(ss.T(), unified))
+			// Resolve the suite context after NewEnv attaches its RPC header decorator.
+			fn(ss, newChasmTestEnv(ss.Context, ss.T(), unified))
 		})
 	}
 }
@@ -498,7 +499,7 @@ func (s *ChasmSuite) TestListWorkflowExecutions() {
 		var execInfo *workflowpb.WorkflowExecutionInfo
 		ss.AwaitTrue(
 			func() bool {
-				listResp, err := cenv.FrontendClient().ListWorkflowExecutions(cenv.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				listResp, err := cenv.FrontendClient().ListWorkflowExecutions(ss.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 					Namespace: cenv.Namespace().String(),
 					PageSize:  10,
 					Query:     visQuery,
@@ -551,7 +552,7 @@ func (s *ChasmSuite) TestPayloadStoreForceDelete() {
 		var executionInfo *workflowpb.WorkflowExecutionInfo
 		ss.AwaitTrue(
 			func() bool {
-				resp, err := cenv.FrontendClient().ListWorkflowExecutions(cenv.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+				resp, err := cenv.FrontendClient().ListWorkflowExecutions(ss.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 					Namespace: cenv.Namespace().String(),
 					PageSize:  10,
 					Query:     visQuery,
@@ -573,7 +574,7 @@ func (s *ChasmSuite) TestPayloadStoreForceDelete() {
 		ss.NoError(err)
 		ss.Equal(tests.ArchetypeID, chasm.ArchetypeID(parsedArchetypeID))
 
-		_, err = cenv.AdminClient().DeleteWorkflowExecution(cenv.Context(), &adminservice.DeleteWorkflowExecutionRequest{
+		_, err = cenv.AdminClient().DeleteWorkflowExecution(ss.Context(), &adminservice.DeleteWorkflowExecutionRequest{
 			Namespace: cenv.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: storeID,
@@ -584,7 +585,7 @@ func (s *ChasmSuite) TestPayloadStoreForceDelete() {
 		ss.NoError(err)
 
 		// Validate mutable state is deleted.
-		_, err = cenv.AdminClient().DescribeMutableState(cenv.Context(), &adminservice.DescribeMutableStateRequest{
+		_, err = cenv.AdminClient().DescribeMutableState(ss.Context(), &adminservice.DescribeMutableStateRequest{
 			Namespace: cenv.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: storeID,
@@ -842,7 +843,7 @@ func (s *ChasmSuite) TestMutableStateRebuilder() {
 		// payloadStore archetype is not the workflow archetype, should fail the rebuild.
 		ss.NotEqual(tests.Archetype, chasm.WorkflowArchetype, "Archetype should not be the workflow archetype")
 
-		_, err = cenv.AdminClient().RebuildMutableState(cenv.Context(), &adminservice.RebuildMutableStateRequest{
+		_, err = cenv.AdminClient().RebuildMutableState(ss.Context(), &adminservice.RebuildMutableStateRequest{
 			Namespace: cenv.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: storeID,
@@ -1035,7 +1036,7 @@ func (s *ChasmSuite) TestPayloadStore_ApproximateExecutionSize() {
 		sizeDelta := float64(100) // Allow 100 bytes of variance due to overhead, encoding, etc.
 		ss.InDelta(payloadSize, currentApproxSize-initialApproxSize, sizeDelta)
 
-		adminDescResp, err := cenv.AdminClient().DescribeMutableState(cenv.Context(), &adminservice.DescribeMutableStateRequest{
+		adminDescResp, err := cenv.AdminClient().DescribeMutableState(ss.Context(), &adminservice.DescribeMutableStateRequest{
 			Namespace: cenv.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: storeID,
@@ -1058,7 +1059,7 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 		_, err := rand.Read(namespaceSuffix[:])
 		ss.NoError(err)
 		namespaceName := fmt.Sprintf("ns-chasm-delete-%x", namespaceSuffix)
-		_, err = cenv.FrontendClient().RegisterNamespace(cenv.Context(), &workflowservice.RegisterNamespaceRequest{
+		_, err = cenv.FrontendClient().RegisterNamespace(ss.Context(), &workflowservice.RegisterNamespaceRequest{
 			Namespace:                        namespaceName,
 			WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
 			HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
@@ -1066,7 +1067,7 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 		})
 		ss.NoError(err)
 
-		descResp, err := cenv.FrontendClient().DescribeNamespace(cenv.Context(), &workflowservice.DescribeNamespaceRequest{
+		descResp, err := cenv.FrontendClient().DescribeNamespace(ss.Context(), &workflowservice.DescribeNamespaceRequest{
 			Namespace: namespaceName,
 		})
 		ss.NoError(err)
@@ -1086,7 +1087,7 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 
 		// Wait for visibility records to appear.
 		visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d'", tests.ArchetypeID)
-		await.Require(cenv.Context(), ss.T(), func(t *await.T) {
+		await.Require(ss.Context(), ss.T(), func(t *await.T) {
 			resp, err := cenv.FrontendClient().ListWorkflowExecutions(t.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: namespaceName,
 				PageSize:  10,
@@ -1097,13 +1098,13 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
 		// Delete the namespace, which should trigger DeleteExecution for all CHASM executions.
-		_, err = cenv.OperatorClient().DeleteNamespace(cenv.Context(), &operatorservice.DeleteNamespaceRequest{
+		_, err = cenv.OperatorClient().DeleteNamespace(ss.Context(), &operatorservice.DeleteNamespaceRequest{
 			Namespace: namespaceName,
 		})
 		ss.NoError(err)
 
 		// Verify all CHASM executions are cleaned up from visibility.
-		await.Require(cenv.Context(), ss.T(), func(t *await.T) {
+		await.Require(ss.Context(), ss.T(), func(t *await.T) {
 			resp, err := cenv.FrontendClient().ListWorkflowExecutions(t.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: namespaceName,
 				PageSize:  10,

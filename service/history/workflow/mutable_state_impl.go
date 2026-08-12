@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -686,6 +687,11 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 func (ms *MutableStateImpl) ChasmEnabled() bool {
 	_, isNoop := ms.chasmTree.(*noopChasmTree)
 	return !isNoop
+}
+
+func (ms *MutableStateImpl) ChasmSkipPersistenceEnabled() bool {
+	return ms.config.EnableCHASMSkipPersistence != nil &&
+		ms.config.EnableCHASMSkipPersistence(ms.GetNamespaceEntry().Name().String())
 }
 
 // chasmCallbacksEnabled returns true if CHASM callbacks are enabled for this workflow.
@@ -3193,9 +3199,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.Priority = event.Priority
 
 	if tsc, stateProp := event.GetTimeSkippingConfig(), event.GetTimeSkippingStatePropagation(); tsc != nil || stateProp.GetInitialSkippedDuration().AsDuration() > 0 {
-		if err := ms.initTimeSkippingInfo(tsc, stateProp); err != nil {
-			return err
-		}
+		ms.initTimeSkippingInfo(tsc, stateProp)
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -4710,6 +4714,7 @@ func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
 			ai.Version,
 			ai.StartVersion,
 			nil,
+			0,
 		))
 		if err != nil {
 			return err
@@ -5944,13 +5949,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		tsc := attributes.GetTimeSkippingConfig()
 		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
 		if tsi == nil {
-			if err := ms.initTimeSkippingInfo(tsc, nil); err != nil {
-				return err
-			}
+			ms.initTimeSkippingInfo(tsc, nil)
 		} else {
-			if err := ms.updateTimeSkippingInfo(tsc); err != nil {
-				return err
-			}
+			ms.updateTimeSkippingInfo(tsc)
 		}
 	}
 
@@ -6787,7 +6788,7 @@ func (ms *MutableStateImpl) RetryActivity(
 		}
 	}
 
-	if !isRetryable(activityFailure, ai.RetryNonRetryableErrorTypes) {
+	if !retrypolicy.IsRetryableFailure(activityFailure, ai.RetryNonRetryableErrorTypes) {
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
 	}
 

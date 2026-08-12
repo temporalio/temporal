@@ -528,6 +528,9 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	pm, ok = e.partitions[key]
 	if ok {
 		e.partitionsLock.Unlock()
+		// Lost the race with a concurrent load of the same partition. The unstarted
+		// newPM holds no external references (subscriptions etc. are only registered
+		// in Start), so it can simply be dropped and garbage collected.
 		return pm, false, nil
 	}
 
@@ -1776,15 +1779,17 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	if request.GetVersions() == nil {
 		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build ID as a member of the BuildIds list")
 	}
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true, loadCauseDescribe)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), !request.GetOnlyIfLoaded(), loadCauseDescribe)
 	if err != nil {
 		return nil, err
+	} else if pm == nil {
+		return nil, serviceerror.NewFailedPrecondition("partition was not loaded")
 	}
 	buildIds, err := e.getBuildIds(request.GetVersions())
 	if err != nil {
 		return nil, err
 	}
-	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers(), request.GetReportInternalTaskQueueStatus())
+	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers(), request.GetReportInternalTaskQueueStatus(), request.GetOnlyIfLoaded())
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
@@ -3384,6 +3389,12 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		metrics.AsyncMatchLatencyPerTaskQueue.With(metricsHandler).Record(time.Since(ct))
 	}
 
+	componentRef := task.event.GetData().GetComponentRef()
+	activityAttemptStamp := int32(0)
+	if len(componentRef) > 0 {
+		activityAttemptStamp = task.event.Data.GetStamp()
+	}
+
 	taskToken := tasktoken.NewActivityTaskToken(
 		task.event.Data.GetNamespaceId(),
 		task.event.Data.GetWorkflowId(),
@@ -3395,7 +3406,8 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		historyResponse.GetClock(),
 		historyResponse.GetVersion(),
 		historyResponse.GetStartVersion(),
-		task.event.GetData().GetComponentRef(),
+		componentRef,
+		activityAttemptStamp,
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 

@@ -32,6 +32,8 @@ func scalerEnvOptions(dcPartitions int) []testcore.TestOption {
 			BatchSize:          1,           // always go directly to scaler
 			BackgroundInterval: time.Second, // ping scaler often and drain faster
 			DrainBufferTime:    time.Second, // drain faster
+			ShrinkRatio:        1.0,         // allow fast shrinking
+			ShrinkDelta:        100,         // allow fast shrinking
 		}),
 	}
 }
@@ -99,8 +101,9 @@ func TestPartitionScaling_Down(t *testing.T) {
 		Fixed:   4,
 	})
 
-	t.Log("wait until 4,5 see no new tasks over a 1s window")
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), time.Second, 4, 5), 15*time.Second, time.Millisecond)
+	t.Log("wait until 4,5 see no new tasks over a 2s window")
+	// nolint:staticcheck // until we rewrite the test
+	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()
@@ -175,8 +178,9 @@ func TestPartitionScaling_Down_FromDC(t *testing.T) {
 		Fixed:   4,
 	})
 
-	t.Log("wait until 4,5 see no new tasks over a 1s window")
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), time.Second, 4, 5), 15*time.Second, time.Millisecond)
+	t.Log("wait until 4,5 see no new tasks over a 2s window")
+	// nolint:staticcheck // until we rewrite the test
+	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()

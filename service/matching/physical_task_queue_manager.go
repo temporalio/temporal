@@ -379,10 +379,6 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 		return
 	}
 
-	if !c.config.EnableMigration() {
-		return
-	}
-
 	var drainBacklogMgr backlogManager
 	var logger log.Logger
 	switch c.backlogMgr.(type) {
@@ -525,7 +521,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// history, but this is more efficient.
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
 			// task is expired while polling
-			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag)
 			task.finish(taskFinishResult{dropReason: dropReasonExpiredMemory})
 			continue
 		}
@@ -580,8 +575,6 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 	task *internalTask,
 ) error {
 	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
-		var invalidTaskTag = getInvalidTaskTag(task)
-		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
 		task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
 		// Don't try to set read level here because it may have been advanced already.
 

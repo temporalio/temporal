@@ -57,6 +57,7 @@ type (
 
 // selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs contains a list of APIs which can be redirected
 var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}{
+	// Workflow APIs
 	"StartWorkflowExecution":           {},
 	"SignalWithStartWorkflowExecution": {},
 	"SignalWorkflowExecution":          {},
@@ -64,10 +65,22 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 	"TerminateWorkflowExecution":       {},
 	"DeleteWorkflowExecution":          {},
 	"QueryWorkflow":                    {},
-	"StartActivityExecution":           {},
-	"RequestCancelActivityExecution":   {},
-	"TerminateActivityExecution":       {},
-	"DeleteActivityExecution":          {},
+
+	// Standalone Activity APIs
+	"StartActivityExecution":         {},
+	"RequestCancelActivityExecution": {},
+	"TerminateActivityExecution":     {},
+	"DeleteActivityExecution":        {},
+	"PauseActivityExecution":         {},
+	"UnpauseActivityExecution":       {},
+	"ResetActivityExecution":         {},
+	"UpdateActivityExecutionOptions": {},
+
+	// Standalone Nexus Operation APIs
+	"StartNexusOperationExecution":         {},
+	"RequestCancelNexusOperationExecution": {},
+	"TerminateNexusOperationExecution":     {},
+	"DeleteNexusOperationExecution":        {},
 }
 
 // RedirectionPolicyGenerator generate corresponding redirection policy

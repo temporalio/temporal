@@ -18,6 +18,7 @@ import (
 	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -32,6 +33,11 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
+// defaultMaxSkipPerSession mirrors the compiled default of
+// dynamicconfig.WorkflowTimeSkippingMaxSkipPerSession. The frontend populates a request's
+// unset MaxSkipPerSession with this value, so tests that leave it empty expect it back.
+const defaultMaxSkipPerSession = 200
+
 type TimeSkippingTestSuite struct {
 	parallelsuite.Suite[*TimeSkippingTestSuite]
 }
@@ -44,11 +50,11 @@ func TestTimeSkippingTestSuite(t *testing.T) {
 // returns an error when the feature flag is off for the namespace.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
 	env := testcore.NewEnv(s.T())
-	// TimeSkippingEnabled defaults to false; no override needed.
+	// WorkflowTimeSkippingEnabled defaults to false; no override needed.
 	id := "functional-timeskipping-feature-disabled"
 	tl := "functional-timeskipping-feature-disabled-tq"
 
-	_, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
@@ -65,15 +71,16 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
 // TimeSkippingConfig persists the config in mutable state when the feature flag is on.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
+	// Request leaves MaxSkipPerSession empty; the frontend populates it from dynamic config.
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour),
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour), Id: "ff-id"},
 	}
 
-	resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -87,6 +94,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
 	s.True(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
+	inputConfig.MaxSessionSkipCount = defaultMaxSkipPerSession // frontend populated this from dynamic config
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -94,15 +102,16 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 // with TimeSkippingConfig persists the config in mutable state when the feature flag is on.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
+	// Request leaves MaxSkipPerSession empty; the frontend populates it from dynamic config.
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour),
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour), Id: "ff-id"},
 	}
 
-	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -116,6 +125,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 	s.NoError(err)
 
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
+	inputConfig.MaxSessionSkipCount = defaultMaxSkipPerSession // frontend populated this from dynamic config
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -124,16 +134,17 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 // when the feature flag is on.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	maxElapsedDuration := time.Hour
 
+	// Request leaves MaxSkipPerSession empty; the frontend populates it from dynamic config.
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(maxElapsedDuration),
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(maxElapsedDuration), Id: "ff-id"},
 	}
 
-	resp, err := env.FrontendClient().ExecuteMultiOperation(testcore.NewContext(), &workflowservice.ExecuteMultiOperationRequest{
+	resp, err := env.FrontendClient().ExecuteMultiOperation(s.Context(), &workflowservice.ExecuteMultiOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 			{
@@ -168,6 +179,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 
 	runID := resp.GetResponses()[0].GetStartWorkflow().GetRunId()
 	ms := s.getMutableState(env, tv.WorkflowID(), runID)
+	inputConfig.MaxSessionSkipCount = defaultMaxSkipPerSession // frontend populated this from dynamic config
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -180,11 +192,11 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 //  5. Assert exactly 3 WorkflowExecutionOptionsUpdated events appear in history.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	// Start a workflow without any time-skipping config.
-	startResp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -198,7 +210,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	// collectOptionsEvents returns all WorkflowExecutionOptionsUpdated events in history order.
 	collectOptionsEvents := func() []*historypb.HistoryEvent {
-		histResp, err := env.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		histResp, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 		})
@@ -212,7 +224,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 		return events
 	}
 	updateOptions := func(cfg *commonpb.TimeSkippingConfig) {
-		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(testcore.NewContext(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 			Namespace:                env.Namespace().String(),
 			WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 			WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfg},
@@ -225,12 +237,14 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	ms := s.getMutableState(env, tv.WorkflowID(), runID)
 	s.Nil(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig())
 
-	// First update: enable with a max_elapsed_duration.
+	// First update: enable with a max_elapsed_duration. MaxSkipPerSession is left empty and
+	// populated by the frontend from dynamic config; the persisted config and event carry it.
 	config1 := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour),
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour), Id: "ff-id"},
 	}
 	updateOptions(config1)
+	config1.MaxSessionSkipCount = defaultMaxSkipPerSession
 
 	ms = s.getMutableState(env, tv.WorkflowID(), runID)
 	s.True(proto.Equal(config1, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
@@ -240,10 +254,11 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	// Second update: change the max_elapsed_duration duration.
 	config2 := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(2 * time.Hour),
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour), Id: "ff-id"},
 	}
 	updateOptions(config2)
+	config2.MaxSessionSkipCount = defaultMaxSkipPerSession
 
 	ms = s.getMutableState(env, tv.WorkflowID(), runID)
 	s.True(proto.Equal(config2, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
@@ -251,9 +266,11 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	s.Len(events, 2)
 	s.True(proto.Equal(config2, events[1].GetWorkflowExecutionOptionsUpdatedEventAttributes().GetTimeSkippingConfig()))
 
-	// Third update: disable time-skipping.
+	// Third update: disable time-skipping. The frontend's default-populate runs even for a
+	// disabled config, so MaxSkipPerSession still comes back set.
 	config3 := &commonpb.TimeSkippingConfig{Enabled: false}
 	updateOptions(config3)
+	config3.MaxSessionSkipCount = defaultMaxSkipPerSession
 
 	ms = s.getMutableState(env, tv.WorkflowID(), runID)
 	s.True(proto.Equal(config3, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
@@ -268,9 +285,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 // attributes carry the full config.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	// Start a workflow and drain the first workflow task to establish a reset point.
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -305,8 +322,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 
 	// Reset with PostResetOperations that sets TimeSkippingConfig.
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour), Id: "ff-id"}}
 	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
 		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
@@ -327,8 +344,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 	s.NoError(err)
 	newRunID := resetResp.RunId
 
-	// New run's mutable state must have the config.
+	// New run's mutable state must have the config (MaxSkipPerSession populated by the frontend).
 	ms := s.getMutableState(env, tv.WorkflowID(), newRunID)
+	inputConfig.MaxSessionSkipCount = defaultMaxSkipPerSession
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 
 	// New run's history must contain a WorkflowExecutionOptionsUpdated event with the config.
@@ -354,7 +372,7 @@ func (s *TimeSkippingTestSuite) getMutableState(env *testcore.TestEnv, workflowI
 		workflowID,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(testcore.NewContext(), &persistence.GetWorkflowExecutionRequest{
+	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: env.NamespaceID().String(),
 		WorkflowID:  workflowID,
@@ -369,7 +387,7 @@ func (s *TimeSkippingTestSuite) getMutableState(env *testcore.TestEnv, workflowI
 // and a caller-specified run timeout. Used by tests that need the run timeout
 // to be long enough to fit a virtual-time skip.
 func (s *TimeSkippingTestSuite) startWorkflowWithTimeSkipping(env *testcore.TestEnv, tv *testvars.TestVars, runTimeout time.Duration) string {
-	resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -432,6 +450,16 @@ func hasEventType(events []*historypb.HistoryEvent, t enumspb.EventType) bool {
 	return false
 }
 
+func timeSkippingTransitions(events []*historypb.HistoryEvent) []*historypb.HistoryEvent {
+	var out []*historypb.HistoryEvent
+	for _, e := range events {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // TestTimeSkipping_TimerAndActivity verifies that when a workflow has both a long user
 // timer and a pending activity, time-skipping is blocked until the activity completes.
 // Once the activity is done and the workflow task is drained, time-skipping fires and
@@ -445,7 +473,7 @@ func hasEventType(events []*historypb.HistoryEvent, t enumspb.EventType) bool {
 //	WT3 → complete workflow (timer has fired)
 func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	// Run timeout must exceed the 1h timer; otherwise skip shifts the run-timeout
@@ -505,7 +533,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_TimerAndActivity() {
 //	WT2 → activity completed → complete the workflow.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_ActivityRetryBackoff() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	wallStart := time.Now()
@@ -576,9 +604,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ActivityRetryBackoff() {
 
 func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := env.Context()
+	ctx := s.Context()
 
 	// Target workflow B. No worker polls B; the SignalExternal RPC will land a
 	// WorkflowExecutionSignaled event in B's history directly. Distinct task
@@ -692,7 +720,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 	env := testcore.NewEnv(
 		s.T(),
 		testcore.WithHistoryTaskRecorder(),
-		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
 	)
 	tv := testvars.New(s.T())
 
@@ -702,7 +730,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 	)
 	wallStart := time.Now()
 
-	startResp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -771,7 +799,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 //	Verify: AccumulatedSkippedDuration ≈ 3h (NOT 1h+4h=5h from canceled timer-B)
 func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarget() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 
 	const (
@@ -894,7 +922,7 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	env := testcore.NewEnv(
 		s.T(),
 		testcore.WithHistoryTaskRecorder(),
-		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
 	)
 	tv := testvars.New(s.T())
 
@@ -1001,7 +1029,7 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	// Consequences:
 	//   - CloseTime − StartTime ≈ skip (≈ timerDuration).  (this is virtualDuration)
 	//   - CloseTime − ExecutionTime ≈ skip.  (public reported duration)
-	desc, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 	})
@@ -1204,8 +1232,8 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 
 func (s *TimeSkippingFastForwardFunctionalSuite) TestTimeSkipping_ExecutionTimeoutTimesOutIdleWorkflow() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	ctx := testcore.NewContext()
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	ctx := s.Context()
 
 	const executionTimeout = 5 * time.Minute
 
@@ -1249,9 +1277,9 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestTimeSkipping_ExecutionTimeo
 
 func (s *TimeSkippingTestSuite) TestTimeSkippingTransitionEventOrdersAfterOptionsUpdated() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	// Start WITHOUT time skipping.
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -1312,4 +1340,204 @@ func (s *TimeSkippingTestSuite) TestTimeSkippingTransitionEventOrdersAfterOption
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 		Reason:            "test cleanup",
 	})
+}
+
+// TestTimeSkipping_Paused verifies time-skipping behavior related to pause and unpause:
+//  1. we allow setting and storing the time skipping config when paused;
+//  2. time doesn't skip when paused, and skipping resumes when unpaused;
+//  3. if a user sets a time point to disable time skipping in the options (the fast-forward)
+//     and also pauses the execution, that timer can still fire and turn off time skipping.
+//
+// Sequence:
+//
+//	WT1       → start timer t1 (5min). Time skipping is off, so nothing skips.
+//	Pause     → status PAUSED.
+//	Update #1 → enable skipping with a 2s fast-forward. The close-tx cannot skip, but the
+//	            fast-forward timer task is scheduled at wall now+2s.
+//	(wait)    → once real time passes 2s the task fires through pause: HasReached=true,
+//	            Config.Enabled=false, and no time was skipped (t1 is untouched).
+//	          → the workflow is still paused; turning time skipping off does not resume it.
+//	Update #2 → enable skipping again with no fast-forward config (FastForwardInfo cleared,
+//	            session skip count reset). Still paused → still no skip 2s later.
+//	Unpause   → the unpause transaction schedules a WFT, which blocks skipping; draining it
+//	            leaves the workflow idle on t1, so the close-tx skips ~5min and t1 fires.
+//	WT        → complete the workflow.
+//
+// Final history has exactly two transitions: the fast-forward disable (while paused) and
+// the skip to t1 (after unpause).
+func (s *TimeSkippingTestSuite) TestTimeSkipping_Paused() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	const (
+		timerDuration = 5 * time.Minute
+		fastForward   = 2 * time.Second
+		// The fast-forward target is only 2s out, so its timer task must fire almost
+		// immediately; anything beyond this means it did not fire through pause at all.
+		fastForwardWait = 3 * time.Second
+		// Real time to let a skip happen, if one were going to, before asserting it did not.
+		settleWindow = 2 * time.Second
+		// Whole-test budget. fastForward + settleWindow are spent waiting on real time; the
+		// rest is RPCs. The 5min timer is skipped, never waited out.
+		maxTestDuration = 10 * time.Second
+	)
+
+	testStart := time.Now()
+
+	// Start without a time-skipping config: skipping must stay off until the first update,
+	// otherwise WT1's close transaction would skip t1 before we can pause.
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+	execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID}
+
+	timeSkippingInfo := func() *persistencespb.TimeSkippingInfo {
+		return s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	}
+	workflowStatus := func() enumspb.WorkflowExecutionStatus {
+		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: execution,
+		})
+		s.NoError(descErr)
+		return desc.GetWorkflowExecutionInfo().GetStatus()
+	}
+	updateTimeSkipping := func(cfg *commonpb.TimeSkippingConfig) {
+		_, updateErr := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+			Namespace:                env.Namespace().String(),
+			WorkflowExecution:        execution,
+			WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfg},
+			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+		})
+		s.NoError(updateErr)
+	}
+	// (1) WT1: start the 5-minute timer and go idle.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("t1", timerDuration)},
+		}, nil
+	})
+	s.NoError(err)
+	s.Nil(timeSkippingInfo(), "no time-skipping info before the workflow opts in")
+
+	// (2) Pause.
+	_, err = env.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+		Identity:   "test",
+		Reason:     "paused workflows must not skip time",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, workflowStatus())
+
+	// (3) Enable time skipping with a 2s fast-forward while paused. The close transaction of
+	// the options update cannot skip, but the fast-forward timer task is still scheduled.
+	updateTimeSkipping(&commonpb.TimeSkippingConfig{
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"},
+	})
+	tsi := timeSkippingInfo()
+	s.True(tsi.GetConfig().GetEnabled())
+	s.False(tsi.GetFastForwardInfo().GetHasReached(), "the fast-forward starts out pending")
+	s.False(hasEventType(env.GetHistory(env.Namespace().String(), execution), enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED),
+		"enabling time skipping on a paused workflow must not skip")
+
+	// (4) Pause does not hold off the fast-forward. Its timer task is wall-clock-anchored, and
+	// executeTimeSkippingTimerTask gates only on IsWorkflowExecutionRunning (a paused workflow
+	// is still RUNNING), so once 2s of real time pass it fires through pause and turns time
+	// skipping off. What it must NOT do is advance the clock of a paused workflow.
+	s.AwaitTruef(func() bool {
+		return timeSkippingInfo().GetFastForwardInfo().GetHasReached()
+	}, fastForwardWait, 500*time.Millisecond, "the fast-forward timer task must fire through pause once its wall-clock target passes")
+
+	tsi = timeSkippingInfo()
+	s.False(tsi.GetConfig().GetEnabled(), "the fast-forward must turn time skipping off even though the workflow is paused")
+	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration(),
+		"the fast-forward disable must not advance the clock of a paused workflow")
+
+	histPaused := env.GetHistory(env.Namespace().String(), execution)
+	s.False(hasEventType(histPaused, enumspb.EVENT_TYPE_TIMER_FIRED), "t1 must not fire while paused")
+	transitions := timeSkippingTransitions(histPaused)
+	s.Len(transitions, 1, "the only transition so far is the fast-forward disable")
+	s.True(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
+		"the transition written while paused must be the fast-forward disable, not a skip")
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, workflowStatus())
+
+	// (5) Still paused: re-enable time skipping, this time with no fast-forward config.
+	updateTimeSkipping(&commonpb.TimeSkippingConfig{Enabled: true})
+	tsi = timeSkippingInfo()
+	s.True(tsi.GetConfig().GetEnabled(), "time skipping is enabled again")
+	s.Nil(tsi.GetConfig().GetFastForwardConfig(), "the update dropped the fast-forward config")
+
+	// (6) Nothing skips while the workflow stays paused, even with skipping enabled and no
+	// fast-forward to bound it.
+	time.Sleep(settleWindow) //nolint:forbidigo // negative assertion: give a skip time to happen
+	tsi = timeSkippingInfo()
+	s.True(tsi.GetConfig().GetEnabled(), "time skipping must stay enabled — nothing disabled it")
+	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration(), "a paused workflow must not skip time")
+	histStillPaused := env.GetHistory(env.Namespace().String(), execution)
+	s.False(hasEventType(histStillPaused, enumspb.EVENT_TYPE_TIMER_FIRED), "t1 must not fire while paused")
+	s.Len(timeSkippingTransitions(histStillPaused), 1, "no new transition while paused")
+
+	// (7) Unpause: the workflow can finally skip to t1 and run to completion.
+	unpauseWall := time.Now()
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(ctx, &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: tv.WorkflowID(),
+		RunId:      runID,
+		Identity:   "test",
+		Reason:     "let the workflow skip",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// poll the wf task created by unpasue
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.NoError(err)
+	// poll the wf task created by user timer
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.True(firedTimers(task)["t1"], "the workflow task after unpause must carry TimerFired for t1")
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+
+	sinceUnpause := time.Since(unpauseWall)
+	s.Less(sinceUnpause, time.Minute,
+		"the workflow should skip to t1 and finish promptly after unpause; took %v of the 5min timer", sinceUnpause)
+
+	tsi = timeSkippingInfo()
+	s.InDelta(float64(timerDuration), float64(tsi.GetAccumulatedSkippedDuration().AsDuration()), float64(time.Minute),
+		"the post-unpause skip covers what was left of the 5min timer")
+	s.True(tsi.GetConfig().GetEnabled(), "one skip with no fast-forward and a fresh session count leaves skipping enabled")
+
+	histFinal := env.GetHistory(env.Namespace().String(), execution)
+	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_TIMER_FIRED), "t1 must fire once the workflow is unpaused")
+	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED))
+	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED))
+	s.True(hasEventType(histFinal, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+	transitions = timeSkippingTransitions(histFinal)
+	s.Len(transitions, 2, "exactly two transitions: the fast-forward disable while paused, the skip after unpause")
+	s.True(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward())
+	s.False(transitions[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
+		"the post-unpause transition is a plain skip, not a fast-forward disable")
+
+	elapsed := time.Since(testStart)
+	s.Less(elapsed, maxTestDuration,
+		"the whole test took %v: %v of that is the fast-forward and settle waits, so the rest is RPC time — the 5min timer must be skipped, not waited out",
+		elapsed, fastForward+settleWindow)
 }

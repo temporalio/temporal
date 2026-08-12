@@ -7,8 +7,10 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -336,6 +338,29 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 				)
 			},
 		)
+	})
+
+	s.Run("identity-mapped system search attributes are registered as overrides", func() {
+		var rc *chasm.RegistrableComponent
+		s.Require().NotPanics(func() {
+			rc = chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes(
+					chasm.SearchAttributeExecutionTime,
+					chasm.SearchAttributeTaskQueue,
+				),
+			)
+		})
+		mapper := rc.SearchAttributesMapper()
+		s.Require().True(mapper.IsSystemOverride(sadefs.ExecutionTime))
+		s.Require().True(mapper.IsSystemOverride(sadefs.TaskQueue))
+		s.Require().Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, mapper.OverriddenSystemFields()[sadefs.ExecutionTime])
+		s.Require().Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, mapper.OverriddenSystemFields()[sadefs.TaskQueue])
+
+		// Overrides are recorded only in overriddenSystemFields, not the alias/field maps; the
+		// query path resolves them via the system column instead.
+		_, err := mapper.Field(sadefs.ExecutionTime)
+		s.Require().Error(err)
 	})
 
 	s.Run("component with Visibility field must have businessID alias", func() {

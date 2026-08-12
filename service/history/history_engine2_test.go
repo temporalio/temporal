@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -65,6 +66,7 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -192,17 +194,18 @@ func (s *engine2Suite) SetupTest() {
 	s.mockWorkflowStateReplicator = ndc.NewMockWorkflowStateReplicator(s.controller)
 
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		logger:             s.logger,
-		throttledLogger:    s.logger,
-		metricsHandler:     metrics.NoopMetricsHandler,
-		tokenSerializer:    tasktoken.NewSerializer(),
-		config:             s.config,
-		timeSource:         s.mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		currentClusterName:  s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:        s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		logger:              s.logger,
+		throttledLogger:     s.logger,
+		metricsHandler:      metrics.NoopMetricsHandler,
+		tokenSerializer:     tasktoken.NewSerializer(),
+		config:              s.config,
+		timeSource:          s.mockShard.GetTimeSource(),
+		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockArchivalProcessor.Category():    s.mockArchivalProcessor,
 			s.mockTxProcessor.Category():          s.mockTxProcessor,
@@ -2576,6 +2579,8 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExi
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent() {
+	// Inline resend: the RPC pulls and re-verifies before returning.
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return false }
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -2661,6 +2666,112 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 
 	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.NoError(err)
+}
+
+// Async resend: the RPC returns the verification error immediately and the pull runs in the
+// background.
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsync() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+
+	// Parent is absent locally, so verification fails and a resend is eligible.
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	// Signal when the background resend lands, so assertions do not race the goroutine.
+	syncCalled := make(chan struct{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+			close(syncCalled)
+			return nil, serviceerror.NewUnavailable("source cluster unavailable")
+		}).Times(1)
+
+	// The RPC itself returns the verification error without waiting for the resend.
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+
+	select {
+	case <-syncCalled:
+	case <-time.After(10 * time.Second):
+		s.Fail("background resend did not call SyncWorkflowState")
+	}
+}
+
+// TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped asserts that a second attempt for
+// the same parent does not start a concurrent resend while the first is still running.
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	// Times(1): only one resend may reach the source. It blocks so the second attempt overlaps.
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+			close(entered)
+			<-release
+			return nil, serviceerror.NewUnavailable("source cluster unavailable")
+		}).Times(1)
+
+	ctx := metrics.AddMetricsContext(context.Background())
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(ctx, request)
+	s.Error(err)
+
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		s.Fail("first resend did not reach the source cluster")
+	}
+
+	// Second attempt while the first is in flight: must not start another resend.
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(ctx, request)
+	s.Error(err)
+
+	close(release)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed() {

@@ -7,6 +7,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -95,7 +96,27 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		return err
 	}
 	if currentRunID == "" {
-		// this means a bug in our code or DB is inconsistent...
+		// currentRunID == "" means the current execution record is gone — the current run was
+		// deleted, leaving this closed run an orphan. With no new run to create, persist it via the
+		// bypass-current path (which tolerates a missing current record). Any other shape (a running
+		// run, or a closed run carrying a new run) still needs a current run we don't have, so
+		// surface it as an inconsistency.
+		if !mutableState.IsWorkflowExecutionRunning() && newWorkflow == nil {
+			r.shardContext.GetThrottledLogger().Warn(
+				"Applying replication update as zombie (bypass-current) for closed run with no current execution; workflow appears deleted",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(targetRunID),
+			)
+			return r.dispatchWorkflowUpdateAsZombie(
+				ctx,
+				isWorkflowRebuilt,
+				nil, // no current workflow: the current run was deleted
+				targetWorkflow,
+				nil, // no new workflow (guarded above)
+				archetypeID,
+			)
+		}
 		return serviceerror.NewInternal("transactionMgr: unable to locate current workflow during update")
 	}
 
@@ -228,6 +249,22 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
 	)
 }
 
+// suppressTargetPolicy suppresses the target workflow by the current workflow and returns the
+// resulting transaction policy.
+//
+// It exists solely for the deleted-current-run (orphan) path in this file, where currentWorkflow is
+// nil because the current execution record is gone. In that case there is nothing to suppress
+// against and the target is guaranteed closed (dispatchForExistingWorkflow only reaches the zombie
+// path for a non-running target), so it stays passive. Do NOT reuse this elsewhere or call it with a
+// nil current for a running target: it would report the target as suppressed without zombifying it.
+// Everywhere else, call targetWorkflow.SuppressBy(currentWorkflow) directly.
+func suppressTargetPolicy(targetWorkflow Workflow, currentWorkflow Workflow) (historyi.TransactionPolicy, error) {
+	if currentWorkflow == nil {
+		return historyi.TransactionPolicyPassive, nil
+	}
+	return targetWorkflow.SuppressBy(currentWorkflow)
+}
+
 func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	ctx context.Context,
 	currentWorkflow Workflow,
@@ -236,9 +273,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	archetypeID chasm.ArchetypeID,
 ) error {
 
-	targetPolicy, err := targetWorkflow.SuppressBy(
-		currentWorkflow,
-	)
+	targetPolicy, err := suppressTargetPolicy(targetWorkflow, currentWorkflow)
 	if err != nil {
 		return err
 	}
@@ -250,6 +285,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	var newMutableState historyi.MutableState
 	var newTransactionPolicy *historyi.TransactionPolicy
 	if newWorkflow != nil {
+		// newWorkflow is only set when a current workflow exists (dispatchForExistingWorkflow skips
+		// the new run when the current record is missing), so suppressing against it is safe.
 		newWorkflowPolicy, err := newWorkflow.SuppressBy(
 			currentWorkflow,
 		)
@@ -287,10 +324,12 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		}
 	}
 
-	// release lock on current workflow, since current cluster maybe the active cluster
-	//  and events maybe reapplied to current workflow
-	currentWorkflow.GetReleaseFn()(nil)
-	currentWorkflow = nil
+	if currentWorkflow != nil {
+		// release lock on current workflow, since current cluster maybe the active cluster
+		//  and events maybe reapplied to current workflow
+		currentWorkflow.GetReleaseFn()(nil)
+		currentWorkflow = nil
+	}
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
 		ctx,
@@ -392,11 +431,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	archetypeID chasm.ArchetypeID,
 ) error {
 
-	var err error
-
-	targetWorkflowPolicy, err := targetWorkflow.SuppressBy(
-		currentWorkflow,
-	)
+	targetWorkflowPolicy, err := suppressTargetPolicy(targetWorkflow, currentWorkflow)
 	if err != nil {
 		return err
 	}
@@ -408,6 +443,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	var newContext historyi.WorkflowContext
 	var newMutableState historyi.MutableState
 	if newWorkflow != nil {
+		// newWorkflow is only set when a current workflow exists (dispatchForExistingWorkflow skips
+		// the new run when the current record is missing), so suppressing against it is safe.
 		newWorkflowPolicy, err = newWorkflow.SuppressBy(
 			currentWorkflow,
 		)
@@ -443,10 +480,12 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		}
 	}
 
-	// release lock on current workflow, since current cluster maybe the active cluster
-	//  and events maybe reapplied to current workflow
-	currentWorkflow.GetReleaseFn()(nil)
-	currentWorkflow = nil
+	if currentWorkflow != nil {
+		// release lock on current workflow, since current cluster maybe the active cluster
+		//  and events maybe reapplied to current workflow
+		currentWorkflow.GetReleaseFn()(nil)
+		currentWorkflow = nil
+	}
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
 		ctx,

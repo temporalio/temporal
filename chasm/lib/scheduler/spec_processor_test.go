@@ -157,6 +157,41 @@ func TestProcessTimeRange_CatchupWindow(t *testing.T) {
 	require.Len(t, res.BufferedStarts, 5)
 }
 
+// A nil or zero catchup window means "not specified" and resolves to the 1-year
+// default, not the 10s minimum. Actions older than the minimum but well within
+// the default must still be buffered, not dropped as "missed catchup window".
+func TestProcessTimeRange_CatchupWindowNilOrZeroUsesDefault(t *testing.T) {
+	cases := []struct {
+		name          string
+		catchupWindow *durationpb.Duration
+	}{
+		{"nil", nil},
+		{"zero", durationpb.New(0)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			ctx := chasm.NewMutableContext(context.Background(), env.Node)
+
+			sch := defaultSchedule()
+			sch.Policies.CatchupWindow = tc.catchupWindow
+			sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, sch, nil)
+			require.NoError(t, err)
+			processor := newTestSpecProcessor(env.Ctrl)
+
+			// Five actions, each 1..5 minutes old, all older than the 10s minimum.
+			end := time.Now()
+			start := end.Add(-5 * defaultInterval)
+
+			res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
+			require.NoError(t, err)
+			// Resolved to the 1-year default, so none are past the window: all are
+			// buffered. Under the bug (zero => clamped to 10s), all five would drop.
+			require.Len(t, res.BufferedStarts, 5)
+		})
+	}
+}
+
 func TestProcessTimeRange_Limit(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := chasm.NewMutableContext(context.Background(), env.Node)
@@ -168,14 +203,57 @@ func TestProcessTimeRange_Limit(t *testing.T) {
 	start := end.Add(-defaultInterval * 5)
 
 	// When a limit pointer is provided, its value should be decremented with each
-	// action buffered, ProcessTimeRange should return once the limit has been
-	// exhausted.
+	// action buffered. Once exhausted, additional automated actions are dropped
+	// (counted in DroppedCount) rather than buffered.
 	limit := 2
 
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, &limit)
 	require.NoError(t, err)
 	require.Len(t, res.BufferedStarts, 2)
 	require.Equal(t, 0, limit)
+	// The range yields 5 actions total; 2 are buffered and the remaining 3 dropped.
+	require.Equal(t, int64(3), res.DroppedCount)
+}
+
+func TestProcessTimeRange_LimitAlreadyFull(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := chasm.NewMutableContext(context.Background(), env.Node)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	require.NoError(t, err)
+	processor := newTestSpecProcessor(env.Ctrl)
+
+	end := time.Now()
+	start := end.Add(-defaultInterval * 5)
+
+	// A limit that starts at or below zero means the buffer was already full: no
+	// automated actions should be buffered, and every action in the range should
+	// be counted as dropped.
+	limit := 0
+	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, &limit)
+	require.NoError(t, err)
+	require.Empty(t, res.BufferedStarts)
+	require.Equal(t, int64(5), res.DroppedCount)
+	// The generator must keep ticking, so a next wakeup is still returned.
+	require.GreaterOrEqual(t, res.NextWakeupTime, end)
+}
+
+func TestProcessTimeRange_ManualDoesNotDrop(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := chasm.NewMutableContext(context.Background(), env.Node)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	require.NoError(t, err)
+	processor := newTestSpecProcessor(env.Ctrl)
+
+	end := time.Now()
+	start := end.Add(-defaultInterval * 5)
+
+	// Manual (backfill) starts stop at the limit so the backfiller can retry the
+	// remainder later; they are never counted as dropped.
+	limit := 2
+	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "backfill", true, &limit)
+	require.NoError(t, err)
+	require.Len(t, res.BufferedStarts, 2)
+	require.Zero(t, res.DroppedCount)
 }
 
 func TestProcessTimeRange_OverlapPolicy(t *testing.T) {

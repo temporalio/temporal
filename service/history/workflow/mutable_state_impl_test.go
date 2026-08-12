@@ -4461,8 +4461,8 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			name: "MaxElapsedDuration is never propagated to children → cleared from child snapshot",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				Config: &commonpb.TimeSkippingConfig{
-					Enabled:     true,
-					FastForward: durationpb.New(3 * time.Hour)},
+					Enabled:           true,
+					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)}},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			},
 			expectCfg:         &commonpb.TimeSkippingConfig{Enabled: true},
@@ -7716,8 +7716,8 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 // rebuild flows.
 func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingConfig() {
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)}}
 
 	testCases := []struct {
 		name                         string
@@ -7795,11 +7795,11 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingC
 
 func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig() {
 	initialConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)}}
 	updatedConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(2 * time.Hour)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)}}
 
 	testCases := []struct {
 		name              string

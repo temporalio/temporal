@@ -57,11 +57,11 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 			UserMetadata: metadata,
 		}
 
-		we, err := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(env.Context(), env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), we.RunId)
+		describeInfo, err := getDescribeWorkflowExecutionInfo(s.Context(), env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), we.RunId)
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
@@ -80,11 +80,11 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 			UserMetadata: metadata,
 		}
 
-		we, err := env.FrontendClient().SignalWithStartWorkflowExecution(env.Context(), request)
+		we, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(env.Context(), env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), we.RunId)
+		describeInfo, err := getDescribeWorkflowExecutionInfo(s.Context(), env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), we.RunId)
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
@@ -125,11 +125,11 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 			},
 		}
 
-		_, err := env.FrontendClient().ExecuteMultiOperation(env.Context(), request)
+		_, err := env.FrontendClient().ExecuteMultiOperation(s.Context(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(env.Context(), env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), "")
+		describeInfo, err := getDescribeWorkflowExecutionInfo(s.Context(), env.FrontendClient(), env.Namespace().String(), tv.WorkflowID(), "")
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})

@@ -373,11 +373,13 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	message := buildSuccessMessage(summary, runID, repo, days)
 	if slackWebhook != "" {
 		fmt.Println("\n=== Sending Slack notification ===")
-		if err := message.send(slackWebhook); err != nil {
+		if err := message.Send(slackWebhook); err != nil {
 			fmt.Printf("Warning: Failed to send Slack notification: %v\n", err)
+		} else {
+			fmt.Println("Slack notification sent successfully")
 		}
 	} else {
-		md := message.renderMarkdown()
+		md := message.RenderMarkdown()
 		if writeErr := os.WriteFile(filepath.Join(outputDir, "slack-report.md"), []byte(md), 0644); writeErr != nil {
 			fmt.Printf("Warning: Failed to write slack-report.md: %v\n", writeErr)
 		}
@@ -394,7 +396,7 @@ func sendFailureNotification(webhookURL, runID, refName, sha, repo string, err e
 
 	fmt.Println("Sending failure notification to Slack...")
 	message := buildFailureMessage(runID, refName, sha, repo)
-	if sendErr := message.send(webhookURL); sendErr != nil {
+	if sendErr := message.Send(webhookURL); sendErr != nil {
 		fmt.Printf("Warning: Failed to send failure notification: %v\n", sendErr)
 	}
 }

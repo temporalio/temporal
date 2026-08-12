@@ -250,6 +250,42 @@ func TestResolveSearchAttributeAlias_ChasmPriority(t *testing.T) {
 	require.Equal(t, enumspb.INDEXED_VALUE_TYPE_KEYWORD, fieldType2)
 }
 
+func TestResolveSearchAttributeAlias_OverridableSystemResolvesViaSystemColumn(t *testing.T) {
+	ns := namespace.Name("test-namespace")
+	mapper := customMapper{
+		fieldToAlias: map[string]string{},
+		aliasToField: map[string]string{},
+	}
+
+	// System search attribute overrides are recorded only in the mapper's overriddenSystemFields
+	// and are NOT added to the CHASM alias/field maps. On the query path they resolve via the
+	// system type map (which always includes system search attributes), preserving the column name.
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{},
+		map[string]enumspb.IndexedValueType{},
+	)
+	saTypeMap := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{
+		sadefs.ExecutionTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		sadefs.TaskQueue:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	})
+
+	cases := []struct {
+		name string
+		typ  enumspb.IndexedValueType
+	}{
+		{sadefs.ExecutionTime, enumspb.INDEXED_VALUE_TYPE_DATETIME},
+		{sadefs.TaskQueue, enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fieldName, fieldType, err := ResolveSearchAttributeAlias(tc.name, ns, mapper, saTypeMap, chasmMapper)
+			require.NoError(t, err)
+			require.Equal(t, tc.name, fieldName)
+			require.Equal(t, tc.typ, fieldType)
+		})
+	}
+}
+
 func TestResolveSearchAttributeAlias_ChasmMissingType(t *testing.T) {
 	ns := namespace.Name("test-namespace")
 	saTypeMap := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{

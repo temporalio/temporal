@@ -513,6 +513,20 @@ func (c *metricClient) PollMutableState(
 	return c.client.PollMutableState(ctx, request, opts...)
 }
 
+func (c *metricClient) PollWorkflowExecutionTimeSkipping(
+	ctx context.Context,
+	request *historyservice.PollWorkflowExecutionTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.PollWorkflowExecutionTimeSkippingResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientPollWorkflowExecutionTimeSkipping")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollWorkflowExecutionTimeSkipping(ctx, request, opts...)
+}
+
 func (c *metricClient) PollWorkflowExecutionUpdate(
 	ctx context.Context,
 	request *historyservice.PollWorkflowExecutionUpdateRequest,

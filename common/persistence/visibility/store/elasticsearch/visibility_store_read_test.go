@@ -949,7 +949,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	s.Error(err)
 	var invalidArgErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgErr)
-	s.Equal("ListWorkflowExecutions failed: elastic: Error 400 (Bad Request): error reason [type=]", invalidArgErr.Message)
+	s.Equal("ListWorkflowExecutions failed: VisibilityStore: Error 400 (Bad Request): error reason [type=]", invalidArgErr.Message)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
@@ -963,7 +963,21 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
-	s.Equal("ListWorkflowExecutions failed: elastic: Error 500 (Internal Server Error): error reason [type=]", unavailableErr.Message)
+	s.Equal("ListWorkflowExecutions failed: VisibilityStore: Error 500 (Internal Server Error)", unavailableErr.Message)
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
+			return nil, &elastic.Error{
+				Status: 429,
+				Details: &elastic.ErrorDetails{
+					Reason: "error reason",
+				},
+			}
+		})
+	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	s.ErrorAs(err, &resourceExhaustedErr)
+	s.Equal("ListWorkflowExecutions failed: VisibilityStore: Error 429 (Too Many Requests)", resourceExhaustedErr.Message)
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsWithNamespaceDivision() {
@@ -1081,16 +1095,70 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 	}
 	s.True(temporalproto.DeepEqual(expectedResp, resp))
 
+	// Grouping by TemporalNamespaceDivision suppresses the default namespace
+	// division filter (no "must not exist" clause) so results span all divisions.
+	request.Query = "GROUP BY TemporalNamespaceDivision"
+	s.mockESClient.EXPECT().
+		CountGroupBy(
+			gomock.Any(),
+			testIndex,
+			elastic.NewBoolQuery().
+				Filter(
+					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
+				),
+			sadefs.TemporalNamespaceDivision,
+			elastic.NewTermsAggregation().Field(sadefs.TemporalNamespaceDivision).Missing(""),
+		).
+		Return(
+			&elastic.SearchResult{
+				Aggregations: map[string]json.RawMessage{
+					// The empty-string bucket comes from Missing("") and
+					// represents default-division (NULL) workflows.
+					sadefs.TemporalNamespaceDivision: json.RawMessage(
+						`{"buckets":[{"key":"","doc_count":50},{"key":"divisionA","doc_count":100},{"key":"divisionB","doc_count":10}]}`,
+					),
+				},
+			},
+			nil,
+		)
+	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
+	s.NoError(err)
+	expectedResp = &store.InternalCountExecutionsResponse{
+		Count: 160,
+		Groups: []store.InternalAggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 50,
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("divisionA", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 100,
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("divisionB", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 10,
+			},
+		},
+	}
+	s.True(temporalproto.DeepEqual(expectedResp, resp))
+
 	// test only allowed to group by a single field
 	request.Query = "GROUP BY ExecutionStatus, WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.ErrorContains(err, "'GROUP BY' clause supports only a single field")
 	s.Nil(resp)
 
-	// test only allowed to group by ExecutionStatus and LowCardinalityKeyword fields
+	// test only allowed to group by ExecutionStatus, TemporalNamespaceDivision,
+	// and LowCardinalityKeyword fields
 	request.Query = "GROUP BY WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
-	s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
+	s.ErrorContains(err, "'GROUP BY' clause is not supported for search attribute WorkflowType")
 	s.Nil(resp)
 }
 
@@ -1442,59 +1510,6 @@ func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
 	s.Contains(err.Error(), "GetWorkflowExecution failed")
-}
-
-func (s *ESVisibilitySuite) Test_detailedErrorMessage() {
-	err := errors.New("test message")
-	s.Equal("test message", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error)", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-		Details: &elastic.ErrorDetails{
-			Type:   "some type",
-			Reason: "some reason",
-		},
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type]", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-		Details: &elastic.ErrorDetails{
-			Type:   "some type",
-			Reason: "some reason",
-			RootCause: []*elastic.ErrorDetails{
-				{
-					Type:   "some type",
-					Reason: "some reason",
-				},
-			},
-		},
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type]", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-		Details: &elastic.ErrorDetails{
-			Type:   "some type",
-			Reason: "some reason",
-			RootCause: []*elastic.ErrorDetails{
-				{
-					Type:   "some other type1",
-					Reason: "some other reason1",
-				},
-				{
-					Type:   "some other type2",
-					Reason: "some other reason2",
-				},
-			},
-		},
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type], root causes: some other reason1 [type=some other type1], some other reason2 [type=some other type2]", detailedErrorMessage(err))
 }
 
 func (s *ESVisibilitySuite) TestProcessPageToken() {

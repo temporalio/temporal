@@ -274,7 +274,7 @@ func mergeWorkflowExecutionOptions(
 	var fastForwardSet bool
 	if _, ok := updateFields["timeSkippingConfig"]; ok {
 		mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
-		if mergeFrom.GetTimeSkippingConfig().GetFastForward() != nil {
+		if mergeFrom.GetTimeSkippingConfig().GetFastForwardConfig() != nil {
 			fastForwardSet = true
 		}
 	}

@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -26,6 +29,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -53,6 +57,9 @@ type ScaleManagerSuite struct {
 
 	// newTarget counts "new target" logs, which are also used for test synchronization
 	newTarget *testlogger.Expectation
+
+	userDataValue *persistencespb.VersionedTaskQueueUserData
+	userDataErr   error
 }
 
 func TestScaleManagerSuite(t *testing.T) {
@@ -61,10 +68,15 @@ func TestScaleManagerSuite(t *testing.T) {
 
 func (s *ScaleManagerSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.userDataValue = nil
+	s.userDataErr = nil
 	s.controller = gomock.NewController(s.T())
 	s.scaler = NewMockPartitionScaler(s.controller)
 	s.scaleDB = NewMockscaleDB(s.controller)
 	s.userData = NewMockuserDataManager(s.controller)
+	s.userData.EXPECT().GetUserData().DoAndReturn(func() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+		return s.userDataValue, nil, s.userDataErr
+	}).AnyTimes()
 	s.matching = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.timeSource = clock.NewEventTimeSource()
 	s.capture = metricstest.NewCaptureHandler()
@@ -182,6 +194,100 @@ func assertNoNewLogs(s *ScaleManagerSuite, e *testlogger.Expectation, d time.Dur
 }
 
 // --- tests ---
+
+func (s *ScaleManagerSuite) TestVersionsForDescribe() {
+	legacyActive := &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: "legacy-deployment",
+		BuildId:        "active",
+	}
+	s.userDataValue = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						Versions: []*deploymentspb.DeploymentVersionData{
+							{Version: legacyActive, Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+							{
+								Version: &deploymentspb.WorkerDeploymentVersion{
+									DeploymentName: "legacy-deployment",
+									BuildId:        "drained",
+								},
+								Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+							},
+						},
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							"new-deployment": {
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									"active":  {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+									"deleted": {Deleted: true},
+									"drained": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED},
+								},
+							},
+							"legacy-deployment": {
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									"active": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	s.startManager(1, nil)
+
+	versions, err := s.sm.versionsForDescribe()
+
+	s.Require().NoError(err)
+	s.ElementsMatch([]string{
+		worker_versioning.WorkerDeploymentVersionToStringV32(legacyActive),
+		worker_versioning.BuildIDToStringV32("new-deployment", "active"),
+	}, versions)
+}
+
+func (s *ScaleManagerSuite) TestUserDataErrorPreservesBacklogState() {
+	s.userDataErr = errors.New("user data unavailable")
+	initial := &persistencespb.PartitionScaleState{
+		Target:        2,
+		BacklogState:  bitSet(nil).set(0).set(1),
+		BacklogCounts: []byte{number.EncodeCompact8(100), number.EncodeCompact8(200)},
+	}
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	s.startManager(2, initial)
+
+	s.sm.updateBacklogAndDrainState(context.Background())
+
+	s.Same(initial, s.sm.scaleState)
+}
+
+func (s *ScaleManagerSuite) TestUnavailablePartitionPreservesBacklogAndDrainState() {
+	initial := &persistencespb.PartitionScaleState{
+		Target:        1,
+		BacklogState:  bitSet(nil).set(0).set(1),
+		BacklogCounts: []byte{number.EncodeCompact8(100), number.EncodeCompact8(200)},
+	}
+	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(
+			_ context.Context,
+			req *matchingservice.DescribeTaskQueuePartitionRequest,
+			_ ...grpc.CallOption,
+		) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+			s.Require().True(req.GetOnlyIfLoaded())
+			if req.GetTaskQueuePartition().GetNormalPartitionId() == 1 {
+				return nil, serviceerror.NewFailedPrecondition("partition was not loaded")
+			}
+			return backlogDescribeResponse(50, false), nil
+		}).Times(2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), false).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			s.Equal([]byte{number.EncodeCompact8(50), number.EncodeCompact8(200)}, state.BacklogCounts)
+			s.Equal(int32(2), bitSet(state.BacklogState).len())
+		}).Return(nil)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	s.startManager(2, initial)
+
+	s.sm.updateBacklogAndDrainState(context.Background())
+}
 
 // TestAddedTasksWakesScalerOnFullBatch verifies that the scaler is only called
 // once cumulative batch reaches numTasks*BatchSize.
@@ -306,6 +412,93 @@ func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
 	s.InDelta(float64(4), read, 0.001, "read gauge")
 	s.InDelta(float64(2), write, 0.001, "write gauge")
 	s.InDelta(float64(2), target, 0.001, "target gauge")
+}
+
+// awaitMetric blocks until at least n recordings of the named metric exist and
+// returns them (a snapshot of the values recorded so far).
+func (s *ScaleManagerSuite) awaitMetric(capt *metricstest.Capture, name string, n int) []*metricstest.CapturedRecording {
+	s.T().Helper()
+	var recs []*metricstest.CapturedRecording
+	await.RequireTruef(s.T(), func() bool {
+		recs = capt.Snapshot()[name]
+		return len(recs) >= n
+	}, time.Second, time.Millisecond, "metric %q not recorded %d time(s)", name, n)
+	return recs
+}
+
+// metricValues extracts recorded values as float64. Gauges record float64 and
+// counters record int64, so handle both.
+func metricValues(recs []*metricstest.CapturedRecording) []float64 {
+	out := make([]float64, len(recs))
+	for i, r := range recs {
+		switch v := r.Value.(type) {
+		case float64:
+			out[i] = v
+		case int64:
+			out[i] = float64(v)
+		default:
+			panic(fmt.Sprintf("unexpected metric value type %T", r.Value))
+		}
+	}
+	return out
+}
+
+// TestShadowModeEmitsExpectedGauges verifies that entering shadow
+// mode on top of a leftover managed target keeps the release path gauge-silent:
+// the release-to-baseline still performs its one-time DB write, but setState no
+// longer emits gauges in shadow mode. The read=0/write=0 sentinels therefore come
+// exclusively from the two shadow decisions (one each), not from the release.
+func (s *ScaleManagerSuite) TestShadowModeEmitsExpectedGauges() {
+	s.metricsHandler = s.capture
+	s.settings.ShadowModeLogInterval = 10 * time.Millisecond
+
+	inputs := make(chan PartitionScalerInput, 2)
+	gomock.InOrder(
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 2}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3}),
+	)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+
+	// Start with a leftover managed target so entering shadow mode triggers the
+	// one-time release-to-baseline (the only persisted write). The release itself
+	// records no gauges.
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.startManager(4, &persistencespb.PartitionScaleState{Target: 5})
+	capt := s.capture.StartCapture()
+	defer s.capture.StopCapture(capt)
+
+	// call AddedTasks 2x (# of tasks added does not impact decision, decision is mocked)
+	for i := range 2 {
+		s.sm.AddedTasks(1)
+		waitRecv(s, inputs, "shadow call missing")
+
+		// wait for log indicating nextDecision was set before we advance
+		s.awaitDecisionApplied(int64(i + 1))
+
+		// wait for the 100ms cooldown + 10ms shadow log interval
+		s.timeSource.Advance(110 * time.Millisecond)
+	}
+	// call a third time, but don't expect the decision applied log, because shadow target didn't change
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "third shadow call missing")
+
+	// Wait for three scale events (the first two record gauges, the last does not).
+	events := s.awaitMetric(capt, "partition_scale_events", 3)
+	s.Equal([]float64{1, 1, 1}, metricValues(events), "target gauge per changed decision")
+
+	// Target, read, and write should only have 2 recordings because the third shadow target was "no change".
+	target := s.awaitMetric(capt, "partition_scale_target", 3)
+	s.Equal([]float64{0, 2, 3}, metricValues(target), "target gauge per changed decision")
+	snap := capt.Snapshot()
+	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_read"]), "read gauge per changed decision")
+	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_write"]), "read gauge per changed decision")
 }
 
 // TestNonPositiveShadowLogIntervalDisabled verifies that ShadowModeLogInterval

@@ -283,8 +283,14 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 				testcore.WithDynamicConfig(callback.AllowedAddresses, allowedAddresses),
 			}
 			if tc.MaxCallbacksPerWorkflow > 0 {
+				// Set both the legacy (HSM) and CHASM callback limits so the limit is
+				// enforced regardless of which callback implementation is active.
 				opts = append(opts, testcore.WithDynamicConfig(
 					dynamicconfig.MaxCallbacksPerWorkflow,
+					tc.MaxCallbacksPerWorkflow,
+				))
+				opts = append(opts, testcore.WithDynamicConfig(
+					callback.MaxPerExecution,
 					tc.MaxCallbacksPerWorkflow,
 				))
 			}

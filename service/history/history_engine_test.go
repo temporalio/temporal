@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -208,15 +209,16 @@ func (s *engineSuite) SetupTest() {
 	)
 
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		logger:             s.mockShard.GetLogger(),
-		metricsHandler:     s.mockShard.GetMetricsHandler(),
-		tokenSerializer:    tasktoken.NewSerializer(),
-		eventNotifier:      eventNotifier,
-		config:             s.config,
+		currentClusterName:  s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:        s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		logger:              s.mockShard.GetLogger(),
+		metricsHandler:      s.mockShard.GetMetricsHandler(),
+		tokenSerializer:     tasktoken.NewSerializer(),
+		eventNotifier:       eventNotifier,
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
+		config:              s.config,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():          s.mockTxProcessor,
 			s.mockTimerProcessor.Category():       s.mockTimerProcessor,
@@ -1935,6 +1937,13 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 	scheduleToStartTimeout := durationpb.New(10 * time.Second)
 	startToCloseTimeout := durationpb.New(50 * time.Second)
 	heartbeatTimeout := durationpb.New(5 * time.Second)
+	retryPolicy := &commonpb.RetryPolicy{
+		InitialInterval:        durationpb.New(time.Second),
+		BackoffCoefficient:     1.5,
+		MaximumInterval:        durationpb.New(10 * time.Second),
+		MaximumAttempts:        3,
+		NonRetryableErrorTypes: []string{"non-retryable"},
+	}
 	commands := []*commandpb.Command{
 		{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1961,6 +1970,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 				ScheduleToStartTimeout: scheduleToStartTimeout,
 				StartToCloseTimeout:    startToCloseTimeout,
 				HeartbeatTimeout:       heartbeatTimeout,
+				RetryPolicy:            retryPolicy,
 				RequestEagerExecution:  true,
 			}},
 		},
@@ -2012,6 +2022,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 	s.Equal(int32(1), activityTask.Attempt)
 	s.Nil(activityTask.HeartbeatDetails)
 	s.Equal(tests.LocalNamespaceEntry.Name().String(), activityTask.WorkflowNamespace)
+	s.ProtoEqual(retryPolicy, activityTask.RetryPolicy)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Cancelled() {

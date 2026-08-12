@@ -317,6 +317,86 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 	require.True(t, triggerFound)
 }
 
+func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
+	// Regression test: workflows started under ALLOW_ALL are tracked in V2 as
+	// BufferedStarts with a RunId (and no Completed) while they run. Modern V1
+	// (version >= DontTrackOverlapping) intentionally keeps ALLOW_ALL runs out
+	// of Info.RunningWorkflows, because they don't participate in overlap
+	// resolution (see recordAction in the V1 scheduler workflow). The V2->V1
+	// migration must therefore not export them into RunningWorkflows: doing so
+	// would make a rolled-back schedule treat itself as busy and mis-apply
+	// SKIP/BUFFER/CANCEL/TERMINATE to later, non-ALLOW_ALL starts. The ALLOW_ALL
+	// runs must still appear in RecentActions, matching V1.
+	now := time.Now().UTC()
+	scheduler := &schedulerpb.SchedulerState{
+		Namespace:     "test-ns",
+		NamespaceId:   "test-ns-id",
+		ScheduleId:    "test-sched-id",
+		ConflictToken: 1,
+		Schedule:      newTestSchedule(),
+		Info:          &schedulepb.ScheduleInfo{},
+	}
+	invoker := &schedulerpb.InvokerState{
+		BufferedStarts: []*schedulespb.BufferedStart{
+			{
+				// Running, started under ALLOW_ALL: excluded from RunningWorkflows,
+				// but present in RecentActions.
+				NominalTime:   timestamppb.New(now.Add(-5 * time.Minute)),
+				ActualTime:    timestamppb.New(now.Add(-5 * time.Minute)),
+				StartTime:     timestamppb.New(now.Add(-5 * time.Minute)),
+				WorkflowId:    "wf-allow-all",
+				RunId:         "run-allow-all",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			},
+			{
+				// Running, non-ALLOW_ALL: tracked in RunningWorkflows, as in V1.
+				NominalTime:   timestamppb.New(now.Add(-3 * time.Minute)),
+				ActualTime:    timestamppb.New(now.Add(-3 * time.Minute)),
+				StartTime:     timestamppb.New(now.Add(-3 * time.Minute)),
+				WorkflowId:    "wf-skip",
+				RunId:         "run-skip",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			},
+			{
+				// Completed ALLOW_ALL: a recent action only, never running.
+				NominalTime:   timestamppb.New(now.Add(-20 * time.Minute)),
+				ActualTime:    timestamppb.New(now.Add(-20 * time.Minute)),
+				StartTime:     timestamppb.New(now.Add(-20 * time.Minute)),
+				WorkflowId:    "wf-allow-all-done",
+				RunId:         "run-allow-all-done",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				Completed: &schedulespb.CompletedResult{
+					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+					CloseTime: timestamppb.New(now.Add(-15 * time.Minute)),
+				},
+			},
+		},
+	}
+
+	args := CHASMToLegacyStartScheduleArgs(scheduler, nil, invoker, nil, nil, nil, nil, now)
+
+	// Only the non-ALLOW_ALL running workflow is exported to RunningWorkflows.
+	require.Len(t, args.Info.RunningWorkflows, 1,
+		"ALLOW_ALL run must not be exported to RunningWorkflows")
+	require.Equal(t, "wf-skip", args.Info.RunningWorkflows[0].WorkflowId)
+	require.Equal(t, "run-skip", args.Info.RunningWorkflows[0].RunId)
+
+	// All three started executions still appear in RecentActions, matching V1,
+	// which records every action regardless of overlap policy.
+	recentStatusByRunID := make(map[string]enumspb.WorkflowExecutionStatus, len(args.Info.RecentActions))
+	for _, action := range args.Info.RecentActions {
+		recentStatusByRunID[action.GetStartWorkflowResult().GetRunId()] = action.GetStartWorkflowStatus()
+	}
+	require.Len(t, args.Info.RecentActions, 3)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, recentStatusByRunID["run-allow-all"],
+		"running ALLOW_ALL execution should still be recorded in RecentActions as RUNNING")
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, recentStatusByRunID["run-skip"])
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, recentStatusByRunID["run-allow-all-done"])
+
+	// NeedRefresh mirrors the (correctly reduced) running set.
+	require.True(t, args.State.NeedRefresh)
+}
+
 func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t *testing.T) {
 	// V1's recordAction puts the same workflow in both RecentActions (with
 	// RUNNING status) and RunningWorkflows. The migration should not create

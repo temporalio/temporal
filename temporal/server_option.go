@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
 
@@ -173,11 +174,19 @@ func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiv
 	})
 }
 
-// WithClientFactoryProvider sets a custom ClientFactoryProvider
+// WithClientFactoryProvider sets a custom client factory provider.
 // NOTE: this option is experimental and may be changed or removed in future release.
 func WithClientFactoryProvider(clientFactoryProvider client.FactoryProvider) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.clientFactoryProvider = clientFactoryProvider
+	})
+}
+
+// WithPersistenceFactoryProvider sets a custom persistence factory provider.
+// NOTE: this option is experimental and may be changed or removed in future release.
+func WithPersistenceFactoryProvider(persistenceFactoryProvider persistenceclient.FactoryProviderFn) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.persistenceFactoryProvider = persistenceFactoryProvider
 	})
 }
 
@@ -200,6 +209,17 @@ func WithChainedFrontendGrpcInterceptors(
 	})
 }
 
+// WithAdditionalStreamInterceptors sets a chain of ordered custom grpc stream interceptors that will be invoked for all
+// service gRPC stream calls. The list of custom interceptors will be appended to the end of the internal
+// ServerInterceptors. The custom interceptors will be invoked in the order as they appear in the supplied list, after
+// the internal ServerInterceptors.
+// NOTE: this option is experimental and may be changed or removed in future release.
+func WithAdditionalStreamInterceptors(interceptors ...grpc.StreamServerInterceptor) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.additionalStreamInterceptors = append(s.additionalStreamInterceptors, interceptors...)
+	})
+}
+
 // WithTokenProvider sets a custom token provider for outbound remote-cluster auth.
 func WithTokenProvider(tp auth.TokenProvider) ServerOption {
 	return applyFunc(func(s *serverOptions) {
@@ -212,6 +232,14 @@ func WithTokenProvider(tp auth.TokenProvider) ServerOption {
 func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.metricHandler = provider
+	})
+}
+
+// WithTestHooks sets custom test hooks.
+// NOTE: this option is for tests only.
+func WithTestHooks(testHooks testhooks.TestHooks) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.testHooks = &testHooks
 	})
 }
 
