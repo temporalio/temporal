@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	commonfailure "go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
@@ -592,10 +591,7 @@ func (a *Activity) HandleCompleted(
 	}
 
 	baseHandler := a.baseMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
-	enrichedHandler, err := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
-	if err != nil {
-		return nil, err
-	}
+	enrichedHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
 
 	if err := TransitionCompleted.Apply(a, ctx, completeEvent{
 		req:             event.Request,
@@ -619,10 +615,7 @@ func (a *Activity) HandleFailed(
 	}
 
 	baseHandler := a.baseMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
-	enrichedHandler, err := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
-	if err != nil {
-		return nil, err
-	}
+	enrichedHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
 	failedRequest := event.Request.GetFailedRequest()
 	failure := failedRequest.GetFailure()
 
@@ -674,10 +667,7 @@ func (a *Activity) HandleCanceled(
 		return nil, consts.ErrActivityTaskNotCancelRequested
 	}
 
-	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
-	if err != nil {
-		return nil, err
-	}
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 
 	if err := TransitionCanceled.Apply(a, ctx, cancelEvent{
 		details:        event.Request.GetCancelRequest().GetDetails(),
@@ -708,10 +698,7 @@ func (a *Activity) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
-	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope)
-	if err != nil {
-		return chasm.TerminateComponentResponse{}, err
-	}
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope)
 	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, terminateEvent{
 		request:        req,
 		metricsHandler: metricsHandler,
@@ -818,10 +805,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		a.reissueDispatchAndScheduleToStart(ctx, attempt)
 	}
 
-	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.ActivityUpdateOptionsScope)
-	if err != nil {
-		return nil, err
-	}
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityUpdateOptionsScope)
 	a.emitOnUpdateOptionsMetrics(metricsHandler)
 
 	if requestID != "" {
@@ -978,11 +962,8 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 
 	// Transition to Canceled if no attempt in progress; otherwise wait for worker response.
 	if !hasAttemptInProgress {
-		metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
-		if err != nil {
-			return nil, err
-		}
-		err = TransitionCanceled.Apply(a, ctx, cancelEvent{
+		metricsHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
+		err := TransitionCanceled.Apply(a, ctx, cancelEvent{
 			metricsHandler: metricsHandler,
 			fromStatus:     originalStatus,
 			details: &commonpb.Payloads{
@@ -1016,10 +997,7 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-pausable state %v", a.GetStatus())
 	}
 
-	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.ActivityPausedScope)
-	if err != nil {
-		return nil, err
-	}
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityPausedScope)
 
 	event := pauseEvent{req: req.GetFrontendRequest(), metricsHandler: metricsHandler}
 	if canPause {
@@ -1053,10 +1031,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	if a.isTerminal() {
 		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
 	}
-	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.ActivityUnpausedScope)
-	if err != nil {
-		return nil, err
-	}
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityUnpausedScope)
 
 	event := unpauseEvent{req: frontendReq, metricsHandler: metricsHandler}
 	switch {
@@ -1211,10 +1186,7 @@ func (a *Activity) handleReset(
 		}
 	}
 
-	metricsHandler, err := a.enrichedMetricsHandler(ctx, metrics.ActivityResetScope)
-	if err != nil {
-		return nil, err
-	}
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityResetScope)
 
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
@@ -2082,14 +2054,11 @@ func (a *Activity) baseMetricsHandler(ctx chasm.Context, operation string) metri
 }
 
 // enrichedMetricsHandler adds standard activity tags in addition to the operation tag.
-func (a *Activity) enrichedMetricsHandler(ctx chasm.Context, operation string) (metrics.Handler, error) {
+func (a *Activity) enrichedMetricsHandler(ctx chasm.Context, operation string) metrics.Handler {
+	namespaceName := ctx.NamespaceEntry().Name()
 	// activityContextFromChasm panics if the context value is missing; this is intentional and
 	// indicates a library registration bug rather than a runtime error.
 	actCtx := activityContextFromChasm(ctx)
-	namespaceName, err := actCtx.namespaceRegistry.GetNamespaceName(namespace.ID(ctx.ExecutionKey().NamespaceID))
-	if err != nil {
-		return nil, err
-	}
 	breakdownMetricsByTaskQueue := actCtx.config.BreakdownMetricsByTaskQueue
 	taskQueueFamily := a.GetTaskQueue().GetName()
 	return metrics.GetPerTaskQueueFamilyScope(
@@ -2101,7 +2070,7 @@ func (a *Activity) enrichedMetricsHandler(ctx chasm.Context, operation string) (
 		metrics.ActivityTypeTag(a.GetActivityType().GetName()),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.WorkflowTypeTag(WorkflowTypeTag),
-	), nil
+	)
 }
 
 func (a *Activity) emitOnAttemptTimedOutMetrics(metricsHandler metrics.Handler, timeoutType enumspb.TimeoutType) {
