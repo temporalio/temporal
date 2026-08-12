@@ -18,13 +18,27 @@ func Field[T any, V any](fn func(string, V) error) FieldValidator[T, V] {
 // NestedFieldValidator is like FieldValidator but for nested proto messages that don't have
 // their own GetNamespace(). Namespace is passed explicitly so validators can apply
 // namespace-specific limits without access to the parent request type.
-type NestedFieldValidator[T any, V any] func(ns string, req *T, fieldName string, value V) error
+type NestedFieldValidator[T any, V any] func(ns string, fieldName string, value V) error
 
 // NestedField creates a NestedFieldValidator from a simple (fieldName, value) → error function,
-// ignoring namespace and parent context.
+// ignoring namespace.
 func NestedField[T any, V any](fn func(string, V) error) NestedFieldValidator[T, V] {
-	return func(_ string, _ *T, fieldName string, value V) error {
+	return func(_ string, fieldName string, value V) error {
 		return fn(fieldName, value)
+	}
+}
+
+// NoOp returns a FieldValidator that always succeeds, for fields with no validation logic.
+func NoOp[T any, V any]() FieldValidator[T, V] {
+	return func(_ *T, _ string, _ V) error {
+		return nil
+	}
+}
+
+// NestedNoOp returns a NestedFieldValidator that always succeeds, for nested fields with no validation logic.
+func NestedNoOp[T any, V any]() NestedFieldValidator[T, V] {
+	return func(_ string, _ string, _ V) error {
+		return nil
 	}
 }
 

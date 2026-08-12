@@ -27,7 +27,7 @@ type startNexusOperationExecutionRequestFieldValidators struct {
 	IdConflictPolicy       validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, enumspb.NexusOperationIdConflictPolicy]
 	SearchAttributes       validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, *commonpb.SearchAttributes]
 	NexusHeader            validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, map[string]string]
-	UserMetadata           validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, *sdkpb.UserMetadata]
+	UserMetadata           userMetadataFieldValidators
 }
 
 func (v startNexusOperationExecutionRequestFieldValidators) ValidateAndNormalize(req *workflowservice.StartNexusOperationExecutionRequest) error {
@@ -76,7 +76,7 @@ func (v startNexusOperationExecutionRequestFieldValidators) ValidateAndNormalize
 	if err := v.NexusHeader(req, "nexus_header", req.GetNexusHeader()); err != nil {
 		return err
 	}
-	if err := v.UserMetadata(req, "user_metadata", req.GetUserMetadata()); err != nil {
+	if err := v.UserMetadata.ValidateAndNormalize(req.GetNamespace(), "user_metadata", req.GetUserMetadata()); err != nil {
 		return err
 	}
 	return nil
@@ -247,10 +247,10 @@ type userMetadataFieldValidators struct {
 }
 
 func (v userMetadataFieldValidators) ValidateAndNormalize(ns string, fieldPrefix string, req *sdkpb.UserMetadata) error {
-	if err := v.Summary(ns, req, fieldPrefix+".summary", req.GetSummary()); err != nil {
+	if err := v.Summary(ns, fieldPrefix+".summary", req.GetSummary()); err != nil {
 		return err
 	}
-	if err := v.Details(ns, req, fieldPrefix+".details", req.GetDetails()); err != nil {
+	if err := v.Details(ns, fieldPrefix+".details", req.GetDetails()); err != nil {
 		return err
 	}
 	return nil

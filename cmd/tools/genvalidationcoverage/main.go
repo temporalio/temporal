@@ -36,10 +36,11 @@ type templateData struct {
 	ImportPath  string
 	TypeName    string
 	Prefix      string
-	SelfAlias   string // import alias for the package containing TypeName
-	Nested      bool   // true for nested proto types (use NestedFieldValidator)
+	SelfAlias   string            // import alias for the package containing TypeName
+	Nested      bool              // true for nested proto types (use NestedFieldValidator)
 	Fields      []field
 	Imports     map[string]string
+	NestedTypes map[string]string // maps Go field type (e.g. "*sdkpb.UserMetadata") → nested validator prefix (e.g. "userMetadata")
 }
 
 func main() {
@@ -105,6 +106,21 @@ func run(messageFlag, messagesFileFlag, outFlag string) error {
 			Fields:      fields,
 			Imports:     imports,
 		})
+	}
+
+	// Second pass: build a map of Go type → nested validator prefix for all nested types,
+	// then attach it to every top-level templateData so renderValidator can embed nested structs.
+	nestedTypeMap := make(map[string]string)
+	for _, data := range allData {
+		if data.Nested {
+			goType := "*" + data.SelfAlias + "." + data.TypeName
+			nestedTypeMap[goType] = data.Prefix
+		}
+	}
+	for i := range allData {
+		if !allData[i].Nested {
+			allData[i].NestedTypes = nestedTypeMap
+		}
 	}
 
 	src, err := render(allData)
@@ -289,12 +305,20 @@ func render(allData []templateData) ([]byte, error) {
 func renderValidator(b *bytes.Buffer, data templateData) {
 	fmt.Fprintf(b, "type %sFieldValidators struct {\n", data.Prefix)
 	for _, f := range data.Fields {
-		fmt.Fprintf(b, "\t%s validation.FieldValidator[%s.%s, %s]\n", f.GoName, data.SelfAlias, data.TypeName, f.Type)
+		if nestedPrefix, ok := data.NestedTypes[f.Type]; ok {
+			fmt.Fprintf(b, "\t%s %sFieldValidators\n", f.GoName, nestedPrefix)
+		} else {
+			fmt.Fprintf(b, "\t%s validation.FieldValidator[%s.%s, %s]\n", f.GoName, data.SelfAlias, data.TypeName, f.Type)
+		}
 	}
 	fmt.Fprint(b, "}\n")
 	fmt.Fprintf(b, "\nfunc (v %sFieldValidators) ValidateAndNormalize(req *%s.%s) error {\n", data.Prefix, data.SelfAlias, data.TypeName)
 	for _, f := range data.Fields {
-		fmt.Fprintf(b, "\tif err := v.%s(req, %q, req.Get%s()); err != nil {\n", f.GoName, f.ProtoName, f.GoName)
+		if _, ok := data.NestedTypes[f.Type]; ok {
+			fmt.Fprintf(b, "\tif err := v.%s.ValidateAndNormalize(req.GetNamespace(), %q, req.Get%s()); err != nil {\n", f.GoName, f.ProtoName, f.GoName)
+		} else {
+			fmt.Fprintf(b, "\tif err := v.%s(req, %q, req.Get%s()); err != nil {\n", f.GoName, f.ProtoName, f.GoName)
+		}
 		fmt.Fprint(b, "\t\treturn err\n")
 		fmt.Fprint(b, "\t}\n")
 	}
@@ -313,7 +337,7 @@ func renderNestedValidator(b *bytes.Buffer, data templateData) {
 	fmt.Fprint(b, "}\n")
 	fmt.Fprintf(b, "\nfunc (v %sFieldValidators) ValidateAndNormalize(ns string, fieldPrefix string, req *%s.%s) error {\n", data.Prefix, data.SelfAlias, data.TypeName)
 	for _, f := range data.Fields {
-		fmt.Fprintf(b, "\tif err := v.%s(ns, req, fieldPrefix+%q, req.Get%s()); err != nil {\n", f.GoName, "."+f.ProtoName, f.GoName)
+		fmt.Fprintf(b, "\tif err := v.%s(ns, fieldPrefix+%q, req.Get%s()); err != nil {\n", f.GoName, "."+f.ProtoName, f.GoName)
 		fmt.Fprint(b, "\t\treturn err\n")
 		fmt.Fprint(b, "\t}\n")
 	}
