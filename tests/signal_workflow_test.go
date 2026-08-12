@@ -388,7 +388,6 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand(opts []testc
 	// need a dedicated cluster to enable cross namespace commands
 	opts = append(
 		opts,
-		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
 	env := testcore.NewEnv(s.T(), opts...)
@@ -775,7 +774,6 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 	// need a dedicated cluster to enable cross namespace commands
 	opts = append(
 		opts,
-		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
 	env := testcore.NewEnv(s.T(), opts...)
@@ -995,7 +993,6 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 	// need a dedicated cluster to enable cross namespace commands
 	opts = append(
 		opts,
-		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
 	env := testcore.NewEnv(s.T(), opts...)

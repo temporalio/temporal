@@ -1565,7 +1565,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEnabled bool) {
 	s.Run("NamespaceNotFound", func(s *NexusWorkflowTestSuite) {
-		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
+		env := s.newTestEnv(chasmEnabled)
 		ctx := s.Context()
 		// Generate a token with a non-existent namespace ID
 		tokenWithBadNamespace, err := s.generateValidCallbackToken("namespace-doesnt-exist-id", testcore.RandomizeStr("workflow"), uuid.NewString())
@@ -1585,7 +1585,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("NamespaceNotFoundNoIdentifier", func(s *NexusWorkflowTestSuite) {
-		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
+		env := s.newTestEnv(chasmEnabled)
 		ctx := s.Context()
 		// Generate a token with a non-existent namespace ID
 		tokenWithBadNamespace, err := s.generateValidCallbackToken("namespace-doesnt-exist-id", testcore.RandomizeStr("workflow"), uuid.NewString())
@@ -1605,7 +1605,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("OperationTokenTooLong", func(s *NexusWorkflowTestSuite) {
-		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
+		env := s.newTestEnv(chasmEnabled)
 		ctx := s.Context()
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
 
@@ -1632,7 +1632,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("OperationTokenTooLongNoIdentifier", func(s *NexusWorkflowTestSuite) {
-		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
+		env := s.newTestEnv(chasmEnabled)
 		ctx := s.Context()
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		// Generate a valid callback token to get past initial validation
@@ -1757,7 +1757,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors(cha
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
 	}
-	env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
+	env := s.newTestEnv(chasmEnabled)
 	env.SetOnAuthorize(onAuthorize)
 
 	// Generate a valid callback token for testing
@@ -1788,7 +1788,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrorsNoId
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
 	}
-	env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
+	env := s.newTestEnv(chasmEnabled)
 	env.SetOnAuthorize(onAuthorize)
 
 	// Generate a valid callback token for testing
@@ -1812,7 +1812,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrorsNoId
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth(chasmEnabled bool) {
-	env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
+	env := s.newTestEnv(chasmEnabled)
 	// Set URL template with invalid host
 	env.OverrideDynamicConfig(
 		nexusoperations.CallbackURLTemplate,

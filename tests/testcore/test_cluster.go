@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -113,18 +112,9 @@ const (
 	bootPhaseTotal           = "total"
 )
 
-// bootPhaseObserver, when non-nil, receives the duration of each cluster boot
-// phase. Only set by benchmarks in this package; nil in normal test runs, where
-// recordBootPhase compiles down to a single atomic load.
-var bootPhaseObserver atomic.Pointer[func(phase string, d time.Duration)]
-
 func recordBootPhase(observer func(string, time.Duration), phase string, start time.Time) {
-	duration := time.Since(start)
 	if observer != nil {
-		observer(phase, duration)
-	}
-	if observer := bootPhaseObserver.Load(); observer != nil {
-		(*observer)(phase, duration)
+		observer(phase, time.Since(start))
 	}
 }
 
@@ -229,6 +219,7 @@ func newClusterWithPersistenceTestBaseFactory(
 	persistenceStart := time.Now()
 	testBase := tbFactory.NewTestBase(&clusterConfig.Persistence)
 	var host *temporalImpl
+	persistenceReady := false
 	defer func() {
 		if clusterResult != nil {
 			return
@@ -236,13 +227,16 @@ func newClusterWithPersistenceTestBaseFactory(
 		if host != nil {
 			retErr = multierr.Combine(retErr, host.Stop())
 		}
-		testBase.TearDownWorkflowStore()
+		if persistenceReady {
+			testBase.TearDownWorkflowStore()
+		}
 		if clusterConfig.ESConfig != nil {
 			retErr = multierr.Combine(retErr, deleteIndex(clusterConfig.ESConfig, logger))
 		}
 	}()
 
 	testBase.Setup(clusterMetadataConfig)
+	persistenceReady = true
 	namespaceStart := time.Now()
 	for _, ns := range clusterConfig.preseededNamespaces {
 		if _, err := testBase.MetadataManager.CreateNamespace(

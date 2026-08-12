@@ -17,10 +17,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -2118,8 +2118,10 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceNotFound() {
 // This test verifies the two-step non-atomic rename operation in Cassandra
 func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 	// This test is for Cassandra
-	if m.DefaultTestCluster.StoreType() != config.StoreTypeNoSQL {
+	switch m.DefaultTestCluster.(type) {
+	case *sql.TestCluster:
 		m.T().Skip()
+	default:
 	}
 
 	id := uuid.NewString()
@@ -2240,7 +2242,9 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 // This test verifies the atomic transaction-based rename operation in SQL databases
 func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceSQL() {
 	// This test is for SQL databases
-	if m.DefaultTestCluster.StoreType() != config.StoreTypeSQL {
+	switch m.DefaultTestCluster.(type) {
+	case *sql.TestCluster:
+	default:
 		m.T().Skip()
 	}
 

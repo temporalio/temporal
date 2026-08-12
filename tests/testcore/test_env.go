@@ -3,7 +3,6 @@ package testcore
 import (
 	"context"
 	_ "embed"
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -63,21 +61,19 @@ type TestEnv struct {
 	*FunctionalTestBase
 
 	// Shadows FunctionalTestBase.Assertions with a per-test instance bound to
-	// this TestEnv's own *testing.T, avoiding data races when parallel tests
-	// share the same *FunctionalTestBase cluster.
+	// this TestEnv's own *testing.T.
 	// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
 	*require.Assertions
 
 	Logger log.Logger
 
-	cluster        *TestCluster
-	nsName         namespace.Name
-	nsID           namespace.ID
-	taskPoller     *taskpoller.TaskPoller
-	t              *testing.T
-	tv             *testvars.TestVars
-	ctx            context.Context
-	dedicatedGuard *dedicatedClusterGuard
+	cluster    *TestCluster
+	nsName     namespace.Name
+	nsID       namespace.ID
+	taskPoller *taskpoller.TaskPoller
+	t          *testing.T
+	tv         *testvars.TestVars
+	ctx        context.Context
 
 	sdkClientOnce sync.Once
 	sdkClient     sdkclient.Client
@@ -89,9 +85,8 @@ type TestEnv struct {
 type TestOption func(*testOptions)
 
 type testOptions struct {
-	dedicatedCluster         bool
 	needWorkerService        bool
-	dedicatedReason          string
+	reason                   string
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
@@ -106,25 +101,14 @@ type dynamicConfigOverride struct {
 
 type versionHeadersContextKey struct{}
 
-// WithDedicatedCluster requests a dedicated (non-shared) cluster for the test.
-// Use this for tests that have cluster-global side effects.
-func WithDedicatedCluster() TestOption {
-	return func(o *testOptions) {
-		o.dedicatedCluster = true
-	}
-}
-
 // WithDisableTestloggerFailure disables the test logger's behavior of failing
 // the test when an error log matches a registered expectation (e.g. soft-assert
 // errors tagged with tag.FailedAssertion). Use for tests that intentionally
-// trigger and then verify soft-assert errors. Implies WithDedicatedCluster,
-// because FailOnError is cluster-wide and disabling it on a shared cluster may
-// hide failures in concurrent tests.
+// trigger and then verify soft-assert errors.
 func WithDisableTestloggerFailure() TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.disableTestloggerFailure = true
-		o.dedicatedReason = "testlogger failures disabled"
+		o.reason = "testlogger failures disabled"
 	}
 }
 
@@ -142,100 +126,82 @@ func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
 }
 
 // WithWorkerService enables the system worker service. The service is off by
-// default to avoid the worker overhead. This implies a dedicated cluster.
+// default to avoid the worker overhead.
 func WithWorkerService(reason string) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.needWorkerService = true
-		o.dedicatedReason = "worker service required: " + reason
+		o.reason = "worker service required: " + reason
 	}
 }
 
-// WithMTLS enables mutual TLS on the test's cluster. This implies a dedicated
-// cluster, since the TLS configuration cannot be shared across tests.
+// WithMTLS enables mutual TLS on the test's cluster.
 func WithMTLS() TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, withMTLS())
-		o.dedicatedReason = "mTLS enabled"
+		o.reason = "mTLS enabled"
 	}
 }
 
-// WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
+// WithPersistenceFaultInjection configures persistence fault injection for the test cluster.
 func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
-		o.dedicatedReason = "fault injection config used"
+		o.reason = "fault injection config used"
 	}
 }
 
-// WithArchival enables archival on the test's cluster. This implies a dedicated
-// cluster because archival is configured at the cluster level.
+// WithArchival enables archival on the test's cluster.
 func WithArchival() TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, withArchivalConfig())
-		o.dedicatedReason = "archival enabled"
+		o.reason = "archival enabled"
 	}
 }
 
 // WithCustomArchivers configures custom history and visibility archiver factories
-// on the test's cluster. This implies a dedicated cluster because the factories are
-// configured at the cluster level.
+// on the test's cluster.
 func WithCustomArchivers(historyFactory provider.CustomHistoryArchiverFactory, visibilityFactory provider.CustomVisibilityArchiverFactory) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, func(params *testClusterParams) {
 			params.AdditionalServerOptions = append(params.AdditionalServerOptions,
 				temporal.WithCustomHistoryArchiverFactory(historyFactory),
 				temporal.WithCustomVisibilityArchiverFactory(visibilityFactory),
 			)
 		})
-		o.dedicatedReason = "custom archivers used"
+		o.reason = "custom archivers used"
 	}
 }
 
 // WithLogger sets a custom logger for the test's cluster, letting a test intercept
-// server log output. This implies a dedicated cluster, since a custom logger cannot
-// be shared across tests.
+// server log output.
 func WithLogger(logger log.Logger) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, WithClusterLogger(logger))
-		o.dedicatedReason = "custom logger used"
+		o.reason = "custom logger used"
 	}
 }
 
 // WithHistoryShardCount sets the number of history shards for the test's cluster.
-// This implies a dedicated cluster, since shard count cannot be changed on a shared cluster.
 func WithHistoryShardCount(n int32) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, WithNumHistoryShards(n))
-		o.dedicatedReason = "custom history shard count used"
+		o.reason = "custom history shard count used"
 	}
 }
 
 func WithHistoryTaskRecorder() TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, WithClusterHistoryTaskRecorder())
-		o.dedicatedReason = "task queue recorder used"
+		o.reason = "task queue recorder used"
 		o.historyTaskRecorder = true
 	}
 }
 
-// WithDynamicConfig overrides a dynamic config setting for the test.
-// For settings that can be namespace-scoped, a namespace constraint is applied.
-// For all others that require a dedicated cluster, this implies `WithDedicatedCluster`.
+// WithDynamicConfig overrides a dynamic config setting for the test cluster.
 func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOption {
 	return func(o *testOptions) {
 		if err := setting.Validate(value); err != nil {
 			panic(fmt.Sprintf("invalid value for setting %s: %v", setting.Key(), err))
-		}
-		if !canBeNamespaceScoped(setting.Precedence()) {
-			o.dedicatedCluster = true
 		}
 		o.dynamicConfigSettings = append(o.dynamicConfigSettings, dynamicConfigOverride{setting: setting, value: value})
 	}
@@ -252,55 +218,21 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	for _, opt := range opts {
 		opt(&options)
 	}
-	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
-	if options.dedicatedReason != "" {
-		dedicatedGuard.record(options.dedicatedReason)
+	startupConfig := make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
+	for _, override := range options.dynamicConfigSettings {
+		startupConfig[override.setting.Key()] = override.value
 	}
 
-	// For dedicated clusters, pass all dynamic config settings at cluster creation.
-	var startupConfig map[dynamicconfig.Key]any
-	var requiresStartupConfig bool
-	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
-		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
-		for _, override := range options.dynamicConfigSettings {
-			if !canBeNamespaceScoped(override.setting.Precedence()) {
-				dedicatedGuard.record("global dynamic config used")
-				requiresStartupConfig = true
-			}
-			startupConfig[override.setting.Key()] = override.value
-		}
-	}
-
-	// Obtain the test cluster from the router.
 	base := testClusterRouter.get(t, clusterRequest{
-		dedicated:             options.dedicatedCluster,
-		needWorkerService:     options.needWorkerService,
-		dedicatedReason:       options.dedicatedReason,
-		dynamicConfig:         startupConfig,
-		requiresStartupConfig: requiresStartupConfig,
-		clusterOpts:           options.clusterOptions,
+		reason:            options.reason,
+		needWorkerService: options.needWorkerService,
+		dynamicConfig:     startupConfig,
+		clusterOpts:       options.clusterOptions,
 	})
 	cluster := base.GetTestCluster()
 
-	// Per-test clusters already have a pristine namespace seeded before the
-	// server starts. Shared clusters still need a distinct namespace per test.
 	ns := base.Namespace()
 	nsID := base.NamespaceID()
-	if !base.usePreseededNamespace {
-		baseName := strings.ReplaceAll(t.Name(), "/", "-")
-		ns = namespace.Name(RandomizeStr(baseName))
-		var err error
-		nsID, err = base.RegisterNamespace(
-			ns,
-			1, // 1 day retention
-			enumspb.ARCHIVAL_STATE_DISABLED,
-			"",
-			"",
-		)
-		if err != nil {
-			t.Fatalf("Failed to register namespace: %v", err)
-		}
-	}
 
 	tv := testvars.New(t)
 	if options.testVars != nil {
@@ -322,14 +254,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		tv:                 tv,
 		ctx:                testcontext.For(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
-		dedicatedGuard:     dedicatedGuard,
 	}
-	t.Cleanup(func() {
-		defer func() { dedicatedGuard = nil }()
-		if err := dedicatedGuard.validate(); err != nil && !t.Failed() {
-			t.Fatal(err)
-		}
-	})
 
 	if options.disableTestloggerFailure {
 		tl, ok := base.Logger.(*testlogger.TestLogger)
@@ -340,12 +265,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Cleanup(func() { tl.FailOnError(prev) })
 	}
 
-	// For shared clusters, apply all dynamic config settings as overrides.
-	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
-		for _, override := range options.dynamicConfigSettings {
-			env.OverrideDynamicConfig(override.setting, override.value)
-		}
-	}
 	if options.historyTaskRecorder {
 		recorder := cluster.GetHistoryTaskRecorder()
 		require.NotNil(t, recorder)
@@ -367,17 +286,13 @@ func (e *TestEnv) NamespaceID() namespace.ID {
 //
 // It auto-detects the scope from the hook:
 // - For namespace-scoped hooks: scopes it to the test's namespace
-// - For global hooks: requires a dedicated cluster, except for suite-scoped legacy clusters.
+// - For global hooks: scopes it to the test-owned cluster.
 func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	var scope any
 	switch hook.Scope() {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared {
-			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
-		}
-		e.dedicatedGuard.record("global hook injected")
 		scope = testhooks.GlobalScope
 	default:
 		e.t.Fatalf("InjectHook: unknown scope %v", hook.Scope())
@@ -389,10 +304,6 @@ func (e *TestEnv) SetOnAuthorize(
 	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
 ) {
 	e.t.Helper()
-	if e.isShared {
-		e.t.Fatal("SetOnAuthorize cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
-	}
-	e.dedicatedGuard.record("authorization callback")
 	e.cluster.host.SetOnAuthorize(fn)
 	e.t.Cleanup(func() {
 		e.cluster.host.SetOnAuthorize(nil)
@@ -401,10 +312,6 @@ func (e *TestEnv) SetOnAuthorize(
 
 func (e *TestEnv) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
 	e.t.Helper()
-	if e.isShared {
-		e.t.Fatal("SetOnGetClaims cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
-	}
-	e.dedicatedGuard.record("authorization callback")
 	e.cluster.host.SetOnGetClaims(fn)
 	e.t.Cleanup(func() {
 		e.cluster.host.SetOnGetClaims(nil)
@@ -533,44 +440,13 @@ func (e *TestEnv) WorkerTaskQueue() string {
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
-// For settings that can be namespace-scoped, a namespace constraint is applied.
-// All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
 func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	if e.isShared {
-		if !canBeNamespaceScoped(setting.Precedence()) {
-			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
-		}
-
-		// Wrap value with namespace constraint for test isolation on shared clusters.
-		ns := e.nsName.String()
-		if cvs, ok := value.([]dynamicconfig.ConstrainedValue); ok {
-			result := make([]dynamicconfig.ConstrainedValue, len(cvs))
-			for i, cv := range cvs {
-				cv.Constraints.Namespace = ns
-				result[i] = cv
-			}
-			value = result
-		} else {
-			value = []dynamicconfig.ConstrainedValue{{
-				Constraints: dynamicconfig.Constraints{Namespace: ns},
-				Value:       value,
-			}}
-		}
-	} else if !canBeNamespaceScoped(setting.Precedence()) {
-		e.dedicatedGuard.record("global dynamic config used")
-	}
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
 }
 
 // StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.
-// Metric capture is cluster-global, so it is only safe on dedicated clusters.
 // Misuse detection is best-effort and only applies to queried metrics that produced recordings.
 func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
-	if e.isShared {
-		e.t.Fatal("StartGlobalMetricCapture cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
-	}
-	e.dedicatedGuard.record("global metric capture") // note that globalCapture has its own misuse detection
-
 	handler := e.cluster.host.CaptureMetricsHandler()
 	if handler == nil {
 		e.t.Fatal("StartGlobalMetricCapture is unavailable because metrics capture is not enabled on this cluster")
@@ -586,8 +462,6 @@ func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
 }
 
 // StartNamespaceMetricCapture starts a metrics capture scoped to this test's namespace.
-// Namespace captures are safe on shared clusters because reads are restricted to
-// per-metric namespace-filtered iteration and reject non-namespaced metrics.
 func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
 	return e.StartNamespaceMetricCaptureFor(e.Namespace().String())
 }
@@ -607,28 +481,12 @@ func (e *TestEnv) StartNamespaceMetricCaptureFor(namespaceName string) *Namespac
 }
 
 // CloseShard closes the shard that contains the given workflow.
-// This is a cluster-global operation and cannot be called on shared clusters.
 func (e *TestEnv) CloseShard(namespaceID string, workflowID string) {
-	if e.isShared {
-		e.t.Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
-	}
-	e.dedicatedGuard.record("shard closed")
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, e.testClusterConfig.HistoryConfig.NumHistoryShards)
 	_, err := e.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
 		ShardId: shardID,
 	})
 	e.NoError(err)
-}
-
-func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
-	switch p {
-	case dynamicconfig.PrecedenceNamespace,
-		dynamicconfig.PrecedenceTaskQueue,
-		dynamicconfig.PrecedenceDestination:
-		return true
-	default:
-		return false
-	}
 }
 
 // checkTestShard supports test sharding based on environment variables.
@@ -654,40 +512,4 @@ func checkTestShard(t *testing.T) {
 		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
 	}
 	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
-}
-
-type dedicatedClusterGuard struct {
-	required    bool
-	mu          sync.Mutex
-	usageReason string
-}
-
-func newDedicatedClusterGuard(required bool) *dedicatedClusterGuard {
-	return &dedicatedClusterGuard{required: required}
-}
-
-// record marks that a dedicated-cluster-only feature was used, satisfying the guard.
-func (u *dedicatedClusterGuard) record(reason string) {
-	if !u.required {
-		return
-	}
-	u.mu.Lock()
-	if u.usageReason == "" {
-		u.usageReason = reason
-	}
-	u.mu.Unlock()
-}
-
-// validate checks that the guard was satisfied i.e. a dedicated-cluster-only feature was used.
-func (u *dedicatedClusterGuard) validate() error {
-	if !u.required {
-		return nil
-	}
-	u.mu.Lock()
-	usageReason := u.usageReason
-	u.mu.Unlock()
-	if usageReason == "" {
-		return errors.New("testcore.WithDedicatedCluster() was requested but no dedicated-cluster-only feature was used")
-	}
-	return nil
 }

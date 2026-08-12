@@ -65,7 +65,7 @@ var (
 
 func TestDeploymentVersionSuite(t *testing.T) {
 	testcore.UseWorkerServiceForSuite(t, "worker deployment version APIs")
-	parallelsuite.RunLegacySequential(t, &DeploymentVersionSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &DeploymentVersionSuite{}) //nolint:staticcheck // SA1019: suite requires legacy sequential execution.
 }
 
 // newTestEnv creates a TestEnv with the dynamic config and test variables this suite needs.

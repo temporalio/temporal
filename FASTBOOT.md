@@ -22,23 +22,19 @@ semantics or production shutdown behavior.
 
 ## Implementation result
 
-The implementation is in progress. The measurement harness, cheap-cluster work,
-database lifetime fix, and per-test provider are implemented. Go test parallelism
-16 / live 40 / warm 12 now passes all three CI shards without `-race` while meeting the
-Gate 2 acquire-latency and RSS limits. Independent core and worker fillers bring
-warm-eligible p99 to 17–33 ms across those shards. Race-enabled per-test and
-pooled controls still overload this machine at the CI scheduler width, so neither
-is valid flake-rate evidence. CI-class race validation and the repeated Phase 3
-runs are still pending. Per-test mode is now the default; pooled mode remains an
-explicit escape hatch and the sharing machinery has not been deleted.
+The implementation is based on PR #10643, which provides smaller CI runners,
+five functional-test shards, bounded test scheduler worker counts, and
+factory-owned SQLite connections. On top of that base, every `NewEnv` now creates
+and owns one cluster until its test cleanup. There is no pooled/shared execution
+mode and no warm-spare inventory. A semaphore, defaulting to `GOMAXPROCS` and
+configurable with `TEMPORAL_TEST_LIVE_CLUSTERS`, bounds concurrent cluster
+ownership. CI-class `-race` validation on all persistence backends is pending.
 
 ### Changes implemented
 
-- The run-level JSONL stream records cluster creation, acquisition and
-  destruction, boot phases, namespaces, live-cluster counts, goroutines, heap,
-  `Sys`, RSS and the process exit code. Acquisitions identify pooled, warm-hit,
-  warm-miss and custom sources. `tools/testreport` reports total latency and the
-  warm-eligible population separately for both single and multi-run gates.
+- The run-level JSONL stream records cluster creation and destruction, boot
+  phases, live-cluster counts, goroutines, heap, `Sys`, RSS and the process exit
+  code. It remains deliberately small and is uploaded by CI for comparison.
 - The two default namespaces and search attributes are seeded before services
   start, avoiding registration and cache-propagation polling on handoff.
 - SDK workers stop before server teardown. The production frontend drain keeps
@@ -46,38 +42,27 @@ explicit escape hatch and the sharing machinery has not been deleted.
   change.
 - Fx lifecycle debug logging was optimized separately and is now inherited from
   `main`; this branch no longer carries logger-interface or Fx-specific changes.
-- SQLite connection ownership now has an explicit database lease. Transient
-  persistence wrappers may close and later reopen while the cluster-owned lease
-  keeps the database pinned. Cluster teardown releases the lease after managers
-  close, allowing the pool entry and file to be removed. This fixes the retained
-  database leak without breaking standalone server restarts, where wrapper
-  references legitimately reach zero between starts.
-- The opt-in per-test provider owns a real live-cluster semaphore. A lease holds
-  its slot through cluster destruction; `-test.parallel` is no longer treated as
-  the resource bound.
-- `TEMPORAL_TEST_WARM_SPARES` is one total bound split between pristine core and
-  worker-enabled inventories. Each inventory has one filler, bounding background
-  prewarming to two concurrent boots. A request receives the matching class, is
-  used once, and is destroyed on release.
-- Dynamic config with namespace, task-queue or destination precedence can be
-  applied when a spare is handed off. Global/startup-sensitive config and cluster
-  options still boot inline. This distinction is required: applying
-  `BuildIdScavengerEnabled` after the worker service starts leaves the scavenger
-  workflow unregistered.
+- SQLite lifetime is inherited from the #10643 stack: persistence factories own
+  their connections, so test teardown can release an in-memory database without
+  a second lease abstraction in the test runner.
+- The per-test provider owns a live-cluster semaphore. A lease holds its slot
+  through cluster destruction, and `RunTests` caps `-test.parallel` to the same
+  bound.
+- Every test option and dynamic-config override is applied while its new cluster
+  boots. The old shared-cluster scoping rules and `WithDedicatedCluster` marker
+  are gone.
 - The ten suites that previously needed suite-scoped ownership now declare a
   suite-wide worker-service capability. Every leaf still receives its own
   cluster in per-test mode. Representative worker suites pass with this model.
-- Warm-spare readiness probing is used only for plaintext prebuilt clusters.
-  Inline custom clusters, including mTLS, retain their protocol-specific startup
-  path.
 - `TestWorkflowTaskRedirectInRetry*` no longer signals that a workflow-task
   timeout occurred at the exact same one-second deadline as the server timeout.
   Its signal is delayed until two seconds and the SDK deadlock watchdog remains
   later at five seconds, so the redirect cannot race timeout persistence under
   full-suite load.
 
-One legacy suite, `ActivityApiResetClientTestSuite`, still constructs its cluster
-directly through `FunctionalTestBase`; it has not yet been migrated to `NewEnv`.
+Legacy `FunctionalTestBase` suites and XDC/NDC multi-cluster suites retain their
+explicit suite-owned lifecycle. The one-cluster-per-test invariant applies to
+`NewEnv`, which is the root functional-test path being migrated.
 
 ### Wins measured
 
@@ -963,18 +948,16 @@ Two much better directions fall out of the same table:
 
 ### Suggested decision path
 
-Per-test dedicated clusters are now the default. The remaining sequence is:
+Per-test clusters are now the only `NewEnv` execution mode. The remaining sequence is:
 
 1. Keep E (SQLite release) and the test-only bounded scheduler settings; both
    directly control per-test memory.
 2. Validate all persistence shards under `-race` and compare wall time and peak
    RSS with `main` before pursuing more boot changes.
 3. Make per-namespace workers lazy (or disable the per-namespace scheduler
-   component in tests). This removes the last reason `WithWorkerService` implies a
-   dedicated cluster, and removes the per-namespace accumulation that makes
-   long-lived pooled clusters expensive.
-4. Continue using **warm spares with no reuse**, and remove old sharing machinery
-   only after the CI comparison demonstrates that the escape hatch is unnecessary.
+   component in tests) if worker-enabled tests remain the memory outliers.
+4. Migrate the remaining explicit legacy suite lifetimes where isolation provides
+   value; keep multi-cluster replication suites explicit.
 5. F (one Fx graph) only if boot CPU turns out to be the constraint after CI — with
    ~19× CPU headroom it probably will not be, which is the case for deferring the
    most expensive change until last.

@@ -3,7 +3,6 @@ package persistencetests
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -28,7 +27,6 @@ import (
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -63,7 +61,6 @@ type (
 		SchemaDir         string `yaml:"-"`
 		FaultInjection    *config.FaultInjection
 		Logger            log.Logger `yaml:"-"`
-		ReuseDatabase     bool       `yaml:"-"`
 	}
 )
 
@@ -108,7 +105,6 @@ type (
 		DefaultTestCluster        PersistenceTestCluster
 		Logger                    log.Logger
 		TracerProvider            trace.TracerProvider
-		databaseLeases            []sqlplugin.DatabaseLease
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -116,7 +112,6 @@ type (
 		SetupTestDatabase()
 		TearDownTestDatabase()
 		Config() config.Persistence
-		StoreType() string
 	}
 
 	// TestTransferTaskIDGenerator helper
@@ -128,9 +123,6 @@ type (
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
 func NewTestBaseWithCassandra(options *TestBaseOptions) *TestBase {
 	logger := log.NewTestLogger()
-	if options.ReuseDatabase {
-		return NewTestBaseForCluster(newReusableCassandraDatabase(options, logger), logger)
-	}
 	testCluster := NewTestClusterForCassandra(options, logger)
 	return NewTestBaseForCluster(testCluster, logger)
 }
@@ -258,9 +250,6 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.DefaultTestCluster.SetupTestDatabase()
 
 	cfg := s.DefaultTestCluster.Config()
-	if err := s.acquireDatabaseLeases(cfg); err != nil {
-		s.Logger.Fatal("Acquire database leases", tag.Error(err))
-	}
 	serializer := serialization.NewSerializer()
 	dataStoreFactory := client.DataStoreFactoryProvider(
 		client.ClusterName(clusterName),
@@ -346,75 +335,18 @@ func (s *TestBase) fatalOnError(msg string, err error) {
 	}
 }
 
-func (s *TestBase) acquireDatabaseLeases(cfg config.Persistence) error {
-	seenStores := make(map[string]struct{}, 2)
-	for _, storeName := range []string{cfg.DefaultStore, cfg.VisibilityStore} {
-		if _, seen := seenStores[storeName]; seen {
-			continue
-		}
-		seenStores[storeName] = struct{}{}
-		store, ok := cfg.DataStores[storeName]
-		if !ok || store.SQL == nil {
-			continue
-		}
-		lease, err := sql.AcquireDatabaseLease(
-			store.SQL,
-			resolver.NewNoopResolver(),
-			s.Logger,
-			metrics.NoopMetricsHandler,
-		)
-		if err != nil {
-			return errors.Join(err, s.releaseDatabaseLeases())
-		}
-		s.databaseLeases = append(s.databaseLeases, lease)
-	}
-	return nil
-}
-
-func (s *TestBase) releaseDatabaseLeases() error {
-	var err error
-	for i := len(s.databaseLeases) - 1; i >= 0; i-- {
-		err = errors.Join(err, s.databaseLeases[i].Close())
-	}
-	s.databaseLeases = nil
-	return err
-}
-
 // TearDownWorkflowStore to cleanup
 func (s *TestBase) TearDownWorkflowStore() {
-	if s.TaskMgr != nil {
-		s.TaskMgr.Close()
-	}
-	if s.FairTaskMgr != nil {
-		s.FairTaskMgr.Close()
-	}
-	if s.ClusterMetadataManager != nil {
-		s.ClusterMetadataManager.Close()
-	}
-	if s.MetadataManager != nil {
-		s.MetadataManager.Close()
-	}
-	if s.ExecutionManager != nil {
-		s.ExecutionManager.Close()
-	}
-	if s.ShardMgr != nil {
-		s.ShardMgr.Close()
-	}
-	if s.NexusEndpointManager != nil {
-		s.NexusEndpointManager.Close()
-	}
-	if s.NamespaceReplicationQueue != nil {
-		s.NamespaceReplicationQueue.Close()
-	}
-	if s.Factory != nil {
-		s.Factory.Close()
-	}
-	if err := s.releaseDatabaseLeases(); err != nil {
-		s.Logger.Error("Release database leases", tag.Error(err))
-	}
-	if s.DefaultTestCluster != nil {
-		s.DefaultTestCluster.TearDownTestDatabase()
-	}
+	s.TaskMgr.Close()
+	s.ClusterMetadataManager.Close()
+	s.MetadataManager.Close()
+	s.ExecutionManager.Close()
+	s.ShardMgr.Close()
+	s.ExecutionManager.Close()
+	s.NexusEndpointManager.Close()
+	s.NamespaceReplicationQueue.Close()
+	s.Factory.Close()
+	s.DefaultTestCluster.TearDownTestDatabase()
 }
 
 // EqualTimesWithPrecision assertion that two times are equal within precision

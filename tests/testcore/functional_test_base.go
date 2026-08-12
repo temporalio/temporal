@@ -31,8 +31,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -66,7 +64,7 @@ type (
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
 
-		t *sharedClusterT // proxy T backing Logger; tracks active tests and cluster poison state
+		t *clusterTestOwner // proxy T backing Logger and cluster boot failures
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
@@ -74,10 +72,9 @@ type (
 		clusterEventID       int64
 		clusterEventRecorder *clusterEventRecorder
 
-		namespace             namespace.Name
-		namespaceID           namespace.ID
-		externalNamespace     namespace.Name
-		usePreseededNamespace bool
+		namespace         namespace.Name
+		namespaceID       namespace.ID
+		externalNamespace namespace.Name
 
 		// Fields used by SDK based tests.
 		sdkClient sdkclient.Client
@@ -86,11 +83,6 @@ type (
 
 		// TODO (alex): replace with v2
 		taskPoller *taskpoller.TaskPoller
-
-		// isShared indicates whether this cluster is shared between multiple tests.
-		// Certain operations (e.g. InjectHook, CloseShard) are not safe on shared clusters
-		// and will panic if called.
-		isShared bool
 	}
 	preseededNamespace struct {
 		name namespace.Name
@@ -105,11 +97,9 @@ type (
 		FaultInjectionConfig      *config.FaultInjection
 		NumHistoryShards          int32
 		Logger                    log.Logger
-		SharedCluster             bool
 		EnableHistoryTaskRecorder bool
 		EnableReplicationRecorder bool
 		EnableArchival            bool
-		ReusePersistenceDatabase  bool
 		AdditionalServerOptions   []temporal.ServerOption
 		bootPhaseObserver         func(string, time.Duration)
 	}
@@ -200,12 +190,6 @@ func withBootPhaseObserver(observer func(string, time.Duration)) TestClusterOpti
 	}
 }
 
-func withReusablePersistenceDatabase() TestClusterOption {
-	return func(params *testClusterParams) {
-		params.ReusePersistenceDatabase = true
-	}
-}
-
 func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
 	return func(params *testClusterParams) {
 		params.FaultInjectionConfig = cfg
@@ -235,12 +219,6 @@ func WithClusterHistoryTaskRecorder() TestClusterOption {
 func WithReplicationStreamRecorder() TestClusterOption {
 	return func(params *testClusterParams) {
 		params.EnableReplicationRecorder = true
-	}
-}
-
-func WithSharedCluster() TestClusterOption {
-	return func(params *testClusterParams) {
-		params.SharedCluster = true
 	}
 }
 
@@ -320,11 +298,10 @@ func (s *FunctionalTestBase) TearDownSuite() {
 }
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
-	// Reserve a slot from the dedicated test cluster pool.
-	testClusterRouter.dedicated.reserveSlot(s.T())
+	// Legacy suites own one cluster for their full lifetime.
+	testClusterRouter.reserveLegacyCluster(s.T())
 	request := clusterRequest{
-		kind:              clusterKindDedicated,
-		dedicatedReason:   "legacy-suite",
+		reason:            "legacy-suite",
 		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
 	}
 	createdAt := time.Now()
@@ -354,13 +331,10 @@ func (s *FunctionalTestBase) setupClusterWithOwner(owner clusterTest, options ..
 	if s.Logger == nil {
 		// The cluster outlives any single test and s.T() changes as different tests use it,
 		// but the proxy T's Name() must be stable, so this is never updated.
-		if proxy, ok := owner.(*sharedClusterT); ok {
+		if proxy, ok := owner.(*clusterTestOwner); ok {
 			s.t = proxy
 		} else {
-			s.t = &sharedClusterT{
-				name:      owner.Name(),
-				logFanout: os.Getenv("CI") != "",
-			}
+			s.t = &clusterTestOwner{name: owner.Name()}
 		}
 		tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 		// Fail tests when a soft assertion fires (see `softassert` package).
@@ -370,9 +344,6 @@ func (s *FunctionalTestBase) setupClusterWithOwner(owner clusterTest, options ..
 
 	s.testClusterConfig = &TestClusterConfig{
 		FaultInjection: params.FaultInjectionConfig,
-		Persistence: persistencetests.TestBaseOptions{
-			ReuseDatabase: params.ReusePersistenceDatabase,
-		},
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
@@ -387,12 +358,6 @@ func (s *FunctionalTestBase) setupClusterWithOwner(owner clusterTest, options ..
 		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
 		preseededNamespaces:       []preseededNamespace{primaryNamespace, externalNamespace},
 		bootPhaseObserver:         params.bootPhaseObserver,
-	}
-
-	// Apply configuration for shared clusters.
-	if params.SharedCluster {
-		s.testClusterConfig.Persistence = sharedClusterPersistence(GetPersistenceTestDefaults())
-		s.isShared = true
 	}
 
 	// Initialize the OTEL collector if OTEL is enabled.
@@ -415,18 +380,6 @@ func (s *FunctionalTestBase) setupClusterWithOwner(owner clusterTest, options ..
 	}
 	s.testCluster, err = testClusterFactory.NewCluster(clusterOwner, s.testClusterConfig, s.Logger)
 	return err
-}
-
-func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
-	if defaults.StoreType == config.StoreTypeSQL &&
-		defaults.SQLDBPluginName == sqlite.PluginName &&
-		defaults.ConnectAttributes["mode"] == "memory" {
-		// Shared clusters need file-based SQLite to support parallel test access.
-		// The default is already file-based; this only covers an explicit opt back
-		// into the in-memory option.
-		return *persistencetests.GetSQLiteFileTestClusterOption()
-	}
-	return defaults
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
@@ -740,11 +693,7 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 }
 
 // CloseShard closes the shard that contains the given workflow.
-// This is a cluster-global operation and cannot be called on shared clusters.
 func (s *FunctionalTestBase) CloseShard(namespaceID string, workflowID string) {
-	if s.isShared {
-		s.T().Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
-	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	_, err := s.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
 		ShardId: shardID,

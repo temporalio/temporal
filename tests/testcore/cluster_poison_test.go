@@ -50,17 +50,6 @@ func (f *mockSubtestT) Log(args ...any) {
 func (f *mockSubtestT) Fail()    {}
 func (f *mockSubtestT) FailNow() {}
 
-type blockingLogT struct {
-	mockSubtestT
-	entered chan struct{}
-	release chan struct{}
-}
-
-func (f *blockingLogT) Logf(string, ...any) {
-	close(f.entered)
-	<-f.release
-}
-
 // finish runs registered cleanups in LIFO order, mirroring *testing.T.
 func (f *mockSubtestT) finish() {
 	f.mu.Lock()
@@ -72,35 +61,8 @@ func (f *mockSubtestT) finish() {
 	}
 }
 
-func TestSharedClusterT_LogfForwardsWhileLocked(t *testing.T) {
-	s := &sharedClusterT{name: t.Name(), logFanout: true}
-	sub := &blockingLogT{
-		mockSubtestT: mockSubtestT{T: t},
-		entered:      make(chan struct{}),
-		release:      make(chan struct{}),
-	}
-	s.addTest(sub)
-
-	done := make(chan struct{})
-	go func() {
-		s.Logf("test log")
-		close(done)
-	}()
-
-	<-sub.entered
-	if s.mu.TryLock() {
-		s.mu.Unlock()
-		close(sub.release)
-		<-done
-		t.Fatal("Logf released sharedClusterT lock while forwarding to an active test")
-	}
-
-	close(sub.release)
-	<-done
-}
-
-func TestSharedClusterT_BuffersLogsAndFailuresUntilHandoff(t *testing.T) {
-	s := &sharedClusterT{name: "warm-spare", bufferWhenIdle: true}
+func TestClusterTestOwnerBuffersLogsAndFailuresUntilHandoff(t *testing.T) {
+	s := newDetachedClusterTestOwner("cluster")
 	s.Logf("boot phase %d", 1)
 	s.Errorf("boot failed: %s", "bad config")
 
@@ -110,7 +72,7 @@ func TestSharedClusterT_BuffersLogsAndFailuresUntilHandoff(t *testing.T) {
 	require.Equal(t, []string{"boot phase 1", "boot failed: bad config"}, sub.logs)
 }
 
-func TestSharedClusterPoison(t *testing.T) {
+func TestTestOwnedClusterPoison(t *testing.T) {
 	// Each phase represents one acquirer's lifetime: Acquire → optional log → finish.
 	// wantErrSubstring asserts on RegisterTest's cleanup t.Errorf.
 	type phase struct {
@@ -160,7 +122,7 @@ func TestSharedClusterPoison(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &FunctionalTestBase{}
-			s.t = &sharedClusterT{name: t.Name()}
+			s.t = &clusterTestOwner{name: t.Name()}
 			tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 			tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
 			s.Logger = tl

@@ -124,10 +124,8 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 }
 
 func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
-	// Explicitly enable cross namespace commands for this test,
-	// need a dedicated cluster to enable cross namespace commands.
+	// Explicitly enable cross namespace commands for this test.
 	env := testcore.NewEnv(s.T(),
-		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
 	id := "functional-cancel-workflow-command-target-running-test"
@@ -266,9 +264,8 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 
 func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFinished() {
 	// Explicitly enable cross namespace commands for this test,
-	// need a dedicated cluster to enable cross namespace commands.
+	// Enable cross namespace commands for this test cluster.
 	env := testcore.NewEnv(s.T(),
-		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
 	id := "functional-cancel-workflow-command-target-finished-test"
@@ -403,9 +400,8 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 
 func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFound() {
 	// Explicitly enable cross namespace commands for this test,
-	// need a dedicated cluster to enable cross namespace commands.
+	// Enable cross namespace commands for this test cluster.
 	env := testcore.NewEnv(s.T(),
-		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
 	id := "functional-cancel-workflow-command-target-not-found-test"

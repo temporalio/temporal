@@ -71,7 +71,7 @@ func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
 	for _, tc := range testCases {
 		s.Run(tc.name, func(s *WorkflowUpdateSuite) {
 			// Uses CaptureMetricsHandler which requires a dedicated cluster to avoid metric interference.
-			env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+			env := testcore.NewEnv(s.T())
 			runID := mustStartWorkflow(env, env.Tv())
 
 			tv := env.Tv()
@@ -531,7 +531,7 @@ func (s *WorkflowUpdateSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 
 func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflowTask_Rejected() {
 	// Uses CaptureMetricsHandler which requires a dedicated cluster to avoid metric interference.
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 	mustStartWorkflow(env, env.Tv())
 
 	capture := env.StartGlobalMetricCapture()
@@ -3319,7 +3319,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_Heartbeat() {
 }
 
 func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_LostUpdate() {
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 	mustStartWorkflow(env, env.Tv())
 
 	wtHandlerCalls := 0
@@ -3427,7 +3427,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_LostUpdate() 
 }
 
 func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_LostUpdate() {
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 	mustStartWorkflow(env, env.Tv())
 
 	wtHandlerCalls := 0
@@ -3549,7 +3549,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_LostUpdate() {
 }
 
 func (s *WorkflowUpdateSuite) TestFirstNormalWorkflowTask_UpdateResurrectedAfterRegistryCleared() {
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 	mustStartWorkflow(env, env.Tv())
 
 	wtHandlerCalls := 0
@@ -3861,12 +3861,7 @@ func (s *WorkflowUpdateSuite) TestCompletedSpeculativeWorkflowTask_DeduplicateID
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func(s *WorkflowUpdateSuite) {
-			// Uses closeShard conditionally which requires a dedicated cluster.
-			var opts []testcore.TestOption
-			if tc.CloseShard {
-				opts = append(opts, testcore.WithDedicatedCluster())
-			}
-			env := testcore.NewEnv(s.T(), opts...)
+			env := testcore.NewEnv(s.T())
 			mustStartWorkflow(env, env.Tv())
 
 			wtHandlerCalls := 0
@@ -3998,7 +3993,7 @@ func (s *WorkflowUpdateSuite) TestCompletedSpeculativeWorkflowTask_DeduplicateID
 }
 
 func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartedId() {
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4145,7 +4140,7 @@ func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDif
 }
 
 func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartTime() {
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4265,7 +4260,7 @@ func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDif
 }
 
 func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_NewWorkflowTaskWith2Updates() {
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
+	env := testcore.NewEnv(s.T())
 	/*
 		Test scenario:
 		An update created a speculative WT and WT is dispatched to the worker (started).

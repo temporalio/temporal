@@ -103,10 +103,6 @@ func (s *TestCluster) Config() config.Persistence {
 	}
 }
 
-func (s *TestCluster) StoreType() string {
-	return config.StoreTypeSQL
-}
-
 // TearDownTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) TearDownTestDatabase() {
 	s.DropDatabase()

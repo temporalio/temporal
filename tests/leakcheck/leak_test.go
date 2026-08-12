@@ -124,14 +124,13 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 }
 
-// buildRunTeardownCluster creates a dedicated cluster, runs a trivial
+// buildRunTeardownCluster creates a cluster, runs a trivial
 // workflow on it to exercise the full server path, then tears it down.
 func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) sdkworker.Worker {
 	var worker sdkworker.Worker
 	// The subtest ensures all env cleanups complete before this returns.
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
-			testcore.WithDedicatedCluster(),
 			testcore.WithWorkerService("leak regression test"))
 
 		worker = env.SdkWorker()

@@ -12,47 +12,40 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 )
 
 const (
 	clusterEventTypeRunStarted  = "run_started"
 	clusterEventTypeRunFinished = "run_finished"
 	clusterEventTypeCreated     = "cluster_created"
-	clusterEventTypeAcquired    = "cluster_acquired"
 	clusterEventTypeDestroyed   = "cluster_destroyed"
 	clusterEventTypeNamespace   = "namespace_registered"
 	clusterEventTypeRuntime     = "runtime"
 )
 
 type clusterEvent struct {
-	Type           string               `json:"type"`
-	Timestamp      time.Time            `json:"timestamp"`
-	ClusterID      int64                `json:"cluster_id,omitempty"`
-	Suite          string               `json:"suite,omitempty"`
-	Test           string               `json:"test,omitempty"`
-	Kind           string               `json:"kind,omitempty"`
-	Reason         string               `json:"reason,omitempty"`
-	Worker         bool                 `json:"worker,omitempty"`
-	DurationMS     float64              `json:"duration_ms,omitempty"`
-	AcquireMS      float64              `json:"acquire_ms,omitempty"`
-	AcquireSource  clusterAcquireSource `json:"acquire_source,omitempty"`
-	LiveClusters   int                  `json:"live_clusters"`
-	Namespaces     int                  `json:"namespaces,omitempty"`
-	Namespace      string               `json:"namespace,omitempty"`
-	PhasesMS       map[string]float64   `json:"phases_ms,omitempty"`
-	Goroutines     int                  `json:"goroutines,omitempty"`
-	HeapInUseBytes uint64               `json:"heap_in_use_bytes,omitempty"`
-	SysBytes       uint64               `json:"sys_bytes,omitempty"`
-	RSSBytes       uint64               `json:"rss_bytes,omitempty"`
-	ExitCode       int                  `json:"exit_code,omitempty"`
+	Type           string             `json:"type"`
+	Timestamp      time.Time          `json:"timestamp"`
+	ClusterID      int64              `json:"cluster_id,omitempty"`
+	Suite          string             `json:"suite,omitempty"`
+	Test           string             `json:"test,omitempty"`
+	Reason         string             `json:"reason,omitempty"`
+	Worker         bool               `json:"worker,omitempty"`
+	DurationMS     float64            `json:"duration_ms,omitempty"`
+	LiveClusters   int                `json:"live_clusters"`
+	Namespaces     int                `json:"namespaces,omitempty"`
+	Namespace      string             `json:"namespace,omitempty"`
+	PhasesMS       map[string]float64 `json:"phases_ms,omitempty"`
+	Goroutines     int                `json:"goroutines,omitempty"`
+	HeapInUseBytes uint64             `json:"heap_in_use_bytes,omitempty"`
+	SysBytes       uint64             `json:"sys_bytes,omitempty"`
+	RSSBytes       uint64             `json:"rss_bytes,omitempty"`
+	ExitCode       int                `json:"exit_code,omitempty"`
 }
 
 type clusterCreationEvent struct {
 	suite      string
 	test       string
-	kind       string
 	reason     string
 	worker     bool
 	duration   time.Duration
@@ -166,26 +159,16 @@ func RunTests(run func() int) int {
 		recorder.sampleRuntime()
 		stopRuntimeSampler = recorder.startRuntimeSampler(recorder.samplerInterval)
 	}
-	if testClusterRouter.perTest != nil {
-		testParallelFlag := flag.Lookup("test.parallel")
-		testParallelism, err := strconv.Atoi(testParallelFlag.Value.String())
-		if err != nil {
-			panic("invalid -test.parallel value")
-		}
-		testParallelism = testClusterRouter.perTest.testParallelism(testParallelism)
-		if err := testParallelFlag.Value.Set(strconv.Itoa(testParallelism)); err != nil {
-			panic("cannot set -test.parallel value")
-		}
-		_ = testClusterRouter.perTest.startAndWait()
+	testParallelFlag := flag.Lookup("test.parallel")
+	testParallelism, err := strconv.Atoi(testParallelFlag.Value.String())
+	if err != nil {
+		panic("invalid -test.parallel value")
+	}
+	testParallelism = testClusterRouter.perTest.testParallelism(testParallelism)
+	if err := testParallelFlag.Value.Set(strconv.Itoa(testParallelism)); err != nil {
+		panic("cannot set -test.parallel value")
 	}
 	exitCode := run()
-	if testClusterRouter.perTest != nil {
-		testClusterRouter.perTest.close()
-	}
-	if err := persistencetests.CloseReusableCassandraDatabases(); err != nil {
-		log.Printf("failed to close reusable Cassandra databases: %v", err)
-		exitCode = 1
-	}
 	if recorder != nil {
 		stopRuntimeSampler()
 		recorder.sampleRuntime()
@@ -219,32 +202,12 @@ func (r *clusterEventRecorder) recordClusterCreated(clusterID int64, creation cl
 		ClusterID:    clusterID,
 		Suite:        creation.suite,
 		Test:         creation.test,
-		Kind:         creation.kind,
 		Reason:       creation.reason,
 		Worker:       creation.worker,
 		DurationMS:   durationMilliseconds(creation.duration),
 		LiveClusters: r.liveClusters,
 		Namespaces:   creation.namespaces,
 		PhasesMS:     phaseMilliseconds(creation.phases),
-	})
-}
-
-func (r *clusterEventRecorder) recordClusterAcquire(
-	clusterID int64,
-	test string,
-	wait time.Duration,
-	source clusterAcquireSource,
-) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.writeLocked(clusterEvent{
-		Type:          clusterEventTypeAcquired,
-		Timestamp:     r.now(),
-		ClusterID:     clusterID,
-		Test:          test,
-		AcquireMS:     durationMilliseconds(wait),
-		AcquireSource: source,
-		LiveClusters:  r.liveClusters,
 	})
 }
 

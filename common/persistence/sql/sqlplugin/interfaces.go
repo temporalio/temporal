@@ -35,35 +35,6 @@ type (
 		GetVisibilityQueryConverter() VisibilityQueryConverter
 	}
 
-	// DatabaseLease pins a plugin's underlying database until Close is called.
-	DatabaseLease interface {
-		Close() error
-	}
-
-	// DatabaseLeaseProvider is an optional plugin capability for databases whose
-	// lifetime needs to outlive transient logical connections.
-	DatabaseLeaseProvider interface {
-		AcquireDatabaseLease(
-			cfg *config.SQL,
-			r resolver.ServiceResolver,
-			l log.Logger,
-			mh metrics.Handler,
-		) (DatabaseLease, error)
-	}
-
-	// DatabaseLeaseStats describes one plugin-managed underlying database.
-	DatabaseLeaseStats struct {
-		Open       bool
-		References int
-		Leases     int
-	}
-
-	// DatabaseLeaseStatsProvider is an optional diagnostic capability used by
-	// persistence lifecycle tests and resource reporting.
-	DatabaseLeaseStatsProvider interface {
-		DatabaseLeaseStats(cfg *config.SQL) (DatabaseLeaseStats, error)
-	}
-
 	// TableCRUD defines the API for interacting with the database tables
 	TableCRUD interface {
 		ClusterMetadata
