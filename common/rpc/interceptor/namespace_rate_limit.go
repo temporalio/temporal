@@ -76,8 +76,6 @@ type (
 			headerGetter headers.HeaderGetter,
 			numToken int,
 		) error
-
-		InterceptNexus(ctx context.Context, in NexusInterceptorInput, next NexusHandlerFunc) (resp any, err error)
 	}
 
 	NamespaceRateLimitInterceptorImpl struct {
@@ -92,6 +90,46 @@ type (
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil).Intercept
 var _ NamespaceRateLimitInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil)
+
+func NewNexusNamespaceRateLimitInterceptor(ni NamespaceRateLimitInterceptor) *NexusNamespaceRateLimitInterceptor {
+	return &NexusNamespaceRateLimitInterceptor{
+		ni: ni,
+	}
+}
+
+// NexusNamespaceRateLimitInterceptor is a wrapper on namespace rate limiter
+// draft-review: should this interim be removed in favor of a lock step impl w/ deps
+type NexusNamespaceRateLimitInterceptor struct {
+	ni NamespaceRateLimitInterceptor
+}
+
+func (n *NexusNamespaceRateLimitInterceptor) InterceptNexus(
+	ctx context.Context,
+	in NexusInterceptorInput,
+	next NexusHandlerFunc,
+) (out any, retErr error) {
+	apiName, err := NexusAPINameFromContext(ctx)
+	if err != nil {
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, true),
+			Outcome: "interceptor_failed",
+		}
+	}
+	header, err := NexusHeaderFromInterceptorInput(in)
+	if err != nil {
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, true),
+			Outcome: "interceptor_failed",
+		}
+	}
+	if err := n.ni.Allow(namespace.Name(in.NamespaceName()), apiName, header); err != nil {
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, true),
+			Outcome: "namespace_rate_limited",
+		}
+	}
+	return next(ctx, in)
+}
 
 func NewNamespaceRateLimitInterceptor(
 	namespaceRegistry namespace.Registry,
@@ -226,35 +264,6 @@ func (ni *NamespaceRateLimitInterceptorImpl) AllowN(
 		return ErrNamespaceRateLimitServerBusy
 	}
 	return nil
-}
-
-// InterceptNexus enforces the namespace rate limit for a Nexus request.
-func (ni *NamespaceRateLimitInterceptorImpl) InterceptNexus(
-	ctx context.Context,
-	in NexusInterceptorInput,
-	next NexusHandlerFunc,
-) (any, error) {
-	apiName, err := NexusAPINameFromContext(ctx)
-	if err != nil {
-		return nil, &InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
-			Outcome: "interceptor_failed",
-		}
-	}
-	header, err := NexusHeaderFromInterceptorInput(in)
-	if err != nil {
-		return nil, &InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
-			Outcome: "interceptor_failed",
-		}
-	}
-	if err := ni.Allow(namespace.Name(in.NamespaceName()), apiName, header); err != nil {
-		return nil, &InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
-			Outcome: "namespace_rate_limited",
-		}
-	}
-	return next(ctx, in)
 }
 
 func IsLongPollGetWorkflowExecutionHistoryRequest(

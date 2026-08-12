@@ -59,7 +59,8 @@ func (s *namespaceRateLimitInterceptorSuite) TestInterceptNexus() {
 				input = NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
 			}
 			nextCalled := false
-			_, err := s.newImpl(false).InterceptNexus(
+			wrapper := NewNexusNamespaceRateLimitInterceptor(s.newImpl(false))
+			_, err := wrapper.InterceptNexus(
 				ctx,
 				input,
 				func(context.Context, NexusInterceptorInput) (any, error) {

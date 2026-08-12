@@ -131,6 +131,7 @@ var Module = fx.Options(
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(newNexusForwardingInterceptor),
+	fx.Provide(interceptor.NewNexusNamespaceRateLimitInterceptor),
 	fx.Provide(newNexusCompletionHandler),
 	fx.Provide(NewNexusOperationHTTPHandler),
 	fx.Provide(newNexusCompletionHTTPHandler),
