@@ -125,7 +125,10 @@ func (ni *ConcurrentRequestLimitInterceptor) InterceptNexus(
 ) (any, error) {
 	apiName, err := NexusAPINameFromContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, &InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "interceptor_failed",
+		}
 	}
 	metricsHandler := GetMetricsHandlerFromContext(ctx, ni.logger)
 	// draft-review: this looks safe to pass "in" as any, but confirm in review

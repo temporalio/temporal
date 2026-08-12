@@ -174,14 +174,14 @@ func (a *Interceptor) InterceptNexus(
 	if err != nil {
 		return nil, &interceptor.InterceptorError{
 			Err:     commonnexus.ConvertGRPCError(err, false),
-			Outcome: "internal_auth_error",
+			Outcome: "interceptor_failed",
 		}
 	}
 	endpointName, err := interceptor.NexusEndpointNameFromContext(ctx)
 	if err != nil {
 		return nil, &interceptor.InterceptorError{
 			Err:     commonnexus.ConvertGRPCError(err, false),
-			Outcome: "internal_auth_error",
+			Outcome: "interceptor_failed",
 		}
 	}
 	claims, _ := ctx.Value(MappedClaims).(*Claims)
