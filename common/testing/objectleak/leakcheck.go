@@ -219,9 +219,9 @@ func settleGCWhen(
 			}
 		}
 		if requireZero && currentSnapshot != 0 {
-			// Unexpected objects can remain reachable while asynchronous shutdown
-			// callbacks drain. Give them the full configured timeout, but still
-			// distinguish a stable leak from GC settling that never became quiet.
+			// Nonzero snapshots can persist while asynchronous shutdown callbacks
+			// drain. Give them the full configured timeout, but still distinguish a
+			// stable value from GC settling that never became quiet.
 			if now.After(deadline) {
 				return haveLastSnapshot && now.After(settledDeadline)
 			}
