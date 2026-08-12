@@ -47,6 +47,15 @@ var (
 // defaultFailureSizeLimit is the retained-failure size limit used by tests in this package.
 const defaultFailureSizeLimit = 1024
 
+// testNamespaceEntry is the namespace entry Activity methods read off the chasm context in tests.
+func testNamespaceEntry() *namespace.Namespace {
+	return namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: "test-namespace-id", Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{},
+		"test-cluster",
+	)
+}
+
 // injectActivityContext adds the dependencies that Activity methods read off the chasm context:
 // the activityContext (dynamic config) and the namespace entry.
 func injectActivityContext(t *testing.T, ctx *chasm.MockMutableContext) {
@@ -54,11 +63,7 @@ func injectActivityContext(t *testing.T, ctx *chasm.MockMutableContext) {
 		MutableStateActivityFailureSizeLimitError: dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit),
 	}
 	ctx.GoCtx = context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{config: config})
-	ctx.HandleNamespaceEntry = func() *namespace.Namespace {
-		return namespace.NewLocalNamespaceForTest(
-			&persistencespb.NamespaceInfo{Name: "test-namespace"}, nil, "test-cluster",
-		)
-	}
+	ctx.HandleNamespaceEntry = testNamespaceEntry
 }
 
 func TestTransitionScheduled(t *testing.T) {
