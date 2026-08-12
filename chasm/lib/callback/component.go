@@ -5,7 +5,9 @@ import (
 	"maps"
 	"time"
 
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -13,6 +15,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -173,6 +176,73 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	default:
 		return nil, serviceerror.NewInternalf("unsupported CHASM callback type: %T", variant)
 	}
+}
+
+// outcome returns the callback's outcome, or nil if the Callback isn't in a terminal state.
+func (c *Callback) outcome() *callbackpb.CallbackOutcome {
+	switch c.Status {
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return &callbackpb.CallbackOutcome{
+			Value: &callbackpb.CallbackOutcome_Success{
+				Success: &emptypb.Empty{},
+			},
+		}
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		// Currently there is no way for a Callback to fail other than due to failed deliveries.
+		// So the last, non-retryable error encountered was LastAttemptFailure.
+		return &callbackpb.CallbackOutcome{
+			Value: &callbackpb.CallbackOutcome_Failure{
+				Failure: common.CloneProto(c.LastAttemptFailure),
+			},
+		}
+	default:
+		return nil
+	}
+}
+
+// APIState converts the CHASM callback status to the API CallbackState enum.
+func (c *Callback) APIState() (enumspb.CallbackState, error) {
+	switch c.Status {
+	case callbackspb.CALLBACK_STATUS_STANDBY:
+		return enumspb.CALLBACK_STATE_STANDBY, nil
+	case callbackspb.CALLBACK_STATUS_SCHEDULED:
+		return enumspb.CALLBACK_STATE_SCHEDULED, nil
+	case callbackspb.CALLBACK_STATUS_BACKING_OFF:
+		return enumspb.CALLBACK_STATE_BACKING_OFF, nil
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		return enumspb.CALLBACK_STATE_FAILED, nil
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return enumspb.CALLBACK_STATE_SUCCEEDED, nil
+	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternal("callback with UNSPECIFIED state")
+	default:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternalf("unknown callback state: %v", c.Status)
+	}
+}
+
+// ToAPICallbackInfo returns the API CallbackInfo based on the current state of the CHASM component.
+func (c *Callback) ToAPICallbackInfo() (*callbackpb.CallbackInfo, error) {
+	apiCb, err := c.ToAPICallback()
+	if err != nil {
+		return nil, err
+	}
+	apiState, err := c.APIState()
+	if err != nil {
+		return nil, err
+	}
+
+	info := &callbackpb.CallbackInfo{
+		Callback:         apiCb,
+		RegistrationTime: common.CloneProto(c.RegistrationTime),
+		State:            apiState,
+		// BlockedReason is unimplemented; only the workflow Describe path computes it.
+		Attempt:                 c.Attempt,
+		LastAttemptCompleteTime: common.CloneProto(c.LastAttemptCompleteTime),
+		LastAttemptFailure:      common.CloneProto(c.LastAttemptFailure),
+		NextAttemptScheduleTime: common.CloneProto(c.NextAttemptScheduleTime),
+		Outcome:                 c.outcome(),
+	}
+	return info, nil
 }
 
 // FromAPICallback converts an API callback into a CHASM callback proto.
