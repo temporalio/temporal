@@ -26,7 +26,7 @@ env:
   TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
   SHARD_COUNT: 5 # NOTE: must match shard count in optimize-test-sharding.yml
-  RUNNER_ARM: ubuntu-24.04-arm # NOTE: avoid using larger runner as they have high provisioning time of several minutes
+  RUNNER_ARM: ubuntu-24.04-arm # NOTE: avoid using larger runner as they have high provisioning time (up to several minutes)
 
 jobs:
   test-setup:
