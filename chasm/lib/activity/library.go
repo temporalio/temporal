@@ -3,7 +3,6 @@ package activity
 import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
 )
 
@@ -13,8 +12,7 @@ var ctxKeyActivityContext = ctxKeyActivityContextType{}
 
 // activityContext holds dependencies injected into the chasm.Context for use by Activity methods.
 type activityContext struct {
-	config            *Config
-	namespaceRegistry namespace.Registry
+	config *Config
 }
 
 // activityContextFromChasm extracts the activityContext from a chasm.Context.
@@ -36,17 +34,14 @@ var (
 
 type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
-	config            *Config
-	namespaceRegistry namespace.Registry
+	config *Config
 }
 
 func newComponentOnlyLibrary(
 	config *Config,
-	namespaceRegistry namespace.Registry,
 ) *componentOnlyLibrary {
 	return &componentOnlyLibrary{
-		config:            config,
-		namespaceRegistry: namespaceRegistry,
+		config: config,
 	}
 }
 
@@ -67,8 +62,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 			chasm.WithBusinessIDAlias("ActivityId"),
 			chasm.WithContextValues(map[any]any{
 				ctxKeyActivityContext: &activityContext{
-					config:            l.config,
-					namespaceRegistry: l.namespaceRegistry,
+					config: l.config,
 				},
 			}),
 		),
@@ -79,7 +73,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 // registration-only contexts like tdbg where no task execution is needed.
 func NewNilLibrary() chasm.Library {
 	return &library{
-		componentOnlyLibrary: *newComponentOnlyLibrary(nil, nil),
+		componentOnlyLibrary: *newComponentOnlyLibrary(nil),
 	}
 }
 
@@ -102,10 +96,9 @@ func newLibrary(
 	startToCloseTimeoutTaskHandler *startToCloseTimeoutTaskHandler,
 	heartbeatTimeoutTaskHandler *heartbeatTimeoutTaskHandler,
 	config *Config,
-	namespaceRegistry namespace.Registry,
 ) *library {
 	return &library{
-		componentOnlyLibrary:              *newComponentOnlyLibrary(config, namespaceRegistry),
+		componentOnlyLibrary:              *newComponentOnlyLibrary(config),
 		handler:                           handler,
 		activityDispatchTaskHandler:       activityDispatchTaskHandler,
 		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,
