@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -1263,28 +1264,25 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 // StartAdminBatchOperation starts an admin batch operation.
 func (adh *AdminHandler) StartAdminBatchOperation(
 	ctx context.Context,
-	request *adminservice.StartAdminBatchOperationRequest,
+	adminRequest *adminservice.StartAdminBatchOperationRequest,
 ) (_ *adminservice.StartAdminBatchOperationResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	if request == nil {
+	if adminRequest == nil {
 		return nil, errRequestNotSet
 	}
-
-	if err := validateAdminBatchOperation(request); err != nil {
+	if err := validateAdminBatchOperation(adminRequest); err != nil {
 		return nil, err
 	}
 
-	// The admin batch workflow runs in the system namespace so admin batches can operate on passive clusters
-	// of a target namespace and can operate fast when the target namespace is overloaded.
-	// The target namespace reaches the activity through the workflow input and AdminRequest.
-	targetNS := request.GetNamespace()
+	// admin batch workflows runs in the temporal-system namespace to operate on target namespaces
+	targetNS := adminRequest.GetNamespace()
 	targetNSID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(targetNS))
 	if err != nil {
 		return nil, err
 	}
-	operateJobID := request.JobId
 	sysNS, sysNSID := primitives.SystemLocalNamespace, primitives.SystemNamespaceID
+	operateJobID := adminRequest.JobId
 
 	// Admin batch operations only run in the system namespace, so the concurrency limit is global.
 	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation()
@@ -1305,34 +1303,46 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		}
 	}
 
-	// batchOperation input and payload have the data namespace, and
-	// the request to start workflow will use operate namespace for routing
-	batchOperationInput := &batchspb.BatchOperationInput{
-		AdminRequest: request,
+	// prepare the batch-workflow input
+	batchWfInput := &batchspb.BatchOperationInput{
+		AdminRequest: adminRequest,
 		NamespaceId:  targetNSID.String(),
 	}
-
-	identity := request.GetIdentity()
+	identity := adminRequest.GetIdentity()
 	var batchTypeMemo string
-	switch op := request.Operation.(type) {
+	switch op := adminRequest.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		batchTypeMemo = "refresh_tasks"
+	case *adminservice.StartAdminBatchOperationRequest_DelegationOperation:
+		// These operations mutate workflow state of the target ns,
+		// so the cluster should be active for the target namespace.
+		if err := adh.checkTargetNamespaceActive(targetNS); err != nil {
+			return nil, err
+		}
+		delegatedBatchType := op.DelegationOperation.GetBatchType()
+		delegatedBatchRequest, err := createDelegatedBatchRequest(adminRequest, delegatedBatchType)
+		if err != nil {
+			return nil, err
+		}
+		if err := batcher.ValidateBatchOperation(delegatedBatchRequest); err != nil {
+			return nil, err
+		}
+		batchWfInput.Request = delegatedBatchRequest
+		batchWfInput.BatchType = delegatedBatchType
+		batchTypeMemo = snakeCaseBatchType(delegatedBatchType)
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
-
-	batchOperationInputPayload, err := payloads.Encode(batchOperationInput)
+	batchWfInputPayload, err := payloads.Encode(batchWfInput)
 	if err != nil {
 		return nil, err
 	}
-
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
 			batcher.BatchOperationTypeMemo: payload.EncodeString(batchTypeMemo),
-			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
+			batcher.BatchReasonMemo:        payload.EncodeString(adminRequest.GetReason()),
 		},
 	}
-
 	var searchAttributes *commonpb.SearchAttributes
 	searchattribute.AddSearchAttributes(
 		&searchAttributes,
@@ -1340,12 +1350,13 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.AdminNamespaceDivision),
 	)
 
+	// start batch workflow
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                sysNS,
 		WorkflowId:               operateJobID,
 		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    batchOperationInputPayload,
+		Input:                    batchWfInputPayload,
 		Identity:                 identity,
 		RequestId:                uuid.NewString(),
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
@@ -1389,9 +1400,63 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		// No additional validation needed
 		return nil
+	case *adminservice.StartAdminBatchOperationRequest_DelegationOperation:
+		// The delegated batch type will be validated after the delegated request is built
+		return nil
 	default:
 		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)
 	}
+}
+
+// checkTargetNamespaceActive reports whether this cluster may mutate the target namespace's
+// executions. The batch workflow itself runs in the system namespace, which is local and so
+// always active here, which is why the target namespace has to be checked separately.
+func (adh *AdminHandler) checkTargetNamespaceActive(targetNS string) error {
+	nsEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(targetNS))
+	if err != nil {
+		return err
+	}
+	currentCluster := adh.clusterMetadata.GetCurrentClusterName()
+	//nolint:forbidigo // a batch spans many workflows, so there is no single businessID to route on
+	if !nsEntry.ActiveInCluster(currentCluster) {
+		return serviceerror.NewNamespaceNotActive(
+			targetNS,
+			currentCluster,
+			nsEntry.ActiveClusterName(namespace.RoutingKey{}),
+		)
+	}
+	return nil
+}
+
+func createDelegatedBatchRequest(
+	adminRequest *adminservice.StartAdminBatchOperationRequest,
+	batchType enumspb.BatchOperationType,
+) (*workflowservice.StartBatchOperationRequest, error) {
+	delegatedBatchRequest := &workflowservice.StartBatchOperationRequest{
+		Namespace:       adminRequest.GetNamespace(), // the target ns
+		JobId:           adminRequest.GetJobId(),
+		Reason:          adminRequest.GetReason(),
+		VisibilityQuery: adminRequest.GetVisibilityQuery(),
+		Executions:      adminRequest.GetExecutions(),
+	}
+	// only delegate termination to admin batch
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_TerminationOperation{
+			TerminationOperation: &batchpb.BatchOperationTermination{Identity: adminRequest.GetIdentity()},
+		}
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+				Identity: adminRequest.GetIdentity(),
+				Reason:   adminRequest.GetReason(),
+			},
+		}
+	default:
+		return nil, serviceerror.NewInvalidArgumentf(
+			"batch operation type %v cannot be delegated to the admin API", batchType)
+	}
+	return delegatedBatchRequest, nil
 }
 
 // ResendReplicationTasks requests replication task from remote cluster
