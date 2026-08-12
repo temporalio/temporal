@@ -115,3 +115,50 @@ func TestClusterRouterPreservesSuiteWorkerRequirement(t *testing.T) {
 	require.True(t, captured.needWorkerService)
 	require.Equal(t, "worker service required: deployment APIs", captured.reason)
 }
+
+func TestClusterRouterReusesOneClusterLeasePerTest(t *testing.T) {
+	var created atomic.Int32
+	var destroyed atomic.Int32
+	router := &clusterRouter{legacySlots: make(chan struct{}, 1)}
+	router.perTest = newPerTestClusterProvider(
+		2,
+		func(_ clusterTest, _ clusterRequest) (*FunctionalTestBase, error) {
+			created.Add(1)
+			return &FunctionalTestBase{}, nil
+		},
+		func(*FunctionalTestBase) error {
+			destroyed.Add(1)
+			return nil
+		},
+	)
+
+	t.Run("leaf", func(t *testing.T) {
+		first := router.get(t, clusterRequest{})
+		second := router.get(t, clusterRequest{})
+
+		require.Same(t, first, second)
+		require.EqualValues(t, 1, created.Load())
+		require.Len(t, router.perTest.live, 1)
+	})
+
+	require.EqualValues(t, 1, destroyed.Load())
+	require.Empty(t, router.perTest.live)
+}
+
+func TestPerTestClusterProviderRejectsLaterClusterRequirements(t *testing.T) {
+	provider := newPerTestClusterProvider(
+		2,
+		func(_ clusterTest, _ clusterRequest) (*FunctionalTestBase, error) {
+			return &FunctionalTestBase{}, nil
+		},
+		func(*FunctionalTestBase) error { return nil },
+	)
+
+	t.Run("leaf", func(t *testing.T) {
+		_, err := provider.clusterForTest(t, clusterRequest{})
+		require.NoError(t, err)
+
+		_, err = provider.clusterForTest(t, clusterRequest{needWorkerService: true})
+		require.ErrorContains(t, err, "worker service")
+	})
+}

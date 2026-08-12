@@ -231,7 +231,7 @@ func newClusterWithPersistenceTestBaseFactory(
 			testBase.TearDownWorkflowStore()
 		}
 		if clusterConfig.ESConfig != nil {
-			retErr = multierr.Combine(retErr, deleteIndex(clusterConfig.ESConfig, logger))
+			retErr = multierr.Combine(retErr, persistencetests.DeleteEsIndex(clusterConfig.ESConfig, logger))
 		}
 	}()
 

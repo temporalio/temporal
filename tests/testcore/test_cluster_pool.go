@@ -89,16 +89,8 @@ func (p *clusterRouter) get(t *testing.T, req clusterRequest) *FunctionalTestBas
 		req.reason = "per-test"
 	}
 
-	lease, err := p.perTest.acquire(t.Name(), req)
+	cluster, err := p.perTest.clusterForTest(t, req)
 	require.NoError(t, err)
-	cluster := lease.cluster
-	cluster.SetT(t)
-	t.Cleanup(func() {
-		if err := lease.release(); err != nil {
-			t.Logf("Failed to tear down per-test cluster: %v", err)
-		}
-	})
-	cluster.RegisterTest(t)
 	return cluster
 }
 
