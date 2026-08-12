@@ -90,6 +90,14 @@ func TestNewSummaryRow_TruncatesOversizedDetail(t *testing.T) {
 	require.Contains(t, row.Details, summaryTruncatedMarker)
 }
 
+func TestNewSummaryRow_TruncatesUTF8DetailAtRuneBoundaries(t *testing.T) {
+	detail := strings.Repeat("é", summaryMaxDetailBytes)
+
+	row := newSummaryRow(failureTypeFailed, "TestStandalone", detail)
+	require.Equal(t, strings.ToValidUTF8(row.Details, ""), row.Details)
+	require.LessOrEqual(t, len(row.Details), summaryMaxDetailBytes)
+}
+
 func TestRenderSummaryFromReports_Markdown_RendersFailureRows(t *testing.T) {
 	failureReport := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 	failureReport.Suites[0].Testcases[0].Name = "TestFoo"
