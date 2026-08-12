@@ -26,7 +26,7 @@ type (
 		namespaceLogger  resource.NamespaceLogger
 
 		// bootstrapPersistenceFactory must only be used during Start; ServerFx closes it after startup.
-		bootstrapPersistenceFactory persistenceClient.Factory
+		bootstrapPersistenceFactory BootstrapPersistenceFactory
 	}
 )
 
@@ -48,7 +48,7 @@ func NewServerFxImpl(
 	namespaceLogger resource.NamespaceLogger,
 	stoppedCh chan any,
 	servicesGroup ServicesGroupIn,
-	bootstrapPersistenceFactory persistenceClient.Factory,
+	bootstrapPersistenceFactory BootstrapPersistenceFactory,
 ) *ServerImpl {
 	s := &ServerImpl{
 		so:                          opts,
@@ -119,6 +119,7 @@ func (s *ServerImpl) startServices() error {
 	return allErrs
 }
 
+// initSystemNamespaces initializes namespaces using a factory owned and closed by its caller.
 func initSystemNamespaces(
 	ctx context.Context,
 	currentClusterName string,
@@ -128,7 +129,6 @@ func initSystemNamespaces(
 	if err != nil {
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
-	// Do not close the manager: it shares the factory's data store, which the factory's owner closes.
 	ctx, cancel := context.WithTimeout(
 		headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo),
 		30*time.Second,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -89,11 +90,17 @@ type (
 		logger      log.Logger
 	}
 
+	// BootstrapPersistenceFactory is a persistence factory used only during server startup.
+	BootstrapPersistenceFactory interface {
+		persistenceClient.Factory
+	}
+
 	ServerFx struct {
 		app                         *fx.App
 		startupSynchronizationMode  synchronizationModeParams
 		logger                      log.Logger
-		bootstrapPersistenceFactory persistenceClient.Factory
+		bootstrapPersistenceFactory BootstrapPersistenceFactory
+		closeBootstrapOnce          sync.Once
 	}
 
 	serverOptionsProvider struct {
@@ -138,6 +145,8 @@ type (
 )
 
 var (
+	// TopLevelModule contains the root server dependencies and must be used through NewServerFx,
+	// which supplies the bootstrap persistence factory.
 	TopLevelModule = fx.Options(
 		fx.Provide(
 			NewServerFxImpl,
@@ -161,6 +170,8 @@ var (
 	)
 )
 
+// NewServerFx constructs a server from topLevelModule. Callers must call Stop to release resources
+// even if Start is never called or returns an error.
 func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (*ServerFx, error) {
 	s := &ServerFx{}
 	s.app = fx.New(
@@ -359,7 +370,7 @@ func (s *ServerFx) provideBootstrapPersistenceFactory(
 	metricsHandler metrics.Handler,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	serializer serialization.Serializer,
-) persistenceClient.Factory {
+) BootstrapPersistenceFactory {
 	persistenceMetricsHandler := metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
 	clusterName := persistenceClient.ClusterName(cfg.ClusterMetadata.CurrentClusterName)
 	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
@@ -387,7 +398,7 @@ func (s *ServerFx) provideBootstrapPersistenceFactory(
 // This function should be called only once, Server doesn't support multiple restarts.
 func (s *ServerFx) Start() error {
 	err := s.app.Start(context.Background())
-	s.closeBootstrapPersistenceFactory() // safe now that app has started
+	s.closeBootstrapPersistenceFactory() // no longer needed once startup has run
 	if err != nil {
 		return err
 	}
@@ -409,11 +420,13 @@ func (s *ServerFx) Stop() error {
 }
 
 func (s *ServerFx) closeBootstrapPersistenceFactory() {
-	factory := s.bootstrapPersistenceFactory
-	s.bootstrapPersistenceFactory = nil
-	if factory != nil {
-		factory.Close()
-	}
+	s.closeBootstrapOnce.Do(func() {
+		factory := s.bootstrapPersistenceFactory
+		s.bootstrapPersistenceFactory = nil
+		if factory != nil {
+			factory.Close()
+		}
+	})
 }
 
 func (svc *ServicesMetadata) Stop(ctx context.Context) {
@@ -688,12 +701,13 @@ func WorkerServiceProvider(
 
 // ApplyClusterMetadataConfigProvider performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
-// This is to keep this check hidden from downstream calls.
+// This is to keep this check hidden from downstream calls. The caller owns factory and closes the
+// data store shared by managers created here.
 // TODO: move this to cluster.fx
 func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
 	svc *config.Config,
-	factory persistenceClient.Factory,
+	factory BootstrapPersistenceFactory,
 ) (*cluster.Config, config.Persistence, error) {
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
@@ -702,7 +716,6 @@ func ApplyClusterMetadataConfigProvider(
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
-	// Do not close the manager: it shares the factory's data store, which the factory's owner closes.
 
 	visCSAOverride := map[enumspb.IndexedValueType]int{}
 	for tpName, value := range svc.Visibility.PersistenceCustomSearchAttributes {

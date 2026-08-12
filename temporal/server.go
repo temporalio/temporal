@@ -41,6 +41,7 @@ var (
 )
 
 // NewServer returns a new instance of server that serves one or many services.
+// Callers must call Stop to release resources even if Start is never called or returns an error.
 func NewServer(opts ...ServerOption) (Server, error) {
 	return NewServerFx(TopLevelModule, opts...)
 }
