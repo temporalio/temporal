@@ -1,9 +1,7 @@
 package tests
 
 import (
-	"context"
 	"errors"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -22,7 +20,6 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -31,39 +28,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
-
-// completionHandler is a nexusrpc completion handler that hands each delivered completion to the
-// test on requestCh, then waits on requestCompleteCh for the error to return to the caller.
-type completionHandler struct {
-	requestCh         chan *nexusrpc.CompletionRequest
-	requestCompleteCh chan error
-}
-
-func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexusrpc.CompletionRequest) error {
-	h.requestCh <- request
-	return <-h.requestCompleteCh
-}
-
-// newNexusCompletionHandler returns a completion handler along with the URL of an HTTP server that
-// delivers completions to it, for use as the target of a completion callback. The server shuts
-// down when t cleans up.
-func newNexusCompletionHandler(t *testing.T) (*completionHandler, string) {
-	// Buffered so tests can queue up multiple completion requests for convenience.
-	ch := &completionHandler{
-		requestCh:         make(chan *nexusrpc.CompletionRequest, 4),
-		requestCompleteCh: make(chan error, 4),
-	}
-
-	httpHandler := nexusrpc.CompletionHandlerOptions{Handler: ch}
-	srv := httptest.NewServer(nexusrpc.NewCompletionHTTPHandler(httpHandler))
-
-	t.Cleanup(func() {
-		// Unblock any handler still waiting on a response; srv.Close waits for in-flight requests.
-		close(ch.requestCompleteCh)
-		srv.Close()
-	})
-	return ch, srv.URL
-}
 
 type CallbacksSuite struct {
 	parallelsuite.Suite[*CallbacksSuite]
