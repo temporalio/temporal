@@ -37,15 +37,6 @@ var goleakOpts = []goleak.Option{
 	goleak.IgnoreAnyFunction("google.golang.org/grpc.(*addrConn).resetTransportAndUnlock"),
 	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/balancer/gracefulswitch.(*Balancer).updateSubConnState"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/membership.(*grpcResolver).listen"),
-
-	// TODO: SDK worker goroutines not fully stopped on cluster shutdown.
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*baseWorker).runEagerTaskDispatcher"),
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*baseWorker).runTaskDispatcher"),
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*localActivityTunnel).getTask"),
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*sharedNamespaceWorker).run"),
-	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal/common/backoff.(*ConcurrentRetrier).throttleInternal"),
-	goleak.IgnoreAnyFunction("go.temporal.io/sdk/internal.(*basePoller).doPoll"),
-	goleak.IgnoreAnyFunction("go.temporal.io/sdk/internal.(*basePoller).doPoll.func1"),
 }
 
 var objectLeakOpts = []objectleak.Option{
