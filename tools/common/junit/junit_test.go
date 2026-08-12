@@ -83,6 +83,7 @@ func TestReadErrors(t *testing.T) {
 	t.Run("missing file", func(t *testing.T) {
 		_, err := Read(filepath.Join(t.TempDir(), "missing.xml"))
 		require.ErrorContains(t, err, "failed to open JUnit report file")
+		require.NotErrorIs(t, err, errRead)
 	})
 
 	tests := []struct {
@@ -109,6 +110,7 @@ func TestReadErrors(t *testing.T) {
 
 			_, err := Read(path)
 			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorIs(t, err, errRead)
 		})
 	}
 }

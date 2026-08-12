@@ -2,6 +2,7 @@ package junit
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"os"
 
@@ -20,6 +21,8 @@ type Testcase = junitxml.Testcase
 // Result is a JUnit test-case failure or error.
 type Result = junitxml.Result
 
+var errRead = errors.New("failed to read JUnit report file")
+
 // Read reads a JUnit XML file with either a testsuites or testsuite root.
 func Read(path string) (*Testsuites, error) {
 	f, err := os.Open(path)
@@ -32,7 +35,7 @@ func Read(path string) (*Testsuites, error) {
 	for {
 		token, err := decoder.Token()
 		if err != nil {
-			return nil, fmt.Errorf("failed to read JUnit report file: %w", err)
+			return nil, fmt.Errorf("%w: %w", errRead, err)
 		}
 		root, ok := token.(xml.StartElement)
 		if !ok {
@@ -43,19 +46,19 @@ func Read(path string) (*Testsuites, error) {
 		case "testsuites":
 			var testsuites Testsuites
 			if err := decoder.DecodeElement(&testsuites, &root); err != nil {
-				return nil, fmt.Errorf("failed to read JUnit report file: %w", err)
+				return nil, fmt.Errorf("%w: %w", errRead, err)
 			}
 			return &testsuites, nil
 		case "testsuite":
 			var testsuite Testsuite
 			if err := decoder.DecodeElement(&testsuite, &root); err != nil {
-				return nil, fmt.Errorf("failed to read JUnit report file: %w", err)
+				return nil, fmt.Errorf("%w: %w", errRead, err)
 			}
 			testsuites := &Testsuites{Time: testsuite.Time}
 			testsuites.AddSuite(testsuite)
 			return testsuites, nil
 		default:
-			return nil, fmt.Errorf("failed to read JUnit report file: unexpected root element %q", root.Name.Local)
+			return nil, fmt.Errorf("%w: unexpected root element %q", errRead, root.Name.Local)
 		}
 	}
 }
