@@ -117,6 +117,26 @@ func TestBackfillTask_TriggerImmediate(t *testing.T) {
 	})
 }
 
+func TestDivergenceRepro_ImmediateTriggerIgnoresScheduledTime(t *testing.T) {
+	env := newTestEnv(t)
+	processingTime := env.TimeSource.Now().UTC()
+	requestedTime := processingTime.Add(-time.Second)
+	request := &schedulepb.TriggerImmediatelyRequest{
+		ScheduledTime: timestamppb.New(requestedTime),
+	}
+
+	runBackfillTestCase(t, env, &backfillTestCase{
+		InitialTriggerRequest:  request,
+		ExpectedBufferedStarts: 1,
+		ExpectedComplete:       true,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			start := invoker.GetBufferedStarts()[0]
+			require.Equal(t, processingTime, start.GetNominalTime().AsTime())
+			require.NotEqual(t, requestedTime, start.GetNominalTime().AsTime())
+		},
+	})
+}
+
 // An immediately-triggered run will back off and retry if the buffer is full.
 func TestBackfillTask_TriggerImmediateFullBuffer(t *testing.T) {
 	env := newTestEnv(t)

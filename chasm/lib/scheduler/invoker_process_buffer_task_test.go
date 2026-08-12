@@ -317,7 +317,7 @@ func TestProcessBufferTask_BufferOne(t *testing.T) {
 	})
 }
 
-func TestProcessBufferTask_SkipDropsOccurrenceWhileWorkflowRunning(t *testing.T) {
+func TestDivergenceRepro_SkipDropsOccurrenceAtDeadlineWhileWorkflowRunning(t *testing.T) {
 	env := newTestEnv(t)
 	startTime := timestamppb.New(env.TimeSource.Now())
 	runProcessBufferTestCase(t, env, &processBufferTestCase{
@@ -335,7 +335,7 @@ func TestProcessBufferTask_SkipDropsOccurrenceWhileWorkflowRunning(t *testing.T)
 	})
 }
 
-func TestProcessBufferTask_SkipStartsOccurrenceAfterWorkflowCompleted(t *testing.T) {
+func TestDivergenceRepro_SkipStartsOccurrenceAfterWorkflowCompleted(t *testing.T) {
 	env := newTestEnv(t)
 	startTime := timestamppb.New(env.TimeSource.Now())
 	runProcessBufferTestCase(t, env, &processBufferTestCase{

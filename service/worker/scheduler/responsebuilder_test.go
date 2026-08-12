@@ -265,6 +265,49 @@ func TestResponseBuilder(t *testing.T) {
 	})
 }
 
+func TestDivergenceRepro_V1OmitsNonFailedTerminalFailure(t *testing.T) {
+	testCases := []struct {
+		name   string
+		status enumspb.WorkflowExecutionStatus
+		event  *historypb.HistoryEvent
+	}{
+		{
+			name:   "canceled",
+			status: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+			event:  &historypb.HistoryEvent{},
+		},
+		{
+			name:   "terminated",
+			status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			event:  &historypb.HistoryEvent{},
+		},
+		{
+			name:   "timed-out",
+			status: enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+			event: &historypb.HistoryEvent{
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{
+					WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			builder := newResponseBuilder(
+				&schedulespb.WatchWorkflowRequest{},
+				tc.status,
+				log.NewNoopLogger(),
+				eventStorageSize-recordOverheadSize,
+			)
+
+			response, err := builder.Build(tc.event)
+			require.NoError(t, err)
+			require.Equal(t, tc.status, response.GetStatus())
+			require.Nil(t, response.GetFailure())
+		})
+	}
+}
+
 func assertResponseResult(t *testing.T, response *schedulespb.WatchWorkflowResponse, expectedResult *commonpb.Payloads) {
 	t.Helper()
 	require.Truef(

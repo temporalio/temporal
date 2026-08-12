@@ -148,3 +148,11 @@ have intentional or already-known next-time and backfill-boundary behavior. Newl
 current-V1 histories are the significant-divergence gate.
 
 Set `TEMPORAL_API_KEY` for API-key authentication and pass `--tls` when connecting over TLS.
+
+## Investigation reports
+
+- [BUG_REPRODUCTIONS.md](BUG_REPRODUCTIONS.md) summarizes the confirmed findings and their focused
+  unit-test reproductions.
+- [DIVERGENCES.md](DIVERGENCES.md) explains the comparison model, timelines, and first-pass triage.
+- [S_AW031_SWEEP_2026-08-09.md](S_AW031_SWEEP_2026-08-09.md) records the redacted production-sweep
+  results and case matrix.

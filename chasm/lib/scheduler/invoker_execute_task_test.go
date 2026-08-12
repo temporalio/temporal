@@ -133,7 +133,7 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	}
 }
 
-func TestExecuteTask_PropagatesTerminalFailureToNextStart(t *testing.T) {
+func TestDivergenceRepro_CHASMPropagatesTerminalFailureToNextStart(t *testing.T) {
 	testCases := []struct {
 		name    string
 		failure *failurepb.Failure
