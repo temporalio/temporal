@@ -538,6 +538,11 @@ func (d *namespaceHandler) UpdateNamespace(
 			for _, clusterConfig := range updateReplicationConfig.Clusters {
 				clustersNew = append(clustersNew, clusterConfig.GetClusterName())
 			}
+			replicationConfig.ClusterConnectTime = d.maybeUpdateClusterConnectTime(
+				replicationConfig.ClusterConnectTime,
+				replicationConfig.Clusters,
+				clustersNew,
+			)
 			replicationConfig.Clusters = clustersNew
 		}
 		if updateReplicationConfig.State != enumspb.REPLICATION_STATE_UNSPECIFIED &&
@@ -1110,6 +1115,56 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 		failoverHistory = failoverHistory[l-maxReplicationHistorySize : l]
 	}
 	return failoverHistory
+}
+
+// maybeUpdateClusterConnectTime stamps the current time for every cluster newly added to the
+// namespace's cluster list (used to anchor the namespace gradual-connect replication ramp -- see
+// Namespace.InitialConnectTime), and removes the entry for every cluster removed from the list.
+// An existing key is never restamped, even if the cluster is present in both oldClusters and
+// newClusters -- only a genuine add (absent from oldClusters) gets a fresh timestamp.
+func (d *namespaceHandler) maybeUpdateClusterConnectTime(
+	clusterConnectTime map[string]*timestamppb.Timestamp,
+	oldClusters []string,
+	newClusters []string,
+) map[string]*timestamppb.Timestamp {
+	oldSet := make(map[string]struct{}, len(oldClusters))
+	for _, c := range oldClusters {
+		oldSet[c] = struct{}{}
+	}
+	newSet := make(map[string]struct{}, len(newClusters))
+	for _, c := range newClusters {
+		newSet[c] = struct{}{}
+	}
+
+	var added, removed []string
+	for _, c := range newClusters {
+		if _, wasPresent := oldSet[c]; !wasPresent {
+			added = append(added, c)
+		}
+	}
+	for c := range oldSet {
+		if _, stillPresent := newSet[c]; !stillPresent {
+			removed = append(removed, c)
+		}
+	}
+	if len(added) == 0 && len(removed) == 0 {
+		// Nothing to stamp or clean; return the original map untouched (including its nilness) so
+		// a no-op cluster-list update doesn't spuriously allocate an empty map in its place.
+		return clusterConnectTime
+	}
+
+	result := maps.Clone(clusterConnectTime)
+	if result == nil {
+		result = make(map[string]*timestamppb.Timestamp, len(added))
+	}
+	now := d.timeSource.Now()
+	for _, c := range added {
+		result[c] = timestamppb.New(now)
+	}
+	for _, c := range removed {
+		delete(result, c)
+	}
+	return result
 }
 
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.

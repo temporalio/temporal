@@ -3,6 +3,7 @@ package replication
 import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -22,6 +23,7 @@ type (
 		fx.In
 
 		Config                    *configs.Config
+		TimeSource                clock.TimeSource
 		ClusterMetadata           cluster.Metadata
 		ClientBean                client.Bean
 		ShardController           shard.Controller

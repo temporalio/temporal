@@ -23,9 +23,11 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -43,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -61,6 +64,7 @@ type (
 		sourceCluster           string
 		sourceShardKey          ClusterShardKey
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
+		timeSource              *clock.EventTimeSource
 		config                  *configs.Config
 		namespaceId             string
 		workflowId              string
@@ -102,6 +106,7 @@ func (s *executableTaskSuite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	s.serializer = serialization.NewSerializer()
 	s.resendHandler = eventhandler.NewMockResendHandler(s.controller)
+	s.timeSource = clock.NewEventTimeSource()
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
@@ -119,6 +124,7 @@ func (s *executableTaskSuite) SetupTest() {
 	s.taskId = rand.Int63()
 	s.toolBox = ProcessToolBox{
 		Config:                  s.config,
+		TimeSource:              s.timeSource,
 		ClusterMetadata:         s.clusterMetadata,
 		ClientBean:              s.clientBean,
 		ResendHandler:           s.resendHandler,
@@ -1068,6 +1074,125 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.False(toProcess)
 }
 
+// newGradualConnectNamespace builds a two-cluster namespace entry with the given
+// ClusterConnectTime for TestGetNamespaceInfo_GradualConnect* cases. A nil connectTime omits the
+// entry entirely (simulating a cluster that's been a member since the namespace's creation).
+func (s *executableTaskSuite) newGradualConnectNamespace(connectTime *time.Time) (*namespace.Namespace, string) {
+	namespaceID := uuid.NewString()
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: cluster.TestAlternativeClusterName,
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
+		},
+	}
+	if connectTime != nil {
+		replicationConfig.ClusterConnectTime = map[string]*timestamppb.Timestamp{
+			cluster.TestCurrentClusterName: timestamppb.New(*connectTime),
+		}
+	}
+	detail := &persistencespb.NamespaceDetail{
+		Info:              &persistencespb.NamespaceInfo{Id: namespaceID, Name: uuid.NewString()},
+		Config:            &persistencespb.NamespaceConfig{},
+		ReplicationConfig: replicationConfig,
+	}
+	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	s.NoError(err)
+	return namespaceEntry, namespaceID
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_KillSwitchOff_Admits() {
+	// EnableReplicationGradualConnect defaults to false in tests.NewDynamicConfig(); a recent
+	// connect time must still admit everything.
+	connectTime := s.timeSource.Now()
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&connectTime)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.True(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_NoConnectTimeRecorded_Admits() {
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(nil)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.True(toProcess, "no recorded connect time must fail open (admit), e.g. a cluster present since namespace creation")
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInFuture_Admits() {
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.ReplicationGradualConnectInitialPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
+	future := s.timeSource.Now().Add(time.Hour)
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&future)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.True(toProcess, "a connect time in the future (clock skew) must fail open (admit) despite InitialPercent=0")
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_Admits() {
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.ReplicationGradualConnectInitialPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
+	s.config.ReplicationGradualConnectStepPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(10)
+	s.config.ReplicationGradualConnectStepDuration = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Minute)
+	connectTime := s.timeSource.Now()
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&connectTime)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	s.timeSource.Update(connectTime.Add(time.Hour)) // well past 10 steps of 1 minute each
+	for range 20 {
+		_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, uuid.NewString())
+		s.NoError(err)
+		s.True(toProcess, "every workflow ID must be admitted once the ramp has run past 100%%")
+	}
+}
+
+// TestGetNamespaceInfo_GradualConnect_Monotonicity checks the property the ramp design leans on:
+// for a fixed connect time, the set of admitted workflow IDs only grows as time advances -- a
+// workflow ID admitted at an earlier tick is never shed at a later one. This is what the earlier
+// delete/verify-task safety analysis depends on: a later replication task for the same workflow
+// can't be shed if an earlier one for that same workflow was already admitted.
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_Monotonicity() {
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.ReplicationGradualConnectInitialPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(10)
+	s.config.ReplicationGradualConnectStepPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(10)
+	stepDuration := time.Minute
+	s.config.ReplicationGradualConnectStepDuration = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(stepDuration)
+	connectTime := s.timeSource.Now()
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&connectTime)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	const numWorkflows = 2000
+	workflowIDs := make([]string, numWorkflows)
+	for i := range workflowIDs {
+		workflowIDs[i] = uuid.NewString()
+	}
+
+	admitted := make(map[string]bool, numWorkflows)
+	for tick := 0; tick <= 10; tick++ { // 0% .. 100% in 10 steps of 10%, plus the initial 10%
+		s.timeSource.Update(connectTime.Add(time.Duration(tick) * stepDuration))
+		for _, wfID := range workflowIDs {
+			_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, wfID)
+			s.NoError(err)
+			if admitted[wfID] {
+				s.True(toProcess, "workflow %s was admitted at an earlier tick; must not be shed at tick %d", wfID, tick)
+			}
+			if toProcess {
+				admitted[wfID] = true
+			}
+		}
+	}
+	for _, wfID := range workflowIDs {
+		s.True(admitted[wfID], "workflow %s must be admitted by the time the ramp reaches 100%%", wfID)
+	}
+}
+
 func (s *executableTaskSuite) TestMarkPoisonPill() {
 	shardID := rand.Int31()
 	shardContext := historyi.NewMockShardContext(s.controller)
@@ -1250,4 +1375,63 @@ func (s *executableTaskSuite) TestSyncState_NotFound() {
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
 	s.NoError(err)
 	s.False(doContinue)
+}
+
+func TestGradualConnectPercent(t *testing.T) {
+	connectTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	testCases := []struct {
+		name           string
+		now            time.Time
+		initialPercent int
+		stepPercent    int
+		stepDuration   time.Duration
+		want           int
+	}{
+		{
+			name:           "at_connect_time_returns_initial_percent",
+			now:            connectTime,
+			initialPercent: 10,
+			stepPercent:    10,
+			stepDuration:   5 * time.Minute,
+			want:           10,
+		},
+		{
+			name:           "each_elapsed_step_adds_step_percent",
+			now:            connectTime.Add(23 * time.Minute), // 4 full 5-minute steps
+			initialPercent: 10,
+			stepPercent:    10,
+			stepDuration:   5 * time.Minute,
+			want:           50,
+		},
+		{
+			name:           "capped_at_100_regardless_of_how_far_past",
+			now:            connectTime.Add(365 * 24 * time.Hour),
+			initialPercent: 10,
+			stepPercent:    10,
+			stepDuration:   5 * time.Minute,
+			want:           100,
+		},
+		{
+			name:           "negative_elapsed_admits_everything",
+			now:            connectTime.Add(-time.Minute),
+			initialPercent: 0,
+			stepPercent:    10,
+			stepDuration:   5 * time.Minute,
+			want:           100,
+		},
+		{
+			name:           "non_positive_step_duration_admits_everything",
+			now:            connectTime.Add(time.Minute),
+			initialPercent: 0,
+			stepPercent:    10,
+			stepDuration:   0,
+			want:           100,
+		},
+	}
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			got := gradualConnectPercent(connectTime, tt.now, tt.initialPercent, tt.stepPercent, tt.stepDuration)
+			require.Equal(t, tt.want, got)
+		})
+	}
 }

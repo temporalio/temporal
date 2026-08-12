@@ -20,6 +20,11 @@ type Config struct {
 	EnableSeparateReplicationEnableFlag           dynamicconfig.BoolPropertyFn
 	HistoryReplicationDLQV2                       dynamicconfig.BoolPropertyFn
 
+	EnableReplicationGradualConnect         dynamicconfig.BoolPropertyFn
+	ReplicationGradualConnectInitialPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ReplicationGradualConnectStepPercent    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ReplicationGradualConnectStepDuration   dynamicconfig.DurationPropertyFnWithNamespaceFilter
+
 	RPS                                         dynamicconfig.IntPropertyFn
 	NamespaceRPS                                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
@@ -465,6 +470,11 @@ func NewConfig(
 		EnableCloseInboundReplicationStreamOnShutdown: dynamicconfig.EnableCloseInboundReplicationStreamOnShutdown.Get(dc),
 		EnableSeparateReplicationEnableFlag:           dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
 		HistoryReplicationDLQV2:                       dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
+
+		EnableReplicationGradualConnect:         dynamicconfig.EnableReplicationGradualConnect.Get(dc),
+		ReplicationGradualConnectInitialPercent: dynamicconfig.ReplicationGradualConnectInitialPercent.Get(dc),
+		ReplicationGradualConnectStepPercent:    dynamicconfig.ReplicationGradualConnectStepPercent.Get(dc),
+		ReplicationGradualConnectStepDuration:   dynamicconfig.ReplicationGradualConnectStepDuration.Get(dc),
 
 		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
 		NamespaceRPS:                         dynamicconfig.HistoryNamespaceRPS.Get(dc),

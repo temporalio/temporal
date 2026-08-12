@@ -318,8 +318,13 @@ type NamespaceReplicationConfig struct {
 	Clusters          []string               `protobuf:"bytes,2,rep,name=clusters,proto3" json:"clusters,omitempty"`
 	State             v1.ReplicationState    `protobuf:"varint,3,opt,name=state,proto3,enum=temporal.api.enums.v1.ReplicationState" json:"state,omitempty"`
 	FailoverHistory   []*FailoverStatus      `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3" json:"failover_history,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// cluster_connect_time records, per cluster, when that cluster was added to clusters by
+	// UpdateNamespace. Used to anchor the namespace gradual-connect replication ramp. Stamped only
+	// on a genuine add (the cluster was absent from the prior cluster list); an existing key is
+	// never restamped, and the entry is removed when the cluster is removed from clusters.
+	ClusterConnectTime map[string]*timestamppb.Timestamp `protobuf:"bytes,9,rep,name=cluster_connect_time,json=clusterConnectTime,proto3" json:"cluster_connect_time,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *NamespaceReplicationConfig) Reset() {
@@ -376,6 +381,13 @@ func (x *NamespaceReplicationConfig) GetState() v1.ReplicationState {
 func (x *NamespaceReplicationConfig) GetFailoverHistory() []*FailoverStatus {
 	if x != nil {
 		return x.FailoverHistory
+	}
+	return nil
+}
+
+func (x *NamespaceReplicationConfig) GetClusterConnectTime() map[string]*timestamppb.Timestamp {
+	if x != nil {
+		return x.ClusterConnectTime
 	}
 	return nil
 }
@@ -471,12 +483,16 @@ const file_temporal_server_api_persistence_v1_namespaces_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1ae\n" +
 	"\x12WorkflowRulesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x129\n" +
-	"\x05value\x18\x02 \x01(\v2#.temporal.api.rules.v1.WorkflowRuleR\x05value:\x028\x01\"\x86\x02\n" +
+	"\x05value\x18\x02 \x01(\v2#.temporal.api.rules.v1.WorkflowRuleR\x05value:\x028\x01\"\xf4\x03\n" +
 	"\x1aNamespaceReplicationConfig\x12.\n" +
 	"\x13active_cluster_name\x18\x01 \x01(\tR\x11activeClusterName\x12\x1a\n" +
 	"\bclusters\x18\x02 \x03(\tR\bclusters\x12=\n" +
 	"\x05state\x18\x03 \x01(\x0e2'.temporal.api.enums.v1.ReplicationStateR\x05state\x12]\n" +
-	"\x10failover_history\x18\b \x03(\v22.temporal.server.api.persistence.v1.FailoverStatusR\x0ffailoverHistory\"|\n" +
+	"\x10failover_history\x18\b \x03(\v22.temporal.server.api.persistence.v1.FailoverStatusR\x0ffailoverHistory\x12\x88\x01\n" +
+	"\x14cluster_connect_time\x18\t \x03(\v2V.temporal.server.api.persistence.v1.NamespaceReplicationConfig.ClusterConnectTimeEntryR\x12clusterConnectTime\x1aa\n" +
+	"\x17ClusterConnectTimeEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05value:\x028\x01\"|\n" +
 	"\x0eFailoverStatus\x12?\n" +
 	"\rfailover_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ffailoverTime\x12)\n" +
 	"\x10failover_version\x18\x02 \x01(\x03R\x0ffailoverVersionB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
@@ -493,7 +509,7 @@ func file_temporal_server_api_persistence_v1_namespaces_proto_rawDescGZIP() []by
 	return file_temporal_server_api_persistence_v1_namespaces_proto_rawDescData
 }
 
-var file_temporal_server_api_persistence_v1_namespaces_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_temporal_server_api_persistence_v1_namespaces_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_temporal_server_api_persistence_v1_namespaces_proto_goTypes = []any{
 	(*NamespaceDetail)(nil),            // 0: temporal.server.api.persistence.v1.NamespaceDetail
 	(*NamespaceInfo)(nil),              // 1: temporal.server.api.persistence.v1.NamespaceInfo
@@ -503,36 +519,39 @@ var file_temporal_server_api_persistence_v1_namespaces_proto_goTypes = []any{
 	nil,                                // 5: temporal.server.api.persistence.v1.NamespaceInfo.DataEntry
 	nil,                                // 6: temporal.server.api.persistence.v1.NamespaceConfig.CustomSearchAttributeAliasesEntry
 	nil,                                // 7: temporal.server.api.persistence.v1.NamespaceConfig.WorkflowRulesEntry
-	(*timestamppb.Timestamp)(nil),      // 8: google.protobuf.Timestamp
-	(v1.NamespaceState)(0),             // 9: temporal.api.enums.v1.NamespaceState
-	(*durationpb.Duration)(nil),        // 10: google.protobuf.Duration
-	(*v11.BadBinaries)(nil),            // 11: temporal.api.namespace.v1.BadBinaries
-	(v1.ArchivalState)(0),              // 12: temporal.api.enums.v1.ArchivalState
-	(v1.ReplicationState)(0),           // 13: temporal.api.enums.v1.ReplicationState
-	(*v12.WorkflowRule)(nil),           // 14: temporal.api.rules.v1.WorkflowRule
+	nil,                                // 8: temporal.server.api.persistence.v1.NamespaceReplicationConfig.ClusterConnectTimeEntry
+	(*timestamppb.Timestamp)(nil),      // 9: google.protobuf.Timestamp
+	(v1.NamespaceState)(0),             // 10: temporal.api.enums.v1.NamespaceState
+	(*durationpb.Duration)(nil),        // 11: google.protobuf.Duration
+	(*v11.BadBinaries)(nil),            // 12: temporal.api.namespace.v1.BadBinaries
+	(v1.ArchivalState)(0),              // 13: temporal.api.enums.v1.ArchivalState
+	(v1.ReplicationState)(0),           // 14: temporal.api.enums.v1.ReplicationState
+	(*v12.WorkflowRule)(nil),           // 15: temporal.api.rules.v1.WorkflowRule
 }
 var file_temporal_server_api_persistence_v1_namespaces_proto_depIdxs = []int32{
 	1,  // 0: temporal.server.api.persistence.v1.NamespaceDetail.info:type_name -> temporal.server.api.persistence.v1.NamespaceInfo
 	2,  // 1: temporal.server.api.persistence.v1.NamespaceDetail.config:type_name -> temporal.server.api.persistence.v1.NamespaceConfig
 	3,  // 2: temporal.server.api.persistence.v1.NamespaceDetail.replication_config:type_name -> temporal.server.api.persistence.v1.NamespaceReplicationConfig
-	8,  // 3: temporal.server.api.persistence.v1.NamespaceDetail.failover_end_time:type_name -> google.protobuf.Timestamp
-	9,  // 4: temporal.server.api.persistence.v1.NamespaceInfo.state:type_name -> temporal.api.enums.v1.NamespaceState
+	9,  // 3: temporal.server.api.persistence.v1.NamespaceDetail.failover_end_time:type_name -> google.protobuf.Timestamp
+	10, // 4: temporal.server.api.persistence.v1.NamespaceInfo.state:type_name -> temporal.api.enums.v1.NamespaceState
 	5,  // 5: temporal.server.api.persistence.v1.NamespaceInfo.data:type_name -> temporal.server.api.persistence.v1.NamespaceInfo.DataEntry
-	10, // 6: temporal.server.api.persistence.v1.NamespaceConfig.retention:type_name -> google.protobuf.Duration
-	11, // 7: temporal.server.api.persistence.v1.NamespaceConfig.bad_binaries:type_name -> temporal.api.namespace.v1.BadBinaries
-	12, // 8: temporal.server.api.persistence.v1.NamespaceConfig.history_archival_state:type_name -> temporal.api.enums.v1.ArchivalState
-	12, // 9: temporal.server.api.persistence.v1.NamespaceConfig.visibility_archival_state:type_name -> temporal.api.enums.v1.ArchivalState
+	11, // 6: temporal.server.api.persistence.v1.NamespaceConfig.retention:type_name -> google.protobuf.Duration
+	12, // 7: temporal.server.api.persistence.v1.NamespaceConfig.bad_binaries:type_name -> temporal.api.namespace.v1.BadBinaries
+	13, // 8: temporal.server.api.persistence.v1.NamespaceConfig.history_archival_state:type_name -> temporal.api.enums.v1.ArchivalState
+	13, // 9: temporal.server.api.persistence.v1.NamespaceConfig.visibility_archival_state:type_name -> temporal.api.enums.v1.ArchivalState
 	6,  // 10: temporal.server.api.persistence.v1.NamespaceConfig.custom_search_attribute_aliases:type_name -> temporal.server.api.persistence.v1.NamespaceConfig.CustomSearchAttributeAliasesEntry
 	7,  // 11: temporal.server.api.persistence.v1.NamespaceConfig.workflow_rules:type_name -> temporal.server.api.persistence.v1.NamespaceConfig.WorkflowRulesEntry
-	13, // 12: temporal.server.api.persistence.v1.NamespaceReplicationConfig.state:type_name -> temporal.api.enums.v1.ReplicationState
+	14, // 12: temporal.server.api.persistence.v1.NamespaceReplicationConfig.state:type_name -> temporal.api.enums.v1.ReplicationState
 	4,  // 13: temporal.server.api.persistence.v1.NamespaceReplicationConfig.failover_history:type_name -> temporal.server.api.persistence.v1.FailoverStatus
-	8,  // 14: temporal.server.api.persistence.v1.FailoverStatus.failover_time:type_name -> google.protobuf.Timestamp
-	14, // 15: temporal.server.api.persistence.v1.NamespaceConfig.WorkflowRulesEntry.value:type_name -> temporal.api.rules.v1.WorkflowRule
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	8,  // 14: temporal.server.api.persistence.v1.NamespaceReplicationConfig.cluster_connect_time:type_name -> temporal.server.api.persistence.v1.NamespaceReplicationConfig.ClusterConnectTimeEntry
+	9,  // 15: temporal.server.api.persistence.v1.FailoverStatus.failover_time:type_name -> google.protobuf.Timestamp
+	15, // 16: temporal.server.api.persistence.v1.NamespaceConfig.WorkflowRulesEntry.value:type_name -> temporal.api.rules.v1.WorkflowRule
+	9,  // 17: temporal.server.api.persistence.v1.NamespaceReplicationConfig.ClusterConnectTimeEntry.value:type_name -> google.protobuf.Timestamp
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_namespaces_proto_init() }
@@ -546,7 +565,7 @@ func file_temporal_server_api_persistence_v1_namespaces_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_persistence_v1_namespaces_proto_rawDesc), len(file_temporal_server_api_persistence_v1_namespaces_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

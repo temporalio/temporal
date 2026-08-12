@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -924,6 +925,255 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 	s.fakeClock.Update(update1Time)
 	_, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.NoError(err)
+}
+
+// TestUpdateNamespace_ClusterConnectTime_StampsOnGenuineAdd verifies that adding a cluster to the
+// namespace's cluster list stamps the current time for that cluster only -- existing clusters that
+// were already present don't get an entry, since they were never "newly connected."
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_StampsOnGenuineAdd() {
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
+	addTime := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
+	namespaceName := s.getRandomNamespace()
+	nid := uuid.NewString()
+	version := int64(100)
+	clusterName1, clusterName2, clusterName3 := "cluster1", "cluster2", "cluster3"
+
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName1: {Enabled: true, InitialFailoverVersion: 1},
+		clusterName2: {Enabled: true, InitialFailoverVersion: 2},
+		clusterName3: {Enabled: true, InitialFailoverVersion: 3},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName1).AnyTimes()
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		IsGlobalNamespace: true,
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:   &persistencespb.NamespaceInfo{Id: nid, Name: namespaceName},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: clusterName1,
+				Clusters:          []string{clusterName1, clusterName2},
+			},
+		},
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Nil(request.Namespace.ReplicationConfig.ClusterConnectTime[clusterName1],
+				"cluster1 was already present, not newly added -- should not get a connect-time entry")
+			s.Nil(request.Namespace.ReplicationConfig.ClusterConnectTime[clusterName2],
+				"cluster2 was already present, not newly added -- should not get a connect-time entry")
+			protorequire.ProtoEqual(s.T(),
+				timestamppb.New(addTime), request.Namespace.ReplicationConfig.ClusterConnectTime[clusterName3])
+			return nil
+		},
+	)
+
+	s.fakeClock.Update(addTime)
+	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: clusterName1},
+				{ClusterName: clusterName2},
+				{ClusterName: clusterName3},
+			},
+		},
+	})
+	s.Require().NoError(err)
+}
+
+// TestUpdateNamespace_ClusterConnectTime_NoRestampOnUnrelatedUpdate verifies that re-submitting the
+// same cluster list -- e.g. as part of an update that isn't actually changing membership -- never
+// restamps an existing entry, even though the clock has advanced since it was first recorded.
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_NoRestampOnUnrelatedUpdate() {
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
+	originalStamp := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
+	laterTime := originalStamp.Add(24 * time.Hour)
+	namespaceName := s.getRandomNamespace()
+	nid := uuid.NewString()
+	version := int64(100)
+	clusterName1, clusterName2 := "cluster1", "cluster2"
+
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName1: {Enabled: true, InitialFailoverVersion: 1},
+		clusterName2: {Enabled: true, InitialFailoverVersion: 2},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName1).AnyTimes()
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		IsGlobalNamespace: true,
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:   &persistencespb.NamespaceInfo{Id: nid, Name: namespaceName},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName:  clusterName1,
+				Clusters:           []string{clusterName1, clusterName2},
+				ClusterConnectTime: map[string]*timestamppb.Timestamp{clusterName2: timestamppb.New(originalStamp)},
+			},
+		},
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			protorequire.ProtoEqual(s.T(),
+				timestamppb.New(originalStamp), request.Namespace.ReplicationConfig.ClusterConnectTime[clusterName2])
+			return nil
+		},
+	)
+
+	s.fakeClock.Update(laterTime)
+	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: clusterName1},
+				{ClusterName: clusterName2},
+			},
+		},
+	})
+	s.Require().NoError(err)
+}
+
+// TestUpdateNamespace_ClusterConnectTime_DeletesEntryOnRemove verifies that removing a cluster from
+// the namespace's cluster list deletes its connect-time entry -- a stale entry for a cluster that's
+// no longer even a replication target has no reason to linger.
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_DeletesEntryOnRemove() {
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
+	originalStamp := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
+	namespaceName := s.getRandomNamespace()
+	nid := uuid.NewString()
+	version := int64(100)
+	clusterName1, clusterName2 := "cluster1", "cluster2"
+
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName1: {Enabled: true, InitialFailoverVersion: 1},
+		clusterName2: {Enabled: true, InitialFailoverVersion: 2},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName1).AnyTimes()
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		IsGlobalNamespace: true,
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:   &persistencespb.NamespaceInfo{Id: nid, Name: namespaceName},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName:  clusterName1,
+				Clusters:           []string{clusterName1, clusterName2},
+				ClusterConnectTime: map[string]*timestamppb.Timestamp{clusterName2: timestamppb.New(originalStamp)},
+			},
+		},
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Empty(request.Namespace.ReplicationConfig.ClusterConnectTime)
+			return nil
+		},
+	)
+
+	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: clusterName1},
+			},
+		},
+	})
+	s.Require().NoError(err)
+}
+
+// TestUpdateNamespace_ClusterConnectTime_RemoveThenReAddGetsFreshStamp verifies that a cluster
+// removed and later re-added gets a brand new connect-time stamp, not its stale original one --
+// a reconnect should ramp again, not be treated as still-connected-since-the-first-time.
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_RemoveThenReAddGetsFreshStamp() {
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
+	originalStamp := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
+	reAddTime := originalStamp.Add(24 * time.Hour)
+	namespaceName := s.getRandomNamespace()
+	nid := uuid.NewString()
+	version := int64(100)
+	clusterName1, clusterName2 := "cluster1", "cluster2"
+
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName1: {Enabled: true, InitialFailoverVersion: 1},
+		clusterName2: {Enabled: true, InitialFailoverVersion: 2},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName1).AnyTimes()
+
+	// Round 1: remove cluster2. Its stale entry from a prior connection should be dropped.
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		IsGlobalNamespace: true,
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:   &persistencespb.NamespaceInfo{Id: nid, Name: namespaceName},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName:  clusterName1,
+				Clusters:           []string{clusterName1, clusterName2},
+				ClusterConnectTime: map[string]*timestamppb.Timestamp{clusterName2: timestamppb.New(originalStamp)},
+			},
+		},
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{{ClusterName: clusterName1}},
+		},
+	})
+	s.Require().NoError(err)
+
+	// Round 2: re-add cluster2, well after its original (now-removed) stamp. It must get a fresh
+	// stamp at reAddTime, not its stale originalStamp.
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: version,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
+		IsGlobalNamespace: true,
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:   &persistencespb.NamespaceInfo{Id: nid, Name: namespaceName},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: clusterName1,
+				Clusters:          []string{clusterName1},
+			},
+		},
+	}, nil)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			protorequire.ProtoEqual(s.T(),
+				timestamppb.New(reAddTime), request.Namespace.ReplicationConfig.ClusterConnectTime[clusterName2])
+			return nil
+		},
+	)
+
+	s.fakeClock.Update(reAddTime)
+	_, err = s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: clusterName1},
+				{ClusterName: clusterName2},
+			},
+		},
+	})
+	s.Require().NoError(err)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_InvalidGlobalNamespace() {

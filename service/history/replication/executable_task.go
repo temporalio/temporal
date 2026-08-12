@@ -18,6 +18,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -887,7 +888,57 @@ FilterLoop:
 			break FilterLoop
 		}
 	}
+	if shouldProcessTask && !e.admittedByGradualConnect(namespaceEntry, businessID) {
+		metrics.ReplicationTasksShedByGradualConnect.With(e.MetricsHandler).Record(
+			int64(1),
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+		)
+		shouldProcessTask = false
+	}
 	return namespaceEntry.Name().String(), shouldProcessTask, nil
+}
+
+// admittedByGradualConnect reports whether businessID is currently admitted by the namespace
+// gradual-connect replication ramp for this cluster. It applies uniformly to every replication
+// task type that reaches this chokepoint -- deliberately no task-type allowlist/denylist; that
+// tradeoff is a decision to revisit once we have more experience with this ramping in practice.
+// Fails open (admits) when the kill switch is off or the namespace has no recorded connect time
+// for this cluster (e.g. it's been a member since the namespace's creation).
+func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.Namespace, businessID string) bool {
+	if !e.Config.EnableReplicationGradualConnect() {
+		return true
+	}
+	connectTime := namespaceEntry.InitialConnectTime(e.ClusterMetadata.GetCurrentClusterName())
+	if connectTime.IsZero() {
+		return true
+	}
+	nsName := namespaceEntry.Name().String()
+	percent := gradualConnectPercent(
+		connectTime,
+		e.TimeSource.Now(),
+		e.Config.ReplicationGradualConnectInitialPercent(nsName),
+		e.Config.ReplicationGradualConnectStepPercent(nsName),
+		e.Config.ReplicationGradualConnectStepDuration(nsName),
+	)
+	metrics.ReplicationGradualConnectPercent.With(e.MetricsHandler).Record(
+		float64(percent),
+		metrics.NamespaceTag(nsName),
+	)
+	return dynamicconfig.RolloutAccepts([]byte(businessID), percent)
+}
+
+// gradualConnectPercent computes the current admission percent for the namespace gradual-connect
+// replication ramp: initialPercent at connectTime, plus stepPercent for every stepDuration elapsed
+// since, capped at 100. Fails open (100) if now is before connectTime (clock skew between hosts is
+// harmless here -- the hash, not the clock, is what provides RolloutAccepts' monotonicity) or
+// stepDuration is non-positive.
+func gradualConnectPercent(connectTime, now time.Time, initialPercent, stepPercent int, stepDuration time.Duration) int {
+	elapsed := now.Sub(connectTime)
+	if elapsed < 0 || stepDuration <= 0 {
+		return 100
+	}
+	percent := initialPercent + int(elapsed/stepDuration)*stepPercent
+	return min(max(percent, 0), 100)
 }
 
 func (e *ExecutableTaskImpl) MarkPoisonPill() error {
