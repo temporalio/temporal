@@ -785,3 +785,53 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateListNexusOperationExecutionsRequest(t *testing.T) {
+	config := &Config{
+		VisibilityMaxPageSize: func(string) int { return 100 },
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*workflowservice.ListNexusOperationExecutionsRequest)
+		check  func(*testing.T, *workflowservice.ListNexusOperationExecutionsRequest)
+	}{
+		{
+			name: "valid request - caps unset page_size to max",
+			check: func(t *testing.T, r *workflowservice.ListNexusOperationExecutionsRequest) {
+				require.Equal(t, int32(100), r.PageSize)
+			},
+		},
+		{
+			name: "valid request - caps page_size exceeding max",
+			mutate: func(r *workflowservice.ListNexusOperationExecutionsRequest) {
+				r.PageSize = 200
+			},
+			check: func(t *testing.T, r *workflowservice.ListNexusOperationExecutionsRequest) {
+				require.Equal(t, int32(100), r.PageSize)
+			},
+		},
+		{
+			name: "valid request - preserves page_size within max",
+			mutate: func(r *workflowservice.ListNexusOperationExecutionsRequest) {
+				r.PageSize = 50
+			},
+			check: func(t *testing.T, r *workflowservice.ListNexusOperationExecutionsRequest) {
+				require.Equal(t, int32(50), r.PageSize)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &workflowservice.ListNexusOperationExecutionsRequest{
+				Namespace: "default",
+			}
+			if tc.mutate != nil {
+				tc.mutate(req)
+			}
+			require.NoError(t, newListNexusOperationExecutionsRequestValidator(config).ValidateAndNormalize(req))
+			if tc.check != nil {
+				tc.check(t, req)
+			}
+		})
+	}
+}

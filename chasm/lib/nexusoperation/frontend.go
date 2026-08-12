@@ -144,15 +144,13 @@ func (h *frontendHandler) ListNexusOperationExecutions(
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
-	pageSize := req.GetPageSize()
-	maxPageSize := int32(h.config.VisibilityMaxPageSize(req.GetNamespace()))
-	if pageSize <= 0 || pageSize > maxPageSize {
-		pageSize = maxPageSize
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
 	}
 
 	resp, err := chasm.ListExecutions[*Operation, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
 		NamespaceName: req.GetNamespace(),
-		PageSize:      int(pageSize),
+		PageSize:      int(req.GetPageSize()),
 		NextPageToken: req.GetNextPageToken(),
 		Query:         req.GetQuery(),
 	})

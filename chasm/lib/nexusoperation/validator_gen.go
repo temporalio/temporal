@@ -241,6 +241,33 @@ func (v deleteNexusOperationExecutionRequestFieldValidators) RegisterValidator(r
 	return validation.RegisterValidator[workflowservice.DeleteNexusOperationExecutionRequest](registry, v)
 }
 
+type listNexusOperationExecutionsRequestFieldValidators struct {
+	Namespace     validation.FieldValidator[workflowservice.ListNexusOperationExecutionsRequest, string]
+	PageSize      validation.FieldValidator[workflowservice.ListNexusOperationExecutionsRequest, int32]
+	NextPageToken validation.FieldValidator[workflowservice.ListNexusOperationExecutionsRequest, []byte]
+	Query         validation.FieldValidator[workflowservice.ListNexusOperationExecutionsRequest, string]
+}
+
+func (v listNexusOperationExecutionsRequestFieldValidators) ValidateAndNormalize(req *workflowservice.ListNexusOperationExecutionsRequest) error {
+	if err := v.Namespace(req, "namespace", req.GetNamespace()); err != nil {
+		return err
+	}
+	if err := v.PageSize(req, "page_size", req.GetPageSize()); err != nil {
+		return err
+	}
+	if err := v.NextPageToken(req, "next_page_token", req.GetNextPageToken()); err != nil {
+		return err
+	}
+	if err := v.Query(req, "query", req.GetQuery()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v listNexusOperationExecutionsRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.ListNexusOperationExecutionsRequest](registry, v)
+}
+
 type userMetadataFieldValidators struct {
 	Summary validation.NestedFieldValidator[sdkpb.UserMetadata, *commonpb.Payload]
 	Details validation.NestedFieldValidator[sdkpb.UserMetadata, *commonpb.Payload]

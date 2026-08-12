@@ -23,6 +23,7 @@ import (
 var ValidatorModule = validation.Module(
 	"chasm.lib.nexusoperation.validators",
 	newStartNexusOperationExecutionRequestValidator,
+	newListNexusOperationExecutionsRequestValidator,
 	newPollNexusOperationExecutionRequestValidator,
 	newRequestCancelNexusOperationExecutionRequestValidator,
 	newTerminateNexusOperationExecutionRequestValidator,
@@ -304,6 +305,23 @@ func newTerminateNexusOperationExecutionRequestValidator(
 		},
 		Reason: func(req *workflowservice.TerminateNexusOperationExecutionRequest, fieldName string, reason string) error {
 			return validateStringMaxLength(fieldName, reason, config.MaxReasonLength(req.GetNamespace()))
+		},
+	}
+}
+
+func newListNexusOperationExecutionsRequestValidator(
+	config *Config,
+) listNexusOperationExecutionsRequestFieldValidators {
+	return listNexusOperationExecutionsRequestFieldValidators{
+		Namespace:     validation.NoOp[workflowservice.ListNexusOperationExecutionsRequest, string](),
+		NextPageToken: validation.NoOp[workflowservice.ListNexusOperationExecutionsRequest, []byte](),
+		Query:         validation.NoOp[workflowservice.ListNexusOperationExecutionsRequest, string](),
+		PageSize: func(req *workflowservice.ListNexusOperationExecutionsRequest, _ string, pageSize int32) error {
+			maxPageSize := int32(config.VisibilityMaxPageSize(req.GetNamespace()))
+			if pageSize <= 0 || pageSize > maxPageSize {
+				req.PageSize = maxPageSize
+			}
+			return nil
 		},
 	}
 }
