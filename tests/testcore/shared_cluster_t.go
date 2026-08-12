@@ -3,6 +3,7 @@ package testcore
 import (
 	"fmt"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -39,7 +40,7 @@ func (s *sharedClusterT) removeTest(t testlogger.CleanupCapableT) (wasLast bool)
 	defer s.mu.Unlock()
 	for i, x := range s.activeTests {
 		if x == t {
-			s.activeTests = append(s.activeTests[:i], s.activeTests[i+1:]...)
+			s.activeTests = slices.Delete(s.activeTests, i, i+1)
 			break
 		}
 	}

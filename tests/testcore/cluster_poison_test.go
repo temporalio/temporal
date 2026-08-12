@@ -2,13 +2,17 @@ package testcore
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 )
 
@@ -84,6 +88,26 @@ func TestSharedClusterT_LogfForwardsWhileLocked(t *testing.T) {
 
 	close(sub.release)
 	<-done
+}
+
+func TestSharedClusterT_RemoveTestReleasesTest(t *testing.T) {
+	s := &sharedClusterT{name: t.Name()}
+	collected := &atomic.Bool{}
+
+	func() {
+		sub := &mockSubtestT{T: t}
+		runtime.AddCleanup(sub, func(collected *atomic.Bool) {
+			collected.Store(true)
+		}, collected)
+		s.addTest(sub)
+		require.True(t, s.removeTest(sub))
+	}()
+
+	await.RequireTrue(t, func() bool {
+		runtime.GC()
+		return collected.Load()
+	}, time.Second, 10*time.Millisecond)
+	runtime.KeepAlive(s)
 }
 
 func TestSharedClusterPoison(t *testing.T) {
