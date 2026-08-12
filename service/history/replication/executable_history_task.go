@@ -157,14 +157,7 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 		return nil
 	case *serviceerrors.RetryReplication:
 		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
-		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
-			context.Background(),
-			callerInfo,
-		), e.NamespaceID, e.WorkflowID)
-		if nsError != nil {
-			return err
-		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
+		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, resendErr := e.Resend(

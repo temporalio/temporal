@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -93,6 +94,7 @@ var Module = fx.Options(
 		admitter nsreplication.NamespaceReplicationAdmitter,
 		logger log.Logger,
 		testHooks testhooks.TestHooks,
+		timeSource clock.TimeSource,
 	) nsreplication.TaskExecutor {
 		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
@@ -101,6 +103,7 @@ var Module = fx.Options(
 			admitter,
 			logger,
 			testHooks,
+			timeSource,
 		)
 	}),
 	fx.Provide(nsreplication.NewNoopDataMerger),

@@ -85,6 +85,7 @@ func eagerNamespaceRefresherProvider(
 	admitter nsreplication.NamespaceReplicationAdmitter,
 	metricsHandler metrics.Handler,
 	testHooks testhooks.TestHooks,
+	timeSource clock.TimeSource,
 ) EagerNamespaceRefresher {
 	return NewEagerNamespaceRefresher(
 		metadataManager,
@@ -98,6 +99,7 @@ func eagerNamespaceRefresherProvider(
 			admitter,
 			logger,
 			testHooks,
+			timeSource,
 		),
 		clusterMetadata.GetCurrentClusterName(),
 		metricsHandler,

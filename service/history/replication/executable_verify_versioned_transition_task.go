@@ -311,14 +311,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
 		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
-		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
-			context.Background(),
-			callerInfo,
-		), e.NamespaceID, e.WorkflowID)
-		if nsError != nil {
-			return err
-		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
+		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, syncStateErr := e.SyncState(

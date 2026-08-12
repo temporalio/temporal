@@ -902,9 +902,19 @@ FilterLoop:
 // gradual-connect replication ramp for this cluster. It applies uniformly to every replication
 // task type that reaches this chokepoint -- deliberately no task-type allowlist/denylist; that
 // tradeoff is a decision to revisit once we have more experience with this ramping in practice.
+// The one exemption is by task attribute, not type: force-replication tasks always bypass the ramp
+// (see below), since they're the operator-controlled catch-up traffic the ramp exists to protect,
+// not the organic traffic it exists to throttle.
 // Fails open (admits) when the kill switch is off or the namespace has no recorded connect time
 // for this cluster (e.g. it's been a member since the namespace's creation).
 func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.Namespace, businessID string) bool {
+	if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
+		// Force-replication tasks are operator-triggered, already-controlled migration catch-up
+		// traffic, not the organic traffic the ramp exists to throttle. A shed task is acked and
+		// dropped (never retried), so shedding one here stalls the migration's verify loop on a task
+		// that will never arrive until it hard-fails -- well before the ramp itself would complete.
+		return true
+	}
 	if !e.Config.EnableReplicationGradualConnect() {
 		return true
 	}
@@ -938,7 +948,11 @@ func gradualConnectPercent(connectTime, now time.Time, initialPercent, stepPerce
 		return 100
 	}
 	percent := initialPercent + int(elapsed/stepDuration)*stepPercent
-	return min(max(percent, 0), 100)
+	if percent < 0 {
+		// Misconfigured (negative InitialPercent/StepPercent) -- fail open, not fail closed.
+		return 100
+	}
+	return min(percent, 100)
 }
 
 func (e *ExecutableTaskImpl) MarkPoisonPill() error {

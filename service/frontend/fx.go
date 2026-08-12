@@ -848,6 +848,7 @@ func NamespaceDLQHandlerProvider(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.SnTaggedLogger,
 	testHooks testhooks.TestHooks,
+	timeSource clock.TimeSource,
 ) nsreplication.DLQMessageHandler {
 	taskExecutor := nsreplication.NewTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
@@ -856,6 +857,7 @@ func NamespaceDLQHandlerProvider(
 		namespaceAdmitter,
 		logger,
 		testHooks,
+		timeSource,
 	)
 	return nsreplication.NewDLQMessageHandler(
 		taskExecutor,

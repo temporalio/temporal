@@ -1136,6 +1136,25 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInF
 	s.True(toProcess, "a connect time in the future (clock skew) must fail open (admit) despite InitialPercent=0")
 }
 
+// TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits guards against a blocking issue:
+// force-replication tasks (operator-triggered migration catch-up traffic, marked via
+// RawTaskInfo.IsForceReplication) must never be shed by the ramp. A shed task is acked and dropped,
+// not retried -- shedding one causes the migration's VerifyReplicationTasks to stall waiting for a
+// task that will never arrive, then hard-fail once defaultNoProgressNotRetryableTimeout (30 minutes)
+// elapses, well before the ramp's default ~45-minute completion.
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits() {
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.ReplicationGradualConnectInitialPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
+	connectTime := s.timeSource.Now() // freshly connected -- percent would otherwise be 0, i.e. shed
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&connectTime)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+	s.task.replicationTask.RawTaskInfo.IsForceReplication = true
+
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.True(toProcess, "a force-replication task must bypass the ramp regardless of percent")
+}
+
 func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_Admits() {
 	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
 	s.config.ReplicationGradualConnectInitialPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
@@ -1378,6 +1397,7 @@ func (s *executableTaskSuite) TestSyncState_NotFound() {
 }
 
 func TestGradualConnectPercent(t *testing.T) {
+	t.Parallel()
 	connectTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	testCases := []struct {
 		name           string
@@ -1427,9 +1447,18 @@ func TestGradualConnectPercent(t *testing.T) {
 			stepDuration:   0,
 			want:           100,
 		},
+		{
+			name:           "negative_step_percent_misconfiguration_fails_open",
+			now:            connectTime.Add(15 * time.Minute), // 3 full 5-minute steps
+			initialPercent: 10,
+			stepPercent:    -10,
+			stepDuration:   5 * time.Minute,
+			want:           100,
+		},
 	}
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := gradualConnectPercent(connectTime, tt.now, tt.initialPercent, tt.stepPercent, tt.stepDuration)
 			require.Equal(t, tt.want, got)
 		})
