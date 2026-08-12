@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
@@ -383,10 +384,20 @@ type activities struct {
 }
 
 // checkNamespace validates that batchParams targets the worker's own namespace.
-// The NamespaceId, Request.Namespace (if set), and AdminRequest.Namespace (if set)
-// must all agree with the worker's bound namespace. This prevents cross-namespace
-// escalation via the privileged internal-frontend connection (NoopClaimMapper → RoleAdmin).
+// This prevents cross-namespace escalation via the privileged internal-frontend connection
+// (NoopClaimMapper → RoleAdmin).
+//
+// The temporal-system worker is exempt for admin batches: it has to reach namespaces that are
+// passive in this cluster, which have no per-namespace worker of their own. Safe because
+// AdminRequest is only set by StartAdminBatchOperation (admin claims required), and frontend
+// StartWorkflowExecution rejects user starts on PerNSWorkerTaskQueue.
 func (a *activities) checkNamespace(batchParams *batchspb.BatchOperationInput) error {
+
+	// we allow admins to run batch jobs in the system namespace for other user namespaces
+	if a.namespaceID.String() == primitives.SystemNamespaceID && isAdminRequest(batchParams) {
+		return nil
+	}
+
 	if batchParams.NamespaceId != a.namespaceID.String() {
 		return errNamespaceMismatch
 	}
@@ -398,6 +409,11 @@ func (a *activities) checkNamespace(batchParams *batchspb.BatchOperationInput) e
 		return errNamespaceMismatch
 	}
 	return nil
+}
+
+// todo: check if this a solid and safe way
+func isAdminRequest(batchParams *batchspb.BatchOperationInput) bool {
+	return batchParams.AdminRequest != nil
 }
 
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
@@ -412,13 +428,17 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
-	ns := a.namespace.String()
 
-	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     ns,
+	targetNS := a.namespace.String()
+	if isAdminRequest(batchParams) {
+		targetNS = batchParams.GetAdminRequest().GetNamespace()
+	}
+
+	sdkClientForTargetNS := a.ClientFactory.NewClient(sdkclient.Options{
+		Namespace:     targetNS,
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
-	defer sdkClient.Close()
+	defer sdkClientForTargetNS.Close()
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
@@ -447,7 +467,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		executions = batchParams.Request.Executions
 		targetExecutions = batchParams.Request.GetTargetExecutions()
 		rateLimiter = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-			return float64(a.rps(ns))
+			return float64(a.rps(targetNS))
 		}))
 	}
 
@@ -460,8 +480,8 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 				// Activity batch types operate on activity executions, which are
 				// counted via CountActivityExecutions rather than CountWorkflow.
 				var resp *workflowservice.CountActivityExecutionsResponse
-				resp, err = sdkClient.WorkflowService().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
-					Namespace: ns,
+				resp, err = sdkClientForTargetNS.WorkflowService().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+					Namespace: targetNS,
 					Query:     visibilityQuery,
 				})
 				if err == nil {
@@ -469,7 +489,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 				}
 			} else {
 				var resp *workflowservice.CountWorkflowExecutionsResponse
-				resp, err = sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+				resp, err = sdkClientForTargetNS.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 					Query: visibilityQuery,
 				})
 				if err == nil {
@@ -492,7 +512,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 
 	// Prepare configuration for shared processing function
 	config := batchProcessorConfig{
-		namespace:               ns,
+		namespace:               targetNS,
 		adjustedQuery:           visibilityQuery,
 		batchType:               batchParams.BatchType,
 		concurrency:             a.getOperationConcurrency(int(batchParams.Concurrency)),
@@ -512,10 +532,10 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		metricsHandler metrics.Handler,
 		logger log.Logger,
 	) {
-		a.startTaskProcessor(ctx, batchParams, ns, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
+		a.startTaskProcessor(ctx, batchParams, targetNS, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
-	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, rateLimiter, sdkClient, metricsHandler, logger, hbd)
+	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, rateLimiter, sdkClientForTargetNS, metricsHandler, logger, hbd)
 }
 
 func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
