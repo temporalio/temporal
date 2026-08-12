@@ -1,11 +1,8 @@
 package namespace
 
 import (
-	"time"
-
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type mutationFunc func(*Namespace)
@@ -66,19 +63,6 @@ func WithRetention(dur *durationpb.Duration) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
 			ns.config.Retention = dur
-		})
-}
-
-// WithClusterConnectTime sets a cluster's recorded connect time on a Namespace during a Clone
-// operation. Test-only; production stamps this via UpdateNamespace, never directly.
-func WithClusterConnectTime(cluster string, connectTime time.Time) Mutation {
-	return mutationFunc(
-		func(ns *Namespace) {
-			replicationConfig := ns.replicationResolver.ReplicationConfig()
-			if replicationConfig.ClusterConnectTime == nil {
-				replicationConfig.ClusterConnectTime = make(map[string]*timestamppb.Timestamp)
-			}
-			replicationConfig.ClusterConnectTime[cluster] = timestamppb.New(connectTime)
 		})
 }
 
