@@ -9,6 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testGCSettleTimeout = 100 * time.Millisecond
+	testGCSettleMinWait = 5 * time.Millisecond
+	testGCSettleQuiet   = 5 * time.Millisecond
+)
+
 type graphRoot struct {
 	Node *graphNode
 }
@@ -37,6 +43,7 @@ type aliasOuter struct {
 
 type aliasInner struct {
 	Value int
+	_     [8]byte
 }
 
 func TestObjectLeak_Check(t *testing.T) {
@@ -244,8 +251,8 @@ baseline retained objects:
 			gcSettleTimeout: time.Nanosecond,
 			setup: func(check *ObjectLeakCheck, roots []any) Baseline {
 				check.Track(roots[0])
-				baseline := check.IgnoreCurrent()                    // records the baseline settle timeout
-				check.gcSettleTimeout = checkGCMinWait + time.Second // lets Check settle normally
+				baseline := check.IgnoreCurrent()           // records the baseline settle timeout
+				check.gcSettleTimeout = testGCSettleTimeout // lets Check settle normally
 				check.Track(roots[1])
 				return baseline
 			},
@@ -366,12 +373,14 @@ baseline retained objects:
 			opts := append([]Option{}, tc.opts...)
 			gcSettleTimeout := tc.gcSettleTimeout
 			if gcSettleTimeout == 0 {
-				gcSettleTimeout = checkGCMinWait + time.Second
+				gcSettleTimeout = testGCSettleTimeout
 			}
 			opts = append(opts, WithGCSettleTimeout(gcSettleTimeout))
 
 			check, err := NewObjectLeakCheck(opts...)
 			require.NoError(t, err)
+			check.gcSettleMinWait = testGCSettleMinWait
+			check.gcSettleQuiet = testGCSettleQuiet
 
 			var baseline Baseline
 			if tc.setup != nil {
@@ -403,8 +412,10 @@ func TestObjectLeak_CheckSkipsTinyPointerFreeObjects(t *testing.T) {
 		new(tinyValue),
 		new(tinyZeroLengthPointerArrayValue),
 	}
-	check, err := NewObjectLeakCheck(WithGCSettleTimeout(checkGCMinWait + time.Second))
+	check, err := NewObjectLeakCheck(WithGCSettleTimeout(testGCSettleTimeout))
 	require.NoError(t, err)
+	check.gcSettleMinWait = testGCSettleMinWait
+	check.gcSettleQuiet = testGCSettleQuiet
 	for _, value := range values {
 		check.Track(value)
 	}
@@ -430,10 +441,22 @@ baseline retained objects:
 
 func TestSettleGCToZeroSucceedsWhenObjectsDrainNearTimeout(t *testing.T) {
 	start := time.Now()
-	require.True(t, settleGCToZero(checkGCMinWait+100*time.Millisecond, func() int {
-		if time.Since(start) < checkGCMinWait {
+	require.True(t, settleGCToZero(testGCSettleTimeout, testGCSettleMinWait, testGCSettleQuiet, func() int {
+		if time.Since(start) < testGCSettleMinWait {
 			return 1
 		}
 		return 0
 	}))
+}
+
+func TestSettleGCToZeroWaitsForQuietAfterObjectsDrain(t *testing.T) {
+	calls := 0
+	require.True(t, settleGCToZero(testGCSettleTimeout, testGCSettleMinWait, testGCSettleQuiet, func() int {
+		calls++
+		if calls == 1 {
+			return 1
+		}
+		return 0
+	}))
+	require.Greater(t, calls, 2)
 }

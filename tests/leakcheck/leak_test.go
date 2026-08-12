@@ -93,7 +93,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 	// Run the leak test: build, run, and tear down a cluster per iteration.
 	for i := range iters {
-		_ = buildRunTeardownCluster(t, &leakCheck)
+		buildRunTeardownCluster(t, &leakCheck)
 		t.Logf("cluster %2d: goroutines=%d", i, runtime.NumGoroutine())
 	}
 

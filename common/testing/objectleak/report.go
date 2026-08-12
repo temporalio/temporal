@@ -44,24 +44,21 @@ func newReport(
 	// Matching mutates pattern.matched for stale-expected pattern detection.
 	activeExpected := slices.Clone(expected)
 
-	var retained [retentionClassCount]retentionAccumulator
 	retainedAddresses := make(map[uintptr]struct{})
 
 	// Record each classified retained object and fold equivalent normalized
 	// path and type pairs into a single report row.
-	addRetained := func(obj trackedObject, path string, class retentionClass) {
-		retainedAddresses[obj.addr] = struct{}{}
-		retained[class].add(obj, path)
-	}
 	for obj := range retainedObjects(baseline.objects) {
 		path := obj.path.normalized()
-		addRetained(obj, path, retentionBaseline)
+		retainedAddresses[obj.addr] = struct{}{}
+		r.retained[retentionBaseline].add(obj, path)
 	}
 	for obj := range retainedObjects(objects) {
 		path := obj.path.normalized()
-		class := classifyRetention(obj, baseline, activeExpected)
+		class := classifyRetention(obj, path, baseline, activeExpected)
 		if class != retentionBaseline {
-			addRetained(obj, path, class)
+			retainedAddresses[obj.addr] = struct{}{}
+			r.retained[class].add(obj, path)
 		}
 	}
 	r.totalRetainedObjects = len(retainedAddresses)
@@ -73,18 +70,23 @@ func newReport(
 
 	// Keep report output stable across map iteration order and repeated runs.
 	for class := range retentionClassCount {
-		r.retained[class] = retained[class].finalize()
+		r.retained[class].sortGroups()
 	}
 	slices.Sort(r.unmatchedExpected)
 	slices.Sort(r.unmatchedPrunes)
 	return r
 }
 
-func classifyRetention(obj trackedObject, baseline Baseline, expected patterns) retentionClass {
+func classifyRetention(
+	obj trackedObject,
+	path string,
+	baseline Baseline,
+	expected patterns,
+) retentionClass {
 	if baseline.contains(obj) {
 		return retentionBaseline
 	}
-	if expected.matchObject(obj.path.normalized(), obj.typeName) {
+	if expected.matchObject(path, obj.typeName) {
 		return retentionExpected
 	}
 	return retentionUnexpected
@@ -173,9 +175,9 @@ func (r report) writeSummary(out *strings.Builder) {
 		out,
 		"retained objects: %d total, %d baseline, %d expected, %d unexpected\n",
 		r.totalRetainedObjects,
-		baseline.objects,
-		expected.objects,
-		unexpected.objects,
+		baseline.objectCount(),
+		expected.objectCount(),
+		unexpected.objectCount(),
 	)
 }
 
@@ -185,64 +187,42 @@ type objectGroupKey struct {
 }
 
 type retentionStats struct {
-	groups  []objectGroup
-	paths   int
-	objects int
+	groups     []objectGroup
+	groupByKey map[objectGroupKey]int
+	paths      int
+	addresses  map[uintptr]struct{}
 }
 
-type retentionAccumulator struct {
-	groups    map[objectGroupKey]*objectGroupAccumulator
-	paths     int
-	addresses map[uintptr]struct{}
-}
-
-type objectGroupAccumulator struct {
-	path      string
-	typeName  string
-	paths     int
-	addresses map[uintptr]struct{}
-}
-
-func (a *retentionAccumulator) add(obj trackedObject, path string) {
-	a.paths++
-	if a.addresses == nil {
-		a.addresses = make(map[uintptr]struct{})
-		a.groups = make(map[objectGroupKey]*objectGroupAccumulator)
+func (s *retentionStats) add(obj trackedObject, path string) {
+	s.paths++
+	if s.addresses == nil {
+		s.addresses = make(map[uintptr]struct{})
+		s.groupByKey = make(map[objectGroupKey]int)
 	}
-	a.addresses[obj.addr] = struct{}{}
+	s.addresses[obj.addr] = struct{}{}
 
 	key := objectGroupKey{
 		path:     path,
 		typeName: obj.typeName,
 	}
-	group := a.groups[key]
-	if group == nil {
-		group = &objectGroupAccumulator{
+	groupIndex, ok := s.groupByKey[key]
+	if !ok {
+		groupIndex = len(s.groups)
+		s.groupByKey[key] = groupIndex
+		s.groups = append(s.groups, objectGroup{
 			path:      key.path,
 			typeName:  key.typeName,
 			addresses: make(map[uintptr]struct{}),
-		}
-		a.groups[key] = group
+		})
 	}
+	group := &s.groups[groupIndex]
 	group.paths++
 	group.addresses[obj.addr] = struct{}{}
 }
 
-func (a retentionAccumulator) finalize() retentionStats {
-	stats := retentionStats{
-		paths:   a.paths,
-		objects: len(a.addresses),
-	}
-	for _, group := range a.groups {
-		stats.groups = append(stats.groups, objectGroup{
-			path:     group.path,
-			typeName: group.typeName,
-			paths:    group.paths,
-			objects:  len(group.addresses),
-		})
-	}
-	slices.SortFunc(stats.groups, func(a objectGroup, b objectGroup) int {
-		if c := cmp.Compare(b.objects, a.objects); c != 0 {
+func (s *retentionStats) sortGroups() {
+	slices.SortFunc(s.groups, func(a objectGroup, b objectGroup) int {
+		if c := cmp.Compare(b.objectCount(), a.objectCount()); c != 0 {
 			return c
 		}
 		if c := cmp.Compare(b.paths, a.paths); c != 0 {
@@ -253,14 +233,17 @@ func (a retentionAccumulator) finalize() retentionStats {
 		}
 		return cmp.Compare(a.typeName, b.typeName)
 	})
-	return stats
+}
+
+func (s retentionStats) objectCount() int {
+	return len(s.addresses)
 }
 
 type objectGroup struct {
-	path     string
-	typeName string
-	paths    int
-	objects  int
+	path      string
+	typeName  string
+	paths     int
+	addresses map[uintptr]struct{}
 }
 
 func (g objectGroup) name() string {
@@ -271,10 +254,15 @@ func (g objectGroup) name() string {
 }
 
 func (g objectGroup) counts() string {
-	if g.paths == g.objects {
-		return formatCount(g.objects, "object")
+	objects := g.objectCount()
+	if g.paths == objects {
+		return formatCount(objects, "object")
 	}
-	return fmt.Sprintf("%s, %s", formatCount(g.paths, "path"), formatCount(g.objects, "object"))
+	return fmt.Sprintf("%s, %s", formatCount(g.paths, "path"), formatCount(objects, "object"))
+}
+
+func (g objectGroup) objectCount() int {
+	return len(g.addresses)
 }
 
 func formatCount(count int, label string) string {

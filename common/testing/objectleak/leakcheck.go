@@ -26,6 +26,8 @@ type ObjectLeakCheck struct {
 	expected        patterns
 	pruneTypes      patterns
 	gcSettleTimeout time.Duration
+	gcSettleMinWait time.Duration
+	gcSettleQuiet   time.Duration
 }
 
 // Baseline contains the retained objects captured by IgnoreCurrent. Its zero
@@ -80,6 +82,8 @@ func WithGCSettleTimeout(timeout time.Duration) Option {
 func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 	t := ObjectLeakCheck{
 		gcSettleTimeout: defaultGCSettleTimeout,
+		gcSettleMinWait: checkGCMinWait,
+		gcSettleQuiet:   checkGCQuiet,
 	}
 	for _, opt := range opts {
 		if err := opt(&t); err != nil {
@@ -94,7 +98,7 @@ func NewObjectLeakCheck(opts ...Option) (ObjectLeakCheck, error) {
 // out, [ObjectLeakCheck.Check] reports the timeout when passed the returned
 // baseline.
 func (t *ObjectLeakCheck) IgnoreCurrent() Baseline {
-	settled := settleGC(t.gcSettleTimeout, func() int {
+	settled := settleGC(t.gcSettleTimeout, t.gcSettleMinWait, t.gcSettleQuiet, func() int {
 		return countRetained(t.objects)
 	})
 
@@ -130,7 +134,7 @@ func (t *ObjectLeakCheck) Track(root any) {
 // tracking, GC settling that timed out during Check, or a timeout recorded in
 // the supplied baseline.
 func (t *ObjectLeakCheck) Check(baseline Baseline) (string, error) {
-	settled := settleGCToZero(t.gcSettleTimeout, func() int {
+	settled := settleGCToZero(t.gcSettleTimeout, t.gcSettleMinWait, t.gcSettleQuiet, func() int {
 		return countUnexpected(t.objects, baseline, t.expected)
 	})
 	report := newReport(t.objects, baseline, !settled, t.roots, t.expected, t.pruneTypes)
@@ -141,19 +145,17 @@ func countUnexpected(objects []trackedObject, baseline Baseline, expected patter
 	activeExpected := slices.Clone(expected)
 	count := 0
 	for obj := range retainedObjects(objects) {
-		if classifyRetention(obj, baseline, activeExpected) == retentionUnexpected {
+		if classifyRetention(obj, obj.path.normalized(), baseline, activeExpected) == retentionUnexpected {
 			count++
 		}
 	}
 	return count
 }
 
-func countRetained(objectSets ...[]trackedObject) int {
+func countRetained(objects []trackedObject) int {
 	count := 0
-	for _, objects := range objectSets {
-		for range retainedObjects(objects) {
-			count++
-		}
+	for range retainedObjects(objects) {
+		count++
 	}
 	return count
 }
@@ -168,23 +170,28 @@ func retainedObjects(objects []trackedObject) iter.Seq[trackedObject] {
 	}
 }
 
-func settleGC(timeout time.Duration, snapshot func() int) bool {
-	return settleGCWhen(timeout, snapshot, false)
+func settleGC(timeout time.Duration, minWait time.Duration, quiet time.Duration, snapshot func() int) bool {
+	return settleGCWhen(timeout, minWait, quiet, snapshot, false)
 }
 
-func settleGCToZero(timeout time.Duration, snapshot func() int) bool {
-	return settleGCWhen(timeout, snapshot, true)
+func settleGCToZero(timeout time.Duration, minWait time.Duration, quiet time.Duration, snapshot func() int) bool {
+	return settleGCWhen(timeout, minWait, quiet, snapshot, true)
 }
 
-func settleGCWhen(timeout time.Duration, snapshot func() int, requireZero bool) bool {
+func settleGCWhen(
+	timeout time.Duration,
+	minWait time.Duration,
+	quiet time.Duration,
+	snapshot func() int,
+	requireZero bool,
+) bool {
 	start := time.Now()
-	minWaitDeadline := start.Add(checkGCMinWait)
+	minWaitDeadline := start.Add(minWait)
 	deadline := start.Add(timeout)
 	settledDeadline := minWaitDeadline
 
 	var lastSnapshot int
 	var haveLastSnapshot bool
-	var hadUnexpected bool
 	for {
 		// AddCleanup callbacks run after GC proves tracked objects are
 		// unreachable. Run a small burst and yield so callbacks can mark tracked
@@ -203,16 +210,10 @@ func settleGCWhen(timeout time.Duration, snapshot func() int, requireZero bool) 
 		// first passing state. This lets delayed cleanup callbacks finish before
 		// we decide.
 		currentSnapshot := snapshot()
-		if requireZero {
-			if currentSnapshot == 0 && hadUnexpected {
-				return true
-			}
-			hadUnexpected = hadUnexpected || currentSnapshot != 0
-		}
 		if !haveLastSnapshot || currentSnapshot != lastSnapshot {
 			lastSnapshot = currentSnapshot
 			haveLastSnapshot = true
-			settledDeadline = now.Add(checkGCQuiet)
+			settledDeadline = now.Add(quiet)
 			if minWaitDeadline.After(settledDeadline) {
 				settledDeadline = minWaitDeadline
 			}
