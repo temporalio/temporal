@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
-	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/backoff"
@@ -439,7 +438,7 @@ func (a *Activity) addCompletionCallbacks(
 
 		// requestID (unique per API call) + idx (position within the request) ensures unique,idempotent callback IDs.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
-		callbackObj := callback.NewCallback(requestID, registrationTime, &callbackspb.CallbackState{}, chasmCB)
+		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
