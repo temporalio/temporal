@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/testing/objectleak"
 	"go.temporal.io/server/tests/testcore"
@@ -75,10 +76,14 @@ func TestClusterShutdownLeak(t *testing.T) {
 	leakCheck, err := objectleak.NewObjectLeakCheck(leakOpts...)
 	require.NoError(t, err)
 
+	// Keep the final stopped warmup worker reachable through Check so the SDK's
+	// process-wide workflow cache remains the same allocation across the baseline.
+	var worker sdkworker.Worker
+
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
 	// init, proto registries, ...) are created before we snapshot the baseline.
 	for range warmupIters {
-		buildRunTeardownCluster(t, &leakCheck)
+		worker = buildRunTeardownCluster(t, &leakCheck)
 	}
 
 	// Wait for warmup goroutines to drain before snapshotting the object and goroutine baselines.
@@ -88,7 +93,7 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 	// Run the leak test: build, run, and tear down a cluster per iteration.
 	for i := range iters {
-		buildRunTeardownCluster(t, &leakCheck)
+		_ = buildRunTeardownCluster(t, &leakCheck)
 		t.Logf("cluster %2d: goroutines=%d", i, runtime.NumGoroutine())
 	}
 
@@ -104,6 +109,8 @@ func TestClusterShutdownLeak(t *testing.T) {
 	// Verify that no cluster references leaked.
 	leakCheckStart := time.Now()
 	leakReport, leakErr := leakCheck.Check(objleakBaseline)
+	runtime.KeepAlive(worker) // ensure worker is kept alive until leak check completes
+
 	t.Logf("object leak check settled in %s", time.Since(leakCheckStart).Round(time.Millisecond))
 	reportPath := filepath.Join(outputDir, "objectleak_report.txt")
 	writeReport(t, outputDir, "objectleak_report.txt", leakReport+"\n")
@@ -122,14 +129,16 @@ func TestClusterShutdownLeak(t *testing.T) {
 
 // buildRunTeardownCluster creates a dedicated cluster, runs a trivial
 // workflow on it to exercise the full server path, then tears it down.
-func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) {
+func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) sdkworker.Worker {
+	var worker sdkworker.Worker
 	// The subtest ensures all env cleanups complete before this returns.
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
 			testcore.WithDedicatedCluster(),
 			testcore.WithWorkerService("leak regression test"))
 
-		env.SdkWorker().RegisterWorkflow(smokeWorkflow)
+		worker = env.SdkWorker()
+		worker.RegisterWorkflow(smokeWorkflow)
 		run, err := env.SdkClient().ExecuteWorkflow(
 			context.Background(),
 			sdkclient.StartWorkflowOptions{TaskQueue: env.WorkerTaskQueue()},
@@ -140,6 +149,7 @@ func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck
 
 		leakCheck.Track(env)
 	})
+	return worker
 }
 
 func smokeWorkflow(workflow.Context) error { return nil }
