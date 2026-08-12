@@ -322,7 +322,7 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 
 func mustReadReportFixture(t *testing.T, path string) *junitReport {
 	t.Helper()
-	testsuites, err := junit.Read(path)
+	report, err := readReport(path)
 	require.NoError(t, err)
-	return &junitReport{Testsuites: *testsuites}
+	return report
 }

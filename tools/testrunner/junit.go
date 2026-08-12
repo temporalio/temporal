@@ -33,6 +33,14 @@ type junitReport struct {
 	reportingErrs []error
 }
 
+func readReport(path string) (*junitReport, error) {
+	testsuites, err := junit.Read(path)
+	if err != nil {
+		return nil, err
+	}
+	return &junitReport{Testsuites: *testsuites}, nil
+}
+
 // generateReport builds a JUnit report for failures that the runner
 // derives itself, such as timeouts and crashes. Failure.Type stores the
 // canonical failure type (for example TIMEOUT or CRASH), and Failure.Data is

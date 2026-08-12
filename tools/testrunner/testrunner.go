@@ -264,11 +264,11 @@ func (r *runner) generateSummary() error {
 
 	reports := make([]*junitReport, 0, len(paths))
 	for _, path := range paths {
-		testsuites, err := junit.Read(path)
+		report, err := readReport(path)
 		if err != nil {
 			return fmt.Errorf("failed to read junit report %q: %w", path, err)
 		}
-		reports = append(reports, &junitReport{Testsuites: *testsuites})
+		reports = append(reports, report)
 	}
 
 	summary := newSummaryFromReports(reports)
@@ -347,7 +347,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
 			totalTimeoutFired = true
 			// Try to read whatever gotestsum managed to write before it was killed.
-			testsuites, readErr := junit.Read(currentAttempt.junitPath)
+			report, readErr := readReport(currentAttempt.junitPath)
 			if readErr != nil {
 				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
 				// stdout for any "--- FAIL:" lines that completed before the kill.
@@ -357,7 +357,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				// If no failed tests are found either, the current attempt's report
 				// remains empty and mergeReports will include only prior attempts.
 			} else {
-				currentAttempt.junitReport.Testsuites = *testsuites
+				currentAttempt.junitReport = report
 			}
 			// Without this, a mid-run timeout leaves an empty JUnit and CI shows green.
 			currentAttempt.junitReport.appendSyntheticFailure(
@@ -384,11 +384,11 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		}
 
 		// All tests were run, parse JUnit XML output.
-		testsuites, err := junit.Read(currentAttempt.junitPath)
+		report, err := readReport(currentAttempt.junitPath)
 		if err != nil {
 			log.Fatal(err)
 		}
-		currentAttempt.junitReport.Testsuites = *testsuites
+		currentAttempt.junitReport = report
 
 		// Write intermediate results so they survive if we are killed externally
 		// between attempts (e.g. a GitHub Actions job timeout fires after this

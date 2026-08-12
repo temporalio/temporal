@@ -197,9 +197,8 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	r.writeCurrentReport()
 
-	testsuites, err := junit.Read(out.Name())
+	result, err := readReport(out.Name())
 	require.NoError(t, err)
-	result := &junitReport{Testsuites: *testsuites}
 	require.Equal(t, 2, result.Failures)
 	require.Len(t, result.Suites, 1)
 
@@ -212,9 +211,8 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	r.writeCurrentReport()
 
-	testsuites, err = junit.Read(out.Name())
+	result2, err := readReport(out.Name())
 	require.NoError(t, err)
-	result2 := &junitReport{Testsuites: *testsuites}
 	require.Equal(t, 4, result2.Failures) // 2 from attempt 1 + 2 from attempt 2
 	require.Len(t, result2.Suites, 2)
 }

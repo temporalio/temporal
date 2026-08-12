@@ -51,14 +51,9 @@ func Read(path string) (*Testsuites, error) {
 			if err := decoder.DecodeElement(&testsuite, &root); err != nil {
 				return nil, fmt.Errorf("failed to read JUnit report file: %w", err)
 			}
-			return &Testsuites{
-				Tests:    testsuite.Tests,
-				Errors:   testsuite.Errors,
-				Failures: testsuite.Failures,
-				Skipped:  testsuite.Skipped,
-				Time:     testsuite.Time,
-				Suites:   []Testsuite{testsuite},
-			}, nil
+			testsuites := &Testsuites{Time: testsuite.Time}
+			testsuites.AddSuite(testsuite)
+			return testsuites, nil
 		default:
 			return nil, fmt.Errorf("failed to read JUnit report file: unexpected root element %q", root.Name.Local)
 		}

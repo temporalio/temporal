@@ -36,19 +36,27 @@ func TestRead(t *testing.T) {
 			},
 		},
 		{
-			name: "testsuite root with skipped testcase",
-			content: `<testsuite name="suite" tests="1" failures="0" errors="0" skipped="1" id="0" time="">
+			name: "testsuite root with aggregate attributes",
+			content: `<testsuite name="suite" tests="10" failures="3" errors="2" skipped="4" disabled="1" id="0" time="5.5">
 	<testcase name="TestOne" classname="example.com/tests">
 		<skipped></skipped>
 	</testcase>
 </testsuite>`,
 			want: Testsuites{
-				Tests:   1,
-				Skipped: 1,
+				Tests:    10,
+				Errors:   2,
+				Failures: 3,
+				Skipped:  4,
+				Disabled: 1,
+				Time:     "5.5",
 				Suites: []Testsuite{{
-					Name:    "suite",
-					Tests:   1,
-					Skipped: 1,
+					Name:     "suite",
+					Tests:    10,
+					Failures: 3,
+					Errors:   2,
+					Disabled: 1,
+					Skipped:  4,
+					Time:     "5.5",
 					Testcases: []Testcase{{
 						Name:      "TestOne",
 						Classname: "example.com/tests",
@@ -67,6 +75,40 @@ func TestRead(t *testing.T) {
 			report, err := Read(path)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, *report)
+		})
+	}
+}
+
+func TestReadErrors(t *testing.T) {
+	t.Run("missing file", func(t *testing.T) {
+		_, err := Read(filepath.Join(t.TempDir(), "missing.xml"))
+		require.ErrorContains(t, err, "failed to open JUnit report file")
+	})
+
+	tests := []struct {
+		name    string
+		content string
+		wantErr string
+	}{
+		{
+			name:    "unexpected root",
+			content: `<foo></foo>`,
+			wantErr: `unexpected root element "foo"`,
+		},
+		{
+			name:    "malformed XML",
+			content: `<testsuite>`,
+			wantErr: "failed to read JUnit report file",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "junit.xml")
+			require.NoError(t, os.WriteFile(path, []byte(tt.content), 0o644))
+
+			_, err := Read(path)
+			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
 }
