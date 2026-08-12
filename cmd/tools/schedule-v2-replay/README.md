@@ -65,6 +65,29 @@ Replay a sample from every namespace and save each history:
   --report /tmp/schedule-v2-replay-report.json
 ```
 
+When the target cell is reachable only through `ct admintools`, collect a deterministic sample
+through the remote Temporal CLI, then run the same local replay step:
+
+```sh
+./cmd/tools/schedule-v2-replay/collect-admintools-sample.sh \
+  --cell s-aw999 \
+  --sample-size 3 \
+  --max-runs 3 \
+  --history-dir /approved-encrypted-volume/s-aw999
+
+./cmd/tools/schedule-v2-replay/replay-sample.sh \
+  --replay-only \
+  --history-dir /approved-encrypted-volume/s-aw999 \
+  --report /tmp/s-aw999-schedule-v2-replay.json \
+  --fail-on significant
+```
+
+Omit `--namespace` to enumerate every namespace, or pass `--namespace NAME` to restrict the
+collection. V2-only schedules have no `temporal-sys-scheduler:` workflow and are skipped. The
+script stores raw history payloads and a sensitive `collection.tsv`; use an approved encrypted
+directory and apply the normal retention policy. Pass `--address HOST:PORT` only when the
+admintools environment does not already configure its Temporal frontend endpoint.
+
 The history directory must be an approved encrypted local volume that is not synchronized or
 checked into source control. The collector creates directories with mode `0700`, writes histories
 and manifests atomically with mode `0600`, uses opaque hashed filenames, and records checksums. It
