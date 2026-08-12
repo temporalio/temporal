@@ -24,19 +24,6 @@ import (
 var goleakOpts = []goleak.Option{
 	// By design: sqlite keeps one *sql.DB per file DSN for the process lifetime.
 	goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
-
-	// TODO: gRPC connection goroutines leaked because history/matching
-	// connection pools are not closed on cluster shutdown.
-	//
-	// IgnoreAnyFunction (rather than IgnoreTopFunction) for addrConn's
-	// reconnect loop: a goroutine caught mid-reconnect can have any of
-	// several functions (fmt/channelz logging, context.Err, ...) at the
-	// top of the stack depending on exactly when it was snapshotted, but
-	// resetTransportAndUnlock is always present as a caller.
-	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run"),
-	goleak.IgnoreAnyFunction("google.golang.org/grpc.(*addrConn).resetTransportAndUnlock"),
-	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/balancer/gracefulswitch.(*Balancer).updateSubConnState"),
-	goleak.IgnoreTopFunction("go.temporal.io/server/common/membership.(*grpcResolver).listen"),
 }
 
 var objectLeakOpts = []objectleak.Option{
