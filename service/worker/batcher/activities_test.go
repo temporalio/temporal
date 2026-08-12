@@ -30,6 +30,8 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
@@ -527,7 +529,9 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 			},
 		}
-		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		adjustedQuery := a.adjustQueryAdminBatchType(&batchspb.BatchOperationInput{
+			AdminRequest: adminReq,
+		})
 		s.Empty(adjustedQuery)
 	})
 
@@ -539,7 +543,9 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 			},
 		}
-		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		adjustedQuery := a.adjustQueryAdminBatchType(&batchspb.BatchOperationInput{
+			AdminRequest: adminReq,
+		})
 		// RefreshWorkflowTasks applies to both open and closed workflows, no filter added
 		s.Equal("WorkflowType='MyWorkflow'", adjustedQuery)
 	})
@@ -551,7 +557,9 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 			},
 		}
-		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		adjustedQuery := a.adjustQueryAdminBatchType(&batchspb.BatchOperationInput{
+			AdminRequest: adminReq,
+		})
 		// RefreshWorkflowTasks applies to both open and closed workflows, no filter added
 		s.Equal("(WorkflowType='MyWorkflow') OR (WorkflowType='OtherWorkflow')", adjustedQuery)
 	})
@@ -560,9 +568,29 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 		adminReq := &adminservice.StartAdminBatchOperationRequest{
 			VisibilityQuery: "WorkflowType='MyWorkflow'",
 		}
-		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		adjustedQuery := a.adjustQueryAdminBatchType(&batchspb.BatchOperationInput{
+			AdminRequest: adminReq,
+		})
 		s.Equal("WorkflowType='MyWorkflow'", adjustedQuery)
 	})
+
+	s.Run("Delegated terminate filters to running executions", func() {
+		adminReq := &adminservice.StartAdminBatchOperationRequest{
+			VisibilityQuery: "WorkflowType='MyWorkflow'",
+			Operation: &adminservice.StartAdminBatchOperationRequest_DelegationOperation{
+				DelegationOperation: &adminservice.BatchOperationDelegation{
+					BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+				},
+			},
+		}
+		adjustedQuery := a.adjustQueryAdminBatchType(&batchspb.BatchOperationInput{
+			AdminRequest: adminReq,
+			//nolint:staticcheck // SA1019: the batcher persists legacy enum values
+			BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
+		})
+		s.Equal("(WorkflowType='MyWorkflow') AND (ExecutionStatus='Running')", adjustedQuery)
+	})
+
 }
 
 func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
@@ -839,6 +867,129 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 
 	resp := <-respCh
 	s.NoError(resp.err)
+}
+
+func (s *activitiesSuite) TestStartTaskProcessor_AdminBatchRouting() {
+	targetNamespace := "target-namespace"
+
+	testTask := func(batchType enumspb.BatchOperationType) task {
+		if isActivityBatchType(batchType) {
+			testPage := &page{
+				targetExecutionInfo: []*commonpb.Execution{{
+					Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+					BusinessId: "test-activity-id",
+					RunId:      "test-run-id",
+				}},
+			}
+			return task{
+				targetExecution: testPage.targetExecutionInfo[0],
+				attempts:        1,
+				page:            testPage,
+			}
+		}
+
+		testPage := &page{
+			executionInfos: []*workflowpb.WorkflowExecutionInfo{
+				{
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: "test-workflow-id",
+						RunId:      "test-run-id",
+					},
+				},
+			},
+		}
+		return task{
+			executionInfo: testPage.executionInfos[0],
+			attempts:      1,
+			page:          testPage,
+		}
+	}
+
+	run := func(a *activities, batchOperation *batchspb.BatchOperationInput) taskResponse {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		taskCh := make(chan task, 1)
+		respCh := make(chan taskResponse, 1)
+		limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
+		taskCh <- testTask(batchOperation.GetBatchType())
+
+		go a.startTaskProcessor(ctx, batchOperation, targetNamespace, taskCh, respCh, limiter, nil, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+		return <-respCh
+	}
+
+	// The worker is bound to temporal-system while the batch targets another namespace.
+	s.Run("Delegated activity termination targets the requested namespace", func() {
+		a := &activities{
+			activityDeps: activityDeps{
+				FrontendClient: s.mockFrontendClient,
+				Logger:         log.NewTestLogger(),
+				MetricsHandler: metrics.NoopMetricsHandler,
+			},
+			namespace:   namespace.Name(primitives.SystemLocalNamespace),
+			namespaceID: namespace.ID(primitives.SystemNamespaceID),
+		}
+
+		batchOperation := &batchspb.BatchOperationInput{
+			NamespaceId: "target-namespace-id",
+			BatchType:   enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace: targetNamespace,
+				Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+					TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{Identity: "test"},
+				},
+			},
+			AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+				Namespace: targetNamespace,
+				Operation: &adminservice.StartAdminBatchOperationRequest_DelegationOperation{
+					DelegationOperation: &adminservice.BatchOperationDelegation{
+						BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+					},
+				},
+			},
+		}
+
+		s.mockFrontendClient.EXPECT().
+			TerminateActivityExecution(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *workflowservice.TerminateActivityExecutionRequest, _ ...any) (*workflowservice.TerminateActivityExecutionResponse, error) {
+				s.Equal(targetNamespace, req.Namespace)
+				s.NotEqual(primitives.SystemLocalNamespace, req.Namespace)
+				return &workflowservice.TerminateActivityExecutionResponse{}, nil
+			})
+
+		s.NoError(run(a, batchOperation).err)
+	})
+
+	s.Run("Refresh tasks operation still routes to the admin path", func() {
+		mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+		a := &activities{
+			activityDeps: activityDeps{
+				FrontendClient: s.mockFrontendClient,
+				HistoryClient:  mockHistoryClient,
+				Logger:         log.NewTestLogger(),
+				MetricsHandler: metrics.NoopMetricsHandler,
+			},
+			namespace:   namespace.Name(primitives.SystemLocalNamespace),
+			namespaceID: namespace.ID(primitives.SystemNamespaceID),
+		}
+
+		batchOperation := &batchspb.BatchOperationInput{
+			NamespaceId: "target-namespace-id",
+			AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+				Namespace: targetNamespace,
+				Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+					RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+				},
+			},
+		}
+
+		mockHistoryClient.EXPECT().
+			RefreshWorkflowTasks(gomock.Any(), gomock.Any()).
+			Return(&historyservice.RefreshWorkflowTasksResponse{}, nil)
+
+		s.NoError(run(a, batchOperation).err)
+	})
 }
 
 // TestStartTaskProcessor_RetryableErrorsDoNotDeadlock verifies that repeated retryable
@@ -1178,10 +1329,10 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 
 	a := &activities{}
 	config := batchProcessorConfig{
-		namespace:     "test-namespace",
-		adjustedQuery: "ActivityType = 'test-activity'",
-		batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
-		concurrency:   3,
+		targetNamespace: "test-namespace",
+		adjustedQuery:   "ActivityType = 'test-activity'",
+		batchType:       enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		concurrency:     3,
 	}
 	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
 

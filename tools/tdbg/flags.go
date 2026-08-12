@@ -84,6 +84,7 @@ var (
 	FlagExecute                    = "execute"
 	FlagWorkers                    = "workers"
 	FlagOutputLog                  = "output-log"
+	FlagBatchType                  = "batch-type"
 )
 
 const defaultMigrateWorkers = 5

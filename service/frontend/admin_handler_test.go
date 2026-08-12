@@ -2491,3 +2491,69 @@ func (s *adminHandlerSuite) TestGetSearchAttributes() {
 		s.ErrorAs(err, &unavailable)
 	})
 }
+
+func TestCreateDelegatedBatchRequest(t *testing.T) {
+	adminRequest := &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       "target-namespace",
+		VisibilityQuery: "WorkflowType = 'test'",
+		JobId:           "job-id",
+		Reason:          "test reason",
+		Identity:        "test identity",
+	}
+
+	tests := []struct {
+		name      string
+		batchType enumspb.BatchOperationType
+		validate  func(*testing.T, *workflowservice.StartBatchOperationRequest)
+		wantError bool
+	}{
+		{
+			name:      "terminate workflows",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_TerminationOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.TerminationOperation.GetIdentity())
+			},
+		},
+		{
+			name:      "terminate activities",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.TerminateActivitiesOperation.GetIdentity())
+				require.Equal(t, adminRequest.GetReason(), op.TerminateActivitiesOperation.GetReason())
+			},
+		},
+		{
+			name:      "unsupported operation",
+			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+			wantError: true,
+		},
+		{
+			name:      "unspecified operation",
+			batchType: enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED,
+			wantError: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := createDelegatedBatchRequest(adminRequest, tc.batchType)
+			if tc.wantError {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Nil(t, request)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, adminRequest.GetNamespace(), request.GetNamespace())
+			require.Equal(t, adminRequest.GetVisibilityQuery(), request.GetVisibilityQuery())
+			require.Equal(t, adminRequest.GetJobId(), request.GetJobId())
+			require.Equal(t, adminRequest.GetReason(), request.GetReason())
+			tc.validate(t, request)
+		})
+	}
+}
