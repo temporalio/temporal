@@ -313,13 +313,11 @@ func (x *NamespaceConfig) GetWorkflowRules() map[string]*v12.WorkflowRule {
 }
 
 type NamespaceReplicationConfig struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	ActiveClusterName string                 `protobuf:"bytes,1,opt,name=active_cluster_name,json=activeClusterName,proto3" json:"active_cluster_name,omitempty"`
-	Clusters          []string               `protobuf:"bytes,2,rep,name=clusters,proto3" json:"clusters,omitempty"`
-	State             v1.ReplicationState    `protobuf:"varint,3,opt,name=state,proto3,enum=temporal.api.enums.v1.ReplicationState" json:"state,omitempty"`
-	FailoverHistory   []*FailoverStatus      `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3" json:"failover_history,omitempty"`
-	// Per cluster, when it was added to clusters. Anchors the gradual-connect replication ramp.
-	// Stamped once on a genuine add, never restamped; removed if the cluster is later removed.
+	state              protoimpl.MessageState            `protogen:"open.v1"`
+	ActiveClusterName  string                            `protobuf:"bytes,1,opt,name=active_cluster_name,json=activeClusterName,proto3" json:"active_cluster_name,omitempty"`
+	Clusters           []string                          `protobuf:"bytes,2,rep,name=clusters,proto3" json:"clusters,omitempty"`
+	State              v1.ReplicationState               `protobuf:"varint,3,opt,name=state,proto3,enum=temporal.api.enums.v1.ReplicationState" json:"state,omitempty"`
+	FailoverHistory    []*FailoverStatus                 `protobuf:"bytes,8,rep,name=failover_history,json=failoverHistory,proto3" json:"failover_history,omitempty"`
 	ClusterConnectTime map[string]*timestamppb.Timestamp `protobuf:"bytes,9,rep,name=cluster_connect_time,json=clusterConnectTime,proto3" json:"cluster_connect_time,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache

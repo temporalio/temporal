@@ -1735,32 +1735,25 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 	EnableReplicationGradualConnect = NewGlobalBoolSetting(
 		"history.enableReplicationGradualConnect",
 		false,
-		`EnableReplicationGradualConnect gates the namespace gradual-connect admission ramp (see
-ReplicationGradualConnectInitialPercent/StepPercent/StepDuration). When false, every replication task
-is admitted immediately. Cluster-wide kill switch; default off so this ships dark.`,
+		`Cluster-wide kill switch for the namespace gradual-connect admission ramp. When false, every
+replication task is admitted immediately; default off so this ships dark.`,
 	)
 	ReplicationGradualConnectInitialPercent = NewNamespaceIntSetting(
 		"history.replicationGradualConnectInitialPercent",
 		10,
-		`ReplicationGradualConnectInitialPercent is the fraction of a namespace's replication tasks (by a
-stable hash of the workflow ID) admitted starting when the current cluster is added to the
-namespace, before the first ramp step elapses. Only takes effect when EnableReplicationGradualConnect
-is true.`,
+		`Fraction of a namespace's replication tasks (by workflow ID hash) admitted immediately when the
+current cluster is newly added, before the ramp's first step.`,
 	)
 	ReplicationGradualConnectStepPercent = NewNamespaceIntSetting(
 		"history.replicationGradualConnectStepPercent",
 		10,
-		`ReplicationGradualConnectStepPercent is the additional percent of a namespace's replication tasks
-admitted every ReplicationGradualConnectStepDuration, until it reaches 100. Only takes effect when
-EnableReplicationGradualConnect is true. Only raise this mid-rollout -- lowering it can shed an
-already-admitted workflow's tasks, since admission is meant to be monotonic in time.`,
+		`Additional percent admitted every ReplicationGradualConnectStepDuration, until reaching 100.
+Only raise mid-rollout -- lowering it can shed already-admitted workflows.`,
 	)
 	ReplicationGradualConnectStepDuration = NewNamespaceDurationSetting(
 		"history.replicationGradualConnectStepDuration",
 		5*time.Minute,
-		`ReplicationGradualConnectStepDuration is the interval between admission-percent increases for the
-namespace gradual-connect replication ramp. Only takes effect when EnableReplicationGradualConnect is
-true.`,
+		`Interval between admission-percent increases in the gradual-connect ramp.`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",

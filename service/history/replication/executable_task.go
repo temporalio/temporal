@@ -899,9 +899,7 @@ FilterLoop:
 }
 
 // admittedByGradualConnect reports whether businessID is admitted by the namespace gradual-connect
-// replication ramp. Applies uniformly across task types (no allowlist/denylist) except by
-// attribute: force-replication tasks always bypass it, since shedding them can't be recovered from.
-// Fails open when the kill switch is off or the namespace has no recorded connect time.
+// replication ramp. Fails open when the kill switch is off or there's no recorded connect time.
 func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.Namespace, businessID string) bool {
 	if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
 		// Shed tasks are dropped, not retried -- shedding these would strand a migration's verify loop.
@@ -929,9 +927,8 @@ func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.
 	return dynamicconfig.RolloutAccepts([]byte(businessID), percent)
 }
 
-// gradualConnectPercent computes the current admission percent: initialPercent at connectTime,
-// plus stepPercent per stepDuration elapsed since, capped at 100. Fails open (100) if now precedes
-// connectTime or stepDuration is non-positive.
+// gradualConnectPercent computes the current admission percent, capped at 100. Fails open (100) if
+// now precedes connectTime or stepDuration is non-positive.
 func gradualConnectPercent(connectTime, now time.Time, initialPercent, stepPercent int, stepDuration time.Duration) int {
 	elapsed := now.Sub(connectTime)
 	if elapsed < 0 || stepDuration <= 0 {

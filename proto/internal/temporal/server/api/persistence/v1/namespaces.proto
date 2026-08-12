@@ -47,8 +47,6 @@ message NamespaceReplicationConfig {
   repeated string clusters = 2;
   temporal.api.enums.v1.ReplicationState state = 3;
   repeated FailoverStatus failover_history = 8;
-  // Per cluster, when it was added to clusters. Anchors the gradual-connect replication ramp.
-  // Stamped once on a genuine add, never restamped; removed if the cluster is later removed.
   map<string, google.protobuf.Timestamp> cluster_connect_time = 9;
 }
 

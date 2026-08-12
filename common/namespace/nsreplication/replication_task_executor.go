@@ -358,9 +358,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 }
 
 // stampOwnClusterConnectTime records when h.currentCluster was genuinely added between oldClusters
-// and newClusters -- anchoring the gradual-connect ramp locally rather than trusting another
-// cluster's clock. Diffing membership (not just "no existing entry") avoids re-ramping live traffic
-// on every unrelated edit to a namespace whose membership predates this field. Never restamps.
+// and newClusters, anchoring the gradual-connect ramp locally. Never restamps an existing entry.
 func (h *taskExecutorImpl) stampOwnClusterConnectTime(
 	existing map[string]*timestamppb.Timestamp,
 	oldClusters []string,
