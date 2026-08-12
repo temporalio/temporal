@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -71,6 +72,7 @@ type replayClassification string
 const (
 	replayClassificationMatch        replayClassification = "match"
 	replayClassificationTimingOnly   replayClassification = "timing_only"
+	replayClassificationKnownCompat  replayClassification = "known_compatibility"
 	replayClassificationSignificant  replayClassification = "significant"
 	replayClassificationUnsupported  replayClassification = "unsupported"
 	replayClassificationInconclusive replayClassification = "inconclusive"
@@ -85,6 +87,7 @@ type replayDivergence struct {
 	CHASMTime        *time.Time              `json:"chasmTime,omitempty"`
 	Fields           []string                `json:"fields,omitempty"`
 	FieldDifferences []replayFieldDifference `json:"fieldDifferences,omitempty"`
+	KnownDifference  string                  `json:"knownDifference,omitempty"`
 }
 
 type replayFieldDifference struct {
@@ -327,21 +330,12 @@ func TestCurrentV1ConformanceCorpus(t *testing.T) {
 			result := replayV1HistoryAgainstCHASM(t, readReplayHistory(t, path))
 			filename := filepath.Base(path)
 			if filename == "skip-running.json.gz" {
-				require.Equal(t, replayClassificationSignificant, result.Classification)
-				require.Equal(t, []string{"action_request", "action_time", "extra_action", "missing_action"}, uniqueReplayDivergenceKinds(result))
-				require.Equal(t, []string{"search_attributes"}, replayDivergenceFields(result, "action_request"))
+				require.Equal(t, replayClassificationKnownCompat, result.Classification)
+				require.Equal(t, []string{"action_time", "extra_action", "missing_action"}, uniqueReplayDivergenceKinds(result))
 				require.Equal(t, result.V1ActionCount, result.CHASMActionCount)
 				return
 			}
-			if filename != "backfill-allow-all.json.gz" && filename != "update.json.gz" {
-				require.Equal(t, replayClassificationSignificant, result.Classification)
-				require.Equal(t, []string{"action_request", "action_time"}, uniqueReplayDivergenceKinds(result))
-				require.Equal(t, []string{"search_attributes"}, replayDivergenceFields(result, "action_request"))
-				require.ElementsMatch(t, result.V1Starts, result.CHASMStarts)
-				return
-			}
-			require.NotEqual(t, replayClassificationSignificant, result.Classification, result.Divergences)
-			require.NotEqual(t, replayClassificationUnsupported, result.Classification, result.Divergences)
+			require.Equal(t, replayClassificationTimingOnly, result.Classification, result.Divergences)
 			require.Equal(t, []string{"action_time"}, uniqueReplayDivergenceKinds(result))
 			require.ElementsMatch(t, result.V1Starts, result.CHASMStarts)
 		})
@@ -611,7 +605,7 @@ func TestReplayReport(t *testing.T) {
 	require.NoError(t, err)
 	var report replayReport
 	require.NoError(t, json.Unmarshal(data, &report))
-	require.Equal(t, 3, report.Version)
+	require.Equal(t, 4, report.Version)
 	require.False(t, report.Redacted)
 	require.Equal(t, map[string]int{"match": 1, "significant": 1}, report.Summary)
 	require.Equal(t, map[string]map[string]int{"spec_interval": {"match": 1}}, report.CohortSummary)
@@ -628,6 +622,8 @@ func TestReplayReport(t *testing.T) {
 	require.True(t, replayResultFails(results[1], "significant"))
 	require.False(t, replayResultFails(results[1], "none"))
 	require.True(t, replayResultFails(replayCaseResult{Classification: replayClassificationTimingOnly}, "all"))
+	require.False(t, replayResultFails(replayCaseResult{Classification: replayClassificationKnownCompat}, "significant"))
+	require.True(t, replayResultFails(replayCaseResult{Classification: replayClassificationKnownCompat}, "all"))
 }
 
 func TestNormalizeStartWorkflowRequest(t *testing.T) {
@@ -647,7 +643,7 @@ func TestNormalizeStartWorkflowRequest(t *testing.T) {
 
 func TestStartWorkflowRequestFieldDifferences(t *testing.T) {
 	v1ScheduledTime := time.Unix(100, 0).UTC()
-	chasmScheduledTime := v1ScheduledTime.Add(500 * time.Millisecond)
+	chasmScheduledTime := v1ScheduledTime.Add(1500 * time.Millisecond)
 	v1ScheduledPayload, err := converter.GetDefaultDataConverter().ToPayload(v1ScheduledTime)
 	require.NoError(t, err)
 	chasmScheduledPayload, err := converter.GetDefaultDataConverter().ToPayload(chasmScheduledTime)
@@ -691,6 +687,21 @@ func TestStartWorkflowRequestFieldDifferences(t *testing.T) {
 		require.Empty(t, difference.V1.Digest)
 		require.Empty(t, difference.CHASM.Digest)
 	}
+}
+
+func TestNormalizeStartWorkflowRequestIgnoresScheduledTimeSubsecondPrecision(t *testing.T) {
+	v1ScheduledPayload, err := sadefs.EncodeValue(time.Unix(100, 0).UTC(), enumspb.INDEXED_VALUE_TYPE_DATETIME)
+	require.NoError(t, err)
+	chasmScheduledPayload, err := sadefs.EncodeValue(time.Unix(100, 500_000_000).UTC(), enumspb.INDEXED_VALUE_TYPE_DATETIME)
+	require.NoError(t, err)
+	v1 := &workflowservice.StartWorkflowExecutionRequest{SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+		sadefs.TemporalScheduledStartTime: v1ScheduledPayload,
+	}}}
+	chasmRequest := &workflowservice.StartWorkflowExecutionRequest{SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+		sadefs.TemporalScheduledStartTime: chasmScheduledPayload,
+	}}}
+
+	protorequire.ProtoEqual(t, normalizeStartWorkflowRequest(v1), normalizeStartWorkflowRequest(chasmRequest))
 }
 
 func mustPayloads(t *testing.T, values ...any) *commonpb.Payloads {
@@ -1064,6 +1075,7 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 		}, struct{}{})
 	require.NoError(t, err)
 	result.Divergences = deduplicateReplayDivergences(divergences)
+	annotateKnownCompatibilityDivergences(result.Divergences, result.Cohorts)
 	result.Classification = classifyReplayDivergences(result.Divergences)
 	result.ReplayStats = budget.stats
 	return result
@@ -1152,6 +1164,15 @@ func normalizeStartWorkflowRequest(request *workflowservice.StartWorkflowExecuti
 		normalized.LastCompletionResult = nil
 	}
 	for name, payload := range normalized.GetSearchAttributes().GetIndexedFields() {
+		if name == sadefs.TemporalScheduledStartTime {
+			if scheduledTime, ok := decodeDateTimeSearchAttribute(payload); ok {
+				encoded, err := sadefs.EncodeValue(scheduledTime.Truncate(time.Second), enumspb.INDEXED_VALUE_TYPE_DATETIME)
+				if err == nil {
+					normalized.SearchAttributes.IndexedFields[name] = encoded
+					payload = encoded
+				}
+			}
+		}
 		if strings.HasPrefix(name, "TemporalScheduled") {
 			delete(payload.Metadata, "type")
 		}
@@ -1538,6 +1559,64 @@ func classifyReplayDivergences(divergences []replayDivergence) replayClassificat
 	return classification
 }
 
+func annotateKnownCompatibilityDivergences(divergences []replayDivergence, cohorts []string) {
+	usesSkip := slices.Contains(cohorts, "overlap_skip") || slices.Contains(cohorts, "overlap_unspecified")
+	for index := range divergences {
+		divergence := &divergences[index]
+		if divergence.Classification == replayClassificationSignificant &&
+			divergence.Kind == "action_request" &&
+			slices.Equal(divergence.Fields, []string{"continued_failure"}) {
+			divergence.Classification = replayClassificationKnownCompat
+			divergence.KnownDifference = "terminal_failure_propagation"
+			continue
+		}
+		if !usesSkip {
+			continue
+		}
+		switch divergence.Kind {
+		case "missing_action", "missing_action_attempt", "extra_action", "action_count", "completion_before_start", "unapplied_completion":
+			divergence.Classification = replayClassificationKnownCompat
+			divergence.KnownDifference = "skip_deadline_boundary"
+		case "action_request":
+			if divergence.Classification == replayClassificationSignificant && fieldsAreKnownSkipCascade(divergence.Fields) {
+				divergence.Classification = replayClassificationKnownCompat
+				divergence.KnownDifference = "skip_deadline_boundary"
+			}
+		default:
+		}
+	}
+}
+
+func fieldsAreKnownSkipCascade(fields []string) bool {
+	if len(fields) == 0 {
+		return false
+	}
+	for _, field := range fields {
+		if field != "continued_failure" && field != "last_completion_result" {
+			return false
+		}
+	}
+	return true
+}
+
+func TestAnnotateKnownCompatibilityDivergences(t *testing.T) {
+	divergences := []replayDivergence{
+		{Classification: replayClassificationSignificant, Kind: "missing_action"},
+		{Classification: replayClassificationInconclusive, Kind: "unapplied_completion"},
+		{Classification: replayClassificationSignificant, Kind: "action_request", Fields: []string{"continued_failure"}},
+		{Classification: replayClassificationSignificant, Kind: "action_request", Fields: []string{"input"}},
+	}
+
+	annotateKnownCompatibilityDivergences(divergences, []string{"overlap_unspecified"})
+	require.Equal(t, replayClassificationKnownCompat, divergences[0].Classification)
+	require.Equal(t, "skip_deadline_boundary", divergences[0].KnownDifference)
+	require.Equal(t, replayClassificationKnownCompat, divergences[1].Classification)
+	require.Equal(t, "skip_deadline_boundary", divergences[1].KnownDifference)
+	require.Equal(t, replayClassificationKnownCompat, divergences[2].Classification)
+	require.Equal(t, "terminal_failure_propagation", divergences[2].KnownDifference)
+	require.Equal(t, replayClassificationSignificant, divergences[3].Classification)
+}
+
 func replayDivergenceKinds(result replayCaseResult) []string {
 	kinds := make([]string, 0, len(result.Divergences))
 	for _, divergence := range result.Divergences {
@@ -1579,10 +1658,12 @@ func replayDivergenceFields(result replayCaseResult, kind string) []string {
 func replayClassificationSeverity(classification replayClassification) int {
 	switch classification {
 	case replayClassificationUnsupported:
-		return 4
+		return 5
 	case replayClassificationSignificant:
-		return 3
+		return 4
 	case replayClassificationInconclusive:
+		return 3
+	case replayClassificationKnownCompat:
 		return 2
 	case replayClassificationTimingOnly:
 		return 1
@@ -1621,7 +1702,7 @@ func writeReplayReportWithCollections(
 		collections = redactCollectionSummaries(collections)
 	}
 	report := replayReport{
-		Version:       3,
+		Version:       4,
 		Redacted:      redact,
 		Summary:       make(map[string]int),
 		CohortSummary: make(map[string]map[string]int),

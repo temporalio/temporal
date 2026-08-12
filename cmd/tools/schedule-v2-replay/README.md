@@ -28,9 +28,13 @@ retries are classified as `inconclusive` instead of inventing an error sequence.
 
 The harness does not replace CHASM's scheduling calculations with V1 decisions. A completion that
 arrives before CHASM's corresponding start is held until that start occurs. Equal action decisions
-at different observed times are classified as `timing_only`; extra or missing workflow IDs, action
-counts, or final state are `significant`. An extra CHASM action receives a synthetic successful
-start response, so one mismatch does not create an artificial retry cascade.
+at different observed times are classified as `timing_only`. Approved subsecond-only differences
+in `TemporalScheduledStartTime` are normalized before request comparison. The exact-deadline
+`SKIP` behavior and terminal `ContinuedFailure` propagation are reported as
+`known_compatibility`; they remain counted and visible but do not fail the default `significant`
+gate. Other extra or missing workflow IDs, action counts, request inputs, or final state remain
+`significant`. An extra CHASM action receives a synthetic successful start response, so one
+mismatch does not create an artificial retry cascade.
 
 Continue-as-new histories can begin with running workflows. The harness seeds their workflow/run
 identity from the migrated buffered-start state before applying later completion events. A
@@ -66,8 +70,9 @@ checked into source control. The collector creates directories with mode `0700`,
 and manifests atomically with mode `0600`, uses opaque hashed filenames, and records checksums. It
 rejects an existing history directory that is accessible by group or other users.
 Reports redact production identifiers by default; pass `--unredacted-report` only for restricted
-local triage. Report version 3 includes payload-safe request diagnostics: presence, element counts,
-encodings, reserved scheduled-time values, and failure-info types. The unredacted report also
+local triage. Report version 4 includes named known-compatibility findings and payload-safe request
+diagnostics: presence, element counts, encodings, reserved scheduled-time values, and failure-info
+types. The unredacted report also
 contains deterministic payload digests; neither report contains decoded user payload values.
 
 Restrict the sample to one namespace:

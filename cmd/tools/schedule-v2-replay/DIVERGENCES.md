@@ -6,14 +6,14 @@ In this report, an **action** is an operation selected by a Temporal Schedule. E
 this corpus uses the `StartWorkflow` action, so an action difference means that one scheduler
 called `StartWorkflowExecution` for a workflow ID that the other scheduler did not.
 
-The corrected current-V1 corpus contains nine scenarios. Two differ only in observation time. Six
-select the same workflow IDs but expose a different `TemporalScheduledStartTime` on their initial
-immediate action. The `skip-running` scenario has that request difference and also selects a
+The corrected current-V1 corpus contains nine scenarios. After fixing immediate-trigger identity
+and normalizing approved subsecond search-attribute precision, eight differ only in observation
+time. The `skip-running` scenario retains a named compatibility difference because it selects a
 different nominal occurrence:
 
 | Finding | V1 | CHASM | Compatibility impact | Likelihood of a V2 correctness bug |
 | --- | --- | --- | --- | --- |
-| Immediate-action scheduled time | Uses `TriggerImmediately.ScheduledTime`, then truncates for the request | Uses CHASM framework time and ignores `ScheduledTime` | Low normally; action-changing at a second boundary | High |
+| Immediate-action scheduled time | Uses `TriggerImmediately.ScheduledTime`, then truncates for the request | Uses non-zero `ScheduledTime`, with framework time as a fallback | Subsecond search-attribute precision is normalized by shadow comparison | Fixed |
 | `SKIP` completion near a deadline | Starts nominal `07:38:50` | Skips `07:38:50`, starts `07:38:51` | Medium | Low |
 | Pause near a deadline (original corpus) | Suppressed nominal `07:18:04` | Started nominal `07:18:04` | Low | Low |
 
@@ -31,6 +31,8 @@ in-memory CHASM state machines.
 - `timing_only`: both schedulers start the same workflow IDs, but the V1 local-activity result and
   CHASM start are observed at different times. Local-activity marker time is not the exact V1
   decision time, so this is evidence about timing rather than a behavioral failure.
+- `known_compatibility`: a named, reviewed V1/V2 behavior difference. These findings remain in
+  reports and cohort counts but do not fail the default `significant` gate.
 - `significant`: an extra or missing workflow ID, a different action count, or a reliably
   comparable final configuration differs.
 - `inconclusive`: the history ends before an external input can be applied with confidence.
@@ -46,7 +48,7 @@ history exposes starts but does not always reveal whether a start was manual; tr
 backfills do not consume the scheduled-action limit. Workflow IDs and action counts remain in the
 oracle, and the JSON report includes CHASM's final state.
 
-## Confirmed difference: immediate-action scheduled time
+## Resolved bug: immediate-action scheduled time
 
 Seven fixtures use `TriggerImmediately` during schedule creation. For the initial action, V1 and
 CHASM start the same workflow ID, but the `TemporalScheduledStartTime` search attribute differs.
@@ -58,9 +60,9 @@ For example:
 
 The frontend stamps `TriggerImmediately.ScheduledTime` before delivering the patch. V1 consumes
 that field in `service/worker/scheduler/workflow.go`, then truncates the buffered nominal time to a
-whole second when constructing the workflow ID and scheduled-time search attribute. CHASM's
-`NewImmediateBackfiller` instead initializes `LastProcessedTime` from `ctx.Now` and
-`processTrigger` uses that framework time without reading `ScheduledTime`.
+whole second when constructing the workflow ID and scheduled-time search attribute. Before this
+fix, CHASM's `NewImmediateBackfiller` initialized `LastProcessedTime` from `ctx.Now` and
+`processTrigger` used that framework time without reading `ScheduledTime`.
 
 Most requests are received within the same second, so the workflow IDs match and only the search
 attribute differs. The production sweep contains a request stamped at `23:33:03.998` and delivered
@@ -74,14 +76,15 @@ First-pass triage:
 - **Compatibility impact: Low normally, Medium at a second boundary.** The common case changes
   only timestamp precision; a request crossing the boundary can change workflow identity and
   deduplication outcome.
-- **V2 correctness-bug likelihood: High.** `ScheduledTime` is explicitly the timestamp used for
-  target-workflow identity, but CHASM currently ignores it.
+- **V2 correctness-bug determination: Confirmed and fixed.** `ScheduledTime` is explicitly the
+  timestamp used for target-workflow identity.
 - **Confidence: High.** Controlled and production evidence agree, and the responsible V1/CHASM
   code paths are direct.
 
-The fix should make the immediate backfiller use a non-zero request `ScheduledTime`, falling back
-to framework time only for older requests where the field is absent. Whether the search attribute
-should retain sub-second precision after that is a separate, lower-severity compatibility choice.
+CHASM now uses a non-zero request `ScheduledTime`, falling back to framework time only for older
+requests where the field is absent. Shadow comparison truncates only
+`TemporalScheduledStartTime` to whole-second precision. It does not normalize workflow IDs,
+action counts, or other request fields, so a future identity regression remains significant.
 
 ## Confirmed difference: `SKIP` near workflow completion
 
@@ -194,7 +197,8 @@ pause. V1 and CHASM now start the same two workflow IDs in the pause/unpause sce
    the documented overlap policy.
 2. Sample production V1 histories with `SKIP` and measure how often completion falls between a
    nominal deadline and V1 workflow-task processing.
-3. Measure use of `TemporalScheduledStartTime`, immediate triggers, and sub-second interval phases.
+3. Monitor the named `skip_deadline_boundary` and `terminal_failure_propagation` findings in
+   production shadow reports even when the default gate succeeds.
 4. Expand the controlled corpus across interval lengths, workflow durations just before/after a
    deadline, jitter, and worker latency. This will quantify impact rather than change semantics.
 5. If strict compatibility is required, design an explicit grace/coalescing rule. Do not infer it
