@@ -398,7 +398,7 @@ func TestRequire_SoftDeadlockLogsAndCancels(t *testing.T) {
 	t.Setenv("TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT", "50ms")
 	t.Setenv("TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT", "5s")
 
-	const awaitTimeout = 10 * time.Second
+	const awaitTimeout = 10 * time.Second * debug.TimeoutMultiplier
 
 	ctx := testcontext.GetOrCreate(t)
 	tb := newRecordingTB()
@@ -424,7 +424,7 @@ func TestRequire_DeadlockDetected(t *testing.T) {
 	t.Setenv("TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT", "50ms")
 	t.Setenv("TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT", "100ms")
 
-	const awaitTimeout = 10 * time.Second
+	const awaitTimeout = 10 * time.Second * debug.TimeoutMultiplier
 
 	ctx := testcontext.GetOrCreate(t)
 	tb := newRecordingTB()

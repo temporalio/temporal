@@ -1968,7 +1968,7 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := testcontext.GetOrCreate(t)
 	sid := testcore.RandomizeStr("sched-stale-running")
 	pendingWid := testcore.RandomizeStr("sched-stale-running-pending-wf")
 	runningWid := testcore.RandomizeStr("sched-stale-running-running-wf")
@@ -2242,7 +2242,7 @@ func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
 	)
 	env.OverrideDynamicConfig(chasmscheduler.CurrentTweakables, tweakables)
 
-	ctx := testcore.NewContext()
+	ctx := testcontext.GetOrCreate(t)
 	sid := testcore.RandomizeStr("sched-migrate-no-running")
 	wid := testcore.RandomizeStr("sched-migrate-no-running-wf")
 	wt := testcore.RandomizeStr("sched-migrate-no-running-wt")

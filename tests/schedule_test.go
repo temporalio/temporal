@@ -452,7 +452,7 @@ func TestScheduleCHASM(t *testing.T) {
 func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
-	ctx := chasmContextFactory(testcontext.For(t))
+	ctx := chasmContextFactory(testcontext.GetOrCreate(t))
 	sid := testcore.RandomizeStr("sched-catchup-window-desc")
 	schedule := &schedulepb.Schedule{
 		Spec:     intervalSpec(noOpInterval),

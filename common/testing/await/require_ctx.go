@@ -100,6 +100,10 @@ func run(
 		awaitDeadline = util.MinTime(awaitDeadline, ctxDeadline)
 	}
 
+	if testDeadline, hasDeadline := testcontext.GoTestDeadline(tb); hasDeadline {
+		awaitDeadline = util.MinTime(awaitDeadline, testDeadline)
+	}
+
 	awaitCtx, awaitCancel := context.WithDeadline(ctx, awaitDeadline)
 	defer awaitCancel()
 

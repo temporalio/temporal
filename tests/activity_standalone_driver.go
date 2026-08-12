@@ -40,7 +40,7 @@ type saaDriver struct {
 func newSAADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *saaDriver {
 	return &saaDriver{
 		env:              env,
-		ctx:              testcontext.For(t),
+		ctx:              testcontext.GetOrCreate(t),
 		cfg:              cfg,
 		activityIDPrefix: t.Name(),
 	}

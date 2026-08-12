@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -64,13 +63,12 @@ type Suite[T testingSuite] struct {
 	guardT      guardT
 	runParallel bool
 	assertT     require.TestingT
-	ctx         context.Context // override set in initSuite; lazy-filled by Context() under ctxOnce when nil
-	ctxOnce     sync.Once
+	ctx         context.Context // override set in initSuite; nil means "use the test context"
 }
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
 // assertT overrides which TestingT assertions are bound to; nil means use the copy's own guardT.
-// ctx overrides the suite's context; nil means use the default (lazy testcontext.For).
+// ctx overrides the suite's context; nil means use the test context (see [Suite.Context]).
 //
 //nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
 func (s *Suite[T]) copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) testingSuite {
@@ -87,7 +85,6 @@ func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.Testin
 	g.hasSubtests.Store(false)
 	s.runParallel = parallel
 	s.ctx = ctx
-	s.ctxOnce = sync.Once{}
 	if s.runParallel {
 		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel tests
 	}
@@ -125,13 +122,14 @@ func (s *Suite[T]) AssertionT() require.TestingT {
 
 // Context returns the test-scoped context (created from [testcontext]).
 // Inside an [Await] callback, it returns the await-scoped context.
+//
+// The result is not cached: the test context is replaced when its deadline is
+// extended, and a cached copy would keep the old, shorter deadline.
 func (s *Suite[T]) Context() context.Context {
-	s.ctxOnce.Do(func() {
-		if s.ctx == nil {
-			s.ctx = testcontext.GetOrCreate(s.T())
-		}
-	})
-	return s.ctx
+	if s.ctx != nil {
+		return s.ctx
+	}
+	return testcontext.GetOrCreate(s.T())
 }
 
 // Run creates a parallel subtest. The callback receives a fresh copy of the
