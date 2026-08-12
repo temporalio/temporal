@@ -87,9 +87,7 @@ func NewServerFxImpl(
 
 func (s *ServerImpl) Start(ctx context.Context) error {
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
-	if log.DebugEnabled(s.logger) {
-		s.logger.Debug(s.so.config.String())
-	}
+	s.logger.Debug(s.so.config.String())
 
 	if err := initSystemNamespaces(
 		ctx,

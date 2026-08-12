@@ -45,18 +45,7 @@ type (
 		Skip(extraSkip int) Logger
 	}
 
-	debugEnabledLogger interface {
-		DebugEnabled() bool
-	}
-
 	// Special logger types for use with fx
 	SnTaggedLogger  Logger
 	ThrottledLogger Logger
 )
-
-// DebugEnabled reports whether logger accepts debug events. Unknown custom loggers
-// default to true so callers preserve their existing logging behavior.
-func DebugEnabled(logger Logger) bool {
-	enabledLogger, ok := logger.(debugEnabledLogger)
-	return !ok || enabledLogger.DebugEnabled()
-}

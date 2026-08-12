@@ -168,10 +168,6 @@ func (l *zapLogger) Debug(msg string, tags ...tag.Tag) {
 	}
 }
 
-func (l *zapLogger) DebugEnabled() bool {
-	return l.zl.Core().Enabled(zap.DebugLevel)
-}
-
 func (l *zapLogger) Info(msg string, tags ...tag.Tag) {
 	if l.zl.Core().Enabled(zap.InfoLevel) {
 		msg = setDefaultMsg(msg)

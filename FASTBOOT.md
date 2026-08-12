@@ -14,9 +14,11 @@ clusters that is **19 300 goroutines and 42 MB of stacks**.
 
 Wall-clock boot time is not the main problem; **resident cost per cluster is**,
 because it bounds how many clusters a test binary can hold and therefore how much
-the pool can amortize. The three cheapest wins are: cap the scheduler worker
-pools in test mode (or make them grow lazily), stop emitting per-fx-hook debug
-logs, and remove the hardcoded 1 s floor in frontend shutdown.
+the pool can amortize. The changes retained here bound test-only scheduler work,
+remove per-test database accumulation, and keep cluster concurrency explicit.
+The SQLite schema-template and production frontend-shutdown experiments were
+measurably faster but were removed from this change to avoid changing persistence
+semantics or production shutdown behavior.
 
 ## Implementation result
 
@@ -37,16 +39,13 @@ explicit escape hatch and the sharing machinery has not been deleted.
   `Sys`, RSS and the process exit code. Acquisitions identify pooled, warm-hit,
   warm-miss and custom sources. `tools/testreport` reports total latency and the
   warm-eligible population separately for both single and multi-run gates.
-- Functional SQLite databases are copied from a process-wide schema template
-  instead of replaying all DDL for every cluster. Per-test clusters use unique
-  file-backed copies.
 - The two default namespaces and search attributes are seeded before services
   start, avoiding registration and cache-propagation polling on handoff.
-- SDK workers stop before server teardown. The production frontend drain no
-  longer imposes an unconditional one-second floor when nothing remains to
-  drain.
-- Per-fx-hook debug logging is gated, and masked server config is not constructed
-  when debug logging is disabled.
+- SDK workers stop before server teardown. The production frontend drain keeps
+  its existing one-second minimum; changing it was too broad for this test-only
+  change.
+- Fx lifecycle debug logging was optimized separately and is now inherited from
+  `main`; this branch no longer carries logger-interface or Fx-specific changes.
 - SQLite connection ownership now has an explicit database lease. Transient
   persistence wrappers may close and later reopen while the cluster-owned lease
   keeps the database pinned. Cluster teardown releases the lease after managers
@@ -94,8 +93,10 @@ showed that the model can beat the pooled control:
 | exit code | 0 | **0** |
 
 The per-test run created 560 clusters and accounted for 1,298 namespaces. Mean
-boot time was 31.3 ms. SQLite templates, namespace preseeding, bounded scheduler
-counts, readiness probing and log gating all contribute to this result.
+boot time was 31.3 ms. That run included the subsequently removed SQLite-template
+and shutdown experiments, so it is evidence about the design space rather than a
+measurement of the final branch. Namespace preseeding, bounded scheduler counts,
+readiness probing and upstream Fx-log changes remain applicable.
 
 More recent shard 2/3 sweeps exercise the suites with the deepest parallel
 subtest trees and most worker-service clusters:
@@ -440,7 +441,7 @@ for propagating deps between graphs. In a onebox test cluster all four graphs li
 in one process and share almost everything, and every new test cluster rebuilds
 all of them from scratch.
 
-### 4. Teardown: a hardcoded 1 s floor in frontend shutdown
+### 4. Teardown: a hardcoded 1 s floor in frontend shutdown (unchanged)
 
 `service/frontend/service.go`:
 
@@ -455,15 +456,19 @@ at shutdown — the system worker's pollers when the worker service is enabled, 
 a test's SDK worker that was not stopped first — turns teardown into a flat
 **~1 015 ms**. A cluster with no in-flight polls tears down in 8 ms.
 
+An experiment removed this floor, but it changed production shutdown semantics
+to optimize tests. It was reverted. The retained mitigation is to stop test SDK
+workers before server teardown so fewer shutdowns reach the floor.
+
 Also in this area: `matching.Service.Stop` has a 2 s `AfterFunc` fallback, and
 history's health check only reports `SERVING` after `InitialShardsAcquired` plus a
 **hardcoded 5 s** stabilization sleep (`service/history/service.go:86`), so any
 test that waits for history health pays 5 s.
 
-### 5. sqlite test databases are never released
+### 5. SQLite test database lifetime (fixed)
 
-`common/persistence/sql/sqlplugin/sqlite/conn_pool.go` refcounts DSNs, but the
-close path is commented out:
+Historically, `common/persistence/sql/sqlplugin/sqlite/conn_pool.go` refcounted
+DSNs but left the zero-reference close path disabled:
 
 ```go
 e.refCount--
@@ -473,12 +478,13 @@ e.refCount--
 // }
 ```
 
-So every in-memory database created by every cluster in a test binary stays
-resident for the process lifetime. This is very likely the "resource
-accumulation" that `test_cluster_pool.go` works around with `maxLeases = 50` in
-CI. Also, sqlite connections are capped at `SetMaxOpenConns(1)` /
-`SetMaxIdleConns(1)`, so all persistence traffic for a cluster is serialized
-through one connection.
+That behavior retained every in-memory database for the process lifetime. The
+implemented fix gives the test-cluster lifetime an explicit database lease.
+Transient persistence wrappers can reach zero references during a restart while
+the lease keeps the database alive; teardown releases the lease after managers
+close, allowing the pool entry to close and disappear. SQLite connections remain
+capped at `SetMaxOpenConns(1)` / `SetMaxIdleConns(1)`, so persistence traffic for
+one cluster is still serialized through one connection.
 
 ### 6. Non-issues (measured, don't bother)
 
@@ -671,7 +677,7 @@ retained test-log memory. Effort: low.*
 3. Fix `s.logger.Debug(s.so.config.String())` in `temporal/server_impl.go` so the
    masked YAML is only built when debug is enabled.
 
-### C. Remove the 1 s floor on frontend shutdown drain
+### C. Remove the 1 s floor on frontend shutdown drain (rejected here)
 
 *Impact: ~1 s per cluster teardown whenever a long poll is open. Effort: low.*
 
@@ -680,6 +686,10 @@ only when the setting is unset, or let it be driven purely by dynamic config, an
 set it to something small in `defaultDynamicConfigOverrides`. While there, make
 history's 5 s readiness stabilization sleep a dynamic-config value so tests that
 wait on history health don't pay it.
+
+This experiment was reverted because it changes production lifecycle behavior.
+Any follow-up should justify that behavior independently rather than landing it
+as a functional-test optimization.
 
 ### D. Raise the shared-cluster hit rate
 
@@ -796,10 +806,10 @@ leaf tests): per-test dedicated roughly doubles cluster creations, from ~550 to
 
 ### Yes — the overhead can come down 2–3×, and then be hidden almost entirely
 
-#### The schema DDL is the whole persistence phase, and it is 6× reducible
+#### The schema DDL dominates the persistence phase, but the template was not retained
 
-`schema/sqlite/setup_bench_test.go` measures this directly. The default in-memory
-mode makes the plugin run all 101 DDL statements (37 in
+An exploratory benchmark (removed with the experiment) measured this directly.
+The default in-memory mode makes the plugin run all 101 DDL statements (37 in
 `schema/sqlite/v3/temporal`, 64 in `.../visibility`) on first connect, per cluster:
 
 | per fresh database | no race | `-race` |
@@ -812,19 +822,17 @@ phase. `modernc.org/sqlite` is a pure-Go sqlite, so `-race` instruments every pa
 operation — which is also why the template copy wins so much more under `-race`
 (6.3×) than without it (3–4×).
 
-This means building the schema once per process and handing each cluster a byte
-copy is worth **~125 ms per cluster under `-race`** — the single largest lever
-available, and it is a self-contained change to the sqlite test cluster setup.
-Note it moves tests from in-memory to file-backed sqlite; that configuration
-already exists and is already exercised (`GetSQLiteFileTestClusterOption` is used
-for shared clusters today), which de-risks it considerably. Put the directory on
-tmpfs in CI.
+Building the schema once per process and handing each cluster a byte copy saved
+**~125 ms per cluster under `-race`**, but it also moved the default tests from
+in-memory to file-backed SQLite and introduced process-wide template ownership.
+That factory and its benchmark were removed. The retained implementation keeps
+the existing in-memory setup and fixes its connection lifetime with leases.
 
 #### Budget for a per-test dedicated cluster
 
 | line item | today, `-race` | after | how |
 |---|---|---|---|
-| persistence (schema DDL) | 149 ms | 23 ms | template copy (measured) |
+| persistence (schema DDL) | 149 ms | 23 ms | removed template experiment |
 | fx graph (4 graphs) | 133 ms | ~113 ms → ~70 ms | B, then F (**F figure is an estimate**) |
 | service start (2 240 goroutines) | 24 ms | ~10 ms | A.3 lazy pools |
 | namespace registration | ~10 ms | ~1 ms | seed the namespace + search attributes into persistence before the server starts, skipping two cache-propagation poll loops |
@@ -858,8 +866,9 @@ deleted rather than extended.
 
 Constraints on the warm-spare model:
 
-- **E (sqlite release) is mandatory**, and now also means deleting template copies.
-  1 100 never-closed databases is an OOM, not a slowdown.
+- **E (SQLite release) is mandatory**. 1 100 never-closed databases is an OOM,
+  not a slowdown. The lease implementation now provides that release without a
+  schema template.
 - **A.3 (lazy pools) is mandatory** — live clusters plus warm spares at 2 400
   goroutines each is untenable; at ~130 each it is fine.
 - Bound both live clusters and warm spares (a small multiple of GOMAXPROCS) so peak
@@ -894,10 +903,11 @@ Three different things get called "workers" here, and they answer differently:
   not be.
 
 The generalisable rule: **share immutable structure across clusters, never
-stateful execution capacity.** The schema template, the fx provider graph, and
-(possibly) a pre-allocated port block are stateless and safe to share. Worker
-pools, connections and services carry state and coupling them defeats the purpose
-of a dedicated cluster.
+stateful execution capacity.** An Fx provider graph and possibly a pre-allocated
+port block are candidates; the SQLite template experiment showed that even
+apparently immutable structure can change test semantics through its backing
+store. Worker pools, connections and services carry state, and coupling them
+defeats the purpose of a dedicated cluster.
 
 ### Why the system worker service specifically cannot be hoisted out
 
@@ -953,22 +963,18 @@ Two much better directions fall out of the same table:
 
 ### Suggested decision path
 
-Don't commit to per-test dedicated yet — the decision is cheap to make once the
-prerequisites land, and expensive to reverse:
+Per-test dedicated clusters are now the default. The remaining sequence is:
 
-1. Land A.1, B, C (small and independently valuable).
-2. Land E (sqlite release) and A.3 (lazy pools). Both are prerequisites for
-   anything below and both pay off on their own.
-3. Land the **schema template** (`schema/sqlite/setup_bench_test.go` already sizes
-   the prize: ~125 ms per cluster under `-race`). Re-run `BenchmarkClusterBoot`
-   under `-race` to confirm the boot drops to ~200 ms.
-4. Make per-namespace workers lazy (or disable the per-namespace scheduler
+1. Keep E (SQLite release) and the test-only bounded scheduler settings; both
+   directly control per-test memory.
+2. Validate all persistence shards under `-race` and compare wall time and peak
+   RSS with `main` before pursuing more boot changes.
+3. Make per-namespace workers lazy (or disable the per-namespace scheduler
    component in tests). This removes the last reason `WithWorkerService` implies a
    dedicated cluster, and removes the per-namespace accumulation that makes
    long-lived pooled clusters expensive.
-5. Convert the pool to **warm spares with no reuse**, and delete the sharing
-   machinery. This is the step that makes per-test dedicated cost ~nothing in wall
-   time, and it does not depend on hitting any particular boot-time number.
-6. F (one fx graph) only if boot CPU turns out to be the constraint after 5 — with
+4. Continue using **warm spares with no reuse**, and remove old sharing machinery
+   only after the CI comparison demonstrates that the escape hatch is unnecessary.
+5. F (one Fx graph) only if boot CPU turns out to be the constraint after CI — with
    ~19× CPU headroom it probably will not be, which is the case for deferring the
    most expensive change until last.
