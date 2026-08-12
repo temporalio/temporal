@@ -707,7 +707,7 @@ func ApplyClusterMetadataConfigProvider(
 	if err != nil {
 		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
-	// Do not close the manager here because the factory owns and closes its persistence resources.
+	// Do not close the manager because the factory owns and closes its persistence resources.
 
 	visCSAOverride := map[enumspb.IndexedValueType]int{}
 	for tpName, value := range svc.Visibility.PersistenceCustomSearchAttributes {
