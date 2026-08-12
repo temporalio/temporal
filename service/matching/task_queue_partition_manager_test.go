@@ -2275,3 +2275,115 @@ func TestSplitTaskQueueStatsByRampPercentage_RateLimitingFalse(t *testing.T) {
 	require.False(t, currentShare.RateLimitingActive)
 	require.False(t, rampShare.RateLimitingActive)
 }
+
+// TestStickyQueueAdjustedStats_VersioningAttributionZeroesRates demonstrates that when a
+// sticky queue has a current deployment version in user data, the versioning attribution
+// logic in Describe subtracts 100% of the unversioned stats from itself, resulting in
+// zero add/dispatch rates. This prevents poller autoscaling from ever sending +1 signals
+// for sticky queues.
+func TestStickyQueueAdjustedStats_VersioningAttributionZeroesRates(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	ns, registry := createMockNamespaceCache(ctrl, namespace.Name(namespaceName))
+	config := defaultTestConfig()
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+	engine := createTestMatchingEngine(logger, ctrl, config, matchingClient, registry)
+
+	// Create a sticky partition (like a real worker's sticky queue)
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	require.NoError(t, err)
+	stickyPartition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("my-sticky-queue")
+
+	tqConfig := newTaskQueueConfig(stickyPartition.TaskQueue(), engine.config, ns.Name())
+
+	// Seed user data with a current deployment version (no ramping).
+	// This simulates a sticky queue that fetches user data from its normal queue,
+	// which has a current deployment configured.
+	const (
+		deploymentName = "my-deployment"
+		currentBuildID = "build-abc"
+	)
+	userDataMgr := &mockUserDataManager{
+		data: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+						DeploymentData: &persistencespb.DeploymentData{
+							DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+								deploymentName: {
+									RoutingConfig: &deploymentpb.RoutingConfig{
+										CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+											DeploymentName: deploymentName,
+											BuildId:        currentBuildID,
+										},
+										CurrentVersionChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									},
+									Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+										currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pm, err := newTaskQueuePartitionManager(engine, ns, stickyPartition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)
+	require.NoError(t, err)
+	engine.partitions[stickyPartition.Key()] = pm
+	engine.Start()
+	pm.Start()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	err = pm.WaitUntilInitialized(ctx)
+	require.NoError(t, err)
+
+	dbq := pm.defaultQueue()
+	require.NotNil(t, dbq)
+
+	// Simulate tasks being added and dispatched on the sticky queue.
+	// In production, TrySyncMatch increments tasksAdded and PollTask increments tasksDispatched.
+	dbqImpl := dbq.(*physicalTaskQueueManagerImpl)
+	for range 100 {
+		dbqImpl.incTaskTracker(dbqImpl.tasksAdded, 3, 1)
+		dbqImpl.incTaskTracker(dbqImpl.tasksDispatched, 3, 1)
+	}
+
+	// Verify the raw stats on the physical queue have non-zero rates.
+	rawStats := dbq.GetStatsByPriority(true)
+	require.NotEmpty(t, rawStats, "raw stats should be populated")
+	var rawAddRate, rawDispatchRate float32
+	for _, s := range rawStats {
+		rawAddRate += s.TasksAddRate
+		rawDispatchRate += s.TasksDispatchRate
+	}
+	require.Greater(t, rawAddRate, float32(0), "raw add rate should be positive")
+	require.Greater(t, rawDispatchRate, float32(0), "raw dispatch rate should be positive")
+
+	// Now call GetPhysicalQueueAdjustedStats — this goes through Describe which applies
+	// the versioning attribution logic.
+	adjustedStats := pm.GetPhysicalQueueAdjustedStats(context.Background(), dbq)
+
+	// BUG: The adjusted stats have zero rates because the attribution logic subtracts
+	// 100% of the unversioned stats (since currentExists=true and isUnversionedDescribe=true).
+	// For sticky queues, this subtraction is incorrect — sticky queues don't route by version.
+	require.NotNil(t, adjustedStats, "adjusted stats should not be nil")
+	t.Logf("Raw rates: add=%.4f dispatch=%.4f", rawAddRate, rawDispatchRate)
+	t.Logf("Adjusted rates: add=%.4f dispatch=%.4f", adjustedStats.TasksAddRate, adjustedStats.TasksDispatchRate)
+
+	// This assertion demonstrates the bug: adjusted rates are near-zero despite
+	// the physical queue having significant traffic.
+	// When fixed, these rates should be equal to the raw rates.
+	require.Greater(t, adjustedStats.TasksAddRate, float32(0),
+		"BUG: adjusted add rate is zero because versioning attribution subtracts all stats from sticky queue")
+	require.Greater(t, adjustedStats.TasksDispatchRate, float32(0),
+		"BUG: adjusted dispatch rate is zero because versioning attribution subtracts all stats from sticky queue")
+}
