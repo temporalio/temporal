@@ -161,14 +161,8 @@ var (
 	)
 )
 
-func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (server *ServerFx, err error) {
+func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (*ServerFx, error) {
 	s := &ServerFx{}
-	defer func() {
-		if server == nil {
-			s.closeBootstrapPersistenceFactory()
-		}
-	}()
-
 	s.app = fx.New(
 		topLevelModule,
 		fx.Supply(opts),
@@ -177,6 +171,7 @@ func NewServerFx(topLevelModule fx.Option, opts ...ServerOption) (server *Server
 		fx.Populate(&s.logger),
 	)
 	if err := s.app.Err(); err != nil {
+		s.closeBootstrapPersistenceFactory()
 		return nil, err
 	}
 	return s, nil
