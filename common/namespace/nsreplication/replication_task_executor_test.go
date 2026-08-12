@@ -604,12 +604,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 }
 
-// TestExecute_UpdateNamespaceTask_UnrelatedConfigEditDoesNotStampExistingMember guards against a
-// regression where any UpdateNamespace that bumps ConfigVersion -- not just a genuine cluster-list
-// change -- stamps a fresh ClusterConnectTime for currentCluster whenever no historical entry exists.
-// A namespace whose currentCluster membership predates the ClusterConnectTime field (or was added by
-// an older binary) has no historical stamp despite having been a steady-state member all along; an
-// unrelated edit (here, a Description change) must not be misread as "just connected."
+// TestExecute_UpdateNamespaceTask_UnrelatedConfigEditDoesNotStampExistingMember guards against
+// stamping a fresh ClusterConnectTime on unrelated edits: a namespace whose membership predates
+// this field must not have that misread as "just connected."
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UnrelatedConfigEditDoesNotStampExistingMember() {
 	id := uuid.NewString()
 	name := "some random namespace test name"
@@ -669,8 +666,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: updateClusterActive,
 				Clusters:          []string{updateClusterActive, updateClusterStandby},
-				// No ClusterConnectTime entry should appear for standby: it was already a
-				// member, so this routine edit must not be misread as a fresh connect.
+				// No ClusterConnectTime entry should appear -- standby was already a member.
 			},
 			ConfigVersion:               updateConfigVersion,
 			FailoverNotificationVersion: 0,

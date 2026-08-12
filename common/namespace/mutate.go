@@ -69,10 +69,8 @@ func WithRetention(dur *durationpb.Duration) Mutation {
 		})
 }
 
-// WithClusterConnectTime sets the recorded connect time for cluster on a Namespace during a Clone
-// operation, for use in tests exercising the namespace gradual-connect replication ramp (see
-// Namespace.InitialConnectTime). Production code never sets this directly -- it's stamped by
-// namespaceHandler.maybeUpdateClusterConnectTime as part of UpdateNamespace.
+// WithClusterConnectTime sets a cluster's recorded connect time on a Namespace during a Clone
+// operation. Test-only; production stamps this via UpdateNamespace, never directly.
 func WithClusterConnectTime(cluster string, connectTime time.Time) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {

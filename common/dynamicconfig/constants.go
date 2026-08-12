@@ -1735,25 +1735,23 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 	EnableReplicationGradualConnect = NewGlobalBoolSetting(
 		"history.enableReplicationGradualConnect",
 		false,
-		`EnableReplicationGradualConnect gates the namespace gradual-connect replication admission ramp
-(see ReplicationGradualConnectInitialPercent/StepPercent/StepDuration). When false, every replication
-task is admitted immediately regardless of how recently the current cluster was added to the
-namespace's cluster list. Cluster-wide kill switch; default off so this ships dark.`,
+		`EnableReplicationGradualConnect gates the namespace gradual-connect admission ramp (see
+ReplicationGradualConnectInitialPercent/StepPercent/StepDuration). When false, every replication task
+is admitted immediately. Cluster-wide kill switch; default off so this ships dark.`,
 	)
 	ReplicationGradualConnectInitialPercent = NewNamespaceIntSetting(
 		"history.replicationGradualConnectInitialPercent",
 		10,
 		`ReplicationGradualConnectInitialPercent is the fraction of a namespace's replication tasks (by a
-stable hash of the workflow ID) admitted starting the moment the current cluster is added to the
-namespace's cluster list, before the first ramp step elapses. Only takes effect when
-EnableReplicationGradualConnect is true.`,
+stable hash of the workflow ID) admitted starting when the current cluster is added to the
+namespace, before the first ramp step elapses. Only takes effect when EnableReplicationGradualConnect
+is true.`,
 	)
 	ReplicationGradualConnectStepPercent = NewNamespaceIntSetting(
 		"history.replicationGradualConnectStepPercent",
 		10,
 		`ReplicationGradualConnectStepPercent is the additional percent of a namespace's replication tasks
-admitted at every ReplicationGradualConnectStepDuration interval after the current cluster was added
-to the namespace's cluster list, until the admitted percent reaches 100. Only takes effect when
+admitted every ReplicationGradualConnectStepDuration, until it reaches 100. Only takes effect when
 EnableReplicationGradualConnect is true. Only raise this mid-rollout -- lowering it can shed an
 already-admitted workflow's tasks, since admission is meant to be monotonic in time.`,
 	)

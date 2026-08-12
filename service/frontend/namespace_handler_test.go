@@ -927,9 +927,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_Li
 	s.NoError(err)
 }
 
-// TestUpdateNamespace_ClusterConnectTime_StampsOnGenuineAdd verifies that adding a cluster to the
-// namespace's cluster list stamps the current time for that cluster only -- existing clusters that
-// were already present don't get an entry, since they were never "newly connected."
+// Adding a cluster stamps a connect time only for that cluster; existing members are untouched.
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_StampsOnGenuineAdd() {
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
 	addTime := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
@@ -986,9 +984,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_Sta
 	s.Require().NoError(err)
 }
 
-// TestUpdateNamespace_ClusterConnectTime_NoRestampOnUnrelatedUpdate verifies that re-submitting the
-// same cluster list -- e.g. as part of an update that isn't actually changing membership -- never
-// restamps an existing entry, even though the clock has advanced since it was first recorded.
+// Re-submitting the same cluster list must never restamp an existing connect-time entry.
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_NoRestampOnUnrelatedUpdate() {
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
 	originalStamp := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
@@ -1041,9 +1037,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_NoR
 	s.Require().NoError(err)
 }
 
-// TestUpdateNamespace_ClusterConnectTime_DeletesEntryOnRemove verifies that removing a cluster from
-// the namespace's cluster list deletes its connect-time entry -- a stale entry for a cluster that's
-// no longer even a replication target has no reason to linger.
+// Removing a cluster deletes its stale connect-time entry.
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_DeletesEntryOnRemove() {
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
 	originalStamp := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
@@ -1092,9 +1086,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_Del
 	s.Require().NoError(err)
 }
 
-// TestUpdateNamespace_ClusterConnectTime_RemoveThenReAddGetsFreshStamp verifies that a cluster
-// removed and later re-added gets a brand new connect-time stamp, not its stale original one --
-// a reconnect should ramp again, not be treated as still-connected-since-the-first-time.
+// A cluster removed and later re-added gets a fresh connect-time stamp, not the stale original.
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_RemoveThenReAddGetsFreshStamp() {
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
 	originalStamp := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
@@ -1139,8 +1131,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ClusterConnectTime_Rem
 	})
 	s.Require().NoError(err)
 
-	// Round 2: re-add cluster2, well after its original (now-removed) stamp. It must get a fresh
-	// stamp at reAddTime, not its stale originalStamp.
+	// Round 2: re-add cluster2 well after its removed stamp; must get a fresh stamp, not the stale one.
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: version,
 	}, nil)

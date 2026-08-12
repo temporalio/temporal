@@ -44,10 +44,8 @@ func (s *gradualConnectTestSuite) SetupTest() {
 	s.setupTest()
 }
 
-// TestNewlyConnectedClusterRampsAdmission exercises the namespace gradual-connect replication ramp
-// end to end for a cluster newly added to an existing namespace: replication tasks generated while
-// the ramp is active must be shed until the standby's own recorded connect time puts it past the
-// ramp, then admitted normally.
+// Exercises the gradual-connect ramp end to end: shed while the ramp is active, admitted once it
+// completes.
 func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
@@ -58,9 +56,7 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	active := s.clusters[0]
 	standby := s.clusters[1]
 
-	// Configure a single, generous ramp step on standby, the cluster about to be newly connected:
-	// 0% until the step elapses, then a deterministic jump to 100%. Long enough to comfortably
-	// outlast updateNamespaceClusters' own namespace-cache-refresh wait below.
+	// A single ramp step: 0% until it elapses, then a deterministic jump to 100%.
 	const rampStepDuration = 12 * time.Second
 	for _, override := range []struct {
 		setting dynamicconfig.GenericSetting
@@ -74,40 +70,31 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 		s.T().Cleanup(standby.OverrideDynamicConfig(s.T(), override.setting, override.value))
 	}
 
-	// Add standby to the namespace's cluster list -- the exact UpdateNamespace path that triggers
-	// the bug.
+	// Add standby to the namespace's cluster list.
 	connectedAt := time.Now()
 	s.updateNamespaceClusters(ns, 0, s.clusters)
 
-	// Diagnostic: confirm standby actually recorded its own connect time. Reads the raw persisted
-	// value directly -- TestBase().MetadataManager is the same instance the server itself uses, not
-	// a separate connection -- rather than through the namespace-cache registry, so a cache-refresh
-	// delay can't be mistaken for the bug.
+	// Diagnostic: standby's own connect time, read directly from persisted state (not the
+	// namespace cache, to rule out a cache-refresh delay).
 	nsResp, err := standby.TestBase().MetadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: ns})
 	s.Require().NoError(err)
 	connectTimestamp := nsResp.Namespace.GetReplicationConfig().GetClusterConnectTime()[standby.ClusterName()]
 	s.Require().NotNil(connectTimestamp, "standby should have recorded its own connect time for this namespace")
 	s.Require().WithinDuration(connectedAt, connectTimestamp.AsTime(), namespaceCacheWaitTime+5*time.Second)
-	// Anchor the ramp window on the actual recorded connect time (not the test's own connectedAt
-	// wall-clock read before updateNamespaceClusters returned) -- admittedByGradualConnect computes
-	// elapsed time from this exact value, and namespace-replication propagation from active to standby
-	// can lag connectedAt by more than the shed check's window below.
+	// Anchor on the recorded connect time, not the test's own wall-clock read -- propagation from
+	// active to standby can lag it by more than the shed check's window below.
 	connectTime := connectTimestamp.AsTime()
 
-	// While still inside the ramp window, a workflow started on active must not replicate to
-	// standby yet.
+	// Still inside the ramp window: a workflow started on active must not replicate to standby yet.
 	shedWorkflowID := "gc-shed-" + uuid.NewString()
 	s.gcStartAndCompleteWorkflow(ctx, active, ns, shedWorkflowID)
 	s.Require().Never(func() bool {
 		return s.gcWorkflowExistsOn(ctx, standby, ns, shedWorkflowID)
 	}, 3*time.Second, 200*time.Millisecond, "workflow should be shed while the ramp is still active")
 
-	// Once the ramp step has elapsed (measured from the standby's own recorded connect time, with a
-	// buffer for the shed check above), a new workflow started on active must replicate normally.
-	// A deliberate sleep-until-deadline, not a poll-until-condition: a task generated before the
-	// deadline is permanently dropped by the shed gate (acked, never retried), so polling early would
-	// only ever observe "not yet admitted" -- it can't substitute for actually waiting past the
-	// deadline before acting.
+	// Once the ramp step has elapsed, a new workflow started on active must replicate normally.
+	// Sleep-until-deadline is deliberate, not poll-until-condition: a task generated before the
+	// deadline is dropped for good by the shed gate, so polling early can't substitute for it.
 	time.Sleep(time.Until(connectTime.Add(rampStepDuration + 3*time.Second))) //nolint:forbidigo
 	admittedWorkflowID := "gc-admit-" + uuid.NewString()
 	s.gcStartAndCompleteWorkflow(ctx, active, ns, admittedWorkflowID)
@@ -116,9 +103,8 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	}, replicationWaitTime, replicationCheckInterval, "workflow should replicate once the ramp has completed")
 }
 
-// gcStartAndCompleteWorkflow starts and completes a workflow on cluster c using the raw frontend
-// API (no SDK worker needed, matching the pattern in delete_execution_replication_test.go), and
-// waits for it to reach COMPLETED on c before returning.
+// gcStartAndCompleteWorkflow starts and completes a workflow on cluster c via the raw frontend API,
+// waiting for it to reach COMPLETED before returning.
 func (s *gradualConnectTestSuite) gcStartAndCompleteWorkflow(ctx context.Context, c *testcore.TestCluster, ns, workflowID string) {
 	client := c.FrontendClient()
 	taskQueue := "gc-tq-" + uuid.NewString()

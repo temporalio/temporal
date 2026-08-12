@@ -246,12 +246,8 @@ func (ns *Namespace) ReplicationConfig() *persistencespb.NamespaceReplicationCon
 }
 
 // InitialConnectTime returns when cluster was added to this namespace's cluster list, per the
-// stamp UpdateNamespace records in ReplicationConfig.ClusterConnectTime (see
-// namespaceHandler.maybeUpdateClusterConnectTime). Used to anchor the namespace gradual-connect
-// replication ramp. Returns the zero Time if cluster has no recorded connect time -- e.g. it was
-// part of the namespace's cluster list since creation, or the entry predates this field, or
-// EnableReplicationGradualConnect was off when the cluster was added -- which callers should treat
-// as "connected long enough to admit everything," matching the ramp's fail-open design.
+// ClusterConnectTime stamp UpdateNamespace records. Returns the zero Time if there's no recorded
+// entry (e.g. the cluster predates this field) -- callers should treat that as "admit everything."
 func (ns *Namespace) InitialConnectTime(cluster string) time.Time {
 	ts := ns.ReplicationConfig().GetClusterConnectTime()[cluster]
 	if ts == nil {

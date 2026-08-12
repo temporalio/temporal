@@ -1074,9 +1074,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.False(toProcess)
 }
 
-// newGradualConnectNamespace builds a two-cluster namespace entry with the given
-// ClusterConnectTime for TestGetNamespaceInfo_GradualConnect* cases. A nil connectTime omits the
-// entry entirely (simulating a cluster that's been a member since the namespace's creation).
+// newGradualConnectNamespace builds a two-cluster namespace entry with the given ClusterConnectTime.
+// A nil connectTime omits the entry (simulating a cluster present since namespace creation).
 func (s *executableTaskSuite) newGradualConnectNamespace(connectTime *time.Time) (*namespace.Namespace, string) {
 	namespaceID := uuid.NewString()
 	factory := namespace.NewDefaultReplicationResolverFactory()
@@ -1136,12 +1135,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInF
 	s.True(toProcess, "a connect time in the future (clock skew) must fail open (admit) despite InitialPercent=0")
 }
 
-// TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits guards against a blocking issue:
-// force-replication tasks (operator-triggered migration catch-up traffic, marked via
-// RawTaskInfo.IsForceReplication) must never be shed by the ramp. A shed task is acked and dropped,
-// not retried -- shedding one causes the migration's VerifyReplicationTasks to stall waiting for a
-// task that will never arrive, then hard-fail once defaultNoProgressNotRetryableTimeout (30 minutes)
-// elapses, well before the ramp's default ~45-minute completion.
+// TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits: a shed task is dropped for good, so
+// shedding force-replication traffic would stall migration verification until it hard-fails.
 func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits() {
 	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
 	s.config.ReplicationGradualConnectInitialPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
@@ -1172,11 +1167,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_A
 	}
 }
 
-// TestGetNamespaceInfo_GradualConnect_Monotonicity checks the property the ramp design leans on:
-// for a fixed connect time, the set of admitted workflow IDs only grows as time advances -- a
-// workflow ID admitted at an earlier tick is never shed at a later one. This is what the earlier
-// delete/verify-task safety analysis depends on: a later replication task for the same workflow
-// can't be shed if an earlier one for that same workflow was already admitted.
+// TestGetNamespaceInfo_GradualConnect_Monotonicity checks that admission only grows over time: a
+// workflow ID admitted at one tick is never shed later. DELETE/VERIFY task safety depends on this.
 func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_Monotonicity() {
 	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
 	s.config.ReplicationGradualConnectInitialPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(10)

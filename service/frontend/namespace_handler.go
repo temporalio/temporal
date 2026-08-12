@@ -1117,11 +1117,8 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 	return failoverHistory
 }
 
-// maybeUpdateClusterConnectTime stamps the current time for every cluster newly added to the
-// namespace's cluster list (used to anchor the namespace gradual-connect replication ramp -- see
-// Namespace.InitialConnectTime), and removes the entry for every cluster removed from the list.
-// An existing key is never restamped, even if the cluster is present in both oldClusters and
-// newClusters -- only a genuine add (absent from oldClusters) gets a fresh timestamp.
+// maybeUpdateClusterConnectTime stamps a fresh connect time for every newly added cluster and
+// removes the entry for every removed cluster. Never restamps an existing entry.
 func (d *namespaceHandler) maybeUpdateClusterConnectTime(
 	clusterConnectTime map[string]*timestamppb.Timestamp,
 	oldClusters []string,
@@ -1148,8 +1145,7 @@ func (d *namespaceHandler) maybeUpdateClusterConnectTime(
 		}
 	}
 	if len(added) == 0 && len(removed) == 0 {
-		// Nothing to stamp or clean; return the original map untouched (including its nilness) so
-		// a no-op cluster-list update doesn't spuriously allocate an empty map in its place.
+		// Nothing changed -- return untouched (preserves nilness) to avoid a spurious allocation.
 		return clusterConnectTime
 	}
 

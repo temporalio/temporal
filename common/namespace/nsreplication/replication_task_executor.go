@@ -182,13 +182,10 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				Clusters:          clusters,
 				State:             task.ReplicationConfig.GetState(),
 				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
-				// oldClusters is nil: there is no prior local record at CREATE, so every member of
-				// the initial cluster list is, by definition, newly connected from this cluster's
-				// perspective. Note this also ramps a namespace that's genuinely brand new (created
-				// fresh across multiple clusters at once, no backlog to protect against) -- accepted
-				// as a bounded, self-clearing cost, since a CREATE task can't cheaply distinguish that
-				// from the real target case (a cluster newly added to an existing namespace with real
-				// history to catch up on).
+				// oldClusters is nil at CREATE: every member of the initial list counts as newly
+				// connected. This also ramps genuinely brand-new namespaces (no backlog to protect) --
+				// accepted, since a CREATE task can't cheaply tell that apart from a cluster newly
+				// added to an existing namespace with real history to catch up on.
 				ClusterConnectTime: h.stampOwnClusterConnectTime(nil, nil, clusters),
 			},
 			ConfigVersion:   task.GetConfigVersion(),
@@ -293,9 +290,8 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		return err
 	}
 
-	// Snapshot the pre-update cluster list before request.Namespace (aliasing resp.Namespace) gets
-	// mutated below -- stampOwnClusterConnectTime needs to tell "currentCluster just joined" from
-	// "currentCluster has been a member all along, just never got a historical stamp."
+	// Snapshot the pre-update cluster list before it's overwritten below: stampOwnClusterConnectTime
+	// needs old vs. new membership to tell "just joined" from "already a member, no historical stamp."
 	oldClusters := slices.Clone(resp.Namespace.GetReplicationConfig().GetClusters())
 
 	recordUpdated := false
@@ -361,15 +357,10 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	return h.metadataManager.UpdateNamespace(ctx, request)
 }
 
-// stampOwnClusterConnectTime records, in existing, when h.currentCluster was genuinely newly added
-// between oldClusters and newClusters -- anchoring the namespace gradual-connect replication ramp
-// locally on the receiver rather than relying on a value stamped by another cluster's clock.
-//
-// Stamping must be based on an old-vs-new membership diff, not merely "no existing entry": a
-// namespace whose currentCluster membership predates this field (or was added by an older binary)
-// has no historical stamp despite being a steady-state member, and treating that as "just connected"
-// would restart the ramp -- and start shedding live traffic -- on every unrelated namespace edit that
-// happens to bump ConfigVersion. Never restamps an existing entry.
+// stampOwnClusterConnectTime records when h.currentCluster was genuinely added between oldClusters
+// and newClusters -- anchoring the gradual-connect ramp locally rather than trusting another
+// cluster's clock. Diffing membership (not just "no existing entry") avoids re-ramping live traffic
+// on every unrelated edit to a namespace whose membership predates this field. Never restamps.
 func (h *taskExecutorImpl) stampOwnClusterConnectTime(
 	existing map[string]*timestamppb.Timestamp,
 	oldClusters []string,
