@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -106,7 +107,7 @@ func NewStreamSender(
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
 		isTieredStackEnabled:    tieredStackEnabled,
-		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey, tieredStackEnabled, logger),
+		readerGroup:             newReaderGroupIfEnabled(config.EnableReplicationReaderGroup, shardContext, clientShardKey, tieredStackEnabled, logger),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
 	}
@@ -436,13 +437,13 @@ func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *pe
 }
 
 func newReaderGroupIfEnabled(
-	config *configs.Config,
+	enableReplicationReaderGroup dynamicconfig.BoolPropertyFn,
 	shardContext historyi.ShardContext,
 	clientShardKey ClusterShardKey,
 	tieredStackEnabled bool,
 	logger log.Logger,
 ) *replicationReaderGroup {
-	if !config.EnableReplicationReaderGroup() {
+	if !enableReplicationReaderGroup() {
 		return nil
 	}
 	return newReplicationReaderGroup(shardContext, clientShardKey, tieredStackEnabled, logger)
