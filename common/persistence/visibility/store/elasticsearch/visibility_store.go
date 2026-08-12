@@ -497,6 +497,19 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	return &store.InternalCountExecutionsResponse{Count: count}, nil
 }
 
+// newGroupByTermsAgg builds a terms aggregation for a GROUP BY field. For
+// TemporalNamespaceDivision, default-division workflows are indexed without the
+// field, so a plain terms aggregation would silently drop them. Missing("")
+// buckets those documents under the empty string so they are counted as the
+// default division.
+func newGroupByTermsAgg(field string) *elastic.TermsAggregation {
+	agg := elastic.NewTermsAggregation().Field(field)
+	if field == sadefs.TemporalNamespaceDivision {
+		agg = agg.Missing("")
+	}
+	return agg
+}
+
 func (s *VisibilityStore) countGroupByExecutions(
 	ctx context.Context,
 	queryParams *esQueryParams,
@@ -522,10 +535,9 @@ func (s *VisibilityStore) countGroupByExecutions(
 	//     }
 	//   }
 	// }
-	termsAgg := elastic.NewTermsAggregation().Field(groupByFields[len(groupByFields)-1])
+	termsAgg := newGroupByTermsAgg(groupByFields[len(groupByFields)-1])
 	for i := len(groupByFields) - 2; i >= 0; i-- {
-		termsAgg = elastic.NewTermsAggregation().
-			Field(groupByFields[i]).
+		termsAgg = newGroupByTermsAgg(groupByFields[i]).
 			SubAggregation(groupByFields[i+1], termsAgg)
 	}
 	esResponse, err := s.esClient.CountGroupBy(
@@ -756,10 +768,17 @@ func (s *VisibilityStore) convertQuery(
 		return nil, err
 	}
 
-	queryParams.QueryExpr = elastic.NewBoolQuery().Filter(
+	// queryParams.QueryExpr may be nil (e.g. "GROUP BY TemporalNamespaceDivision"
+	// with no other filter, which suppresses the default namespace division
+	// filter). Avoid adding a nil clause to the bool query, which would panic on
+	// serialization.
+	namespaceFilter := elastic.NewBoolQuery().Filter(
 		elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()),
-		queryParams.QueryExpr,
 	)
+	if queryParams.QueryExpr != nil {
+		namespaceFilter.Filter(queryParams.QueryExpr)
+	}
+	queryParams.QueryExpr = namespaceFilter
 
 	orderBy := make([]elastic.Sorter, 0, len(queryParams.OrderBy))
 	for _, orderByExpr := range queryParams.OrderBy {

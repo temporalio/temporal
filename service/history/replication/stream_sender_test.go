@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -144,6 +145,61 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
 
 	err := s.streamSender.recvSyncReplicationState(replicationState)
 	s.NoError(err)
+}
+
+// TestRecvSyncReplicationState_ReaderGroupEquivalence pins the PR's core claim: for
+// every ack shape, the reader-group path persists exactly the QueueReaderState and
+// failover watermark the legacy path does.
+func (s *streamSenderSuite) TestRecvSyncReplicationState_ReaderGroupEquivalence() {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	for _, tiered := range []bool{false, true} {
+		attr := &replicationspb.SyncReplicationState{
+			InclusiveLowWatermark:     rand.Int63(),
+			InclusiveLowWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
+		}
+		if tiered {
+			attr.HighPriorityState = &replicationspb.ReplicationState{
+				InclusiveLowWatermark:     rand.Int63(),
+				InclusiveLowWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
+			}
+			attr.LowPriorityState = &replicationspb.ReplicationState{
+				InclusiveLowWatermark:     rand.Int63(),
+				InclusiveLowWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
+			}
+		}
+
+		run := func(group *replicationReaderGroup) (*persistencespb.QueueReaderState, int64) {
+			s.streamSender.isTieredStackEnabled = tiered
+			s.streamSender.readerGroup = group
+			if tiered {
+				s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(attr)
+			}
+			var gotState *persistencespb.QueueReaderState
+			var gotTaskID int64
+			s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).DoAndReturn(
+				func(_ int64, state *persistencespb.QueueReaderState) error {
+					gotState = state
+					return nil
+				})
+			s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ int64, taskID int64, _ time.Time) error {
+					gotTaskID = taskID
+					return nil
+				})
+			s.NoError(s.streamSender.recvSyncReplicationState(attr))
+			return gotState, gotTaskID
+		}
+
+		legacyState, legacyTaskID := run(nil)
+		groupState, groupTaskID := run(newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, log.NewNoopLogger()))
+		s.True(proto.Equal(legacyState, groupState),
+			"tiered=%v: reader group persisted %v, legacy persisted %v", tiered, groupState, legacyState)
+		s.Equal(legacyTaskID, groupTaskID)
+	}
+	s.streamSender.readerGroup = nil
 }
 
 func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Error() {

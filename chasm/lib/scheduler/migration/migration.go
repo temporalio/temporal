@@ -1,7 +1,9 @@
 package migration
 
 import (
+	"fmt"
 	"maps"
+	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -216,11 +218,15 @@ func convertBufferedStartsLegacyToCHASM(
 		v2Start := common.CloneProto(v1Start)
 
 		if v2Start.RequestId == "" {
+			// The per-action index disambiguates starts that share a nominal and
+			// actual time, which GenerateRequestID's other inputs are all constant
+			// across a conversion batch. It rides in the backfill ID tag, as
+			// convertRunningWorkflowsToBufferedStarts does with the run ID below.
 			v2Start.RequestId = schedulerinternal.GenerateRequestID(
 				namespaceID,
 				scheduleID,
 				conflictToken,
-				"migrated",
+				"migrated-"+strconv.Itoa(i),
 				v1Start.GetNominalTime().AsTime(),
 				v1Start.GetActualTime().AsTime(),
 			)
@@ -231,6 +237,15 @@ func convertBufferedStartsLegacyToCHASM(
 				baseWorkflowID,
 				v1Start.GetNominalTime().AsTime(),
 			)
+
+			// Unlike the request ID, the workflow ID is user-visible, and dedup
+			// against an action the V1 scheduler had already started relies on it
+			// matching. Only disambiguate past the first start, so the common case
+			// of a single pending action keeps the ID V1 and native V2 would give
+			// it.
+			if i > 0 {
+				v2Start.WorkflowId = fmt.Sprintf("%s-%d", v2Start.WorkflowId, i)
+			}
 		}
 
 		v2Start.Attempt = 0
