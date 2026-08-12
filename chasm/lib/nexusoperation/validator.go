@@ -24,6 +24,7 @@ var ValidatorModule = validation.Module(
 	"chasm.lib.nexusoperation.validators",
 	newStartNexusOperationExecutionRequestValidator,
 	newListNexusOperationExecutionsRequestValidator,
+	newCountNexusOperationExecutionsRequestValidator,
 	newPollNexusOperationExecutionRequestValidator,
 	newRequestCancelNexusOperationExecutionRequestValidator,
 	newTerminateNexusOperationExecutionRequestValidator,
@@ -323,6 +324,13 @@ func newListNexusOperationExecutionsRequestValidator(
 			}
 			return nil
 		},
+	}
+}
+
+func newCountNexusOperationExecutionsRequestValidator() countNexusOperationExecutionsRequestFieldValidators {
+	return countNexusOperationExecutionsRequestFieldValidators{
+		Namespace: validation.NoOp[workflowservice.CountNexusOperationExecutionsRequest, string](),
+		Query:     validation.NoOp[workflowservice.CountNexusOperationExecutionsRequest, string](),
 	}
 }
 

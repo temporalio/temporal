@@ -835,3 +835,23 @@ func TestValidateListNexusOperationExecutionsRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateCountNexusOperationExecutionsRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*workflowservice.CountNexusOperationExecutionsRequest)
+	}{
+		{name: "valid request"},
+		{name: "valid request - with query", mutate: func(r *workflowservice.CountNexusOperationExecutionsRequest) {
+			r.Query = "ExecutionStatus = 'Running'"
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &workflowservice.CountNexusOperationExecutionsRequest{Namespace: "default"}
+			if tc.mutate != nil {
+				tc.mutate(req)
+			}
+			require.NoError(t, newCountNexusOperationExecutionsRequestValidator().ValidateAndNormalize(req))
+		})
+	}
+}

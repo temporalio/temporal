@@ -268,6 +268,25 @@ func (v listNexusOperationExecutionsRequestFieldValidators) RegisterValidator(re
 	return validation.RegisterValidator[workflowservice.ListNexusOperationExecutionsRequest](registry, v)
 }
 
+type countNexusOperationExecutionsRequestFieldValidators struct {
+	Namespace validation.FieldValidator[workflowservice.CountNexusOperationExecutionsRequest, string]
+	Query     validation.FieldValidator[workflowservice.CountNexusOperationExecutionsRequest, string]
+}
+
+func (v countNexusOperationExecutionsRequestFieldValidators) ValidateAndNormalize(req *workflowservice.CountNexusOperationExecutionsRequest) error {
+	if err := v.Namespace(req, "namespace", req.GetNamespace()); err != nil {
+		return err
+	}
+	if err := v.Query(req, "query", req.GetQuery()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v countNexusOperationExecutionsRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.CountNexusOperationExecutionsRequest](registry, v)
+}
+
 type userMetadataFieldValidators struct {
 	Summary validation.NestedFieldValidator[sdkpb.UserMetadata, *commonpb.Payload]
 	Details validation.NestedFieldValidator[sdkpb.UserMetadata, *commonpb.Payload]

@@ -204,6 +204,10 @@ func (h *frontendHandler) CountNexusOperationExecutions(
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
+	}
+
 	resp, err := chasm.CountExecutions[*Operation](ctx, &chasm.CountExecutionsRequest{
 		NamespaceName: req.GetNamespace(),
 		Query:         req.GetQuery(),

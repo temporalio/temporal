@@ -5,6 +5,7 @@ go.temporal.io/api/workflowservice/v1.RequestCancelNexusOperationExecutionReques
 go.temporal.io/api/workflowservice/v1.TerminateNexusOperationExecutionRequest
 go.temporal.io/api/workflowservice/v1.DeleteNexusOperationExecutionRequest
 go.temporal.io/api/workflowservice/v1.ListNexusOperationExecutionsRequest
+go.temporal.io/api/workflowservice/v1.CountNexusOperationExecutionsRequest
 
 # Nested proto types - generate NestedFieldValidator structs (no RegisterValidator, ValidateAndNormalize takes ns string)
 nested:go.temporal.io/api/sdk/v1.UserMetadata
