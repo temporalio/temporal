@@ -175,18 +175,20 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	healthInterceptor := interceptor.NewHealthInterceptor()
 	healthInterceptor.SetHealthy(true)
-	cbValidator := callback.NewValidator(
-		func(string) int { return 2000 },
-		config.CallbackURLMaxLength,
-		config.CallbackHeaderMaxSize,
-		func(string) callback.AddressMatchRules {
+	cbValidator := callback.NewValidator(callback.ValidatorConfig{
+		MaxPerExecution: func(string) int { return 2000 },
+		URLMaxLength:    config.CallbackURLMaxLength,
+		HeaderMaxSize:   config.CallbackHeaderMaxSize,
+		EndpointRules: func(string) callback.AddressMatchRules {
 			return callback.AddressMatchRules{
 				Rules: []callback.AddressMatchRule{
 					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
 				},
 			}
 		},
-	)
+		WorkerNameMaxLength:        func(string) int { return 1000 },
+		WorkerSourceContextMaxSize: func(string) int { return 4096 },
+	})
 	saValidator := searchattribute.NewValidator(
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesMapperProvider(),
@@ -1174,11 +1176,10 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 
 // Assert that Workflows can only accept Nexus-variant callbacks. (Or Internal.)
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallback() {
-	tests := []struct {
+	testCases := []struct {
 		Name     string
 		Callback *commonpb.Callback
-		// ErrTarget is a pointer to a serviceerror pointer, as expected by ErrorAs.
-		ErrMsg string
+		ErrMsg   string
 	}{
 		{
 			Name: "worker",
@@ -1191,21 +1192,80 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 					},
 				},
 			},
-			// The validator rejects the Worker variant explicitly, before it reaches
-			// the unknown-variant fallback.
+			// A well-formed callback of a kind that is disabled for workflows by default.
 			ErrMsg: "worker callbacks are not enabled for this execution type",
 		},
 		{
-			Name:     "nil variant",
-			Callback: &commonpb.Callback{},
-			ErrMsg:   "unknown callback variant",
+			"nil variant",
+			&commonpb.Callback{},
+			"unknown callback variant",
 		},
 	}
 
-	for _, test := range tests {
+	for _, test := range testCases {
 		s.Run(test.Name, func() {
 			_, err := s.startWorkflowWithCallbacks([]*commonpb.Callback{test.Callback})
-			s.Require().ErrorContains(err, test.ErrMsg)
+			s.ErrorContains(err, test.ErrMsg)
+		})
+	}
+}
+
+// Assert that completion callbacks attached to a workflow update go through the callback validator,
+// and that only the kinds enabled for updates are accepted.
+func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecution_Failed_InvalidCallback() {
+	testCases := []struct {
+		Name     string
+		Callback *commonpb.Callback
+		ErrMsg   string
+	}{
+		{
+			"nexus url too long",
+			&commonpb.Callback{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{
+						Url: "http://localhost/" + strings.Repeat("x", 2000),
+					},
+				},
+			},
+			"url length longer than max length allowed",
+		},
+		{
+			"worker",
+			&commonpb.Callback{
+				Variant: &commonpb.Callback_Worker_{
+					Worker: &commonpb.Callback_Worker{
+						TaskQueueName: "completions-task-queue",
+						Service:       "HTTPAdapter",
+						Operation:     "DeliverAsWebhook",
+					},
+				},
+			},
+			"worker callbacks are not enabled for this execution type",
+		},
+		{
+			"nil variant",
+			&commonpb.Callback{},
+			"unknown callback variant",
+		},
+	}
+
+	config := s.newConfig()
+	config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+
+	for _, test := range testCases {
+		s.Run(test.Name, func() {
+			_, err := wh.UpdateWorkflowExecution(context.Background(), &workflowservice.UpdateWorkflowExecutionRequest{
+				Namespace:         s.testNamespace.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "WORKFLOW_ID"},
+				Request: &updatepb.Request{
+					Meta:                &updatepb.Meta{UpdateId: "UPDATE_ID"},
+					Input:               &updatepb.Input{Name: "NAME"},
+					RequestId:           uuid.NewString(),
+					CompletionCallbacks: []*commonpb.Callback{test.Callback},
+				},
+			})
+			s.ErrorContains(err, test.ErrMsg)
 		})
 	}
 }

@@ -901,12 +901,7 @@ func OperatorHandlerProvider(
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
 func callbackValidatorProvider(dc *dynamicconfig.Collection) callback.Validator {
-	return callback.NewValidator(
-		callback.MaxPerExecution.Get(dc),
-		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		callback.AllowedAddresses.Get(dc),
-	)
+	return callback.NewValidator(callback.NewValidatorConfig(dc))
 }
 
 func HandlerProvider(
