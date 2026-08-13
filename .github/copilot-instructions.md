@@ -137,3 +137,6 @@ Report concrete `nit` and `small` findings selectively, and consolidate related 
 
 Be direct and practical, without fluff.
 Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change, not just that it should.
+Keep `Issue:` to at most two sentences and `Suggestion:` to at most two sentences or a code suggestion.
+Anything longer belongs in the collapsible block, or does not belong in the comment.
+Do not restate what the code does before saying what is wrong with it.
