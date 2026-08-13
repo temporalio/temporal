@@ -173,7 +173,7 @@ func addCallbacksToMap(
 			// Already registered, skip to avoid overwriting.
 			continue
 		}
-		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
+		callbackObj := callback.NewCallback(requestID, eventTime, chasmCB)
 		target[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
