@@ -501,9 +501,11 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	isRunning := len(runningWorkflows) > 0
 	result.missedCatchupByActionRunning = make(map[bool]int64)
 
-	// Processing completely ignores any BufferedStart that's already executing/backing off.
+	// Processing ignores starts that are already executing or backing off. An existing
+	// deferred BUFFER_ONE start still participates so it can reject later starts.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt == 0
+		return start.Attempt == 0 ||
+			(start.Attempt == -1 && scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE)
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
