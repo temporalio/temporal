@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -64,7 +65,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
 	})
-	s.Error(err, "expected error when time skipping is disabled for namespace")
+	s.ErrorAs(err, new(*serviceerror.Unimplemented))
 }
 
 // TestTimeSkipping_StartWorkflow_DCEnabled verifies that StartWorkflowExecution with
@@ -786,8 +787,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 // ApplyTimerCanceledEvent deletes the timer from pendingTimerInfoIDs, so it is
 // invisible to calculateTimeSkippingTransition.
 //
-// If a canceled timer were mistakenly used, the accumulated skip would equal
-// the sum of all timers' durations rather than just the surviving timers'.
+// If a canceled timer were mistakenly used, the second transition would target
+// timer-B instead of timer-C.
 //
 // Sequence:
 //
@@ -796,7 +797,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 //	WT2 → cancel timer-B + start timer-C (2h)
 //	Skip to timer-C (2h), accumulated = 1h + 2h = 3h, timer-C fires → WT3
 //	WT3 → complete workflow
-//	Verify: AccumulatedSkippedDuration ≈ 3h (NOT 1h+4h=5h from canceled timer-B)
+//	Verify: transition targets are exactly timer-A and timer-C, never timer-B
 func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarget() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
@@ -852,18 +853,28 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarge
 	})
 	s.NoError(err)
 
-	// Accumulated skip ≈ 1h + 2h = 3h. 1s tolerance covers real-time slack
-	// between skip transition and timer-fired and is far below the 2h margin
-	// between the right answer (3h) and the wrong answer (5h with canceled
-	// timer-B included).
-	ms := s.getMutableState(env, tv.WorkflowID(), runID)
-	accumulated := ms.State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
-	s.InDelta(float64(timerADuration+timerCDuration), float64(accumulated), float64(time.Second),
-		"AccumulatedSkippedDuration must equal sum of non-canceled timer durations (1h+2h=3h), not include the canceled timer-B")
-
 	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(), RunId: runID,
 	})
+	timerExpiry := make(map[string]time.Time)
+	var skipTargets []time.Time
+	for _, event := range history {
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_TIMER_STARTED:
+			attrs := event.GetTimerStartedEventAttributes()
+			timerExpiry[attrs.GetTimerId()] = event.GetEventTime().AsTime().Add(attrs.GetStartToFireTimeout().AsDuration())
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
+			skipTargets = append(skipTargets,
+				event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetTargetTime().AsTime())
+		default:
+			continue
+		}
+	}
+	s.Len(timerExpiry, 3)
+	s.Len(skipTargets, 2)
+	s.Equal(timerExpiry["timer-A"], skipTargets[0])
+	s.Equal(timerExpiry["timer-C"], skipTargets[1])
+	s.NotEqual(timerExpiry["timer-B"], skipTargets[1])
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_TIMER_CANCELED), "timer-B must be canceled")
 	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 }
