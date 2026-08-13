@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -124,6 +125,8 @@ type replayStats struct {
 	PureTasks       int    `json:"pureTasks"`
 	SideEffectTasks int    `json:"sideEffectTasks"`
 	Starts          int    `json:"starts"`
+	Cancels         int    `json:"cancels"`
+	Terminates      int    `json:"terminates"`
 	BudgetExceeded  string `json:"budgetExceeded,omitempty"`
 }
 
@@ -274,6 +277,7 @@ type v1HistoryTrace struct {
 	memo          *commonpb.Memo
 	baseActions   int64
 	capturedIDs   bool
+	captureIssues int
 	startRetries  int
 }
 
@@ -431,6 +435,60 @@ func TestV1HistoryAgainstCHASM_ReplayBudgetExceeded(t *testing.T) {
 	require.Equal(t, "deadlines", result.ReplayStats.BudgetExceeded)
 	require.Empty(t, result.V1Starts)
 	require.Len(t, result.CHASMStarts, 1)
+}
+
+func TestV1HistoryAgainstCHASM_OverlapPolicyExternalEffects(t *testing.T) {
+	for _, testCase := range []struct {
+		name               string
+		overlapPolicy      enumspb.ScheduleOverlapPolicy
+		expectedCancels    int
+		expectedTerminates int
+	}{
+		{
+			name: "cancel", overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER,
+			expectedCancels: 1,
+		},
+		{
+			name: "terminate", overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER,
+			expectedTerminates: 1,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			startTime := time.Unix(100, 0).UTC()
+			args := &schedulespb.StartScheduleArgs{
+				Schedule: &schedulepb.Schedule{
+					Spec: &schedulepb.ScheduleSpec{},
+					Action: &schedulepb.ScheduleAction{Action: &schedulepb.ScheduleAction_StartWorkflow{
+						StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+							WorkflowId: "action", WorkflowType: &commonpb.WorkflowType{Name: "type"},
+						},
+					}},
+					State: &schedulepb.ScheduleState{},
+				},
+				Info: &schedulepb.ScheduleInfo{},
+				InitialPatch: &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: testCase.overlapPolicy,
+				}},
+				State: &schedulespb.InternalState{
+					Namespace: "namespace", NamespaceId: "namespace-id", ScheduleId: "schedule-id",
+					LastProcessedTime: timestamppb.New(startTime),
+					BufferedStarts: []*schedulespb.BufferedStart{{
+						WorkflowId: "running-workflow", RunId: "running-run-id",
+					}},
+				},
+			}
+			history := &historypb.History{Events: []*historypb.HistoryEvent{{
+				EventId: 1, EventTime: timestamppb.New(startTime), EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{Input: mustPayloads(t, args)},
+				},
+			}}}
+
+			result := replayV1HistoryAgainstCHASM(t, history)
+			require.Equal(t, testCase.expectedCancels, result.ReplayStats.Cancels)
+			require.Equal(t, testCase.expectedTerminates, result.ReplayStats.Terminates)
+		})
+	}
 }
 
 func TestV1HistoryAgainstCHASM_MissingInitialState(t *testing.T) {
@@ -724,6 +782,15 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 	for _, start := range trace.starts {
 		result.V1Starts = append(result.V1Starts, start.workflowID)
 	}
+	if trace.captureIssues != 0 {
+		result.Classification = replayClassificationInconclusive
+		result.Divergences = []replayDivergence{{
+			Classification: replayClassificationInconclusive,
+			Kind:           "local_activity_capture_unavailable",
+			Message:        fmt.Sprintf("%d V1 local activity marker(s) could not be associated with replayed invocations", trace.captureIssues),
+		}}
+		return result
+	}
 	if trace.args.GetSchedule() == nil || trace.args.GetState() == nil {
 		result.Classification = replayClassificationUnsupported
 		result.Divergences = []replayDivergence{{
@@ -738,7 +805,7 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
 
-	var startMu sync.Mutex
+	var actionMu sync.Mutex
 	startIndex := 0
 	executionMap := make(workflowExecutionMap)
 	var chasmStarts []chasmStart
@@ -762,8 +829,8 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 	timeSource.Update(trace.startTime)
 	frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes().
 		DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
-			startMu.Lock()
-			defer startMu.Unlock()
+			actionMu.Lock()
+			defer actionMu.Unlock()
 			budget.addStart()
 			workflowID := request.GetWorkflowId()
 			chasmTime := timeSource.Now().UTC()
@@ -822,6 +889,20 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 				CHASMTime:      timePointer(chasmTime),
 			})
 			return &workflowservice.StartWorkflowExecutionResponse{RunId: fmt.Sprintf("chasm-replay-extra-%d", len(chasmStarts))}, nil
+		})
+	historyClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes().
+		DoAndReturn(func(_ context.Context, _ *historyservice.RequestCancelWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
+			actionMu.Lock()
+			defer actionMu.Unlock()
+			budget.stats.Cancels++
+			return &historyservice.RequestCancelWorkflowExecutionResponse{}, nil
+		})
+	historyClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).AnyTimes().
+		DoAndReturn(func(_ context.Context, _ *historyservice.TerminateWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.TerminateWorkflowExecutionResponse, error) {
+			actionMu.Lock()
+			defer actionMu.Unlock()
+			budget.stats.Terminates++
+			return &historyservice.TerminateWorkflowExecutionResponse{}, nil
 		})
 
 	registry := chasm.NewRegistry(logger)
@@ -982,7 +1063,7 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 		}
 	}
 
-	startMu.Lock()
+	actionMu.Lock()
 	checkedAttempts := make(map[string]int, len(trace.startAttempts))
 	for _, attempt := range trace.startAttempts {
 		if attempt.workflowID != "" {
@@ -1022,7 +1103,7 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 	for _, start := range chasmStarts {
 		result.CHASMStarts = append(result.CHASMStarts, start.workflowID)
 	}
-	startMu.Unlock()
+	actionMu.Unlock()
 	if len(pendingCompletions) != 0 {
 		divergences = append(divergences, replayDivergence{
 			Classification: replayClassificationInconclusive,
@@ -2146,9 +2227,15 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 					trace.startRetries++
 				}
 				if event.GetMarkerRecordedEventAttributes().GetFailure() != nil {
-					require.NotNil(t, localActivities)
+					if localActivities == nil {
+						trace.captureIssues++
+						continue
+					}
 					request, ok := localActivities.startsByActivityID[metadata.ActivityID]
-					require.True(t, ok, "failed local StartWorkflow marker %q has no matching V1 invocation", metadata.ActivityID)
+					if !ok {
+						trace.captureIssues++
+						continue
+					}
 					trace.failedStarts = append(trace.failedStarts, observedStartFailure{
 						workflowID: request.GetRequest().GetWorkflowId(), time: event.GetEventTime().AsTime(),
 						request: proto.CloneOf(request.GetRequest()),
@@ -2165,7 +2252,10 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 				start := observedStart{runID: response.GetRunId(), time: event.GetEventTime().AsTime()}
 				if localActivities != nil {
 					request, ok := localActivities.startsByActivityID[metadata.ActivityID]
-					require.True(t, ok, "local StartWorkflow marker %q has no matching V1 invocation", metadata.ActivityID)
+					if !ok {
+						trace.captureIssues++
+						continue
+					}
 					start.workflowID = request.GetRequest().GetWorkflowId()
 					start.request = proto.CloneOf(request.GetRequest())
 				}
@@ -2176,9 +2266,15 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 				})
 			}
 			if metadata.ActivityType == "WatchWorkflow" {
-				require.NotNil(t, localActivities)
+				if localActivities == nil {
+					trace.captureIssues++
+					continue
+				}
 				request, ok := localActivities.watchesByActivityID[metadata.ActivityID]
-				require.True(t, ok, "local WatchWorkflow marker %q has no matching V1 invocation", metadata.ActivityID)
+				if !ok {
+					trace.captureIssues++
+					continue
+				}
 				var response schedulespb.WatchWorkflowResponse
 				details := event.GetMarkerRecordedEventAttributes().GetDetails()
 				require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(details["result"], &response))

@@ -66,7 +66,7 @@ for value in "$sample_size" "$max_runs"; do
     exit 2
   fi
 done
-for dependency in ct jq gzip shasum; do
+for dependency in ct jq gzip shasum base64; do
   if ! command -v "$dependency" >/dev/null 2>&1; then
     echo "Missing required command: $dependency" >&2
     exit 1
@@ -82,27 +82,8 @@ if [[ ! -e "$index" ]]; then
   printf 'namespace\tschedule_id\trun_index\thistory\n' >"$index"
 fi
 
-remote_temporal() {
-  local args=(admintools --context "$cell" -- temporal)
-  if [[ -n "$address" ]]; then
-    args+=(--address "$address")
-  fi
-  ct "${args[@]}" "$@" --color never --output json
-}
-
 opaque_id() {
   printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
-}
-
-json_items() {
-  local collection="$1"
-  jq -c --arg collection "$collection" '
-    if type == "array" then .[]
-    elif .[$collection] != null then .[$collection][]
-    elif .items != null then .items[]
-    else empty
-    end
-  '
 }
 
 list_namespaces() {
@@ -110,28 +91,54 @@ list_namespaces() {
     printf '%s\n' "$namespace"
     return
   fi
-  remote_temporal operator namespace list |
-    json_items namespaces |
-    jq -r '.namespaceInfo.name // .namespace_info.name // .name // .namespace // empty'
+  ct admintools --context "$cell" -- bash -o pipefail -c '
+    address=$1
+    args=()
+    if [[ -n "$address" ]]; then args+=(--address "$address"); fi
+    temporal "${args[@]}" operator namespace list --color never --output json |
+      jq -r '\''
+        if type == "array" then .[]
+        elif .namespaces != null then .namespaces[]
+        elif .items != null then .items[]
+        else empty
+        end |
+        .namespaceInfo.name // .namespace_info.name // .name // .namespace // empty
+      '\'' |
+      gzip -9 |
+      base64 |
+      tr -d "\n"
+  ' -- "$address" </dev/null | base64 -D | gzip -dc
 }
 
 list_schedules() {
   local namespace_name="$1"
-  remote_temporal schedule list --namespace "$namespace_name" |
-    json_items schedules |
-    jq -r '.scheduleId // .schedule_id // .id // empty'
+  ct admintools --context "$cell" -- bash -o pipefail -c '
+    address=$1
+    namespace_name=$2
+    args=()
+    if [[ -n "$address" ]]; then args+=(--address "$address"); fi
+    temporal "${args[@]}" schedule list --namespace "$namespace_name" --color never --output json |
+      jq -r '\''
+        if type == "array" then .[]
+        elif .schedules != null then .schedules[]
+        elif .items != null then .items[]
+        else empty
+        end |
+        .scheduleId // .schedule_id // .id // empty
+      '\'' |
+      gzip -9 |
+      base64 |
+      tr -d "\n"
+  ' -- "$address" "$namespace_name" </dev/null | base64 -D | gzip -dc
 }
 
 sample_schedules() {
   local namespace_name="$1"
+  local schedules_file="$2"
   while IFS= read -r schedule_id; do
     [[ -n "$schedule_id" ]] || continue
     printf '%s\t%s\n' "$(opaque_id "$sample_seed"$'\0'"$namespace_name"$'\0'"$schedule_id")" "$schedule_id"
-  done < <(list_schedules "$namespace_name") | sort | sed -n "1,${sample_size}p" | cut -f2-
-}
-
-history_events() {
-  jq -c 'if .events != null then .events elif .history.events != null then .history.events else empty end'
+  done <"$schedules_file" | sort | sed -n "1,${sample_size}p" | cut -f2-
 }
 
 download_schedule() {
@@ -151,22 +158,30 @@ download_schedule() {
     if [[ -e "$output" ]]; then
       break
     fi
-    temporary="$(mktemp "$namespace_dir/.history.XXXXXX.json")"
-    local command=(workflow show --namespace "$namespace_name" --workflow-id "$workflow_id")
-    if [[ -n "$run_id" ]]; then
-      command+=(--run-id "$run_id")
-    fi
-    if ! remote_temporal "${command[@]}" >"$temporary"; then
+    temporary="$(mktemp "$namespace_dir/.history.base64.XXXXXX")"
+    if ! ct admintools --context "$cell" -- bash -o pipefail -c '
+      address=$1
+      namespace_name=$2
+      workflow_id=$3
+      run_id=$4
+      args=()
+      if [[ -n "$address" ]]; then args+=(--address "$address"); fi
+      if [[ -n "$run_id" ]]; then args+=(--run-id "$run_id"); fi
+      temporal "${args[@]}" workflow show --namespace "$namespace_name" --workflow-id "$workflow_id" --color never --output json |
+        jq -c '\''if .events != null then {events: .events} elif .history.events != null then {events: .history.events} else empty end'\'' |
+        gzip -9 |
+        base64 |
+        tr -d "\n"
+    ' -- "$address" "$namespace_name" "$workflow_id" "$run_id" </dev/null >"$temporary"; then
       rm -f "$temporary"
       return 0
     fi
-    if ! history_events <"$temporary" | jq -e 'length > 0' >/dev/null; then
+    if ! base64 -D <"$temporary" >"$output" || ! gzip -dc "$output" | jq -e '.events | length > 0' >/dev/null; then
       echo "Skipping invalid or empty history: namespace=$namespace_name schedule=$schedule_id" >&2
-      rm -f "$temporary"
+      rm -f "$temporary" "$output"
       return 0
     fi
-    previous_run="$(history_events <"$temporary" | jq -r '.[0].workflowExecutionStartedEventAttributes.continuedExecutionRunId // .[0].workflow_execution_started_event_attributes.continued_execution_run_id // empty')"
-    history_events <"$temporary" | jq '{events: .}' | gzip -9 >"$output"
+    previous_run="$(gzip -dc "$output" | jq -r '.events[0].workflowExecutionStartedEventAttributes.continuedExecutionRunId // .events[0].workflow_execution_started_event_attributes.continued_execution_run_id // empty')"
     chmod 0600 "$output"
     rm -f "$temporary"
     printf '%s\t%s\t%d\t%s\n' "$namespace_name" "$schedule_id" "$run_index" "${output#"$history_dir/"}" >>"$index"
@@ -175,16 +190,31 @@ download_schedule() {
   done
 }
 
+namespaces_file="$(mktemp "$history_dir/.namespaces.XXXXXX")"
+if ! list_namespaces >"$namespaces_file"; then
+  rm -f "$namespaces_file"
+  echo "Failed to list namespaces" >&2
+  exit 1
+fi
+
 while IFS= read -r namespace_name; do
   [[ -n "$namespace_name" ]] || continue
+  schedules_file="$(mktemp "$history_dir/.schedules.XXXXXX")"
+  if ! list_schedules "$namespace_name" >"$schedules_file"; then
+    rm -f "$schedules_file"
+    echo "Failed to list schedules: namespace=$namespace_name" >&2
+    continue
+  fi
   selected=0
   while IFS= read -r schedule_id; do
     [[ -n "$schedule_id" ]] || continue
     download_schedule "$namespace_name" "$schedule_id"
     selected=$((selected + 1))
-  done < <(sample_schedules "$namespace_name")
+  done < <(sample_schedules "$namespace_name" "$schedules_file")
+  rm -f "$schedules_file"
   printf 'COLLECTION_SUMMARY namespace=%q selected=%d\n' "$namespace_name" "$selected"
-done < <(list_namespaces)
+done <"$namespaces_file"
+rm -f "$namespaces_file"
 
 echo "Histories saved under $history_dir"
 echo "Replay with: cmd/tools/schedule-v2-replay/replay-sample.sh --replay-only --history-dir $history_dir --report $history_dir/report.json --fail-on significant"
