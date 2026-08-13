@@ -393,7 +393,9 @@ func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 }
 
 func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
-	scopes := NewRandomScopes(1)
+	// Two scopes and a non-default reader ID so the read progress assertion below can
+	// not be satisfied by attributing progress to the wrong slice or reader.
+	scopes := NewRandomScopes(2)
 
 	paginationFnProvider := func(_ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
@@ -413,6 +415,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 
 	completionFnCalled := false
 	reader := s.newTestReader(scopes, paginationFnProvider, func(_ int64) { completionFnCalled = true })
+	reader.readerID = DefaultReaderId + 1
 	mockTimeSource := clock.NewEventTimeSource()
 	mockTimeSource.Update(scopes[0].Range.ExclusiveMax.FireTime)
 	reader.timeSource = mockTimeSource
