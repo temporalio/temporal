@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/tools/common/github"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 // ArtifactJob represents a job to download and process an artifact
@@ -126,7 +127,7 @@ func processArtifactJob(ctx context.Context, job ArtifactJob, totalArtifacts int
 
 	// Parse JUnit XML files
 	for _, xmlFile := range xmlFiles {
-		suites, err := parseJUnitFile(xmlFile)
+		suites, err := junit.Read(xmlFile)
 		if err != nil {
 			fmt.Printf("  Warning: Failed to parse %s: %v\n", filepath.Base(xmlFile), err)
 			continue
