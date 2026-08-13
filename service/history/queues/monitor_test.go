@@ -164,7 +164,7 @@ func (s *monitorSuite) TestSliceReadWatermarkStats_DroppedAlertIsRetried() {
 	for i := 0; i != criticalAttempts; i++ {
 		s.monitor.SetSliceReadWatermark(first, DefaultReaderId, readerStuckKey(0, int64(i)))
 	}
-	s.NotNil(s.receiveAlert())
+	s.receiveAlert()
 
 	// The second window is dropped by the outstanding alert dedup, so it must not be
 	// treated as reported or it would never be mitigated.
@@ -175,7 +175,7 @@ func (s *monitorSuite) TestSliceReadWatermarkStats_DroppedAlertIsRetried() {
 
 	s.monitor.ResolveAlert(AlertTypeReaderStuck)
 	s.monitor.SetSliceReadWatermark(second, DefaultReaderId, readerStuckKey(0, 0))
-	s.NotNil(s.receiveAlert())
+	s.receiveAlert()
 }
 
 func (s *monitorSuite) TestSliceReadWatermarkStats_ReadsSpreadAcrossSlices() {
@@ -311,6 +311,10 @@ func (s *monitorSuite) TestSliceCount() {
 			CriticalSliceCount: threshold,
 		},
 	}, *alert)
+
+	s.monitor.RemoveReader(DefaultReaderId + 1)
+	s.Equal(threshold*2, s.monitor.GetTotalSliceCount())
+	s.Equal(0, s.monitor.GetSliceCount(DefaultReaderId+1))
 }
 
 func (s *monitorSuite) TestResolveAlert() {

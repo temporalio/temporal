@@ -183,12 +183,7 @@ func (m *monitorImpl) GetTotalSliceCount() int {
 	m.Lock()
 	defer m.Unlock()
 
-	count := 0
-	for _, sliceCount := range m.readerSliceCount {
-		count += sliceCount
-	}
-
-	return count
+	return m.totalSliceCount
 }
 
 func (m *monitorImpl) GetSliceCount(readerID int64) int {
