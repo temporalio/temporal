@@ -104,7 +104,7 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	s.False(ok)
 
 	now := time.Now().Truncate(monitorWatermarkPrecision)
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	watermark, ok := s.monitor.GetReaderWatermark(DefaultReaderId)
 	s.True(ok)
 	s.Equal(tasks.NewKey(
@@ -114,7 +114,7 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 
 	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
 		now = now.Add(time.Millisecond * 100)
-		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	}
 
 	alert := <-s.alertCh
@@ -130,17 +130,21 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	}
 	s.Equal(expectedAlert, *alert)
 
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	select {
 	case <-s.alertCh:
 		s.Fail("should have only one outstanding slice count alert")
 	default:
 	}
 
+	// One window is reported once, so mitigating it does not cost an alert per read.
 	s.monitor.ResolveAlert(alert.AlertType)
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
-	alert = <-s.alertCh
-	s.Equal(expectedAlert, *alert)
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
+	select {
+	case <-s.alertCh:
+		s.Fail("a stuck window should only be reported once")
+	default:
+	}
 }
 
 func (s *monitorSuite) TestSliceCount() {
