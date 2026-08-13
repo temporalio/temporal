@@ -3,12 +3,17 @@ package replication
 import (
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/wideevents"
@@ -90,6 +95,9 @@ func (s *StreamSenderImpl) emitReplicationSent(
 		taskType = wideevents.ReplTaskSyncVersionedTransition
 	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
 		taskType = wideevents.ReplTaskVerifyVersionedTransition
+	case enumsspb.REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK:
+		// Carries no state or events, so only the identity below applies.
+		taskType = wideevents.ReplTaskDeleteExecution
 	default:
 		return
 	}
@@ -111,6 +119,8 @@ func (s *StreamSenderImpl) emitReplicationSent(
 		SourceCluster: s.shardContext.GetClusterMetadata().GetCurrentClusterName(),
 		SourceShard:   s.serverShardKey.ShardID,
 		SourceTaskID:  item.GetTaskID(),
+		TargetCluster: s.clientClusterName,
+		Priority:      task.GetPriority().String(),
 	}
 	if vt := task.GetVersionedTransition(); vt != nil {
 		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
@@ -134,37 +144,125 @@ func (s *StreamSenderImpl) emitReplicationSent(
 		payload.IsFirstSync = attr.GetVersionedTransitionArtifact().GetIsFirstSync()
 	}
 
-	// parent info, extracted from the mutable state carried in the task payload (child->parent
-	// only). The verify task ships no mutable state, so it contributes no parent info here.
-	populateSentParentInfo(&payload, task)
+	// artifact detail, extracted from the mutable state carried in the task payload: the child->parent
+	// identity plus what the task actually carried. The verify task ships no mutable state, so it
+	// contributes nothing here.
+	populateSentArtifactInfo(&payload, task, s.shardContext.GetPayloadSerializer(), s.logger)
 
 	wideevents.Emit(logger, payload)
 }
 
-// populateSentParentInfo records the child->parent identity from the mutable state carried in the
-// task payload, when present. Task types that ship no mutable state (e.g. verify) are a no-op.
-func populateSentParentInfo(payload *wideevents.ReplicationLifecyclePayload, task *replicationspb.ReplicationTask) {
+// populateSentArtifactInfo records the child->parent identity and what the task carried, from the
+// mutable state in the task payload. Task types that ship no mutable state (e.g. verify) are a no-op.
+//
+// These bounds are recorded because they cannot be recovered later: LastUpdateVersionedTransition
+// stamps are overwritten by subsequent transitions, and the replication progress cache that supplies
+// the lower bound of both the state diff and the event range is in-memory and per (run, target).
+func populateSentArtifactInfo(
+	payload *wideevents.ReplicationLifecyclePayload,
+	task *replicationspb.ReplicationTask,
+	serializer serialization.Serializer,
+	logger log.Logger,
+) {
 	switch task.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		if ms := task.GetSyncWorkflowStateTaskAttributes().GetWorkflowState(); ms != nil {
+			// This task type always carries whole mutable state, so there is no lower bound.
+			payload.ArtifactKind = wideevents.ArtifactKindSnapshot
 			payload.PopulateParentInfo(ms.GetExecutionInfo())
+			payload.HydratedVT = hydratedVersionedTransition(ms.GetExecutionInfo())
 		}
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
 		art := task.GetSyncVersionedTransitionTaskAttributes().GetVersionedTransitionArtifact()
 		if art == nil {
 			return
 		}
+		var info *persistencespb.WorkflowExecutionInfo
 		if snap := art.GetSyncWorkflowStateSnapshotAttributes(); snap != nil {
+			payload.ArtifactKind = wideevents.ArtifactKindSnapshot
 			if ms := snap.GetState(); ms != nil {
-				payload.PopulateParentInfo(ms.GetExecutionInfo())
+				info = ms.GetExecutionInfo()
 			}
 		} else if mut := art.GetSyncWorkflowStateMutationAttributes(); mut != nil {
+			payload.ArtifactKind = wideevents.ArtifactKindMutation
+			// Exclusive lower bound of the state diff: the target's last-synced versioned transition
+			// per the sender's progress cache. Only a mutation carries one.
+			if vt := mut.GetExclusiveStartVersionedTransition(); vt != nil {
+				payload.ExclusiveStartVT = &wideevents.VersionedTransitionEntry{
+					FailoverVersion: vt.GetNamespaceFailoverVersion(),
+					TransitionCount: vt.GetTransitionCount(),
+				}
+			}
 			if m := mut.GetStateMutation(); m != nil {
-				payload.PopulateParentInfo(m.GetExecutionInfo())
+				info = m.GetExecutionInfo()
 			}
 		}
+		if info != nil {
+			payload.PopulateParentInfo(info)
+			payload.HydratedVT = hydratedVersionedTransition(info)
+		}
+		payload.ShippedFirstEventID, payload.ShippedFirstEventVersion,
+			payload.ShippedLastEventID, payload.ShippedLastEventVersion =
+			shippedEventRange(serializer, art.GetEventBatches(), logger)
+		// The successor's event 1 rides outside the bounds above; the run id is enough to find it.
+		payload.NewRunID = art.GetNewRunInfo().GetRunId()
 	default:
 	}
+}
+
+// hydratedVersionedTransition returns the versioned transition of the mutable state serialized into
+// the artifact, i.e. the last entry of its transition history. Nil when transition history is absent
+// (state-based replication disabled, or the workflow is in an unknown versioned transition).
+func hydratedVersionedTransition(info *persistencespb.WorkflowExecutionInfo) *wideevents.VersionedTransitionEntry {
+	vt := transitionhistory.LastVersionedTransition(info.GetTransitionHistory())
+	if vt == nil {
+		return nil
+	}
+	return &wideevents.VersionedTransitionEntry{
+		FailoverVersion: vt.GetNamespaceFailoverVersion(),
+		TransitionCount: vt.GetTransitionCount(),
+	}
+}
+
+// shippedEventRange reads the inclusive (event id, version) bounds actually carried by the artifact
+// from its first and last batch. The versions identify the history branch the events sit on, which
+// event ids alone cannot: the same ids exist on both sides of a split brain. Deserialization
+// failures yield zeroes rather than an error: this is best-effort instrumentation and must never
+// affect the send path.
+//
+// Decoding is stripped (event_id + version, unknown fields discarded) so the cost does not scale
+// with payload size: a full decode of a large batch would copy every payload byte to read two ints.
+func shippedEventRange(
+	serializer serialization.Serializer,
+	batches []*commonpb.DataBlob,
+	logger log.Logger,
+) (firstEventID int64, firstEventVersion int64, lastEventID int64, lastEventVersion int64) {
+	if len(batches) == 0 || serializer == nil {
+		return 0, 0, 0, 0
+	}
+	firstBatch, err := serializer.DeserializeStrippedEvents(batches[0])
+	if err != nil || len(firstBatch) == 0 {
+		if err != nil && logger != nil {
+			logger.Error("replication lifecycle: unable to deserialize first event batch", tag.Error(err))
+		}
+		return 0, 0, 0, 0
+	}
+	firstEventID = firstBatch[0].GetEventId()
+	firstEventVersion = firstBatch[0].GetVersion()
+
+	lastBatch := firstBatch
+	if len(batches) > 1 {
+		lastBatch, err = serializer.DeserializeStrippedEvents(batches[len(batches)-1])
+		if err != nil || len(lastBatch) == 0 {
+			if err != nil && logger != nil {
+				logger.Error("replication lifecycle: unable to deserialize last event batch", tag.Error(err))
+			}
+			// The lower bound is still worth reporting on its own.
+			return firstEventID, firstEventVersion, 0, 0
+		}
+	}
+	last := lastBatch[len(lastBatch)-1]
+	return firstEventID, firstEventVersion, last.GetEventId(), last.GetVersion()
 }
 
 // emitReplicationVerifyApplied emits a best-effort "applied" ReplicationLifecycle event for a

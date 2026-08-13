@@ -208,6 +208,8 @@ type Config struct {
 	MaximumBufferedEventsBatch       dynamicconfig.IntPropertyFn
 	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaximumRequestIDsPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RequestIDMaxAge                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
@@ -321,6 +323,7 @@ type Config struct {
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
+	EnableReplicationReaderGroup                        dynamicconfig.BoolPropertyFn
 	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
@@ -642,6 +645,7 @@ func NewConfig(
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
+		EnableReplicationReaderGroup:                        dynamicconfig.EnableReplicationReaderGroup.Get(dc),
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
@@ -665,6 +669,8 @@ func NewConfig(
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
+		MaximumRequestIDsPerExecution:    dynamicconfig.MaximumRequestIDsPerExecution.Get(dc),
+		RequestIDMaxAge:                  dynamicconfig.RequestIDMaxAge.Get(dc),
 		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
 		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),

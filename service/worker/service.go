@@ -67,6 +67,7 @@ type (
 		workerManager                    *workerManager
 		perNamespaceWorkerManager        *PerNamespaceWorkerManager
 		scanner                          *scanner.Scanner
+		parentClosePolicyProcessor       *parentclosepolicy.Processor
 		matchingClient                   matchingservice.MatchingServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		customTaskHandler                func(ctx context.Context, task *replicationspb.ReplicationTask) error
@@ -297,6 +298,9 @@ func (s *Service) Stop() {
 	s.scanner.Stop()
 	s.perNamespaceWorkerManager.Stop()
 	s.workerManager.Stop()
+	if s.parentClosePolicyProcessor != nil {
+		s.parentClosePolicyProcessor.Stop()
+	}
 	s.visibilityManager.Close()
 
 	s.server.GracefulStop()
@@ -325,6 +329,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 			tag.Error(err),
 		)
 	}
+	s.parentClosePolicyProcessor = processor
 }
 
 func (s *Service) initScanner(serializer serialization.Serializer) error {

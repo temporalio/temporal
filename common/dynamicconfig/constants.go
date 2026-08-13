@@ -1912,7 +1912,7 @@ This can help reduce effects of shard movement.`,
 	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",
-		false,
+		true,
 		`EnableHostLevelEventsCache controls if the events cache is host level. Requires service restart to take effect.`,
 	)
 	AcquireShardInterval = NewGlobalDurationSetting(
@@ -2608,6 +2608,18 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 		10000,
 		`MaximumSignalsPerExecution is max number of signals supported by single execution`,
 	)
+	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
+		"history.maximumRequestIDsPerExecution",
+		25,
+		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained per
+execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to disable the count cap.`,
+	)
+	RequestIDMaxAge = NewNamespaceDurationSetting(
+		"history.requestIDMaxAge",
+		7*24*time.Hour,
+		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
+UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
+	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
 		5*time.Minute,
@@ -2927,6 +2939,14 @@ that task will be sent to DLQ.`,
 		"history.EnableReplicationTaskTieredProcessing",
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
+	)
+	EnableReplicationReaderGroup = NewGlobalBoolSetting(
+		"history.EnableReplicationReaderGroup",
+		false,
+		`EnableReplicationReaderGroup routes replication stream reader-state handling through the
+replicationReaderGroup abstraction, a refactor of the per-priority cursor arithmetic in the
+stream sender. Behavior is unchanged; this flag exists to allow a safe rollout of the
+refactored path. Changing it restarts replication streams.`,
 	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
