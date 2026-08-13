@@ -2,6 +2,7 @@ package testrunner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -36,16 +37,10 @@ const (
 	summaryCommand     = "generate-summary"
 )
 
-type attempt struct {
-	number           int
-	coverProfilePath string
-	result           attemptResult
-}
-
 type runner struct {
 	junitOutputPath  string
 	coverProfilePath string
-	attempts         []*attempt
+	results          []attemptResult
 	maxAttempts      int
 	crashName        string
 	junitGlob        string
@@ -56,7 +51,6 @@ type runner struct {
 
 func newRunner() *runner {
 	return &runner{
-		attempts:       make([]*attempt, 0),
 		maxAttempts:    1,
 		executeAttempt: runAttempt,
 	}
@@ -170,27 +164,6 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 	return sanitizedArgs, nil
 }
 
-func (r *runner) newAttempt() *attempt {
-	a := &attempt{
-		number: len(r.attempts) + 1,
-		coverProfilePath: fmt.Sprintf(
-			"%v_%v%v",
-			strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
-			len(r.attempts),
-			codeCoverageExtension),
-	}
-	r.attempts = append(r.attempts, a)
-	return a
-}
-
-func (r *runner) attemptResults() []attemptResult {
-	results := make([]attemptResult, 0, len(r.attempts))
-	for _, attempt := range r.attempts {
-		results = append(results, attempt.result)
-	}
-	return results
-}
-
 // Main is the entry point for the testrunner tool.
 // nolint:revive,deep-exit
 func Main() {
@@ -216,9 +189,17 @@ func Main() {
 
 	switch command {
 	case testCommand:
-		r.runTests(ctx, args)
+		exitCode, err := r.runTests(ctx, args)
+		if err != nil {
+			log.Printf("test run failed: %v", err)
+		}
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 	case crashReportCommand:
-		r.reportCrash()
+		if err := r.reportCrash(); err != nil {
+			log.Fatal(err)
+		}
 	case summaryCommand:
 		if err := r.generateSummary(); err != nil {
 			log.Fatal(err)
@@ -228,12 +209,9 @@ func Main() {
 	}
 }
 
-// nolint:revive,deep-exit
-func (r *runner) reportCrash() {
+func (r *runner) reportCrash() error {
 	report := renderCrashJUnit(r.crashName)
-	if err := r.writeReport(&report); err != nil {
-		log.Fatal(err)
-	}
+	return r.writeReport(&report)
 }
 
 func (r *runner) generateSummary() error {
@@ -290,34 +268,28 @@ func (r *runner) writeReport(report *junit.Testsuites) error {
 // writeCurrentReport writes the report from all completed attempts to the
 // final output path. It is called after each attempt so that partial results
 // survive if the process is killed externally between attempts.
-func (r *runner) writeCurrentReport() {
-	results := r.attemptResults()
-	if len(results) == 0 {
-		return
+func (r *runner) writeCurrentReport() error {
+	if len(r.results) == 0 {
+		return nil
 	}
-	report := renderJUnit(results)
-	if err := r.writeReport(&report); err != nil {
-		log.Printf("warning: failed to write intermediate report: %v", err)
-	}
+	report := renderJUnit(r.results)
+	return r.writeReport(&report)
 }
 
-// nolint:revive,deep-exit
-func (r *runner) runTests(ctx context.Context, args []string) {
+func (r *runner) runTests(ctx context.Context, args []string) (int, error) {
 	policy := retryPolicy{targetedThreshold: targetedRetryThreshold}
 	currentArgs := slices.Clone(args)
 	var pending *retryPlan
 	var validationErr error
-	var currentAttempt *attempt
-	for a := 1; a <= r.maxAttempts; a++ {
-		currentAttempt = r.newAttempt()
+	var writeErr error
 
+	for attemptNumber := 1; attemptNumber <= r.maxAttempts; attemptNumber++ {
 		// Run tests.
 		result := r.executeAttempt(ctx, attemptSpec{
-			number:           currentAttempt.number,
+			number:           attemptNumber,
 			args:             currentArgs,
-			coverProfilePath: currentAttempt.coverProfilePath,
+			coverProfilePath: r.attemptCoveragePath(attemptNumber),
 		})
-		currentAttempt.result = result
 
 		// Check whether our total timeout fired (context deadline exceeded).
 		// This happens when the go test binary hangs and never produces its own
@@ -325,28 +297,32 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		// completed attempts and from the partially-executed current attempt, then
 		// flush the XML before the external kill arrives.
 		if result.process.state == processDeadlineExceeded {
-			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
-			currentAttempt.result.process.details = r.totalTimeoutDetails(result)
+			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", attemptNumber-1)
+			result.process.details = r.totalTimeoutDetails(result)
 		}
+		r.results = append(r.results, result)
 
 		// Write intermediate results so they survive if we are killed externally
 		// between attempts (e.g. a GitHub Actions job timeout fires after this
 		// attempt but before the next one completes).
-		r.writeCurrentReport()
+		if writeErr = r.writeCurrentReport(); writeErr != nil {
+			log.Printf("warning: failed to write intermediate report: %v", writeErr)
+		}
+
 		if pending != nil {
-			if err := pending.validate(currentAttempt.result); err != nil {
+			if err := pending.validate(result); err != nil {
 				validationErr = err
 				break
 			}
 		}
 
-		for _, pkg := range currentAttempt.result.abortedPackages() {
-			details := packageAbortDetails(currentAttempt.result, pkg)
+		for _, pkg := range result.abortedPackages() {
+			details := packageAbortDetails(result, pkg)
 			log.Printf("%s: %s", failureTypeAborted, packageAbortLogSummary(details))
 		}
 
-		plan := policy.plan(currentAttempt.result)
-		if plan.mode == retryStop || a == r.maxAttempts {
+		plan := policy.plan(result)
+		if plan.mode == retryStop || attemptNumber == r.maxAttempts {
 			break
 		}
 		log.Print(plan.reason)
@@ -354,24 +330,32 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		pending = &plan
 	}
 
-	// Render results from all attempts and write the final JUnit report.
-	report := renderJUnit(r.attemptResults())
-	if err := r.writeReport(&report); err != nil {
-		log.Fatal(err)
+	// Every completed attempt was persisted above. Promote the last write failure
+	// to the caller instead of leaving only a warning from an intermediate write.
+	if writeErr != nil {
+		return 1, fmt.Errorf("failed to write JUnit report: %w", errors.Join(writeErr, validationErr))
 	}
-
 	if validationErr != nil {
-		log.Fatal(validationErr)
+		return 1, validationErr
 	}
+	last := r.results[len(r.results)-1]
+	if last.successful() {
+		return 0, nil
+	}
+	log.Printf("exiting with failure after running %d attempt(s)", len(r.results))
+	if last.process.exitCode > 0 {
+		return last.process.exitCode, nil
+	}
+	return 1, nil
+}
 
-	if !currentAttempt.result.successful() {
-		log.Printf("exiting with failure after running %d attempt(s)", len(r.attempts))
-		exitCode := currentAttempt.result.process.exitCode
-		if exitCode <= 0 {
-			exitCode = 1
-		}
-		os.Exit(exitCode)
-	}
+func (r *runner) attemptCoveragePath(attemptNumber int) string {
+	return fmt.Sprintf(
+		"%v_%v%v",
+		strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
+		attemptNumber-1,
+		codeCoverageExtension,
+	)
 }
 
 func (r *runner) totalTimeoutDetails(result attemptResult) string {
