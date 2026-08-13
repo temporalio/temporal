@@ -607,6 +607,7 @@ func (a *activities) startTaskProcessor(
 // lets the server's idempotency checks collapse retries of the same call.
 func deterministicRequestID(jobID string, parts ...string) string {
 	var key strings.Builder
+	key.WriteString(jobID)
 	for _, part := range parts {
 		key.WriteString(":" + part)
 	}
