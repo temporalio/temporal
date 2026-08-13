@@ -188,7 +188,7 @@ func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerRep
 	allFailures []TestFailure, allTestRuns []TestRun, runs []github.Run, successfulRuns int) *ReportSummary {
 	filteredFlakyReports := make([]TestReport, 0, len(flakyReports))
 	for _, report := range flakyReports {
-		// Tests that fail on every observed run are consistently broken, not flaky.
+		// Tests that fail on every observed run are very likely false reporting.
 		if report.TotalRuns > 0 && report.FailureCount == report.TotalRuns {
 			continue
 		}
