@@ -49,6 +49,28 @@ func TestGenerateSuiteBreakdownTable(t *testing.T) {
 		"| `TestFunctionalSuite` | **25.0% (2/8)** | 3h ago |\n", table)
 }
 
+func TestBuildReportSummaryExcludesHundredPercentFlakyTests(t *testing.T) {
+	fullyFailing := TestReport{TestName: "TestAlwaysFails", FailureCount: 2, TotalRuns: 2}
+	flaky := TestReport{TestName: "TestSometimesFails", FailureCount: 1, TotalRuns: 2}
+	timeout := TestReport{TestName: "TestTimeout", FailureCount: 2, TotalRuns: 2}
+	crash := TestReport{TestName: "TestCrash", FailureCount: 2, TotalRuns: 2}
+	ciBreaker := TestReport{TestName: "TestCIBreaker", FailureCount: 2, TotalRuns: 2}
+
+	summary := buildReportSummary(
+		[]TestReport{fullyFailing, flaky},
+		[]TestReport{timeout},
+		[]TestReport{crash},
+		[]TestReport{ciBreaker},
+		nil, nil, nil, nil, 0,
+	)
+
+	require.Equal(t, []TestReport{flaky}, summary.FlakyTests)
+	require.Equal(t, 1, summary.TotalFlakyCount)
+	require.Equal(t, []TestReport{timeout}, summary.Timeouts)
+	require.Equal(t, []TestReport{crash}, summary.Crashes)
+	require.Equal(t, []TestReport{ciBreaker}, summary.CIBreakers)
+}
+
 func TestGenerateReportLimitsAllTableRows(t *testing.T) {
 	const (
 		maxRows = maxReportRowsPerTable
@@ -117,7 +139,7 @@ func TestGenerateReportLimitsAllTableRows(t *testing.T) {
 	require.Contains(t, bisectRows[0], "`Bisect100`")
 	require.Contains(t, bisectRows[1], "`Bisect100`")
 	require.NotContains(t, summaryContent, "`Bisect1`")
-	require.Equal(t, 6, strings.Count(summaryContent, "Showing the top 100 of 101 entries."))
+	require.NotContains(t, summaryContent, "Showing the top")
 }
 
 func TestBuildBisectTableRowsSortsReportsByTopSuspect(t *testing.T) {

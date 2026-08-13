@@ -71,15 +71,8 @@ func formatSparkline(points []int) string {
 	return sb.String()
 }
 
-func limitReportRows[T any](rows []T) ([]T, int) {
-	total := len(rows)
-	return rows[:min(total, maxReportRowsPerTable)], total
-}
-
-func writeTableLimitNotice(sb *strings.Builder, displayed, total int) {
-	if displayed < total {
-		fmt.Fprintf(sb, "Showing the top %d of %d entries.\n\n", displayed, total)
-	}
+func limitReportRows[T any](rows []T) []T {
+	return rows[:min(len(rows), maxReportRowsPerTable)]
 }
 
 // generateSuiteBreakdownTable creates a markdown table of per-suite flake data
@@ -88,10 +81,9 @@ func generateSuiteBreakdownTable(suiteReports []SuiteReport) string {
 		return ""
 	}
 
-	suiteReports, total := limitReportRows(suiteReports)
+	suiteReports = limitReportRows(suiteReports)
 
 	var sb strings.Builder
-	writeTableLimitNotice(&sb, len(suiteReports), total)
 	sb.WriteString("| Suite | Flake Rate | Last Failure |\n")
 	sb.WriteString("|-------|------------|-------------|\n")
 
@@ -116,10 +108,9 @@ func generateTestReportTable(reports []TestReport, rateHeader string, maxLinks i
 		return ""
 	}
 
-	reports, total := limitReportRows(reports)
+	reports = limitReportRows(reports)
 
 	var sb strings.Builder
-	writeTableLimitNotice(&sb, len(reports), total)
 	sb.WriteString(fmt.Sprintf("| Test | %s | Last Failure | Trend | Links |\n", rateHeader))
 	sb.WriteString("|------|------------|-------------|-------|-------|\n")
 

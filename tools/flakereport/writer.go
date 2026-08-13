@@ -201,8 +201,7 @@ func generateBisectSummary(reports []TestBisectReport, repo string, minProb floa
 	}
 	sb.WriteString("\n\n")
 
-	rows, total := limitReportRows(buildBisectTableRows(reports))
-	writeTableLimitNotice(&sb, len(rows), total)
+	rows := limitReportRows(buildBisectTableRows(reports))
 	writeBisectTable(&sb, rows, repo)
 	return sb.String()
 }
