@@ -13,6 +13,16 @@ type ClosureReport struct {
 	OmittedActions     []string `json:"omittedActions,omitempty"`
 }
 
+type ProjectedTarget struct {
+	ModelFamilyVersion string
+	Target             VerificationTarget
+	Model              Model
+	Closure            ClosureReport
+	Modules            []string
+	Properties         []string
+	Interfaces         []ManifestInterface
+}
+
 func MarshalClosureReport(report ClosureReport) ([]byte, error) {
 	result := report
 	result.RetainedActions = sortedClone(report.RetainedActions)
@@ -26,13 +36,13 @@ func MarshalClosureReport(report ClosureReport) ([]byte, error) {
 	return append(encoded, '\n'), nil
 }
 
-func Project(family ModelFamily, targetName string) (Model, ClosureReport, error) {
+func Project(family ModelFamily, targetName string) (ProjectedTarget, error) {
 	if err := ValidateModelFamily(family); err != nil {
-		return Model{}, ClosureReport{}, err
+		return ProjectedTarget{}, err
 	}
 	target, found := targetByName(family.Targets, targetName)
 	if !found {
-		return Model{}, ClosureReport{}, fmt.Errorf("unknown verification target %q", targetName)
+		return ProjectedTarget{}, fmt.Errorf("unknown verification target %q", targetName)
 	}
 	modules := make(map[string]Module, len(family.Modules))
 	for _, module := range family.Modules {
@@ -48,7 +58,7 @@ func Project(family ModelFamily, targetName string) (Model, ClosureReport, error
 	for _, compositionName := range target.Compositions {
 		composition, found := compositions[compositionName]
 		if !found {
-			return Model{}, ClosureReport{}, fmt.Errorf("verification target %q references unknown composition %q", target.Name, compositionName)
+			return ProjectedTarget{}, fmt.Errorf("verification target %q references unknown composition %q", target.Name, compositionName)
 		}
 		moduleNames = append(moduleNames, composition.Modules...)
 		propertyNames = append(propertyNames, composition.Properties...)
@@ -64,7 +74,7 @@ func Project(family ModelFamily, targetName string) (Model, ClosureReport, error
 	for _, moduleName := range moduleNames {
 		module, found := modules[moduleName]
 		if !found {
-			return Model{}, ClosureReport{}, fmt.Errorf("verification target %q references unknown module %q", target.Name, moduleName)
+			return ProjectedTarget{}, fmt.Errorf("verification target %q references unknown module %q", target.Name, moduleName)
 		}
 		includedModules[moduleName] = struct{}{}
 		addNames(entities, module.Entities)
@@ -79,7 +89,7 @@ func Project(family ModelFamily, targetName string) (Model, ClosureReport, error
 	for _, refinementMapName := range refinementMapNames {
 		refinementMap, found := refinementMaps[refinementMapName]
 		if !found {
-			return Model{}, ClosureReport{}, fmt.Errorf("verification target %q references unknown refinement map %q", target.Name, refinementMapName)
+			return ProjectedTarget{}, fmt.Errorf("verification target %q references unknown refinement map %q", target.Name, refinementMapName)
 		}
 		for _, refinement := range refinementMap.Actions {
 			if refinement.Stutter {
@@ -123,18 +133,18 @@ func Project(family ModelFamily, targetName string) (Model, ClosureReport, error
 			continue
 		}
 		if actionAffects(action, entities, relations) {
-			return Model{}, ClosureReport{}, fmt.Errorf("verification target %q omits action %q which can affect retained state", target.Name, action.Name)
+			return ProjectedTarget{}, fmt.Errorf("verification target %q omits action %q which can affect retained state", target.Name, action.Name)
 		}
 	}
 	result := projectedModel(family.Model, target, entities, relations, actions, properties, environmentActions)
 	if err := applyTargetBounds(target, &result); err != nil {
-		return Model{}, ClosureReport{}, err
+		return ProjectedTarget{}, err
 	}
 	if err := validateMinimumBounds(target, result); err != nil {
-		return Model{}, ClosureReport{}, err
+		return ProjectedTarget{}, err
 	}
 	if err := Validate(result); err != nil {
-		return Model{}, ClosureReport{}, fmt.Errorf("project verification target %q: %w", target.Name, err)
+		return ProjectedTarget{}, fmt.Errorf("project verification target %q: %w", target.Name, err)
 	}
 	report := ClosureReport{}
 	for _, action := range family.Model.Actions {
@@ -150,7 +160,78 @@ func Project(family ModelFamily, targetName string) (Model, ClosureReport, error
 			report.OmittedActions = append(report.OmittedActions, action.Name)
 		}
 	}
-	return result, report, nil
+	selectedModules := sortedCompact(moduleNames)
+	return ProjectedTarget{
+		ModelFamilyVersion: family.Version,
+		Target:             cloneVerificationTarget(target),
+		Model:              result,
+		Closure:            report,
+		Modules:            selectedModules,
+		Properties:         sortedCompact(propertyNames),
+		Interfaces:         projectedManifestInterfaces(family, selectedModules),
+	}, nil
+}
+
+func projectedManifestInterfaces(family ModelFamily, moduleNames []string) []ManifestInterface {
+	selected := make(map[string]struct{}, len(moduleNames))
+	for _, module := range moduleNames {
+		selected[module] = struct{}{}
+	}
+	owners := make(map[string]CapabilityOwner, len(family.Modules))
+	for _, module := range family.Modules {
+		owners[module.Name] = module.Owner
+	}
+	var result []ManifestInterface
+	for _, declared := range family.Interfaces {
+		_, providerSelected := selected[declared.Provider]
+		var consumers []ManifestModuleRef
+		for _, consumer := range declared.Consumers {
+			if _, consumerSelected := selected[consumer]; consumerSelected {
+				consumers = append(consumers, ManifestModuleRef{Module: consumer, Owner: owners[consumer]})
+			}
+		}
+		if !providerSelected && len(consumers) == 0 {
+			continue
+		}
+		projected := ManifestInterface{
+			Name:       declared.Name,
+			Provider:   ManifestModuleRef{Module: declared.Provider, Owner: owners[declared.Provider]},
+			Consumers:  consumers,
+			Identities: sortedClone(declared.Identities),
+		}
+		for _, obligation := range declared.Obligations {
+			projected.Obligations = append(projected.Obligations, obligation.Name)
+		}
+		slices.Sort(projected.Obligations)
+		slices.SortFunc(projected.Consumers, func(left, right ManifestModuleRef) int {
+			return compareString(left.Module, right.Module)
+		})
+		result = append(result, projected)
+	}
+	slices.SortFunc(result, func(left, right ManifestInterface) int {
+		return compareString(left.Name, right.Name)
+	})
+	return result
+}
+
+func cloneVerificationTarget(target VerificationTarget) VerificationTarget {
+	result := target
+	result.Owners = slices.Clone(target.Owners)
+	result.Modules = slices.Clone(target.Modules)
+	result.Compositions = slices.Clone(target.Compositions)
+	result.Properties = slices.Clone(target.Properties)
+	result.RefinementMaps = slices.Clone(target.RefinementMaps)
+	result.Bounds = cloneBounds(target.Bounds)
+	result.MinimumBounds = cloneBounds(target.MinimumBounds)
+	result.BackendRequirements = slices.Clone(target.BackendRequirements)
+	result.FailurePolicy = slices.Clone(target.FailurePolicy)
+	result.Abstractions = slices.Clone(target.Abstractions)
+	return result
+}
+
+func sortedCompact(values []string) []string {
+	result := sortedClone(values)
+	return slices.Compact(result)
 }
 
 func applyTargetBounds(target VerificationTarget, model *Model) error {

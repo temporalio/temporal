@@ -14,8 +14,9 @@ func TestProjectKeepsOnlySelectedModuleClosure(t *testing.T) {
 		Modules: []string{"workflow"},
 	}}
 
-	model, report, err := Project(family, "feature-workflow")
+	projection, err := Project(family, "feature-workflow")
 	require.NoError(t, err)
+	model, report := projection.Model, projection.Closure
 	require.Equal(t, []string{"Workflow"}, entityNames(model.Entities))
 	require.Empty(t, model.Relations)
 	require.Empty(t, model.Actions)
@@ -48,8 +49,9 @@ func TestProjectRetainsImportedProviderActionAsEnvironment(t *testing.T) {
 		},
 	}
 
-	model, report, err := Project(family, "feature-workflow")
+	projection, err := Project(family, "feature-workflow")
 	require.NoError(t, err)
+	model, report := projection.Model, projection.Closure
 	require.Len(t, model.Actions, 1)
 	require.Equal(t, "schedule", model.Actions[0].Name)
 	require.True(t, model.Actions[0].Unrealized)
@@ -90,8 +92,9 @@ func TestProjectClosesTransitiveContractAssumptions(t *testing.T) {
 		},
 	}
 
-	model, report, err := Project(family, "feature-workflow")
+	projection, err := Project(family, "feature-workflow")
 	require.NoError(t, err)
+	model, report := projection.Model, projection.Closure
 	require.Equal(t, []string{"schedule", "ready"}, actionNames(model.Actions))
 	require.ElementsMatch(t, []string{"schedule", "ready"}, report.EnvironmentActions)
 }
@@ -107,7 +110,7 @@ func TestProjectRejectsOmittedActionWhichMutatesRetainedState(t *testing.T) {
 		Modules: []string{"workflow"},
 	}}
 
-	_, _, err := Project(family, "feature-workflow")
+	_, err := Project(family, "feature-workflow")
 	require.ErrorContains(t, err, `verification target "feature-workflow" omits action "schedule" which can affect retained state`)
 }
 
@@ -128,8 +131,9 @@ func TestProjectReportsExplicitStutteringAction(t *testing.T) {
 		RefinementMaps: []string{"workflow-delivery"},
 	}}
 
-	model, report, err := Project(family, "feature-workflow")
+	projection, err := Project(family, "feature-workflow")
 	require.NoError(t, err)
+	model, report := projection.Model, projection.Closure
 	require.Empty(t, model.Actions)
 	require.Equal(t, []string{"schedule"}, report.StutteringActions)
 	require.Empty(t, report.OmittedActions)
@@ -155,7 +159,7 @@ func TestProjectRejectsStutteringActionWhichMutatesRetainedState(t *testing.T) {
 		RefinementMaps: []string{"workflow-delivery"},
 	}}
 
-	_, _, err := Project(family, "feature-workflow")
+	_, err := Project(family, "feature-workflow")
 	require.ErrorContains(t, err, `verification target "feature-workflow" omits action "schedule" which can affect retained state`)
 }
 
@@ -168,7 +172,7 @@ func TestProjectRejectsVacuousTargetBound(t *testing.T) {
 		MinimumBounds: map[string]int{"Workflow": 2},
 	}}
 
-	_, _, err := Project(family, "feature-workflow")
+	_, err := Project(family, "feature-workflow")
 	require.ErrorContains(t, err, `verification target "feature-workflow" requires at least 2 identities for entity "Workflow", got 1`)
 }
 
@@ -182,8 +186,9 @@ func TestProjectAppliesIndependentTargetBounds(t *testing.T) {
 		MinimumBounds: map[string]int{"NexusOperation": 1},
 	}}
 
-	model, _, err := Project(family, "feature-nexus")
+	projection, err := Project(family, "feature-nexus")
 	require.NoError(t, err)
+	model := projection.Model
 	var operationIDs []string
 	for _, entity := range model.Entities {
 		if entity.Name == "NexusOperation" {
@@ -202,16 +207,30 @@ func TestProjectRejectsTargetBoundLargerThanSourcePool(t *testing.T) {
 		Bounds:  map[string]int{"NexusOperation": 3},
 	}}
 
-	_, _, err := Project(family, "feature-nexus")
+	_, err := Project(family, "feature-nexus")
 	require.ErrorContains(t, err, `verification target "feature-nexus" requires 3 identities for entity "NexusOperation", source model provides 2`)
 }
 
 func TestProjectExpandsSelectedComposition(t *testing.T) {
 	family := validModelFamily()
+	family.Model.Properties = []Property{{Name: "workflow-safe", Kind: SafetyProperty, Expr: Expr{Op: TrueExpr}}}
+	family.Modules[0].Properties = []string{"workflow-safe"}
+	family.Interfaces = []Interface{{
+		Name:       "delivery",
+		Provider:   "nexus",
+		Consumers:  []string{"workflow"},
+		Identities: []string{"Workflow", "NexusOperation"},
+		Obligations: []Obligation{{
+			Name:    "accepted",
+			Actions: []string{"schedule"},
+		}},
+	}}
 	family.Compositions = []Composition{{
-		Name:    "nexus-workflow",
-		Owners:  []CapabilityOwner{"nexus", "workflow"},
-		Modules: []string{"nexus", "workflow"},
+		Name:       "nexus-workflow",
+		Owners:     []CapabilityOwner{"nexus", "workflow"},
+		Modules:    []string{"nexus", "workflow"},
+		Properties: []string{"workflow-safe"},
+		Closes:     []ObligationRef{{Interface: "delivery", Obligation: "accepted"}},
 	}}
 	family.Targets = []VerificationTarget{{
 		Name:         "integration-nexus-workflow",
@@ -219,8 +238,18 @@ func TestProjectExpandsSelectedComposition(t *testing.T) {
 		Compositions: []string{"nexus-workflow"},
 	}}
 
-	model, report, err := Project(family, "integration-nexus-workflow")
+	projection, err := Project(family, "integration-nexus-workflow")
 	require.NoError(t, err)
-	require.Equal(t, []string{"schedule"}, actionNames(model.Actions))
-	require.Equal(t, []string{"schedule"}, report.RetainedActions)
+	require.Equal(t, "integration-nexus-workflow", projection.Target.Name)
+	require.Equal(t, []string{"nexus", "workflow"}, projection.Modules)
+	require.Equal(t, []string{"workflow-safe"}, projection.Properties)
+	require.Equal(t, []ManifestInterface{{
+		Name:        "delivery",
+		Provider:    ManifestModuleRef{Module: "nexus", Owner: "nexus"},
+		Consumers:   []ManifestModuleRef{{Module: "workflow", Owner: "workflow"}},
+		Identities:  []string{"NexusOperation", "Workflow"},
+		Obligations: []string{"accepted"},
+	}}, projection.Interfaces)
+	require.Equal(t, []string{"schedule"}, actionNames(projection.Model.Actions))
+	require.Equal(t, []string{"schedule"}, projection.Closure.RetainedActions)
 }

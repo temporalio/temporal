@@ -57,8 +57,9 @@ func TestVerificationFamilyProjectsProtocolAtomicWithoutSemanticDrift(t *testing
 		"WorkflowTask":   1,
 	}, family.Targets[0].Bounds)
 
-	got, report, err := verify.Project(family, "protocol-atomic")
+	projection, err := verify.Project(family, "protocol-atomic")
 	require.NoError(t, err)
+	got, report := projection.Model, projection.Closure
 	wantJSON, err := verify.MarshalModel(want)
 	require.NoError(t, err)
 	gotJSON, err := verify.MarshalModel(got)
@@ -93,8 +94,9 @@ func TestVerificationFamilyDeclaresFoundationDeliverySafetyTarget(t *testing.T) 
 		"WorkObligation":  2,
 	}, target.MinimumBounds)
 
-	model, report, err := verify.Project(family, target.Name)
+	projection, err := verify.Project(family, target.Name)
 	require.NoError(t, err)
+	model, report := projection.Model, projection.Closure
 	require.NoError(t, verify.Validate(model))
 	require.NotEmpty(t, report.RetainedActions)
 	require.Empty(t, report.EnvironmentActions)
@@ -451,9 +453,9 @@ func foundationDeliveryModel(t *testing.T) verify.Model {
 	require.NoError(t, err)
 	family, err := protocol.VerificationFamily(VerificationOptions{DefaultBound: 1})
 	require.NoError(t, err)
-	model, _, err := verify.Project(family, foundationDeliveryTarget)
+	projection, err := verify.Project(family, foundationDeliveryTarget)
 	require.NoError(t, err)
-	return model
+	return projection.Model
 }
 
 func foundationPersistTrace() []verify.TraceStep {

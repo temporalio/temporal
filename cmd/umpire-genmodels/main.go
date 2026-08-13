@@ -92,11 +92,11 @@ func generate(output string, defaultBound int) error {
 		return strings.Compare(left.Name, right.Name)
 	})
 	for _, target := range targets {
-		model, report, err := verify.Project(family, target.Name)
+		projection, err := verify.Project(family, target.Name)
 		if err != nil {
 			return err
 		}
-		targetFiles, entry, err := generateTarget(family, familyHash, target, model, report)
+		targetFiles, entry, err := generateTarget(familyHash, projection)
 		if err != nil {
 			return err
 		}
@@ -127,12 +127,10 @@ type targetIndexEntry struct {
 }
 
 func generateTarget(
-	family verify.ModelFamily,
 	familyHash string,
-	target verify.VerificationTarget,
-	model verify.Model,
-	report verify.ClosureReport,
+	projection verify.ProjectedTarget,
 ) (map[string][]byte, targetIndexEntry, error) {
+	target, model := projection.Target, projection.Model
 	tlaFiles, err := tla.Generate(model)
 	if err != nil {
 		return nil, targetIndexEntry{}, err
@@ -153,15 +151,15 @@ func generateTarget(
 		GeneratorVersion:    generatorVersion,
 		Target:              target.Name,
 		TargetOwners:        target.Owners,
-		TargetModules:       targetModuleNames(family, target),
+		TargetModules:       projection.Modules,
 		TargetCompositions:  target.Compositions,
-		TargetProperties:    targetPropertyNames(family, target),
-		ModelFamilyVersion:  family.Version,
+		TargetProperties:    projection.Properties,
+		ModelFamilyVersion:  projection.ModelFamilyVersion,
 		ModelFamilyHash:     familyHash,
 		BackendRequirements: target.BackendRequirements,
 		MinimumBounds:       target.MinimumBounds,
 		FailurePolicy:       target.FailurePolicy,
-		Interfaces:          targetManifestInterfaces(family, target),
+		Interfaces:          projection.Interfaces,
 		Guarantee:           verify.FiniteExhaustive,
 		Tools:               pinnedTools,
 		Unsupported:         unsupported,
@@ -177,7 +175,7 @@ func generateTarget(
 	if err != nil {
 		return nil, targetIndexEntry{}, err
 	}
-	closureJSON, err := verify.MarshalClosureReport(report)
+	closureJSON, err := verify.MarshalClosureReport(projection.Closure)
 	if err != nil {
 		return nil, targetIndexEntry{}, err
 	}
@@ -204,76 +202,13 @@ func generateTarget(
 	return files, entry, nil
 }
 
-func targetModuleNames(family verify.ModelFamily, target verify.VerificationTarget) []string {
-	modules := slices.Clone(target.Modules)
-	for _, selected := range target.Compositions {
-		for _, composition := range family.Compositions {
-			if composition.Name == selected {
-				modules = append(modules, composition.Modules...)
-				break
-			}
-		}
-	}
-	slices.Sort(modules)
-	return slices.Compact(modules)
-}
-
-func targetPropertyNames(family verify.ModelFamily, target verify.VerificationTarget) []string {
-	properties := slices.Clone(target.Properties)
-	for _, selected := range target.Compositions {
-		for _, composition := range family.Compositions {
-			if composition.Name == selected {
-				properties = append(properties, composition.Properties...)
-				break
-			}
-		}
-	}
-	slices.Sort(properties)
-	return slices.Compact(properties)
-}
-
-func targetManifestInterfaces(family verify.ModelFamily, target verify.VerificationTarget) []verify.ManifestInterface {
-	selected := make(map[string]struct{})
-	for _, module := range targetModuleNames(family, target) {
-		selected[module] = struct{}{}
-	}
-	owners := make(map[string]verify.CapabilityOwner, len(family.Modules))
-	for _, module := range family.Modules {
-		owners[module.Name] = module.Owner
-	}
-	var result []verify.ManifestInterface
-	for _, declared := range family.Interfaces {
-		_, providerSelected := selected[declared.Provider]
-		var consumers []verify.ManifestModuleRef
-		for _, consumer := range declared.Consumers {
-			if _, consumerSelected := selected[consumer]; consumerSelected {
-				consumers = append(consumers, verify.ManifestModuleRef{Module: consumer, Owner: owners[consumer]})
-			}
-		}
-		if !providerSelected && len(consumers) == 0 {
-			continue
-		}
-		manifestInterface := verify.ManifestInterface{
-			Name:       declared.Name,
-			Provider:   verify.ManifestModuleRef{Module: declared.Provider, Owner: owners[declared.Provider]},
-			Consumers:  consumers,
-			Identities: slices.Clone(declared.Identities),
-		}
-		for _, obligation := range declared.Obligations {
-			manifestInterface.Obligations = append(manifestInterface.Obligations, obligation.Name)
-		}
-		result = append(result, manifestInterface)
-	}
-	return result
-}
-
 func verificationModel(defaultBound int) (verify.Model, error) {
 	family, err := verificationFamily(defaultBound)
 	if err != nil {
 		return verify.Model{}, err
 	}
-	model, _, err := verify.Project(family, protocol.ProtocolAtomicTarget)
-	return model, err
+	projection, err := verify.Project(family, protocol.ProtocolAtomicTarget)
+	return projection.Model, err
 }
 
 func verificationFamily(defaultBound int) (verify.ModelFamily, error) {
@@ -399,10 +334,11 @@ func checkModels(ctx context.Context, options checkOptions) error {
 		return err
 	}
 	for _, target := range targets {
-		model, _, err := verify.Project(family, target.Name)
+		projection, err := verify.Project(family, target.Name)
 		if err != nil {
 			return err
 		}
+		model := projection.Model
 		targetBounds := bounds
 		targetBounds.Identities = make(map[string]int, len(model.Entities))
 		for _, entity := range model.Entities {
