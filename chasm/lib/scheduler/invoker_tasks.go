@@ -10,6 +10,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -659,8 +660,13 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	}
 
 	var lcr []*commonpb.Payload
-	if lastCompletionState.Success != nil {
+	var continuedFailure *failurepb.Failure
+	tracksCompletionResult := scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+	if tracksCompletionResult && lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
+	}
+	if tracksCompletionResult {
+		continuedFailure = lastCompletionState.Failure
 	}
 	// Build the completion callback with this start's request ID packed into its token, so the
 	// completion is matched by a request ID that rides in the callback header and survives
@@ -689,7 +695,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
 		Priority:                 requestSpec.Priority,
-		ContinuedFailure:         lastCompletionState.Failure,
+		ContinuedFailure:         continuedFailure,
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
 		},

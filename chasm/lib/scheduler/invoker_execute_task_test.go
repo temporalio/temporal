@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -126,6 +127,30 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	if c.ValidateInvoker != nil {
 		c.ValidateInvoker(t, invoker, env)
 	}
+}
+
+func TestExecuteTask_AllowAllDoesNotPropagateCompletionState(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	env.Scheduler.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+	env.Scheduler.LastCompletionResult = chasm.NewDataField(env.MutableContext(), &schedulerpb.LastCompletionResult{
+		Success: &commonpb.Payload{Data: []byte("previous-result")},
+		Failure: &failurepb.Failure{Message: "previous-failure"},
+	})
+	startTime := timestamppb.New(env.TimeSource.Now())
+	env.mockFrontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			require.Empty(t, request.GetLastCompletionResult().GetPayloads())
+			require.Nil(t, request.GetContinuedFailure())
+			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+		})
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
+			RequestId: "request-id", WorkflowId: "workflow-id", Attempt: 1,
+		}},
+		ExpectedBufferedStarts: 1, ExpectedRunningWorkflows: 1, ExpectedActionCount: 1,
+	})
 }
 
 // executeTaskOnce runs a single InvokerExecuteTask pass against the live
