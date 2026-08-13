@@ -1912,7 +1912,7 @@ This can help reduce effects of shard movement.`,
 	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",
-		false,
+		true,
 		`EnableHostLevelEventsCache controls if the events cache is host level. Requires service restart to take effect.`,
 	)
 	AcquireShardInterval = NewGlobalDurationSetting(
@@ -2608,6 +2608,18 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 		10000,
 		`MaximumSignalsPerExecution is max number of signals supported by single execution`,
 	)
+	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
+		"history.maximumRequestIDsPerExecution",
+		25,
+		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained per
+execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to disable the count cap.`,
+	)
+	RequestIDMaxAge = NewNamespaceDurationSetting(
+		"history.requestIDMaxAge",
+		7*24*time.Hour,
+		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
+UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
+	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
 		5*time.Minute,
@@ -2928,6 +2940,14 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	EnableReplicationReaderGroup = NewGlobalBoolSetting(
+		"history.EnableReplicationReaderGroup",
+		false,
+		`EnableReplicationReaderGroup routes replication stream reader-state handling through the
+replicationReaderGroup abstraction, a refactor of the per-priority cursor arithmetic in the
+stream sender. Behavior is unchanged; this flag exists to allow a safe rollout of the
+refactored path. Changing it restarts replication streams.`,
+	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,
@@ -3002,6 +3022,22 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		"history.ReplicationStreamSenderLivenessMultiplier",
 		10,
 		"ReplicationStreamSenderLivenessMultiplier is the multiplier of liveness check interval on stream sender",
+	)
+	ReplicationStreamMaxLifetime = NewGlobalDurationSetting(
+		"history.ReplicationStreamMaxLifetime",
+		0,
+		`ReplicationStreamMaxLifetime, if greater than 0, bounds how long a single replication
+stream may live before the stream receiver gracefully recycles it (stops it, after which the
+stream receiver monitor reopens a fresh stream). A jitter is applied to spread recycling across
+streams. This lets proxies (e.g. Envoy) gracefully drain connections that would otherwise be
+pinned open indefinitely by endless replication streams. 0 disables the max lifetime (default).`,
+	)
+	ReplicationStreamMaxLifetimeJitter = NewGlobalFloatSetting(
+		"history.ReplicationStreamMaxLifetimeJitter",
+		0.1,
+		`ReplicationStreamMaxLifetimeJitter is the +/- jitter coefficient applied to
+ReplicationStreamMaxLifetime so that streams sharing a connection do not all recycle at the same
+time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are clamped.`,
 	)
 	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
 		"history.EnableHistoryReplicationRateLimiter",

@@ -3,11 +3,13 @@ package shard
 import (
 	"math"
 
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/wideevents"
 )
 
 const (
@@ -40,12 +42,14 @@ type HandoverTracker interface {
 
 // HandoverTrackerParams contains the dependencies needed to construct a HandoverTracker.
 type HandoverTrackerParams struct {
+	ShardID                 int32
 	ClusterMetadata         cluster.Metadata
 	GetMaxReplicationTaskID func() int64
 	ErrorByStateFn          func() error
 	NotifyReplicationFn     func(taskID int64)
 	NamespaceRegistry       namespace.Registry
 	Logger                  log.Logger
+	EventLogger             otellog.Logger
 }
 
 // HandoverTrackerFactory creates a HandoverTracker.
@@ -54,11 +58,13 @@ type HandoverTrackerFactory func(HandoverTrackerParams) HandoverTracker
 // defaultHandoverTracker is the OSS implementation keyed by namespace name.
 type defaultHandoverTracker struct {
 	handoverNamespaces      map[namespace.Name]*namespaceHandOverInfo
+	shardID                 int32
 	clusterMetadata         cluster.Metadata
 	getMaxReplicationTaskID func() int64
 	errorByStateFn          func() error
 	notifyReplicationFn     func(taskID int64)
 	logger                  log.Logger
+	eventLogger             otellog.Logger
 }
 
 // NewDefaultHandoverTrackerFactory returns a factory that creates the default OSS HandoverTracker.
@@ -66,11 +72,13 @@ func NewDefaultHandoverTrackerFactory() HandoverTrackerFactory {
 	return func(params HandoverTrackerParams) HandoverTracker {
 		return &defaultHandoverTracker{
 			handoverNamespaces:      make(map[namespace.Name]*namespaceHandOverInfo),
+			shardID:                 params.ShardID,
 			clusterMetadata:         params.ClusterMetadata,
 			getMaxReplicationTaskID: params.GetMaxReplicationTaskID,
 			errorByStateFn:          params.ErrorByStateFn,
 			notifyReplicationFn:     params.NotifyReplicationFn,
 			logger:                  params.Logger,
+			eventLogger:             params.EventLogger,
 		}
 	}
 }
@@ -86,7 +94,13 @@ func (t *defaultHandoverTracker) UpdateHandoverState(newNs *namespace.Namespace,
 		newNs.ReplicationState("") == enumspb.REPLICATION_STATE_HANDOVER
 
 	if deletedFromDB || !isHandoverNamespace {
-		delete(t.handoverNamespaces, nsName)
+		if removed, ok := t.handoverNamespaces[nsName]; ok {
+			delete(t.handoverNamespaces, nsName)
+			wideevents.EmitHandoverWatermarkRemoved(
+				t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(),
+				removed.MaxReplicationTaskID, removed.NotificationVersion, deletedFromDB,
+			)
+		}
 		return
 	}
 
@@ -99,12 +113,22 @@ func (t *defaultHandoverTracker) UpdateHandoverState(newNs *namespace.Namespace,
 		if handover.NotificationVersion < newNs.NotificationVersion() {
 			handover.NotificationVersion = newNs.NotificationVersion()
 			handover.MaxReplicationTaskID = maxReplicationTaskID
+			wideevents.EmitHandoverWatermarkSet(
+				t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(),
+				maxReplicationTaskID, handover.NotificationVersion,
+				maxReplicationTaskID == PendingMaxReplicationTaskID, wideevents.WatermarkUpdated,
+			)
 		}
 	} else {
 		t.handoverNamespaces[nsName] = &namespaceHandOverInfo{
 			NotificationVersion:  newNs.NotificationVersion(),
 			MaxReplicationTaskID: maxReplicationTaskID,
 		}
+		wideevents.EmitHandoverWatermarkSet(
+			t.eventLogger, t.shardID, nsName.String(), newNs.ID().String(),
+			maxReplicationTaskID, newNs.NotificationVersion(),
+			maxReplicationTaskID == PendingMaxReplicationTaskID, wideevents.WatermarkAdded,
+		)
 	}
 
 	if maxReplicationTaskID != PendingMaxReplicationTaskID {

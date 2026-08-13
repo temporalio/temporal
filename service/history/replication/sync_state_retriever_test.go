@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -897,4 +898,77 @@ func (s *syncWorkflowStateSuite) TestGetUpdatedSubStateMachine() {
 	s.Len(result, 1)
 	s.Len(result[0].Path.Path, len(child2.Path()))
 	s.Equal(child2.Path()[0].ID, result[0].Path.Path[0].Id)
+}
+
+// versionedEventBlobs serializes one real batch of events at a single version. A batch is always
+// single-version and contiguous, which persistence asserts on read (see history_manager.go).
+func (s *syncWorkflowStateSuite) versionedEventBlobs(version, firstEventID, lastEventID int64) *commonpb.DataBlob {
+	events := make([]*historypb.HistoryEvent, 0, lastEventID-firstEventID+1)
+	for id := firstEventID; id <= lastEventID; id++ {
+		events = append(events, &historypb.HistoryEvent{EventId: id, Version: version})
+	}
+	blob, err := s.mockShard.GetPayloadSerializer().SerializeEvents(events)
+	s.NoError(err)
+	return blob
+}
+
+// TestGetSyncStateEvents_RangeSpansFailover reproduces a real send in which the shipped event range
+// crosses a failover, so the first and last shipped events carry DIFFERENT versions.
+//
+// The source branch has two version segments -- events 1-10 written while cluster A was active at
+// failover version 10, then events 11-30 written after failing over to B at version 13. This is one
+// branch, not two: a clean failover continues the branch rather than forking it, so the version
+// history accumulates a second item (see versionhistory.AddOrUpdateVersionHistoryItem).
+//
+// The target is behind the failover point (its history ends at event 5, inside the FIRST segment),
+// so the LCA lands at 5 and the shipped range [6, 30] straddles the 10/11 boundary.
+func (s *syncWorkflowStateSuite) TestGetSyncStateEvents_RangeSpansFailover() {
+	const oldVersion, newVersion = int64(10), int64(13)
+
+	// One branch, two version segments: events 1-10 @ v10, events 11-30 @ v13.
+	sourceVersionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("source-branch-spanning-a-failover"),
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 10, Version: oldVersion},
+					{EventId: 30, Version: newVersion},
+				},
+			},
+		},
+	}
+	// The target only has events up to 5, i.e. it lagged from before the failover.
+	targetVersionHistoriesItems := [][]*historyspb.VersionHistoryItem{
+		{{EventId: 5, Version: oldVersion}},
+	}
+
+	// The sender reads [6, 31): the tail of the old segment plus all of the new one.
+	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken: sourceVersionHistories.Histories[0].GetBranchToken(),
+		MinEventID:  6,
+		MaxEventID:  31,
+		ShardID:     s.mockShard.GetShardID(),
+		PageSize:    defaultPageSize,
+	}).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			s.versionedEventBlobs(oldVersion, 6, 10),  // tail of the pre-failover segment
+			s.versionedEventBlobs(newVersion, 11, 30), // everything written post-failover
+		},
+	}, nil)
+
+	events, err := s.syncStateRetriever.getSyncStateEvents(
+		context.Background(), s.workflowKey, targetVersionHistoriesItems, sourceVersionHistories, false)
+	s.NoError(err)
+	s.Len(events, 2, "both batches are shipped in a single artifact")
+
+	// This is what the wide event reports for that one sent task.
+	firstID, firstVer, lastID, lastVer := shippedEventRange(
+		s.mockShard.GetPayloadSerializer(), events, s.logger)
+
+	s.Equal(int64(6), firstID)
+	s.Equal(oldVersion, firstVer)
+	s.Equal(int64(30), lastID)
+	s.Equal(newVersion, lastVer)
+	s.NotEqual(firstVer, lastVer, "one shipped range, two versions: this is why each bound needs its own")
 }
