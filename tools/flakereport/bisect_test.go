@@ -262,7 +262,7 @@ func TestRunBisectInformationlessData(t *testing.T) {
 
 func TestBuildObservations(t *testing.T) {
 	commitOrderSlice := []string{"sha-a", "sha-b", "sha-c", "sha-d"}
-	runToSHA := map[int64]string{
+	githubActionsRunIDToCommitSHA := map[int64]string{
 		100: "sha-a",
 		200: "sha-b",
 		300: "sha-c",
@@ -295,7 +295,10 @@ func TestBuildObservations(t *testing.T) {
 		{Name: "TestFoo", Failed: false, RunID: 999},
 	}
 
-	obs := buildObservations("TestFoo", runs, commitOrderSlice, runToSHA)
+	index := buildTestRunIndex(runs, commitOrderSlice, githubActionsRunIDToCommitSHA)
+	obs := buildObservations("TestFoo", index)
+	require.Equal(t, 12, index.tests["TestFoo"].totalRuns)
+	require.Equal(t, 4, index.tests["TestFoo"].failures)
 
 	require.Len(t, obs, 4, "should have one observation per commit with data")
 
@@ -348,14 +351,14 @@ func TestSelectTopFlakyTests(t *testing.T) {
 	t.Run("excludes tests below MinFailures threshold", func(t *testing.T) {
 		runs := makeRunsForTest("TestLowFails", 100, 2) // 2 failures: below minBisectFailures=5
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 10}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs, nil, nil), cfg)
 		assert.NotContains(t, result, "TestLowFails")
 	})
 
 	t.Run("excludes tests below MinRuns threshold", func(t *testing.T) {
 		runs := makeRunsForTest("TestFewRuns", 10, 6) // only 10 total runs: below minBisectRuns=30
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs, nil, nil), cfg)
 		assert.NotContains(t, result, "TestFewRuns")
 	})
 
@@ -366,7 +369,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 		runs = append(runs, makeRunsForTest("TestHighRate", 40, 20)...)
 		runs = append(runs, makeRunsForTest("TestLowRate", 40, 10)...)
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs, nil, nil), cfg)
 		require.GreaterOrEqual(t, len(result), 2)
 		assert.Equal(t, "TestHighRate", result[0])
 		assert.Equal(t, "TestLowRate", result[1])
@@ -378,7 +381,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 			runs = append(runs, makeRunsForTest("TestFlaky"+string(rune('A'+i)), 40, 10)...)
 		}
 		cfg := BisectConfig{TopN: 3, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs, nil, nil), cfg)
 		assert.Len(t, result, 3)
 	})
 
@@ -388,7 +391,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 			{Name: "TestSkipped", Skipped: true, Failed: true},
 		}
 		cfg := BisectConfig{TopN: 10, MinFailures: 1, MinRuns: 1}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs, nil, nil), cfg)
 		assert.NotContains(t, result, "TestSkipped")
 	})
 
@@ -402,7 +405,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 			runs = append(runs, TestRun{Name: "TestFlaky (retry 1)", Failed: true})
 		}
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs, nil, nil), cfg)
 		require.Len(t, result, 1)
 		assert.Equal(t, "TestFlaky", result[0])
 	})
@@ -484,7 +487,7 @@ func TestRunBisectForTestDirectionFilter(t *testing.T) {
 	// not introduced). The direction filter must suppress this suspect so it does not appear
 	// as a culprit in the report.
 	commitOrderSlice := []string{"sha0", "sha1", "sha2", "sha3", "sha4", "sha5"}
-	runToSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
+	githubActionsRunIDToCommitSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
 
 	var allRuns []TestRun
 	// sha0-sha4: 8 failures + 2 passes each (80% failure rate)
@@ -508,7 +511,7 @@ func TestRunBisectForTestDirectionFilter(t *testing.T) {
 		MinProbability: 0.5,
 	}
 
-	report := runBisectForTest(cfg, "TestFoo", allRuns, commitOrderSlice, runToSHA, nil)
+	report := runBisectForTest(cfg, "TestFoo", buildTestRunIndex(allRuns, commitOrderSlice, githubActionsRunIDToCommitSHA), nil)
 
 	// The only high-probability transition point (sha5, where rate dropped 80%→0%) should be
 	// filtered out by the direction filter, leaving no actionable suspects.
@@ -520,7 +523,7 @@ func TestRunBisectForTestDirectionFilterKeepsIntroduction(t *testing.T) {
 	// Complementary: failure rate INCREASES at sha3 (flake introduced). The direction filter
 	// must retain this suspect.
 	commitOrderSlice := []string{"sha0", "sha1", "sha2", "sha3", "sha4", "sha5"}
-	runToSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
+	githubActionsRunIDToCommitSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
 
 	var allRuns []TestRun
 	// sha0-sha2: clean (0% failure rate)
@@ -547,7 +550,7 @@ func TestRunBisectForTestDirectionFilterKeepsIntroduction(t *testing.T) {
 		MinProbability: 0.5,
 	}
 
-	report := runBisectForTest(cfg, "TestFoo", allRuns, commitOrderSlice, runToSHA, nil)
+	report := runBisectForTest(cfg, "TestFoo", buildTestRunIndex(allRuns, commitOrderSlice, githubActionsRunIDToCommitSHA), nil)
 
 	require.False(t, report.Skipped, "report should not be skipped: a real introduction exists")
 	require.NotEmpty(t, report.TopSuspects)
