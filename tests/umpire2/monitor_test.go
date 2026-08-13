@@ -302,54 +302,8 @@ func TestMonitorRecordsActionCoverageAndCausalWindows(t *testing.T) {
 	require.Equal(t, "true", verdictEvent.Fields["pass"])
 
 	u.PurgeNamespace(namespaceID)
-	require.NotContains(t, u.traceActive, namespaceID)
-	require.NotContains(t, u.traceLast, namespaceID)
-}
-
-func TestMonitorRetainsActionWindowWhenTraceCapRejectsFinish(t *testing.T) {
-	u, err := NewMonitor(log.NewNoopLogger())
-	require.NoError(t, err)
-	u.SetTraceRecorder(umpirefw.NewTraceRecorder(umpirefw.TraceOptions{MaxEvents: 1}))
-	const namespaceID = "namespace"
-	require.NoError(t, u.ObserveExecution(t.Context(), umpirefw.ExecutionObservation{
-		Kind: umpirefw.ExecutionActionStart, Scope: namespaceID, Action: "action", Outcome: umpirefw.ExecutionOutcomeStarted,
-	}))
-
-	err = u.ObserveExecution(t.Context(), umpirefw.ExecutionObservation{
-		Kind: umpirefw.ExecutionActionFinish, Scope: namespaceID, Action: "action", Outcome: umpirefw.ExecutionOutcomeFailed, ErrorClass: "error",
-	})
-	require.ErrorIs(t, err, umpirefw.ErrTraceLimit)
-	require.Len(t, u.traceActive[namespaceID]["action"], 1)
-}
-
-func TestMonitorReconcilesDeclaredCausalFootprintAtActionFinish(t *testing.T) {
-	u, err := NewMonitor(log.NewNoopLogger())
-	require.NoError(t, err)
-	u.SetTraceRecorder(umpirefw.NewTraceRecorder(umpirefw.TraceOptions{MaxEvents: 10, MaxBytes: 8192}))
-	const namespaceID = "namespace"
-	start := umpirefw.ExecutionObservation{
-		Kind: umpirefw.ExecutionActionStart, Scope: namespaceID,
-		Action: "nexus.respond_start.scheduled.sync", Outcome: umpirefw.ExecutionOutcomeStarted,
-	}
-	finish := umpirefw.ExecutionObservation{
-		Kind: umpirefw.ExecutionActionFinish, Scope: namespaceID,
-		Action: "nexus.respond_start.scheduled.sync", Outcome: umpirefw.ExecutionOutcomeSucceeded,
-	}
-	require.NoError(t, u.ObserveExecution(t.Context(), start))
-	require.NoError(t, u.recordTrace([]umpirefw.Fact{&fact.NexusOperationTerminal{
-		NamespaceID: namespaceID,
-		WorkflowID:  "workflow",
-		EntityPath: &umpirefw.EntityPath{
-			EntityID:  umpirefw.NewEntityID(model.NexusOperationType, "operation"),
-			Ancestors: []umpirefw.EntityID{umpirefw.NewEntityID(model.NamespaceType, namespaceID)},
-		},
-	}}))
-	require.NoError(t, u.ObserveExecution(t.Context(), finish))
-
-	u.SetTraceRecorder(umpirefw.NewTraceRecorder(umpirefw.TraceOptions{MaxEvents: 10, MaxBytes: 8192}))
-	require.NoError(t, u.ObserveExecution(t.Context(), start))
-	err = u.ObserveExecution(t.Context(), finish)
-	require.ErrorContains(t, err, "causal observation is missing")
+	require.NotContains(t, u.executionTrace.active, namespaceID)
+	require.NotContains(t, u.executionTrace.last, namespaceID)
 }
 
 func traceContains(trace umpirefw.Trace, kind umpirefw.TraceKind, name string) bool {

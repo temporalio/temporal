@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -39,17 +37,11 @@ type Monitor struct {
 	// scopes entities by. A synchronous rejection produces no telemetry, so its fact must be
 	// namespace-id-rooted from the request alone; the driver seeds this map (it knows both) before
 	// driving. See SetNamespaceID and UMPIRE.md.
-	nsMu        sync.RWMutex
-	nsIDByName  map[string]string
-	coverageMu  sync.RWMutex
-	coverage    *umpirefw.Coverage
-	traceMu     sync.Mutex
-	trace       *umpirefw.TraceRecorder
-	traceSeq    atomic.Uint64
-	traceSeen   map[string]struct{}
-	traceActive map[string]map[string][]string
-	traceLast   map[string]string
-	footprints  map[string]umpirefw.CausalFootprint
+	nsMu           sync.RWMutex
+	nsIDByName     map[string]string
+	coverageMu     sync.RWMutex
+	coverage       *umpirefw.Coverage
+	executionTrace *executionTrace
 }
 
 // NewMonitor creates a new Monitor with all default rules registered.
@@ -114,11 +106,8 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 		protocol:   defaultProtocol,
 		relations:  relations,
 		nsIDByName: map[string]string{},
-		footprints: make(map[string]umpirefw.CausalFootprint, len(declaredFootprints)),
 	}
-	for _, declared := range declaredFootprints {
-		u.footprints[declared.Footprint.Action] = declared.Footprint
-	}
+	u.executionTrace = newExecutionTrace(registry, relations, declaredFootprints)
 
 	return u, nil
 }
@@ -230,7 +219,7 @@ func (u *Monitor) routeFacts(ctx context.Context, facts []umpirefw.Fact) error {
 	}
 	relationErr := errors.Join(relationErrors...)
 	u.recordCoverage(facts)
-	traceErr := u.recordTrace(facts)
+	traceErr := u.executionTrace.recordFacts(facts)
 	return errors.Join(modelErr, relationErr, traceErr)
 }
 
@@ -245,77 +234,7 @@ func (u *Monitor) ObserveExecution(_ context.Context, observed umpirefw.Executio
 		}
 	}
 
-	u.traceMu.Lock()
-	defer u.traceMu.Unlock()
-	if u.trace == nil {
-		return nil
-	}
-	fields := map[string]string{}
-	for key, value := range map[string]string{
-		"scope":       observed.Scope,
-		"phase":       observed.Phase,
-		"outcome":     observed.Outcome,
-		"error_class": observed.ErrorClass,
-		"checkpoint":  observed.Checkpoint,
-	} {
-		if value != "" {
-			fields[key] = value
-		}
-	}
-	name := observed.Action
-	if observed.Kind == umpirefw.ExecutionVerdict {
-		name = observed.Checkpoint
-		fields["pass"] = strconv.FormatBool(observed.Pass)
-		fields["violations"] = strconv.Itoa(observed.Violations)
-	}
-	if name == "" {
-		return fmt.Errorf("execution observation %s has no stable name", observed.Kind)
-	}
-	keyKind := "action"
-	traceKind := umpirefw.TraceAction
-	var causes []string
-	switch observed.Kind {
-	case umpirefw.ExecutionVerdict:
-		keyKind = "verdict"
-		traceKind = umpirefw.TraceVerdict
-		if last := u.traceLast[observed.Scope]; last != "" {
-			causes = []string{last}
-		}
-	case umpirefw.ExecutionActionFinish:
-		if byAction := u.traceActive[observed.Scope]; byAction != nil {
-			windows := byAction[observed.Action]
-			if len(windows) != 0 {
-				causes = []string{windows[0]}
-			}
-		}
-	default:
-	}
-	key := u.nextTraceKey(keyKind)
-	if err := u.trace.Record(umpirefw.TraceEvent{Key: key, Kind: traceKind, Name: name, Causes: causes, Fields: fields}); err != nil {
-		return err
-	}
-	switch observed.Kind {
-	case umpirefw.ExecutionActionStart:
-		if u.traceActive[observed.Scope] == nil {
-			u.traceActive[observed.Scope] = map[string][]string{}
-		}
-		u.traceActive[observed.Scope][observed.Action] = append(u.traceActive[observed.Scope][observed.Action], key)
-	case umpirefw.ExecutionActionFinish:
-		if byAction := u.traceActive[observed.Scope]; byAction != nil {
-			windows := byAction[observed.Action]
-			if len(windows) != 0 {
-				byAction[observed.Action] = windows[1:]
-			}
-		}
-		u.traceLast[observed.Scope] = key
-		if footprint, ok := u.footprints[observed.Action]; ok {
-			if err := umpirefw.CompareCausalFootprint(footprint, u.trace.Snapshot()); err != nil {
-				return fmt.Errorf("causal footprint %s: %w", observed.Action, err)
-			}
-		}
-	default:
-	}
-	return nil
+	return u.executionTrace.observeExecution(observed)
 }
 
 func (u *Monitor) recordRelationConflict(err error) {
@@ -368,98 +287,6 @@ func (u *Monitor) recordCoverage(facts []umpirefw.Fact) {
 	}
 }
 
-func (u *Monitor) recordTrace(facts []umpirefw.Fact) error {
-	u.traceMu.Lock()
-	defer u.traceMu.Unlock()
-	if u.trace == nil {
-		return nil
-	}
-	roots := map[umpirefw.EntityID]struct{}{}
-	var errs []error
-	for _, observed := range facts {
-		fields := map[string]string{}
-		var causes []string
-		if path := observed.TargetEntity(); path != nil {
-			fields["target"] = umpirefw.EntityPathKey(path)
-			roots[path.Root()] = struct{}{}
-			causes = u.activeTraceCausesLocked(path.Root().ID)
-		}
-		if err := u.trace.Record(umpirefw.TraceEvent{
-			Key:    u.nextTraceKey("fact"),
-			Kind:   umpirefw.TraceFact,
-			Name:   observed.Name(),
-			Causes: causes,
-			Fields: fields,
-		}); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	for _, edge := range u.relations.Snapshot() {
-		if _, scoped := roots[edge.Scope]; !scoped {
-			continue
-		}
-		semanticKey := fmt.Sprintf("relation:%s:%s:%s", edge.Type, edge.Source, edge.Target)
-		if _, seen := u.traceSeen[semanticKey]; seen {
-			continue
-		}
-		u.traceSeen[semanticKey] = struct{}{}
-		if err := u.trace.Record(umpirefw.TraceEvent{
-			Key:    u.nextTraceKey("relation"),
-			Kind:   umpirefw.TraceRelation,
-			Name:   string(edge.Type),
-			Causes: u.activeTraceCausesLocked(edge.Scope.ID),
-			Fields: map[string]string{
-				"source": edge.Source.String(),
-				"target": edge.Target.String(),
-			},
-		}); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	for root := range roots {
-		for _, entry := range u.registry.QueryAll(0, &root) {
-			lifecycled, ok := entry.Entity.(umpirefw.Lifecycled)
-			if !ok {
-				continue
-			}
-			for _, edge := range lifecycled.Lifecycle().VisitedEdges() {
-				name := protocol.TransitionCoverageID(entry.Entity.Type(), edge)
-				semanticKey := "transition:" + entry.Key + ":" + name
-				if _, seen := u.traceSeen[semanticKey]; seen {
-					continue
-				}
-				u.traceSeen[semanticKey] = struct{}{}
-				if err := u.trace.Record(umpirefw.TraceEvent{
-					Key:    u.nextTraceKey("transition"),
-					Kind:   umpirefw.TraceTransition,
-					Name:   name,
-					Causes: u.activeTraceCausesLocked(root.ID),
-					Fields: map[string]string{
-						"entity": entry.Key,
-					},
-				}); err != nil {
-					errs = append(errs, err)
-				}
-			}
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func (u *Monitor) activeTraceCausesLocked(scope string) []string {
-	byAction := u.traceActive[scope]
-	var causes []string
-	for _, windows := range byAction {
-		causes = append(causes, windows...)
-	}
-	slices.Sort(causes)
-	return slices.Compact(causes)
-}
-
-func (u *Monitor) nextTraceKey(kind string) string {
-	return fmt.Sprintf("%s:%d", kind, u.traceSeq.Add(1))
-}
-
 // CheckNamespace runs a final check scoped to a single namespace: only entities
 // rooted at that namespace are evaluated, and their unresolved liveness
 // conditions are promoted to violations. Use it to validate one test's namespace
@@ -503,10 +330,7 @@ func (u *Monitor) PurgeNamespace(namespaceID string) {
 	u.factLog.PurgeScope(root)
 	u.rulebook.PurgeScope(root)
 	u.relations.PurgeScope(root)
-	u.traceMu.Lock()
-	delete(u.traceActive, namespaceID)
-	delete(u.traceLast, namespaceID)
-	u.traceMu.Unlock()
+	u.executionTrace.purgeScope(namespaceID)
 }
 
 func (u *Monitor) namespaceRoot(namespaceID string) umpirefw.EntityID {
@@ -537,13 +361,7 @@ func (u *Monitor) SetCoverage(coverage *umpirefw.Coverage) {
 
 // SetTraceRecorder installs an optional normalized trace recorder.
 func (u *Monitor) SetTraceRecorder(recorder *umpirefw.TraceRecorder) {
-	u.traceMu.Lock()
-	u.trace = recorder
-	u.traceSeen = map[string]struct{}{}
-	u.traceActive = map[string]map[string][]string{}
-	u.traceLast = map[string]string{}
-	u.traceSeq.Store(0)
-	u.traceMu.Unlock()
+	u.executionTrace.setRecorder(recorder)
 }
 
 // RuleStats returns per-rule evaluation statistics.
