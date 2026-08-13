@@ -1,6 +1,10 @@
 package flakereport
 
 import (
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,4 +49,41 @@ func TestGenerateSuiteBreakdownTable(t *testing.T) {
 	require.Equal(t, "| Suite | Flake Rate | Last Failure |\n"+
 		"|-------|------------|-------------|\n"+
 		"| `TestFunctionalSuite` | **25.0% (2/8)** | 3h ago |\n", table)
+}
+
+func TestGenerateGitHubSummaryLimitsFlakyTests(t *testing.T) {
+	flakyTests := make([]TestReport, 3)
+	for i := range flakyTests {
+		flakyTests[i].TestName = "TestFlake" + strconv.Itoa(i+1)
+	}
+	summary := &ReportSummary{
+		FlakyTests:      flakyTests,
+		TotalFlakyCount: len(flakyTests),
+	}
+
+	actionsSummary := generateGitHubSummary(summary, "", 0, 2)
+	fullReport := generateGitHubSummary(summary, "", 0, len(flakyTests))
+
+	require.Contains(t, actionsSummary, "| Flaky Tests | 3 |")
+	require.Contains(t, actionsSummary, "`TestFlake1`")
+	require.Contains(t, actionsSummary, "`TestFlake2`")
+	require.NotContains(t, actionsSummary, "`TestFlake3`")
+	require.Contains(t, actionsSummary, "Showing the top 2 of 3 flaky tests")
+	require.Equal(t, 3, strings.Count(fullReport, "| `TestFlake"))
+	require.NotContains(t, fullReport, "Showing the top")
+}
+
+func TestWriteGitHubSummaryPreservesFullArtifact(t *testing.T) {
+	outputDir := t.TempDir()
+	actionsSummaryPath := filepath.Join(t.TempDir(), "summary.md")
+	t.Setenv("GITHUB_STEP_SUMMARY", actionsSummaryPath)
+
+	require.NoError(t, writeGitHubSummary("full report", "limited summary", outputDir))
+
+	artifact, err := os.ReadFile(filepath.Join(outputDir, "github-report.md"))
+	require.NoError(t, err)
+	require.Equal(t, "full report", string(artifact))
+	actionsSummary, err := os.ReadFile(actionsSummaryPath)
+	require.NoError(t, err)
+	require.Equal(t, "limited summary", string(actionsSummary))
 }
