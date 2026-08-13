@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"strconv"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,13 +25,16 @@ const (
 type (
 	// grpcBuilder implements grpc/resolver.Builder. This is a singleton that's registered with grpc.
 	grpcBuilder struct {
-		resolvers sync.Map // registration ID string -> *GRPCResolver
+		resolvers sync.Map // registration ID string -> *grpcResolverRegistration
 	}
 
 	// GRPCResolver and the resolvers map in grpcBuilder is used to pass a Monitor through a string url.
 	GRPCResolver struct {
-		monitor        Monitor
 		registrationID string
+	}
+
+	grpcResolverRegistration struct {
+		monitor Monitor
 	}
 
 	// grpcResolver is a single instance of a resolver.
@@ -70,15 +73,7 @@ func GetServiceResolverFromURL(u *url.URL) (ServiceResolver, error) {
 
 // This should only be used in unit tests. For normal code, use the *GRPCResolver provided by fx.
 // Monitor may be nil if it's not needed, but then note that GetServiceResolverFromURL will panic.
-func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) string {
-	res, register, _ := newGRPCResolverRegistration(monitor)
-	register()
-	return res.MakeURL(service)
-}
-
-// GRPCResolverURLForTestingWithCleanup registers monitor and returns its URL
-// together with a function that removes the registration.
-func GRPCResolverURLForTestingWithCleanup(monitor Monitor, service primitives.ServiceName) (string, func()) {
+func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) (string, func()) {
 	res, register, cleanup := newGRPCResolverRegistration(monitor)
 	register()
 	return res.MakeURL(service), cleanup
@@ -86,11 +81,8 @@ func GRPCResolverURLForTestingWithCleanup(monitor Monitor, service primitives.Se
 
 func newGRPCResolver(lifecycle fx.Lifecycle, monitor Monitor) *GRPCResolver {
 	res, register, cleanup := newGRPCResolverRegistration(monitor)
+	register()
 	lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error {
-			register()
-			return nil
-		},
 		OnStop: func(context.Context) error {
 			cleanup()
 			return nil
@@ -104,16 +96,22 @@ func newGRPCResolverRegistration(monitor Monitor) (
 	register func(),
 	cleanup func(),
 ) {
-	registrationID := strconv.FormatUint(grpcResolverID.Add(1), 10)
-	res := &GRPCResolver{
-		monitor:        monitor,
-		registrationID: registrationID,
-	}
+	registrationID := newGRPCResolverRegistrationID()
+	res := &GRPCResolver{registrationID: registrationID}
+	registration := &grpcResolverRegistration{monitor: monitor}
+	runtime.AddCleanup(res, func(registrationID string) {
+		globalGrpcBuilder.resolvers.Delete(registrationID)
+	}, registrationID)
 	return res, func() {
-			globalGrpcBuilder.resolvers.Store(registrationID, res)
+			globalGrpcBuilder.resolvers.Store(registrationID, registration)
 		}, func() {
 			globalGrpcBuilder.resolvers.Delete(registrationID)
+			runtime.KeepAlive(res)
 		}
+}
+
+func newGRPCResolverRegistrationID() string {
+	return fmt.Sprintf("0x%x", grpcResolverID.Add(1))
 }
 
 func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
@@ -136,7 +134,7 @@ func (m *grpcBuilder) getServiceResolver(u *url.URL) (ServiceResolver, error) {
 	if !ok {
 		return nil, errNotInitialized
 	}
-	return v.(*GRPCResolver).monitor.GetResolver(primitives.ServiceName(service))
+	return v.(*grpcResolverRegistration).monitor.GetResolver(primitives.ServiceName(service))
 }
 
 func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (resolver.Resolver, error) {

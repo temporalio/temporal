@@ -165,7 +165,7 @@ func (c *clients) ensureMatching() {
 
 		monitor := static.NewMonitor(c.hostsByService)
 		monitor.Start()
-		frontendMembershipAddress, unregisterResolver := membership.GRPCResolverURLForTestingWithCleanup(
+		frontendMembershipAddress, unregisterResolver := membership.GRPCResolverURLForTesting(
 			monitor,
 			primitives.FrontendService,
 		)

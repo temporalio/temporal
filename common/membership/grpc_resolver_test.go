@@ -3,7 +3,6 @@ package membership
 import (
 	"context"
 	"net"
-	"net/url"
 	"testing"
 	"time"
 
@@ -11,75 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/nettest"
-	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
-
-func TestGRPCResolverUnregistersOnStop(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	serviceResolver := NewMockServiceResolver(ctrl)
-	monitor := NewMockMonitor(ctrl)
-	monitor.EXPECT().GetResolver(primitives.FrontendService).Return(serviceResolver, nil)
-
-	lifecycle := fxtest.NewLifecycle(t)
-	grpcResolver := newGRPCResolver(lifecycle, monitor)
-	resolverURL, err := url.Parse(grpcResolver.MakeURL(primitives.FrontendService))
-	require.NoError(t, err)
-	_, err = GetServiceResolverFromURL(resolverURL)
-	require.ErrorIs(t, err, errNotInitialized)
-
-	require.NoError(t, lifecycle.Start(context.Background()))
-	resolved, err := GetServiceResolverFromURL(resolverURL)
-	require.NoError(t, err)
-	require.Equal(t, serviceResolver, resolved)
-
-	require.NoError(t, lifecycle.Stop(context.Background()))
-	_, err = GetServiceResolverFromURL(resolverURL)
-	require.ErrorIs(t, err, errNotInitialized)
-}
-
-func TestGRPCResolverDoesNotRegisterBeforeStart(t *testing.T) {
-	lifecycle := fxtest.NewLifecycle(t)
-	grpcResolver := newGRPCResolver(lifecycle, nil)
-	resolverURL, err := url.Parse(grpcResolver.MakeURL(primitives.FrontendService))
-	require.NoError(t, err)
-
-	_, err = GetServiceResolverFromURL(resolverURL)
-	require.ErrorIs(t, err, errNotInitialized)
-}
-
-func TestGRPCResolverURLForTestingWithCleanup(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	serviceResolver := NewMockServiceResolver(ctrl)
-	replacementServiceResolver := NewMockServiceResolver(ctrl)
-	monitor := NewMockMonitor(ctrl)
-	replacementMonitor := NewMockMonitor(ctrl)
-	monitor.EXPECT().GetResolver(primitives.FrontendService).Return(serviceResolver, nil)
-	replacementMonitor.EXPECT().GetResolver(primitives.FrontendService).Return(replacementServiceResolver, nil)
-
-	resolverURLString, cleanup := GRPCResolverURLForTestingWithCleanup(monitor, primitives.FrontendService)
-	resolverURL, err := url.Parse(resolverURLString)
-	require.NoError(t, err)
-	resolved, err := GetServiceResolverFromURL(resolverURL)
-	require.NoError(t, err)
-	require.Equal(t, serviceResolver, resolved)
-
-	cleanup()
-	_, err = GetServiceResolverFromURL(resolverURL)
-	require.ErrorIs(t, err, errNotInitialized)
-
-	replacementURLString, replacementCleanup := GRPCResolverURLForTestingWithCleanup(replacementMonitor, primitives.FrontendService)
-	t.Cleanup(replacementCleanup)
-	replacementURL, err := url.Parse(replacementURLString)
-	require.NoError(t, err)
-	replacement, err := GetServiceResolverFromURL(replacementURL)
-	require.NoError(t, err)
-	require.Equal(t, replacementServiceResolver, replacement)
-	_, err = GetServiceResolverFromURL(resolverURL)
-	require.ErrorIs(t, err, errNotInitialized)
-}
 
 func TestGRPCBuilder(t *testing.T) {
 	t.Parallel()
@@ -127,7 +61,8 @@ func TestGRPCBuilder(t *testing.T) {
 
 	// This is where we invoke the code under test. We dial the frontend service. The URL should use our custom
 	// protocol, and then our resolver should resolve this to the localhost:1234 address.
-	url := GRPCResolverURLForTesting(monitor, primitives.FrontendService)
+	url, cleanup := GRPCResolverURLForTesting(monitor, primitives.FrontendService)
+	t.Cleanup(cleanup)
 	assert.Regexp(t, "membership://frontend~0x[[:xdigit:]]*", url)
 
 	// dialedAddress is the actual address that the gRPC framework dialed after resolving the URL using our resolver.

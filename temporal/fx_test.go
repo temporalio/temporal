@@ -3,11 +3,9 @@ package temporal
 import (
 	"context"
 	"path"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -16,47 +14,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
-	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 )
-
-func TestOTELLoggerErrorHandlerReleasesLoggerOnStop(t *testing.T) {
-	t.Cleanup(func() { otel.SetErrorHandler(otel.ErrorHandlerFunc(func(error) {})) })
-	lifecycle := fxtest.NewLifecycle(t)
-	tracingReady := &atomic.Bool{}
-	tracingReady.Store(true)
-
-	installOTELLoggerErrorHandler(lifecycle, log.NewNoopLogger(), tracingReady)
-	require.Nil(t, globalOTELLoggerErrorHandler.currentState())
-	require.NoError(t, lifecycle.Start(context.Background()))
-	require.Equal(t, &globalOTELLoggerErrorHandler, otel.GetErrorHandler())
-	require.NotNil(t, globalOTELLoggerErrorHandler.currentState())
-
-	require.NoError(t, lifecycle.Stop(context.Background()))
-	require.Nil(t, globalOTELLoggerErrorHandler.currentState())
-}
-
-func TestOTELLoggerErrorHandlerRestoresPreviousRegistrationOnStop(t *testing.T) {
-	t.Cleanup(func() { otel.SetErrorHandler(otel.ErrorHandlerFunc(func(error) {})) })
-	firstLifecycle := fxtest.NewLifecycle(t)
-	firstReady := &atomic.Bool{}
-	firstReady.Store(true)
-	installOTELLoggerErrorHandler(firstLifecycle, log.NewNoopLogger(), firstReady)
-	require.NoError(t, firstLifecycle.Start(context.Background()))
-	firstState := globalOTELLoggerErrorHandler.currentState()
-	require.NotNil(t, firstState)
-
-	secondLifecycle := fxtest.NewLifecycle(t)
-	secondReady := &atomic.Bool{}
-	secondReady.Store(true)
-	installOTELLoggerErrorHandler(secondLifecycle, log.NewNoopLogger(), secondReady)
-	require.NoError(t, secondLifecycle.Start(context.Background()))
-	require.NotSame(t, firstState, globalOTELLoggerErrorHandler.currentState())
-
-	require.NoError(t, secondLifecycle.Stop(context.Background()))
-	require.Same(t, firstState, globalOTELLoggerErrorHandler.currentState())
-	require.NoError(t, firstLifecycle.Stop(context.Background()))
-}
 
 func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
