@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	umpirefw "go.temporal.io/server/common/testing/umpire"
+	coreregress "go.temporal.io/server/common/testing/umpire/regress"
 	"go.temporal.io/server/tests/umpire2/model"
 )
 
@@ -15,9 +16,8 @@ type NamedCausalFootprint struct {
 	Footprint umpirefw.CausalFootprint
 }
 
-// DefaultCausalFootprints returns the validated Temporal action-footprint catalog.
-func DefaultCausalFootprints() ([]NamedCausalFootprint, error) {
-	declarations := []NamedCausalFootprint{
+func defaultCausalFootprints() []NamedCausalFootprint {
+	return []NamedCausalFootprint{
 		{
 			Name: "ordinary-completion",
 			Footprint: factFootprint("nexus.respond_start.scheduled.sync",
@@ -53,12 +53,6 @@ func DefaultCausalFootprints() ([]NamedCausalFootprint, error) {
 			},
 		},
 	}
-	return CompileCausalFootprints([]string{
-		"nexus.respond_start.scheduled.sync",
-		"nexus.complete.scheduled",
-		"nexus.cancel_with_retry",
-		"nexus.start.attach_handler",
-	}, declarations)
 }
 
 func factFootprint(action string, names ...string) umpirefw.CausalFootprint {
@@ -76,16 +70,19 @@ func factFootprint(action string, names ...string) umpirefw.CausalFootprint {
 	}
 }
 
-// CompileCausalFootprints validates names, action ownership, and semantic trace patterns.
-func CompileCausalFootprints(knownActions []string, declarations []NamedCausalFootprint) ([]NamedCausalFootprint, error) {
-	actions := make(map[string]struct{}, len(knownActions))
-	for _, action := range knownActions {
-		if action == "" {
-			return nil, errors.New("causal footprints: known action is empty")
+func compileCausalFootprints(
+	regression *coreregress.Domain,
+	facts []umpirefw.Fact,
+	relations []umpirefw.RelationSchema,
+	declarations []NamedCausalFootprint,
+) ([]NamedCausalFootprint, error) {
+	actions := map[string]struct{}{}
+	for _, action := range regression.Snapshot().Actions {
+		if action.Realization != "" {
+			actions[action.Realization] = struct{}{}
 		}
-		actions[action] = struct{}{}
 	}
-	patterns := defaultTracePatterns()
+	patterns := tracePatterns(facts, relations)
 	names := map[string]struct{}{}
 	ownedActions := map[string]struct{}{}
 	result := make([]NamedCausalFootprint, 0, len(declarations))
@@ -115,12 +112,12 @@ func CompileCausalFootprints(knownActions []string, declarations []NamedCausalFo
 	return result, nil
 }
 
-func defaultTracePatterns() map[umpirefw.TracePattern]struct{} {
+func tracePatterns(facts []umpirefw.Fact, relations []umpirefw.RelationSchema) map[umpirefw.TracePattern]struct{} {
 	patterns := map[umpirefw.TracePattern]struct{}{}
-	for _, observed := range model.DefaultFacts() {
+	for _, observed := range facts {
 		patterns[umpirefw.TracePattern{Kind: umpirefw.TraceFact, Name: observed.Name()}] = struct{}{}
 	}
-	for _, relation := range defaultRelationSchemas() {
+	for _, relation := range relations {
 		patterns[umpirefw.TracePattern{Kind: umpirefw.TraceRelation, Name: string(relation.Type)}] = struct{}{}
 	}
 	return patterns

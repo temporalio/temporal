@@ -270,14 +270,12 @@ func (p *Protocol) addVerificationInventory(result *verify.Model) {
 			})
 		}
 	}
-	if footprints, err := DefaultCausalFootprints(); err == nil {
-		for _, footprint := range footprints {
-			result.Inventory = append(result.Inventory, verify.InventoryItem{
-				Kind: "causal-footprint", Name: footprint.Name,
-				Reason: "retained as a live execution refinement rather than transition behavior",
-				Source: verify.Provenance{Path: "tests/umpire2/protocol/causal_footprints.go", Symbol: footprint.Footprint.Action},
-			})
-		}
+	for _, footprint := range p.CausalFootprints() {
+		result.Inventory = append(result.Inventory, verify.InventoryItem{
+			Kind: "causal-footprint", Name: footprint.Name,
+			Reason: "retained as a live execution refinement rather than transition behavior",
+			Source: verify.Provenance{Path: "tests/umpire2/protocol/causal_footprints.go", Symbol: footprint.Footprint.Action},
+		})
 	}
 }
 

@@ -8,8 +8,9 @@ import (
 )
 
 func TestDefaultCausalFootprintsAreValidatedAndDefensive(t *testing.T) {
-	first, err := DefaultCausalFootprints()
+	firstProtocol, err := Default()
 	require.NoError(t, err)
+	first := firstProtocol.CausalFootprints()
 	require.Equal(t, []string{
 		"ordinary-completion",
 		"completion-before-start",
@@ -18,24 +19,52 @@ func TestDefaultCausalFootprintsAreValidatedAndDefensive(t *testing.T) {
 	}, footprintNames(first))
 	first[0].Footprint.Refinement.Required[0].Name = "mutated"
 
-	second, err := DefaultCausalFootprints()
+	secondProtocol, err := Default()
 	require.NoError(t, err)
+	second := secondProtocol.CausalFootprints()
 	require.Equal(t, "NexusOperationTerminal", second[0].Footprint.Refinement.Required[0].Name)
 }
 
-func TestCompileCausalFootprintsRejectsDuplicateActionsAndUnknownPatterns(t *testing.T) {
-	valid := NamedCausalFootprint{
-		Name:      "one",
-		Footprint: factFootprint("action", "NexusOperationTerminal"),
+func TestCompileRejectsInvalidCausalFootprints(t *testing.T) {
+	tests := []struct {
+		name      string
+		mutate    func(*Declaration)
+		wantError string
+	}{
+		{
+			name: "duplicate action",
+			mutate: func(declaration *Declaration) {
+				duplicate := cloneNamedCausalFootprint(declaration.CausalFootprints[0])
+				duplicate.Name = "duplicate"
+				declaration.CausalFootprints = append(declaration.CausalFootprints, duplicate)
+			},
+			wantError: "duplicate action",
+		},
+		{
+			name: "unknown action",
+			mutate: func(declaration *Declaration) {
+				declaration.CausalFootprints[0].Footprint.Action = "unknown"
+			},
+			wantError: "unknown action",
+		},
+		{
+			name: "unknown pattern",
+			mutate: func(declaration *Declaration) {
+				declaration.CausalFootprints[0].Footprint.Refinement.Required = []umpirefw.TracePattern{{Kind: umpirefw.TraceFact, Name: "UnknownFact"}}
+			},
+			wantError: "unknown pattern",
+		},
 	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			declaration := defaultDeclaration()
+			test.mutate(&declaration)
 
-	_, err := CompileCausalFootprints([]string{"action"}, []NamedCausalFootprint{valid, {Name: "two", Footprint: valid.Footprint}})
-	require.ErrorContains(t, err, "duplicate action")
+			_, err := Compile(declaration)
 
-	unknown := valid
-	unknown.Footprint.Refinement.Required = []umpirefw.TracePattern{{Kind: umpirefw.TraceFact, Name: "UnknownFact"}}
-	_, err = CompileCausalFootprints([]string{"action"}, []NamedCausalFootprint{unknown})
-	require.ErrorContains(t, err, "unknown pattern")
+			require.ErrorContains(t, err, test.wantError)
+		})
+	}
 }
 
 func footprintNames(footprints []NamedCausalFootprint) []string {

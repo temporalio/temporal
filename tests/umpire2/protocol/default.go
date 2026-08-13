@@ -38,6 +38,7 @@ func defaultDeclaration() Declaration {
 		Relations:        defaultRelationSchemas(),
 		RelationDerivers: defaultRelationDerivers(),
 		Regression:       defaultRegressionDomain(),
+		CausalFootprints: defaultCausalFootprints(),
 	}
 }
 

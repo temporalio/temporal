@@ -17,6 +17,7 @@ type Declaration struct {
 	Relations        []umpire.RelationSchema
 	RelationDerivers []RelationDeriver
 	Regression       *coreregress.Domain
+	CausalFootprints []NamedCausalFootprint
 }
 
 // RelationMutation is one fact-derived change to runtime relation state.
@@ -80,6 +81,16 @@ type Protocol struct {
 	relations   []umpire.RelationSchema
 	derivers    []RelationDeriver
 	regression  *coreregress.Domain
+	footprints  []NamedCausalFootprint
+}
+
+// CausalFootprints returns a defensive copy of the protocol's execution refinements.
+func (p *Protocol) CausalFootprints() []NamedCausalFootprint {
+	result := make([]NamedCausalFootprint, len(p.footprints))
+	for index, footprint := range p.footprints {
+		result[index] = cloneNamedCausalFootprint(footprint)
+	}
+	return result
 }
 
 // ActionCatalog returns a defensive declaration-ordered action and gap catalog.

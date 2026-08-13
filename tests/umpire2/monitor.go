@@ -55,10 +55,6 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("monitor: failed to compile default protocol: %w", err)
 	}
-	declaredFootprints, err := protocol.DefaultCausalFootprints()
-	if err != nil {
-		return nil, fmt.Errorf("monitor: failed to compile causal footprints: %w", err)
-	}
 	defaultProtocol.Register(registry)
 	relations, err := defaultProtocol.NewRelationStore()
 	if err != nil {
@@ -107,7 +103,7 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 		relations:  relations,
 		nsIDByName: map[string]string{},
 	}
-	u.executionTrace = newExecutionTrace(registry, relations, declaredFootprints)
+	u.executionTrace = newExecutionTrace(registry, relations, defaultProtocol.CausalFootprints())
 
 	return u, nil
 }

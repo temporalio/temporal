@@ -111,6 +111,16 @@ func Compile(declaration Declaration) (*Protocol, error) {
 			return nil, fmt.Errorf("protocol: relation deriver %d is nil", index)
 		}
 	}
+	footprints, err := compileCausalFootprints(
+		protocol.regression,
+		protocol.facts,
+		protocol.relations,
+		declaration.CausalFootprints,
+	)
+	if err != nil {
+		return nil, err
+	}
+	protocol.footprints = footprints
 	return protocol, nil
 }
 

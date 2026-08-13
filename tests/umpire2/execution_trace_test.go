@@ -16,9 +16,7 @@ func newTestExecutionTrace(t *testing.T) *executionTrace {
 	require.NoError(t, err)
 	relations, err := compiled.NewRelationStore()
 	require.NoError(t, err)
-	footprints, err := protocol.DefaultCausalFootprints()
-	require.NoError(t, err)
-	return newExecutionTrace(umpirefw.NewModelState(), relations, footprints)
+	return newExecutionTrace(umpirefw.NewModelState(), relations, compiled.CausalFootprints())
 }
 
 func TestExecutionTraceRetainsActionWindowWhenRecorderRejectsFinish(t *testing.T) {
