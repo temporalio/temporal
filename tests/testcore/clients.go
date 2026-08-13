@@ -66,8 +66,9 @@ type historyClients struct {
 }
 
 type matchingClient struct {
-	once   sync.Once
-	client matchingservice.MatchingServiceClient
+	once    sync.Once
+	client  matchingservice.MatchingServiceClient
+	cleanup func()
 }
 
 func newClients(
@@ -164,7 +165,10 @@ func (c *clients) ensureMatching() {
 
 		monitor := static.NewMonitor(c.hostsByService)
 		monitor.Start()
-		frontendMembershipAddress := membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService)
+		frontendMembershipAddress, unregisterResolver := membership.GRPCResolverURLForTestingWithCleanup(
+			monitor,
+			primitives.FrontendService,
+		)
 		rpcFactory := rpc.NewFactory(
 			&config.Config{},
 			primitives.FrontendService,
@@ -204,9 +208,15 @@ func (c *clients) ensureMatching() {
 			matchingclient.DefaultLongPollTimeout,
 		)
 		if err != nil {
+			rpcFactory.Close()
+			unregisterResolver()
 			c.logger.Fatal("unable to create matching test client", tag.Error(err))
 		}
 		c.matching.client = matchingClient
+		c.matching.cleanup = func() {
+			rpcFactory.Close()
+			unregisterResolver()
+		}
 	})
 }
 
@@ -222,6 +232,11 @@ func (c *clients) close() []error {
 	}
 	c.frontend.conn = nil
 	c.history.conn = nil
+	if c.matching.cleanup != nil {
+		c.matching.cleanup()
+		c.matching.cleanup = nil
+		c.matching.client = nil
+	}
 	return errs
 }
 

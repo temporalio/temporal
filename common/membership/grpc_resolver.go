@@ -1,11 +1,14 @@
 package membership
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
@@ -22,12 +25,13 @@ const (
 type (
 	// grpcBuilder implements grpc/resolver.Builder. This is a singleton that's registered with grpc.
 	grpcBuilder struct {
-		resolvers sync.Map // pointer as string -> *GRPCResolver
+		resolvers sync.Map // registration ID string -> *GRPCResolver
 	}
 
 	// GRPCResolver and the resolvers map in grpcBuilder is used to pass a Monitor through a string url.
 	GRPCResolver struct {
-		monitor Monitor
+		monitor        Monitor
+		registrationID string
 	}
 
 	// grpcResolver is a single instance of a resolver.
@@ -47,6 +51,7 @@ var (
 	_ resolver.Builder = (*grpcBuilder)(nil)
 
 	globalGrpcBuilder grpcBuilder
+	grpcResolverID    atomic.Uint64
 
 	errInvalidUrl     = errors.New("invalid grpc resolver url")
 	errNotInitialized = errors.New("grpc resolver has not been initialized yet")
@@ -66,17 +71,53 @@ func GetServiceResolverFromURL(u *url.URL) (ServiceResolver, error) {
 // This should only be used in unit tests. For normal code, use the *GRPCResolver provided by fx.
 // Monitor may be nil if it's not needed, but then note that GetServiceResolverFromURL will panic.
 func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) string {
-	return newGRPCResolver(monitor).MakeURL(service)
+	res, register, _ := newGRPCResolverRegistration(monitor)
+	register()
+	return res.MakeURL(service)
 }
 
-func newGRPCResolver(monitor Monitor) *GRPCResolver {
-	res := &GRPCResolver{monitor: monitor}
-	globalGrpcBuilder.resolvers.Store(fmt.Sprintf("%p", res), res)
+// GRPCResolverURLForTestingWithCleanup registers monitor and returns its URL
+// together with a function that removes the registration.
+func GRPCResolverURLForTestingWithCleanup(monitor Monitor, service primitives.ServiceName) (string, func()) {
+	res, register, cleanup := newGRPCResolverRegistration(monitor)
+	register()
+	return res.MakeURL(service), cleanup
+}
+
+func newGRPCResolver(lifecycle fx.Lifecycle, monitor Monitor) *GRPCResolver {
+	res, register, cleanup := newGRPCResolverRegistration(monitor)
+	lifecycle.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			register()
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			cleanup()
+			return nil
+		},
+	})
 	return res
 }
 
+func newGRPCResolverRegistration(monitor Monitor) (
+	grpcResolver *GRPCResolver,
+	register func(),
+	cleanup func(),
+) {
+	registrationID := strconv.FormatUint(grpcResolverID.Add(1), 10)
+	res := &GRPCResolver{
+		monitor:        monitor,
+		registrationID: registrationID,
+	}
+	return res, func() {
+			globalGrpcBuilder.resolvers.Store(registrationID, res)
+		}, func() {
+			globalGrpcBuilder.resolvers.Delete(registrationID)
+		}
+}
+
 func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
-	return fmt.Sprintf("%s://%s%s%p", grpcResolverScheme, string(service), delim, g)
+	return fmt.Sprintf("%s://%s%s%s", grpcResolverScheme, string(service), delim, g.registrationID)
 }
 
 func (m *grpcBuilder) Scheme() string {
