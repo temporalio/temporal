@@ -77,9 +77,9 @@ type commitRunCounts struct {
 }
 
 func buildTestRunIndex(
-	allTestRuns []TestRun,
+	allRuns []TestRun,
 	commitOrder []string,
-	githubActionsRunIDToCommitSHA map[int64]string,
+	runToSHA map[int64]string,
 ) *testRunIndex {
 	commitIndexes := make(map[string]int, len(commitOrder))
 	for i, sha := range commitOrder {
@@ -90,7 +90,7 @@ func buildTestRunIndex(
 		commitOrder: commitOrder,
 		tests:       make(map[string]*indexedTestRuns),
 	}
-	for _, run := range allTestRuns {
+	for _, run := range allRuns {
 		if run.Skipped {
 			continue
 		}
@@ -105,7 +105,7 @@ func buildTestRunIndex(
 			testRuns.failures++
 		}
 
-		commitSHA, ok := githubActionsRunIDToCommitSHA[run.RunID]
+		commitSHA, ok := runToSHA[run.RunID]
 		if !ok || commitSHA == "" {
 			continue
 		}
@@ -422,36 +422,36 @@ func selectTopFlakyTests(index *testRunIndex, cfg BisectConfig) []string {
 
 // runBisectAnalysis is the top-level bisect orchestrator called from the generate command.
 // It runs bisect for the top-N flakiest tests and returns their reports.
-func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allTestRuns []TestRun, githubActionsRuns []github.Run) ([]TestBisectReport, error) {
-	githubActionsRunIDToCommitSHA := make(map[int64]string, len(githubActionsRuns))
-	var oldestGitHubActionsCommitSHA string
+func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun, githubActionsRuns []github.Run) ([]TestBisectReport, error) {
+	runToSHA := make(map[int64]string, len(githubActionsRuns))
+	var oldestSHA string
 	var oldestTime time.Time
 	for _, githubActionsRun := range githubActionsRuns {
 		if githubActionsRun.HeadSHA == "" {
 			continue
 		}
-		githubActionsRunIDToCommitSHA[githubActionsRun.DatabaseID] = githubActionsRun.HeadSHA
+		runToSHA[githubActionsRun.DatabaseID] = githubActionsRun.HeadSHA
 		if oldestTime.IsZero() || githubActionsRun.CreatedAt.Before(oldestTime) {
 			oldestTime = githubActionsRun.CreatedAt
-			oldestGitHubActionsCommitSHA = githubActionsRun.HeadSHA
+			oldestSHA = githubActionsRun.HeadSHA
 		}
 	}
 
-	if oldestGitHubActionsCommitSHA == "" {
+	if oldestSHA == "" {
 		return nil, errors.New("no GitHub Actions runs with commit SHAs found")
 	}
 
 	// Get commit ordering from git log
-	fmt.Printf("Building commit order from %s..HEAD\n", oldestGitHubActionsCommitSHA[:7])
-	commitOrderSlice, err := commitOrder(ctx, oldestGitHubActionsCommitSHA)
+	fmt.Printf("Building commit order from %s..HEAD\n", oldestSHA[:7])
+	commitOrderSlice, err := commitOrder(ctx, oldestSHA)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit order: %w", err)
 	}
 	if len(commitOrderSlice) == 0 {
-		return nil, fmt.Errorf("commit order is empty for anchor %s: SHA may not be an ancestor of HEAD (force-push or unrelated branch?)", oldestGitHubActionsCommitSHA[:7])
+		return nil, fmt.Errorf("commit order is empty for anchor %s: SHA may not be an ancestor of HEAD (force-push or unrelated branch?)", oldestSHA[:7])
 	}
 	fmt.Printf("Commit range: %d commits\n", len(commitOrderSlice))
-	testRuns := buildTestRunIndex(allTestRuns, commitOrderSlice, githubActionsRunIDToCommitSHA)
+	testRuns := buildTestRunIndex(allRuns, commitOrderSlice, runToSHA)
 
 	// Select qualifying flaky tests
 	targetTests := selectTopFlakyTests(testRuns, cfg)
@@ -464,9 +464,9 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allTestRuns []Test
 	}
 
 	// Pre-fetch commit metadata for all unique GitHub Actions commit SHAs.
-	uniqueSHAs := make([]string, 0, len(githubActionsRunIDToCommitSHA))
-	seenSHA := make(map[string]struct{}, len(githubActionsRunIDToCommitSHA))
-	for _, sha := range githubActionsRunIDToCommitSHA {
+	uniqueSHAs := make([]string, 0, len(runToSHA))
+	seenSHA := make(map[string]struct{}, len(runToSHA))
+	for _, sha := range runToSHA {
 		if _, ok := seenSHA[sha]; !ok {
 			seenSHA[sha] = struct{}{}
 			uniqueSHAs = append(uniqueSHAs, sha)

@@ -262,7 +262,7 @@ func TestRunBisectInformationlessData(t *testing.T) {
 
 func TestBuildObservations(t *testing.T) {
 	commitOrderSlice := []string{"sha-a", "sha-b", "sha-c", "sha-d"}
-	githubActionsRunIDToCommitSHA := map[int64]string{
+	runToSHA := map[int64]string{
 		100: "sha-a",
 		200: "sha-b",
 		300: "sha-c",
@@ -295,7 +295,7 @@ func TestBuildObservations(t *testing.T) {
 		{Name: "TestFoo", Failed: false, RunID: 999},
 	}
 
-	index := buildTestRunIndex(runs, commitOrderSlice, githubActionsRunIDToCommitSHA)
+	index := buildTestRunIndex(runs, commitOrderSlice, runToSHA)
 	obs := buildObservations("TestFoo", index)
 	require.Equal(t, 12, index.tests["TestFoo"].totalRuns)
 	require.Equal(t, 4, index.tests["TestFoo"].failures)
@@ -487,7 +487,7 @@ func TestRunBisectForTestDirectionFilter(t *testing.T) {
 	// not introduced). The direction filter must suppress this suspect so it does not appear
 	// as a culprit in the report.
 	commitOrderSlice := []string{"sha0", "sha1", "sha2", "sha3", "sha4", "sha5"}
-	githubActionsRunIDToCommitSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
+	runToSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
 
 	var allRuns []TestRun
 	// sha0-sha4: 8 failures + 2 passes each (80% failure rate)
@@ -511,7 +511,7 @@ func TestRunBisectForTestDirectionFilter(t *testing.T) {
 		MinProbability: 0.5,
 	}
 
-	report := runBisectForTest(cfg, "TestFoo", buildTestRunIndex(allRuns, commitOrderSlice, githubActionsRunIDToCommitSHA), nil)
+	report := runBisectForTest(cfg, "TestFoo", buildTestRunIndex(allRuns, commitOrderSlice, runToSHA), nil)
 
 	// The only high-probability transition point (sha5, where rate dropped 80%→0%) should be
 	// filtered out by the direction filter, leaving no actionable suspects.
@@ -523,7 +523,7 @@ func TestRunBisectForTestDirectionFilterKeepsIntroduction(t *testing.T) {
 	// Complementary: failure rate INCREASES at sha3 (flake introduced). The direction filter
 	// must retain this suspect.
 	commitOrderSlice := []string{"sha0", "sha1", "sha2", "sha3", "sha4", "sha5"}
-	githubActionsRunIDToCommitSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
+	runToSHA := map[int64]string{0: "sha0", 1: "sha1", 2: "sha2", 3: "sha3", 4: "sha4", 5: "sha5"}
 
 	var allRuns []TestRun
 	// sha0-sha2: clean (0% failure rate)
@@ -550,7 +550,7 @@ func TestRunBisectForTestDirectionFilterKeepsIntroduction(t *testing.T) {
 		MinProbability: 0.5,
 	}
 
-	report := runBisectForTest(cfg, "TestFoo", buildTestRunIndex(allRuns, commitOrderSlice, githubActionsRunIDToCommitSHA), nil)
+	report := runBisectForTest(cfg, "TestFoo", buildTestRunIndex(allRuns, commitOrderSlice, runToSHA), nil)
 
 	require.False(t, report.Skipped, "report should not be skipped: a real introduction exists")
 	require.NotEmpty(t, report.TopSuspects)
