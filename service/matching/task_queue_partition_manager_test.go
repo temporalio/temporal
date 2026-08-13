@@ -2371,6 +2371,6 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	// should exactly match the raw rates.
 	adjustedStats := pm.GetPhysicalQueueAdjustedStats(context.Background(), dbq)
 	require.NotNil(t, adjustedStats)
-	require.Equal(t, rawStats[3].TasksAddRate, adjustedStats.TasksAddRate)
-	require.Equal(t, rawStats[3].TasksDispatchRate, adjustedStats.TasksDispatchRate)
+	require.InDelta(t, rawStats[3].TasksAddRate, adjustedStats.TasksAddRate, 0)
+	require.InDelta(t, rawStats[3].TasksDispatchRate, adjustedStats.TasksDispatchRate, 0)
 }
