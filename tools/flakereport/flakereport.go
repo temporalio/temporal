@@ -13,15 +13,14 @@ import (
 )
 
 const (
-	minFlakyFailures       = 3
-	defaultMaxLinks        = 3
-	defaultLookbackDays    = 7
-	defaultWorkflowID      = 80591745
-	defaultRepository      = "temporalio/temporal"
-	defaultBranch          = "main"
-	defaultConcurrency     = 20
-	maxFlakyTestsPerReport = 100
-	slackMaxListItems      = 10
+	minFlakyFailures    = 3
+	defaultMaxLinks     = 3
+	defaultLookbackDays = 7
+	defaultWorkflowID   = 80591745
+	defaultRepository   = "temporalio/temporal"
+	defaultBranch       = "main"
+	defaultConcurrency  = 20
+	slackMaxListItems   = 10
 )
 
 // NewCliApp instantiates a new instance of the CLI application

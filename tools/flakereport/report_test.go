@@ -49,23 +49,58 @@ func TestGenerateSuiteBreakdownTable(t *testing.T) {
 		"| `TestFunctionalSuite` | **25.0% (2/8)** | 3h ago |\n", table)
 }
 
-func TestGenerateGitHubSummaryLimitsFlakyTests(t *testing.T) {
-	flakyTests := make([]TestReport, maxFlakyTestsPerReport+1)
-	for i := range flakyTests {
-		flakyTests[i].TestName = "TestFlake" + strconv.Itoa(i+1)
+func TestGenerateReportLimitsAllTableRows(t *testing.T) {
+	const (
+		maxRows = 100
+		total   = maxRows + 1
+	)
+	makeTestReports := func(prefix string) []TestReport {
+		reports := make([]TestReport, total)
+		for i := range reports {
+			reports[i].TestName = prefix + strconv.Itoa(i+1)
+		}
+		return reports
+	}
+
+	suites := make([]SuiteReport, total)
+	bisectReports := make([]TestBisectReport, total)
+	for i := range total {
+		suites[i] = SuiteReport{
+			SuiteName: "Suite" + strconv.Itoa(i+1),
+			FlakeRate: float64(i + 1),
+		}
+		bisectReports[i] = TestBisectReport{
+			TestName: "Bisect" + strconv.Itoa(i+1),
+			TopSuspects: []BisectResult{{
+				CommitSHA:   "abcdef0",
+				Probability: float64(i+1) / total,
+			}},
+		}
 	}
 	summary := &ReportSummary{
-		FlakyTests:      flakyTests,
-		TotalFlakyCount: len(flakyTests),
+		CIBreakers:      makeTestReports("CIBreaker"),
+		Crashes:         makeTestReports("Crash"),
+		Timeouts:        makeTestReports("Timeout"),
+		FlakyTests:      makeTestReports("Flake"),
+		Suites:          suites,
+		TotalFlakyCount: total,
 	}
 
 	summaryContent := generateGitHubSummary(summary, "", 0)
+	summaryContent += generateBisectSummary(bisectReports, "temporalio/temporal", 0.5)
 
 	require.Contains(t, summaryContent, "| Flaky Tests | 101 |")
-	require.Contains(t, summaryContent, "`TestFlake1`")
-	require.Contains(t, summaryContent, "`TestFlake100`")
-	require.NotContains(t, summaryContent, "`TestFlake101`")
-	require.Contains(t, summaryContent, "Showing the top 100 of 101 flaky tests")
-	require.NotContains(t, summaryContent, "complete list")
-	require.Equal(t, maxFlakyTestsPerReport, strings.Count(summaryContent, "| `TestFlake"))
+	for _, prefix := range []string{"CIBreaker", "Crash", "Timeout", "Flake"} {
+		require.Contains(t, summaryContent, "`"+prefix+"1`")
+		require.Contains(t, summaryContent, "`"+prefix+"100`")
+		require.NotContains(t, summaryContent, "`"+prefix+"101`")
+		require.Equal(t, maxRows, strings.Count(summaryContent, "| `"+prefix))
+	}
+	require.NotContains(t, summaryContent, "`Suite1`")
+	require.Contains(t, summaryContent, "`Suite101`")
+	require.Equal(t, maxRows, strings.Count(summaryContent, "| `Suite"))
+	require.NotContains(t, summaryContent, "`Bisect1`")
+	require.Contains(t, summaryContent, "`Bisect101`")
+	require.Equal(t, maxRows, strings.Count(summaryContent, "| `Bisect"))
+	require.Equal(t, 6, strings.Count(summaryContent, "Showing the top 100 of 101 entries."))
 }

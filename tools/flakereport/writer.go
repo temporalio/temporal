@@ -87,13 +87,7 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	// Flaky tests section
 	if len(summary.FlakyTests) > 0 {
 		content += "### Flaky Tests\n\n"
-		flakyTests := summary.FlakyTests
-		if len(flakyTests) > maxFlakyTestsPerReport {
-			flakyTests = flakyTests[:maxFlakyTestsPerReport]
-			content += fmt.Sprintf("Showing the top %d of %d flaky tests.\n\n",
-				len(flakyTests), len(summary.FlakyTests))
-		}
-		content += generateTestReportTable(flakyTests, "Flake Rate", maxLinks) + "\n"
+		content += generateTestReportTable(summary.FlakyTests, "Flake Rate", maxLinks) + "\n"
 	}
 
 	// Flaky suites
@@ -126,32 +120,55 @@ func escapeTableCell(s string) string {
 	return strings.ReplaceAll(s, "|", "&#124;")
 }
 
-// writeBisectTable writes all suspect (test, commit) pairs into a single flat table.
-func writeBisectTable(sb *strings.Builder, reports []TestBisectReport, repo string) {
-	sb.WriteString("| Test | Prob | Commit | Date | Author | Before | After | Note |\n")
-	sb.WriteString("|------|------|--------|------|--------|--------|-------|------|\n")
-	for _, r := range reports {
-		if r.Skipped || len(r.TopSuspects) == 0 {
+type bisectTableRow struct {
+	testName string
+	suspect  BisectResult
+}
+
+func buildBisectTableRows(reports []TestBisectReport) []bisectTableRow {
+	var rows []bisectTableRow
+	for _, report := range reports {
+		if report.Skipped {
 			continue
 		}
-		for _, s := range r.TopSuspects {
-			shortSHA := s.CommitSHA
-			if len(shortSHA) > 7 {
-				shortSHA = shortSHA[:7]
-			}
-			commitURL := github.CommitURL(repo, s.CommitSHA)
-			title := s.CommitTitle
-			if title == s.CommitSHA || title == "" {
-				title = shortSHA
-			}
-			beforeStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsBefore, s.PassesBefore+s.FailsBefore,
-				pct(s.FailsBefore, s.PassesBefore+s.FailsBefore))
-			afterStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsAfter, s.PassesAfter+s.FailsAfter,
-				pct(s.FailsAfter, s.PassesAfter+s.FailsAfter))
-			fmt.Fprintf(sb, "| `%s` | %.1f%% | [%s](%s) %s | %s | %s | %s | %s | %s |\n",
-				escapeTableCell(r.TestName), s.Probability*100, shortSHA, commitURL, escapeTableCell(title),
-				s.CommitDate, escapeTableCell(s.CommitAuthor), beforeStr, afterStr, escapeTableCell(s.HeuristicNote))
+		for _, suspect := range report.TopSuspects {
+			rows = append(rows, bisectTableRow{testName: report.TestName, suspect: suspect})
 		}
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].suspect.Probability != rows[j].suspect.Probability {
+			return rows[i].suspect.Probability > rows[j].suspect.Probability
+		}
+		if rows[i].testName != rows[j].testName {
+			return rows[i].testName < rows[j].testName
+		}
+		return rows[i].suspect.CommitSHA < rows[j].suspect.CommitSHA
+	})
+	return rows
+}
+
+// writeBisectTable writes suspect (test, commit) pairs into a single flat table.
+func writeBisectTable(sb *strings.Builder, rows []bisectTableRow, repo string) {
+	sb.WriteString("| Test | Prob | Commit | Date | Author | Before | After | Note |\n")
+	sb.WriteString("|------|------|--------|------|--------|--------|-------|------|\n")
+	for _, row := range rows {
+		s := row.suspect
+		shortSHA := s.CommitSHA
+		if len(shortSHA) > 7 {
+			shortSHA = shortSHA[:7]
+		}
+		commitURL := github.CommitURL(repo, s.CommitSHA)
+		title := s.CommitTitle
+		if title == s.CommitSHA || title == "" {
+			title = shortSHA
+		}
+		beforeStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsBefore, s.PassesBefore+s.FailsBefore,
+			pct(s.FailsBefore, s.PassesBefore+s.FailsBefore))
+		afterStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsAfter, s.PassesAfter+s.FailsAfter,
+			pct(s.FailsAfter, s.PassesAfter+s.FailsAfter))
+		fmt.Fprintf(sb, "| `%s` | %.1f%% | [%s](%s) %s | %s | %s | %s | %s | %s |\n",
+			escapeTableCell(row.testName), s.Probability*100, shortSHA, commitURL, escapeTableCell(title),
+			s.CommitDate, escapeTableCell(s.CommitAuthor), beforeStr, afterStr, escapeTableCell(s.HeuristicNote))
 	}
 	sb.WriteString("\n")
 }
@@ -181,20 +198,9 @@ func generateBisectSummary(reports []TestBisectReport, repo string, minProb floa
 	}
 	sb.WriteString("\n\n")
 
-	// Sort by top suspect probability descending so the most actionable rows appear first.
-	sort.Slice(reports, func(i, j int) bool {
-		pi := 0.0
-		if len(reports[i].TopSuspects) > 0 {
-			pi = reports[i].TopSuspects[0].Probability
-		}
-		pj := 0.0
-		if len(reports[j].TopSuspects) > 0 {
-			pj = reports[j].TopSuspects[0].Probability
-		}
-		return pi > pj
-	})
-
-	writeBisectTable(&sb, reports, repo)
+	rows, total := limitReportRows(buildBisectTableRows(reports))
+	writeTableLimitNotice(&sb, len(rows), total)
+	writeBisectTable(&sb, rows, repo)
 	return sb.String()
 }
 
