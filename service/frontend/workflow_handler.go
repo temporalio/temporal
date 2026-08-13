@@ -1201,13 +1201,18 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		Messages:                   matchingResp.Messages,
 		PollerScalingDecision:      matchingResp.PollerScalingDecision,
 	}
-	trace.SpanFromContext(ctx).SetAttributes(
-		attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeWorkflow),
-		attribute.String(telemetry.WorkerTaskIDKey, fmt.Sprint(response.GetStartedEventId())),
-		attribute.String(telemetry.WorkerTaskNamespaceIDKey, namespaceID.String()),
-		attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
-		attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
-	)
+	if len(response.GetTaskToken()) > 0 {
+		attrs := []attribute.KeyValue{
+			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeWorkflow),
+			attribute.String(telemetry.WorkerTaskNamespaceIDKey, namespaceID.String()),
+			attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
+			attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
+		}
+		if startedEventID := response.GetStartedEventId(); startedEventID != 0 {
+			attrs = append(attrs, attribute.String(telemetry.WorkerTaskIDKey, fmt.Sprint(startedEventID)))
+		}
+		trace.SpanFromContext(ctx).SetAttributes(attrs...)
+	}
 	return response, nil
 }
 
@@ -1446,14 +1451,16 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		Priority:                    matchingResponse.Priority,
 		RetryPolicy:                 matchingResponse.RetryPolicy,
 	}
-	trace.SpanFromContext(ctx).SetAttributes(
-		attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeActivity),
-		attribute.String(telemetry.WorkerTaskIDKey, response.GetActivityId()),
-		attribute.String(telemetry.WorkerTaskNamespaceIDKey, namespaceID.String()),
-		attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
-		attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
-		attribute.String(telemetry.WorkerTaskActivityIDKey, response.GetActivityId()),
-	)
+	if len(response.GetTaskToken()) > 0 {
+		trace.SpanFromContext(ctx).SetAttributes(
+			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeActivity),
+			attribute.String(telemetry.WorkerTaskIDKey, response.GetActivityId()),
+			attribute.String(telemetry.WorkerTaskNamespaceIDKey, namespaceID.String()),
+			attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
+			attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
+			attribute.String(telemetry.WorkerTaskActivityIDKey, response.GetActivityId()),
+		)
+	}
 	return response, nil
 }
 
