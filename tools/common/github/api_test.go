@@ -22,10 +22,16 @@ func newTestAPIClient(server *httptest.Server) *apiClient {
 
 func TestAPIClientGetJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		require.Equal(t, "Bearer test-token", request.Header.Get("Authorization"))
-		require.Equal(t, "application/vnd.github+json", request.Header.Get("Accept"))
+		if got := request.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("Authorization = %q, want %q", got, "Bearer test-token")
+		}
+		if got := request.Header.Get("Accept"); got != "application/vnd.github+json" {
+			t.Errorf("Accept = %q, want %q", got, "application/vnd.github+json")
+		}
 		_, err := io.WriteString(w, `{"value":"ok"}`)
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -53,6 +59,6 @@ func TestSetAPIRPS(t *testing.T) {
 	})
 
 	require.NoError(t, SetAPIRPS(15))
-	require.Equal(t, rate.Limit(15), defaultAPIClient.limiter.Limit())
+	require.InDelta(t, 15, float64(defaultAPIClient.limiter.Limit()), 0)
 	require.ErrorContains(t, SetAPIRPS(0), "must be at least 1")
 }

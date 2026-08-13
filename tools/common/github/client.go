@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -35,7 +36,7 @@ func apiToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to get GitHub token: %w", fallbackToken.err)
 	}
 	if fallbackToken.value == "" {
-		return "", fmt.Errorf("GitHub token is empty")
+		return "", errors.New("GitHub token is empty")
 	}
 	return fallbackToken.value, nil
 }

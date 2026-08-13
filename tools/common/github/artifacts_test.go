@@ -13,9 +13,13 @@ import (
 
 func TestDownloadArtifact(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		require.Equal(t, "/artifact", request.URL.Path)
+		if got := request.URL.Path; got != "/artifact" {
+			t.Errorf("request path = %q, want %q", got, "/artifact")
+		}
 		_, err := io.WriteString(w, "zip contents")
-		require.NoError(t, err)
+		if err != nil {
+			t.Errorf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

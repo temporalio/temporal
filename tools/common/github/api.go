@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,7 +46,7 @@ func newAPIClient() *apiClient {
 // SetAPIRPS sets the request rate limit for GitHub API requests.
 func SetAPIRPS(rps int) error {
 	if rps < 1 {
-		return fmt.Errorf("GitHub API requests per second must be at least 1")
+		return errors.New("GitHub API requests per second must be at least 1")
 	}
 	defaultAPIClient.limiter.SetLimit(rate.Limit(rps))
 	return nil
