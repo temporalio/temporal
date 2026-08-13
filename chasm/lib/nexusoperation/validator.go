@@ -57,7 +57,7 @@ func newStartNexusOperationExecutionRequestValidator(
 	userMetadataValidators := newUserMetadataValidator(config)
 	return startNexusOperationExecutionRequestFieldValidators{
 		Namespace: validation.NoOp[workflowservice.StartNexusOperationExecutionRequest, string](),
-		Identity: validation.Field[workflowservice.StartNexusOperationExecutionRequest](maxStringLength(config.MaxIDLengthLimit())),
+		Identity:  validation.Field[workflowservice.StartNexusOperationExecutionRequest](maxStringLength(config.MaxIDLengthLimit())),
 		RequestId: func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, requestID string) error {
 			if requestID == "" {
 				req.RequestId = uuid.NewString()
@@ -216,7 +216,7 @@ func newDescribeNexusOperationExecutionRequestValidator(
 	namespaceID string,
 ) describeNexusOperationExecutionRequestFieldValidators {
 	return describeNexusOperationExecutionRequestFieldValidators{
-		Namespace: validation.NoOp[workflowservice.DescribeNexusOperationExecutionRequest, string](),
+		Namespace:   validation.NoOp[workflowservice.DescribeNexusOperationExecutionRequest, string](),
 		OperationId: validation.Field[workflowservice.DescribeNexusOperationExecutionRequest](requiredID(config.MaxIDLengthLimit())),
 		RunId: func(_ *workflowservice.DescribeNexusOperationExecutionRequest, fieldName string, runID string) error {
 			if runID != "" {
@@ -250,7 +250,7 @@ func newPollNexusOperationExecutionRequestValidator(
 	config *Config,
 ) pollNexusOperationExecutionRequestFieldValidators {
 	return pollNexusOperationExecutionRequestFieldValidators{
-		Namespace: validation.NoOp[workflowservice.PollNexusOperationExecutionRequest, string](),
+		Namespace:   validation.NoOp[workflowservice.PollNexusOperationExecutionRequest, string](),
 		OperationId: validation.Field[workflowservice.PollNexusOperationExecutionRequest](requiredID(config.MaxIDLengthLimit())),
 		RunId:       validation.Field[workflowservice.PollNexusOperationExecutionRequest](validateOptionalRunID),
 		WaitStage: func(req *workflowservice.PollNexusOperationExecutionRequest, fieldName string, waitStage enumspb.NexusOperationWaitStage) error {
@@ -272,7 +272,7 @@ func newRequestCancelNexusOperationExecutionRequestValidator(
 	config *Config,
 ) requestCancelNexusOperationExecutionRequestFieldValidators {
 	return requestCancelNexusOperationExecutionRequestFieldValidators{
-		Namespace: validation.NoOp[workflowservice.RequestCancelNexusOperationExecutionRequest, string](),
+		Namespace:   validation.NoOp[workflowservice.RequestCancelNexusOperationExecutionRequest, string](),
 		OperationId: validation.Field[workflowservice.RequestCancelNexusOperationExecutionRequest](requiredID(config.MaxIDLengthLimit())),
 		RunId:       validation.Field[workflowservice.RequestCancelNexusOperationExecutionRequest](validateOptionalRunID),
 		Identity:    validation.Field[workflowservice.RequestCancelNexusOperationExecutionRequest](maxStringLength(config.MaxIDLengthLimit())),
@@ -293,7 +293,7 @@ func newTerminateNexusOperationExecutionRequestValidator(
 	config *Config,
 ) terminateNexusOperationExecutionRequestFieldValidators {
 	return terminateNexusOperationExecutionRequestFieldValidators{
-		Namespace: validation.NoOp[workflowservice.TerminateNexusOperationExecutionRequest, string](),
+		Namespace:   validation.NoOp[workflowservice.TerminateNexusOperationExecutionRequest, string](),
 		OperationId: validation.Field[workflowservice.TerminateNexusOperationExecutionRequest](requiredID(config.MaxIDLengthLimit())),
 		RunId:       validation.Field[workflowservice.TerminateNexusOperationExecutionRequest](validateOptionalRunID),
 		Identity:    validation.Field[workflowservice.TerminateNexusOperationExecutionRequest](maxStringLength(config.MaxIDLengthLimit())),
@@ -338,7 +338,7 @@ func newDeleteNexusOperationExecutionRequestValidator(
 	config *Config,
 ) deleteNexusOperationExecutionRequestFieldValidators {
 	return deleteNexusOperationExecutionRequestFieldValidators{
-		Namespace: validation.NoOp[workflowservice.DeleteNexusOperationExecutionRequest, string](),
+		Namespace:   validation.NoOp[workflowservice.DeleteNexusOperationExecutionRequest, string](),
 		OperationId: validation.Field[workflowservice.DeleteNexusOperationExecutionRequest](requiredID(config.MaxIDLengthLimit())),
 		RunId:       validation.Field[workflowservice.DeleteNexusOperationExecutionRequest](validateOptionalRunID),
 	}

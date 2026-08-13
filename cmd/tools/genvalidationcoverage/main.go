@@ -36,8 +36,8 @@ type templateData struct {
 	ImportPath  string
 	TypeName    string
 	Prefix      string
-	SelfAlias   string            // import alias for the package containing TypeName
-	Nested      bool              // true for nested proto types (use NestedFieldValidator)
+	SelfAlias   string // import alias for the package containing TypeName
+	Nested      bool   // true for nested proto types (use NestedFieldValidator)
 	Fields      []field
 	Imports     map[string]string
 	NestedTypes map[string]string // maps Go field type (e.g. "*sdkpb.UserMetadata") → nested validator prefix (e.g. "userMetadata")
