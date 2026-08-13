@@ -4,15 +4,18 @@ package tests
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -90,6 +93,97 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 		t := s.T()
 		testTimeoutWhileAttemptInProgress(t, model.HeartbeatElapses)
 	})
+}
+
+// A retryable ServerFailure reported through RespondActivityTaskFailedById must be retried, exactly
+// like a retryable ApplicationFailure. Only the by-ID API accepts a non-application failure (the
+// by-token API rejects one), so this is the path a ServerFailure reaches the handler through.
+func (s *activityParityTestSuite) TestRetryableServerFailureIsRetried() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	trace := []model.Event{model.Poll, model.FailByIDRetryablyWithServerFailure}
+	// A second attempt is scheduled and backing off, rather than the activity going terminal.
+	expected := activityInfo{
+		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		Attempt:                    2,
+		CurrentRetryInterval:       activityLongDuration,
+		NextAttemptScheduleTimeSet: true,
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t),
+			"a retryable ServerFailure must schedule another attempt, not fail terminally")
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t),
+			"a retryable ServerFailure must schedule another attempt, not fail terminally")
+	})
+}
+
+// Failures submitted through RespondActivityTaskFailedById use the same retry classification for
+// standalone and workflow activities, including non-application failures a worker synthesizes.
+func (s *activityParityTestSuite) TestSyntheticFailuresHaveRetryParity() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	retryableFailures := []struct {
+		name  string
+		event model.Event
+	}{
+		{name: "StartToCloseTimeout", event: model.FailByIDRetryablyWithStartToCloseTimeoutFailure},
+		{name: "HeartbeatTimeout", event: model.FailByIDRetryablyWithHeartbeatTimeoutFailure},
+		{name: "UnknownFailure", event: model.FailByIDRetryablyWithUnknownFailure},
+	}
+	wantRetry := activityInfo{
+		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		Attempt:                    2,
+		CurrentRetryInterval:       activityLongDuration,
+		NextAttemptScheduleTimeSet: true,
+	}
+
+	for _, tc := range retryableFailures {
+		s.Run(tc.name, func(s *activityParityTestSuite) {
+			trace := []model.Event{model.Poll, tc.event}
+			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, wantRetry, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+			})
+			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, wantRetry, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+			})
+		})
+	}
+
+	// Both implementations close these failures without retrying. WFA surfaces them as timed out,
+	// while SAA surfaces worker-reported timeouts as failed, so terminal status itself is not parity.
+	nonRetryableTimeouts := []struct {
+		name  string
+		event model.Event
+	}{
+		{name: "ScheduleToStartTimeout", event: model.FailByIDWithScheduleToStartTimeoutFailure},
+		{name: "ScheduleToCloseTimeout", event: model.FailByIDWithScheduleToCloseTimeoutFailure},
+	}
+	for _, tc := range nonRetryableTimeouts {
+		s.Run(tc.name, func(s *activityParityTestSuite) {
+			trace := []model.Event{model.Poll, tc.event}
+			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, activityTerminalOutcome{
+					status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+					retryState: enumspb.RETRY_STATE_TIMEOUT,
+				}, newWFADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
+			})
+			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, activityTerminalOutcome{
+					status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+					retryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+				}, newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
+			})
+		})
+	}
 }
 
 // A terminal timeout must chain the application failure that drove its retries as its Cause, so an SDK
@@ -487,24 +581,159 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 2}
 
-	trace := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}
 	expected := activityMarshalPayloads(activityHeartbeatDetails)
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, expected,
-			newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
-	})
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		d := newSAADriver(t, env, cfg)
-		require.Equal(t, expected,
-			d.driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+	for _, eventType := range []model.EventType{model.RespondFailedType, model.RespondFailedByIDType} {
+		s.Run(eventType.String(), func(s *activityParityTestSuite) {
+			trace := []model.Event{model.Poll, {Type: eventType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}
+			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, expected,
+					newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+			})
+			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+				t := s.T()
+				require.Equal(t, expected,
+					newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+			})
+		})
+	}
+}
 
-		// For SAA we additionally confirm that it's persisted even if the failure is terminal. WFA
-		// drops the pending activity from MS at this point.
-		terminal := []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: false}, HasHeartbeatDetails: true}}
-		require.Equal(t, expected,
-			d.driveTrace(t, terminal).activityInfo(t).LastHeartbeatDetails)
+// Reset rewinds the attempt counter but carries the heartbeat checkpoint into the new attempt, so a
+// long-running activity resumes from where it got to. reset_heartbeat opts out of that: the
+// checkpoint is discarded, and the new attempt starts with none.
+func (s *activityParityTestSuite) TestResetHeartbeatDetails() {
+	env := newActivityParityEnv(s.T())
+	// A long retry interval holds the activity in backoff, so a reset lands while it is SCHEDULED and
+	// no dispatched attempt can pick the checkpoint up before it is read.
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	recorded := activityMarshalPayloads(activityRecordedHeartbeatDetails)
+
+	for _, tc := range []struct {
+		name                     string
+		resetEvent               model.Event
+		expectedHeartbeatDetails []byte
+	}{
+		{name: "Keep", resetEvent: model.Reset, expectedHeartbeatDetails: recorded},
+		{name: "Clear", resetEvent: model.ResetClearingHeartbeat, expectedHeartbeatDetails: nil},
+	} {
+		s.Run(tc.name, func(s *activityParityTestSuite) {
+			// Reset with no attempt in progress: takes effect at once.
+			s.Run("WhileScheduled", func(s *activityParityTestSuite) {
+				trace := []model.Event{model.Poll, model.Heartbeat, model.FailRetryably, tc.resetEvent}
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					require.Equal(t, tc.expectedHeartbeatDetails,
+						newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+				})
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					require.Equal(t, tc.expectedHeartbeatDetails,
+						newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+				})
+			})
+			// Reset while a worker owns the attempt: deferred until that worker yields
+			s.Run("WhileStarted", func(s *activityParityTestSuite) {
+				trace := []model.Event{model.Poll, model.Heartbeat, tc.resetEvent}
+				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					handle := newWFADriver(t, env, cfg).driveTrace(t, trace)
+					require.Equal(t, recorded, handle.activityInfo(t).LastHeartbeatDetails,
+						"the running attempt must keep reporting its checkpoint until it yields")
+					handle.driveEvent(t, model.FailRetryably)
+					require.Equal(t, tc.expectedHeartbeatDetails, handle.activityInfo(t).LastHeartbeatDetails)
+				})
+				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+					t := s.T()
+					handle := newSAADriver(t, env, cfg).driveTrace(t, trace)
+					require.Equal(t, recorded, handle.activityInfo(t).LastHeartbeatDetails,
+						"the running attempt must keep reporting its checkpoint until it yields")
+					handle.driveEvent(t, model.FailRetryably)
+					require.Equal(t, tc.expectedHeartbeatDetails, handle.activityInfo(t).LastHeartbeatDetails)
+				})
+			})
+		})
+	}
+}
+
+// A retryable failure payload is truncated to MutableStateActivityFailureSizeLimitError,
+// but final failure is not.
+func (s *activityParityTestSuite) TestRetryableFailureTruncation() {
+	env := newActivityParityEnv(s.T())
+
+	assertTruncated := func(t *testing.T, failure *failurepb.Failure) {
+		t.Helper()
+		require.NotNil(t, failure, "the attempt's failure must be retained for the retry")
+		require.Equal(t, common.FailureReasonFailureExceedsLimit, failure.GetMessage())
+		require.NotNil(t, failure.GetServerFailureInfo(),
+			"the wrapper is a server failure")
+		cause := failure.GetCause()
+		require.Equal(t, "TestFailure", cause.GetApplicationFailureInfo().GetType(),
+			"the actual failure is wrapped as the cause")
+		require.LessOrEqual(t, cause.Size(), activityFailureSizeLimit,
+			"the wrapped caused must be trucated to the size limit")
+		require.NotEmpty(t, cause.GetMessage())
+		require.True(t, strings.HasPrefix(activityLargeFailureMessage, cause.GetMessage()),
+			"the truncation is at the end of the failure payload")
+		require.Less(t, len(cause.GetMessage()), len(activityLargeFailureMessage),
+			"the truncation must reduce the failure payload size")
+	}
+
+	assertWhole := func(t *testing.T, failure *failurepb.Failure) {
+		t.Helper()
+		require.NotNil(t, failure)
+		require.Nil(t, failure.GetServerFailureInfo(),
+			"a final failure is not replaced by the size-limit stand-in")
+		require.Equal(t, "TestFailure", failure.GetApplicationFailureInfo().GetType())
+		require.Equal(t, activityLargeFailureMessage, failure.GetMessage(),
+			"a final failure must not be truncated")
+	}
+
+	s.Run("RetryableAttemptFailure", func(s *activityParityTestSuite) {
+		t := s.T()
+		cfg := activityConfig{MaxAttempts: 2, RetryInterval: activityLongDuration}
+		fail := model.Event{Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true, LargeMessage: true}}
+		trace := []model.Event{model.Poll, fail}
+
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			a := newWFADriver(t, env, cfg).driveTrace(t, trace)
+			assertTruncated(t, a.pendingActivityInfo(t).GetLastFailure())
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			a := newSAADriver(t, env, cfg).driveTrace(t, trace)
+			assertTruncated(t, a.describe(t).GetInfo().GetLastFailure())
+		})
+	})
+
+	// Different than TestTerminalRetryState because earlier failure is trucated but not the final.
+	s.Run("FinalFailure", func(s *activityParityTestSuite) {
+		t := s.T()
+		cfg := activityConfig{MaxAttempts: 2}
+		fail := model.Event{Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true, LargeMessage: true}}
+		trace := []model.Event{model.Poll, fail, model.BackoffElapses, model.Poll, fail}
+
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			a := newWFADriver(t, env, cfg).driveTrace(t, trace)
+			require.Equal(t, activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+				retryState: enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+			}, a.terminalOutcome(t))
+			appErr, ok := errors.AsType[*temporal.ApplicationError](errors.Unwrap(a.run.Get(a.d.ctx, nil)))
+			require.True(t, ok)
+			require.Equal(t, "TestFailure", appErr.Type())
+			require.Equal(t, activityLargeFailureMessage, appErr.Message(),
+				"a final failure must not be truncated")
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			a := newSAADriver(t, env, cfg).driveTrace(t, trace)
+			require.Equal(t, activityTerminalOutcome{
+				status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+				retryState: enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+			}, a.terminalOutcome(t))
+			describeResp := a.describe(t)
+			assertWhole(t, describeResp.GetOutcome().GetFailure())
+			assertWhole(t, describeResp.GetInfo().GetLastFailure())
+		})
 	})
 }
 

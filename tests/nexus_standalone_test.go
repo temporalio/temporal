@@ -953,6 +953,66 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		s.Contains(err.Error(), "cancellation already requested")
 	})
 
+	s.Run("RetryAfterTerminalStateAndIDReuse", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
+
+		firstStartResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		cancelRequest := &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       firstStartResp.RunId,
+			RequestId:   "cancel-request-id",
+		}
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(
+			s.Context(),
+			cancelRequest,
+		)
+		s.NoError(err)
+
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(
+			s.Context(),
+			&workflowservice.TerminateNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       firstStartResp.RunId,
+				RequestId:   "terminate-request-id",
+			},
+		)
+		s.NoError(err)
+
+		secondStartResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+			RequestId:   "second-start-request-id",
+		})
+		s.NoError(err)
+		s.NotEqual(firstStartResp.RunId, secondStartResp.RunId)
+
+		// The retry targets the closed execution and must not cancel its replacement.
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(
+			s.Context(),
+			cancelRequest,
+		)
+		s.NoError(err)
+
+		describeResp, err := env.FrontendClient().DescribeNexusOperationExecution(
+			s.Context(),
+			&workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       secondStartResp.RunId,
+			},
+		)
+		s.NoError(err)
+		s.Nil(describeResp.GetInfo().GetCancellationInfo())
+	})
+
 	s.Run("RequestCancel_ForwardsOriginalNexusHeaders", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
 		taskHeaderCh := make(chan string, 1)
@@ -1661,7 +1721,7 @@ func (s *NexusStandaloneTestSuite) TestCountStandaloneNexusOperation() {
 			Query:     "GROUP BY Endpoint",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-		s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
+		s.ErrorContains(err, "'GROUP BY' clause is not supported for search attribute")
 	})
 
 	s.Run("InvalidQuery", func(s *NexusStandaloneTestSuite) {

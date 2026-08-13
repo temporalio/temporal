@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -20,13 +21,14 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.uber.org/mock/gomock"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -76,6 +78,7 @@ func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
 					},
 				},
 			}
+			injectActivityContext(t, ctx) // needed for last test case
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
 					Status:                 tc.status,
@@ -503,19 +506,14 @@ func TestActivityTerminate(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			nsRegistry := namespace.NewMockRegistry(ctrl)
-			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
-					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleNow:            func(chasm.Component) time.Time { return defaultTime },
+					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
 							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 						},
-						namespaceRegistry: nsRegistry,
 					}),
 				},
 			}
@@ -698,11 +696,6 @@ func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			nsRegistry := namespace.NewMockRegistry(ctrl)
-			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 
@@ -710,11 +703,11 @@ func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
 				MockContext: chasm.MockContext{
 					HandleNow:            func(chasm.Component) time.Time { return defaultTime },
 					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
 							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 						},
-						namespaceRegistry: nsRegistry,
 					}),
 				},
 			}
@@ -1135,19 +1128,14 @@ func TestActivityTaskTokenLegacyStampCompatibility(t *testing.T) {
 
 func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	nsRegistry := namespace.NewMockRegistry(ctrl)
-	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return testTime },
+			HandleNow:            func(chasm.Component) time.Time { return testTime },
+			HandleNamespaceEntry: testNamespaceEntry,
 			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 				config: &Config{
 					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 				},
-				namespaceRegistry: nsRegistry,
 			}),
 		},
 	}
@@ -1415,17 +1403,14 @@ func TestUpdateActivityExecutionOptionsRequestID(t *testing.T) {
 
 func newOperatorCommandTestContext(t *testing.T) *chasm.MockMutableContext {
 	t.Helper()
-	ctrl := gomock.NewController(t)
-	nsRegistry := namespace.NewMockRegistry(ctrl)
-	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
 	return &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+			HandleNow:            func(chasm.Component) time.Time { return time.Unix(0, 0) },
+			HandleNamespaceEntry: testNamespaceEntry,
 			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 				config: &Config{
 					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 				},
-				namespaceRegistry: nsRegistry,
 			}),
 		},
 	}
@@ -1962,4 +1947,142 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 	require.Error(t, err)
 	require.Empty(t, activity.GetLastResetRequestId())
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
+}
+
+func TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+		},
+	}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		},
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			LastDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: "test-deployment",
+				BuildId:        "test-build-1",
+			},
+		}),
+		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{}),
+		Visibility:  chasm.NewComponentField(ctx, &chasm.Visibility{}),
+	}
+
+	resp, err := activity.buildDescribeActivityExecutionResponse(ctx, &activitypb.DescribeActivityExecutionRequest{
+		FrontendRequest: &workflowservice.DescribeActivityExecutionRequest{},
+	})
+
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-1",
+	}, resp.FrontendResponse.GetInfo().GetLastDeploymentVersion())
+}
+
+// oversizedActivityFailure returns an application failure whose details push it past the retained
+// failure size limit, mirroring the failure used by the workflow activity truncation tests.
+func oversizedActivityFailure(t *testing.T) *failurepb.Failure {
+	activityFailure := &failurepb.Failure{
+		Message: "activity failure with large details",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "application-failure-type",
+			NonRetryable: false,
+			Details: &commonpb.Payloads{
+				Payloads: []*commonpb.Payload{
+					{
+						Data: make([]byte, defaultFailureSizeLimit*2),
+					},
+				},
+			},
+		}},
+	}
+	require.Greater(t, activityFailure.Size(), defaultFailureSizeLimit)
+	return activityFailure
+}
+
+// withinLimitActivityFailure returns an application failure small enough to be retained whole.
+func withinLimitActivityFailure(t *testing.T) *failurepb.Failure {
+	activityFailure := &failurepb.Failure{
+		Message: "activity failure",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type: "application-failure-type",
+		}},
+	}
+	require.LessOrEqual(t, activityFailure.Size(), defaultFailureSizeLimit)
+	return activityFailure
+}
+
+// recordFailedAttempt truncates the retryable failure, and not the final failure.
+func TestRecordFailedAttempt_FailureTruncation(t *testing.T) {
+	requireTruncated := func(t *testing.T, sent, retained *failurepb.Failure) {
+		require.LessOrEqual(t, retained.Size(), defaultFailureSizeLimit)
+		require.Equal(t, common.FailureReasonFailureExceedsLimit, retained.GetMessage())
+		require.NotNil(t, retained.GetServerFailureInfo())
+		cause := retained.GetCause()
+		require.Equal(t, sent.GetMessage(), cause.GetMessage())
+		require.Equal(t, "application-failure-type", cause.GetApplicationFailureInfo().GetType())
+		require.Nil(t, cause.GetApplicationFailureInfo().GetDetails())
+	}
+	requireKeptWhole := func(t *testing.T, sent, retained *failurepb.Failure) {
+		protorequire.ProtoEqual(t, sent, retained)
+	}
+
+	testCases := []struct {
+		name          string
+		failure       func(*testing.T) *failurepb.Failure
+		noRetriesLeft bool
+		requireResult func(t *testing.T, sent, retained *failurepb.Failure)
+	}{
+		{
+			name:          "OversizedRetryableFailureIsTruncated",
+			failure:       oversizedActivityFailure,
+			requireResult: requireTruncated,
+		},
+		{
+			name:          "RetryableFailureWithinLimitIsKeptWhole",
+			failure:       withinLimitActivityFailure,
+			requireResult: requireKeptWhole,
+		},
+		{
+			name:          "OversizedTerminalFailureIsKeptWhole",
+			failure:       oversizedActivityFailure,
+			noRetriesLeft: true,
+			requireResult: requireKeptWhole,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			injectActivityContext(t, ctx)
+
+			attemptState := &activitypb.ActivityAttemptState{Count: 1}
+			activity := &Activity{
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+			}
+			activityFailure := tc.failure(t)
+
+			retryInterval, retryIntervalSource := time.Second, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
+			if tc.noRetriesLeft {
+				retryInterval, retryIntervalSource = 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
+			}
+
+			err := activity.recordFailedAttempt(
+				ctx,
+				retryInterval,
+				retryIntervalSource,
+				activityFailure,
+				defaultTime,
+				tc.noRetriesLeft,
+			)
+			require.NoError(t, err)
+
+			tc.requireResult(t, activityFailure, attemptState.GetLastFailureDetails().GetFailure())
+		})
+	}
 }

@@ -13,12 +13,17 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
@@ -38,6 +43,28 @@ var (
 	defaultScheduleToStartTimeout = 2 * time.Minute
 	defaultStartToCloseTimeout    = 3 * time.Minute
 )
+
+// defaultFailureSizeLimit is the retained-failure size limit used by tests in this package.
+const defaultFailureSizeLimit = 1024
+
+// testNamespaceEntry is the namespace entry Activity methods read off the chasm context in tests.
+func testNamespaceEntry() *namespace.Namespace {
+	return namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: "test-namespace-id", Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{},
+		"test-cluster",
+	)
+}
+
+// injectActivityContext adds the dependencies that Activity methods read off the chasm context:
+// the activityContext (dynamic config) and the namespace entry.
+func injectActivityContext(t *testing.T, ctx *chasm.MockMutableContext) {
+	config := &Config{
+		MutableStateActivityFailureSizeLimitError: dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit),
+	}
+	ctx.GoCtx = context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{config: config})
+	ctx.HandleNamespaceEntry = testNamespaceEntry
+}
 
 func TestTransitionScheduled(t *testing.T) {
 	testCases := []struct {
@@ -278,6 +305,7 @@ func TestTransitionRescheduled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
 			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			injectActivityContext(t, ctx)
 			attemptState := &activitypb.ActivityAttemptState{Count: tc.startingAttemptCount}
 			outcome := &activitypb.ActivityOutcome{}
 
@@ -367,6 +395,16 @@ func TestTransitionStarted(t *testing.T) {
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			Identity: "test-worker",
 		},
+		// TODO: change this and serverside once versioning is supported in SAA.
+		// LastDeploymentVersion represents the worker that actually accepted the task,
+		// than when it's scheduled. WFA derives it from PollRequest via
+		// DeploymentFromCapabilities, while this test uses VersionDirective.
+		VersionDirective: &taskqueuespb.TaskVersionDirective{
+			DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: "test-deployment",
+				BuildId:        "test-build-1",
+			},
+		},
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)
@@ -375,6 +413,10 @@ func TestTransitionStarted(t *testing.T) {
 	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
 	require.Equal(t, headers.ClientNameGoSDK, attemptState.SdkName)
 	require.Equal(t, temporal.SDKVersion, attemptState.SdkVersion)
+
+	deploymentVersion := attemptState.GetLastDeploymentVersion()
+	require.Equal(t, "test-deployment", deploymentVersion.GetDeploymentName())
+	require.Equal(t, "test-build-1", deploymentVersion.GetBuildId())
 
 	// Verify added tasks
 	require.Len(t, ctx.Tasks, 1)
@@ -907,6 +949,22 @@ func TestTransitionCancelRequested(t *testing.T) {
 	require.NotNil(t, cancelState.GetRequestTime())
 }
 
+func TestTransitionCancelRequestedClearsDeferredOptionRestore(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status:              activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			ResetRestoreOptions: true,
+		},
+	}
+
+	err := TransitionCancelRequested.Apply(activity, ctx, &workflowservice.RequestCancelActivityExecutionRequest{})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, activity.Status)
+	require.False(t, activity.ResetRestoreOptions)
+}
+
 func TestTransitionCanceled(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -1007,38 +1065,56 @@ func TestTransitionCanceled(t *testing.T) {
 	}
 }
 
-func TestTransitionResetClearsHeartbeat(t *testing.T) {
-	ctx := &chasm.MockMutableContext{}
-	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-	attemptState := &activitypb.ActivityAttemptState{Count: 2}
-	heartbeatState := &activitypb.ActivityHeartbeatState{
-		Details:      payloads.EncodeString("heartbeat-details"),
-		RecordedTime: timestamppb.New(defaultTime),
-	}
+// TestTransitionResetHeartbeat: reset keeps the heartbeat checkpoint unless the request asks for it
+// to be discarded.
+func TestTransitionResetHeartbeat(t *testing.T) {
+	for _, resetHeartbeat := range []bool{false, true} {
+		t.Run(fmt.Sprintf("resetHeartbeat=%v", resetHeartbeat), func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			attemptState := &activitypb.ActivityAttemptState{Count: 2}
+			heartbeatState := &activitypb.ActivityHeartbeatState{
+				Details:      payloads.EncodeString("heartbeat-details"),
+				RecordedTime: timestamppb.New(defaultTime),
+			}
 
-	act := &Activity{
-		ActivityState: &activitypb.ActivityState{
-			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
-			RetryPolicy:            defaultRetryPolicy,
-			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
-			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
-			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
-			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			ScheduleTime:           timestamppb.New(defaultTime),
-			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
-		},
-		LastAttempt:   chasm.NewDataField(ctx, attemptState),
-		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
-		Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
-	}
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+					RetryPolicy:            defaultRetryPolicy,
+					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+					ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+					ScheduleTime:           timestamppb.New(defaultTime),
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				},
+				LastAttempt:   chasm.NewDataField(ctx, attemptState),
+				LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
+				Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
 
-	err := TransitionReset.Apply(act, ctx, resetEvent{resetTime: defaultTime, metricsHandler: metrics.NoopMetricsHandler})
-	require.NoError(t, err)
-	require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
-	require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
+			err := TransitionReset.Apply(act, ctx, resetEvent{
+				req:            &workflowservice.ResetActivityExecutionRequest{ResetHeartbeat: resetHeartbeat},
+				resetTime:      defaultTime,
+				metricsHandler: metrics.NoopMetricsHandler,
+			})
+			require.NoError(t, err)
+			if resetHeartbeat {
+				require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
+				require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
+			} else {
+				protorequire.ProtoEqual(t, payloads.EncodeString("heartbeat-details"), act.LastHeartbeat.Get(ctx).GetDetails())
+				require.Equal(t, timestamppb.New(defaultTime), act.LastHeartbeat.Get(ctx).GetRecordedTime())
+			}
+		})
+	}
 }
 
-func TestDeferredResetClearsHeartbeat(t *testing.T) {
+// TestDeferredResetHeartbeat: when the reset landed while a worker was running, the heartbeat
+// checkpoint is discarded on the deferred landing only if the request asked for it, in which case
+// the deferred intent is consumed.
+func TestDeferredResetHeartbeat(t *testing.T) {
 	testCases := []struct {
 		name              string
 		transition        chasm.Transition[activitypb.ActivityExecutionStatus, *Activity, rescheduleEvent]
@@ -1063,45 +1139,55 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := &chasm.MockMutableContext{}
-			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-			attemptState := &activitypb.ActivityAttemptState{
-				Count:       3,
-				StartedTime: timestamppb.New(defaultTime),
-			}
-			heartbeatState := &activitypb.ActivityHeartbeatState{
-				Details:      payloads.EncodeString("heartbeat-details"),
-				RecordedTime: timestamppb.New(defaultTime),
-			}
+		for _, shouldClearHeartbeat := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/resetShouldClearHeartbeat=%v", tc.name, shouldClearHeartbeat), func(t *testing.T) {
+				ctx := &chasm.MockMutableContext{}
+				ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+				injectActivityContext(t, ctx)
+				attemptState := &activitypb.ActivityAttemptState{
+					Count:       3,
+					StartedTime: timestamppb.New(defaultTime),
+				}
+				heartbeatState := &activitypb.ActivityHeartbeatState{
+					Details:      payloads.EncodeString("heartbeat-details"),
+					RecordedTime: timestamppb.New(defaultTime),
+				}
 
-			act := &Activity{
-				ActivityState: &activitypb.ActivityState{
-					ActivityType:            &commonpb.ActivityType{Name: "test-activity-type"},
-					RetryPolicy:             defaultRetryPolicy,
-					ScheduleToCloseTimeout:  durationpb.New(defaultScheduleToCloseTimeout),
-					ScheduleToStartTimeout:  durationpb.New(0),
-					StartToCloseTimeout:     durationpb.New(defaultStartToCloseTimeout),
-					Status:                  activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
-					ScheduleTime:            timestamppb.New(defaultTime),
-					FirstAttemptStartedTime: timestamppb.New(defaultTime),
-					TaskQueue:               &taskqueuepb.TaskQueue{Name: "test-task-queue"},
-					ResetShouldPause:        tc.resetShouldPause,
-				},
-				LastAttempt:   chasm.NewDataField(ctx, attemptState),
-				LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
-				Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
-			}
+				act := &Activity{
+					ActivityState: &activitypb.ActivityState{
+						ActivityType:              &commonpb.ActivityType{Name: "test-activity-type"},
+						RetryPolicy:               defaultRetryPolicy,
+						ScheduleToCloseTimeout:    durationpb.New(defaultScheduleToCloseTimeout),
+						ScheduleToStartTimeout:    durationpb.New(0),
+						StartToCloseTimeout:       durationpb.New(defaultStartToCloseTimeout),
+						Status:                    activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+						ScheduleTime:              timestamppb.New(defaultTime),
+						FirstAttemptStartedTime:   timestamppb.New(defaultTime),
+						TaskQueue:                 &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+						ResetShouldPause:          tc.resetShouldPause,
+						ResetShouldClearHeartbeat: shouldClearHeartbeat,
+					},
+					LastAttempt:   chasm.NewDataField(ctx, attemptState),
+					LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
+					Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+				}
 
-			err := tc.transition.Apply(act, ctx, rescheduleEvent{})
-			require.NoError(t, err)
-			require.Equal(t, tc.expectedStatus, act.Status)
-			require.Equal(t, int32(1), attemptState.Count)
-			require.Nil(t, attemptState.GetCurrentRetryInterval())
-			require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
-			require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
-			require.Len(t, ctx.Tasks, tc.expectedTaskCount)
-		})
+				err := tc.transition.Apply(act, ctx, rescheduleEvent{})
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedStatus, act.Status)
+				require.Equal(t, int32(1), attemptState.Count)
+				require.Nil(t, attemptState.GetCurrentRetryInterval())
+				require.False(t, act.GetResetShouldClearHeartbeat(), "the deferred intent must be consumed")
+				if shouldClearHeartbeat {
+					require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
+					require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
+				} else {
+					protorequire.ProtoEqual(t, payloads.EncodeString("heartbeat-details"), act.LastHeartbeat.Get(ctx).GetDetails())
+					require.Equal(t, timestamppb.New(defaultTime), act.LastHeartbeat.Get(ctx).GetRecordedTime())
+				}
+				require.Len(t, ctx.Tasks, tc.expectedTaskCount)
+			})
+		}
 	}
 }
 

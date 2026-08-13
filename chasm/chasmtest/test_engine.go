@@ -15,9 +15,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -537,6 +539,13 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			return definition.NewWorkflowKey(key.NamespaceID, key.BusinessID, key.RunID)
 		},
 		HandleIsWorkflow: func() bool { return false },
+		HandleGetNamespaceEntry: func() *namespace.Namespace {
+			return namespace.NewLocalNamespaceForTest(
+				&persistencespb.NamespaceInfo{Id: key.NamespaceID, Name: key.NamespaceID},
+				&persistencespb.NamespaceConfig{},
+				cluster.TestCurrentClusterName,
+			)
+		},
 		// GetExecutionState returns the current lifecycle state, which CloseTransaction
 		// uses to decide whether to call UpdateWorkflowStateStatus on the backend.
 		HandleGetExecutionState: func() *persistencespb.WorkflowExecutionState {

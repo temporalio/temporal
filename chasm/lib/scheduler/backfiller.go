@@ -63,13 +63,16 @@ func newBackfillerWithState(ctx chasm.MutableContext, state *schedulerpb.Backfil
 	return backfiller
 }
 
-// scheduleTask schedules a BackfillerTask at the given time.
+// scheduleTask advances the stamp for the initial task or a successor.
 func (b *Backfiller) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	b.TaskStamp++
 	b.getOrCreateEventLog(ctx).LogEvent(ctx,
-		fmt.Sprintf("scheduled backfillerTask for %s", scheduledTime.Format(time.RFC3339)))
+		fmt.Sprintf("scheduled backfillerTask for %s (stamp %d)", scheduledTime.Format(time.RFC3339), b.TaskStamp))
 	ctx.AddTask(b, chasm.TaskAttributes{
 		ScheduledTime: scheduledTime,
-	}, &schedulerpb.BackfillerTask{})
+	}, &schedulerpb.BackfillerTask{
+		Stamp: b.TaskStamp,
+	})
 }
 
 func (b *Backfiller) LifecycleState(ctx chasm.Context) chasm.LifecycleState {

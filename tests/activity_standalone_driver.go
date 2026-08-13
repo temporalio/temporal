@@ -235,7 +235,7 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	switch e.Type {
 	case model.HeartbeatType:
 		_, err := fc.RecordActivityTaskHeartbeat(a.d.ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
-			Namespace: ns, TaskToken: a.token, Details: payloads.EncodeString("heartbeat details"),
+			Namespace: ns, TaskToken: a.token, Details: activityRecordedHeartbeatDetails,
 		})
 		return err
 	case model.RespondCompletedType:
@@ -258,6 +258,16 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 			req.LastHeartbeatDetails = activityHeartbeatDetails
 		}
 		_, err := fc.RespondActivityTaskFailed(a.d.ctx, req)
+		return err
+	case model.RespondFailedByIDType:
+		req := &workflowservice.RespondActivityTaskFailedByIdRequest{
+			Namespace: ns, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
+			Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+		}
+		if e.HasHeartbeatDetails {
+			req.LastHeartbeatDetails = activityHeartbeatDetails
+		}
+		_, err := fc.RespondActivityTaskFailedById(a.d.ctx, req)
 		return err
 	case model.RespondCanceledType:
 		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{
@@ -288,7 +298,7 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 		return err
 	case model.ResetType:
 		_, err := fc.ResetActivityExecution(a.d.ctx, &workflowservice.ResetActivityExecutionRequest{
-			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused,
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused, ResetHeartbeat: e.ResetHeartbeat,
 		})
 		return err
 	case model.UpdateOptionsType:
