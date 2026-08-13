@@ -65,6 +65,11 @@ func NewCliApp() *cli.App {
 					Value: defaultConcurrency,
 					Usage: "Number of parallel workers for artifact processing",
 				},
+				&cli.IntFlag{
+					Name:  "rps",
+					Value: github.DefaultAPIRPS,
+					Usage: "Maximum GitHub API requests per second",
+				},
 				&cli.StringFlag{
 					Name:  "output-dir",
 					Value: "out",
@@ -218,6 +223,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	workflowID := c.Int64("workflow-id")
 	maxLinks := c.Int("max-links")
 	concurrency := c.Int("concurrency")
+	rps := c.Int("rps")
 	outputDir := c.String("output-dir")
 	slackWebhook := c.String("slack-webhook")
 	runID := c.String("run-id")
@@ -233,6 +239,9 @@ func runGenerateCommand(c *cli.Context) (err error) {
 			sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
 		}
 	}()
+	if err := github.SetAPIRPS(rps); err != nil {
+		return err
+	}
 
 	fmt.Println("Starting flaky test report generation...")
 	fmt.Printf("Repository: %s\n", repo)
@@ -240,6 +249,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	fmt.Printf("Lookback days: %d\n", days)
 	fmt.Printf("Workflow ID: %d\n", workflowID)
 	fmt.Printf("Parallel workers: %d\n", concurrency)
+	fmt.Printf("GitHub API requests per second: %d\n", rps)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)

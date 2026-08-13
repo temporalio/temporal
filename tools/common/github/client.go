@@ -2,25 +2,42 @@ package github
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
 const defaultTimeout = 30 * time.Second
 
-func getJSON(ctx context.Context, path string, out any) error {
-	output, err := commandOutput(ctx, defaultTimeout, "api", path)
-	if err != nil {
-		return err
+var fallbackToken struct {
+	sync.Once
+	value string
+	err   error
+}
+
+func apiToken(ctx context.Context) (string, error) {
+	if token := os.Getenv("GH_TOKEN"); token != "" {
+		return token, nil
 	}
-	if err := json.Unmarshal(output, out); err != nil {
-		return fmt.Errorf("failed to parse GitHub response for %s: %w", path, err)
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		return token, nil
 	}
-	return nil
+
+	fallbackToken.Do(func() {
+		output, err := commandOutput(ctx, defaultTimeout, "auth", "token")
+		fallbackToken.value = strings.TrimSpace(string(output))
+		fallbackToken.err = err
+	})
+	if fallbackToken.err != nil {
+		return "", fmt.Errorf("failed to get GitHub token: %w", fallbackToken.err)
+	}
+	if fallbackToken.value == "" {
+		return "", fmt.Errorf("GitHub token is empty")
+	}
+	return fallbackToken.value, nil
 }
 
 func commandOutput(ctx context.Context, timeout time.Duration, args ...string) ([]byte, error) {
