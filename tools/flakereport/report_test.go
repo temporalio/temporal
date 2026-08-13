@@ -71,7 +71,7 @@ func TestBuildReportSummaryExcludesHundredPercentFlakyTests(t *testing.T) {
 	require.Equal(t, []TestReport{ciBreaker}, summary.CIBreakers)
 }
 
-func TestGenerateReportLimitsAllTableRows(t *testing.T) {
+func TestGenerateReportLimitsNonSuiteTableRows(t *testing.T) {
 	const (
 		maxRows = maxReportRowsPerTable
 		total   = maxRows + 1
@@ -126,9 +126,9 @@ func TestGenerateReportLimitsAllTableRows(t *testing.T) {
 		require.NotContains(t, summaryContent, "`"+prefix+"101`")
 		require.Equal(t, maxRows, strings.Count(summaryContent, "| `"+prefix))
 	}
-	require.NotContains(t, summaryContent, "`Suite1`")
+	require.Contains(t, summaryContent, "`Suite1`")
 	require.Contains(t, summaryContent, "`Suite101`")
-	require.Equal(t, maxRows, strings.Count(summaryContent, "| `Suite"))
+	require.Equal(t, total, strings.Count(summaryContent, "| `Suite"))
 	var bisectRows []string
 	for line := range strings.Lines(summaryContent) {
 		if strings.HasPrefix(line, "| `Bisect") {

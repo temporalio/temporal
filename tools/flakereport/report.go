@@ -81,8 +81,6 @@ func generateSuiteBreakdownTable(suiteReports []SuiteReport) string {
 		return ""
 	}
 
-	suiteReports = limitReportRows(suiteReports)
-
 	var sb strings.Builder
 	sb.WriteString("| Suite | Flake Rate | Last Failure |\n")
 	sb.WriteString("|-------|------------|-------------|\n")

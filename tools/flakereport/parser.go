@@ -447,9 +447,6 @@ func generateSuiteReports(allFailures []TestFailure, allTestRuns []TestRun) []Su
 	}
 
 	sort.Slice(reports, func(i, j int) bool {
-		if reports[i].FlakeRate != reports[j].FlakeRate {
-			return reports[i].FlakeRate > reports[j].FlakeRate
-		}
 		return reports[i].SuiteName < reports[j].SuiteName
 	})
 

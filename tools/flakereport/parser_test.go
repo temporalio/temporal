@@ -261,25 +261,25 @@ func TestGenerateSuiteReports(t *testing.T) {
 	// Should have SuiteA and SuiteB (SuiteC is all skipped)
 	require.Len(t, reports, 2)
 
-	// Sorted by flake rate
-	require.Equal(t, "TestFunctionalSuiteB", reports[0].SuiteName)
-	require.Equal(t, "TestFunctionalSuiteA", reports[1].SuiteName)
+	// Sorted by suite name
+	require.Equal(t, "TestFunctionalSuiteA", reports[0].SuiteName)
+	require.Equal(t, "TestFunctionalSuiteB", reports[1].SuiteName)
 
 	// SuiteA: 2 failed (run,config) pairs out of 6 total
 	// Failed: (run=1, db-a) and (run=2, db-b); retry on (run=1, db-a) doesn't add a new key
-	require.Equal(t, 2, reports[1].FailedRuns)
-	require.Equal(t, 6, reports[1].TotalRuns)
-	require.InDelta(t, 33.3, reports[1].FlakeRate, 0.1)
-	require.Equal(t, oneDayAgo, reports[1].LastFailure)
+	require.Equal(t, 2, reports[0].FailedRuns)
+	require.Equal(t, 6, reports[0].TotalRuns)
+	require.InDelta(t, 33.3, reports[0].FlakeRate, 0.1)
+	require.Equal(t, oneDayAgo, reports[0].LastFailure)
 
 	// SuiteB: 1 failed (run,config) pair out of 2 total
-	require.Equal(t, 1, reports[0].FailedRuns)
-	require.Equal(t, 2, reports[0].TotalRuns)
-	require.InDelta(t, 50.0, reports[0].FlakeRate, 0.1)
-	require.Equal(t, twoDaysAgo, reports[0].LastFailure)
+	require.Equal(t, 1, reports[1].FailedRuns)
+	require.Equal(t, 2, reports[1].TotalRuns)
+	require.InDelta(t, 50.0, reports[1].FlakeRate, 0.1)
+	require.Equal(t, twoDaysAgo, reports[1].LastFailure)
 }
 
-func TestGenerateSuiteReportsSortsByFlakeRateAndName(t *testing.T) {
+func TestGenerateSuiteReportsSortsByName(t *testing.T) {
 	failures := []TestFailure{
 		{Name: "TestB", SuiteName: "TestFunctionalSuiteB", RunID: 1, MatrixName: "db"},
 		{Name: "TestA", SuiteName: "TestFunctionalSuiteA", RunID: 1, MatrixName: "db"},
@@ -287,7 +287,6 @@ func TestGenerateSuiteReportsSortsByFlakeRateAndName(t *testing.T) {
 	}
 	allRuns := []TestRun{
 		{SuiteName: "TestFunctionalSuiteB", RunID: 1, MatrixName: "db"},
-		{SuiteName: "TestFunctionalSuiteB", RunID: 2, MatrixName: "db"},
 		{SuiteName: "TestFunctionalSuiteA", RunID: 1, MatrixName: "db"},
 		{SuiteName: "TestFunctionalSuiteA", RunID: 2, MatrixName: "db"},
 		{SuiteName: "TestFunctionalSuiteC", RunID: 1, MatrixName: "db"},
