@@ -3,6 +3,7 @@ package deletenamespace
 import (
 	"context"
 
+	otellog "go.opentelemetry.io/otel/log"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/cluster"
@@ -31,6 +32,7 @@ type (
 		historyClient        resource.HistoryClient
 		metricsHandler       metrics.Handler
 		logger               log.Logger
+		eventLogger          otellog.Logger
 
 		protectedNamespaces                       dynamicconfig.TypedPropertyFn[[]string]
 		allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
@@ -49,6 +51,7 @@ type (
 		HistoryClient        resource.HistoryClient
 		MetricsHandler       metrics.Handler
 		Logger               log.Logger
+		EventLogger          otellog.Logger
 	}
 )
 
@@ -66,6 +69,7 @@ func newComponent(
 		historyClient:        params.HistoryClient,
 		metricsHandler:       params.MetricsHandler,
 		logger:               params.Logger,
+		eventLogger:          params.EventLogger,
 		protectedNamespaces:  dynamicconfig.ProtectedNamespaces.Get(params.DynamicCollection),
 		allowDeleteNamespaceIfNexusEndpointTarget: dynamicconfig.AllowDeleteNamespaceIfNexusEndpointTarget.Get(params.DynamicCollection),
 		nexusEndpointListDefaultPageSize:          dynamicconfig.NexusEndpointListDefaultPageSize.Get(params.DynamicCollection),
@@ -115,6 +119,7 @@ func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActiv
 		wc.clusterMetadata,
 		wc.nexusEndpointManager,
 		wc.logger,
+		wc.eventLogger,
 		wc.protectedNamespaces,
 		wc.allowDeleteNamespaceIfNexusEndpointTarget,
 		wc.nexusEndpointListDefaultPageSize)

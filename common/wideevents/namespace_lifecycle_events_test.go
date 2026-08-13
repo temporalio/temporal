@@ -187,3 +187,15 @@ func TestEmitNamespaceUpdatedCarriesBeforeAfterAndFlags(t *testing.T) {
 	require.Equal(t, "clusterB", d["after"].(map[string]any)["active_cluster"])
 	require.EqualValues(t, 21, d["after"].(map[string]any)["failover_version"])
 }
+
+func TestEmitNamespaceDeleted(t *testing.T) {
+	lg := &captureLogger{}
+
+	EmitNamespaceDeleted(lg, NamespaceDeletedInput{Namespace: "ns", NamespaceID: "ns-id", RenamedTo: "ns-deleted-abc"})
+
+	require.Len(t, lg.records, 1)
+	require.Equal(t, PhaseNamespaceDeleted, attrValue(lg.records[0], "phase"))
+	require.Equal(t, "ns", attrValue(lg.records[0], "namespace"))
+	require.Equal(t, "ns-id", attrValue(lg.records[0], "namespace_id"))
+	require.Equal(t, "ns-deleted-abc", lagDetails(t, lg.records[0])["renamed_to"])
+}

@@ -10,9 +10,9 @@ import (
 )
 
 // This file builds the input structs for the frontend's namespace_lifecycle emitters (defined in
-// common/wideevents) from frontend domain objects, keeping namespace_handler.go to a snapshot plus a
-// single emit call per operation — mirroring how service/history/replication/replication_events.go
-// relates to its handlers.
+// common/wideevents) from frontend domain objects, so namespace_handler.go stays a pre-mutation
+// snapshot (for updates) plus one emit call per operation — mirroring how
+// service/history/replication/replication_events.go relates to its handlers.
 
 // namespaceStateFields snapshots the fields the namespace_lifecycle events report from a namespace
 // record. isGlobal is passed separately because it is not stored on the detail. Slices are cloned so

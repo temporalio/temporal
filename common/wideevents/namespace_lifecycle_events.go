@@ -173,10 +173,14 @@ func handoverExitReason(err error) string {
 	}
 }
 
-// Namespace administration phases: the register/update operations served by the frontend on the
-// cluster that owns the write (the master cluster, for global namespaces). Each is a control-plane
-// event emitted once per successful mutation, distinct from the data-plane convergence the history
-// and replication paths observe.
+// Namespace administration phases: register/update served by the frontend, plus the delete pipeline
+// run by the worker. Each records a namespace metadata mutation, emitted once per successful
+// mutation on the cluster that served the request — as opposed to the history and replication events,
+// which track how that change propagates and takes effect.
+//
+// The serving cluster varies by op: for a global namespace RegisterNamespace and DeprecateNamespace
+// are master-cluster only, but UpdateNamespace is not — a failover is issued on the cluster becoming
+// active. Deletion is never replicated, so its pipeline runs per cluster.
 //
 // Everything that flows through UpdateNamespace — a config change, a state transition (DEPRECATED
 // via DeprecateNamespace, DELETED via UpdateNamespace), a local->global promotion, or an
@@ -184,12 +188,17 @@ func handoverExitReason(err error) string {
 // is_promotion / is_failover flags rather than separate phases; the before/after field snapshots
 // already carry the distinguishing data (active cluster, failover version, failover history).
 //
-// The frontend builds the input structs below from its domain objects (see
+// namespace_deleted is emitted from the worker delete pipeline (not the frontend): namespace
+// deletion is local and never replicated, so it can only be observed there. See
+// service/worker/deletenamespace.
+//
+// The register/update input structs are built by the frontend from its domain objects (see
 // service/frontend/namespace_lifecycle_events.go), mirroring how service/history/replication relates
 // to its handlers.
 const (
 	PhaseNamespaceRegistered = "namespace_registered"
 	PhaseNamespaceUpdated    = "namespace_updated"
+	PhaseNamespaceDeleted    = "namespace_deleted"
 )
 
 // FailoverHistoryEntry is one entry of a global namespace's failover history. It mirrors
@@ -259,5 +268,25 @@ func EmitNamespaceUpdated(logger otellog.Logger, in NamespaceUpdatedInput) {
 			"before":       in.Before,
 			"after":        in.After,
 		},
+	})
+}
+
+// NamespaceDeletedInput is the input to EmitNamespaceDeleted. Namespace is the original name;
+// RenamedTo is the tombstone name the record is renamed to as part of deletion.
+type NamespaceDeletedInput struct {
+	Namespace   string
+	NamespaceID string
+	RenamedTo   string
+}
+
+// EmitNamespaceDeleted emits a namespace_deleted event when a namespace is deleted. It is emitted at
+// the point the namespace is renamed to its tombstone name (see service/worker/deletenamespace),
+// which is when it ceases to exist under its real name.
+func EmitNamespaceDeleted(logger otellog.Logger, in NamespaceDeletedInput) {
+	Emit(logger, NamespaceLifecyclePayload{
+		Phase:       PhaseNamespaceDeleted,
+		Namespace:   in.Namespace,
+		NamespaceID: in.NamespaceID,
+		Details:     map[string]any{"renamed_to": in.RenamedTo},
 	})
 }
