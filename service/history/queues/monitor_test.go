@@ -99,77 +99,101 @@ func (s *monitorSuite) TestPendingTasksStats() {
 	s.Equal(1, s.monitor.GetTotalPendingTaskCount())
 }
 
+func (s *monitorSuite) receiveAlert() *Alert {
+	select {
+	case alert := <-s.alertCh:
+		return alert
+	default:
+		s.FailNow("expected an alert")
+		return nil
+	}
+}
+
+func (s *monitorSuite) requireNoAlert(msg string) {
+	select {
+	case <-s.alertCh:
+		s.Fail(msg)
+	default:
+	}
+}
+
 func (s *monitorSuite) TestSliceReadWatermarkStats() {
 	slice := &SliceImpl{}
 
-	_, ok := s.monitor.GetSliceReadWatermark(slice)
-	s.False(ok)
-
-	now := time.Now().Truncate(monitorWatermarkPrecision)
-	s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
-	watermark, ok := s.monitor.GetSliceReadWatermark(slice)
-	s.True(ok)
-	s.Equal(tasks.NewKey(now, 0), watermark)
-
-	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
-		now = now.Add(time.Millisecond * 100)
-		s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
-	}
-
-	alert := <-s.alertCh
+	// The fire time is deliberately not aligned to monitorWatermarkPrecision so the
+	// expected watermark below also covers truncation, not just the task ID reset.
+	watermark := stuckKey(750*time.Millisecond, rand.Int63())
 	expectedAlert := Alert{
 		AlertType: AlertTypeReaderStuck,
 		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
-			ReaderID: DefaultReaderId,
-			CurrentWatermark: tasks.NewKey(
-				now.Truncate(monitorWatermarkPrecision),
-				0,
-			),
+			ReaderID:         DefaultReaderId,
+			CurrentWatermark: stuckKey(0, 0),
 		},
 	}
-	s.Equal(expectedAlert, *alert)
 
-	s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
-	select {
-	case <-s.alertCh:
-		s.Fail("should have only one outstanding reader stuck alert")
-	default:
+	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
+		s.monitor.SetSliceReadWatermark(slice, DefaultReaderId, watermark)
 	}
+	s.Equal(expectedAlert, *s.receiveAlert())
 
-	s.monitor.ResolveAlert(alert.AlertType)
-	s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
-	alert = <-s.alertCh
-	s.Equal(expectedAlert, *alert)
+	s.monitor.SetSliceReadWatermark(slice, DefaultReaderId, watermark)
+	s.requireNoAlert("should have only one outstanding reader stuck alert")
+
+	s.monitor.ResolveAlert(AlertTypeReaderStuck)
+	s.monitor.SetSliceReadWatermark(slice, DefaultReaderId, watermark)
+	s.Equal(expectedAlert, *s.receiveAlert())
 }
 
 func (s *monitorSuite) TestSliceReadWatermarkStats_ReadsSpreadAcrossSlices() {
 	// A shard that keeps generating tasks gets a new slice per notification, and
-	// several of them can cover the same fire time second. Every read makes progress
-	// in its own slice, so this must not be reported as a stuck reader.
-	now := time.Now().Truncate(monitorWatermarkPrecision)
+	// several of them can cover one fire time window. Every read makes progress in
+	// its own slice, so this must not be reported as a stuck reader.
 	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts()*2; i++ {
-		s.monitor.SetSliceReadWatermark(DefaultReaderId, &SliceImpl{}, tasks.NewKey(now, rand.Int63()))
+		s.monitor.SetSliceReadWatermark(&SliceImpl{}, DefaultReaderId, stuckKey(0, int64(i)))
 	}
 
-	select {
-	case <-s.alertCh:
-		s.Fail("reads spread across distinct slices should not trigger reader stuck alert")
-	default:
+	s.requireNoAlert("reads spread across distinct slices should not trigger reader stuck alert")
+}
+
+func (s *monitorSuite) TestSliceReadWatermarkStats_AdvancingWatermarkResetsAttempts() {
+	slice := &SliceImpl{}
+	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts()*2; i++ {
+		s.monitor.SetSliceReadWatermark(
+			slice,
+			DefaultReaderId,
+			stuckKey(time.Duration(i)*monitorWatermarkPrecision, rand.Int63()),
+		)
 	}
+
+	s.requireNoAlert("a reader whose watermark keeps advancing is not stuck")
+}
+
+func (s *monitorSuite) TestSliceReadWatermarkStats_AlertingDisabled() {
+	s.monitor.options.ReaderStuckCriticalAttempts = dynamicconfig.GetIntPropertyFn(0)
+
+	slice := &SliceImpl{}
+	for i := 0; i != 20; i++ {
+		s.monitor.SetSliceReadWatermark(slice, DefaultReaderId, stuckKey(0, int64(i)))
+	}
+
+	s.requireNoAlert("reader stuck detection is disabled when critical attempts is 0")
 }
 
 func (s *monitorSuite) TestSliceReadWatermarkStats_NonDefaultReader() {
 	slice := &SliceImpl{}
 	readerID := DefaultReaderId + 1
 
-	now := time.Now().Truncate(monitorWatermarkPrecision)
 	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
-		s.monitor.SetSliceReadWatermark(readerID, slice, tasks.NewKey(now, rand.Int63()))
+		s.monitor.SetSliceReadWatermark(slice, readerID, stuckKey(0, int64(i)))
 	}
 
-	alert := <-s.alertCh
-	s.Equal(AlertTypeReaderStuck, alert.AlertType)
-	s.Equal(readerID, alert.AlertAttributesReaderStuck.ReaderID)
+	s.Equal(Alert{
+		AlertType: AlertTypeReaderStuck,
+		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
+			ReaderID:         readerID,
+			CurrentWatermark: stuckKey(0, 0),
+		},
+	}, *s.receiveAlert())
 }
 
 func (s *monitorSuite) TestSliceReadWatermarkStats_ImmediateQueueNotTracked() {
@@ -178,7 +202,7 @@ func (s *monitorSuite) TestSliceReadWatermarkStats_ImmediateQueueNotTracked() {
 
 	slice := &SliceImpl{}
 	for i := 0; i != monitor.options.ReaderStuckCriticalAttempts()*2; i++ {
-		monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(tasks.DefaultFireTime, int64(i)))
+		monitor.SetSliceReadWatermark(slice, DefaultReaderId, tasks.NewKey(tasks.DefaultFireTime, int64(i)))
 	}
 
 	select {
@@ -188,17 +212,18 @@ func (s *monitorSuite) TestSliceReadWatermarkStats_ImmediateQueueNotTracked() {
 	}
 }
 
-func (s *monitorSuite) TestRemoveSliceClearsReadProgress() {
+func (s *monitorSuite) TestRemoveSliceResetsReadProgress() {
 	slice := &SliceImpl{}
-
-	now := time.Now().Truncate(monitorWatermarkPrecision)
-	s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
-	_, ok := s.monitor.GetSliceReadWatermark(slice)
-	s.True(ok)
+	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts()-1; i++ {
+		s.monitor.SetSliceReadWatermark(slice, DefaultReaderId, stuckKey(0, int64(i)))
+	}
 
 	s.monitor.RemoveSlice(slice)
-	_, ok = s.monitor.GetSliceReadWatermark(slice)
-	s.False(ok)
+
+	// The attempt count restarted, so the read that would have crossed the threshold
+	// no longer does.
+	s.monitor.SetSliceReadWatermark(slice, DefaultReaderId, stuckKey(0, 0))
+	s.requireNoAlert("RemoveSlice should reset the stuck attempt counter")
 }
 
 func (s *monitorSuite) TestSliceCount() {

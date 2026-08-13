@@ -11,19 +11,22 @@ var _ Action = (*actionReaderStuck)(nil)
 type (
 	actionReaderStuck struct {
 		attributes     *AlertAttributesReaderStuck
-		maxReaderCount int64
+		monitor        Monitor
+		maxReaderCount int
 		logger         log.Logger
 	}
 )
 
 func newReaderStuckAction(
 	attributes *AlertAttributesReaderStuck,
+	monitor Monitor,
 	maxReaderCount int,
 	logger log.Logger,
 ) *actionReaderStuck {
 	return &actionReaderStuck{
 		attributes:     attributes,
-		maxReaderCount: int64(maxReaderCount),
+		monitor:        monitor,
+		maxReaderCount: maxReaderCount,
 		logger:         logger,
 	}
 }
@@ -34,15 +37,14 @@ func (a *actionReaderStuck) Name() string {
 
 func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 	nextReaderID := a.attributes.ReaderID + 1
-	if nextReaderID >= a.maxReaderCount {
-		a.logger.Info("Skipped reader stuck action, no lower priority reader available", tag.QueueReaderID(a.attributes.ReaderID))
-		return false
+	if nextReaderID >= int64(a.maxReaderCount) {
+		return a.decline()
 	}
 
 	reader, ok := readerGroup.ReaderByID(a.attributes.ReaderID)
 	if !ok {
 		a.logger.Info("Failed to get queue with readerID for reader stuck action", tag.QueueReaderID(a.attributes.ReaderID))
-		return false
+		return a.decline()
 	}
 
 	stuckRange := NewRange(
@@ -56,29 +58,28 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 	var splitSlices []Slice
 	reader.SplitSlices(func(s Slice) ([]Slice, bool) {
 		r := s.Scope().Range
-		if r.InclusiveMin.CompareTo(stuckRange.ExclusiveMax) >= 0 ||
-			stuckRange.InclusiveMin.CompareTo(r.ExclusiveMax) >= 0 {
-			return nil, false
-		}
-
 		if stuckRange.ContainsRange(r) {
 			splitSlices = append(splitSlices, s)
 			return nil, true
 		}
 
-		// s only partially overlaps the stuck range, so at least one of the bounds
-		// below falls strictly inside s and splitting can not produce an empty slice.
 		remaining := make([]Slice, 0, 2)
-		if r.InclusiveMin.CompareTo(stuckRange.InclusiveMin) < 0 {
+		if r.CanSplitStrictly(stuckRange.InclusiveMin) {
 			left, right := s.SplitByRange(stuckRange.InclusiveMin)
 			remaining = append(remaining, left)
 			s = right
 		}
 
-		if s.Scope().Range.ExclusiveMax.CompareTo(stuckRange.ExclusiveMax) > 0 {
+		if r.CanSplitStrictly(stuckRange.ExclusiveMax) {
 			left, right := s.SplitByRange(stuckRange.ExclusiveMax)
 			remaining = append(remaining, right)
 			s = left
+		}
+
+		if len(remaining) == 0 {
+			// s lies outside the stuck range or only abuts it, so any split here
+			// would produce an empty slice.
+			return nil, false
 		}
 
 		splitSlices = append(splitSlices, s)
@@ -86,10 +87,18 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 	})
 
 	if len(splitSlices) == 0 {
-		return false
+		return a.decline()
 	}
 
 	nextReader := readerGroup.GetOrCreateReader(nextReaderID)
 	nextReader.MergeSlices(splitSlices...)
 	return true
+}
+
+// decline silences the alert before reporting that nothing was mitigated.
+// Nothing about the reader changed, so the next read at the same watermark would
+// otherwise re-alert immediately and checkpoint the queue on every read.
+func (a *actionReaderStuck) decline() bool {
+	a.monitor.SilenceAlert(AlertTypeReaderStuck)
+	return false
 }

@@ -51,6 +51,14 @@ func (r *Range) CanSplit(
 	return r.ContainsKey(key) || r.ExclusiveMax.CompareTo(key) == 0
 }
 
+// CanSplitStrictly reports whether splitting at key yields two non-empty ranges.
+// CanSplit also accepts InclusiveMin and ExclusiveMax, which produce an empty side.
+func (r *Range) CanSplitStrictly(
+	key tasks.Key,
+) bool {
+	return key.CompareTo(r.InclusiveMin) > 0 && key.CompareTo(r.ExclusiveMax) < 0
+}
+
 func (r *Range) Split(
 	key tasks.Key,
 ) (left Range, right Range) {

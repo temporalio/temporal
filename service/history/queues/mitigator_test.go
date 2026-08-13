@@ -104,6 +104,32 @@ func (s *mitigatorSuite) TestMitigate_ActionMatchAlert() {
 	}
 }
 
+func (s *mitigatorSuite) TestMitigate_ReaderStuckActionGetsMaxReaderCount() {
+	// Without the reader count the action can not tell whether a lower priority
+	// reader exists, and it declines every alert.
+	var actualAction Action
+	s.mitigator.actionRunner = func(
+		action Action,
+		_ *ReaderGroup,
+		_ metrics.Handler,
+	) {
+		actualAction = action
+	}
+
+	s.mitigator.Mitigate(Alert{
+		AlertType: AlertTypeReaderStuck,
+		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
+			ReaderID:         1,
+			CurrentWatermark: NewRandomKey(),
+		},
+	})
+
+	action, ok := actualAction.(*actionReaderStuck)
+	s.True(ok)
+	s.Equal(3, action.maxReaderCount)
+	s.Equal(s.monitor, action.monitor)
+}
+
 func (s *mitigatorSuite) TestMitigate_ResolveAlert() {
 	s.mitigator.actionRunner = func(
 		_ Action,

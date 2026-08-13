@@ -196,6 +196,29 @@ func (s *rangeSuite) TestCanSplit() {
 	}
 }
 
+func (s *rangeSuite) TestCanSplitStrictly() {
+	key := NewRandomKey()
+	ranges := []Range{
+		NewRandomRange(),
+		NewRange(key, key),
+	}
+
+	for _, r := range ranges {
+		s.False(r.CanSplitStrictly(r.InclusiveMin))
+		s.False(r.CanSplitStrictly(r.ExclusiveMax))
+
+		if !r.IsEmpty() {
+			for i := 0; i != 1000; i++ {
+				testKey := NewRandomKeyInRange(r)
+				if testKey.CompareTo(r.InclusiveMin) == 0 {
+					continue
+				}
+				s.True(r.CanSplitStrictly(testKey))
+			}
+		}
+	}
+}
+
 func (s *rangeSuite) TestCanMerge() {
 	key := NewRandomKey()
 	ranges := []Range{
