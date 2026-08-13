@@ -1,7 +1,6 @@
 // Package action holds the Temporal-specific Nexus-operation actions and their realizers,
 // plus the runtime glue (RealizeContext, StateOracle, a programmable mock handler) over a live
-// test env. The generic action schema and Drive loop live in common/testing/umpire. See
-// UMPIRE_ACTIONS.md and PLAN.md.
+// test env. The generic action schema and Drive loop live in common/testing/umpire. See UMPIRE.md.
 package action
 
 import (
@@ -60,7 +59,7 @@ func (c *Ctx) Cleanup() {
 
 // NewCtx builds a RealizeContext for one drive. It seeds the Monitor's namespace name→id map: a
 // synchronous rejection carries only the name, but the driver knows both, so this lets the observer
-// route the rejection fact into the id-scoped model (see UMPIRE_ERR.md, Monitor.SetNamespaceID).
+// route the rejection fact into the id-scoped model (see UMPIRE.md, Monitor.SetNamespaceID).
 func NewCtx(env Environment, endpoint string, h *ResponsePolicy, iter int) *Ctx {
 	monitor := env.GetMonitor()
 	monitor.SetNamespaceID(env.Namespace().String(), env.NamespaceID().String())
@@ -166,7 +165,7 @@ func entityID(e umpire.Entity) string {
 
 // Successor implements umpire.LineageOracle: the run the given run produced (continue-as-new /
 // reset / retry), found by its observed predecessor link. Lets Drive bind a LinkedFrom ref by
-// observation — the driver never needs the server-minted successor RunID (see UMPIRE_IDENTITY.md).
+// observation — the driver never needs the server-minted successor RunID (see UMPIRE.md).
 func (o Oracle) Successor(t umpire.EntityType, predecessorID string) (string, bool) {
 	nsRoot := umpire.NewEntityID(model.NamespaceType, o.Env.NamespaceID().String())
 	for _, e := range o.Env.GetMonitor().ModelState().QueryEntities(t, 0, &nsRoot) {

@@ -20,7 +20,7 @@ const (
 	AttrRunID      attribute.Key = "workflow.run_id"
 	// AttrFirstRunID / AttrPreviousRunID carry a run's lineage: the chain root and the immediate
 	// predecessor (continue-as-new / reset / retry). Empty previous means a first run. They let an
-	// observer reconstruct the run graph under a WorkflowID (see UMPIRE_IDENTITY.md).
+	// observer reconstruct the run graph under a WorkflowID (see UMPIRE.md).
 	AttrFirstRunID    attribute.Key = "workflow.first_run_id"
 	AttrPreviousRunID attribute.Key = "workflow.previous_run_id"
 	// AttrRunInitiator labels how a successor run was created — the typed graph edge from its

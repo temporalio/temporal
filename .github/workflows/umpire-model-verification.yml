@@ -8,7 +8,7 @@ on:
       - "common/testing/umpire/**"
       - "tests/umpire2/**"
       - "Makefile"
-      - "UMPIRE_GENMODELS.md"
+      - "UMPIRE_VERIFY.md"
   schedule:
     - cron: "31 8 * * *"
 

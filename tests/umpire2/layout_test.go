@@ -18,13 +18,13 @@ func TestPackageLayout(t *testing.T) {
 	repoRoot := repositoryRoot(t)
 
 	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire"))
-	require.DirExists(t, filepath.Join(repoRoot, "tests", "umpirev1"))
-	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpirev1", "protocolv2"))
+	require.DirExists(t, filepath.Join(repoRoot, "tests", "umpire1"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire1", "protocolv2"))
 	require.DirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "protocol"))
 
-	requirePackageNames(t, filepath.Join(repoRoot, "tests", "umpirev1"), "umpirev1")
+	requirePackageNames(t, filepath.Join(repoRoot, "tests", "umpire1"), "umpire1")
 	requirePackageNames(t, filepath.Join(repoRoot, "tests", "umpire2", "protocol"), "protocol", "protocol_test")
-	requireNoProductionImports(t, filepath.Join(repoRoot, "tests", "umpire2"), "go.temporal.io/server/tests/umpirev1")
+	requireNoProductionImports(t, filepath.Join(repoRoot, "tests", "umpire2"), "go.temporal.io/server/tests/umpire1")
 	requireNoExactProductionImport(t, filepath.Join(repoRoot, "tests", "umpire2"), "go.temporal.io/server/tests/testcore")
 	requireNoGenericChangedCalls(t, filepath.Join(repoRoot, "tests", "umpire2", "rule"))
 }

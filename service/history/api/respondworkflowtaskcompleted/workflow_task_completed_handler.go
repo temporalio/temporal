@@ -1162,7 +1162,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	// Emit OTEL span events for the umpire run graph: the continue-as-new successor's start (with
 	// its lineage and the continued_as_new edge label) and the predecessor's continued-as-new close
 	// (so the closing run reaches a continued_as_new terminal rather than staying started). See
-	// UMPIRE_IDENTITY.md.
+	// UMPIRE.md.
 	newKey := newMutableState.GetWorkflowKey()
 	prevKey := handler.mutableState.GetWorkflowKey()
 	span := trace.SpanFromContext(ctx)

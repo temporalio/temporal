@@ -1,11 +1,9 @@
 package action
 
-// The error / divergence model (UMPIRE_ERR.md): declared variants off an action's valid base, so
-// umpire drives invalid inputs and judges the outcome against the same conformance machinery.
-// E1 is the rejection round-trip (a rejected RPC is a judged outcome, not a drive crash); E2 adds
-// per-field variant enumeration by reflecting the request descriptor. This file holds the
-// Temporal concretions; the abstract schema (Reject / Param / Domain / Variant) is in
-// common/testing/umpire.
+// Invalid inputs are declared as variants of an action's valid base, then judged by the same
+// conformance machinery. A rejected RPC is a modeled outcome rather than a drive failure, and
+// request descriptor reflection enumerates per-field variants. The abstract Reject, Param,
+// Domain, and Variant schema lives in common/testing/umpire.
 
 import (
 	"context"
@@ -29,7 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// ---- E1: the rejection round-trip ----
+// ---- Rejection round trip ----
 
 // rpcStartInvalid realizes an invalid StartNexusOperationExecution: a well-formed request naming a
 // non-existent endpoint. The frontend rejects it (NotFound) during endpoint resolution, before any
@@ -60,11 +58,10 @@ var StartUnknownEndpoint = umpire.Action{
 	Realize: rpcStartInvalid{},
 }
 
-// The rejection is now judged by the model, not a domain-side check: the decoder turns the RPC
+// The decoder turns the RPC
 // error into a NexusOperationRejected fact (only for client-error classes), the operation reaches
-// the `rejected` Failure terminal, and the existing umpire.Reconcile confirms the action's reject
-// Effect against the observed edge. The former RejectionDrift / clientErrorCodes helpers are gone;
-// the client-error gate lives in fact.RejectionCode (see UMPIRE_ERR.md §3).
+// the `rejected` Failure terminal, and umpire.Reconcile confirms the action's reject Effect against
+// the observed edge. The client-error gate lives in fact.RejectionCode.
 
 // CountEntities reports how many entities of type t the Monitor currently models in the env's
 // namespace — used to assert a rejection produced exactly one (rejected) operation.
@@ -73,12 +70,11 @@ func CountEntities(env Environment, t umpire.EntityType) int {
 	return len(env.GetMonitor().ModelState().QueryEntities(t, 0, &nsRoot))
 }
 
-// ---- E2: per-field variant enumeration by descriptor reflection ----
+// ---- Per-field variant enumeration by descriptor reflection ----
 
 // validStartBase is a known-good StartNexusOperationExecution request (real endpoint, valid
-// fields). Variant realizers build from it and perturb exactly one field — the "valid base plus
-// one labeled mutation" discipline (UMPIRE_ERR.md §5), so the mutated field is the sole cause of
-// any rejection.
+// fields). Variant realizers build from it and perturb exactly one field, so the mutated field is
+// the sole cause of any rejection.
 func (c *Ctx) validStartBase() *workflowservice.StartNexusOperationExecutionRequest {
 	opID := fmt.Sprintf("umpire-action-mut-%d", c.Iter)
 	return &workflowservice.StartNexusOperationExecutionRequest{
@@ -94,7 +90,7 @@ func (c *Ctx) validStartBase() *workflowservice.StartNexusOperationExecutionRequ
 }
 
 // stringDomain is the reflected domain of a proto string field: its standard invalid neighbors are
-// an empty value and an over-long one, both client-error-class (UMPIRE_ERR.md §1).
+// an empty value and an over-long one, both client-error-class.
 type stringDomain struct {
 	overLen  int
 	required bool
@@ -112,8 +108,7 @@ func (d stringDomain) Variants() []umpire.Variant {
 
 // durationDomain is the reflected domain of a google.protobuf.Duration field: its standard invalid
 // neighbor is a negative value (OutOfRange), which the server rejects before the operation exists.
-// It ignores the base value (the mutant is absolute), proving the reflection generalizes past
-// strings to message-typed fields (UMPIRE_ERR.md §1, E5).
+// It ignores the base value because the mutant is absolute.
 type durationDomain struct{}
 
 func (durationDomain) Variants() []umpire.Variant {
@@ -308,9 +303,8 @@ func newSignedIntegerValidatorDomain(minimum, maximum int64) (*umpire.ValidatorD
 }
 
 // reflectStartParams walks a request message's descriptor and returns a Param per scalar field the
-// reflection understands — string, enum, Duration, and Payload fields. This is the pillar-1
-// enumeration (UMPIRE_ERR.md §0): the variant set falls out of the descriptor, not hand
-// authoring. Integer domains remain a follow-up until request-specific bounds are declared.
+// reflection understands — string, enum, Duration, and Payload fields. The variant set falls out of
+// the descriptor rather than hand authoring. Integer domains require request-specific bounds.
 func reflectStartParams(msg protoreflect.ProtoMessage) []umpire.Param {
 	registry, registryErr := startValidatorRegistry(msg)
 	var params []umpire.Param
@@ -399,10 +393,8 @@ func StartFieldVariant(path string, v umpire.Variant) umpire.Action {
 }
 
 // StartFieldVariants enumerates the invalid actions for every reflected param × variant of
-// StartNexusOperationExecution — the negative-space action set derived from the descriptor. E4
-// (the differential validator oracle) will decide which of these actually reject vs. are
-// normalized/optional; today the enumeration is proven and specific known-rejecting variants
-// round-trip.
+// StartNexusOperationExecution — the negative-space action set derived from the descriptor. The
+// validator registry classifies each variant as rejecting, normalized, or optional.
 func StartFieldVariants() []umpire.Action {
 	var actions []umpire.Action
 	base := &workflowservice.StartNexusOperationExecutionRequest{

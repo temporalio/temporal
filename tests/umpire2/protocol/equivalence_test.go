@@ -16,20 +16,20 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/tests/umpire1"
+	v1action "go.temporal.io/server/tests/umpire1/action"
+	v1fact "go.temporal.io/server/tests/umpire1/fact"
+	v1model "go.temporal.io/server/tests/umpire1/model"
+	v1planner "go.temporal.io/server/tests/umpire1/planner"
 	umpirev2 "go.temporal.io/server/tests/umpire2"
 	v2action "go.temporal.io/server/tests/umpire2/action"
 	v2fact "go.temporal.io/server/tests/umpire2/fact"
 	v2model "go.temporal.io/server/tests/umpire2/model"
 	"go.temporal.io/server/tests/umpire2/protocol"
-	"go.temporal.io/server/tests/umpirev1"
-	v1action "go.temporal.io/server/tests/umpirev1/action"
-	v1fact "go.temporal.io/server/tests/umpirev1/fact"
-	v1model "go.temporal.io/server/tests/umpirev1/model"
-	v1planner "go.temporal.io/server/tests/umpirev1/planner"
 )
 
 func TestDefaultMonitorRulesContainActiveV1Rules(t *testing.T) {
-	v1, err := umpirev1.NewMonitor(log.NewNoopLogger())
+	v1, err := umpire1.NewMonitor(log.NewNoopLogger())
 	require.NoError(t, err)
 	v2, err := umpirev2.NewMonitor(log.NewNoopLogger())
 	require.NoError(t, err)

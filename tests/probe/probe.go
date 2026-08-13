@@ -1,9 +1,8 @@
 // Package probe is a prototype of the single "Umpire" API: describe a state to
 // reach, drive to it, break the underlying calls, and judge the result with the
 // existing safety/liveness rulebook — with no hand-written faults or assertions.
-// It closes the plan -> drive -> fault -> judge loop over the pieces already
-// built (Planner, Driver, Monitor, and the gRPC fault seam). See UMPIRE_SPEC.md
-// and UMPIRE_TRACING.md.
+// It closes the plan -> drive -> fault -> judge loop through the Planner, Driver,
+// Monitor, and gRPC fault seam. See UMPIRE.md.
 //
 // Every execution (the baseline and each fault scenario) runs in its own fresh
 // test environment — its own namespace — so scenarios are fully isolated. The
@@ -24,8 +23,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/server/tests/umpirev1/model"
-	"go.temporal.io/server/tests/umpirev1/planner"
+	"go.temporal.io/server/tests/umpire1/model"
+	"go.temporal.io/server/tests/umpire1/planner"
 )
 
 // defaultMaxFaults bounds how many observed calls become fault scenarios, so a

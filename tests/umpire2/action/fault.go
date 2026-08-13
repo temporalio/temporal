@@ -82,7 +82,7 @@ var ambientCalls = []string{"Poll", "GetSystemInfo", "GetClusterInfo", "Describe
 // *learned* footprint: the calls a plan actually makes, discovered rather than declared. The two
 // statically declared points (Action.Entry) are only the client-entry RPCs; the internal calls a
 // fault can meaningfully perturb are knowable only by observation — so fault targeting is sourced
-// from here (via FaultTargets), not from static declarations. (UMPIRE_ACTIONS.md "What remains".)
+// from here (via FaultTargets), not from static declarations.
 func LearnFootprint(dctx context.Context, rc umpire.RealizeContext, oracle umpire.StateOracle,
 	resolver umpire.EffectResolver, poll time.Duration, plan []umpire.Action) ([]string, error) {
 	c := rc.(*Ctx)

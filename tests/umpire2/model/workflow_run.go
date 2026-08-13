@@ -19,9 +19,8 @@ var _ umpire.Lifecycled = (*WorkflowRun)(nil)
 // of Workflow (by id). Modeling the run distinctly is what lets multiple runs of one WorkflowID
 // (continue-as-new / retry / reset) be tracked separately, and it records the run's lineage
 // (FirstRunID = chain root, PreviousRunID = predecessor) so the run graph can be reconstructed. Its
-// lifecycle is created→started→completed; both transitions are observed via span events that carry
-// the RunID. fail/cancel/terminate/timeout and the lineage *edges* are follow-ups
-// (UMPIRE_IDENTITY.md).
+// lifecycle is created→started→a typed close outcome. Start and close observations carry event
+// time and RunID; successor starts also carry the lineage edge and successor identity.
 type WorkflowRun struct {
 	WorkflowID     string
 	RunID          string

@@ -4,12 +4,9 @@ import (
 	"go.temporal.io/server/common/testing/umpire"
 )
 
-// This file models the *standalone activity* archetype — the same archetype the SAA branch
-// models (SAA = Standalone Activity Archetype; see UMPIRE_PRIOR_ART.md). It is pure and
-// server-free: a Lifecycle to plan over and validate statically, not (yet) wired as an
-// observed Entity. When observed, the public lifecycle (scheduled/started/terminal) is
-// black-box via ActivityTask* history events; only the backing_off/attempt retry loop needs
-// internal signals.
+// This file defines the standalone activity lifecycle shared by the observed Activity entity,
+// planning, and verification. Public snapshots cover scheduled, started, and terminal states;
+// only the backing_off/attempt retry loop requires internal signals.
 
 type (
 	ActivityState = string

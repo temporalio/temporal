@@ -11,8 +11,8 @@ import (
 // operator with preconditions over entity states and effects that fire lifecycle transitions
 // (possibly on several entities). A planner assembles actions into sequences that cover the
 // edge set; the generic Drive runtime here executes a sequence. This file is domain-agnostic —
-// the concrete Temporal actions and their realizers live in tests/umpirev1/action. See
-// UMPIRE_ACTIONS.md.
+// the concrete Temporal actions and their realizers live in tests/umpire1/action. See
+// UMPIRE.md.
 
 // Kind is how an action is physically realized against a live environment. It also fixes the
 // action's temporal mode: proactive kinds are fired at a point (once preconditions hold);
@@ -37,7 +37,7 @@ type Ref struct {
 	// LinkedFrom, when set, names the Var of this entity's predecessor. The entity is bound by
 	// *observation* — to whatever the LineageOracle reports as that predecessor's successor
 	// (continue-as-new / reset / retry) — rather than to a driver-supplied id, because a
-	// server-minted successor RunID cannot be known in advance. See UMPIRE_IDENTITY.md.
+	// server-minted successor RunID cannot be known in advance. See UMPIRE.md.
 	LinkedFrom string
 }
 
@@ -54,7 +54,7 @@ type Effect struct {
 }
 
 // Action is a declarative driver operator. It is domain-agnostic; concrete actions (with
-// Temporal realizers) are declared in tests/umpirev1/action.
+// Temporal realizers) are declared in tests/umpire1/action.
 type Action struct {
 	Name     string
 	Kind     Kind
@@ -65,26 +65,26 @@ type Action struct {
 	// Entry names the RPC(s) / HTTP path(s) this action issues directly. A Drop of an entry call
 	// fails the drive rather than testing resilience, so entry calls are *excluded* from a plan's
 	// learned fault targets — the internal/retryable calls a fault can meaningfully perturb are
-	// discovered by observing a drive, not declared here (see tests/umpirev1/action fault.go:
+	// discovered by observing a drive, not declared here (see tests/umpire1/action fault.go:
 	// LearnFootprint / FaultTargets).
 	Entry []string
 	// Footprint names the internal RPC(s) / HTTP path(s) this action is *expected* to trigger
 	// downstream (beyond the Entry call it issues directly). It is the wire-level analog of Effects:
 	// where Effects declare the lifecycle transitions an action causes, Footprint declares the calls
 	// it should make to cause them, reconciled against the observed footprint (see
-	// tests/umpirev1/action footprint.go: ReconcileFootprint) to catch drift a refactor introduces —
+	// tests/umpire1/action footprint.go: ReconcileFootprint) to catch drift a refactor introduces —
 	// a new or removed internal call — that the effect-level check would miss. Opt-in: a nil
 	// Footprint is not reconciled.
 	Footprint []string
 	// Reject, when non-nil, declares this action is expected to be rejected synchronously rather
-	// than produce its Effects — an invalid input (malformed / unknown / stale; see UMPIRE_ERR.md).
+	// than produce its Effects — an invalid input (malformed / unknown / stale; see UMPIRE.md).
 	// Drive treats a Fire error on such an action as the expected outcome (recorded via RejectSink,
 	// not a drive failure); the domain side judges the captured error against the rejection
 	// contract, since that judgment needs transport knowledge this package deliberately lacks.
 	Reject *Reject
 }
 
-// Reject declares an action's expected synchronous rejection (UMPIRE_ERR.md §0/§2). It is
+// Reject declares an action's expected synchronous rejection. It is
 // deliberately transport-agnostic: an empty Code means "any client-error class" — the generic
 // rejection contract, with the specific grounded on first observation — while a set Code/Message
 // pin a grounded or by-design specific.
@@ -93,7 +93,7 @@ type Reject struct {
 	Message string // optional substring the rejection message must contain
 }
 
-// ValidityClass tags why a mutated value diverges from a field's valid domain (UMPIRE_ERR.md §1).
+// ValidityClass tags why a mutated value diverges from a field's valid domain.
 // It is the negative-space analog of a lifecycle state: the class, not the specific value, is what
 // the model reasons about.
 type ValidityClass int
@@ -106,8 +106,8 @@ const (
 	OutOfRange                      // a numeric / enum value outside the allowed set
 )
 
-// Variant is one labeled perturbation of a field's valid value and the outcome it should produce
-// (UMPIRE_ERR.md §2). Mutate maps the request's current (valid) value to the perturbed one; Expect
+// Variant is one labeled perturbation of a field's valid value and the outcome it should produce.
+// Mutate maps the request's current (valid) value to the perturbed one; Expect
 // is the outcome the server should produce — for now the rejection contract (an empty Reject means
 // "any client-error class", grounded).
 type Variant struct {
@@ -118,14 +118,14 @@ type Variant struct {
 }
 
 // Domain describes a request field's valid values and its standard invalid neighbors. Concrete
-// domains are reflected from the proto descriptor on the domain side (see UMPIRE_ERR.md §0 pillar
-// 1); this package holds only the abstract shape so the schema and planner can reason about params
+// domains are reflected from the proto descriptor on the domain side; this package holds only the
+// abstract shape so the schema and planner can reason about params
 // uniformly, without any proto/RPC dependency.
 type Domain interface {
 	Variants() []Variant
 }
 
-// Param binds a request field path to its Domain (UMPIRE_ERR.md §1). The full set of an action's
+// Param binds a request field path to its Domain. The full set of an action's
 // params is usually enumerated by reflecting the request descriptor, not hand-authored.
 type Param struct {
 	Path   string
@@ -305,7 +305,7 @@ func proactive(k Kind) bool {
 // LineageOracle optionally reports the successor an entity produced (the run created from it via
 // continue-as-new / reset / retry), so Drive can bind a LinkedFrom ref by observation rather than a
 // server-minted id the driver could not know in advance. Implemented Temporal-side over the run
-// graph (see UMPIRE_IDENTITY.md).
+// graph (see UMPIRE.md).
 type LineageOracle interface {
 	Successor(t EntityType, predecessorID string) (string, bool)
 }

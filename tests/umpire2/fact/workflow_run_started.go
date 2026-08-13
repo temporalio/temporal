@@ -10,7 +10,7 @@ import (
 // EventWorkflowExecutionStarted span event, carrying the run's lineage (FirstRunID = chain root,
 // PreviousRunID = immediate predecessor for continue-as-new / reset / retry; empty for a first
 // run). It targets the run-precise WorkflowRun entity, so a run is observed — with its lineage — at
-// start, not only at completion. See UMPIRE_IDENTITY.md.
+// start, not only at completion. See UMPIRE.md.
 type WorkflowRunStarted struct {
 	EventTimeCarrier
 	WorkflowID    string

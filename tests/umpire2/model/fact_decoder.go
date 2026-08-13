@@ -153,7 +153,7 @@ func (d *FactDecoder) PurgeNamespace(namespaceID string) {
 
 // ImportRejection converts a rejected gRPC request (request + error + resolved namespace id) to a
 // fact, or nil if the request/rejection is not modeled. See fact.NexusOperationRejected and
-// UMPIRE_ERR.md.
+// UMPIRE.md.
 func (d *FactDecoder) ImportRejection(req any, err error, namespaceID string) umpire.Fact {
 	f := &fact.NexusOperationRejected{}
 	if f.ImportRejection(req, err, namespaceID) {

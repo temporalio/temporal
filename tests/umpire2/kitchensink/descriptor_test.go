@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	v1kitchensink "go.temporal.io/server/tests/umpirev1/kitchensink"
+	v1kitchensink "go.temporal.io/server/tests/umpire1/kitchensink"
 	"google.golang.org/protobuf/proto"
 )
 

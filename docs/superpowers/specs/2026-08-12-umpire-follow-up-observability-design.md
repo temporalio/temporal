@@ -2,7 +2,7 @@
 
 ## Objective
 
-Complete the five follow-ups in `UMPIRE_PLAN.md` after the initial v2 parity cutover:
+Complete the five follow-ups identified after the initial v2 parity cutover:
 
 1. triage the v2 default against the Umpire, Nexus, Workflow, and testcore suites;
 2. model callback-to-operation and callback-to-handler identities with duplicate-response
@@ -13,7 +13,7 @@ Complete the five follow-ups in `UMPIRE_PLAN.md` after the initial v2 parity cut
    Temporal protocol adapter for pairwise matrices; and
 5. add checked-in causal trace footprints and validator-backed error domains.
 
-V1 remains in `tests/umpirev1` as an explicit compatibility implementation. This work neither
+V1 remains in `tests/umpire1` as an explicit compatibility implementation. This work neither
 deletes v1 nor requires v1 to adopt v2-only relations and observability.
 
 ## Scope

@@ -59,7 +59,7 @@ func (completeWorkflow) Fire(ctx context.Context, rc umpire.RealizeContext, a um
 // observes for a run — the completion span carries the RunID, so it grounds the run-precise
 // WorkflowRun entity (created→completed). A run-level `started` awaits observing WorkflowStart (the
 // frontend StartWorkflowExecution reaches the Monitor, but the WorkflowStarted fact decodes the
-// history request the frontend interceptor does not see; see UMPIRE_ACTIONS.md).
+// history request the frontend interceptor does not see; see UMPIRE.md).
 func selfCompletingWorkflow(workflow.Context) error { return nil }
 
 type runWorkflow struct{}

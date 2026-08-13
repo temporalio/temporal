@@ -13,7 +13,7 @@ import (
 //
 // Identity mirrors the operation HSM node: an operation is the node whose ID is the
 // scheduled-event ID, under its caller workflow run — so the entity ID is
-// "<workflowID>:<scheduledEventID>" (see UMPIRE_NEXUS.md).
+// "<workflowID>:<scheduledEventID>" (see UMPIRE.md).
 func importNexusSpanEvent(attrs attribute.Set) (scheduledEventID, workflowID string, path *umpire.EntityPath) {
 	if v, ok := attrs.Value(telemetry.AttrNexusScheduledEventID); ok {
 		scheduledEventID = v.AsString()

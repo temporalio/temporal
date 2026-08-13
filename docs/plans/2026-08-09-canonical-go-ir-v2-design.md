@@ -4,7 +4,7 @@ Date: 2026-08-09
 
 Status: Superseded package layout. The phase 1 design below is retained as
 history; the implementation now lives at `tests/umpire2/protocol`, alongside
-the renamed baseline at `tests/umpirev1`, as described in the Umpire 2 package
+the renamed baseline at `tests/umpire1`, as described in the Umpire 2 package
 migration design.
 
 ## Decision

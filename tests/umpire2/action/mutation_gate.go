@@ -10,15 +10,13 @@ import (
 
 // The mutation analogue of ValidateKitchensinkMappings. Where kitchensink completeness is
 // per-action ("every WorkerCommand action has a realization"), invalid-input completeness is
-// per-*field*: the negative-space claim (UMPIRE_ERR.md §0 — "the variant set falls out of the
-// descriptor, not hand authoring") only holds if every request field is either enumerated by
+// per-*field*: the negative-space claim only holds if every request field is either enumerated by
 // reflection or consciously deferred. This gate makes that checkable before any test runs, so a
 // new request field of an unhandled kind can't be silently left untested.
 
 // deferredMutationKinds are scalar proto field kinds whose invalid-input domains are not yet
-// modeled (tracked as follow-ups in UMPIRE_ERR.md). A field of such a kind is out of scope on
-// purpose; a covered kind (string / enum / Duration / Payload) must be enumerated; anything else
-// is a gap.
+// modeled. A field of such a kind is out of scope on purpose; a covered kind (string / enum /
+// Duration / Payload) must be enumerated; anything else is a gap.
 var deferredMutationFields = map[string]string{
 	"search_attributes": "search-attribute validation requires namespace schema state",
 	"nexus_header":      "header collection mutations require request-level aggregate limits",

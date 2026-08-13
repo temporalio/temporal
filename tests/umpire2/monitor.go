@@ -38,7 +38,7 @@ type Monitor struct {
 	// nsIDByName resolves a namespace name (all a frontend request carries) to the id the model
 	// scopes entities by. A synchronous rejection produces no telemetry, so its fact must be
 	// namespace-id-rooted from the request alone; the driver seeds this map (it knows both) before
-	// driving. See SetNamespaceID and UMPIRE_ERR.md.
+	// driving. See SetNamespaceID and UMPIRE.md.
 	nsMu        sync.RWMutex
 	nsIDByName  map[string]string
 	coverageMu  sync.RWMutex
@@ -87,10 +87,9 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	// Illegal-transition conformance is not registered as a rule: it is a built-in
 	// framework check (RuleRegistry.Check → checkConformance) that surfaces, for every
 	// Lifecycled entity, the illegal transitions Lifecycle.Fire records at fire-time —
-	// the model judging its own transitions. It is silent for the current converging-DAG
-	// lifecycles (Classify treats forward jumps over unobserved states as legal, so they
-	// have no possible illegal transitions) and gains teeth with event-time ordering or a
-	// branching lifecycle. See UMPIRE_PLAN.md.
+	// the model judging its own transitions. Classify tolerates forward jumps over reachable
+	// states because an unobserved intermediate is indistinguishable from a skipped transition;
+	// events outside that reachable path remain illegal.
 
 	// Liveness rules — checked at test teardown.
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })

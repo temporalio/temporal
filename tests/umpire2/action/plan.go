@@ -14,7 +14,7 @@ import (
 // It is the registry: the event picks the action, and where an event has several producers the
 // from-state and hosting disambiguate (schedule → standalone RPC vs embedded command; succeed
 // from scheduled is a handler result vs from started is a completion callback). See
-// UMPIRE_ACTIONS.md.
+// UMPIRE.md.
 func actionFor(from, event string, hosting umpire.Hosting) (umpire.Action, bool) {
 	switch event {
 	case model.NexusSchedule:

@@ -258,7 +258,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 	// Emit an OTEL span event for the reset (forked) run's start, carrying its lineage — the base
 	// run it forked from and the chain root — so the umpire observer links it into the run graph.
-	// See UMPIRE_IDENTITY.md.
+	// See UMPIRE.md.
 	resetKey := resetMS.GetWorkflowKey()
 	trace.SpanFromContext(ctx).AddEvent(telemetry.EventWorkflowExecutionStarted,
 		trace.WithAttributes(

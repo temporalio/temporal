@@ -124,7 +124,7 @@ var MustProgress Trait = mustProgressTrait{}
 // Capability is a class of drive power an edge may require to be realized. It is
 // environment-independent knowledge about the edge (e.g. a timeout edge inherently
 // needs timing/fault control); the concrete realization stays in the Driver, and a
-// run enables only the capabilities its environment grants (see UMPIRE_SPEC.md).
+// run enables only the capabilities its environment grants (see UMPIRE.md).
 type Capability int
 
 const (

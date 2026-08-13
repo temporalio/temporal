@@ -26,7 +26,7 @@ type ResponseRecorder interface {
 // RejectionRecorder is an optional extension of FactRecorder that receives a
 // handler's error outcome — the request was rejected rather than served. It lets
 // the observer model a synchronous rejection (an invalid request that produced no
-// entity and no telemetry) as a fact. See UMPIRE_ERR.md.
+// entity and no telemetry) as a fact. See UMPIRE.md.
 type RejectionRecorder interface {
 	RecordRejection(ctx context.Context, req any, err error)
 }

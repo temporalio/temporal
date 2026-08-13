@@ -145,8 +145,8 @@ func (s *UmpireTestSuite) TestProbeNexusGeneratedCompletion() {
 	require.Equal(t, "succeeded", report.Baseline.Terminal)
 }
 
-// TestProbeNexusRejectedStart is the E3 rejection round-trip (UMPIRE_ERR.md §3): an invalid action
-// — a well-formed StartNexusOperationExecution naming a non-existent endpoint — is driven, and its
+// TestProbeNexusRejectedStart drives a well-formed StartNexusOperationExecution naming a
+// non-existent endpoint, and its
 // synchronous rejection is modeled as an entity reaching the `rejected` Failure terminal. The
 // Monitor decodes the RPC error into a fact, so the same umpire.Reconcile that judges any other
 // transition confirms the action's reject Effect, and exactly one (rejected) operation exists.
@@ -167,10 +167,10 @@ func (s *UmpireTestSuite) TestProbeNexusRejectedStart() {
 	require.Equal(t, 1, action.CountEntities(env.TestEnv, model.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
 }
 
-// TestProbeNexusReflectedVariant is the E2 round-trip (UMPIRE_ERR.md §1): the invalid actions are
-// enumerated by reflecting the StartNexusOperationExecution descriptor — a variant per string field
+// TestProbeNexusReflectedVariant enumerates invalid actions by reflecting the
+// StartNexusOperationExecution descriptor — a variant per string field
 // — rather than hand-authored. Driving one reflected variant (operation_id mutated to empty on an
-// otherwise-valid base) reaches the E3 model: the rejection is observed as the op reaching the
+// otherwise-valid base) observes the op reaching the
 // `rejected` terminal, confirmed by Reconcile.
 func (s *UmpireTestSuite) TestProbeNexusReflectedVariant() {
 	t := s.T()
@@ -203,10 +203,10 @@ func (s *UmpireTestSuite) TestProbeNexusReflectedVariant() {
 	require.Equal(t, 1, action.CountEntities(env.TestEnv, model.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
 }
 
-// TestProbeNexusReflectedDurationVariant is the E5 non-string round-trip (UMPIRE_ERR.md §1): the
-// descriptor reflection generalizes past strings to message-typed fields. It drives a reflected
+// TestProbeNexusReflectedDurationVariant proves descriptor reflection generalizes past strings to
+// message-typed fields. It drives a reflected
 // Duration variant (schedule_to_start_timeout mutated negative on an otherwise-valid base), which
-// the server rejects (InvalidArgument) before the operation exists, and the E3 model observes it as
+// the server rejects (InvalidArgument) before the operation exists, and the model observes it as
 // the op reaching the rejected terminal.
 func (s *UmpireTestSuite) TestProbeNexusReflectedDurationVariant() {
 	t := s.T()
@@ -259,7 +259,7 @@ func (s *UmpireTestSuite) TestProbeNexusFaultAction() {
 // (actions model): drive the sync-success completion via the runtime, learn the underlying
 // gRPC/HTTP calls from the happy-path trace, break each one, and let the Monitor judge — no
 // hand-written faults and no hand-written outcome assertions (only the fault-free baseline is
-// asserted). This is the learned-footprint fault exploration on an actions plan (PLAN.md Phase 5).
+// asserted). This is learned-footprint fault exploration over an action plan.
 func (s *UmpireTestSuite) TestProbeNexusResilience() {
 	t := s.T()
 	report := probe.Umpire(t).
@@ -395,7 +395,7 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 		OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error { return nil },
 	}
 
-	// Auto-cover (PLAN.md Phase 4): the LIST of drives is computed from the model — one plan
+	// The list of drives is computed from the model — one plan
 	// per settling edge, assembled by PlanEdge and driven in its own env. This covers every
 	// edge across both hostings (embedded handler/completion outcomes, standalone terminates)
 	// except the two server-timer edges below, which have no atomic action.
@@ -412,7 +412,7 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	//   async operation (the force-timeout hook fires on the attempt, not once started).
 	explore(asyncStart, timeoutCaller, 10*time.Second)
 	//   unspecified --reject--> rejected: a synchronous rejection (invalid input) — the Monitor
-	//   models the RPC error as the operation reaching the rejected terminal (E3, UMPIRE_ERR.md).
+	//   models the RPC error as the operation reaching the rejected terminal.
 	exploreEnv(s.nexusGenExecPlan([]umpire.Action{action.StartUnknownEndpoint}), 15*time.Second)
 
 	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
