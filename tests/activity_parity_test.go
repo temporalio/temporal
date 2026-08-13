@@ -252,18 +252,20 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 	// no prior attempt here, so a preserved cause can only have come from the worker-reported
 	// failure, exercising the by-ID timeout path end to end.
 	s.Run("ScheduleToStartViaRespondFailedByID", func(s *activityParityTestSuite) {
+		fail := model.Event{Type: model.RespondFailedByIDType, Failure: &model.Failure{Type: model.ScheduleToStartTimeoutFailureType, WithCause: true}}
 		assertCausePreserved(s.T(), activityConfig{},
 			[]model.Event{
 				model.Poll,
-				model.FailByIDWithScheduleToStartTimeoutFailureWithCause,
+				fail,
 			},
 		)
 	})
 	s.Run("ScheduleToCloseViaRespondFailedByID", func(s *activityParityTestSuite) {
+		fail := model.Event{Type: model.RespondFailedByIDType, Failure: &model.Failure{Type: model.ScheduleToCloseTimeoutFailureType, WithCause: true}}
 		assertCausePreserved(s.T(), activityConfig{},
 			[]model.Event{
 				model.Poll,
-				model.FailByIDWithScheduleToCloseTimeoutFailureWithCause,
+				fail,
 			},
 		)
 	})

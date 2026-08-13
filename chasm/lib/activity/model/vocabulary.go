@@ -85,10 +85,6 @@ var (
 	FailByIDRetryablyWithHeartbeatTimeoutFailure    = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: HeartbeatTimeoutFailureType}}
 	FailByIDWithScheduleToStartTimeoutFailure       = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: ScheduleToStartTimeoutFailureType}}
 	FailByIDWithScheduleToCloseTimeoutFailure       = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: ScheduleToCloseTimeoutFailureType}}
-	// The *WithCause variants wrap an underlying application failure as the timeout's Cause, modeling
-	// a worker that reports a schedule timeout while carrying the real failure that drove it.
-	FailByIDWithScheduleToStartTimeoutFailureWithCause = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: ScheduleToStartTimeoutFailureType, WithCause: true}}
-	FailByIDWithScheduleToCloseTimeoutFailureWithCause = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: ScheduleToCloseTimeoutFailureType, WithCause: true}}
 	FailByIDRetryablyWithUnknownFailure             = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: UnknownFailureType}}
 	RespondCanceled                                 = Event{Type: RespondCanceledType}
 	RequestCancel                                   = Event{Type: RequestCancelType}
