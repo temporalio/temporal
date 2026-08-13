@@ -253,9 +253,6 @@ jobs:
 
             ## Posting rules
 
-            These rules override any earlier instruction to post a checklist, a summary,
-            a plan, your reasoning, or a job link in the top-level comment.
-
             Prefer inline comments for all actionable findings.
             Use `mcp__github_inline_comment__create_inline_comment` with `confirmed: true` to highlight specific code issues.
             When posting inline comments, use repository-relative PR file paths from the diff, without the `pr-head/` prefix.
