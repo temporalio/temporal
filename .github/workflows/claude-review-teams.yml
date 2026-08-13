@@ -260,7 +260,6 @@ jobs:
             `Reviewing...`; once finished, it reads `Reviewed N files, M findings.`
             That line is your closing summary. The findings are already inline, so restating
             them there, or your process, or what you could not run, adds nothing to it.
-            The spinner and the job run link are status, so keep them.
             One thing may follow that line: a finding with no changed line to attach to,
             formatted like an inline finding.
             Only post GitHub comments - don't submit review text as messages.
