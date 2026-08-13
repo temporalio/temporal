@@ -228,7 +228,7 @@ func requireReportEquals(t *testing.T, expectedFile, actualFile string) {
 
 	actualReport, err := os.ReadFile(actualFile)
 	require.NoError(t, err)
-	require.Equal(t, strings.TrimSuffix(string(expectedReport), "\n"), string(actualReport))
+	require.Equal(t, string(expectedReport), string(actualReport))
 }
 
 func TestJUnitXMLWellFormed(t *testing.T) {

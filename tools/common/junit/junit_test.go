@@ -101,6 +101,11 @@ func TestReadErrors(t *testing.T) {
 			content: `<testsuite>`,
 			wantErr: "failed to read JUnit report file",
 		},
+		{
+			name:    "trailing data",
+			content: `<testsuites></testsuites><testsuite></testsuite>`,
+			wantErr: `unexpected trailing XML element "testsuite"`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -110,6 +115,7 @@ func TestReadErrors(t *testing.T) {
 
 			_, err := Read(path)
 			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorContains(t, err, path)
 			require.ErrorIs(t, err, errRead)
 		})
 	}
@@ -140,5 +146,24 @@ func TestWrite(t *testing.T) {
     <testsuite name="suite" tests="1" failures="0" errors="0" id="0" time="">
         <testcase name="TestOne" classname="example.com/tests"></testcase>
     </testsuite>
-</testsuites>`, string(content))
+</testsuites>
+`, string(content))
+}
+
+func TestWriteAtomicallyReplacesExistingTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "junit.xml")
+	require.NoError(t, os.WriteFile(path, []byte("previous report"), 0o600))
+	report := &Testsuites{}
+
+	require.NoError(t, Write(path, report))
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "<testsuites></testsuites>\n", string(content))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o644), info.Mode().Perm())
+	temps, err := filepath.Glob(filepath.Join(dir, ".junit.xml-*"))
+	require.NoError(t, err)
+	require.Empty(t, temps)
 }
