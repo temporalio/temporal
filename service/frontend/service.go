@@ -216,7 +216,7 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.AddressMatchRules]
 
-	// Which callback kinds may be attached to a workflow jor workflow update execution.
+	// Which callback kinds may be attached to a workflow or workflow update execution.
 	WorkflowCallbackKinds       dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.EnabledCallbackKinds]
 	WorkflowUpdateCallbackKinds dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.EnabledCallbackKinds]
 
