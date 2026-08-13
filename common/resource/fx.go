@@ -478,8 +478,10 @@ func RPCFactoryProvider(
 func FrontendHTTPClientCacheProvider(
 	metadata cluster.Metadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	tracerProvider trace.TracerProvider,
+	propagator propagation.TextMapPropagator,
 ) *cluster.FrontendHTTPClientCache {
-	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider)
+	return cluster.NewFrontendHTTPClientCacheWithTracing(metadata, tlsConfigProvider, tracerProvider, propagator)
 }
 
 func getFrontendConnectionDetails(
