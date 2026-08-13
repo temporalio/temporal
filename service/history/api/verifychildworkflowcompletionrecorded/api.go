@@ -3,6 +3,7 @@ package verifychildworkflowcompletionrecorded
 import (
 	"context"
 	"errors"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -15,9 +16,13 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -89,6 +94,7 @@ func Invoke(
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	shardContext historyi.ShardContext,
+	inFlightResends *InFlightResends,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
@@ -107,6 +113,99 @@ func Invoke(
 		return nil, errVerify
 	}
 
+	metricsHandler := shardContext.GetMetricsHandler()
+
+	// The measured resend, run either inline or in the background.
+	resend := func(ctx context.Context) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+		metrics.ParentWorkflowResendAttempts.With(metricsHandler).Record(1)
+		startTime := time.Now().UTC()
+		resp, err := resendParentAndVerify(ctx, request, workflowConsistencyChecker, shardContext, namespaceID, versionedTransition, versionHistories, errVerify)
+		metrics.ParentWorkflowResendLatency.With(metricsHandler).Record(time.Since(startTime))
+		if err != nil {
+			recordResendFailure(shardContext, metricsHandler, request, err)
+		}
+		return resp, err
+	}
+
+	if !shardContext.GetConfig().EnableAsyncParentWorkflowResend() {
+		return resend(ctx)
+	}
+
+	// The resend can take minutes while the calling standby task's deadline is short, so run it in
+	// the background and let that task retry until the parent lands.
+	//
+	// At most one resend per parent, and at most ParentWorkflowResendMaxInFlight per shard: callers
+	// retry while an earlier resend runs, so without these a stale parent, or a namespace with many
+	// of them, would spawn goroutines without bound.
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
+	claimed, atCapacity := inFlightResends.tryClaim(parentKey, shardContext.GetConfig().ParentWorkflowResendMaxInFlight())
+	if atCapacity {
+		metrics.ParentWorkflowResendLimited.With(metricsHandler).Record(1)
+		shardContext.GetLogger().Warn("Dropped parent workflow resend, shard is at its in-flight limit",
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.NewStringTag("parent-workflow-id", request.ParentExecution.GetWorkflowId()),
+			tag.NewStringTag("parent-run-id", request.ParentExecution.GetRunId()),
+			tag.NewStringTag("child-workflow-id", request.ChildExecution.GetWorkflowId()),
+			tag.NewStringTag("child-run-id", request.ChildExecution.GetRunId()),
+			tag.NewInt("max-in-flight", shardContext.GetConfig().ParentWorkflowResendMaxInFlight()),
+		)
+		return nil, errVerify
+	}
+	if !claimed {
+		metrics.ParentWorkflowResendSkipped.With(metricsHandler).Record(1)
+		return nil, errVerify
+	}
+
+	// The context is detached from the request, which gRPC cancels when this handler returns, and
+	// rooted at the shard lifecycle so the work stops with the shard.
+	resendCtx := rpc.CopyContextValues(shardContext.GetLifecycleContext(), ctx)
+	resendCtx, cancel := context.WithTimeout(resendCtx, shardContext.GetConfig().ReplicationTaskApplyTimeout())
+	go func() {
+		defer cancel()
+		defer inFlightResends.release(parentKey)
+		defer func() {
+			var panicErr error
+			log.CapturePanic(shardContext.GetLogger(), &panicErr)
+			if panicErr != nil {
+				metrics.ParentWorkflowResendFailures.With(metricsHandler).Record(1)
+			}
+		}()
+		_, _ = resend(resendCtx)
+	}()
+	return nil, errVerify
+}
+
+// recordResendFailure reports a failed parent resend. On the asynchronous path no caller receives
+// the error, so these are its only signals.
+func recordResendFailure(
+	shardContext historyi.ShardContext,
+	metricsHandler metrics.Handler,
+	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+	err error,
+) {
+	metrics.ParentWorkflowResendFailures.With(metricsHandler).Record(1)
+	shardContext.GetLogger().Error("Failed to resend parent workflow for child completion verification",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.NewStringTag("parent-workflow-id", request.ParentExecution.GetWorkflowId()),
+		tag.NewStringTag("parent-run-id", request.ParentExecution.GetRunId()),
+		tag.NewStringTag("child-workflow-id", request.ChildExecution.GetWorkflowId()),
+		tag.NewStringTag("child-run-id", request.ChildExecution.GetRunId()),
+		tag.Error(err),
+	)
+}
+
+// resendParentAndVerify pulls the parent workflow's state from the source cluster, applies it, and
+// re-checks the child's completion. Separate from Invoke so the async path can run it detached.
+func resendParentAndVerify(
+	ctx context.Context,
+	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	shardContext historyi.ShardContext,
+	namespaceID namespace.ID,
+	versionedTransition *persistencespb.VersionedTransition,
+	versionHistories *historyspb.VersionHistories,
+	errVerify error,
+) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	// Resend parent workflow from source cluster
 
 	clusterMetadata := shardContext.GetClusterMetadata()

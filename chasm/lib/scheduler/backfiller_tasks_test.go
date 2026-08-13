@@ -277,7 +277,7 @@ func TestBackfillTask_PartialFill(t *testing.T) {
 		BaseLogger:     env.Logger,
 		SpecProcessor:  env.SpecProcessor,
 	})
-	err = handler.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{})
+	err = handler.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{Stamp: backfiller.GetTaskStamp()})
 	require.NoError(t, err)
 	require.NoError(t, env.CloseTransaction())
 

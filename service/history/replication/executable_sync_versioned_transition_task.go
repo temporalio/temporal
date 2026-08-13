@@ -235,8 +235,11 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		)
 		// Workflow is not found in source cluster, cleanup workflow in target cluster.
 		// This handles workflow deletion from source cluster and this is optional as deletion operation will replicate to target clusters.
+		// Route through the deletion task's own HandleErr so that a NotFound from the cleanup
+		// (the workflow is already gone in the target cluster) is treated as success. Otherwise the
+		// error is retried until the retry policy expires and the task is sent to the DLQ.
 		deletionTask := NewExecutableDeleteExecutionTask(e.ProcessToolBox, e.TaskID(), e.TaskCreationTime(), e.SourceClusterName(), e.SourceShardKey(), e.ReplicationTask())
-		return deletionTask.Execute()
+		return deletionTask.HandleErr(deletionTask.Execute())
 	default:
 		return err
 	}
