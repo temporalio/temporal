@@ -4,15 +4,12 @@ import (
 	"fmt"
 
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
-	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -205,42 +202,16 @@ func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.Callb
 	for _, field := range a.Callbacks {
 		cb := field.Get(ctx)
 
-		cbSpec, err := cb.ToAPICallback()
+		cbInfo, err := cb.ToAPICallbackInfo()
 		if err != nil {
 			return nil, err
-		}
-
-		var state enumspb.CallbackState
-		switch cb.Status {
-		case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
-			return nil, serviceerror.NewInternal("callback with UNSPECIFIED state")
-		case callbackspb.CALLBACK_STATUS_STANDBY:
-			state = enumspb.CALLBACK_STATE_STANDBY
-		case callbackspb.CALLBACK_STATUS_SCHEDULED:
-			state = enumspb.CALLBACK_STATE_SCHEDULED
-		case callbackspb.CALLBACK_STATUS_BACKING_OFF:
-			state = enumspb.CALLBACK_STATE_BACKING_OFF
-		case callbackspb.CALLBACK_STATUS_FAILED:
-			state = enumspb.CALLBACK_STATE_FAILED
-		case callbackspb.CALLBACK_STATUS_SUCCEEDED:
-			state = enumspb.CALLBACK_STATE_SUCCEEDED
-		default:
-			return nil, serviceerror.NewInternalf("unknown callback state: %v", cb.Status)
 		}
 
 		cbInfos = append(cbInfos, &apiactivitypb.CallbackInfo{
 			Trigger: &apiactivitypb.CallbackInfo_Trigger{
 				Variant: &apiactivitypb.CallbackInfo_Trigger_ActivityClosed{},
 			},
-			Info: &callbackpb.CallbackInfo{
-				Callback:                cbSpec,
-				RegistrationTime:        cb.RegistrationTime,
-				State:                   state,
-				Attempt:                 cb.Attempt,
-				LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
-				LastAttemptFailure:      cb.LastAttemptFailure,
-				NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
-			},
+			Info: cbInfo,
 		})
 	}
 	return cbInfos, nil
