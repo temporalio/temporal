@@ -237,8 +237,6 @@ jobs:
           github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Always on, so label- and auto-triggered reviews produce the same output.
-          # This forces the action into tag mode: it creates a status comment and
-          # appends the prompt below to its own default prompt as custom instructions.
           track_progress: true
           include_fix_links: false
           prompt: |
