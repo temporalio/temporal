@@ -22,16 +22,6 @@ import (
 
 const generatorVersion = "umpire-genmodels/v1"
 
-var pinnedTools = []verify.ToolVersion{
-	{Name: "apalache", Version: "0.61.0", SHA256: "f2d761315667f977c7c33792d95167f12e83b8a775909180886bcb67660470c5"},
-	{Name: "ivy", Version: "1.8.26", Artifacts: []verify.ToolArtifact{
-		{Platform: "darwin-universal2", SHA256: "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c"},
-		{Platform: "linux-x86_64", SHA256: "2a71da0bb2ce6314ddb40b6d76c6d734b8102db51c158477c2ef85b45da65dc1"},
-	}},
-	{Name: "p", Version: "3.1.0", SHA256: "b2a212e3b1af1bf2fdc9b80899da2901d6625d1a2e478d478e30028872a4bdc1"},
-	{Name: "tla2tools", Version: "1.7.4", SHA256: "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"},
-}
-
 func main() {
 	var (
 		mode         = flag.String("mode", "generate", "generate, check-generated, or verify")
@@ -161,7 +151,7 @@ func generateTarget(
 		FailurePolicy:       target.FailurePolicy,
 		Interfaces:          projection.Interfaces,
 		Guarantee:           verify.FiniteExhaustive,
-		Tools:               pinnedTools,
+		Tools:               runner.ToolVersions(),
 		Unsupported:         unsupported,
 	})
 	if err != nil {
@@ -317,14 +307,6 @@ type checkOptions struct {
 }
 
 func checkModels(ctx context.Context, options checkOptions) error {
-	backends, err := requestedBackends(options.backend, options.profile)
-	if err != nil {
-		return err
-	}
-	bounds, err := profileBounds(options.profile)
-	if err != nil {
-		return err
-	}
 	family, err := verificationFamily(options.defaultBound)
 	if err != nil {
 		return err
@@ -333,34 +315,31 @@ func checkModels(ctx context.Context, options checkOptions) error {
 	if err != nil {
 		return err
 	}
+	toolchain := runner.Toolchain{
+		TLAJarPath: options.tlaJar, JavaPath: options.javaTool, PPath: options.pTool,
+		ApalachePath: options.apalacheTool, IvyPath: options.ivyTool,
+	}
 	for _, target := range targets {
 		projection, err := verify.Project(family, target.Name)
 		if err != nil {
 			return err
 		}
-		model := projection.Model
-		targetBounds := bounds
-		targetBounds.Identities = make(map[string]int, len(model.Entities))
-		for _, entity := range model.Entities {
-			targetBounds.Identities[entity.Name] = len(entity.IDs)
-		}
-		options.target = target.Name
-		selectedBackends, err := targetBackends(backends, target.BackendRequirements)
+		requests, err := toolchain.Plan(projection.Model, runner.PlanOptions{
+			ModelRoot: options.output, ArtifactRoot: options.artifacts, Target: target.Name,
+			Backends: options.backend, Profile: options.profile, Requirements: target.BackendRequirements,
+			Timeout: options.timeout,
+		})
 		if err != nil {
 			return fmt.Errorf("verification target %q: %w", target.Name, err)
 		}
-		for _, backend := range selectedBackends {
-			request, err := runnerRequest(backend, options, targetBounds, model)
-			if err != nil {
-				return err
-			}
+		for _, request := range requests {
 			result, err := runner.Check(ctx, request)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("%s/%s: %s (%s)\n", target.Name, backend, result.Status, result.Termination)
+			fmt.Printf("%s/%s: %s (%s)\n", target.Name, request.Backend, result.Status, result.Termination)
 			if result.Status == verify.Counterexample || result.Status == verify.Inconclusive || result.Status == verify.UnsupportedStatus {
-				return fmt.Errorf("%s/%s verification returned %s: %s", target.Name, backend, result.Status, result.Diagnostic)
+				return fmt.Errorf("%s/%s verification returned %s: %s", target.Name, request.Backend, result.Status, result.Diagnostic)
 			}
 		}
 	}
@@ -389,154 +368,4 @@ func targetByName(targets []verify.VerificationTarget, name string) (verify.Veri
 		}
 	}
 	return verify.VerificationTarget{}, false
-}
-
-func targetBackends(backends []runner.Backend, requirements []string) ([]runner.Backend, error) {
-	if len(requirements) == 0 {
-		return slices.Clone(backends), nil
-	}
-	allowed := make(map[string]struct{}, len(requirements))
-	for _, requirement := range requirements {
-		allowed[requirement] = struct{}{}
-	}
-	result := make([]runner.Backend, 0, len(backends))
-	for _, backend := range backends {
-		family := string(backend)
-		switch backend {
-		case runner.SANY, runner.TLC, runner.Apalache, runner.ApalacheProof:
-			family = "tla"
-		case runner.P, runner.PEx:
-			family = "p"
-		case runner.Ivy:
-			family = "ivy"
-		default:
-		}
-		_, exact := allowed[string(backend)]
-		_, familyAllowed := allowed[family]
-		if exact || familyAllowed {
-			result = append(result, backend)
-		}
-	}
-	if len(result) == 0 {
-		return nil, errors.New("none of the requested backends satisfy target requirements")
-	}
-	return result, nil
-}
-
-func requestedBackends(value, profile string) ([]runner.Backend, error) {
-	if value == "all" {
-		result := []runner.Backend{runner.SANY, runner.TLC, runner.Apalache, runner.P, runner.PEx, runner.Ivy}
-		if profile == "nightly" {
-			result = append(result, runner.ApalacheProof)
-		}
-		return result, nil
-	}
-	var result []runner.Backend
-	for _, name := range strings.Split(value, ",") {
-		backend := runner.Backend(strings.TrimSpace(name))
-		switch backend {
-		case runner.SANY, runner.TLC, runner.Apalache, runner.ApalacheProof, runner.P, runner.PEx, runner.Ivy:
-			result = append(result, backend)
-		default:
-			return nil, fmt.Errorf("unknown verification backend %q", name)
-		}
-	}
-	return result, nil
-}
-
-func profileBounds(profile string) (verify.Bounds, error) {
-	switch profile {
-	case "smoke":
-		return verify.Bounds{MaxDepth: 100, Schedules: 100}, nil
-	case "nightly":
-		return verify.Bounds{MaxDepth: 1_000, Schedules: 10_000}, nil
-	default:
-		return verify.Bounds{}, fmt.Errorf("unknown verification profile %q", profile)
-	}
-}
-
-func runnerRequest(
-	backend runner.Backend,
-	options checkOptions,
-	bounds verify.Bounds,
-	model verify.Model,
-) (runner.Request, error) {
-	actionNames := make(map[string]string, len(model.Actions))
-	propertyNames := make(map[string]string, len(model.Properties))
-	fairnessSet := map[string]struct{}{}
-	var unsupported []verify.Unsupported
-	for _, action := range model.Actions {
-		actionNames[tla.ActionIdentifier(action.Name)] = action.Name
-		actionNames[ivy.ActionIdentifier(action.Name)] = action.Name
-	}
-	for _, property := range model.Properties {
-		propertyNames[tla.PropertyIdentifier(property.Name)] = property.Name
-		propertyNames[ivy.PropertyIdentifier(property.Name)] = property.Name
-		for _, assumption := range property.Fairness {
-			fairnessSet[assumption] = struct{}{}
-		}
-		if property.Kind != verify.SafetyProperty {
-			unsupported = append(unsupported, verify.Unsupported{
-				Backend: "ivy", Construct: "property " + property.Name,
-				Reason: "Ivy generation supports inductive safety properties only", Source: property.Source,
-			})
-		}
-	}
-	var fairness []string
-	for assumption := range fairnessSet {
-		fairness = append(fairness, assumption)
-	}
-	slices.Sort(fairness)
-	request := runner.Request{
-		Backend: backend, Target: options.target, Profile: options.profile,
-		ArtifactDir: filepath.Join(options.artifacts, options.target, options.profile), Timeout: options.timeout, Bounds: bounds,
-		JavaPath: options.javaTool, ActionNames: actionNames, PropertyNames: propertyNames,
-		Fairness: fairness, Abstractions: model.Abstractions, Unsupported: unsupported,
-	}
-	switch backend {
-	case runner.SANY, runner.TLC:
-		request.ModelDir = filepath.Join(options.output, options.target, "tla")
-		request.ToolPath = options.tlaJar
-		request.ToolVersion = "1.7.4"
-		if request.ToolPath == "" {
-			return request, errors.New("TLA+ verification requires -tla-jar or UMPIRE_TLA_JAR")
-		}
-	case runner.Apalache, runner.ApalacheProof:
-		request.ModelDir = filepath.Join(options.output, options.target, "tla")
-		request.ToolPath = options.apalacheTool
-		request.ToolVersion = "0.61.0"
-		if backend == runner.Apalache {
-			if options.profile == "nightly" {
-				request.Bounds.MaxDepth = 20
-			} else {
-				request.Bounds.MaxDepth = 5
-			}
-		}
-		if request.ToolPath == "" {
-			return request, errors.New("apalache verification requires -apalache-tool or UMPIRE_APALACHE_TOOL")
-		}
-	case runner.P, runner.PEx:
-		request.ModelDir = filepath.Join(options.output, options.target, "p")
-		request.ToolPath = options.pTool
-		request.ToolVersion = "3.1.0"
-		if backend == runner.PEx && request.Bounds.MaxDepth > 100 {
-			request.Bounds.MaxDepth = 100
-		}
-		if request.ToolPath == "" {
-			return request, errors.New("p verification requires -p-tool or UMPIRE_P_TOOL")
-		}
-	case runner.Ivy:
-		request.ModelDir = filepath.Join(options.output, options.target, "ivy")
-		request.ToolPath = options.ivyTool
-		request.ToolVersion = "1.8.26"
-		if request.ToolPath == "" {
-			return request, errors.New("ivy verification requires -ivy-tool or UMPIRE_IVY_TOOL")
-		}
-	default:
-		return request, fmt.Errorf("unknown verification backend %q", backend)
-	}
-	if options.profile == "nightly" {
-		request.Config = "Umpire-nightly.cfg"
-	}
-	return request, nil
 }

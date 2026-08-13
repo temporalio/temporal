@@ -130,50 +130,6 @@ func TestCheckGeneratedRejectsUnexpectedArtifact(t *testing.T) {
 	require.ErrorContains(t, err, "unexpected stale.txt")
 }
 
-func TestRunnerRequestUsesBackendSpecificApalacheDepth(t *testing.T) {
-	request, err := runnerRequest(runner.Apalache, checkOptions{
-		output: "/models", artifacts: "/artifacts", profile: "smoke", apalacheTool: "/tools/apalache",
-	}, verify.Bounds{MaxDepth: 100, Schedules: 100}, verify.Model{})
-	require.NoError(t, err)
-	require.Equal(t, uint64(5), request.Bounds.MaxDepth)
-}
-
-func TestRunnerRequestCapsPExDepthAtNativeChoiceLimit(t *testing.T) {
-	request, err := runnerRequest(runner.PEx, checkOptions{
-		output: "/models", artifacts: "/artifacts", profile: "nightly", pTool: "/tools/p",
-	}, verify.Bounds{MaxDepth: 1_000, Schedules: 10_000}, verify.Model{})
-	require.NoError(t, err)
-	require.Equal(t, uint64(100), request.Bounds.MaxDepth)
-	require.Equal(t, uint64(10_000), request.Bounds.Schedules)
-}
-
-func TestRequestedBackendsRunsInductiveProofOnlyForNightlyAll(t *testing.T) {
-	smoke, err := requestedBackends("all", "smoke")
-	require.NoError(t, err)
-	require.NotContains(t, smoke, runner.ApalacheProof)
-
-	nightly, err := requestedBackends("all", "nightly")
-	require.NoError(t, err)
-	require.Contains(t, nightly, runner.ApalacheProof)
-
-	explicit, err := requestedBackends("apalache-proof", "smoke")
-	require.NoError(t, err)
-	require.Equal(t, []runner.Backend{runner.ApalacheProof}, explicit)
-}
-
-func TestTargetBackendsSelectsOnlyRequiredBackendFamilies(t *testing.T) {
-	backends := []runner.Backend{runner.SANY, runner.TLC, runner.Apalache, runner.ApalacheProof, runner.P, runner.PEx, runner.Ivy}
-	selected, err := targetBackends(backends, []string{"tla", "ivy"})
-	require.NoError(t, err)
-	require.Equal(t,
-		[]runner.Backend{runner.SANY, runner.TLC, runner.Apalache, runner.ApalacheProof, runner.Ivy},
-		selected,
-	)
-
-	_, err = targetBackends([]runner.Backend{runner.P}, []string{"tla"})
-	require.ErrorContains(t, err, "none of the requested backends satisfy target requirements")
-}
-
 func TestRequestedVerificationTargetsSelectsAllOrOne(t *testing.T) {
 	family, err := verificationFamily(1)
 	require.NoError(t, err)
@@ -188,15 +144,6 @@ func TestRequestedVerificationTargetsSelectsAllOrOne(t *testing.T) {
 
 	_, err = requestedVerificationTargets(family, "missing")
 	require.ErrorContains(t, err, `unknown verification target "missing"`)
-}
-
-func TestRunnerRequestUsesTargetScopedModelAndResultDirectories(t *testing.T) {
-	request, err := runnerRequest(runner.TLC, checkOptions{
-		output: "/models", artifacts: "/artifacts", target: "protocol-atomic", profile: "smoke", tlaJar: "/tools/tla2tools.jar",
-	}, verify.Bounds{}, verify.Model{})
-	require.NoError(t, err)
-	require.Equal(t, "/models/protocol-atomic/tla", request.ModelDir)
-	require.Equal(t, "/artifacts/protocol-atomic/smoke", request.ArtifactDir)
 }
 
 func TestGeneratorsCoverEverySourceActionAndProperty(t *testing.T) {
