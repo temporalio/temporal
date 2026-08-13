@@ -172,18 +172,18 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.T
 		{
 			name:    "invalid-scheme",
 			urls:    []string{"invalid"},
-			message: "invalid url: unknown scheme: invalid",
+			message: "completion_callbacks[0]: invalid url: unknown scheme: invalid",
 		},
 		{
 			name:    "url-length-too-long",
 			urls:    []string{"http://some-very-very-very-very-very-very-very-long-url"},
-			message: "invalid url: url length longer than max length allowed of 50",
+			message: "completion_callbacks[0]: invalid url: url length longer than max length allowed of 50",
 		},
 		{
 			name:    "header-size-too-large",
 			urls:    []string{"http://some-ignored-address"},
 			header:  map[string]string{"too": "long"},
-			message: "invalid header: header size longer than max allowed size of 6",
+			message: "completion_callbacks[0]: invalid header: header size longer than max allowed size of 6",
 		},
 		{
 			name:    "too many callbacks",
@@ -191,14 +191,17 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.T
 			message: "cannot attach more than 2 callbacks to an execution",
 		},
 		{
-			name:    "url not configured",
-			urls:    []string{"http://some-unconfigured-address"},
-			message: "invalid url: url does not match any configured callback address: http://some-unconfigured-address",
+			// The second callback is the offending one, so the error names index 1.
+			name: "url not configured",
+			urls: []string{"http://some-ignored-address", "http://some-unconfigured-address"},
+			message: "completion_callbacks[1]: invalid url: url does not match any configured callback " +
+				"address: http://some-unconfigured-address",
 		},
 		{
-			name:    "https required",
-			urls:    []string{"http://some-secure-address"},
-			message: "invalid url: callback address does not allow insecure connections: http://some-secure-address",
+			name: "https required",
+			urls: []string{"http://some-secure-address"},
+			message: "completion_callbacks[0]: invalid url: callback address does not allow insecure " +
+				"connections: http://some-secure-address",
 		},
 	}
 

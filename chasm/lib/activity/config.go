@@ -43,8 +43,9 @@ var (
 	EnabledCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 		"activity.enabledCallbackKinds",
 		callback.ConvertEnabledKinds,
-		callback.EnabledCallbackKinds{callback.CallbackKindNexus},
-		callback.GetEnabledCallbacksConfigDescription("standalone activity executions", "\nRequires activity.enableCallbacks."),
+		callback.EnabledCallbackKinds{callback.KindNexus},
+		`The list of completion callback kinds that may be attached to a standalone activity execution.
+Must be a non-empty list naming only "nexus" and/or "worker". Requires activity.enableCallbacks.`,
 	)
 
 	EnableStandaloneActivityOperatorCommands = dynamicconfig.NewNamespaceBoolSetting(
