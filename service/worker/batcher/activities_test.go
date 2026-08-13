@@ -1387,3 +1387,20 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	s.Require().Error(err)
 	s.Contains(err.Error(), "unknown admin batch type")
 }
+
+// TestDeterministicRequestID_ScopedToJob covers the property every caller of
+// deterministicRequestID relies on: retries of the same call within one batch
+// job derive the same request ID (so the server dedupes them), while two
+// different jobs making the same call derive different ones (so the second job
+// is not dropped as a duplicate).
+func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
+	const (
+		jobA = "job-a"
+		jobB = "job-b"
+	)
+	parts := []string{"signal", "workflow-id", "run-id", "signal-name"}
+
+	s.Equal(deterministicRequestID(jobA, parts...), deterministicRequestID(jobA, parts...))
+	s.NotEqual(deterministicRequestID(jobA, parts...), deterministicRequestID(jobB, parts...))
+	s.NotEqual(deterministicRequestID(jobA, "signal", "workflow-id", "run-id", "other-signal"), deterministicRequestID(jobA, parts...))
+}
