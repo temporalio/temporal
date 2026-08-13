@@ -172,3 +172,92 @@ func handoverExitReason(err error) string {
 		return "error"
 	}
 }
+
+// Namespace administration phases: the register/update operations served by the frontend on the
+// cluster that owns the write (the master cluster, for global namespaces). Each is a control-plane
+// event emitted once per successful mutation, distinct from the data-plane convergence the history
+// and replication paths observe.
+//
+// Everything that flows through UpdateNamespace — a config change, a state transition (DEPRECATED
+// via DeprecateNamespace, DELETED via UpdateNamespace), a local->global promotion, or an
+// active-cluster failover — is a namespace_updated event. Promotion and failover are marked with the
+// is_promotion / is_failover flags rather than separate phases; the before/after field snapshots
+// already carry the distinguishing data (active cluster, failover version, failover history).
+//
+// The frontend builds the input structs below from its domain objects (see
+// service/frontend/namespace_lifecycle_events.go), mirroring how service/history/replication relates
+// to its handlers.
+const (
+	PhaseNamespaceRegistered = "namespace_registered"
+	PhaseNamespaceUpdated    = "namespace_updated"
+)
+
+// FailoverHistoryEntry is one entry of a global namespace's failover history. It mirrors
+// persistencespb.FailoverStatus in a form this package can carry without importing persistence.
+type FailoverHistoryEntry struct {
+	FailoverVersion int64  `json:"failover_version"`
+	FailoverTime    string `json:"failover_time"`
+}
+
+// NamespaceStateFields is the snapshot of a namespace's fields the lifecycle events report.
+// namespace_updated carries a Before and an After; namespace_registered carries only the created
+// state.
+type NamespaceStateFields struct {
+	Description                 string                 `json:"description"`
+	State                       string                 `json:"state"`
+	IsGlobalNamespace           bool                   `json:"is_global_namespace"`
+	ConfigVersion               int64                  `json:"config_version"`
+	FailoverVersion             int64                  `json:"failover_version"`
+	FailoverNotificationVersion int64                  `json:"failover_notification_version"`
+	FailoverEndTime             string                 `json:"failover_end_time"`
+	Retention                   string                 `json:"retention"`
+	HistoryArchivalState        string                 `json:"history_archival_state"`
+	VisibilityArchivalState     string                 `json:"visibility_archival_state"`
+	ActiveCluster               string                 `json:"active_cluster"`
+	Clusters                    []string               `json:"clusters"`
+	ReplicationState            string                 `json:"replication_state"`
+	FailoverHistory             []FailoverHistoryEntry `json:"failover_history"`
+}
+
+// NamespaceRegisteredInput is the input to EmitNamespaceRegistered.
+type NamespaceRegisteredInput struct {
+	Namespace   string
+	NamespaceID string
+	Fields      NamespaceStateFields
+}
+
+// NamespaceUpdatedInput is the input to EmitNamespaceUpdated. IsFailover marks an active-cluster
+// change; IsPromotion marks a local->global promotion. Before/After carry the full field snapshots.
+type NamespaceUpdatedInput struct {
+	Namespace   string
+	NamespaceID string
+	IsFailover  bool
+	IsPromotion bool
+	Before      NamespaceStateFields
+	After       NamespaceStateFields
+}
+
+// EmitNamespaceRegistered emits a namespace_registered event for a newly persisted namespace.
+func EmitNamespaceRegistered(logger otellog.Logger, in NamespaceRegisteredInput) {
+	Emit(logger, NamespaceLifecyclePayload{
+		Phase:       PhaseNamespaceRegistered,
+		Namespace:   in.Namespace,
+		NamespaceID: in.NamespaceID,
+		Details:     map[string]any{"after": in.Fields},
+	})
+}
+
+// EmitNamespaceUpdated emits a namespace_updated event for a persisted namespace mutation.
+func EmitNamespaceUpdated(logger otellog.Logger, in NamespaceUpdatedInput) {
+	Emit(logger, NamespaceLifecyclePayload{
+		Phase:       PhaseNamespaceUpdated,
+		Namespace:   in.Namespace,
+		NamespaceID: in.NamespaceID,
+		Details: map[string]any{
+			"is_failover":  in.IsFailover,
+			"is_promotion": in.IsPromotion,
+			"before":       in.Before,
+			"after":        in.After,
+		},
+	})
+}

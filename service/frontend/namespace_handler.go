@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -39,6 +41,7 @@ type (
 	// such as registering, updating, and querying namespaces.
 	namespaceHandler struct {
 		logger                 log.Logger
+		eventLogger            otellog.Logger
 		metadataMgr            persistence.MetadataManager
 		namespaceRegistry      namespace.Registry
 		clusterMetadata        cluster.Metadata
@@ -68,6 +71,7 @@ var (
 // newNamespaceHandler create a new namespace handler
 func newNamespaceHandler(
 	logger log.Logger,
+	eventLogger otellog.Logger,
 	metadataMgr persistence.MetadataManager,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
@@ -79,6 +83,7 @@ func newNamespaceHandler(
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
+		eventLogger:            eventLogger,
 		metadataMgr:            metadataMgr,
 		namespaceRegistry:      namespaceRegistry,
 		clusterMetadata:        clusterMetadata,
@@ -248,6 +253,8 @@ func (d *namespaceHandler) RegisterNamespace(
 		return nil, err
 	}
 
+	wideevents.EmitNamespaceRegistered(d.eventLogger, buildNamespaceRegisteredInput(namespaceRequest, namespaceResponse.ID))
+
 	err = d.namespaceReplicator.HandleTransmissionTask(
 		ctx,
 		enumsspb.NAMESPACE_OPERATION_CREATE,
@@ -405,6 +412,10 @@ func (d *namespaceHandler) UpdateNamespace(
 	failoverNotificationVersion := getResponse.Namespace.FailoverNotificationVersion
 	isGlobalNamespace := getResponse.IsGlobalNamespace || updateRequest.PromoteNamespace
 	needsNamespacePromotion := !getResponse.IsGlobalNamespace && updateRequest.PromoteNamespace
+
+	// Snapshot pre-mutation namespace fields for the namespace_updated wide event emitted on success
+	// below; the after-snapshot is taken from the persisted record once the mutations complete.
+	eventBefore := namespaceStateFields(getResponse.Namespace, getResponse.IsGlobalNamespace)
 
 	currentHistoryArchivalState := &namespace.ArchivalConfigState{
 		State: config.HistoryArchivalState,
@@ -620,6 +631,14 @@ func (d *namespaceHandler) UpdateNamespace(
 		if err != nil {
 			return nil, err
 		}
+
+		wideevents.EmitNamespaceUpdated(d.eventLogger, buildNamespaceUpdatedInput(
+			eventBefore,
+			updateReq.Namespace,
+			isGlobalNamespace,
+			activeClusterChanged && isGlobalNamespace,
+			needsNamespacePromotion,
+		))
 	}
 
 	err = d.namespaceReplicator.HandleTransmissionTask(
@@ -679,6 +698,8 @@ func (d *namespaceHandler) DeprecateNamespace(
 		return nil, err
 	}
 
+	eventBefore := namespaceStateFields(getResponse.Namespace, getResponse.IsGlobalNamespace)
+
 	getResponse.Namespace.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
 	getResponse.Namespace.Info.State = enumspb.NAMESPACE_STATE_DEPRECATED
 	updateReq := &persistence.UpdateNamespaceRequest{
@@ -697,6 +718,14 @@ func (d *namespaceHandler) DeprecateNamespace(
 	if err != nil {
 		return nil, err
 	}
+
+	wideevents.EmitNamespaceUpdated(d.eventLogger, buildNamespaceUpdatedInput(
+		eventBefore,
+		getResponse.Namespace,
+		getResponse.IsGlobalNamespace,
+		false,
+		false,
+	))
 	return nil, nil
 }
 

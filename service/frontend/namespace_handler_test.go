@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -86,6 +87,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.config = NewConfig(dc.NewNoopCollection(), 1024)
 	s.handler = newNamespaceHandler(
 		logger,
+		wideevents.NoopLogger(),
 		s.mockMetadataMgr,
 		namespace.NewMockRegistry(s.controller),
 		s.mockClusterMetadata,

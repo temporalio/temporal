@@ -144,3 +144,46 @@ func TestEmitHandoverWatermarkEvents(t *testing.T) {
 	require.Equal(t, PhaseHandoverWatermarkRemoved, attrValue(lg.records[1], "phase"))
 	require.Equal(t, true, lagDetails(t, lg.records[1])["deleted_from_db"])
 }
+
+func TestEmitNamespaceRegistered(t *testing.T) {
+	lg := &captureLogger{}
+
+	EmitNamespaceRegistered(lg, NamespaceRegisteredInput{
+		Namespace:   "ns",
+		NamespaceID: "ns-id",
+		Fields:      NamespaceStateFields{ActiveCluster: "clusterA", IsGlobalNamespace: true, FailoverVersion: 7},
+	})
+
+	require.Len(t, lg.records, 1)
+	require.Equal(t, PhaseNamespaceRegistered, attrValue(lg.records[0], "phase"))
+	require.Equal(t, "ns-id", attrValue(lg.records[0], "namespace_id"))
+
+	after := lagDetails(t, lg.records[0])["after"].(map[string]any)
+	require.Equal(t, "clusterA", after["active_cluster"])
+	require.Equal(t, true, after["is_global_namespace"])
+	require.EqualValues(t, 7, after["failover_version"])
+}
+
+// A failover is a namespace_updated with is_failover set; the before/after snapshots carry the
+// active-cluster and failover-version deltas.
+func TestEmitNamespaceUpdatedCarriesBeforeAfterAndFlags(t *testing.T) {
+	lg := &captureLogger{}
+
+	EmitNamespaceUpdated(lg, NamespaceUpdatedInput{
+		Namespace:   "ns",
+		NamespaceID: "ns-id",
+		IsFailover:  true,
+		Before:      NamespaceStateFields{ActiveCluster: "clusterA", FailoverVersion: 10},
+		After:       NamespaceStateFields{ActiveCluster: "clusterB", FailoverVersion: 21},
+	})
+
+	require.Len(t, lg.records, 1)
+	require.Equal(t, PhaseNamespaceUpdated, attrValue(lg.records[0], "phase"))
+
+	d := lagDetails(t, lg.records[0])
+	require.Equal(t, true, d["is_failover"])
+	require.Equal(t, false, d["is_promotion"])
+	require.Equal(t, "clusterA", d["before"].(map[string]any)["active_cluster"])
+	require.Equal(t, "clusterB", d["after"].(map[string]any)["active_cluster"])
+	require.EqualValues(t, 21, d["after"].(map[string]any)["failover_version"])
+}

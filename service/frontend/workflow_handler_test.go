@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
@@ -207,6 +208,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetLogger(),
+		wideevents.NoopLogger(),
 		s.mockResource.GetThrottledLogger(),
 		s.mockResource.GetExecutionManager().GetName(),
 		s.mockResource.GetClusterMetadataManager(),
