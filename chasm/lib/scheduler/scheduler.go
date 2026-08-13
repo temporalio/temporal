@@ -336,6 +336,7 @@ func CreateSchedulerFromMigration(
 	if slices.ContainsFunc(state.GetInvokerState().GetBufferedStarts(), needsCallback) {
 		ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
 	} else {
+		sched.Invoker.Get(ctx).addTasks(ctx)
 		sched.Generator.Get(ctx).Generate(ctx)
 	}
 
