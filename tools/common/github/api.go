@@ -42,10 +42,16 @@ type RateLimitError struct {
 }
 
 func (e *RateLimitError) Error() string {
+	var message string
 	if !e.RetryAttempted && e.RetryAfter == 0 {
-		return fmt.Sprintf("GitHub API rate limit response %s did not include a valid Retry-After header", e.Status)
+		message = fmt.Sprintf("GitHub API rate limit response %s did not include a valid Retry-After header", e.Status)
+	} else {
+		message = fmt.Sprintf("GitHub API rate limit persisted after retrying in %s: %s", e.RetryAfter, e.Status)
 	}
-	return fmt.Sprintf("GitHub API rate limit persisted after retrying in %s: %s", e.RetryAfter, e.Status)
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", message, e.Err)
+	}
+	return message
 }
 
 func (e *RateLimitError) Unwrap() error {
@@ -82,13 +88,21 @@ func get(ctx context.Context, path string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	var rateLimitStatus string
+	var retryDelay time.Duration
 	for attempt := 0; attempt <= maxAPIRetries; attempt++ {
 		if err := apiLimiter.Wait(ctx); err != nil {
+			if attempt > 0 {
+				return nil, &RateLimitError{Status: rateLimitStatus, RetryAfter: retryDelay, RetryAttempted: true, Err: fmt.Errorf("failed while waiting to retry GitHub request: %w", err)}
+			}
 			return nil, err
 		}
 
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+path, nil)
 		if err != nil {
+			if attempt > 0 {
+				return nil, &RateLimitError{Status: rateLimitStatus, RetryAfter: retryDelay, RetryAttempted: true, Err: fmt.Errorf("failed to create retry GitHub request: %w", err)}
+			}
 			return nil, fmt.Errorf("failed to create GitHub request: %w", err)
 		}
 		request.Header.Set("Accept", "application/vnd.github+json")
@@ -97,6 +111,9 @@ func get(ctx context.Context, path string) (*http.Response, error) {
 
 		response, err := apiClient.Do(request)
 		if err != nil {
+			if attempt > 0 {
+				return nil, &RateLimitError{Status: rateLimitStatus, RetryAfter: retryDelay, RetryAttempted: true, Err: fmt.Errorf("GitHub retry request failed: %w", err)}
+			}
 			return nil, fmt.Errorf("GitHub request failed: %w", err)
 		}
 		if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
@@ -114,6 +131,8 @@ func get(ctx context.Context, path string) (*http.Response, error) {
 			return nil, &RateLimitError{Status: response.Status, RetryAfter: retryAfter, RetryAttempted: true, Err: responseError(response)}
 		}
 
+		rateLimitStatus = response.Status
+		retryDelay = retryAfter
 		_ = response.Body.Close()
 		fmt.Printf("GitHub API rate limited (%s); retrying request in %s\n", response.Status, retryAfter)
 		if err := waitForRetry(ctx, retryAfter); err != nil {
