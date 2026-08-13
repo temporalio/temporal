@@ -127,7 +127,6 @@ func (s *mitigatorSuite) TestMitigate_ReaderStuckActionGetsMaxReaderCount() {
 	action, ok := actualAction.(*actionReaderStuck)
 	s.True(ok)
 	s.Equal(3, action.maxReaderCount)
-	s.Equal(s.monitor, action.monitor)
 }
 
 func (s *mitigatorSuite) TestMitigate_ResolveAlert() {

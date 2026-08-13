@@ -53,8 +53,8 @@ type (
 		totalPendingTaskCount int
 		totalSliceCount       int
 
-		readerStats map[int64]readerStats
-		sliceStats  map[Slice]sliceStats
+		readerSliceCount map[int64]int
+		sliceStats       map[Slice]sliceStats
 
 		categoryType tasks.CategoryType
 		timeSource   clock.TimeSource
@@ -66,18 +66,14 @@ type (
 		shutdownCh     chan struct{}
 	}
 
-	readerStats struct {
-		sliceCount int
-	}
-
-	// readProgress counts consecutive reads that ended on the same watermark. It is
-	// kept per slice because many slices can cover one fire time window, and a read
-	// that advances one of them says nothing about the others. It is kept per reader
-	// so that a slice handed to another reader is judged on that reader's own reads.
+	// Progress is tracked per slice and per reader so that neither an unrelated slice
+	// covering the same fire time window nor a previous owner of the slice contributes
+	// to stuck detection. alerted keeps one window from alerting on every later read.
 	readProgress struct {
 		readerID  int64
 		watermark tasks.Key
 		attempts  int
+		alerted   bool
 	}
 
 	sliceStats struct {
@@ -92,15 +88,15 @@ func newMonitor(
 	options *MonitorOptions,
 ) *monitorImpl {
 	return &monitorImpl{
-		readerStats:    make(map[int64]readerStats),
-		sliceStats:     make(map[Slice]sliceStats),
-		categoryType:   categoryType,
-		timeSource:     timeSource,
-		options:        options,
-		pendingAlerts:  make(map[AlertType]struct{}),
-		silencedAlerts: make(map[AlertType]time.Time),
-		alertCh:        make(chan *Alert, alertChSize),
-		shutdownCh:     make(chan struct{}),
+		readerSliceCount: make(map[int64]int),
+		sliceStats:       make(map[Slice]sliceStats),
+		categoryType:     categoryType,
+		timeSource:       timeSource,
+		options:          options,
+		pendingAlerts:    make(map[AlertType]struct{}),
+		silencedAlerts:   make(map[AlertType]time.Time),
+		alertCh:          make(chan *Alert, alertChSize),
+		shutdownCh:       make(chan struct{}),
 	}
 }
 
@@ -168,18 +164,21 @@ func (m *monitorImpl) SetSliceReadWatermark(slice Slice, readerID int64, waterma
 	}
 
 	stats.progress.attempts++
-	m.sliceStats[slice] = stats
 
 	criticalAttempts := m.options.ReaderStuckCriticalAttempts()
-	if criticalAttempts > 0 && stats.progress.attempts >= criticalAttempts {
-		m.sendAlertLocked(&Alert{
-			AlertType: AlertTypeReaderStuck,
-			AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
-				ReaderID:         readerID,
-				CurrentWatermark: stats.progress.watermark,
-			},
-		})
+	if stats.progress.alerted || criticalAttempts <= 0 || stats.progress.attempts < criticalAttempts {
+		m.sliceStats[slice] = stats
+		return
 	}
+
+	stats.progress.alerted = m.sendAlertLocked(&Alert{
+		AlertType: AlertTypeReaderStuck,
+		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
+			ReaderID:         readerID,
+			CurrentWatermark: stats.progress.watermark,
+		},
+	})
+	m.sliceStats[slice] = stats
 }
 
 func (m *monitorImpl) GetTotalSliceCount() int {
@@ -187,8 +186,8 @@ func (m *monitorImpl) GetTotalSliceCount() int {
 	defer m.Unlock()
 
 	count := 0
-	for _, stats := range m.readerStats {
-		count += stats.sliceCount
+	for _, sliceCount := range m.readerSliceCount {
+		count += sliceCount
 	}
 
 	return count
@@ -198,21 +197,15 @@ func (m *monitorImpl) GetSliceCount(readerID int64) int {
 	m.Lock()
 	defer m.Unlock()
 
-	if stats, ok := m.readerStats[readerID]; ok {
-		return stats.sliceCount
-	}
-	return 0
+	return m.readerSliceCount[readerID]
 }
 
 func (m *monitorImpl) SetSliceCount(readerID int64, count int) {
 	m.Lock()
 	defer m.Unlock()
 
-	stats := m.readerStats[readerID]
-	m.totalSliceCount = m.totalSliceCount - stats.sliceCount + count
-
-	stats.sliceCount = count
-	m.readerStats[readerID] = stats
+	m.totalSliceCount = m.totalSliceCount - m.readerSliceCount[readerID] + count
+	m.readerSliceCount[readerID] = count
 
 	criticalSliceCount := m.options.SliceCountCriticalThreshold()
 	if criticalSliceCount > 0 && m.totalSliceCount > criticalSliceCount {
@@ -243,13 +236,13 @@ func (m *monitorImpl) RemoveReader(readerID int64) {
 	m.Lock()
 	defer m.Unlock()
 
-	stats, ok := m.readerStats[readerID]
+	sliceCount, ok := m.readerSliceCount[readerID]
 	if !ok {
 		return
 	}
 
-	m.totalSliceCount -= stats.sliceCount
-	delete(m.readerStats, readerID)
+	m.totalSliceCount -= sliceCount
+	delete(m.readerSliceCount, readerID)
 }
 
 func (m *monitorImpl) ResolveAlert(alertType AlertType) {
@@ -288,26 +281,30 @@ func (m *monitorImpl) Close() {
 	}
 }
 
-func (m *monitorImpl) sendAlertLocked(alert *Alert) {
+// sendAlertLocked reports whether the alert was queued, so callers that latch on
+// having reported a condition do not latch on an alert that was dropped.
+func (m *monitorImpl) sendAlertLocked(alert *Alert) bool {
 	if m.isClosed() {
 		// make sure alert won't be sent to a closed chan
-		return
+		return false
 	}
 
 	if m.timeSource.Now().Before(m.silencedAlerts[alert.AlertType]) {
-		return
+		return false
 	}
 
 	// dedup alerts, we only need one outstanding alert per alert type
 	if _, ok := m.pendingAlerts[alert.AlertType]; ok {
-		return
+		return false
 	}
 
 	select {
 	case m.alertCh <- alert:
 		m.pendingAlerts[alert.AlertType] = struct{}{}
+		return true
 	default:
 		// do not block if alertCh full
+		return false
 	}
 }
 

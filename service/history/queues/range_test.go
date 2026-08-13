@@ -197,26 +197,19 @@ func (s *rangeSuite) TestCanSplit() {
 }
 
 func (s *rangeSuite) TestCanSplitStrictly() {
-	key := NewRandomKey()
-	ranges := []Range{
-		NewRandomRange(),
-		NewRange(key, key),
-	}
+	r := NewRange(
+		tasks.NewKey(time.Unix(0, 100), 10),
+		tasks.NewKey(time.Unix(0, 100), 20),
+	)
 
-	for _, r := range ranges {
-		s.False(r.CanSplitStrictly(r.InclusiveMin))
-		s.False(r.CanSplitStrictly(r.ExclusiveMax))
+	s.False(r.CanSplitStrictly(tasks.NewKey(time.Unix(0, 100), 9)))
+	s.False(r.CanSplitStrictly(r.InclusiveMin))
+	s.True(r.CanSplitStrictly(tasks.NewKey(time.Unix(0, 100), 15)))
+	s.False(r.CanSplitStrictly(r.ExclusiveMax))
+	s.False(r.CanSplitStrictly(tasks.NewKey(time.Unix(0, 100), 21)))
 
-		if !r.IsEmpty() {
-			for i := 0; i != 1000; i++ {
-				testKey := NewRandomKeyInRange(r)
-				if testKey.CompareTo(r.InclusiveMin) == 0 {
-					continue
-				}
-				s.True(r.CanSplitStrictly(testKey))
-			}
-		}
-	}
+	empty := NewRange(r.InclusiveMin, r.InclusiveMin)
+	s.False(empty.CanSplitStrictly(r.InclusiveMin))
 }
 
 func (s *rangeSuite) TestCanMerge() {

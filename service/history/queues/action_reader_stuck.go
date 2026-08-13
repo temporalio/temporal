@@ -11,7 +11,6 @@ var _ Action = (*actionReaderStuck)(nil)
 type (
 	actionReaderStuck struct {
 		attributes     *AlertAttributesReaderStuck
-		monitor        Monitor
 		maxReaderCount int
 		logger         log.Logger
 	}
@@ -19,13 +18,11 @@ type (
 
 func newReaderStuckAction(
 	attributes *AlertAttributesReaderStuck,
-	monitor Monitor,
 	maxReaderCount int,
 	logger log.Logger,
 ) *actionReaderStuck {
 	return &actionReaderStuck{
 		attributes:     attributes,
-		monitor:        monitor,
 		maxReaderCount: maxReaderCount,
 		logger:         logger,
 	}
@@ -38,13 +35,14 @@ func (a *actionReaderStuck) Name() string {
 func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 	nextReaderID := a.attributes.ReaderID + 1
 	if nextReaderID >= int64(a.maxReaderCount) {
-		return a.decline()
+		a.logger.Info("Skipped reader stuck action, no lower priority reader available", tag.QueueReaderID(a.attributes.ReaderID))
+		return false
 	}
 
 	reader, ok := readerGroup.ReaderByID(a.attributes.ReaderID)
 	if !ok {
 		a.logger.Info("Failed to get queue with readerID for reader stuck action", tag.QueueReaderID(a.attributes.ReaderID))
-		return a.decline()
+		return false
 	}
 
 	stuckRange := NewRange(
@@ -87,18 +85,10 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 	})
 
 	if len(splitSlices) == 0 {
-		return a.decline()
+		return false
 	}
 
 	nextReader := readerGroup.GetOrCreateReader(nextReaderID)
 	nextReader.MergeSlices(splitSlices...)
 	return true
-}
-
-// decline silences the alert before reporting that nothing was mitigated.
-// Nothing about the reader changed, so the next read at the same watermark would
-// otherwise re-alert immediately and checkpoint the queue on every read.
-func (a *actionReaderStuck) decline() bool {
-	a.monitor.SilenceAlert(AlertTypeReaderStuck)
-	return false
 }

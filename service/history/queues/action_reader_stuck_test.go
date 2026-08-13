@@ -13,11 +13,9 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-// The action derives the stuck range [readerStuckFireTime, +monitorWatermarkPrecision)
-// from the alert watermark, and every expectation below is expressed against it.
 var readerStuckFireTime = time.Unix(1000, 0).UTC()
 
-func stuckKey(offset time.Duration, taskID int64) tasks.Key {
+func readerStuckKey(offset time.Duration, taskID int64) tasks.Key {
 	return tasks.NewKey(readerStuckFireTime.Add(offset), taskID)
 }
 
@@ -69,13 +67,12 @@ func newReaderStuckTestReaderGroup(monitor Monitor) *ReaderGroup {
 	})
 }
 
-func newReaderStuckTestAction(monitor Monitor, readerID int64, maxReaderCount int) *actionReaderStuck {
+func newReaderStuckTestAction(readerID int64, maxReaderCount int) *actionReaderStuck {
 	return newReaderStuckAction(
 		&AlertAttributesReaderStuck{
 			ReaderID:         readerID,
-			CurrentWatermark: stuckKey(0, 0),
+			CurrentWatermark: readerStuckKey(0, 0),
 		},
-		monitor,
 		maxReaderCount,
 		log.NewTestLogger(),
 	)
@@ -103,85 +100,84 @@ func TestReaderStuckActionRun(t *testing.T) {
 			name:           "slice spans both sides of the stuck range",
 			readerID:       DefaultReaderId,
 			maxReaderCount: 2,
-			sliceRanges:    []Range{NewRange(stuckKey(-10*time.Second, 0), stuckKey(10*time.Second, 0))},
+			sliceRanges:    []Range{NewRange(readerStuckKey(-10*time.Second, 0), readerStuckKey(10*time.Second, 0))},
 			wantMitigated:  true,
 			wantKept: []Range{
-				NewRange(stuckKey(-10*time.Second, 0), stuckKey(0, 0)),
-				NewRange(stuckKey(time.Second, 0), stuckKey(10*time.Second, 0)),
+				NewRange(readerStuckKey(-10*time.Second, 0), readerStuckKey(0, 0)),
+				NewRange(readerStuckKey(time.Second, 0), readerStuckKey(10*time.Second, 0)),
 			},
-			wantMoved: []Range{NewRange(stuckKey(0, 0), stuckKey(time.Second, 0))},
+			wantMoved: []Range{NewRange(readerStuckKey(0, 0), readerStuckKey(time.Second, 0))},
 		},
 		{
 			name:           "slice contained in the stuck range",
 			readerID:       DefaultReaderId,
 			maxReaderCount: 2,
-			sliceRanges:    []Range{NewRange(stuckKey(0, 5), stuckKey(500*time.Millisecond, 0))},
+			sliceRanges:    []Range{NewRange(readerStuckKey(0, 5), readerStuckKey(500*time.Millisecond, 0))},
 			wantMitigated:  true,
 			wantKept:       nil,
-			wantMoved:      []Range{NewRange(stuckKey(0, 5), stuckKey(500*time.Millisecond, 0))},
+			wantMoved:      []Range{NewRange(readerStuckKey(0, 5), readerStuckKey(500*time.Millisecond, 0))},
 		},
 		{
 			name:           "slice starts before the stuck range and ends inside it",
 			readerID:       DefaultReaderId,
 			maxReaderCount: 2,
-			sliceRanges:    []Range{NewRange(stuckKey(-time.Second, 0), stuckKey(500*time.Millisecond, 0))},
+			sliceRanges:    []Range{NewRange(readerStuckKey(-time.Second, 0), readerStuckKey(500*time.Millisecond, 0))},
 			wantMitigated:  true,
-			wantKept:       []Range{NewRange(stuckKey(-time.Second, 0), stuckKey(0, 0))},
-			wantMoved:      []Range{NewRange(stuckKey(0, 0), stuckKey(500*time.Millisecond, 0))},
+			wantKept:       []Range{NewRange(readerStuckKey(-time.Second, 0), readerStuckKey(0, 0))},
+			wantMoved:      []Range{NewRange(readerStuckKey(0, 0), readerStuckKey(500*time.Millisecond, 0))},
 		},
 		{
 			name:           "slice starts inside the stuck range and ends after it",
 			readerID:       DefaultReaderId,
 			maxReaderCount: 2,
-			sliceRanges:    []Range{NewRange(stuckKey(500*time.Millisecond, 0), stuckKey(2*time.Second, 0))},
+			sliceRanges:    []Range{NewRange(readerStuckKey(500*time.Millisecond, 0), readerStuckKey(2*time.Second, 0))},
 			wantMitigated:  true,
-			wantKept:       []Range{NewRange(stuckKey(time.Second, 0), stuckKey(2*time.Second, 0))},
-			wantMoved:      []Range{NewRange(stuckKey(500*time.Millisecond, 0), stuckKey(time.Second, 0))},
+			wantKept:       []Range{NewRange(readerStuckKey(time.Second, 0), readerStuckKey(2*time.Second, 0))},
+			wantMoved:      []Range{NewRange(readerStuckKey(500*time.Millisecond, 0), readerStuckKey(time.Second, 0))},
 		},
 		{
-			// The two moved pieces are contiguous, so MergeSlices combines them.
 			name:           "several slices overlap the stuck range",
 			readerID:       DefaultReaderId,
 			maxReaderCount: 2,
 			sliceRanges: []Range{
-				NewRange(stuckKey(0, 0), stuckKey(300*time.Millisecond, 0)),
-				NewRange(stuckKey(300*time.Millisecond, 0), stuckKey(2*time.Second, 0)),
+				NewRange(readerStuckKey(0, 0), readerStuckKey(300*time.Millisecond, 0)),
+				NewRange(readerStuckKey(300*time.Millisecond, 0), readerStuckKey(2*time.Second, 0)),
 			},
 			wantMitigated: true,
-			wantKept:      []Range{NewRange(stuckKey(time.Second, 0), stuckKey(2*time.Second, 0))},
-			wantMoved:     []Range{NewRange(stuckKey(0, 0), stuckKey(time.Second, 0))},
+			wantKept:      []Range{NewRange(readerStuckKey(time.Second, 0), readerStuckKey(2*time.Second, 0))},
+			wantMoved:     []Range{NewRange(readerStuckKey(0, 0), readerStuckKey(time.Second, 0))},
 		},
 		{
 			name:           "slices only abut the stuck range",
 			readerID:       DefaultReaderId,
 			maxReaderCount: 2,
 			sliceRanges: []Range{
-				NewRange(stuckKey(-5*time.Second, 0), stuckKey(0, 0)),
-				NewRange(stuckKey(time.Second, 0), stuckKey(5*time.Second, 0)),
+				NewRange(readerStuckKey(-5*time.Second, 0), readerStuckKey(0, 0)),
+				NewRange(readerStuckKey(time.Second, 0), readerStuckKey(5*time.Second, 0)),
 			},
 			wantMitigated: false,
 			wantKept: []Range{
-				NewRange(stuckKey(-5*time.Second, 0), stuckKey(0, 0)),
-				NewRange(stuckKey(time.Second, 0), stuckKey(5*time.Second, 0)),
+				NewRange(readerStuckKey(-5*time.Second, 0), readerStuckKey(0, 0)),
+				NewRange(readerStuckKey(time.Second, 0), readerStuckKey(5*time.Second, 0)),
 			},
 			wantMoved: nil,
 		},
 		{
-			name:           "no reader below the default one is allowed",
+			name:           "max reader count reached",
 			readerID:       DefaultReaderId,
 			maxReaderCount: 1,
-			sliceRanges:    []Range{NewRange(stuckKey(0, 0), stuckKey(500*time.Millisecond, 0))},
+			sliceRanges:    []Range{NewRange(readerStuckKey(0, 0), readerStuckKey(500*time.Millisecond, 0))},
 			wantMitigated:  false,
-			wantKept:       []Range{NewRange(stuckKey(0, 0), stuckKey(500*time.Millisecond, 0))},
+			wantKept:       []Range{NewRange(readerStuckKey(0, 0), readerStuckKey(500*time.Millisecond, 0))},
 			wantMoved:      nil,
 		},
 		{
 			name:           "already on the last reader",
 			readerID:       DefaultReaderId + 1,
 			maxReaderCount: 2,
-			sliceRanges:    []Range{NewRange(stuckKey(0, 0), stuckKey(500*time.Millisecond, 0))},
+			sliceRanges:    []Range{NewRange(readerStuckKey(0, 0), readerStuckKey(500*time.Millisecond, 0))},
 			wantMitigated:  false,
-			wantKept:       []Range{NewRange(stuckKey(0, 0), stuckKey(500*time.Millisecond, 0))},
+			wantKept:       []Range{NewRange(readerStuckKey(0, 0), readerStuckKey(500*time.Millisecond, 0))},
 			wantMoved:      nil,
 		},
 	}
@@ -198,7 +194,7 @@ func TestReaderStuckActionRun(t *testing.T) {
 			readerGroup := newReaderStuckTestReaderGroup(monitor)
 			readerGroup.NewReader(tc.readerID, slices...)
 
-			action := newReaderStuckTestAction(monitor, tc.readerID, tc.maxReaderCount)
+			action := newReaderStuckTestAction(tc.readerID, tc.maxReaderCount)
 			require.Equal(t, tc.wantMitigated, action.Run(readerGroup))
 
 			reader, ok := readerGroup.ReaderByID(tc.readerID)
@@ -225,17 +221,17 @@ func TestReaderStuckActionMergesIntoExistingNextReader(t *testing.T) {
 	readerGroup := newReaderStuckTestReaderGroup(monitor)
 	readerGroup.NewReader(
 		DefaultReaderId,
-		newReaderStuckTestSlice(monitor, NewRange(stuckKey(0, 0), stuckKey(2*time.Second, 0))),
+		newReaderStuckTestSlice(monitor, NewRange(readerStuckKey(0, 0), readerStuckKey(2*time.Second, 0))),
 	)
-	existing := NewRange(stuckKey(10*time.Second, 0), stuckKey(20*time.Second, 0))
+	existing := NewRange(readerStuckKey(10*time.Second, 0), readerStuckKey(20*time.Second, 0))
 	readerGroup.NewReader(DefaultReaderId+1, newReaderStuckTestSlice(monitor, existing))
 
-	require.True(t, newReaderStuckTestAction(monitor, DefaultReaderId, 2).Run(readerGroup))
+	require.True(t, newReaderStuckTestAction(DefaultReaderId, 2).Run(readerGroup))
 
 	nextReader, ok := readerGroup.ReaderByID(DefaultReaderId + 1)
 	require.True(t, ok)
 	require.Equal(t, []Range{
-		NewRange(stuckKey(0, 0), stuckKey(time.Second, 0)),
+		NewRange(readerStuckKey(0, 0), readerStuckKey(time.Second, 0)),
 		existing,
 	}, readerSliceRanges(nextReader))
 }
@@ -246,62 +242,8 @@ func TestReaderStuckActionSkipsWhenReaderMissing(t *testing.T) {
 
 	readerGroup := newReaderStuckTestReaderGroup(monitor)
 
-	require.False(t, newReaderStuckTestAction(monitor, DefaultReaderId, 2).Run(readerGroup))
+	require.False(t, newReaderStuckTestAction(DefaultReaderId, 2).Run(readerGroup))
 	require.Empty(t, readerGroup.Readers())
-}
-
-func TestReaderStuckActionSilencesAlertWhenDeclining(t *testing.T) {
-	// Declining without silencing would re-alert on the reader's next read, and every
-	// alert checkpoints the queue.
-	testCases := []struct {
-		name           string
-		maxReaderCount int
-		sliceRanges    []Range
-	}{
-		{
-			name:           "no reader available",
-			maxReaderCount: 1,
-			sliceRanges:    []Range{NewRange(stuckKey(0, 0), stuckKey(500*time.Millisecond, 0))},
-		},
-		{
-			name:           "nothing overlaps the stuck range",
-			maxReaderCount: 2,
-			sliceRanges:    []Range{NewRange(stuckKey(time.Second, 0), stuckKey(5*time.Second, 0))},
-		},
-		{
-			name:           "reader missing",
-			maxReaderCount: 2,
-			sliceRanges:    nil,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			monitor := newReaderStuckTestMonitor()
-			t.Cleanup(monitor.Close)
-
-			readerGroup := newReaderStuckTestReaderGroup(monitor)
-			if tc.sliceRanges != nil {
-				slices := make([]Slice, 0, len(tc.sliceRanges))
-				for _, r := range tc.sliceRanges {
-					slices = append(slices, newReaderStuckTestSlice(monitor, r))
-				}
-				readerGroup.NewReader(DefaultReaderId, slices...)
-			}
-
-			require.False(t, newReaderStuckTestAction(monitor, DefaultReaderId, tc.maxReaderCount).Run(readerGroup))
-
-			slice := newReaderStuckTestSlice(monitor, NewRange(stuckKey(0, 0), stuckKey(time.Second, 0)))
-			for i := 0; i != monitor.options.ReaderStuckCriticalAttempts()+1; i++ {
-				monitor.SetSliceReadWatermark(slice, DefaultReaderId, stuckKey(0, int64(i)))
-			}
-			select {
-			case <-monitor.AlertCh():
-				require.FailNow(t, "alert should be silenced after the action declined")
-			default:
-			}
-		})
-	}
 }
 
 func TestReaderStuckActionDoesNotCascadeAfterMovingSlice(t *testing.T) {
@@ -310,23 +252,27 @@ func TestReaderStuckActionDoesNotCascadeAfterMovingSlice(t *testing.T) {
 	monitor := newReaderStuckTestMonitor()
 	t.Cleanup(monitor.Close)
 
-	sliceRange := NewRange(stuckKey(0, 0), stuckKey(500*time.Millisecond, 0))
+	sliceRange := NewRange(readerStuckKey(0, 0), readerStuckKey(500*time.Millisecond, 0))
 	slice := newReaderStuckTestSlice(monitor, sliceRange)
 	readerGroup := newReaderStuckTestReaderGroup(monitor)
 	readerGroup.NewReader(DefaultReaderId, slice)
 
 	criticalAttempts := monitor.options.ReaderStuckCriticalAttempts()
 	for i := 0; i != criticalAttempts; i++ {
-		monitor.SetSliceReadWatermark(slice, DefaultReaderId, stuckKey(0, int64(i)))
+		monitor.SetSliceReadWatermark(slice, DefaultReaderId, readerStuckKey(0, int64(i)))
 	}
-	alert := <-monitor.AlertCh()
+	var alert *Alert
+	select {
+	case alert = <-monitor.AlertCh():
+	default:
+		require.FailNow(t, "expected the original reader to alert")
+	}
 	require.Equal(t, DefaultReaderId, alert.AlertAttributesReaderStuck.ReaderID)
 	monitor.ResolveAlert(alert.AlertType)
 
-	require.True(t, newReaderStuckTestAction(monitor, DefaultReaderId, 3).Run(readerGroup))
+	require.True(t, newReaderStuckTestAction(DefaultReaderId, 3).Run(readerGroup))
 
-	// The first read by the new owner must not re-trigger the alert.
-	monitor.SetSliceReadWatermark(slice, DefaultReaderId+1, stuckKey(0, 0))
+	monitor.SetSliceReadWatermark(slice, DefaultReaderId+1, readerStuckKey(0, 0))
 	select {
 	case <-monitor.AlertCh():
 		require.FailNow(t, "a slice must not be demoted again on the new reader's first read")
@@ -334,7 +280,7 @@ func TestReaderStuckActionDoesNotCascadeAfterMovingSlice(t *testing.T) {
 	}
 
 	for i := 1; i != criticalAttempts; i++ {
-		monitor.SetSliceReadWatermark(slice, DefaultReaderId+1, stuckKey(0, int64(i)))
+		monitor.SetSliceReadWatermark(slice, DefaultReaderId+1, readerStuckKey(0, int64(i)))
 	}
 	select {
 	case alert := <-monitor.AlertCh():

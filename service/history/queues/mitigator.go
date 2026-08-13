@@ -71,7 +71,6 @@ func (m *mitigatorImpl) Mitigate(alert Alert) {
 	case AlertTypeReaderStuck:
 		action = newReaderStuckAction(
 			alert.AlertAttributesReaderStuck,
-			m.monitor,
 			m.maxReaderCount(),
 			m.logger,
 		)
