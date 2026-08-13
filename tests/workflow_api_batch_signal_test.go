@@ -70,9 +70,9 @@ func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Separate
 
 	// Two separate batch jobs, same signal name, same target workflow.
 	first := s.signalWorkflowViaBatch(ctx, env, execution, "first-signal-data")
-	second := s.signalWorkflowViaBatch(ctx, env, execution, "second-signal-data")
-
 	assertWorkflowBatchOperationSucceeded(ctx, t, env, first)
+
+	second := s.signalWorkflowViaBatch(ctx, env, execution, "second-signal-data")
 	assertWorkflowBatchOperationSucceeded(ctx, t, env, second)
 
 	// Both signals must reach the workflow: if the second one is deduped, the
