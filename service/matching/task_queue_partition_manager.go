@@ -1459,9 +1459,9 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 			isRampingDescribe := deploymentVersion.GetDeploymentName() == rampingVersion.GetDeploymentName() &&
 				deploymentVersion.GetBuildId() == rampingVersion.GetBuildId()
 
-			// Skip versioning attribution for sticky queues: sticky queues don't route
-			// by version, so their stats belong entirely to the queue itself.
-			if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+			// Skip versioning attribution for partitions that don't support versioning
+			// (e.g. sticky queues): their stats belong entirely to the queue itself.
+			if pm.partition.SupportsVersioning() {
 				if isUnversionedDescribe {
 					// Reduce unversioned stats by any shares attributed to versioned queues.
 					if currentExists {
