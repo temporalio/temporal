@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
@@ -122,6 +123,7 @@ type clientProviderCacheKey struct {
 func clientProviderFactory(
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
+	namespaceRegistry namespace.Registry,
 	rpcFactory common.RPCFactory,
 	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
 ) (ClientProvider, error) {
@@ -146,7 +148,11 @@ func clientProviderFactory(
 		var httpClient *http.Client
 		// Populate source header for worker targets, and route internally. Callback assumes external target if unset.
 		needsCallbackSourceHeader := false
-
+		var targetNamespaceName string
+		originNamespaceName := namespaceID
+		if namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID)); err == nil {
+			originNamespaceName = namespaceName.String()
+		}
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
@@ -159,23 +165,23 @@ func clientProviderFactory(
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
 			needsCallbackSourceHeader = true
+			if namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(variant.Worker.GetNamespaceId())); err == nil {
+				targetNamespaceName = namespaceName.String()
+			}
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
-
-		httpCaller := httpClient.Do
-		if clusterID != "" {
-			httpCaller = func(r *http.Request) (*http.Response, error) {
-				if needsCallbackSourceHeader {
-					r.Header.Set(nexusCallbackSourceHeader, clusterID)
-				}
-				resp, callErr := httpClient.Do(r)
-				// nexusrpc.HTTPClient does not return the raw HTTP response, so copy the failure-source header into the call context.
-				commonnexus.SetFailureSourceOnContext(ctx, resp)
-				return resp, callErr
+		httpCaller := func(r *http.Request) (*http.Response, error) {
+			telemetry.MarkNexusHTTPRequest(r, originNamespaceName, targetNamespaceName)
+			if needsCallbackSourceHeader && clusterID != "" {
+				r.Header.Set(nexusCallbackSourceHeader, clusterID)
 			}
+			resp, callErr := httpClient.Do(r)
+			if clusterID != "" {
+				commonnexus.SetFailureSourceOnContext(ctx, resp)
+			}
+			return resp, callErr
 		}
-
 		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 			BaseURL:    url,
 			Service:    service,

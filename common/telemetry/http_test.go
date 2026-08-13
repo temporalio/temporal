@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -183,6 +184,41 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		require.NotContains(t, attrs, "http.response.payload")
 		require.NotContains(t, attrs, "http.request.headers.request-header")
 		require.NotContains(t, attrs, "http.response.headers.response-header")
+	})
+
+	// Nexus client spans need routing and request identifiers for correlation.
+	t.Run("AnnotatesNexusRequest", func(t *testing.T) {
+		t.Parallel()
+
+		traceEnv := newHTTPTraceEnv(t)
+		rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       http.NoBody,
+				Header:     http.Header{},
+				Request:    r,
+			}, nil
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+		req.Header.Set(nexusrpc.HeaderRequestID, "request-id")
+		MarkNexusHTTPRequest(req, "caller-namespace", "target-namespace")
+
+		resp, err := rt.RoundTrip(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		require.Equal(t, map[string]any{
+			"http.request.method":       "GET",
+			"http.response.status_code": int64(http.StatusOK),
+			"network.protocol.version":  "1.1",
+			"server.address":            "example.com",
+			"temporal.namespace":        "caller-namespace",
+			"temporal.nexus.namespace":  "target-namespace",
+			"temporal.nexus.request":    true,
+			"temporal.nexus.request_id": "request-id",
+			"url.full":                  "http://example.com",
+		}, traceEnv.spanAttrs())
 	})
 
 	// Debug mode adds diagnostic HTTP headers and payloads to client spans.

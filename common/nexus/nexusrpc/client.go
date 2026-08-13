@@ -273,7 +273,7 @@ func (c *HTTPClient) StartOperation(
 	if options.RequestID == "" {
 		options.RequestID = uuid.NewString()
 	}
-	request.Header.Set(headerRequestID, options.RequestID)
+	request.Header.Set(HeaderRequestID, options.RequestID)
 	request.Header.Set(headerUserAgent, userAgent)
 	addContentHeaderToHTTPHeader(reader.Header, request.Header)
 	addCallbackHeaderToHTTPHeader(options.CallbackHeader, request.Header)

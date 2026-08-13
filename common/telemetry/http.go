@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 
 	"github.com/felixge/httpsnoop"
@@ -12,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
 // HTTPClientTransportInstrumenter instruments HTTP transports with the service's tracing configuration.
@@ -80,6 +82,10 @@ func NewHTTPClientTransport(
 		rt,
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
+		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
+			annotateNexusHTTPRequest(ctx, trace.SpanFromContext(ctx))
+			return &httptrace.ClientTrace{}
+		}),
 	)
 	if isDebug {
 		rt = &debugHTTPClientTransport{rt: rt}
@@ -190,6 +196,36 @@ func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Respo
 		state.finalizeResponse = responseCapture.finalize
 	}
 	return resp, err
+}
+
+type nexusHTTPRequestKey struct{}
+
+type nexusHTTPRequestAttrs struct {
+	namespaceName       string
+	targetNamespaceName string
+	requestID           string
+}
+
+// MarkNexusHTTPRequest annotates the HTTP client span for a Nexus request.
+func MarkNexusHTTPRequest(req *http.Request, namespaceName string, targetNamespaceName string) {
+	*req = *req.WithContext(context.WithValue(req.Context(), nexusHTTPRequestKey{}, nexusHTTPRequestAttrs{
+		namespaceName:       namespaceName,
+		targetNamespaceName: targetNamespaceName,
+		requestID:           req.Header.Get(nexusrpc.HeaderRequestID),
+	}))
+}
+
+func annotateNexusHTTPRequest(ctx context.Context, span trace.Span) {
+	nexusAttrs, ok := ctx.Value(nexusHTTPRequestKey{}).(nexusHTTPRequestAttrs)
+	if !ok {
+		return
+	}
+	SetNexusSpanAttributes(span, NexusSpanAttributes{
+		Request:             true,
+		NamespaceName:       nexusAttrs.namespaceName,
+		TargetNamespaceName: nexusAttrs.targetNamespaceName,
+		RequestID:           nexusAttrs.requestID,
+	})
 }
 
 type debugHTTPHandler struct {
