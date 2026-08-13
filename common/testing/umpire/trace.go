@@ -179,6 +179,13 @@ type TraceRefinement struct {
 	AllowExtras bool
 }
 
+// CausalFootprint declares the normalized observations required inside one action window.
+type CausalFootprint struct {
+	Action     string
+	Refinement TraceRefinement
+	Causal     []TracePattern
+}
+
 // TraceMismatch describes the first refinement or causality mismatch.
 type TraceMismatch struct {
 	Index   int
@@ -233,6 +240,80 @@ func CompareTraceRefinement(spec TraceRefinement, actual Trace) error {
 		return &TraceMismatch{Index: position, Reason: "unexpected extra observation"}
 	}
 	return nil
+}
+
+// CompareCausalFootprint checks one action window's refinement and required action-start causes.
+func CompareCausalFootprint(spec CausalFootprint, actual Trace) error {
+	if spec.Action == "" {
+		return &TraceMismatch{Reason: "action name is empty"}
+	}
+	if err := CompareTraceRefinement(TraceRefinement{AllowExtras: true}, actual); err != nil {
+		return err
+	}
+	start := -1
+	finish := -1
+	var pending []int
+	for index, event := range actual.Events {
+		if event.Kind != TraceAction || event.Name != spec.Action {
+			continue
+		}
+		if event.Fields["outcome"] == ExecutionOutcomeStarted {
+			pending = append(pending, index)
+			continue
+		}
+		if len(pending) != 0 {
+			start = pending[0]
+			pending = pending[1:]
+			finish = index
+		}
+	}
+	if finish < 0 && len(pending) != 0 {
+		start = pending[0]
+	}
+	if start < 0 {
+		return &TraceMismatch{Reason: "action window start is missing", Pattern: TracePattern{Kind: TraceAction, Name: spec.Action}}
+	}
+	if finish < 0 {
+		return &TraceMismatch{Index: start + 1, Reason: "action window finish is missing", Pattern: TracePattern{Kind: TraceAction, Name: spec.Action}}
+	}
+	startKey := actual.Events[start].Key
+	for _, required := range spec.Causal {
+		matched := false
+		for index := start + 1; index < finish; index++ {
+			event := actual.Events[index]
+			if !traceMatches(required, event) {
+				continue
+			}
+			matched = true
+			if !slices.Contains(event.Causes, startKey) {
+				return &TraceMismatch{Index: index, Reason: "observation is causally disconnected from action start", Pattern: required, Event: event}
+			}
+		}
+		if !matched {
+			return &TraceMismatch{Index: start + 1, Reason: "causal observation is missing", Pattern: required}
+		}
+	}
+	seenSemantic := map[TracePattern]struct{}{}
+	for index := start + 1; index < finish; index++ {
+		event := actual.Events[index]
+		pattern := TracePattern{Kind: event.Kind, Name: event.Name}
+		if !slices.Contains(spec.Causal, pattern) {
+			continue
+		}
+		if _, duplicate := seenSemantic[pattern]; duplicate {
+			return &TraceMismatch{Index: index, Reason: "duplicate semantic observation", Pattern: pattern, Event: event}
+		}
+		seenSemantic[pattern] = struct{}{}
+	}
+	window := Trace{Events: make([]TraceEvent, finish-start+1)}
+	for index, event := range actual.Events[start : finish+1] {
+		window.Events[index] = cloneTraceEvent(event)
+		window.Events[index].Causes = nil
+	}
+	refinement := spec.Refinement
+	refinement.Required = append([]TracePattern{{Kind: TraceAction, Name: spec.Action}}, refinement.Required...)
+	refinement.Required = append(refinement.Required, TracePattern{Kind: TraceAction, Name: spec.Action})
+	return CompareTraceRefinement(refinement, window)
 }
 
 func traceMatches(pattern TracePattern, event TraceEvent) bool {

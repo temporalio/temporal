@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -20,6 +21,81 @@ var (
 type NormalizingDomain interface {
 	Domain
 	Normalize(any) (string, error)
+}
+
+// ValidatorRegistration composes mutation variants with cloning and canonical validation.
+type ValidatorRegistration struct {
+	Key       string
+	Domain    Domain
+	Clone     func(any) any
+	Normalize func(any) (string, error)
+}
+
+// ValidatorRegistry is an immutable lookup table safe for concurrent reads.
+type ValidatorRegistry struct {
+	entries map[string]ValidatorRegistration
+}
+
+// NewValidatorRegistry validates and defensively stores validator registrations.
+func NewValidatorRegistry(registrations ...ValidatorRegistration) (*ValidatorRegistry, error) {
+	registry := &ValidatorRegistry{entries: make(map[string]ValidatorRegistration, len(registrations))}
+	for _, registration := range registrations {
+		if registration.Key == "" {
+			return nil, fmt.Errorf("%w: validator key is empty", ErrUnsupportedDomain)
+		}
+		if registration.Domain == nil || registration.Normalize == nil {
+			return nil, fmt.Errorf("%w: validator %q is incomplete", ErrUnsupportedDomain, registration.Key)
+		}
+		if _, duplicate := registry.entries[registration.Key]; duplicate {
+			return nil, fmt.Errorf("%w: duplicate validator %q", ErrUnsupportedDomain, registration.Key)
+		}
+		registry.entries[registration.Key] = registration
+	}
+	return registry, nil
+}
+
+// Domain returns a validator-backed domain, or a typed unsupported lookup error.
+func (r *ValidatorRegistry) Domain(key string) (*ValidatorDomain, error) {
+	if r == nil {
+		return nil, fmt.Errorf("%w: validator registry is nil", ErrUnsupportedDomain)
+	}
+	registration, found := r.entries[key]
+	if !found {
+		return nil, fmt.Errorf("%w: no validator registered for %q", ErrUnsupportedDomain, key)
+	}
+	return &ValidatorDomain{
+		base:      registration.Domain,
+		clone:     registration.Clone,
+		normalize: registration.Normalize,
+	}, nil
+}
+
+// ValidatorDomain delegates variants to an existing domain and validates a defensive clone.
+type ValidatorDomain struct {
+	base      Domain
+	clone     func(any) any
+	normalize func(any) (string, error)
+}
+
+func (d *ValidatorDomain) Variants() []Variant {
+	if d == nil || d.base == nil {
+		return nil
+	}
+	return slices.Clone(d.base.Variants())
+}
+
+func (d *ValidatorDomain) Normalize(value any) (string, error) {
+	if d == nil || d.normalize == nil {
+		return "", fmt.Errorf("%w: validator domain is incomplete", ErrUnsupportedDomain)
+	}
+	if d.clone != nil {
+		value = d.clone(value)
+	}
+	normalized, err := d.normalize(value)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrDomainValue, err)
+	}
+	return normalized, nil
 }
 
 // EnumDomain models a finite set of numeric protobuf enum values.
@@ -201,12 +277,27 @@ func (d *PayloadDomain) Normalize(value any) (string, error) {
 	if d.maxBytes > 0 && len(payload.GetData()) > d.maxBytes {
 		return "", fmt.Errorf("%w: payload has %d bytes, maximum is %d", ErrDomainValue, len(payload.GetData()), d.maxBytes)
 	}
-	encoded, err := proto.MarshalOptions{Deterministic: true}.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("%w: encode payload: %v", ErrDomainValue, err)
+	return CanonicalProtoDigest("payload", payload)
+}
+
+// CanonicalProtoDigest returns a labeled deterministic digest without retaining serialized data.
+func CanonicalProtoDigest(label string, message proto.Message) (string, error) {
+	if label == "" {
+		return "", fmt.Errorf("%w: digest label is empty", ErrDomainValue)
 	}
-	digest := sha256.Sum256(encoded)
-	return fmt.Sprintf("sha256:%x", digest), nil
+	if message == nil || !message.ProtoReflect().IsValid() {
+		return "", fmt.Errorf("%w: digest message is nil", ErrDomainValue)
+	}
+	encoded, err := proto.MarshalOptions{Deterministic: true}.Marshal(message)
+	if err != nil {
+		return "", fmt.Errorf("%w: encode %s: %v", ErrDomainValue, label, err)
+	}
+	digestInput := make([]byte, 0, len(label)+1+len(encoded))
+	digestInput = append(digestInput, label...)
+	digestInput = append(digestInput, 0)
+	digestInput = append(digestInput, encoded...)
+	digest := sha256.Sum256(digestInput)
+	return fmt.Sprintf("%s:sha256:%x", label, digest), nil
 }
 
 // UnsupportedDomain explicitly preserves a dependency-blocked validity domain.

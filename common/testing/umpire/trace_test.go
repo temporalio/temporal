@@ -85,6 +85,65 @@ func TestCompareTraceRefinementRejectsForbiddenAndInvalidCausality(t *testing.T)
 	require.ErrorContains(t, err, "cause")
 }
 
+func TestCompareCausalFootprintSelectsActionWindow(t *testing.T) {
+	actual := Trace{Events: []TraceEvent{
+		{Key: "before", Kind: TraceFact, Name: "Before"},
+		{Key: "start", Kind: TraceAction, Name: "complete", Fields: map[string]string{"outcome": ExecutionOutcomeStarted}},
+		{Key: "scheduled", Kind: TraceFact, Name: "Scheduled", Causes: []string{"start"}},
+		{Key: "extra", Kind: TraceTransition, Name: "Started", Causes: []string{"start"}},
+		{Key: "terminal", Kind: TraceFact, Name: "Terminal", Causes: []string{"start"}},
+		{Key: "finish", Kind: TraceAction, Name: "complete", Causes: []string{"start"}, Fields: map[string]string{"outcome": ExecutionOutcomeSucceeded}},
+	}}
+	spec := CausalFootprint{
+		Action: "complete",
+		Refinement: TraceRefinement{
+			Required:    []TracePattern{{Kind: TraceFact, Name: "Scheduled"}, {Kind: TraceFact, Name: "Terminal"}},
+			Forbidden:   []TracePattern{{Kind: TraceVerdict, Name: "failure"}},
+			AllowExtras: true,
+		},
+		Causal: []TracePattern{{Kind: TraceFact, Name: "Scheduled"}, {Kind: TraceFact, Name: "Terminal"}},
+	}
+	require.NoError(t, CompareCausalFootprint(spec, actual))
+}
+
+func TestCompareCausalFootprintReportsStableMismatches(t *testing.T) {
+	base := CausalFootprint{
+		Action: "complete",
+		Refinement: TraceRefinement{
+			Required:    []TracePattern{{Kind: TraceFact, Name: "Terminal"}},
+			AllowExtras: true,
+		},
+		Causal: []TracePattern{{Kind: TraceFact, Name: "Terminal"}},
+	}
+	tests := []struct {
+		name   string
+		trace  Trace
+		reason string
+	}{
+		{name: "missing start", trace: Trace{}, reason: "window start is missing"},
+		{name: "missing finish", trace: Trace{Events: []TraceEvent{{Key: "start", Kind: TraceAction, Name: "complete", Fields: map[string]string{"outcome": ExecutionOutcomeStarted}}}}, reason: "window finish is missing"},
+		{name: "causal disconnect", trace: Trace{Events: []TraceEvent{
+			{Key: "start", Kind: TraceAction, Name: "complete", Fields: map[string]string{"outcome": ExecutionOutcomeStarted}},
+			{Key: "terminal", Kind: TraceFact, Name: "Terminal"},
+			{Key: "finish", Kind: TraceAction, Name: "complete", Causes: []string{"start"}, Fields: map[string]string{"outcome": ExecutionOutcomeSucceeded}},
+		}}, reason: "causally disconnected"},
+		{name: "duplicate semantic event", trace: Trace{Events: []TraceEvent{
+			{Key: "start", Kind: TraceAction, Name: "complete", Fields: map[string]string{"outcome": ExecutionOutcomeStarted}},
+			{Key: "terminal-1", Kind: TraceFact, Name: "Terminal", Causes: []string{"start"}},
+			{Key: "terminal-2", Kind: TraceFact, Name: "Terminal", Causes: []string{"start"}},
+			{Key: "finish", Kind: TraceAction, Name: "complete", Causes: []string{"start"}, Fields: map[string]string{"outcome": ExecutionOutcomeSucceeded}},
+		}}, reason: "duplicate semantic observation"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := CompareCausalFootprint(base, test.trace)
+			require.ErrorContains(t, err, test.reason)
+			var mismatch *TraceMismatch
+			require.ErrorAs(t, err, &mismatch)
+		})
+	}
+}
+
 func TestWriteTraceFileAtomicallyPersistsCompleteTrace(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "traces", "trace.json")
 	trace := Trace{Complete: true, Events: []TraceEvent{{Key: "one", Kind: TraceFact, Name: "started"}}}

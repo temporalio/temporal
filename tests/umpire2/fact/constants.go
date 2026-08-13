@@ -10,4 +10,5 @@ const (
 	NamespaceType      umpire.EntityType = "Namespace"
 	NexusOperationType umpire.EntityType = "NexusOperation"
 	ActivityType       umpire.EntityType = "Activity"
+	CallbackType       umpire.EntityType = "Callback"
 )

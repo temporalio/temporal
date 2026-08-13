@@ -60,3 +60,44 @@ func TestDefaultRelationsDeriveNexusActivityLinksFromEitherSide(t *testing.T) {
 	require.Equal(t, []umpire.EntityID{operation}, store.Targets(ActivityNexusRelation, activity))
 	require.Len(t, store.Snapshot(), 2)
 }
+
+func TestDefaultRelationsDeriveIdempotentCallbackTargets(t *testing.T) {
+	compiled, err := Default()
+	require.NoError(t, err)
+	store, err := compiled.NewRelationStore()
+	require.NoError(t, err)
+	callback := umpire.NewEntityID(model.CallbackType, "namespace\x00callback")
+	operation := umpire.NewEntityID(model.NexusOperationType, "namespace\x00operation")
+	handlerRun := umpire.NewEntityID(model.WorkflowRunType, "namespace\x00handler-run")
+	facts := []umpire.Fact{
+		&fact.NexusCallbackObservation{NamespaceID: "namespace", CallbackID: "callback", OperationID: "operation"},
+		&fact.NexusCallbackObservation{NamespaceID: "namespace", CallbackID: "callback", OperationID: "operation"},
+		&fact.WorkflowCallbackAttachment{NamespaceID: "namespace", CallbackID: "callback", HandlerRunID: "handler-run"},
+	}
+
+	require.Empty(t, compiled.ApplyRelations(store, facts))
+	require.Equal(t, []umpire.EntityID{operation}, store.Targets(CallbackOperationRelation, callback))
+	require.Equal(t, []umpire.EntityID{handlerRun}, store.Targets(CallbackHandlerRunRelation, callback))
+	require.Equal(t, []umpire.EntityID{callback}, store.Sources(CallbackHandlerRunRelation, handlerRun))
+	require.Len(t, store.Snapshot(), 2)
+}
+
+func TestDefaultRelationsRejectCallbackConflictsWithoutReplacingAcceptedEdge(t *testing.T) {
+	compiled, err := Default()
+	require.NoError(t, err)
+	store, err := compiled.NewRelationStore()
+	require.NoError(t, err)
+	callbackFact := func(operation string) umpire.Fact {
+		return &fact.NexusCallbackObservation{NamespaceID: "namespace", CallbackID: "callback", OperationID: operation}
+	}
+	require.Empty(t, compiled.ApplyRelations(store, []umpire.Fact{callbackFact("accepted")}))
+	errs := compiled.ApplyRelations(store, []umpire.Fact{callbackFact("conflict")})
+	require.Len(t, errs, 1)
+	require.ErrorIs(t, errs[0], umpire.ErrRelationCardinality)
+	require.Equal(t, []umpire.EntityID{
+		umpire.NewEntityID(model.NexusOperationType, "namespace\x00accepted"),
+	}, store.Targets(CallbackOperationRelation, umpire.NewEntityID(model.CallbackType, "namespace\x00callback")))
+
+	require.Equal(t, 1, store.PurgeScope(umpire.NewEntityID(model.NamespaceType, "namespace")))
+	require.Empty(t, store.Snapshot())
+}

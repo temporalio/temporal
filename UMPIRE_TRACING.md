@@ -2,8 +2,9 @@
 
 > **Status: design with a focused implementation.** Dynamic footprint learning, reconciliation,
 > novelty-guided fault scheduling, bounded normalized semantic recording, atomic persistence, and
-> ordered/causal refinement comparison are implemented. Checked-in operational golden traces and
-> cross-task causal association remain planned.
+> ordered/causal refinement comparison are implemented. Both runtimes now emit normalized action
+> windows and verdicts, and four checked-in Temporal causal footprints reconcile those windows.
+> Raw operational golden traces and cross-task causal association remain planned.
 
 How Umpire can learn, cache, and fault-test the *underlying operations* a model transition
 actually performs — **without hard-coding either the faults or the gRPC/persistence calls they
@@ -368,8 +369,9 @@ op** and a fixed budget, and `log()` what was skipped (no silent truncation).
 
 ## Status
 
-Nothing here is built. The **seams** it stands on are: `chasm.transition` delimiters + Monitor
-span ingestion (built), the gRPC `RPCFaultGenerator` (built, PR #9076), the persistence-interceptor
-seam (present, `nil`), and `EntityPath` routing (built). The first shippable unit is **Phase 0–1**
-(gRPC footprint capture + golden drift test), which delivers living docs and drift detection with
-no fault machinery at all.
+The semantic core is built: both execution engines emit one neutral action/verdict contract; the
+v2 Monitor records bounded `TraceAction`/`TraceVerdict` events; facts, transitions, and relations
+reference active action starts; and checked-in Temporal `CausalFootprint` declarations reconcile
+ordinary completion, completion-before-start, cancellation retry, and shared-handler attachment.
+Raw cross-service trace-derived operation footprints, persistence interception, and fault targeting
+remain the heavier opt-in phases described above.

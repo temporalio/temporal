@@ -11,9 +11,95 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/tests/umpire2/fact"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+func TestImportPollNexusResponseCapturesCallbackTarget(t *testing.T) {
+	token, err := (&commonnexus.CallbackTokenGenerator{}).Tokenize(&tokenspb.NexusOperationCompletion{
+		NamespaceId: "namespace-id",
+		WorkflowId:  "operation-id",
+		RunId:       "run-id",
+		Ref:         &persistencespb.StateMachineRef{},
+		RequestId:   "operation-request-id",
+	})
+	require.NoError(t, err)
+	response := &workflowservice.PollNexusTaskQueueResponse{Request: &nexuspb.Request{
+		Variant: &nexuspb.Request_StartOperation{StartOperation: &nexuspb.StartOperationRequest{
+			RequestId:      "handler-request-id",
+			Callback:       "https://callback",
+			CallbackHeader: map[string]string{commonnexus.CallbackTokenHeader: token},
+		}},
+	}}
+
+	decoded := fromResponses(&workflowservice.PollNexusTaskQueueRequest{}, response, "namespace-id")
+	require.Len(t, decoded, 1)
+	observed, ok := decoded[0].(*fact.NexusCallbackObservation)
+	require.True(t, ok)
+	require.Equal(t, "operation-id", observed.OperationID)
+}
+
+func TestImportStartWorkflowResponseReturnsEveryCallbackAttachment(t *testing.T) {
+	callback := func(url string) *commonpb.Callback {
+		return &commonpb.Callback{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: url}}}
+	}
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:          "handler-id",
+		RequestId:           "request-id",
+		CompletionCallbacks: []*commonpb.Callback{callback("https://first"), callback("https://second")},
+	}
+	response := &workflowservice.StartWorkflowExecutionResponse{RunId: "handler-run-id"}
+
+	decoded := fromResponses(request, response, "namespace-id")
+	require.Len(t, decoded, 2)
+	first, ok := decoded[0].(*fact.WorkflowCallbackAttachment)
+	require.True(t, ok)
+	second, ok := decoded[1].(*fact.WorkflowCallbackAttachment)
+	require.True(t, ok)
+	require.NotEqual(t, first.CallbackID, second.CallbackID)
+	require.Equal(t, "handler-run-id", first.HandlerRunID)
+}
+
+func TestImportHistoryResponseReturnsExistingAndTerminalFacts(t *testing.T) {
+	request := &workflowservice.GetWorkflowExecutionHistoryRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id"}}
+	response := &workflowservice.GetWorkflowExecutionHistoryResponse{History: &historypb.History{Events: []*historypb.HistoryEvent{
+		{
+			EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED,
+			Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+				NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{ScheduledEventId: 5},
+			},
+		},
+		{
+			EventId:   9,
+			EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+			Attributes: &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+				NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{ScheduledEventId: 5},
+			},
+		},
+	}}}
+
+	decoded := fromResponses(request, response, "namespace-id")
+	require.Len(t, decoded, 2)
+	_, ok := decoded[0].(*fact.NexusOperationCancelRequestFailed)
+	require.True(t, ok)
+	_, ok = decoded[1].(*fact.NexusOperationTerminal)
+	require.True(t, ok)
+}
+
+func TestImportDescribeMutableStateReturnsExplicitEmptyStorageSnapshot(t *testing.T) {
+	request := &adminservice.DescribeMutableStateRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id"}}
+	response := &adminservice.DescribeMutableStateResponse{DatabaseMutableState: &persistencespb.WorkflowMutableState{}}
+
+	decoded := fromResponses(request, response, "namespace-id")
+	require.Len(t, decoded, 1)
+	observed, ok := decoded[0].(*fact.WorkflowNexusStorageSnapshot)
+	require.True(t, ok)
+	require.Empty(t, observed.OperationIDs)
+}
 
 func TestImportHistoryResponseCapturesNexusTimeoutSemantics(t *testing.T) {
 	request := &workflowservice.GetWorkflowExecutionHistoryRequest{

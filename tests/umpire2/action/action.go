@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testhooks"
 	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/tests/umpire2/fact"
 	"go.temporal.io/server/tests/umpire2/model"
 	"go.temporal.io/server/tests/umpire2/planner"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -60,8 +62,26 @@ func (c *Ctx) Cleanup() {
 // synchronous rejection carries only the name, but the driver knows both, so this lets the observer
 // route the rejection fact into the id-scoped model (see UMPIRE_ERR.md, Monitor.SetNamespaceID).
 func NewCtx(env Environment, endpoint string, h *ResponsePolicy, iter int) *Ctx {
-	env.GetMonitor().SetNamespaceID(env.Namespace().String(), env.NamespaceID().String())
+	monitor := env.GetMonitor()
+	monitor.SetNamespaceID(env.Namespace().String(), env.NamespaceID().String())
+	if observer, ok := monitor.(factObserver); ok {
+		h.setFactObserver(env.NamespaceID().String(), observer)
+	}
 	return &Ctx{Env: env, Endpoint: endpoint, Handler: h, Iter: iter, bind: map[string]string{}, rejects: map[string]error{}}
+}
+
+type factObserver interface {
+	ObserveFact(context.Context, umpire.Fact) error
+}
+
+// ObserveExecution forwards neutral runtime observations to the owning monitor.
+func (c *Ctx) ObserveExecution(ctx context.Context, observed umpire.ExecutionObservation) error {
+	observer, ok := c.Env.GetMonitor().(umpire.ExecutionObserver)
+	if !ok {
+		return nil
+	}
+	observed.Scope = c.Env.NamespaceID().String()
+	return observer.ObserveExecution(ctx, observed)
 }
 
 // ObserveReject implements umpire.RejectSink: it captures the synchronous outcome of an action
@@ -180,9 +200,12 @@ type ResponsePolicy struct {
 	release        chan struct{}
 	releaseOnce    sync.Once
 	onStartHook    func(context.Context, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
+	handlerLinks   []nexus.Link
 	cancelErr      error
 	captured       chan callback
 	cancelObserved chan struct{}
+	namespaceID    string
+	factObserver   factObserver
 }
 
 type callback struct{ url, token string }
@@ -205,9 +228,28 @@ func (p *ResponsePolicy) Handler() nexustest.Handler {
 			}
 			p.mu.Lock()
 			r, err, block, deferred, release, hook := p.onStart, p.startErr, p.block, p.deferred, p.release, p.onStartHook
+			links := append([]nexus.Link(nil), p.handlerLinks...)
+			namespaceID, observer := p.namespaceID, p.factObserver
 			p.mu.Unlock()
+			if observer != nil {
+				header := make(map[string]string, len(opts.CallbackHeader))
+				for key, value := range opts.CallbackHeader {
+					header[key] = value
+				}
+				observed := fact.NewNexusCallbackObservation(namespaceID, &nexuspb.StartOperationRequest{
+					RequestId:      opts.RequestID,
+					Callback:       opts.CallbackURL,
+					CallbackHeader: header,
+				})
+				if err := observer.ObserveFact(hctx, observed); err != nil {
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "umpire callback observation failed")
+				}
+			}
 			if hook != nil {
 				return hook(hctx, opts)
+			}
+			if len(links) != 0 {
+				nexus.AddHandlerLinks(hctx, links...)
 			}
 			if block {
 				<-hctx.Done() // hold the attempt so the operation stays scheduled
@@ -236,10 +278,23 @@ func (p *ResponsePolicy) Handler() nexustest.Handler {
 	}
 }
 
+func (p *ResponsePolicy) setFactObserver(namespaceID string, observer factObserver) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.namespaceID = namespaceID
+	p.factObserver = observer
+}
+
 func (p *ResponsePolicy) setStart(r nexus.HandlerStartOperationResult[any], err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.onStart, p.startErr = r, err
+}
+
+func (p *ResponsePolicy) setHandlerLinks(links ...nexus.Link) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.handlerLinks = append([]nexus.Link(nil), links...)
 }
 
 func (p *ResponsePolicy) setStartHook(hook func(context.Context, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)) {

@@ -20,6 +20,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payloads"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
@@ -33,6 +34,7 @@ import (
 type RegressionEnvironment interface {
 	Environment
 	T() *testing.T
+	AdminClient() adminservice.AdminServiceClient
 	OperatorClient() operatorservice.OperatorServiceClient
 }
 
@@ -96,6 +98,17 @@ type regressionPath struct {
 	mu           sync.RWMutex
 }
 
+func (p *regressionPath) ExecutionObserver() umpirefw.ExecutionObserver { return p }
+
+func (p *regressionPath) ObserveExecution(ctx context.Context, observed umpirefw.ExecutionObservation) error {
+	observer, ok := p.environment.GetMonitor().(umpirefw.ExecutionObserver)
+	if !ok {
+		return nil
+	}
+	observed.Scope = p.environment.NamespaceID().String()
+	return observer.ObserveExecution(ctx, observed)
+}
+
 var regressionEndpointSequence atomic.Uint64
 
 func (p *regressionPath) InstallAction(_ context.Context, step coreregress.CompletedStep, _ coreregress.Bindings) (coreregress.Cleanup, error) {
@@ -106,11 +119,22 @@ func (p *regressionPath) InstallAction(_ context.Context, step coreregress.Compl
 		p.policy.setDeferredStart(&nexus.HandlerStartOperationResultAsync{OperationToken: "umpire-regress-token"}, nil)
 	case RegressionNexusRespondStartScheduledSync:
 		p.policy.setStart(&nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil)
+		p.policy.setHandlerLinks(commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+			Namespace:  "umpire-regression",
+			WorkflowId: "handler",
+			RunId:      "handler-run",
+			Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+				RequestId: "handler-start",
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			}},
+		}))
 	case RegressionNexusScheduleDefault, RegressionNexusScheduleEmbedded, RegressionNexusSchedule,
 		RegressionNexusCompleteScheduled, RegressionNexusCompleteStarted, RegressionNexusCompleteCallbackFailed,
 		RegressionNexusCancel, RegressionNexusCancelWithRetry, RegressionNexusTimeout, RegressionNexusStartNewHandler, RegressionNexusStartAttachHandler,
 		RegressionNexusCompleteFromHandler, RegressionWorkflowComplete, RegressionWorkflowObserveRunID:
 		// Proactive realizations perform their work in Fire.
+	case RegressionObserve:
+		// Observation realizations perform their work in Reconcile.
 	case RegressionNexusStartActivity:
 		p.policy.setStartHook(func(ctx context.Context, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			return p.startActivityFromHandler(ctx, step.Action, options)
@@ -268,10 +292,6 @@ func (p *regressionPath) startHandlerOperation(ctx context.Context, action corer
 	p.context.Bind(handlerSymbol, p.handlerID)
 	bindings[operationSymbol] = operationID
 	bindings[handlerSymbol] = p.handlerID
-	p.localFacts[semanticAtomKey(coreregress.CompletedAtom{
-		Predicate: "nexus.handler_workflow",
-		Arguments: []coreregress.Argument{action.Arguments[0], action.Arguments[1]},
-	})] = true
 	return nil
 }
 

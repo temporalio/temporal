@@ -1,12 +1,45 @@
 package umpire
 
 import (
+	"fmt"
 	"math"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+func TestCanonicalProtoDigestIsDeterministicAndNonSecret(t *testing.T) {
+	left, err := structpb.NewStruct(map[string]any{"second": "secret", "first": 1.0})
+	require.NoError(t, err)
+	right, err := structpb.NewStruct(map[string]any{"first": 1.0, "second": "secret"})
+	require.NoError(t, err)
+
+	leftDigest, err := CanonicalProtoDigest("payload", left)
+	require.NoError(t, err)
+	rightDigest, err := CanonicalProtoDigest("payload", right)
+	require.NoError(t, err)
+	require.Equal(t, leftDigest, rightDigest)
+	require.True(t, strings.HasPrefix(leftDigest, "payload:sha256:"))
+	require.NotContains(t, leftDigest, "secret")
+
+	otherLabel, err := CanonicalProtoDigest("failure", left)
+	require.NoError(t, err)
+	require.NotEqual(t, leftDigest, otherLabel)
+}
+
+func TestCanonicalProtoDigestRejectsInvalidInput(t *testing.T) {
+	_, err := CanonicalProtoDigest("", &wrapperspb.StringValue{Value: "value"})
+	require.ErrorIs(t, err, ErrDomainValue)
+	_, err = CanonicalProtoDigest("payload", nil)
+	require.ErrorIs(t, err, ErrDomainValue)
+	_, err = CanonicalProtoDigest("payload", &wrapperspb.StringValue{Value: string([]byte{0xff})})
+	require.ErrorIs(t, err, ErrDomainValue)
+}
 
 func TestEnumDomainProducesOutOfDomainVariantAndCanonicalValue(t *testing.T) {
 	domain, err := NewEnumDomain([]int32{0, 1, 2})
@@ -66,4 +99,92 @@ func TestUnsupportedDomainIsExplicit(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupportedDomain)
 	require.ErrorContains(t, err, "validator registry unavailable")
 	require.NotErrorIs(t, err, ErrDomainValue)
+}
+
+func TestValidatorRegistryValidatesRegistrationAndLookup(t *testing.T) {
+	base, err := NewIntegerDomain(0, 10)
+	require.NoError(t, err)
+	registration := ValidatorRegistration{
+		Key:    "message.field",
+		Domain: base,
+		Normalize: func(value any) (string, error) {
+			return base.Normalize(value)
+		},
+	}
+	registry, err := NewValidatorRegistry(registration)
+	require.NoError(t, err)
+	domain, err := registry.Domain("message.field")
+	require.NoError(t, err)
+	normalized, err := domain.Normalize(int32(4))
+	require.NoError(t, err)
+	require.Equal(t, "4", normalized)
+	require.Len(t, domain.Variants(), 2)
+
+	_, err = registry.Domain("missing")
+	require.ErrorIs(t, err, ErrUnsupportedDomain)
+	_, err = NewValidatorRegistry(ValidatorRegistration{})
+	require.ErrorIs(t, err, ErrUnsupportedDomain)
+	_, err = NewValidatorRegistry(registration, registration)
+	require.ErrorContains(t, err, "duplicate validator")
+}
+
+func TestValidatorDomainClonesMutableValuesBeforeNormalization(t *testing.T) {
+	base := NewPayloadDomain(32)
+	registry, err := NewValidatorRegistry(ValidatorRegistration{
+		Key:    "message.payload",
+		Domain: base,
+		Clone: func(value any) any {
+			return clonePayload(value)
+		},
+		Normalize: func(value any) (string, error) {
+			payload := value.(*commonpb.Payload)
+			payload.Data[0] = 'X'
+			return base.Normalize(payload)
+		},
+	})
+	require.NoError(t, err)
+	domain, err := registry.Domain("message.payload")
+	require.NoError(t, err)
+	payload := &commonpb.Payload{Metadata: map[string][]byte{"encoding": []byte("json/plain")}, Data: []byte("secret")}
+	normalized, err := domain.Normalize(payload)
+	require.NoError(t, err)
+	require.NotContains(t, normalized, "secret")
+	require.Equal(t, []byte("secret"), payload.Data)
+}
+
+func TestValidatorRegistrySupportsConcurrentReads(t *testing.T) {
+	base, err := NewIntegerDomain(0, 10)
+	require.NoError(t, err)
+	registry, err := NewValidatorRegistry(ValidatorRegistration{
+		Key: "message.field", Domain: base, Normalize: base.Normalize,
+	})
+	require.NoError(t, err)
+	var wait sync.WaitGroup
+	results := make(chan error, 32)
+	for range 32 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			domain, err := registry.Domain("message.field")
+			if err != nil {
+				results <- err
+				return
+			}
+			value, err := domain.Normalize(int64(5))
+			if err != nil {
+				results <- err
+				return
+			}
+			if value != "5" {
+				results <- fmt.Errorf("unexpected normalized value %q", value)
+				return
+			}
+			results <- nil
+		}()
+	}
+	wait.Wait()
+	close(results)
+	for err := range results {
+		require.NoError(t, err)
+	}
 }

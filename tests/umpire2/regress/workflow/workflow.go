@@ -4,9 +4,11 @@ package workflow
 import "go.temporal.io/server/common/testing/umpire/regress"
 
 var (
-	WorkflowType = regress.EntityType("WorkflowRun")
-	StateType    = regress.ValueType("WorkflowState")
-	RunIDType    = regress.ValueType("RunID")
+	WorkflowType  = regress.EntityType("WorkflowRun")
+	StateType     = regress.ValueType("WorkflowState")
+	RunIDType     = regress.ValueType("RunID")
+	OperationType = regress.EntityType("NexusOperation")
+	CallbackType  = regress.EntityType("Callback")
 )
 
 type StateValue string
@@ -27,6 +29,16 @@ var (
 		RunIDType,
 		regress.SymbolParameter("workflow", WorkflowType),
 	)
+	callbackHandlerRunSchema = regress.RelationSchema(
+		"workflow.callback_handler_run",
+		regress.SymbolParameter("callback", CallbackType),
+		regress.SymbolParameter("handler", WorkflowType),
+	)
+	nexusStorageAbsentSchema = regress.OutcomeSchema(
+		"workflow.nexus_storage_absent",
+		regress.SymbolParameter("workflow", WorkflowType),
+		regress.SymbolParameter("operation", OperationType),
+	)
 )
 
 func State(workflow string, state StateValue) regress.Instruction {
@@ -37,5 +49,15 @@ func RunID(workflow string) regress.Projection {
 	return regress.Project(runIDSchema, regress.Symbol(workflow))
 }
 
-func StateSchema() regress.Schema { return stateSchema }
-func RunIDSchema() regress.Schema { return runIDSchema }
+func CallbackHandlerRun(callback, handler string) regress.Instruction {
+	return regress.Relation(callbackHandlerRunSchema, regress.Symbol(callback), regress.Symbol(handler))
+}
+
+func NexusStorageAbsent(workflow, operation string) regress.Instruction {
+	return regress.Outcome(nexusStorageAbsentSchema, regress.Symbol(workflow), regress.Symbol(operation))
+}
+
+func StateSchema() regress.Schema              { return stateSchema }
+func RunIDSchema() regress.Schema              { return runIDSchema }
+func CallbackHandlerRunSchema() regress.Schema { return callbackHandlerRunSchema }
+func NexusStorageAbsentSchema() regress.Schema { return nexusStorageAbsentSchema }

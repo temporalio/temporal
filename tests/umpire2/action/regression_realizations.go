@@ -28,6 +28,7 @@ const (
 	RegressionNexusStartActivity                      = "nexus.start_activity"
 	RegressionWorkflowComplete                        = "workflow.complete"
 	RegressionWorkflowObserveRunID                    = "workflow.observe_run_id"
+	RegressionObserve                                 = "temporal.observe"
 )
 
 func RegressionNexusRespondStart(from, response string) string {

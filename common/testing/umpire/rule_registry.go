@@ -23,13 +23,13 @@ func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *ModelState,
 	}
 	rc := &SafetyContext{
 		ruleContext: ruleContext{
-			Context:  ctx,
-			Now:      time.Now(),
+			Context:    ctx,
+			Now:        time.Now(),
 			ModelState: registry,
-			Logger:   logger,
-			Config:   config,
-			state:    st,
-			ruleName: rule.Name(),
+			Logger:     logger,
+			Config:     config,
+			state:      st,
+			ruleName:   rule.Name(),
 		},
 	}
 	rule.CheckSafety(rc)
@@ -46,13 +46,13 @@ func CheckLivenessRule(ctx context.Context, rule LivenessRule, registry *ModelSt
 	}
 	rc := &LivenessContext{
 		ruleContext: ruleContext{
-			Context:  ctx,
-			Now:      time.Now(),
+			Context:    ctx,
+			Now:        time.Now(),
 			ModelState: registry,
-			Logger:   logger,
-			Config:   config,
-			state:    st,
-			ruleName: rule.Name(),
+			Logger:     logger,
+			Config:     config,
+			state:      st,
+			ruleName:   rule.Name(),
 		},
 	}
 	rule.CheckLiveness(rc)
@@ -109,7 +109,7 @@ type ruleState struct {
 type ruleContext struct {
 	context.Context
 	Now             time.Time
-	ModelState        *ModelState
+	ModelState      *ModelState
 	Logger          log.Logger
 	Config          RuleConfig
 	sinceGeneration uint64    // only query entities changed after this generation
@@ -240,13 +240,14 @@ type RuleRegistry struct {
 	states   map[string]*ruleState
 
 	ruleModelState *ModelState
-	logger       log.Logger
-	config       RuleConfig
+	logger         log.Logger
+	config         RuleConfig
 
 	// conformance dedup: per entity key, how many recorded illegal transitions have
 	// already been surfaced as violations (see checkConformance).
-	conformanceMu   sync.Mutex
-	reportedIllegal map[string]int
+	conformanceMu       sync.Mutex
+	reportedIllegal     map[string]int
+	recordedConformance map[EntityID]map[string]Violation
 }
 
 // NewRuleRegistry creates a new rulebook.
@@ -355,7 +356,7 @@ func (r *RuleRegistry) Check(ctx context.Context, final bool, scope *EntityID) [
 		base := ruleContext{
 			Context:         ctx,
 			Now:             now,
-			ModelState:        r.ruleModelState,
+			ModelState:      r.ruleModelState,
 			Logger:          r.logger,
 			Config:          r.config,
 			sinceGeneration: st.lastGeneration,
@@ -395,8 +396,73 @@ func (r *RuleRegistry) Check(ctx context.Context, final bool, scope *EntityID) [
 	// fire-time. This is not a pluggable rule — it runs for every Lifecycled entity,
 	// always, as the model judging its own transitions.
 	allViolations = append(allViolations, r.checkConformance(scope)...)
+	allViolations = append(allViolations, r.recordedConformanceViolations(scope)...)
 
 	return allViolations
+}
+
+// RecordConformance retains one scoped, deduplicated conformance violation until the scope is purged.
+func (r *RuleRegistry) RecordConformance(scope EntityID, key string, violation Violation) {
+	if scope.Type == "" || scope.ID == "" || key == "" {
+		return
+	}
+	if violation.Rule == "" {
+		violation.Rule = "Conformance"
+	}
+	violation.Tags = cloneViolationTags(violation.Tags)
+	r.conformanceMu.Lock()
+	defer r.conformanceMu.Unlock()
+	if r.recordedConformance == nil {
+		r.recordedConformance = map[EntityID]map[string]Violation{}
+	}
+	if r.recordedConformance[scope] == nil {
+		r.recordedConformance[scope] = map[string]Violation{}
+	}
+	if _, exists := r.recordedConformance[scope][key]; !exists {
+		r.recordedConformance[scope][key] = violation
+	}
+}
+
+func (r *RuleRegistry) recordedConformanceViolations(scope *EntityID) []Violation {
+	r.conformanceMu.Lock()
+	defer r.conformanceMu.Unlock()
+	type entry struct {
+		scope EntityID
+		key   string
+		value Violation
+	}
+	var entries []entry
+	for recordedScope, violations := range r.recordedConformance {
+		if scope != nil && recordedScope != *scope {
+			continue
+		}
+		for key, violation := range violations {
+			entries = append(entries, entry{scope: recordedScope, key: key, value: violation})
+		}
+	}
+	slices.SortFunc(entries, func(left, right entry) int {
+		if result := strings.Compare(left.scope.String(), right.scope.String()); result != 0 {
+			return result
+		}
+		return strings.Compare(left.key, right.key)
+	})
+	result := make([]Violation, len(entries))
+	for index, recorded := range entries {
+		result[index] = recorded.value
+		result[index].Tags = cloneViolationTags(recorded.value.Tags)
+	}
+	return result
+}
+
+func cloneViolationTags(tags map[string]string) map[string]string {
+	if tags == nil {
+		return nil
+	}
+	result := make(map[string]string, len(tags))
+	for key, value := range tags {
+		result[key] = value
+	}
+	return result
 }
 
 // checkConformance surfaces the illegal transitions the model recorded at fire-time
@@ -466,6 +532,7 @@ func (r *RuleRegistry) PurgeScope(root EntityID) {
 			delete(r.reportedIllegal, k)
 		}
 	}
+	delete(r.recordedConformance, root)
 	r.conformanceMu.Unlock()
 }
 

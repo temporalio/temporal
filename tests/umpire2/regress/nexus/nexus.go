@@ -17,6 +17,9 @@ var (
 	RPCType       = regress.ValueType("RPC")
 	ActivityType  = regress.EntityType("Activity")
 	WorkflowType  = regress.EntityType("WorkflowRun")
+	CallbackType  = regress.EntityType("Callback")
+	DigestType    = regress.ValueType("Digest")
+	LinkType      = regress.ValueType("LinkEndpoint")
 )
 
 type StateValue string
@@ -83,6 +86,11 @@ var (
 		regress.SymbolParameter("operation", OperationType),
 		regress.SymbolParameter("handler", WorkflowType),
 	)
+	scheduleEmbeddedSchema = regress.ActionSchema(
+		"nexus.schedule_embedded_with_caller",
+		regress.SymbolParameter("operation", OperationType),
+		regress.SymbolParameter("caller", WorkflowType),
+	)
 	startActivitySchema = regress.ActionSchema(
 		"nexus.start_activity",
 		regress.SymbolParameter("operation", OperationType),
@@ -107,6 +115,21 @@ var (
 		"nexus.start_to_close",
 		regress.SymbolParameter("operation", OperationType),
 		regress.LiteralParameter("duration", DurationType),
+	)
+	callbackOperationSchema = regress.RelationSchema(
+		"nexus.callback_operation",
+		regress.SymbolParameter("callback", CallbackType),
+		regress.SymbolParameter("operation", OperationType),
+	)
+	resultDigestSchema = regress.OutcomeSchema(
+		"nexus.result_digest",
+		regress.SymbolParameter("operation", OperationType),
+		regress.LiteralParameter("digest", DigestType),
+	)
+	linkEndpointSchema = regress.OutcomeSchema(
+		"nexus.link_endpoint",
+		regress.SymbolParameter("operation", OperationType),
+		regress.LiteralParameter("endpoint", LinkType),
 	)
 	dropSchema = regress.PolicySchema(
 		"nexus.drop",
@@ -154,6 +177,10 @@ func Schedule(operation string, option ScheduleOption) regress.Instruction {
 	return regress.Action(scheduleSchema, regress.Symbol(operation), regress.Literal(option.startToClose))
 }
 
+func ScheduleEmbedded(operation, caller string) regress.Instruction {
+	return regress.Action(scheduleEmbeddedSchema, regress.Symbol(operation), regress.Symbol(caller))
+}
+
 type StartTarget struct {
 	handler string
 }
@@ -176,6 +203,18 @@ func ChildOf(operation, caller string) regress.Instruction {
 	return regress.Relation(childOfSchema, regress.Symbol(operation), regress.Symbol(caller))
 }
 
+func CallbackOperation(callback, operation string) regress.Instruction {
+	return regress.Relation(callbackOperationSchema, regress.Symbol(callback), regress.Symbol(operation))
+}
+
+func ResultDigest(operation, digest string) regress.Instruction {
+	return regress.Outcome(resultDigestSchema, regress.Symbol(operation), regress.Literal(digest))
+}
+
+func LinkEndpoint(operation, endpoint string) regress.Instruction {
+	return regress.Outcome(linkEndpointSchema, regress.Symbol(operation), regress.Literal(endpoint))
+}
+
 func Drop(name rpc.Name) regress.Instruction {
 	return regress.Policy(dropSchema, regress.Literal(name))
 }
@@ -192,12 +231,16 @@ func CancelWithRetrySchema() regress.Schema { return cancelWithRetrySchema }
 func CancelRequestFailedSchema() regress.Schema {
 	return cancelRequestFailedSchema
 }
-func ScheduleSchema() regress.Schema         { return scheduleSchema }
-func StartSchema() regress.Schema            { return startSchema }
-func StartActivitySchema() regress.Schema    { return startActivitySchema }
-func LinkedToActivitySchema() regress.Schema { return linkedToActivitySchema }
-func HandlerWorkflowSchema() regress.Schema  { return handlerWorkflowSchema }
-func ChildOfSchema() regress.Schema          { return childOfSchema }
-func StartToCloseSchema() regress.Schema     { return startToCloseSchema }
-func DropSchema() regress.Schema             { return dropSchema }
-func FailNextSchema() regress.Schema         { return failNextSchema }
+func ScheduleSchema() regress.Schema          { return scheduleSchema }
+func ScheduleEmbeddedSchema() regress.Schema  { return scheduleEmbeddedSchema }
+func StartSchema() regress.Schema             { return startSchema }
+func StartActivitySchema() regress.Schema     { return startActivitySchema }
+func LinkedToActivitySchema() regress.Schema  { return linkedToActivitySchema }
+func HandlerWorkflowSchema() regress.Schema   { return handlerWorkflowSchema }
+func ChildOfSchema() regress.Schema           { return childOfSchema }
+func StartToCloseSchema() regress.Schema      { return startToCloseSchema }
+func CallbackOperationSchema() regress.Schema { return callbackOperationSchema }
+func ResultDigestSchema() regress.Schema      { return resultDigestSchema }
+func LinkEndpointSchema() regress.Schema      { return linkEndpointSchema }
+func DropSchema() regress.Schema              { return dropSchema }
+func FailNextSchema() regress.Schema          { return failNextSchema }

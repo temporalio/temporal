@@ -11,11 +11,53 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
 	coreregress "go.temporal.io/server/common/testing/umpire/regress"
 	testmonitor "go.temporal.io/server/tests/testcore/monitor"
+	"go.temporal.io/server/tests/umpire2/fact"
 )
+
+func TestResponsePolicyEmitsCanonicalCallbackFact(t *testing.T) {
+	token, err := (&commonnexus.CallbackTokenGenerator{}).Tokenize(&tokenspb.NexusOperationCompletion{
+		NamespaceId: "namespace-id",
+		WorkflowId:  "operation-id",
+		RunId:       "run-id",
+		Ref:         &persistencespb.StateMachineRef{},
+	})
+	require.NoError(t, err)
+	observer := &capturingFactObserver{}
+	policy := NewResponsePolicy()
+	policy.setFactObserver("namespace-id", observer)
+	policy.setStart(&nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil)
+
+	_, err = policy.Handler().OnStartOperation(context.Background(), "service", "operation", nil, nexus.StartOperationOptions{
+		CallbackURL: "https://secret.example/callback",
+		CallbackHeader: nexus.Header{
+			commonnexus.CallbackTokenHeader: token,
+			"authorization":                 "secret",
+		},
+		RequestID: "handler-request-id",
+	})
+	require.NoError(t, err)
+	require.Len(t, observer.facts, 1)
+	observed, ok := observer.facts[0].(*fact.NexusCallbackObservation)
+	require.True(t, ok)
+	require.Equal(t, "operation-id", observed.OperationID)
+	require.NotContains(t, observed.CallbackID, "secret")
+}
+
+type capturingFactObserver struct {
+	facts []umpirefw.Fact
+}
+
+func (o *capturingFactObserver) ObserveFact(_ context.Context, observed umpirefw.Fact) error {
+	o.facts = append(o.facts, observed)
+	return nil
+}
 
 func TestResponsePolicyDefersStartResponseUntilReleased(t *testing.T) {
 	policy := NewResponsePolicy()

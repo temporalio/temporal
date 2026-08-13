@@ -10,8 +10,9 @@ whole-system pitch read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md); for the pieces thi
 
 > **Status: design with an implemented core.** `common/testing/umpire` now provides a deterministic,
 > constraint-aware, bounded pairwise generator with explicit invalid/unsatisfiable/limit errors.
-> Sparse path expansion and deterministic fault scheduling remain separate existing mechanisms;
-> the declarative axis-selection surface and Temporal catalog adapter below remain planned.
+> `tests/umpire2/protocol` adds a pure Temporal adapter over declaration-ordered entity, edge,
+> hosting, action-or-gap, profile, and capability data. Sparse scenario assembly, environment flags,
+> and deterministic fault scheduling remain separate follow-ups.
 
 ## Why
 

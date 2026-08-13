@@ -57,6 +57,13 @@ type ActionGap struct {
 	Reason string
 }
 
+// ActionCatalogEntry is one declaration-ordered executable action or explicit gap.
+type ActionCatalogEntry struct {
+	Key       ActionKey
+	Action    *umpire.Action
+	GapReason string
+}
+
 type compiledEntity struct {
 	new   umpire.EntityFactory
 	facts []umpire.Fact
@@ -69,9 +76,23 @@ type Protocol struct {
 	entities    map[umpire.EntityType]compiledEntity
 	actions     map[ActionKey]umpire.Action
 	gaps        map[ActionKey]string
+	actionOrder []ActionCatalogEntry
 	relations   []umpire.RelationSchema
 	derivers    []RelationDeriver
 	regression  *coreregress.Domain
+}
+
+// ActionCatalog returns a defensive declaration-ordered action and gap catalog.
+func (p *Protocol) ActionCatalog() []ActionCatalogEntry {
+	result := make([]ActionCatalogEntry, len(p.actionOrder))
+	for index, entry := range p.actionOrder {
+		result[index] = entry
+		if entry.Action != nil {
+			action := cloneAction(*entry.Action)
+			result[index].Action = &action
+		}
+	}
+	return result
 }
 
 // RelationSchemas returns a defensive copy of the protocol's relation declarations.

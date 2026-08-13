@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
 	coreregress "go.temporal.io/server/common/testing/umpire/regress"
+	"go.temporal.io/server/tests/umpire2/fact"
 	"go.temporal.io/server/tests/umpire2/model"
 	regressnexus "go.temporal.io/server/tests/umpire2/regress/nexus"
 )
@@ -153,13 +157,50 @@ func (p *regressionPath) awaitAtoms(ctx context.Context, atoms []coreregress.Com
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("%w waiting for %s", ctx.Err(), strings.Join(missing, ", "))
+			return fmt.Errorf("%w waiting for %s; callback observations: %s", ctx.Err(), strings.Join(missing, ", "), p.callbackObservationSummary())
 		case <-ticker.C:
 		}
 	}
 }
 
+func (p *regressionPath) callbackObservationSummary() string {
+	monitor, ok := p.environment.GetMonitor().(relationMonitor)
+	if !ok {
+		return "relations unavailable"
+	}
+	var callbackFacts []string
+	root := umpirefw.NewEntityID(model.NamespaceType, p.environment.NamespaceID().String())
+	for _, observed := range p.environment.GetMonitor().FactLog().QueryByID(root) {
+		switch value := observed.(type) {
+		case *fact.NexusCallbackObservation:
+			callbackFacts = append(callbackFacts, fmt.Sprintf("NexusCallback(callback=%s operation=%s malformed=%t class=%s)", value.CallbackID, value.OperationID, value.Malformed, value.ErrorClass))
+		case *fact.WorkflowCallbackAttachment:
+			callbackFacts = append(callbackFacts, fmt.Sprintf("WorkflowCallback(callback=%s run=%s malformed=%t class=%s)", value.CallbackID, value.HandlerRunID, value.Malformed, value.ErrorClass))
+		default:
+			continue
+		}
+	}
+	relations := strings.ReplaceAll(fmt.Sprint(monitor.Relations().Snapshot()), "\x00", "/")
+	return fmt.Sprintf("facts=%v relations=%s", callbackFacts, relations)
+}
+
 func (p *regressionPath) atomSatisfied(ctx context.Context, atom coreregress.CompletedAtom, bindings coreregress.Bindings, historical bool) bool {
+	if atom.Predicate == "nexus.result_digest" && len(atom.Arguments) == 2 {
+		return p.terminalObservationSatisfied(ctx, atom, bindings, func(observed *fact.NexusOperationTerminal, expected string) bool {
+			return observed.ResultDigest == expected
+		})
+	}
+	if atom.Predicate == "nexus.link_endpoint" && len(atom.Arguments) == 2 {
+		return p.terminalObservationSatisfied(ctx, atom, bindings, func(observed *fact.NexusOperationTerminal, expected string) bool {
+			return slices.Contains(observed.LinkEndpoints, expected)
+		})
+	}
+	if atom.Predicate == "workflow.nexus_storage_absent" && len(atom.Arguments) == 2 {
+		return p.nexusStorageAbsent(ctx, atom, bindings)
+	}
+	if atom.Predicate == "nexus.handler_workflow" && len(atom.Arguments) == 2 {
+		return p.handlerWorkflowRelationSatisfied(atom, bindings)
+	}
 	if atom.Predicate == "nexus.cancel_request_failed" && len(atom.Arguments) == 1 {
 		operationID, ok := bindingString(bindings, atom.Arguments[0].SymbolName)
 		return ok && (p.standaloneCancellationFailed(ctx, operationID) || p.historyContainsNexusEvent(ctx, operationID, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED))
@@ -210,6 +251,114 @@ func (p *regressionPath) atomSatisfied(ctx context.Context, atom coreregress.Com
 		}
 	}
 	return p.historyNexusStateReached(ctx, identity, state)
+}
+
+func (p *regressionPath) terminalObservationSatisfied(
+	ctx context.Context,
+	atom coreregress.CompletedAtom,
+	bindings coreregress.Bindings,
+	matches func(*fact.NexusOperationTerminal, string) bool,
+) bool {
+	workflowID, ok := bindingString(bindings, atom.Arguments[0].SymbolName)
+	if !ok {
+		return false
+	}
+	expected := fmt.Sprint(atom.Arguments[1].Value)
+	if p.findTerminalObservation(workflowID, expected, matches) {
+		return true
+	}
+	_, err := p.environment.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: p.environment.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+	})
+	return err == nil && p.findTerminalObservation(workflowID, expected, matches)
+}
+
+func (p *regressionPath) findTerminalObservation(
+	workflowID string,
+	expected string,
+	matches func(*fact.NexusOperationTerminal, string) bool,
+) bool {
+	root := umpirefw.NewEntityID(model.NamespaceType, p.environment.NamespaceID().String())
+	for _, observed := range p.environment.GetMonitor().FactLog().QueryByType(root, (&fact.NexusOperationTerminal{}).Name()) {
+		terminal, ok := observed.(*fact.NexusOperationTerminal)
+		if ok && terminal.WorkflowID == workflowID && matches(terminal, expected) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *regressionPath) nexusStorageAbsent(ctx context.Context, atom coreregress.CompletedAtom, bindings coreregress.Bindings) bool {
+	workflowID, ok := bindingString(bindings, atom.Arguments[0].SymbolName)
+	if !ok {
+		return false
+	}
+	if p.findEmptyNexusStorage(workflowID) {
+		return true
+	}
+	response, err := p.environment.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: p.environment.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		Archetype: chasm.WorkflowArchetype,
+	})
+	if err != nil || response.GetDatabaseMutableState() == nil {
+		return false
+	}
+	observed := fact.NewWorkflowNexusStorageSnapshot(
+		p.environment.NamespaceID().String(),
+		workflowID,
+		response.GetDatabaseMutableState(),
+	)
+	if observer, ok := p.environment.GetMonitor().(factObserver); ok {
+		if err := observer.ObserveFact(ctx, observed); err != nil {
+			return false
+		}
+	}
+	return len(observed.OperationIDs) == 0
+}
+
+func (p *regressionPath) findEmptyNexusStorage(workflowID string) bool {
+	root := umpirefw.NewEntityID(model.NamespaceType, p.environment.NamespaceID().String())
+	observed := p.environment.GetMonitor().FactLog().QueryByType(root, (&fact.WorkflowNexusStorageSnapshot{}).Name())
+	for i := len(observed) - 1; i >= 0; i-- {
+		snapshot, ok := observed[i].(*fact.WorkflowNexusStorageSnapshot)
+		if ok && snapshot.WorkflowID == workflowID {
+			return len(snapshot.OperationIDs) == 0
+		}
+	}
+	return false
+}
+
+type relationMonitor interface {
+	Relations() *umpirefw.RelationStore
+}
+
+func (p *regressionPath) handlerWorkflowRelationSatisfied(atom coreregress.CompletedAtom, bindings coreregress.Bindings) bool {
+	operationID, ok := bindingString(bindings, atom.Arguments[0].SymbolName)
+	if !ok {
+		return false
+	}
+	handlerID, ok := bindingString(bindings, atom.Arguments[1].SymbolName)
+	if !ok {
+		return false
+	}
+	monitor, ok := p.environment.GetMonitor().(relationMonitor)
+	if !ok {
+		return false
+	}
+	namespaceID := p.environment.NamespaceID().String()
+	operation := umpirefw.NewEntityID(model.NexusOperationType, namespaceID+"\x00"+operationID)
+	handler := umpirefw.NewEntityID(model.WorkflowType, namespaceID+"\x00"+handlerID)
+	handlerRuns := monitor.Relations().Targets(model.WorkflowRunsRelation, handler)
+	for _, callback := range monitor.Relations().Sources(model.CallbackOperationRelation, operation) {
+		for _, run := range monitor.Relations().Targets(model.CallbackHandlerRunRelation, callback) {
+			if slices.Contains(handlerRuns, run) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (p *regressionPath) standaloneCancellationFailed(ctx context.Context, operationID string) bool {

@@ -7,7 +7,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/workflowservice/v1"
-	matchingservice "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/fact"
@@ -85,6 +86,11 @@ func (d *FactDecoder) ImportResponse(req, resp any, namespaceID string) umpire.F
 	return fromResponse(req, resp, namespaceID)
 }
 
+// ImportResponses converts a gRPC request+response pair to every recognized fact.
+func (d *FactDecoder) ImportResponses(req, resp any, namespaceID string) []umpire.Fact {
+	return fromResponses(req, resp, namespaceID)
+}
+
 // ImportRejection converts a rejected gRPC request (request + error + resolved namespace id) to a
 // fact, or nil if the request/rejection is not modeled. See fact.NexusOperationRejected and
 // UMPIRE_ERR.md.
@@ -98,13 +104,22 @@ func (d *FactDecoder) ImportRejection(req any, err error, namespaceID string) um
 
 // fromResponse creates a fact from a gRPC request+response pair, or nil if unrecognized.
 func fromResponse(req, resp any, namespaceID string) umpire.Fact {
+	facts := fromResponses(req, resp, namespaceID)
+	if len(facts) == 0 {
+		return nil
+	}
+	return facts[0]
+}
+
+// fromResponses creates every fact from a gRPC request+response pair.
+func fromResponses(req, resp any, namespaceID string) []umpire.Fact {
 	switch req := req.(type) {
 	case *workflowservice.DescribeActivityExecutionRequest:
 		response, ok := resp.(*workflowservice.DescribeActivityExecutionResponse)
 		if !ok || response.GetInfo() == nil {
 			return nil
 		}
-		return fact.NewActivityExecutionSnapshot(namespaceID, req.GetActivityId(), response.GetInfo().GetStatus(), response.GetInfo().GetLinks())
+		return []umpire.Fact{fact.NewActivityExecutionSnapshot(namespaceID, req.GetActivityId(), response.GetInfo().GetStatus(), response.GetInfo().GetLinks())}
 	case *workflowservice.DescribeNexusOperationExecutionRequest:
 		response, ok := resp.(*workflowservice.DescribeNexusOperationExecutionResponse)
 		if !ok || response.GetInfo() == nil {
@@ -113,13 +128,30 @@ func fromResponse(req, resp any, namespaceID string) umpire.Fact {
 		snapshot := fact.NewNexusOperationExecutionSnapshot(namespaceID, req.GetOperationId(), response.GetInfo().GetLinks())
 		snapshot.CancellationState = response.GetInfo().GetCancellationInfo().GetState()
 		snapshot.CancellationFailure = response.GetInfo().GetCancellationInfo().GetLastAttemptFailure().GetMessage()
-		return snapshot
+		return []umpire.Fact{snapshot}
+	case *workflowservice.PollNexusTaskQueueRequest:
+		response, ok := resp.(*workflowservice.PollNexusTaskQueueResponse)
+		if !ok || response.GetRequest().GetStartOperation() == nil {
+			return nil
+		}
+		return []umpire.Fact{fact.NewNexusCallbackObservation(namespaceID, response.GetRequest().GetStartOperation())}
+	case *workflowservice.StartWorkflowExecutionRequest:
+		response, ok := resp.(*workflowservice.StartWorkflowExecutionResponse)
+		if !ok || response.GetRunId() == "" {
+			return nil
+		}
+		facts := make([]umpire.Fact, 0, len(req.GetCompletionCallbacks()))
+		for _, callback := range req.GetCompletionCallbacks() {
+			facts = append(facts, fact.NewWorkflowCallbackAttachment(namespaceID, req.GetWorkflowId(), response.GetRunId(), req.GetRequestId(), callback))
+		}
+		return facts
 	case *workflowservice.GetWorkflowExecutionHistoryRequest:
 		response, ok := resp.(*workflowservice.GetWorkflowExecutionHistoryResponse)
 		if !ok || response.GetHistory() == nil {
 			return nil
 		}
 		startToClose := make(map[int64]time.Duration)
+		var facts []umpire.Fact
 		for _, event := range response.GetHistory().GetEvents() {
 			if attributes := event.GetNexusOperationScheduledEventAttributes(); attributes != nil {
 				startToClose[event.GetEventId()] = attributes.GetStartToCloseTimeout().AsDuration()
@@ -130,13 +162,13 @@ func fromResponse(req, resp any, namespaceID string) umpire.Fact {
 			if attributes == nil {
 				continue
 			}
-			return fact.NewNexusOperationCancelRequestFailed(
+			facts = append(facts, fact.NewNexusOperationCancelRequestFailed(
 				namespaceID,
 				req.GetExecution().GetWorkflowId(),
 				strconv.FormatInt(attributes.GetScheduledEventId(), 10),
 				strconv.FormatInt(attributes.GetRequestedEventId(), 10),
 				attributes.GetFailure().GetMessage(),
-			)
+			))
 		}
 		for _, event := range response.GetHistory().GetEvents() {
 			attributes := event.GetNexusOperationTimedOutEventAttributes()
@@ -144,16 +176,27 @@ func fromResponse(req, resp any, namespaceID string) umpire.Fact {
 				continue
 			}
 			cause := attributes.GetFailure().GetCause()
-			return fact.NewNexusOperationHistorySnapshot(
+			facts = append(facts, fact.NewNexusOperationHistorySnapshot(
 				namespaceID,
 				req.GetExecution().GetWorkflowId(),
 				strconv.FormatInt(attributes.GetScheduledEventId(), 10),
 				startToClose[attributes.GetScheduledEventId()],
 				cause.GetTimeoutFailureInfo().GetTimeoutType(),
 				cause.GetMessage(),
-			)
+			))
 		}
-		return nil
+		for _, event := range response.GetHistory().GetEvents() {
+			if terminal := fact.NewNexusOperationTerminal(namespaceID, req.GetExecution().GetWorkflowId(), event); terminal != nil {
+				facts = append(facts, terminal)
+			}
+		}
+		return facts
+	case *adminservice.DescribeMutableStateRequest:
+		response, ok := resp.(*adminservice.DescribeMutableStateResponse)
+		if !ok || response.GetDatabaseMutableState() == nil || req.GetExecution().GetWorkflowId() == "" {
+			return nil
+		}
+		return []umpire.Fact{fact.NewWorkflowNexusStorageSnapshot(namespaceID, req.GetExecution().GetWorkflowId(), response.GetDatabaseMutableState())}
 	case *matchingservice.PollWorkflowTaskQueueRequest:
 		r, ok := resp.(*matchingservice.PollWorkflowTaskQueueResponse)
 		if !ok || r == nil || len(r.GetTaskToken()) == 0 {
@@ -172,7 +215,7 @@ func fromResponse(req, resp any, namespaceID string) umpire.Fact {
 			}
 			m.EntityPath = &umpire.EntityPath{EntityID: wtID, Ancestors: ancestors}
 		}
-		return m
+		return []umpire.Fact{m}
 	default:
 		return nil
 	}

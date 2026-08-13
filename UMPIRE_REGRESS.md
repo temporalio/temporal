@@ -864,12 +864,12 @@ Current migration inventory:
   cancellation. The model imports both the embedded public-history event and the standalone public
   cancellation snapshot; the original imperative test remains because it additionally compares
   two embedded operations' cancellation state and event metadata.
-- Ordinary sync completion retains its imperative test for result payload, handler-supplied
-  workflow-event links, and state-machine deletion. These need modeled payload/link predicates and
-  a terminal-storage invariant before that test can be removed.
-- Completion-before-start and shared-handler coverage retain their imperative test for callback
-  attachment request references, event timestamps, and duplicate start-response idempotency. These
-  need typed callback-reference predicates and an idempotency rule.
+- Ordinary sync completion now has a sparse proof for the canonical result digest,
+  handler-supplied workflow-event link endpoint, and explicit HSM/CHASM state-machine deletion.
+  The imperative test remains as a detailed compatibility oracle; v1 is not deleted.
+- Completion-before-start and shared-handler coverage now use normalized callback facts and typed
+  callback-operation/callback-handler-run relations. Their imperative tests remain for timestamp
+  precision and duplicate start-response behavior that is not yet a reusable global rule.
 
 ## Trade-offs
 

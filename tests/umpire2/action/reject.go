@@ -9,15 +9,22 @@ package action
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common/links"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives/timestamp"
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/model"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -88,13 +95,19 @@ func (c *Ctx) validStartBase() *workflowservice.StartNexusOperationExecutionRequ
 
 // stringDomain is the reflected domain of a proto string field: its standard invalid neighbors are
 // an empty value and an over-long one, both client-error-class (UMPIRE_ERR.md §1).
-type stringDomain struct{ overLen int }
+type stringDomain struct {
+	overLen  int
+	required bool
+}
 
 func (d stringDomain) Variants() []umpire.Variant {
-	return []umpire.Variant{
-		{Label: "empty", Class: umpire.Malformed, Mutate: func(any) any { return "" }, Expect: &umpire.Reject{}},
+	variants := []umpire.Variant{
 		{Label: "too-long", Class: umpire.Malformed, Mutate: func(any) any { return strings.Repeat("x", d.overLen) }, Expect: &umpire.Reject{}},
 	}
+	if d.required {
+		variants = append([]umpire.Variant{{Label: "empty", Class: umpire.Malformed, Mutate: func(any) any { return "" }, Expect: &umpire.Reject{}}}, variants...)
+	}
+	return variants
 }
 
 // durationDomain is the reflected domain of a google.protobuf.Duration field: its standard invalid
@@ -132,28 +145,189 @@ func reflectedEnumDomain(fd protoreflect.FieldDescriptor) umpire.Domain {
 	return domain
 }
 
+func validatorKey(message protoreflect.MessageDescriptor, field protoreflect.FieldDescriptor) string {
+	return string(message.FullName()) + "." + string(field.Name())
+}
+
+func startValidatorRegistry(msg protoreflect.ProtoMessage) (*umpire.ValidatorRegistry, error) {
+	descriptor := msg.ProtoReflect().Descriptor()
+	requiredStrings := map[protoreflect.Name]bool{
+		"namespace": true, "operation_id": true, "endpoint": true, "service": true, "operation": true,
+	}
+	var registrations []umpire.ValidatorRegistration
+	fields := descriptor.Fields()
+	for index := 0; index < fields.Len(); index++ {
+		field := fields.Get(index)
+		if field.IsList() || field.IsMap() {
+			continue
+		}
+		key := validatorKey(descriptor, field)
+		switch {
+		case field.Kind() == protoreflect.StringKind:
+			base := stringDomain{overLen: 4096, required: requiredStrings[field.Name()]}
+			registrations = append(registrations, umpire.ValidatorRegistration{
+				Key: key, Domain: base,
+				Normalize: func(value any) (string, error) {
+					text, ok := value.(string)
+					if !ok {
+						return "", fmt.Errorf("string has type %T", value)
+					}
+					if base.required && text == "" {
+						return "", errors.New("required string is empty")
+					}
+					if len(text) >= base.overLen {
+						return "", fmt.Errorf("string has %d bytes, maximum is %d", len(text), base.overLen-1)
+					}
+					return text, nil
+				},
+			})
+		case field.Kind() == protoreflect.EnumKind:
+			base := reflectedEnumDomain(field)
+			normalizing, ok := base.(umpire.NormalizingDomain)
+			if !ok {
+				return nil, fmt.Errorf("enum validator %s is not normalizing", key)
+			}
+			registrations = append(registrations, umpire.ValidatorRegistration{Key: key, Domain: base, Normalize: normalizing.Normalize})
+		case isDurationField(field):
+			registrations = append(registrations, umpire.ValidatorRegistration{
+				Key: key, Domain: durationDomain{}, Clone: cloneProtoValue,
+				Normalize: func(value any) (string, error) {
+					duration, ok := value.(*durationpb.Duration)
+					if !ok {
+						return "", fmt.Errorf("duration has type %T", value)
+					}
+					if duration == nil {
+						return "duration:zero", nil
+					}
+					if err := timestamp.ValidateAndCapProtoDuration(duration); err != nil {
+						return "", err
+					}
+					return umpire.CanonicalProtoDigest("duration", duration)
+				},
+			})
+		case isPayloadField(field):
+			base := umpire.NewPayloadDomain(2 * 1024 * 1024)
+			registrations = append(registrations, umpire.ValidatorRegistration{
+				Key: key, Domain: base, Clone: cloneProtoValue,
+				Normalize: func(value any) (string, error) {
+					input, ok := value.(*commonpb.Payload)
+					if !ok {
+						return "", fmt.Errorf("payload has type %T", value)
+					}
+					if input == nil {
+						return "payload:nil", nil
+					}
+					if err := chasmnexus.ValidatePayloadSize(input, 2*1024*1024); err != nil {
+						return "", err
+					}
+					var decoded any
+					if err := payload.Decode(input, &decoded); err != nil {
+						return "", err
+					}
+					return base.Normalize(input)
+				},
+			})
+		default:
+			continue
+		}
+	}
+	return umpire.NewValidatorRegistry(registrations...)
+}
+
+func cloneProtoValue(value any) any {
+	message, ok := value.(proto.Message)
+	if !ok || message == nil || !message.ProtoReflect().IsValid() {
+		return value
+	}
+	return proto.Clone(message)
+}
+
+type linkCollectionDomain struct {
+	maxCount int
+	maxSize  int
+}
+
+func (d linkCollectionDomain) Variants() []umpire.Variant {
+	return []umpire.Variant{{
+		Label: "too-many", Class: umpire.OutOfRange, Expect: &umpire.Reject{},
+		Mutate: func(any) any { return make([]*commonpb.Link, d.maxCount+1) },
+	}}
+}
+
+func newLinkCollectionValidatorDomain(maxCount, maxSize int) (*umpire.ValidatorDomain, error) {
+	registry, err := umpire.NewValidatorRegistry(umpire.ValidatorRegistration{
+		Key: "temporal.api.common.v1.Link[]", Domain: linkCollectionDomain{maxCount: maxCount, maxSize: maxSize},
+		Clone: func(value any) any {
+			values, _ := value.([]*commonpb.Link)
+			cloned := slices.Clone(values)
+			for index, link := range cloned {
+				if link != nil {
+					cloned[index] = proto.Clone(link).(*commonpb.Link)
+				}
+			}
+			return cloned
+		},
+		Normalize: func(value any) (string, error) {
+			values, ok := value.([]*commonpb.Link)
+			if !ok {
+				return "", fmt.Errorf("links have type %T", value)
+			}
+			if err := links.Validate(values, maxCount, maxSize); err != nil {
+				return "", err
+			}
+			digests := make([]string, 0, len(values))
+			for _, link := range values {
+				digest, err := umpire.CanonicalProtoDigest("link", link)
+				if err != nil {
+					return "", err
+				}
+				digests = append(digests, digest)
+			}
+			slices.Sort(digests)
+			return "links:" + strings.Join(digests, ","), nil
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return registry.Domain("temporal.api.common.v1.Link[]")
+}
+
+func newSignedIntegerValidatorDomain(minimum, maximum int64) (*umpire.ValidatorDomain, error) {
+	base, err := umpire.NewIntegerDomain(minimum, maximum)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := umpire.NewValidatorRegistry(umpire.ValidatorRegistration{
+		Key: "signed-integer", Domain: base, Normalize: base.Normalize,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return registry.Domain("signed-integer")
+}
+
 // reflectStartParams walks a request message's descriptor and returns a Param per scalar field the
 // reflection understands — string, enum, Duration, and Payload fields. This is the pillar-1
 // enumeration (UMPIRE_ERR.md §0): the variant set falls out of the descriptor, not hand
 // authoring. Integer domains remain a follow-up until request-specific bounds are declared.
 func reflectStartParams(msg protoreflect.ProtoMessage) []umpire.Param {
+	registry, registryErr := startValidatorRegistry(msg)
 	var params []umpire.Param
-	fields := msg.ProtoReflect().Descriptor().Fields()
+	descriptor := msg.ProtoReflect().Descriptor()
+	fields := descriptor.Fields()
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)
-		if fd.IsList() || fd.IsMap() {
+		if registryErr != nil {
+			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: umpire.NewUnsupportedDomain(registryErr.Error())})
 			continue
 		}
-		switch {
-		case fd.Kind() == protoreflect.StringKind:
-			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: stringDomain{overLen: 4096}})
-		case fd.Kind() == protoreflect.EnumKind:
-			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: reflectedEnumDomain(fd)})
-		case isDurationField(fd):
-			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: durationDomain{}})
-		case isPayloadField(fd):
-			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: umpire.NewPayloadDomain(2 * 1024 * 1024)})
+		domain, err := registry.Domain(validatorKey(descriptor, fd))
+		if err != nil {
+			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: umpire.NewUnsupportedDomain(err.Error())})
+			continue
 		}
+		params = append(params, umpire.Param{Path: string(fd.Name()), Domain: domain})
 	}
 	return params
 }
@@ -231,8 +405,22 @@ func StartFieldVariant(path string, v umpire.Variant) umpire.Action {
 // round-trip.
 func StartFieldVariants() []umpire.Action {
 	var actions []umpire.Action
-	for _, p := range reflectStartParams(&workflowservice.StartNexusOperationExecutionRequest{}) {
+	base := &workflowservice.StartNexusOperationExecutionRequest{
+		Namespace: "namespace", Identity: "identity", RequestId: "request", OperationId: "operation-id",
+		Endpoint: "endpoint", Service: "service", Operation: "operation",
+		ScheduleToCloseTimeout: durationpb.New(time.Minute), Input: payloads.MustEncodeSingle("input"),
+	}
+	message := base.ProtoReflect()
+	for _, p := range reflectStartParams(base) {
+		field := message.Descriptor().Fields().ByName(protoreflect.Name(p.Path))
+		normalizing, ok := p.Domain.(umpire.NormalizingDomain)
+		if !ok || field == nil {
+			continue
+		}
 		for _, v := range p.Domain.Variants() {
+			if _, err := normalizing.Normalize(v.Mutate(currentValue(field, message))); err == nil {
+				continue
+			}
 			actions = append(actions, StartFieldVariant(p.Path, v))
 		}
 	}

@@ -67,6 +67,14 @@ func TestRepresentativePlansCompileAgainstDefaultDomain(t *testing.T) {
 			nexus.Complete("op", nexus.Succeeded),
 			nexus.State("op", nexus.CallbackFailed),
 		),
+		"sync completion observations": coreregress.OnePath(
+			nexus.ScheduleEmbedded("op", "caller"),
+			nexus.RespondStart("op", nexus.Sync),
+			nexus.State("op", nexus.Completed),
+			nexus.ResultDigest("op", "result:sha256:canonical"),
+			nexus.LinkEndpoint("op", "workflow-event:namespace/workflow/run/request"),
+			workflow.NexusStorageAbsent("caller", "op"),
+		),
 	}
 
 	for name, plan := range tests {

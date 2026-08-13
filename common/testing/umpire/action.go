@@ -2,6 +2,7 @@ package umpire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -173,7 +174,24 @@ type EffectResolver interface {
 // action's effects have been observed. All Temporal knowledge stays behind the interfaces.
 func Drive(ctx context.Context, rc RealizeContext, oracle StateOracle, resolver EffectResolver, poll time.Duration, plan []Action) error {
 	for _, a := range plan {
+		if err := observeExecution(ctx, rc, ExecutionObservation{
+			Kind:    ExecutionActionStart,
+			Action:  a.Name,
+			Phase:   "install",
+			Outcome: ExecutionOutcomeStarted,
+		}); err != nil {
+			return fmt.Errorf("observe install %s: %w", a.Name, err)
+		}
 		if err := a.Realize.Install(rc, a); err != nil {
+			if observeErr := observeExecution(ctx, rc, ExecutionObservation{
+				Kind:       ExecutionActionFinish,
+				Action:     a.Name,
+				Phase:      "install",
+				Outcome:    ExecutionOutcomeFailed,
+				ErrorClass: ExecutionErrorClass(err),
+			}); observeErr != nil {
+				return errors.Join(fmt.Errorf("install %s: %w", a.Name, err), fmt.Errorf("observe install failure %s: %w", a.Name, observeErr))
+			}
 			return fmt.Errorf("install %s: %w", a.Name, err)
 		}
 	}
@@ -198,10 +216,36 @@ func Drive(ctx context.Context, rc RealizeContext, oracle StateOracle, resolver 
 			if sink, ok := rc.(RejectSink); ok {
 				sink.ObserveReject(a.Name, err)
 			}
+			if observeErr := observeExecution(ctx, rc, ExecutionObservation{
+				Kind:       ExecutionActionFinish,
+				Action:     a.Name,
+				Phase:      "fire",
+				Outcome:    ExecutionOutcomeRejected,
+				ErrorClass: ExecutionErrorClass(err),
+			}); observeErr != nil {
+				return fmt.Errorf("observe rejection %s: %w", a.Name, observeErr)
+			}
 			continue
 		}
 		if err != nil {
+			if observeErr := observeExecution(ctx, rc, ExecutionObservation{
+				Kind:       ExecutionActionFinish,
+				Action:     a.Name,
+				Phase:      "fire",
+				Outcome:    ExecutionOutcomeFailed,
+				ErrorClass: ExecutionErrorClass(err),
+			}); observeErr != nil {
+				return errors.Join(fmt.Errorf("fire %s: %w", a.Name, err), fmt.Errorf("observe fire failure %s: %w", a.Name, observeErr))
+			}
 			return fmt.Errorf("fire %s: %w", a.Name, err)
+		}
+		if err := observeExecution(ctx, rc, ExecutionObservation{
+			Kind:    ExecutionActionFinish,
+			Action:  a.Name,
+			Phase:   "fire",
+			Outcome: ExecutionOutcomeSucceeded,
+		}); err != nil {
+			return fmt.Errorf("observe fire %s: %w", a.Name, err)
 		}
 	}
 	// Confirm the plan's endpoint: the final action's effects must be observed. Earlier
@@ -214,11 +258,37 @@ func Drive(ctx context.Context, rc RealizeContext, oracle StateOracle, resolver 
 				continue
 			}
 			if err := awaitState(ctx, rc, oracle, poll, e.Ref, dst); err != nil {
+				if observeErr := observeExecution(ctx, rc, ExecutionObservation{
+					Kind:       ExecutionVerdict,
+					Action:     last.Name,
+					Checkpoint: "endpoint",
+					ErrorClass: ExecutionErrorClass(err),
+					Pass:       false,
+					Violations: 1,
+				}); observeErr != nil {
+					return errors.Join(fmt.Errorf("%s effect %s:%s (→%s) not confirmed: %w", last.Name, e.Ref.Var, e.Event, dst, err), fmt.Errorf("observe endpoint verdict %s: %w", last.Name, observeErr))
+				}
 				return fmt.Errorf("%s effect %s:%s (→%s) not confirmed: %w", last.Name, e.Ref.Var, e.Event, dst, err)
 			}
 		}
+		if err := observeExecution(ctx, rc, ExecutionObservation{
+			Kind:       ExecutionVerdict,
+			Action:     last.Name,
+			Checkpoint: "endpoint",
+			Pass:       true,
+		}); err != nil {
+			return fmt.Errorf("observe endpoint verdict %s: %w", last.Name, err)
+		}
 	}
 	return nil
+}
+
+func observeExecution(ctx context.Context, rc RealizeContext, observed ExecutionObservation) error {
+	observer, ok := rc.(ExecutionObserver)
+	if !ok || observer == nil {
+		return nil
+	}
+	return observer.ObserveExecution(ctx, observed)
 }
 
 // proactive reports whether an action is fired at a point (and so must wait for its

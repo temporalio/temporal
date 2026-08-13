@@ -1,9 +1,9 @@
 # UMPIRE — The Error / Divergence Model
 
-> **Status: component reference; partially implemented.** Synchronous rejection capture,
-> string/duration/enum domains, reusable integer bounds, bounded payload mutations, canonical
-> non-sensitive normalization, rejection facts, and grounded contracts are built. Request-specific
-> integer overlays and validator-registry-backed domains remain explicit follow-ups.
+> **Status: component reference; implemented adapter layer.** Synchronous rejection capture,
+> validator-backed string/duration/enum/payload/link domains, reusable signed-integer bounds,
+> canonical non-sensitive normalization, rejection facts, and grounded contracts are built. A
+> generated server-wide field-validator registry remains a future integration point.
 
 ## Why
 
@@ -342,16 +342,16 @@ Rule of thumb: **prefer the registry oracle where the field is covered and the e
 
 ## Implementation
 
-Built on top of the actions model (`UMPIRE_ACTIONS.md`). The Temporal concretions live in
-`tests/umpirev1/action/reject.go`; the abstract schema is in `common/testing/umpire`.
+Built on top of the actions model (`UMPIRE_ACTIONS.md`). The current Temporal concretions live in
+`tests/umpire2/action/reject.go`; the abstract schema is in `common/testing/umpire`.
 
 - **E1 — rejection round-trip (done).** `umpire.Action.Reject` + the `RejectSink` seam: `Drive`
   records a Fire outcome on a `Reject` action (error, or nil if accepted) and continues instead of
   aborting. The declared `StartUnknownEndpoint` (well-formed request, non-existent endpoint →
   NotFound) exercises it.
 - **E2 — per-field variant enumeration (done).** The `Param` / `Domain` / `Variant` /
-  `ValidityClass` schema, plus `reflectStringParams` walking the request descriptor to mint a
-  `stringDomain`'s standard mutants per scalar string field. `rpcStartMutated` applies a single
+  `ValidityClass` schema, plus `reflectStartParams` walking the request descriptor and resolving
+  each supported field through its full-name validator key. `rpcStartMutated` applies a single
   field mutation to the valid base via protoreflect; `StartFieldVariants` enumerates the negative
   set. Exercised by `TestProbeNexusReflectedVariant` (`operation_id=empty`).
 - **E3 — rejection judged by the model (done).** A rejection is now a *fact*, not a domain-side
@@ -365,21 +365,22 @@ Built on top of the actions model (`UMPIRE_ACTIONS.md`). The Temporal concretion
   `SetNamespaceID`). A non-client-error failure produces no fact, so its absent transition surfaces
   as drift rather than a pass. `reject` is the 17th modelled edge and is covered by the exploration.
 
-- **E5 (partial) — non-string domains (done for Duration).** The descriptor reflection generalizes
-  past strings: `reflectStartParams` now also emits a `durationDomain` per `google.protobuf.Duration`
-  field, and `rpcStartMutated` sets fields by kind (string or Duration message) via `protoValue` /
-  `currentValue`. Exercised by `TestProbeNexusReflectedDurationVariant` (`schedule_to_start_timeout=
-  negative` → `InvalidArgument`). Enum / int / payload domains remain.
+- **E4 — validator-backed domains (adapter layer done).** The generic immutable registry composes
+  mutation domains with cloning and canonical validation. Temporal adapters reuse the existing
+  duration, link, payload decoder/size, enum, and signed-integer validators. Mutable protobufs are
+  cloned before validators normalize them, and live variants are emitted only when the adapter
+  predicts rejection.
+- **E5 — non-string domains (done for the current request).** Duration, enum, and payload fields
+  are descriptor-selected; link collections and explicit signed integer bounds are available for
+  requests that declare those shapes. Named field deferrals keep the mutation gate exhaustive.
 
 ### What remains
 
-- **E4 — blocked on the validator registry.** The differential oracle (§6) runs the server's own
-  generated `ValidateAndNormalize` in-process. That generator
-  ([temporalio/temporal#10200](https://github.com/temporalio/temporal/pull/10200)) is **not in this
-  tree** (no `common/validation`, no `validator_gen.go`), so E4 cannot be built against a real
-  registry yet. Until then the generic contract + grounding (E1–E3) is the oracle.
-- **E5 (remaining)** — enum / int / payload domains, and variant coverage as a planning goal (drive
-  every reflected variant, grounding each outcome) alongside edge coverage.
+- **Generated registry adoption.** The proposed generated `ValidateAndNormalize` registry is not
+  in this tree yet. When it lands, its functions can replace the current Temporal adapter entries
+  without changing the generic registry or authoring API.
+- **Variant coverage as a planning goal.** Drive every adapter-predicted rejection alongside edge
+  coverage rather than relying only on focused live examples.
 - **Normalize outcomes** — §2's `Normalize` (e.g. empty `request_id` → UUID) is designed but not yet
   driven; today such a variant would read as an accepted request.
 - **Rejection classes as terminals** — E3 models all client-error rejections as one `rejected`

@@ -7,10 +7,12 @@ import (
 )
 
 const (
-	WorkflowRunsRelation         umpire.RelationType = "workflow-runs"
+	WorkflowRunsRelation         umpire.RelationType = model.WorkflowRunsRelation
 	WorkflowRunSuccessorRelation umpire.RelationType = "workflow-run-successor"
 	NexusActivityRelation        umpire.RelationType = "nexus-activity"
 	ActivityNexusRelation        umpire.RelationType = "activity-nexus"
+	CallbackOperationRelation    umpire.RelationType = model.CallbackOperationRelation
+	CallbackHandlerRunRelation   umpire.RelationType = model.CallbackHandlerRunRelation
 )
 
 func defaultRelationSchemas() []umpire.RelationSchema {
@@ -43,11 +45,25 @@ func defaultRelationSchemas() []umpire.RelationSchema {
 			SourceCardinality: umpire.RelationOne,
 			TargetCardinality: umpire.RelationOne,
 		},
+		{
+			Type:              CallbackOperationRelation,
+			Source:            model.CallbackType,
+			Target:            model.NexusOperationType,
+			SourceCardinality: umpire.RelationOne,
+			TargetCardinality: umpire.RelationMany,
+		},
+		{
+			Type:              CallbackHandlerRunRelation,
+			Source:            model.CallbackType,
+			Target:            model.WorkflowRunType,
+			SourceCardinality: umpire.RelationOne,
+			TargetCardinality: umpire.RelationMany,
+		},
 	}
 }
 
 func defaultRelationDerivers() []RelationDeriver {
-	return []RelationDeriver{deriveWorkflowRunRelations, deriveNexusActivityRelations}
+	return []RelationDeriver{deriveWorkflowRunRelations, deriveNexusActivityRelations, deriveCallbackRelations}
 }
 
 func deriveWorkflowRunRelations(observed umpire.Fact) []RelationMutation {
@@ -112,6 +128,33 @@ func deriveNexusActivityRelations(observed umpire.Fact) []RelationMutation {
 			}})
 		}
 		return result
+	default:
+		return nil
+	}
+}
+
+func deriveCallbackRelations(observed umpire.Fact) []RelationMutation {
+	switch callback := observed.(type) {
+	case *fact.NexusCallbackObservation:
+		if callback.Malformed || callback.NamespaceID == "" || callback.CallbackID == "" || callback.OperationID == "" {
+			return nil
+		}
+		return []RelationMutation{{Edge: umpire.RelationEdge{
+			Type:   CallbackOperationRelation,
+			Scope:  umpire.NewEntityID(model.NamespaceType, callback.NamespaceID),
+			Source: scopedRelationEntity(model.CallbackType, callback.NamespaceID, callback.CallbackID),
+			Target: scopedRelationEntity(model.NexusOperationType, callback.NamespaceID, callback.OperationID),
+		}}}
+	case *fact.WorkflowCallbackAttachment:
+		if callback.Malformed || callback.NamespaceID == "" || callback.CallbackID == "" || callback.HandlerRunID == "" {
+			return nil
+		}
+		return []RelationMutation{{Edge: umpire.RelationEdge{
+			Type:   CallbackHandlerRunRelation,
+			Scope:  umpire.NewEntityID(model.NamespaceType, callback.NamespaceID),
+			Source: scopedRelationEntity(model.CallbackType, callback.NamespaceID, callback.CallbackID),
+			Target: scopedRelationEntity(model.WorkflowRunType, callback.NamespaceID, callback.HandlerRunID),
+		}}}
 	default:
 		return nil
 	}

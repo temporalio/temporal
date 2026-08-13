@@ -2,8 +2,9 @@
 
 > **Status: current architecture.** The protocol-backed v2 monitor is the suite-wide `testcore`
 > default; v1 remains explicitly selectable for compatibility. V2 adds WorkflowRun, Activity,
-> Nexus link/timeout/cancellation observations, typed runtime relations, and opt-in semantic
-> coverage and normalized tracing. `UMPIRE_PLAN.md` tracks the remaining adoption work.
+> Nexus callback/completion/storage observations, typed runtime relations with durable conflict
+> violations, and opt-in semantic action coverage plus causal normalized tracing.
+> `UMPIRE_PLAN.md` tracks the remaining adoption work.
 
 How the pieces fit together. For *why* it exists read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md);
 for current status, gaps, and the rule inventory read [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).

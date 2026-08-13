@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
+	umpirefw "go.temporal.io/server/common/testing/umpire"
 	coreregress "go.temporal.io/server/common/testing/umpire/regress"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/umpire2"
@@ -23,7 +25,16 @@ import (
 )
 
 func TestSparseRegressionOrdinaryNexusCompletion(t *testing.T) {
-	plan := coreregress.OnePath(nexus.State("op", nexus.Completed))
+	resultDigest, err := umpirefw.CanonicalProtoDigest("result", payloads.MustEncodeSingle("ok"))
+	require.NoError(t, err)
+	plan := coreregress.OnePath(
+		nexus.ScheduleEmbedded("op", "caller"),
+		nexus.RespondStart("op", nexus.Sync),
+		nexus.State("op", nexus.Completed),
+		nexus.ResultDigest("op", resultDigest),
+		nexus.LinkEndpoint("op", "workflow-event:umpire-regression/handler/handler-run/handler-start"),
+		workflow.NexusStorageAbsent("caller", "op"),
+	)
 	runSparseRegression(t, plan, coreregress.Profile{Name: "local"})
 }
 

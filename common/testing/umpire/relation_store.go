@@ -45,6 +45,7 @@ var (
 // RelationError describes a rejected schema or edge mutation.
 type RelationError struct {
 	Type   RelationType
+	Scope  EntityID
 	Source EntityID
 	Target EntityID
 	Err    error
@@ -180,19 +181,19 @@ func (s *RelationStore) Remove(edge RelationEdge) (bool, error) {
 func (s *RelationStore) validateEdge(edge RelationEdge) (RelationSchema, error) {
 	schema, exists := s.schemas[edge.Type]
 	if !exists {
-		return RelationSchema{}, &RelationError{Type: edge.Type, Source: edge.Source, Target: edge.Target, Err: ErrRelationSchema, Reason: "type is not registered"}
+		return RelationSchema{}, &RelationError{Type: edge.Type, Scope: edge.Scope, Source: edge.Source, Target: edge.Target, Err: ErrRelationSchema, Reason: "type is not registered"}
 	}
 	if edge.Source.ID == "" || edge.Source.Type != schema.Source {
-		return RelationSchema{}, &RelationError{Type: edge.Type, Source: edge.Source, Target: edge.Target, Err: ErrRelationEndpoint, Reason: fmt.Sprintf("source must be a non-empty %s", schema.Source)}
+		return RelationSchema{}, &RelationError{Type: edge.Type, Scope: edge.Scope, Source: edge.Source, Target: edge.Target, Err: ErrRelationEndpoint, Reason: fmt.Sprintf("source must be a non-empty %s", schema.Source)}
 	}
 	if edge.Target.ID == "" || edge.Target.Type != schema.Target {
-		return RelationSchema{}, &RelationError{Type: edge.Type, Source: edge.Source, Target: edge.Target, Err: ErrRelationEndpoint, Reason: fmt.Sprintf("target must be a non-empty %s", schema.Target)}
+		return RelationSchema{}, &RelationError{Type: edge.Type, Scope: edge.Scope, Source: edge.Source, Target: edge.Target, Err: ErrRelationEndpoint, Reason: fmt.Sprintf("target must be a non-empty %s", schema.Target)}
 	}
 	return schema, nil
 }
 
 func relationCardinalityError(edge RelationEdge, reason string) error {
-	return &RelationError{Type: edge.Type, Source: edge.Source, Target: edge.Target, Err: ErrRelationCardinality, Reason: reason}
+	return &RelationError{Type: edge.Type, Scope: edge.Scope, Source: edge.Source, Target: edge.Target, Err: ErrRelationCardinality, Reason: reason}
 }
 
 // Targets returns a stable snapshot of targets for one relation source.

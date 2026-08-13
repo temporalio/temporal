@@ -10,8 +10,44 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/common/testing/umpire/regress"
 )
+
+func TestRunEmitsNeutralActionWindowsAndVerdicts(t *testing.T) {
+	observer := &recordingExecutionObserver{}
+	harness := &recordingHarness{observer: observer}
+	suite := regress.Suite{
+		Paths: []regress.CompletedPath{{Steps: []regress.CompletedStep{
+			{Action: regress.CompletedAction{Name: "proactive"}, Mode: regress.ProactiveAction},
+			{Action: regress.CompletedAction{Name: "reactive"}, Mode: regress.ReactiveAction},
+		}}},
+		PathCount: 1,
+	}
+
+	require.NoError(t, regress.Run(t.Context(), suite, harness))
+	require.Equal(t, []umpire.ExecutionObservation{
+		{Kind: umpire.ExecutionActionStart, Action: "proactive", Phase: "install", Outcome: umpire.ExecutionOutcomeStarted},
+		{Kind: umpire.ExecutionActionStart, Action: "reactive", Phase: "install", Outcome: umpire.ExecutionOutcomeStarted},
+		{Kind: umpire.ExecutionActionFinish, Action: "proactive", Phase: "reconcile", Outcome: umpire.ExecutionOutcomeSucceeded},
+		{Kind: umpire.ExecutionVerdict, Checkpoint: "action", Pass: true},
+		{Kind: umpire.ExecutionActionFinish, Action: "reactive", Phase: "reconcile", Outcome: umpire.ExecutionOutcomeSucceeded},
+		{Kind: umpire.ExecutionVerdict, Checkpoint: "action", Pass: true},
+		{Kind: umpire.ExecutionVerdict, Checkpoint: "quiescence", Pass: true},
+	}, observer.observations)
+}
+
+func TestRunPropagatesExecutionObserverError(t *testing.T) {
+	observerErr := errors.New("observer failed")
+	harness := &recordingHarness{observer: &recordingExecutionObserver{err: observerErr}}
+	suite := regress.Suite{
+		Paths:     []regress.CompletedPath{{Steps: []regress.CompletedStep{{Action: regress.CompletedAction{Name: "action"}, Mode: regress.ProactiveAction}}}},
+		PathCount: 1,
+	}
+
+	err := regress.Run(t.Context(), suite, harness)
+	require.ErrorIs(t, err, observerErr)
+}
 
 func TestRunExecutesPathAndCleansUpInReverseOrder(t *testing.T) {
 	harness := &recordingHarness{}
@@ -164,6 +200,20 @@ type recordingHarness struct {
 	fireErr      error
 	reconcileErr error
 	safetyErr    error
+	observer     *recordingExecutionObserver
+}
+
+type recordingExecutionObserver struct {
+	observations []umpire.ExecutionObservation
+	err          error
+}
+
+func (o *recordingExecutionObserver) ObserveExecution(_ context.Context, observed umpire.ExecutionObservation) error {
+	if o.err != nil {
+		return o.err
+	}
+	o.observations = append(o.observations, observed)
+	return nil
 }
 
 type parallelHarness struct {
@@ -215,6 +265,13 @@ func (h *recordingHarness) NewPath(_ context.Context, index int, _ regress.Compl
 
 type recordingPath struct {
 	parent *recordingHarness
+}
+
+func (p *recordingPath) ExecutionObserver() umpire.ExecutionObserver {
+	if p.parent.observer == nil {
+		return nil
+	}
+	return p.parent.observer
 }
 
 func (p *recordingPath) SetupResource(_ context.Context, resource regress.CompletedResource) (regress.Cleanup, error) {

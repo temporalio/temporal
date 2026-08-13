@@ -24,25 +24,45 @@ Current state, a critical read against the goals, gap analysis, and rule invento
   superset; v1 stays available for explicit compatibility runs.
 - **Sparse regressions:** seven functional proofs cover ordinary completion,
   completion-before-start, cancellation failure followed by terminal cancellation, shared
-  handlers, timeout, standalone Activity links, and callback-after-caller-completion. Deeper
-  imperative assertions still need callback-reference/idempotency and payload/link plus
-  terminal-storage predicates before those tests can be retired.
+  handlers, timeout, standalone Activity links, and callback-after-caller-completion. Ordinary
+  completion now also proves a canonical result digest, canonical handler link endpoint, and
+  explicit HSM/CHASM operation-storage deletion. Shared-handler resolution is grounded through
+  callback-operation and callback-handler-run relations. The imperative v1 tests remain available.
 - **Reusable slices:** typed runtime relations, semantic coverage, deterministic pairwise
-  generation, bounded normalized tracing/refinement, and enum/integer/payload error domains are
-  implemented. Broader Temporal adapters and external validator-backed domains remain follow-ups.
+  generation plus a Temporal protocol adapter, bounded normalized action/verdict tracing,
+  checked-in causal footprints, and validator-backed duration/link/payload/enum/integer domains
+  are implemented. The external generated validator registry remains a future integration point.
+
+### Bounded v2-default triage
+
+The repeatable local prefixes are:
+
+- `go test -tags test_dep ./common/testing/umpire/...`
+- `go test -tags test_dep ./tests/umpire2/...`
+- `go test -tags test_dep ./tests/testcore/...`
+- `go test -tags test_dep ./tests -run '^TestSparseRegression' -count=1`
+- `go test -tags test_dep ./tests -run '^Test(Umpire|SparseRegression)' -count=1`
+- `go test -tags test_dep ./tests -run '^TestNexus' -count=1`
+- `go test -tags test_dep ./tests -run '^Test.*Workflow' -count=1`
+
+The focused framework, v2, testcore, and sparse prefixes pass. The combined Umpire prefix retains
+the known `TestProbeNexusExploration` model-coverage expectation (17 declared Nexus edges versus
+11 exercised by that bounded probe). The broad Nexus and Workflow prefixes also reproduce the
+unrelated `TestWorkflowUpdateAsyncNexusOperation` duplicate workflow registration panic for
+`func1`; it is outside this parity change. Neither result justifies selecting v1 implicitly.
 
 ## Ordered next steps
 
-1. Run broader functional-suite triage under the v2 default and classify any model-fidelity gaps;
-   use explicit v1 only for a documented compatibility exception.
-2. Model callback-to-operation and callback-to-handler references plus duplicate-response
-   idempotency, then retire the corresponding imperative mechanics.
-3. Add hashed payload/link predicates and an explicit terminal-storage observation for ordinary
-   completion without persisting raw payload data.
-4. Wire action coverage and action/verdict trace events at the executor boundary, and add a small
-   Temporal catalog adapter over the generic pairwise generator.
-5. Extend trace association toward checked-in causal footprints and add validator-backed error
-   domains only when the server exposes a reusable validator registry.
+1. Broaden v2-default functional triage beyond the bounded prefixes and classify only reproducible
+   model-fidelity gaps; use explicit v1 solely for a documented compatibility exception.
+2. Add the remaining imperative callback assertions—request-reference timestamps and duplicate
+   response semantics—as reusable facts/rules before considering any test retirement.
+3. Extend causal association across task and process boundaries, then use the checked-in semantic
+   footprints to drive opt-in trace-derived fault targeting.
+4. Build the matrix scenario assembler and environment-flag constraints over the pure Temporal
+   catalog adapter; keep cluster creation outside matrix generation.
+5. Adopt generated request validators when they land in-tree, replacing adapter registrations
+   field-by-field without changing the generic validator-domain contract.
 
 ## Useful parity gate
 

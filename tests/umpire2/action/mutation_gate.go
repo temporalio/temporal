@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/workflowservice/v1"
+	umpirefw "go.temporal.io/server/common/testing/umpire"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -18,21 +19,10 @@ import (
 // modeled (tracked as follow-ups in UMPIRE_ERR.md). A field of such a kind is out of scope on
 // purpose; a covered kind (string / enum / Duration / Payload) must be enumerated; anything else
 // is a gap.
-var deferredMutationKinds = map[protoreflect.Kind]bool{
-	protoreflect.Int32Kind:    true,
-	protoreflect.Int64Kind:    true,
-	protoreflect.Uint32Kind:   true,
-	protoreflect.Uint64Kind:   true,
-	protoreflect.Sint32Kind:   true,
-	protoreflect.Sint64Kind:   true,
-	protoreflect.Fixed32Kind:  true,
-	protoreflect.Fixed64Kind:  true,
-	protoreflect.Sfixed32Kind: true,
-	protoreflect.Sfixed64Kind: true,
-	protoreflect.BoolKind:     true,
-	protoreflect.BytesKind:    true,
-	protoreflect.FloatKind:    true,
-	protoreflect.DoubleKind:   true,
+var deferredMutationFields = map[string]string{
+	"search_attributes": "search-attribute validation requires namespace schema state",
+	"nexus_header":      "header collection mutations require request-level aggregate limits",
+	"user_metadata":     "user-metadata limits are namespace-configured",
 }
 
 // ValidateMutationCoverage checks that the invalid-input enumeration is exhaustive over each
@@ -46,7 +36,8 @@ func ValidateMutationCoverage() error {
 	for _, req := range mutationRequests() {
 		covered := map[string]bool{}
 		for _, p := range reflectStartParams(req) {
-			covered[p.Path] = true
+			_, unsupported := p.Domain.(*umpirefw.UnsupportedDomain)
+			covered[p.Path] = !unsupported
 		}
 		name := string(req.ProtoReflect().Descriptor().Name())
 		for _, g := range fieldGaps(req, covered) {
@@ -70,21 +61,14 @@ func fieldGaps(req protoreflect.ProtoMessage, covered map[string]bool) []string 
 	fields := req.ProtoReflect().Descriptor().Fields()
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)
-		if fd.IsList() || fd.IsMap() {
-			continue // collection-mutation domains are a separate follow-up
-		}
 		name := string(fd.Name())
 		switch {
-		case fd.Kind() == protoreflect.StringKind || fd.Kind() == protoreflect.EnumKind || isDurationField(fd) || isPayloadField(fd):
-			if !covered[name] {
-				gaps = append(gaps, fmt.Sprintf("%s (%s: covered kind but not enumerated)", name, fd.Kind()))
-			}
-		case fd.Kind() == protoreflect.MessageKind:
-			// Other messages (user metadata, search attributes) are deferred.
-		case deferredMutationKinds[fd.Kind()]:
-			// Consciously out of scope.
+		case covered[name]:
+			continue
+		case deferredMutationFields[name] != "":
+			continue
 		default:
-			gaps = append(gaps, fmt.Sprintf("%s (unclassified kind %s: add a domain or defer it)", name, fd.Kind()))
+			gaps = append(gaps, fmt.Sprintf("%s (unclassified kind %s: register a validator or name a deferral)", name, fd.Kind()))
 		}
 	}
 	return gaps

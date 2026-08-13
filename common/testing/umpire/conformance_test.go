@@ -62,3 +62,27 @@ func TestRuleRegistry_ConformanceSurfacesIllegalTransitions(t *testing.T) {
 	rr.PurgeScope(NewEntityID("condEntity", "x"))
 	require.Len(t, rr.Check(ctx, true, nil), 1)
 }
+
+func TestRuleRegistry_RetainsScopedRecordedConformanceViolations(t *testing.T) {
+	ms := NewModelState()
+	rr := NewRuleRegistry()
+	require.NoError(t, rr.InitRules(ms, log.NewNoopLogger(), RuleConfig{}))
+	left := NewEntityID("Namespace", "left")
+	right := NewEntityID("Namespace", "right")
+	violation := Violation{
+		Rule:    "Conformance",
+		Message: "callback relation conflict",
+		Tags:    map[string]string{"relation": "callback-operation"},
+	}
+
+	rr.RecordConformance(left, "callback-operation:callback", violation)
+	rr.RecordConformance(left, "callback-operation:callback", violation)
+	rr.RecordConformance(right, "callback-operation:other", violation)
+	require.Len(t, rr.Check(context.Background(), false, &left), 1)
+	require.Len(t, rr.Check(context.Background(), false, &left), 1, "recorded conformance remains visible until purge")
+	require.Len(t, rr.Check(context.Background(), false, nil), 2)
+
+	rr.PurgeScope(left)
+	require.Empty(t, rr.Check(context.Background(), false, &left))
+	require.Len(t, rr.Check(context.Background(), false, &right), 1)
+}

@@ -58,6 +58,7 @@ func TestDefaultMatchesModelStateFactSet(t *testing.T) {
 		"WorkflowTaskDiscarded",
 		"WorkflowTerminated",
 		"SpeculativeWorkflowTaskScheduled",
+		"WorkflowNexusStorageSnapshot",
 		"NexusOperationScheduled",
 		"NexusOperationAttemptFailed",
 		"NexusOperationStarted",
@@ -69,7 +70,10 @@ func TestDefaultMatchesModelStateFactSet(t *testing.T) {
 		"NexusOperationCancelRequestFailed",
 		"NexusOperationExecutionSnapshot",
 		"NexusOperationHistorySnapshot",
+		"NexusOperationTerminal",
 		"ActivityExecutionSnapshot",
+		"NexusCallbackObservation",
+		"WorkflowCallbackAttachment",
 	}
 	got := make([]string, len(protocol.facts))
 	for i, fact := range protocol.facts {

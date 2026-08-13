@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"go.temporal.io/server/common/testing/umpire"
 )
 
 // Bindings contains concrete identities and values grounded while a path executes.
@@ -30,6 +32,11 @@ type PathHarness interface {
 	CheckSafety(context.Context, Checkpoint) error
 	Quiesce(context.Context) error
 	ResolveLiveness(context.Context) error
+}
+
+// ExecutionObserverProvider optionally exposes the neutral observer shared by both runtimes.
+type ExecutionObserverProvider interface {
+	ExecutionObserver() umpire.ExecutionObserver
 }
 
 type closablePath interface {
@@ -219,8 +226,27 @@ func runPath(ctx context.Context, harness PathHarness, path CompletedPath, recor
 		}
 	}
 	for _, step := range steps {
+		actionName := executionActionName(step.Action)
+		if err := observePathExecution(ctx, harness, umpire.ExecutionObservation{
+			Kind:    umpire.ExecutionActionStart,
+			Action:  actionName,
+			Phase:   "install",
+			Outcome: umpire.ExecutionOutcomeStarted,
+		}); err != nil {
+			return bindings, fmt.Errorf("observe install %s: %w", step.Action.Name, err)
+		}
 		cleanup, err := harness.InstallAction(ctx, step, bindings)
 		if err != nil {
+			observeErr := observePathExecution(ctx, harness, umpire.ExecutionObservation{
+				Kind:       umpire.ExecutionActionFinish,
+				Action:     actionName,
+				Phase:      "install",
+				Outcome:    umpire.ExecutionOutcomeFailed,
+				ErrorClass: umpire.ExecutionErrorClass(err),
+			})
+			if observeErr != nil {
+				return bindings, errors.Join(fmt.Errorf("install action %s: %w", step.Action.Name, err), fmt.Errorf("observe install failure %s: %w", step.Action.Name, observeErr))
+			}
 			return bindings, fmt.Errorf("install action %s: %w", step.Action.Name, err)
 		}
 		installed = append(installed, &activeCleanup{name: "uninstall action " + step.Action.Name, cleanup: cleanup, active: cleanup != nil})
@@ -230,6 +256,7 @@ func runPath(ctx context.Context, harness PathHarness, path CompletedPath, recor
 		return bindings, err
 	}
 	for index, step := range steps {
+		actionName := executionActionName(step.Action)
 		if err := recorder.actionBegun(ctx, pathIndex, step.Action.Name, bindings); err != nil {
 			return bindings, fmt.Errorf("write action artifact: %w", err)
 		}
@@ -240,11 +267,39 @@ func runPath(ctx context.Context, harness PathHarness, path CompletedPath, recor
 				}
 			}
 			if err := harness.Fire(ctx, step, bindings); err != nil {
+				observeErr := observePathExecution(ctx, harness, umpire.ExecutionObservation{
+					Kind:       umpire.ExecutionActionFinish,
+					Action:     actionName,
+					Phase:      "fire",
+					Outcome:    umpire.ExecutionOutcomeFailed,
+					ErrorClass: umpire.ExecutionErrorClass(err),
+				})
+				if observeErr != nil {
+					return bindings, errors.Join(fmt.Errorf("fire %s: %w", step.Action.Name, err), fmt.Errorf("observe fire failure %s: %w", step.Action.Name, observeErr))
+				}
 				return bindings, fmt.Errorf("fire %s: %w", step.Action.Name, err)
 			}
 		}
 		if err := harness.Reconcile(ctx, step, bindings); err != nil {
+			observeErr := observePathExecution(ctx, harness, umpire.ExecutionObservation{
+				Kind:       umpire.ExecutionActionFinish,
+				Action:     actionName,
+				Phase:      "reconcile",
+				Outcome:    umpire.ExecutionOutcomeFailed,
+				ErrorClass: umpire.ExecutionErrorClass(err),
+			})
+			if observeErr != nil {
+				return bindings, errors.Join(fmt.Errorf("reconcile %s: %w", step.Action.Name, err), fmt.Errorf("observe reconcile failure %s: %w", step.Action.Name, observeErr))
+			}
 			return bindings, fmt.Errorf("reconcile %s: %w", step.Action.Name, err)
+		}
+		if err := observePathExecution(ctx, harness, umpire.ExecutionObservation{
+			Kind:    umpire.ExecutionActionFinish,
+			Action:  actionName,
+			Phase:   "reconcile",
+			Outcome: umpire.ExecutionOutcomeSucceeded,
+		}); err != nil {
+			return bindings, fmt.Errorf("observe reconcile %s: %w", step.Action.Name, err)
 		}
 		if provider, ok := harness.(ArtifactFactProvider); ok {
 			if err := recorder.facts(ctx, pathIndex, provider); err != nil {
@@ -259,7 +314,14 @@ func runPath(ctx context.Context, harness PathHarness, path CompletedPath, recor
 		return bindings, fmt.Errorf("quiesce: %w", err)
 	}
 	if err := harness.CheckSafety(ctx, QuiescenceCheckpoint); err != nil {
+		observeErr := observePathVerdict(ctx, harness, QuiescenceCheckpoint, err)
+		if observeErr != nil {
+			return bindings, errors.Join(fmt.Errorf("monitor safety at quiescence: %w", err), observeErr)
+		}
 		return bindings, fmt.Errorf("monitor safety at quiescence: %w", err)
+	}
+	if err := observePathVerdict(ctx, harness, QuiescenceCheckpoint, nil); err != nil {
+		return bindings, err
 	}
 	if err := recorder.verdict(ctx, pathIndex, QuiescenceCheckpoint, bindings); err != nil {
 		return bindings, fmt.Errorf("write Monitor artifact: %w", err)
@@ -268,6 +330,13 @@ func runPath(ctx context.Context, harness PathHarness, path CompletedPath, recor
 		return bindings, fmt.Errorf("resolve liveness: %w", err)
 	}
 	return bindings, nil
+}
+
+func executionActionName(action CompletedAction) string {
+	if action.Realization != "" {
+		return action.Realization
+	}
+	return action.Name
 }
 
 func executeBoundary(
@@ -314,7 +383,14 @@ func executeBoundary(
 	}
 	if boundary > 0 || observed {
 		if err := harness.CheckSafety(ctx, checkpoint); err != nil {
+			observeErr := observePathVerdict(ctx, harness, checkpoint, err)
+			if observeErr != nil {
+				return errors.Join(fmt.Errorf("monitor safety at %s: %w", checkpoint, err), observeErr)
+			}
 			return fmt.Errorf("monitor safety at %s: %w", checkpoint, err)
+		}
+		if err := observePathVerdict(ctx, harness, checkpoint, nil); err != nil {
+			return err
 		}
 		if err := recorder.verdict(ctx, pathIndex, checkpoint, bindings); err != nil {
 			return fmt.Errorf("write Monitor artifact: %w", err)
@@ -332,6 +408,34 @@ func executeBoundary(
 		if err := recorder.policy(ctx, pathIndex, policy.Name, false, bindings); err != nil {
 			return fmt.Errorf("write policy artifact: %w", err)
 		}
+	}
+	return nil
+}
+
+func observePathExecution(ctx context.Context, harness PathHarness, observed umpire.ExecutionObservation) error {
+	provider, ok := harness.(ExecutionObserverProvider)
+	if !ok {
+		return nil
+	}
+	observer := provider.ExecutionObserver()
+	if observer == nil {
+		return nil
+	}
+	return observer.ObserveExecution(ctx, observed)
+}
+
+func observePathVerdict(ctx context.Context, harness PathHarness, checkpoint Checkpoint, verdictErr error) error {
+	observed := umpire.ExecutionObservation{
+		Kind:       umpire.ExecutionVerdict,
+		Checkpoint: checkpoint.String(),
+		Pass:       verdictErr == nil,
+	}
+	if verdictErr != nil {
+		observed.ErrorClass = umpire.ExecutionErrorClass(verdictErr)
+		observed.Violations = 1
+	}
+	if err := observePathExecution(ctx, harness, observed); err != nil {
+		return fmt.Errorf("observe Monitor verdict at %s: %w", checkpoint, err)
 	}
 	return nil
 }

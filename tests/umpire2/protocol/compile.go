@@ -178,6 +178,8 @@ func (p *Protocol) addAction(entityType umpire.EntityType, lifecycle *umpire.Lif
 		return fmt.Errorf("protocol: action %v has no matching effect", key)
 	}
 	p.actions[key] = cloneAction(binding.Action)
+	action := cloneAction(binding.Action)
+	p.actionOrder = append(p.actionOrder, ActionCatalogEntry{Key: key, Action: &action})
 	return nil
 }
 
@@ -205,6 +207,7 @@ func (p *Protocol) addGap(entityType umpire.EntityType, lifecycle *umpire.Lifecy
 		return fmt.Errorf("protocol: duplicate gap key %v", key)
 	}
 	p.gaps[key] = gap.Reason
+	p.actionOrder = append(p.actionOrder, ActionCatalogEntry{Key: key, GapReason: gap.Reason})
 	return nil
 }
 
