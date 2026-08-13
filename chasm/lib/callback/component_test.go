@@ -4,14 +4,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/testing/protorequire"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestFromAPICallback(t *testing.T) {
@@ -164,4 +167,81 @@ func TestWorkerCallbacksNotSupported(t *testing.T) {
 	require.ErrorAs(t, err, &unprocessableErr)
 	require.ErrorContains(t, err, "unprocessable callback variant")
 	require.ErrorContains(t, err, "Callback_Worker_")
+}
+
+// Verify the awkward setResult method works correctly, populating the
+// "result fields" on the CallbackInfo proto based on the Callback state.
+func TestSetResult(t *testing.T) {
+	lastAttemptFailure := &failurepb.Failure{Message: "last attempt"}
+
+	cases := []struct {
+		name string
+
+		// Callback state to set.
+		status             callbackspb.CallbackStatus
+		lastAttemptFailure *failurepb.Failure
+
+		// Expected to be either *CallbackInfo_Success or *CallbackInfo_Failure.
+		// Used because the Golang protobuf doesn't export the type.
+		wantResult any
+	}{
+		{
+			name:   "unspecified is non-terminal",
+			status: callbackspb.CALLBACK_STATUS_UNSPECIFIED,
+		},
+		{
+			name:   "standby is non-terminal",
+			status: callbackspb.CALLBACK_STATUS_STANDBY,
+		},
+		{
+			name:   "scheduled is non-terminal",
+			status: callbackspb.CALLBACK_STATUS_SCHEDULED,
+		},
+		{
+			name:               "backing off is non-terminal, even with a last attempt failure",
+			status:             callbackspb.CALLBACK_STATUS_BACKING_OFF,
+			lastAttemptFailure: lastAttemptFailure,
+		},
+		{
+			name:       "succeeded",
+			status:     callbackspb.CALLBACK_STATUS_SUCCEEDED,
+			wantResult: &callbackpb.CallbackInfo_Success{Success: &emptypb.Empty{}},
+		},
+		{
+			name:               "failed reports the terminal failure",
+			status:             callbackspb.CALLBACK_STATUS_FAILED,
+			lastAttemptFailure: lastAttemptFailure,
+			wantResult:         &callbackpb.CallbackInfo_Failure{Failure: lastAttemptFailure},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cb := &Callback{
+				CallbackState: &callbackspb.CallbackState{
+					LastAttemptFailure: tc.lastAttemptFailure,
+				},
+			}
+			cb.SetStateMachineState(tc.status)
+
+			var cbInfo callbackpb.CallbackInfo
+			cb.setResult(&cbInfo)
+
+			switch tc.wantResult.(type) {
+			case nil:
+				require.Nil(t, cbInfo.GetResult())
+			case *callbackpb.CallbackInfo_Success:
+				require.NotNil(t, cbInfo.GetSuccess())
+				require.Nil(t, cbInfo.GetFailure())
+			case *callbackpb.CallbackInfo_Failure:
+				require.Nil(t, cbInfo.GetSuccess())
+				gotFailure := cbInfo.GetFailure()
+				require.NotNil(t, gotFailure)
+				protorequire.ProtoEqual(t, tc.lastAttemptFailure, gotFailure)
+				require.NotSame(t, tc.lastAttemptFailure, gotFailure)
+			default:
+				t.Errorf("unexpected type: %T", tc.wantResult)
+			}
+		})
+	}
 }
