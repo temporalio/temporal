@@ -441,7 +441,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			},
 		})
 		s.NoError(err)
-		s.Equal(1, len(descResp.DescResponse.Pollers))
+		s.Len(descResp.DescResponse.Pollers, 1)
 		s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
 		s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
 		s.Nil(descResp.DescResponse.GetTaskQueueStatus())
@@ -581,7 +581,7 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 	if expectedError != nil {
 		s.ErrorAs(err, &expectedError)
 	} else {
-		s.Nil(err)
+		s.NoError(err)
 	}
 	wg.Wait()
 }
@@ -682,7 +682,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		NextPageToken: nil,
 	}
 
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(expectedResp, resp)
 }
 
@@ -1321,7 +1321,7 @@ func (s *matchingEngineSuite) TestAddWorkflowTaskDoesNotLoadSticky() {
 	// check loaded queues
 	s.matchingEngine.partitionsLock.RLock()
 	defer s.matchingEngine.partitionsLock.RUnlock()
-	s.Equal(0, len(s.matchingEngine.partitions))
+	s.Empty(s.matchingEngine.partitions)
 }
 
 func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
@@ -1339,7 +1339,7 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	// check loaded queues
 	s.matchingEngine.partitionsLock.RLock()
 	defer s.matchingEngine.partitionsLock.RUnlock()
-	s.Equal(0, len(s.matchingEngine.partitions))
+	s.Empty(s.matchingEngine.partitions)
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
@@ -1380,7 +1380,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		s.NoError(err)
 	}
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
+	s.Equal(taskCount, s.taskManager.getTaskCount(tlID))
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
@@ -1431,15 +1431,15 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			s.logger.Debug("empty poll returned")
 			continue
 		}
-		s.EqualValues(activityID, result.ActivityId)
-		s.EqualValues(activityType, result.ActivityType)
-		s.EqualValues(activityInput, result.Input)
-		s.EqualValues(workflowExecution, result.WorkflowExecution)
-		s.Equal(true, validateTimeRange(result.ScheduledTime.AsTime(), time.Minute))
-		s.EqualValues(time.Second*100, result.ScheduleToCloseTimeout.AsDuration())
-		s.Equal(true, validateTimeRange(result.StartedTime.AsTime(), time.Minute))
-		s.EqualValues(time.Second*50, result.StartToCloseTimeout.AsDuration())
-		s.EqualValues(time.Second*10, result.HeartbeatTimeout.AsDuration())
+		s.Equal(activityID, result.ActivityId)
+		s.Equal(activityType, result.ActivityType)
+		s.Equal(activityInput, result.Input)
+		s.Equal(workflowExecution, result.WorkflowExecution)
+		s.True(validateTimeRange(result.ScheduledTime.AsTime(), time.Minute))
+		s.Equal(time.Second*100, result.ScheduleToCloseTimeout.AsDuration())
+		s.True(validateTimeRange(result.StartedTime.AsTime(), time.Minute))
+		s.Equal(time.Second*50, result.StartToCloseTimeout.AsDuration())
+		s.Equal(time.Second*10, result.HeartbeatTimeout.AsDuration())
 		taskToken := &tokenspb.Task{
 			Attempt:          1,
 			NamespaceId:      namespaceID,
@@ -1451,10 +1451,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		}
 
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
-		s.EqualValues(serializedToken, result.TaskToken)
+		s.Equal(serializedToken, result.TaskToken)
 		i++
 	}
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
@@ -1579,13 +1579,13 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.NoError(err)
 			s.NoError(pollErr)
 			s.NotNil(result)
-			s.True(len(result.TaskToken) > 0)
+			s.NotEmpty(result.TaskToken)
 		}
 
-		s.EqualValues(activityID, result.ActivityId)
-		s.EqualValues(activityType, result.ActivityType)
-		s.EqualValues(activityInput, result.Input)
-		s.EqualValues(workflowExecution, result.WorkflowExecution)
+		s.Equal(activityID, result.ActivityId)
+		s.Equal(activityType, result.ActivityType)
+		s.Equal(activityInput, result.Input)
+		s.Equal(workflowExecution, result.WorkflowExecution)
 
 		taskToken := &tokenspb.Task{
 			Attempt:          1,
@@ -1597,7 +1597,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			ActivityType:     activityTypeName,
 		}
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
-		s.EqualValues(serializedToken, result.TaskToken)
+		s.Equal(serializedToken, result.TaskToken)
 	}
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
@@ -1622,7 +1622,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		},
 	})
 	s.NoError(err)
-	s.Equal(1, len(descResp.DescResponse.Pollers))
+	s.Len(descResp.DescResponse.Pollers, 1)
 	s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
 	s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
 	s.Equal(defaultTaskDispatchRPS, descResp.DescResponse.Pollers[0].GetRatePerSecond())
@@ -1982,11 +1982,11 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	wg.Wait()
 	totalTasks := int(taskCount) * workerCount
 	persisted := s.taskManager.getCreateTaskCount(dbq)
-	s.True(persisted < totalTasks)
+	s.Less(persisted, totalTasks)
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(dbq).rangeID)
-	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
+	s.Equal(0, s.taskManager.getTaskCount(dbq))
 
 	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
 	bufCtr := scope.Snapshot().Counters()["test.buffer_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
@@ -2107,10 +2107,10 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		}()
 	}
 	wg.Wait()
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * workerCount
 	persisted := s.taskManager.getCreateTaskCount(tlID)
-	s.True(persisted < totalTasks)
+	s.Less(persisted, totalTasks)
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
@@ -2149,7 +2149,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 			Identity:  identity,
 		},
 	}, metrics.NoopMetricsHandler)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(emptyPollActivityTaskQueueResponse, resp)
 }
 
@@ -2179,7 +2179,7 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 			Identity:  identity,
 		}},
 		metrics.NoopMetricsHandler)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(pollResp)
 
 	// Sanity check: adding a task should succeed with the queue loaded
@@ -2262,7 +2262,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		}
 	}
 
-	s.EqualValues(iterations*engineCount*taskCount, s.taskManager.getCreateTaskCount(tlID))
+	s.Equal(iterations*engineCount*taskCount, s.taskManager.getCreateTaskCount(tlID))
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
@@ -2320,10 +2320,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.EqualValues(activityID, result.ActivityId)
-				s.EqualValues(activityType, result.ActivityType)
-				s.EqualValues(activityInput, result.Input)
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
+				s.Equal(activityID, result.ActivityId)
+				s.Equal(activityType, result.ActivityType)
+				s.Equal(activityInput, result.Input)
+				s.Equal(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
 					Attempt:      1,
 					NamespaceId:  namespaceID,
@@ -2349,11 +2349,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		e.Stop()
 	}
 
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
-	s.EqualValues(totalTasks, persisted)
+	s.Equal(totalTasks, persisted)
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
@@ -2465,10 +2465,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				s.EqualValues(workflowType, result.WorkflowType)
-				s.EqualValues(startedEventID, result.StartedEventId)
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
+				s.Equal(workflowExecution, result.WorkflowExecution)
+				s.Equal(workflowType, result.WorkflowType)
+				s.Equal(startedEventID, result.StartedEventId)
+				s.Equal(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
 					Attempt:        1,
 					NamespaceId:    namespaceID,
@@ -2493,11 +2493,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		e.Stop()
 	}
 
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
-	s.EqualValues(totalTasks, persisted)
+	s.Equal(totalTasks, persisted)
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
@@ -2527,7 +2527,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 		})
 	s.NoError(err)
-	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
+	s.Equal(1, s.taskManager.getTaskCount(dbq))
 
 	task1, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
@@ -2583,7 +2583,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	}
 
 	tlMgr := s.getPhysicalTaskQueueManagerImplFromKey(dbq)
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
+	s.Equal(taskCount, s.taskManager.getTaskCount(dbq))
 
 	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
 	// at the end of this step, ackManager readLevel will also be equal to the buffer size
@@ -2600,15 +2600,15 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// This is only for unit test purpose
 	blm.taskAckManager.setReadLevel(blm.getDB().GetMaxReadLevel(0))
 	batch, err := blm.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
-	s.EqualValues(0, len(batch.tasks))
-	s.EqualValues(blm.getDB().GetMaxReadLevel(0), batch.readLevel)
+	s.NoError(err)
+	s.Empty(batch.tasks)
+	s.Equal(blm.getDB().GetMaxReadLevel(0), batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
 	blm.taskAckManager.setReadLevel(0)
 	batch, err = blm.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
-	s.EqualValues(rangeSize, len(batch.tasks))
+	s.NoError(err)
+	s.Len(batch.tasks, rangeSize)
 	s.EqualValues(rangeSize, batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
@@ -2638,9 +2638,9 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 			continue
 		}
 	}
-	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(dbq))
+	s.Equal(taskCount-rangeSize, s.taskManager.getTaskCount(dbq))
 	batch, err = blm.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
+	s.NoError(err)
 	s.True(0 < len(batch.tasks) && len(batch.tasks) <= rangeSize)
 	s.True(batch.isReadBatchDone)
 }
@@ -2717,7 +2717,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		}
 
 		tlMgr := s.getPhysicalTaskQueueManagerImplFromKey(dbq)
-		s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
+		s.Equal(taskCount, s.taskManager.getTaskCount(dbq))
 		blm := tlMgr.backlogMgr.(*backlogManagerImpl)
 
 		// wait until all tasks are loaded by into in-memory buffers by task queue manager
@@ -2862,7 +2862,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.Equal("9", curDefault.GetBuildIds()[0])
 	lastNode = curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
 	s.Equal("9.79", lastNode)
-	s.Equal(1, len(majorSets))
+	s.Len(majorSets, 1)
 
 	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
@@ -3240,7 +3240,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 			},
 		},
 	})
-	s.Assert().NoError(err)
+	s.NoError(err)
 
 	// add a task for build0, will get spooled in its set
 	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
@@ -3356,7 +3356,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	_, _, err = e.getTaskQueuePartitionManager(context.Background(), p2, true, loadCauseUnspecified)
 	s.NoError(err)
 
-	s.Equal(2, len(e.getTaskQueuePartitions(1000)))
+	s.Len(e.getTaskQueuePartitions(1000), 2)
 
 	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
 
@@ -3367,7 +3367,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	s.mockServiceResolver.EXPECT().LookupN(p2key, p2n+1).Return([]membership.HostInfo{self})
 	e.membershipChangedCh <- nil
 	time.Sleep(50 * time.Millisecond)
-	s.Equal(2, len(e.getTaskQueuePartitions(1000)), "nothing should be unloaded yet")
+	s.Len(e.getTaskQueuePartitions(1000), 2, "nothing should be unloaded yet")
 
 	// signal again but p2 doesn't belong to us anymore
 	s.mockServiceResolver.EXPECT().LookupN(p1key, p1n+1).Return([]membership.HostInfo{self})
@@ -3501,7 +3501,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 		partitionType: prtn.Kind(),
 		versioned:     "unversioned",
 	}
-	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
+	s.Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 
 }
 
@@ -3544,7 +3544,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "versionSet",
 	}
-	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
+	s.Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 }
 
 func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
@@ -3585,7 +3585,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "buildId",
 	}
-	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
+	s.Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 
 }
 
@@ -3789,12 +3789,12 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.NoError(err)
 	pqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
 
-	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
+	s.Equal(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
 
 	// Check the maxReadLevel with the value of task stored in db
 	maxTaskId, ok := s.taskManager.maxTaskID(ptq)
 	s.True(ok)
-	s.EqualValues(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
+	s.Equal(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
 
 	// validate the approximateBacklogCounter
 	s.EqualValues(taskCount*numWorkers, totalApproximateBacklogCount(pqMgr.backlogMgr))
@@ -3815,7 +3815,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	}
 	_, err = s.taskManager.CompleteTasksLessThan(context.Background(), request)
 	s.NoError(err)
-	s.EqualValues((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
+	s.Equal((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
 
 	// Add pollers which shall also load the fresher version of tqMgr
 	s.pollWorkflowTasks(workflowType, (taskCount*numWorkers)-1, ptq, taskQueue)
@@ -3827,7 +3827,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	// stopped (which would not result in resetting).
 	pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(subqueueZero, maxTaskId)
 
-	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
+	s.Equal(0, s.taskManager.getTaskCount(ptq))
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		require.Equal(collect, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")

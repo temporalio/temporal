@@ -207,7 +207,7 @@ loop:
 			if ctxErr := s.ctx.Err(); errors.Is(ctxErr, context.DeadlineExceeded) {
 				errMsg = fmt.Sprintf("Await aborted since scenario timed out after %s\n\n", s.timeout)
 			} else {
-				errMsg = fmt.Sprintf("Await aborted since scenario was cancelled")
+				errMsg = "Await aborted since scenario was cancelled"
 			}
 			break loop
 		case <-waiterCtx.Done():

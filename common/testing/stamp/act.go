@@ -77,7 +77,7 @@ func NewActorModel[AM modelAccessor](mdl AM) ActorModel[AM] {
 
 func newSeed(values ...any) int {
 	h := fnv.New32a()
-	h.Write([]byte(fmt.Sprintf("%v", values)))
+	fmt.Fprintf(h, "%v", values)
 	return int(h.Sum32())
 }
 

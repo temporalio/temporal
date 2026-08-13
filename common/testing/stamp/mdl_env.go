@@ -159,7 +159,7 @@ func (e *ModelEnv) updateIdentity(oldKey modelKey, newKey modelKey) {
 }
 
 func (e *ModelEnv) getRequire() *require.Assertions {
-	return e.testEnv.Assertions()
+	return e.Assertions()
 }
 
 func (e *ModelEnv) verify() {

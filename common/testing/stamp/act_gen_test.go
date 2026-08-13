@@ -88,7 +88,7 @@ func TestGenNext(t *testing.T) {
 		genCtx := newGenContext(0)
 		genCtx.pickChoiceFn = func(id string, count int) int {
 			require.Equal(t, "Gen[string](1,Choice(letters))", id)
-			require.Equal(t, count, 3)
+			require.Equal(t, 3, count)
 			return 1 // always pick the second choice
 		}
 

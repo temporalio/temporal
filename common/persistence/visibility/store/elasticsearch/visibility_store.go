@@ -1316,7 +1316,7 @@ func detailedErrorMessage(err error) string {
 	sb.WriteString(elasticErr.Error())
 	sb.WriteString(", root causes:")
 	for i, rootCause := range elasticErr.Details.RootCause {
-		sb.WriteString(fmt.Sprintf(" %s [type=%s]", rootCause.Reason, rootCause.Type))
+		fmt.Fprintf(&sb, " %s [type=%s]", rootCause.Reason, rootCause.Type)
 		if i != len(elasticErr.Details.RootCause)-1 {
 			sb.WriteRune(',')
 		}

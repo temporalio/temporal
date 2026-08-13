@@ -195,7 +195,7 @@ func isFromEmbedded(method reflect.Method) bool {
 		if _, ok := typ.MethodByName(method.Name); ok {
 			return true
 		}
-		if typ.Kind() == reflect.Ptr {
+		if typ.Kind() == reflect.Pointer {
 			if _, ok := typ.Elem().MethodByName(method.Name); ok {
 				return true
 			}

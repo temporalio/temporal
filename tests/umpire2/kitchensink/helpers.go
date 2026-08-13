@@ -5,8 +5,8 @@ import (
 	"math/rand"
 	"time"
 
-	"go.temporal.io/api/common/v1"
-	"go.temporal.io/api/failure/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -44,7 +44,7 @@ func ActivityNameAndArgs(act *ExecuteActivityAction) (string, []any) {
 }
 
 // ConvertFromPBRetryPolicy converts a proto RetryPolicy into an SDK RetryPolicy.
-func ConvertFromPBRetryPolicy(retryPolicy *common.RetryPolicy) *temporal.RetryPolicy {
+func ConvertFromPBRetryPolicy(retryPolicy *commonpb.RetryPolicy) *temporal.RetryPolicy {
 	if retryPolicy == nil {
 		return nil
 	}
@@ -113,7 +113,7 @@ func NoOpSingleActivityActionSet() *ActionSet {
 			{
 				Variant: &Action_ReturnResult{
 					ReturnResult: &ReturnResultAction{
-						ReturnThis: &common.Payload{},
+						ReturnThis: &commonpb.Payload{},
 					},
 				},
 			},
@@ -134,7 +134,7 @@ func ResourceConsumingActivity(bytesToAllocate uint64, cpuYieldEveryNIters uint3
 					},
 				},
 				StartToCloseTimeout: &durationpb.Duration{Seconds: runForSeconds * 2},
-				RetryPolicy: &common.RetryPolicy{
+				RetryPolicy: &commonpb.RetryPolicy{
 					MaximumAttempts:    1,
 					BackoffCoefficient: 1.0,
 				},
@@ -147,7 +147,7 @@ func NewEmptyReturnResultAction() *Action {
 	return &Action{
 		Variant: &Action_ReturnResult{
 			ReturnResult: &ReturnResultAction{
-				ReturnThis: &common.Payload{},
+				ReturnThis: &commonpb.Payload{},
 			},
 		},
 	}
@@ -285,7 +285,7 @@ func DefaultLocalActivity(activity *ExecuteActivityAction) *Action {
 	activity.Locality = &ExecuteActivityAction_IsLocal{
 		IsLocal: &emptypb.Empty{},
 	}
-	activity.RetryPolicy = &common.RetryPolicy{
+	activity.RetryPolicy = &commonpb.RetryPolicy{
 		InitialInterval:    durationpb.New(10 * time.Millisecond),
 		MaximumAttempts:    10,
 		BackoffCoefficient: 2.0,
@@ -301,7 +301,7 @@ func DefaultLocalActivity(activity *ExecuteActivityAction) *Action {
 func RemoteActivityWithRetry(startToCloseTimeout time.Duration, maxAttempts int32, initialInterval time.Duration, backoffCoefficient float64) ActionFactory[ExecuteActivityAction] {
 	return func(activity *ExecuteActivityAction) *Action {
 		activity.StartToCloseTimeout = durationpb.New(startToCloseTimeout)
-		activity.RetryPolicy = &common.RetryPolicy{
+		activity.RetryPolicy = &commonpb.RetryPolicy{
 			MaximumAttempts:    maxAttempts,
 			InitialInterval:    durationpb.New(initialInterval),
 			BackoffCoefficient: backoffCoefficient,
@@ -322,7 +322,7 @@ func RemoteActivityWithHeartbeat(startToCloseTimeout, heartbeatTimeout time.Dura
 	return func(activity *ExecuteActivityAction) *Action {
 		activity.StartToCloseTimeout = durationpb.New(startToCloseTimeout)
 		activity.HeartbeatTimeout = durationpb.New(heartbeatTimeout)
-		activity.RetryPolicy = &common.RetryPolicy{
+		activity.RetryPolicy = &commonpb.RetryPolicy{
 			MaximumAttempts:    maxAttempts,
 			InitialInterval:    durationpb.New(initialInterval),
 			BackoffCoefficient: backoffCoefficient,
@@ -407,7 +407,7 @@ func NewErrorAction(errorMessage string) *Action {
 	return &Action{
 		Variant: &Action_ReturnError{
 			ReturnError: &ReturnErrorAction{
-				Failure: &failure.Failure{
+				Failure: &failurepb.Failure{
 					Message: errorMessage,
 				},
 			},
@@ -415,7 +415,7 @@ func NewErrorAction(errorMessage string) *Action {
 	}
 }
 
-func ConvertToPayload(newInput any) *common.Payload {
+func ConvertToPayload(newInput any) *commonpb.Payload {
 	payload, err := jsonPayloadConverter.ToPayload(newInput)
 	if err != nil {
 		// this should never happen; but we don't want to swallow the error

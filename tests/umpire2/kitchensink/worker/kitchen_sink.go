@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -44,7 +44,7 @@ type KSWorkflowState struct {
 	pendingActions []workflow.Future
 }
 
-func KitchenSinkWorkflow(ctx workflow.Context, params *kitchensink.WorkflowInput) (*common.Payload, error) {
+func KitchenSinkWorkflow(ctx workflow.Context, params *kitchensink.WorkflowInput) (*commonpb.Payload, error) {
 	workflow.GetLogger(ctx).Debug("Started kitchen sink workflow")
 
 	state := KSWorkflowState{
@@ -191,7 +191,7 @@ func KitchenSinkWorkflow(ctx workflow.Context, params *kitchensink.WorkflowInput
 func (ws *KSWorkflowState) handleActionSet(
 	ctx workflow.Context,
 	set *kitchensink.ActionSet,
-) (returnValue *common.Payload, err error) {
+) (returnValue *commonpb.Payload, err error) {
 	// If these are non-concurrent, just execute and return if requested
 	if !set.Concurrent {
 		for _, action := range set.Actions {
@@ -258,7 +258,7 @@ func handleSignalDeduplication(params *kitchensink.WorkflowInput, signalID int32
 func (ws *KSWorkflowState) handleAction(
 	ctx workflow.Context,
 	action *kitchensink.Action,
-) (*common.Payload, error) {
+) (*commonpb.Payload, error) {
 	if rr := action.GetReturnResult(); rr != nil {
 		return rr.ReturnThis, nil
 	} else if re := action.GetReturnError(); re != nil {
@@ -575,7 +575,7 @@ func Heartbeat(ctx context.Context, config *kitchensink.ExecuteActivityAction_He
 }
 
 type ReturnOrErr struct {
-	retme *common.Payload
+	retme *commonpb.Payload
 	err   error
 }
 
