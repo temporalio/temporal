@@ -88,8 +88,8 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	if len(summary.FlakyTests) > 0 {
 		content += "### Flaky Tests\n\n"
 		flakyTests := summary.FlakyTests
-		if len(flakyTests) > githubSummaryMaxFlakyTests {
-			flakyTests = flakyTests[:githubSummaryMaxFlakyTests]
+		if len(flakyTests) > maxFlakyTestsPerReport {
+			flakyTests = flakyTests[:maxFlakyTestsPerReport]
 			content += fmt.Sprintf("Showing the top %d of %d flaky tests.\n\n",
 				len(flakyTests), len(summary.FlakyTests))
 		}

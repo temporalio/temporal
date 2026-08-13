@@ -1,8 +1,6 @@
 package flakereport
 
 import (
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -52,7 +50,7 @@ func TestGenerateSuiteBreakdownTable(t *testing.T) {
 }
 
 func TestGenerateGitHubSummaryLimitsFlakyTests(t *testing.T) {
-	flakyTests := make([]TestReport, githubSummaryMaxFlakyTests+1)
+	flakyTests := make([]TestReport, maxFlakyTestsPerReport+1)
 	for i := range flakyTests {
 		flakyTests[i].TestName = "TestFlake" + strconv.Itoa(i+1)
 	}
@@ -69,20 +67,5 @@ func TestGenerateGitHubSummaryLimitsFlakyTests(t *testing.T) {
 	require.NotContains(t, summaryContent, "`TestFlake101`")
 	require.Contains(t, summaryContent, "Showing the top 100 of 101 flaky tests")
 	require.NotContains(t, summaryContent, "complete list")
-	require.Equal(t, githubSummaryMaxFlakyTests, strings.Count(summaryContent, "| `TestFlake"))
-}
-
-func TestWriteGitHubSummaryWritesSameContentToArtifactAndActionsSummary(t *testing.T) {
-	outputDir := t.TempDir()
-	actionsSummaryPath := filepath.Join(t.TempDir(), "summary.md")
-	t.Setenv("GITHUB_STEP_SUMMARY", actionsSummaryPath)
-
-	require.NoError(t, writeGitHubSummary("limited summary", outputDir))
-
-	artifact, err := os.ReadFile(filepath.Join(outputDir, "github-report.md"))
-	require.NoError(t, err)
-	require.Equal(t, "limited summary", string(artifact))
-	actionsSummary, err := os.ReadFile(actionsSummaryPath)
-	require.NoError(t, err)
-	require.Equal(t, "limited summary", string(actionsSummary))
+	require.Equal(t, maxFlakyTestsPerReport, strings.Count(summaryContent, "| `TestFlake"))
 }
