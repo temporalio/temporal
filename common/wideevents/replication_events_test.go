@@ -154,6 +154,8 @@ func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePaylo
 		ParentInitiatedID:        3,
 		Details:                  map[string]any{"k": "v"},
 		NewRunID:                 "new-run",
+		SourceCluster:            "source-cluster",
+		SourceShard:              11,
 		SourceTaskID:             42,
 		IsFirstSync:              true,
 		FirstEventID:             1,
@@ -207,6 +209,9 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 		"parent_run_id":         "p-run",
 		"parent_initiated_id":   int64(3),
 		"details":               `{"k":"v"}`,
+		"source_cluster":        "source-cluster",
+		"source_shard":          int64(11),
+		"source_task_id":        int64(42),
 		"event_version_history": `[{"event_id":9,"version":5}]`,
 	}
 	// want pins each phase's complete emitted field set AND values — the published wire contract.
@@ -216,7 +221,6 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 		ReplicationSent: mergeFields(base, map[string]any{
 			"phase":          "sent",
 			"new_run_id":     "new-run",
-			"source_task_id": int64(42),
 			"is_first_sync":  true,
 			"first_event_id": int64(1),
 			"next_event_id":  int64(8),

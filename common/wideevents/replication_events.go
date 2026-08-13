@@ -56,12 +56,16 @@ type ReplicationLifecyclePayload struct {
 	// Details carries phase-specific extras, e.g. verify's expected-vs-actual comparison.
 	Details map[string]any
 
+	// SourceCluster/SourceShard/SourceTaskID identify the sending cluster, the sending shard and the
+	// sender's replication-queue task id; together they are the cross-cluster join key.
+	SourceCluster string
+	SourceShard   int32
+	SourceTaskID  int64
+
 	// sent-only
 
 	// NewRunID is the successor run a verify task targets, or whose event 1 a sync task also shipped.
 	NewRunID string
-	// SourceTaskID is the sender's replication-queue task id, for correlating with the source queue.
-	SourceTaskID int64
 	// IsFirstSync marks the first sync of a newly created run.
 	IsFirstSync bool
 	// FirstEventID/NextEventID are the task's own event range, not what the artifact carried.
@@ -167,6 +171,15 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 			attrs = append(attrs, log.Int64("parent_initiated_id", p.ParentInitiatedID))
 		}
 	}
+	if p.SourceCluster != "" {
+		attrs = append(attrs, log.String("source_cluster", p.SourceCluster))
+	}
+	if p.SourceShard != 0 {
+		attrs = append(attrs, log.Int64("source_shard", int64(p.SourceShard)))
+	}
+	if p.SourceTaskID != 0 {
+		attrs = append(attrs, log.Int64("source_task_id", p.SourceTaskID))
+	}
 	if len(p.Details) > 0 {
 		attrs = append(attrs, jsonAttr("details", p.Details))
 	}
@@ -188,9 +201,6 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyValue {
 	if p.NewRunID != "" {
 		attrs = append(attrs, log.String("new_run_id", p.NewRunID))
-	}
-	if p.SourceTaskID != 0 {
-		attrs = append(attrs, log.Int64("source_task_id", p.SourceTaskID))
 	}
 	attrs = append(attrs, log.Bool("is_first_sync", p.IsFirstSync))
 	if p.FirstEventID != 0 {
