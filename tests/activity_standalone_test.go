@@ -9902,6 +9902,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		tests := []struct {
 			Name     string
 			Callback *commonpb.Callback
+			ErrMsg   string
 		}{
 			{
 				"worker",
@@ -9914,10 +9915,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 						},
 					},
 				},
+				// The callback is well-formed, but the Worker kind is not enabled for
+				// standalone activities.
+				"worker callbacks are not enabled for this execution type",
 			},
 			{
 				"nil",
 				&commonpb.Callback{},
+				"unknown callback variant",
 			},
 		}
 		for _, test := range tests {
@@ -9940,7 +9945,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 
 				var unimplementedErr *serviceerror.Unimplemented
 				require.ErrorAs(t, err, &unimplementedErr)
-				require.ErrorContains(t, err, "unknown callback variant")
+				require.ErrorContains(t, err, test.ErrMsg)
 			})
 		}
 	})

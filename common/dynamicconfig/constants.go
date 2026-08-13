@@ -1090,6 +1090,12 @@ so forwarding by endpoint ID will not work out of the box.`,
 		8*1024,
 		`FrontendCallbackHeaderMaxSize is the maximum accumulated size of callback header keys and values`,
 	)
+
+	// Configuration for the callbacks that can be attached to Workflows are defined
+	// in the chasm/lib/callback package.
+	// - frontend.enabledWorkflowCallbackKinds
+	// - frontend.enabledWorkflowUpdateCallbackKinds
+
 	MaxCallbacksPerWorkflow = NewNamespaceIntSetting(
 		"system.maxCallbacksPerWorkflow",
 		32,

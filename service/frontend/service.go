@@ -215,6 +215,10 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.AddressMatchRules]
 
+	// Which callback kinds may be attached to a workflow jor workflow update execution.
+	WorkflowCallbackKinds       dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.EnabledCallbackKinds]
+	WorkflowUpdateCallbackKinds dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.EnabledCallbackKinds]
+
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
@@ -408,6 +412,8 @@ func NewConfig(
 		CallbackURLMaxLength:           dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		CallbackHeaderMaxSize:          dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		MaxCallbacksPerWorkflow:        dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		WorkflowCallbackKinds:          callback.EnabledWorkflowCallbackKinds.Get(dc),
+		WorkflowUpdateCallbackKinds:    callback.EnabledWorkflowUpdateCallbackKinds.Get(dc),
 		MaxNexusOperationTokenLength:   nexusoperations.MaxOperationTokenLength.Get(dc),
 		NexusRequestHeadersBlacklist:   dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
 		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),
