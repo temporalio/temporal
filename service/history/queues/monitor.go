@@ -27,7 +27,7 @@ type (
 		SetSlicePendingTaskCount(slice Slice, count int)
 
 		GetReaderWatermark(readerID int64) (tasks.Key, bool)
-		SetReaderWatermark(readerID int64, watermark tasks.Key)
+		SetReaderWatermark(readerID int64, watermark tasks.Key, moreTasks bool)
 
 		GetTotalSliceCount() int
 		GetSliceCount(readerID int64) int
@@ -74,7 +74,10 @@ type (
 
 	readerProgress struct {
 		watermark tasks.Key
-		attempts  int
+		// attempts counts reads that ended at watermark with more pages left to load,
+		// which is a reader that cannot get past this one second. A task added to the
+		// shard produces a read with no next page, so those do not count.
+		attempts int
 	}
 
 	sliceStats struct {
@@ -151,7 +154,7 @@ func (m *monitorImpl) GetReaderWatermark(readerID int64) (tasks.Key, bool) {
 	return stats.progress.watermark, true
 }
 
-func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key) {
+func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key, moreTasks bool) {
 	// TODO: currently only tracking default reader progress for scheduled queue
 	if readerID != DefaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
 		return
@@ -165,10 +168,10 @@ func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key) {
 
 	stats := m.readerStats[readerID]
 	if stats.progress.watermark.CompareTo(watermark) != 0 {
-		stats.progress = readerProgress{
-			watermark: watermark,
-			attempts:  1,
-		}
+		stats.progress = readerProgress{watermark: watermark}
+	}
+
+	if !moreTasks {
 		m.readerStats[readerID] = stats
 		return
 	}

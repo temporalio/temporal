@@ -12,6 +12,8 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+var monitorTestFireTime = time.Unix(1000, 0).UTC()
+
 type (
 	monitorSuite struct {
 		suite.Suite
@@ -104,7 +106,7 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	s.False(ok)
 
 	now := time.Now().Truncate(monitorWatermarkPrecision)
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	watermark, ok := s.monitor.GetReaderWatermark(DefaultReaderId)
 	s.True(ok)
 	s.Equal(tasks.NewKey(
@@ -114,7 +116,7 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 
 	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
 		now = now.Add(time.Millisecond * 100)
-		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	}
 
 	alert := <-s.alertCh
@@ -130,7 +132,7 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	}
 	s.Equal(expectedAlert, *alert)
 
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	select {
 	case <-s.alertCh:
 		s.Fail("should have only one outstanding slice count alert")
@@ -138,9 +140,81 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	}
 
 	s.monitor.ResolveAlert(alert.AlertType)
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	alert = <-s.alertCh
 	s.Equal(expectedAlert, *alert)
+}
+
+func (s *monitorSuite) receivedStuckAlert() bool {
+	select {
+	case alert := <-s.alertCh:
+		s.Equal(AlertTypeReaderStuck, alert.AlertType)
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_DrainedReadsNeitherCountNorReset() {
+	key := tasks.NewKey(monitorTestFireTime, 1)
+	criticalAttempts := s.monitor.options.ReaderStuckCriticalAttempts()
+
+	// Interleaving drained reads distinguishes ignoring them from resetting prior attempts.
+	s.monitor.SetReaderWatermark(DefaultReaderId, key, false)
+	for i := 0; i != criticalAttempts-1; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, key, true)
+		s.monitor.SetReaderWatermark(DefaultReaderId, key, false)
+	}
+	s.False(s.receivedStuckAlert(), "only reads that left tasks behind should count toward the threshold")
+
+	s.monitor.SetReaderWatermark(DefaultReaderId, key, true)
+	s.True(s.receivedStuckAlert(), "expected an alert once enough reads had left tasks behind")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_DrainedReadRecordsItsWatermark() {
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), false)
+
+	watermark, ok := s.monitor.GetReaderWatermark(DefaultReaderId)
+	s.True(ok)
+	s.Equal(tasks.NewKey(monitorTestFireTime, 0), watermark)
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_AlertsOnFirstCutShortReadWhenThresholdIsOne() {
+	s.monitor.options.ReaderStuckCriticalAttempts = dynamicconfig.GetIntPropertyFn(1)
+
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+
+	s.True(s.receivedStuckAlert(), "a threshold of one should alert on the first read that left tasks behind")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_AdvancingWatermarkResetsAttempts() {
+	criticalAttempts := s.monitor.options.ReaderStuckCriticalAttempts()
+	inWindow := tasks.NewKey(monitorTestFireTime, 1)
+	inNextWindow := tasks.NewKey(monitorTestFireTime.Add(monitorWatermarkPrecision), 1)
+
+	for i := 0; i != criticalAttempts-1; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, inWindow, true)
+	}
+
+	// However the move to the next window is reported, what the previous one accumulated
+	// must not carry over.
+	s.monitor.SetReaderWatermark(DefaultReaderId, inNextWindow, false)
+	for i := 0; i != criticalAttempts-1; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, inNextWindow, true)
+	}
+
+	s.False(s.receivedStuckAlert(), "attempts from earlier windows must not carry into the current one")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_ReadsInOneWindowShareTheirCount() {
+	criticalAttempts := s.monitor.options.ReaderStuckCriticalAttempts()
+	for i := 0; i != criticalAttempts; i++ {
+		// Distinct fire times inside one window have to accumulate together.
+		fireTime := monitorTestFireTime.Add(time.Duration(i) * 100 * time.Millisecond)
+		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(fireTime, 1), true)
+	}
+
+	s.True(s.receivedStuckAlert(), "reads inside one window must count toward the same total")
 }
 
 func (s *monitorSuite) TestSliceCount() {
