@@ -44,6 +44,24 @@ func TestNormalizeTestName(t *testing.T) {
 	}
 }
 
+func TestSplitTestRunnerTimeoutFailures(t *testing.T) {
+	failures := []TestFailure{
+		{Name: "TestFoo"},
+		{Name: "testrunner.TotalTimeout (retry 2) (final)"},
+	}
+	testFailures, timeouts := splitTestRunnerTimeoutFailures(failures)
+
+	require.Equal(t, []TestFailure{{Name: "TestFoo"}}, testFailures)
+	require.Equal(t, []TestFailure{{Name: "testrunner.TotalTimeout (retry 2) (final)"}}, timeouts)
+	require.Equal(t, "timeout", classifyFailure(timeouts[0].Name))
+
+	runs := filterTestRunnerTimeoutRuns([]TestRun{
+		{Name: "TestFoo"},
+		{Name: "testrunner.TotalTimeout (retry 2) (final)"},
+	})
+	require.Equal(t, []TestRun{{Name: "TestFoo"}}, runs)
+}
+
 func TestParseArtifactName(t *testing.T) {
 	tests := []struct {
 		name               string

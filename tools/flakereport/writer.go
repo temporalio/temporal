@@ -38,7 +38,7 @@ func writeFailuresJSON(outputDir string, failures []TestFailure, repo string) er
 }
 
 // generateGitHubSummary creates markdown summary for GitHub Actions
-func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) string {
+func generateGitHubSummary(summary *ReportSummary, bisectReports []TestBisectReport, repo, runID string, maxLinks int, minProbability float64) string {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 
 	var content string
@@ -57,19 +57,29 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	content += fmt.Sprintf("* **Total Failures**: %d\n", summary.TotalFailures)
 	content += fmt.Sprintf("* **Overall Failure Rate**: %.1f per 1000 tests\n\n", summary.OverallFailureRate)
 
+	if len(bisectReports) > 0 {
+		content += generateBisectSummary(bisectReports, repo, minProbability)
+	}
+
 	// Summary table
 	content += "### Failure Categories Summary\n\n"
-	content += "| Category | Unique Tests |\n"
-	content += "|----------|--------------|\n"
-	content += fmt.Sprintf("| CI Breakers | %d |\n", len(summary.CIBreakers))
+	content += "| Category | Unique Entries |\n"
+	content += "|----------|----------------|\n"
+	content += fmt.Sprintf("| Test Runner Timeouts | %d |\n", len(summary.TestRunnerTimeouts))
+	content += fmt.Sprintf("| Final-Retry Test Failures | %d |\n", len(summary.CIBreakers))
 	content += fmt.Sprintf("| Crashes | %d |\n", len(summary.Crashes))
 	content += fmt.Sprintf("| Timeouts | %d |\n", len(summary.Timeouts))
 	content += fmt.Sprintf("| Flaky Tests | %d |\n\n", summary.TotalFlakyCount)
 
-	// CI Breakers section (tests that failed all retries)
+	if len(summary.TestRunnerTimeouts) > 0 {
+		content += "### CI Execution Interruptions\n\n"
+		content += generateOccurrenceReportTable(summary.TestRunnerTimeouts, "Event", "Affected Artifacts", maxLinks) + "\n"
+	}
+
+	// Final-retry failures are tracked per artifact, not per GitHub Actions workflow run.
 	if len(summary.CIBreakers) > 0 {
-		content += "### CI Breakers (Failed All Retries)\n\n"
-		content += generateTestReportTable(summary.CIBreakers, "CI Break Rate", maxLinks) + "\n"
+		content += "### Final-Retry Test Failures\n\n"
+		content += generateOccurrenceReportTable(summary.CIBreakers, "Test", "Affected Artifacts", maxLinks) + "\n"
 	}
 
 	// Crashes section
@@ -176,7 +186,7 @@ func writeBisectTable(sb *strings.Builder, rows []bisectTableRow, repo string) {
 	sb.WriteString("\n")
 }
 
-// generateBisectSummary creates the markdown section for bisect results to append to the GitHub summary.
+// generateBisectSummary creates the markdown section for Bayesian bisect results.
 func generateBisectSummary(reports []TestBisectReport, repo string, minProb float64) string {
 	qualifying := countQualifyingBisectReports(reports)
 

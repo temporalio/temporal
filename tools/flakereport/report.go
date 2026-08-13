@@ -37,6 +37,14 @@ func formatReportLines(reports []TestReport) []string {
 	return lines
 }
 
+func formatOccurrenceLines(reports []TestReport, countLabel string) []string {
+	lines := make([]string, 0, len(reports))
+	for _, r := range reports {
+		lines = append(lines, fmt.Sprintf("• %d %s: `%s`", r.FailureCount, countLabel, r.TestName))
+	}
+	return lines
+}
+
 // formatLinks formats GitHub URLs as numbered markdown links
 func formatLinks(urls []string, maxLinks int) string {
 	linkCount := min(len(urls), maxLinks)
@@ -128,6 +136,27 @@ func generateTestReportTable(reports []TestReport, rateHeader string, maxLinks i
 		}
 		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | `%s` | %s |\n",
 			report.TestName, rate, lastFailure, formatSparkline(report.TrendPoints), links))
+	}
+
+	return sb.String()
+}
+
+func generateOccurrenceReportTable(reports []TestReport, nameHeader, countHeader string, maxLinks int) string {
+	if len(reports) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("| %s | %s | Last Occurrence | Trend | Links |\n", nameHeader, countHeader))
+	sb.WriteString("|------|--------------------|-----------------|-------|-------|\n")
+	for _, report := range reports {
+		links := formatLinks(report.GitHubURLs, maxLinks)
+		lastOccurrence := "N/A"
+		if !report.LastFailure.IsZero() {
+			lastOccurrence = hoursAgo(report.LastFailure)
+		}
+		sb.WriteString(fmt.Sprintf("| `%s` | %d | %s | `%s` | %s |\n",
+			report.TestName, report.FailureCount, lastOccurrence, formatSparkline(report.TrendPoints), links))
 	}
 
 	return sb.String()
