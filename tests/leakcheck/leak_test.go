@@ -29,7 +29,6 @@ var goleakOpts = []goleak.Option{
 
 var objectLeakOpts = []objectleak.Option{
 	objectleak.WithPruneType("google.golang.org/protobuf/internal/impl.*"),
-	objectleak.WithExpected("FunctionalTestBase.Logger*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
 }

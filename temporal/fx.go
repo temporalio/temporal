@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -970,6 +972,79 @@ type SpanExporterInputs struct {
 	Config     *config.Config `optional:"true"`
 }
 
+type otelLoggerErrorHandler struct {
+	mu            sync.RWMutex
+	registrations []*otelLoggerErrorHandlerRegistration
+}
+
+type otelLoggerErrorHandlerRegistration struct {
+	tracingReady *atomic.Bool
+	logger       atomic.Pointer[otelLoggerErrorHandlerState]
+}
+
+type otelLoggerErrorHandlerState struct {
+	logger log.Logger
+}
+
+func (h *otelLoggerErrorHandler) Handle(err error) {
+	state := h.currentState()
+	if state != nil {
+		state.logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
+	}
+}
+
+func (h *otelLoggerErrorHandler) currentState() *otelLoggerErrorHandlerState {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for i := len(h.registrations) - 1; i >= 0; i-- {
+		registration := h.registrations[i]
+		state := registration.logger.Load()
+		if state != nil && registration.tracingReady.Load() { // ignore errors during startup and shutdown
+			return state
+		}
+	}
+	return nil
+}
+
+func (h *otelLoggerErrorHandler) add(registration *otelLoggerErrorHandlerRegistration) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.registrations = append(h.registrations, registration)
+}
+
+func (h *otelLoggerErrorHandler) remove(registration *otelLoggerErrorHandlerRegistration) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i, candidate := range h.registrations {
+		if candidate == registration {
+			h.registrations = slices.Delete(h.registrations, i, i+1)
+			return
+		}
+	}
+}
+
+var globalOTELLoggerErrorHandler otelLoggerErrorHandler
+
+func installOTELLoggerErrorHandler(lifecycle fx.Lifecycle, logger log.Logger, tracingReady *atomic.Bool) {
+	registration := &otelLoggerErrorHandlerRegistration{
+		tracingReady: tracingReady,
+	}
+	registration.logger.Store(&otelLoggerErrorHandlerState{logger: logger})
+	lifecycle.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			globalOTELLoggerErrorHandler.add(registration)
+			otel.SetErrorHandler(&globalOTELLoggerErrorHandler)
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			registration.tracingReady.Store(false)
+			registration.logger.Store(nil)
+			globalOTELLoggerErrorHandler.remove(registration)
+			return nil
+		},
+	})
+}
+
 // TraceExportModule holds process-global telemetry fx state defining the set of
 // OTEL trace/span exporters used by tracing instrumentation. The following
 // types can be overriden/augmented with fx.Replace/fx.Decorate:
@@ -977,13 +1052,6 @@ type SpanExporterInputs struct {
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
 var TraceExportModule = fx.Options(
 	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
-		var tracingReady atomic.Bool
-		otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-			if tracingReady.Load() { // ignore errors during startup
-				inputs.Logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
-			}
-		}))
-
 		// (1) Exporters from config.
 		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 		if inputs.Config != nil {
@@ -1007,6 +1075,7 @@ var TraceExportModule = fx.Options(
 		maps.Copy(exportersByType, exportersByTypeFromEnv) // env overrides config
 		maps.Copy(exportersByType, customExportersByType)  // custom overrides all
 		exporters := expmaps.Values(exportersByType)
+		tracingReady := &atomic.Bool{}
 
 		// Configure exporters' lifecycle hooks.
 		inputs.Lifecycyle.Append(fx.Hook{
@@ -1017,6 +1086,7 @@ var TraceExportModule = fx.Options(
 			},
 			OnStop: shutdownAll(exporters),
 		})
+		installOTELLoggerErrorHandler(inputs.Lifecycyle, inputs.Logger, tracingReady)
 		return exporters, nil
 	}),
 )
@@ -1086,10 +1156,6 @@ var ServiceTracingModule = fx.Options(
 		tp := otelsdktrace.NewTracerProvider(opts...)
 		lc.Append(fx.Hook{
 			OnStop: func(ctx context.Context) error {
-				otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-					// ignore errors during shutdown
-				}))
-
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 				defer cancel()
 
