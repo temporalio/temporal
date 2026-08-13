@@ -1,10 +1,14 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -32,6 +36,104 @@ func signalReceivingWorkflow(ctx workflow.Context) (string, error) {
 	var received string
 	workflow.GetSignalChannel(ctx, batchSignalTestSignalName).Receive(ctx, &received)
 	return received, nil
+}
+
+// twoSignalReceivingWorkflow blocks until it receives batchSignalTestSignalName
+// twice, then returns both payloads joined by a comma.
+func twoSignalReceivingWorkflow(ctx workflow.Context) (string, error) {
+	ch := workflow.GetSignalChannel(ctx, batchSignalTestSignalName)
+	var first, second string
+	ch.Receive(ctx, &first)
+	ch.Receive(ctx, &second)
+	return first + "," + second, nil
+}
+
+// TestWorkflowBatchSignal_SeparateJobsNotDeduped verifies that two distinct
+// batch jobs signaling the same workflow with the same signal name both take
+// effect. The batcher derives a deterministic request ID per call so that its
+// own retries dedupe server-side; that request ID must be scoped to the batch
+// job, otherwise the second job's signal is silently dropped as a duplicate.
+func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_SeparateJobsNotDeduped() {
+	env := newWorkflowBatchEnv(s.T())
+	t := s.T()
+	ctx := s.Context()
+
+	workflowType := testcore.RandomizeStr(t.Name())
+	env.SdkWorker().RegisterWorkflowWithOptions(twoSignalReceivingWorkflow, workflow.RegisterOptions{Name: workflowType})
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr(t.Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}, workflowType)
+	s.NoError(err)
+	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+
+	// Two separate batch jobs, same signal name, same target workflow.
+	first := s.signalWorkflowViaBatch(ctx, env, execution, "first-signal-data")
+	assertWorkflowBatchOperationSucceeded(ctx, t, env, first)
+
+	second := s.signalWorkflowViaBatch(ctx, env, execution, "second-signal-data")
+	assertWorkflowBatchOperationSucceeded(ctx, t, env, second)
+
+	// Both signals must reach the workflow: if the second one is deduped, the
+	// workflow stays blocked on its second Receive and never completes.
+	getCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	var result string
+	s.NoError(env.SdkClient().GetWorkflow(ctx, execution.GetWorkflowId(), execution.GetRunId()).Get(getCtx, &result))
+	s.Equal("first-signal-data,second-signal-data", result)
+}
+
+// signalWorkflowViaBatch starts a batch signal operation targeting a single
+// workflow execution and returns the batch job ID.
+func (s *WorkflowAPIBatchSignalClientTestSuite) signalWorkflowViaBatch(
+	ctx context.Context,
+	env *testcore.TestEnv,
+	execution *commonpb.WorkflowExecution,
+	signalData string,
+) string {
+	inputPayloads, err := converter.GetDefaultDataConverter().ToPayloads(signalData)
+	s.NoError(err)
+
+	jobID := uuid.NewString()
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+			SignalOperation: &batchpb.BatchOperationSignal{
+				Signal:   batchSignalTestSignalName,
+				Input:    inputPayloads,
+				Identity: "batch-signaler",
+			},
+		},
+		TargetExecutions: toTargetExecutions([]*commonpb.WorkflowExecution{execution}),
+		JobId:            jobID,
+		Reason:           "test",
+	})
+	s.NoError(err)
+	return jobID
+}
+
+// assertWorkflowBatchOperationSucceeded waits for the batch job to complete
+// with exactly one successful operation and no failures.
+func assertWorkflowBatchOperationSucceeded(
+	ctx context.Context,
+	t *testing.T,
+	env *testcore.TestEnv,
+	jobID string,
+) {
+	t.Helper()
+
+	//nolint:forbidigo // for tests with waits
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		desc, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     jobID,
+		})
+		require.NoError(c, err)
+		require.Equal(c, enumspb.BATCH_OPERATION_STATE_COMPLETED, desc.GetState())
+		require.EqualValues(c, 1, desc.GetCompleteOperationCount())
+		require.Zero(c, desc.GetFailureOperationCount())
+	}, 30*time.Second, 200*time.Millisecond)
 }
 
 func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Success() {
