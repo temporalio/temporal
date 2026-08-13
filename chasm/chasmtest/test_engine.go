@@ -45,11 +45,12 @@ type (
 	}
 
 	execution struct {
-		key       chasm.ExecutionKey
-		node      *chasm.Node
-		backend   *chasm.MockNodeBackend
-		root      chasm.RootComponent
-		requestID string
+		key             chasm.ExecutionKey
+		node            *chasm.Node
+		backend         *chasm.MockNodeBackend
+		root            chasm.RootComponent
+		createRequestID string
+		requestIDs      map[string]struct{}
 		// commitTransition advances the backend's committed transition count.
 		commitTransition func()
 	}
@@ -137,8 +138,7 @@ func (e *Engine) StartExecution(
 
 	current, hasCurrent := e.currentExecutions[bKey]
 	if hasCurrent {
-		// if the requestID matches the original create request, return the existing run.
-		if options.RequestID != "" && options.RequestID == current.requestID {
+		if _, ok := current.requestIDs[options.RequestID]; options.RequestID != "" && ok {
 			serializedRef, err := current.node.Ref(current.root)
 			if err != nil {
 				return chasm.StartExecutionResult{}, err
@@ -179,7 +179,7 @@ func (e *Engine) UpdateWithStartExecution(
 	if hasCurrent {
 		switch current.backend.GetExecutionState().State {
 		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn)
+			serializedRef, err := e.updateComponentInExecution(ctx, current, ref, updateFn, "")
 			if err != nil {
 				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
@@ -198,7 +198,7 @@ func (e *Engine) UpdateWithStartExecution(
 							"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 							ref.BusinessID, current.key.RunID, options.ReusePolicy,
 						),
-						current.requestID,
+						current.createRequestID,
 						current.key.RunID,
 					)
 				}
@@ -208,7 +208,7 @@ func (e *Engine) UpdateWithStartExecution(
 						"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 						ref.BusinessID, current.key.RunID, options.ReusePolicy,
 					),
-					current.requestID,
+					current.createRequestID,
 					current.key.RunID,
 				)
 			default:
@@ -230,13 +230,22 @@ func (e *Engine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
-	_ ...chasm.TransitionOption,
+	opts ...chasm.TransitionOption,
 ) ([]byte, error) {
 	execution, err := e.executionForRef(ref)
 	if err != nil {
 		return nil, err
 	}
-	return e.updateComponentInExecution(ctx, execution, ref, updateFn)
+
+	options := constructTransitionOptions(opts...)
+	if options.RequestID != "" {
+		if _, ok := execution.requestIDs[options.RequestID]; ok {
+			return nil, serviceerror.NewFailedPreconditionf(
+				"request ID %s has already been used for this execution", options.RequestID)
+		}
+	}
+
+	return e.updateComponentInExecution(ctx, execution, ref, updateFn, options.RequestID)
 }
 
 func (e *Engine) ReadComponent(
@@ -360,7 +369,7 @@ func (e *Engine) handleConflictPolicy(
 				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
 				ref.BusinessID, current.key.RunID, options.ConflictPolicy,
 			),
-			current.requestID,
+			current.createRequestID,
 			current.key.RunID,
 		)
 	case chasm.BusinessIDConflictPolicyTerminateExisting:
@@ -404,7 +413,7 @@ func (e *Engine) handleReusePolicy(
 					"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 					ref.BusinessID, current.key.RunID, options.ReusePolicy,
 				),
-				current.requestID,
+				current.createRequestID,
 				current.key.RunID,
 			)
 		}
@@ -414,7 +423,7 @@ func (e *Engine) handleReusePolicy(
 				"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 				ref.BusinessID, current.key.RunID, options.ReusePolicy,
 			),
-			current.requestID,
+			current.createRequestID,
 			current.key.RunID,
 		)
 	default:
@@ -433,7 +442,8 @@ func (e *Engine) startNew(
 	requestID string,
 ) (chasm.StartExecutionResult, error) {
 	exec := e.newExecution(key)
-	exec.requestID = requestID
+	exec.createRequestID = requestID
+	exec.recordRequestID(requestID)
 
 	mutableCtx := chasm.NewMutableContext(ctx, exec.node)
 	root, err := startFn(mutableCtx)
@@ -473,7 +483,8 @@ func (e *Engine) startAndUpdateNew(
 	requestID string,
 ) (chasm.EngineUpdateWithStartExecutionResult, error) {
 	exec := e.newExecution(key)
-	exec.requestID = requestID
+	exec.createRequestID = requestID
+	exec.recordRequestID(requestID)
 
 	mutableCtx := chasm.NewMutableContext(ctx, exec.node)
 	root, err := startFn(mutableCtx)
@@ -595,6 +606,16 @@ func (x *execution) closeTransaction() error {
 	return nil
 }
 
+func (x *execution) recordRequestID(requestID string) {
+	if requestID == "" {
+		return
+	}
+	if x.requestIDs == nil {
+		x.requestIDs = make(map[string]struct{})
+	}
+	x.requestIDs[requestID] = struct{}{}
+}
+
 // executionForRef looks up an execution by the ref's RunID when present, or falls back
 // to the current run for the business ID when RunID is empty.
 func (e *Engine) executionForRef(ref chasm.ComponentRef) (*execution, error) {
@@ -621,6 +642,7 @@ func (e *Engine) updateComponentInExecution(
 	execution *execution,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
+	requestID string,
 ) ([]byte, error) {
 	mutableCtx := chasm.NewMutableContext(ctx, execution.node)
 	component, err := execution.node.Component(mutableCtx, ref)
@@ -635,8 +657,13 @@ func (e *Engine) updateComponentInExecution(
 	if err = execution.closeTransaction(); err != nil {
 		return nil, err
 	}
+	execution.recordRequestID(requestID)
 
-	return mutableCtx.Ref(component)
+	serializedRef, err := mutableCtx.Ref(component)
+	if errors.As(err, new(*serviceerror.NotFound)) {
+		return nil, nil
+	}
+	return serializedRef, err
 }
 
 // refForComponent looks up the ComponentRef for a component instance by scanning
