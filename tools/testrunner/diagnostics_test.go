@@ -129,3 +129,14 @@ func TestCollectAttemptDiagnosticsScopesFiltersAndDeduplicates(t *testing.T) {
 	require.Empty(t, diagnostics[1].tests)
 	require.Equal(t, diagnosticPanic, diagnostics[2].kind)
 }
+
+func TestPackageAbortLogSummary(t *testing.T) {
+	require.Equal(t,
+		"likely cause: panic: boom\npackage example.com/tests aborted",
+		packageAbortLogSummary("package example.com/tests aborted\n\npanic: boom\nstack"),
+	)
+	require.Equal(t,
+		"package example.com/tests aborted",
+		packageAbortLogSummary("package example.com/tests aborted\n\nordinary output"),
+	)
+}

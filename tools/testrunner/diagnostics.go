@@ -393,3 +393,21 @@ func isTestResultBoundary(line string) bool {
 func shouldStopOnTestBoundary(line string, _, _ int) bool {
 	return isTestResultBoundary(line)
 }
+
+func packageAbortLogSummary(details string) string {
+	headline, _, _ := strings.Cut(details, "\n")
+	for line := range strings.Lines(details) {
+		cause := strings.TrimSpace(line)
+		if strings.Contains(line, "\tfatal\t") ||
+			strings.HasPrefix(cause, "panic:") ||
+			strings.HasPrefix(cause, "fatal error:") ||
+			strings.HasPrefix(cause, "WARNING: DATA RACE") ||
+			strings.HasPrefix(cause, "signal: ") ||
+			strings.HasPrefix(cause, "exit status ") ||
+			strings.HasPrefix(cause, "*** Test killed") ||
+			strings.Contains(cause, "test exceeded timeout") {
+			return fmt.Sprintf("likely cause: %s\n%s", cause, headline)
+		}
+	}
+	return headline
+}

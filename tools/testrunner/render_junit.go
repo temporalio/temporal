@@ -100,7 +100,7 @@ func (r *junitRenderer) renderPackage(
 			Error: &junit.Result{
 				Message: "Package runtime error",
 				Type:    "ERROR",
-				Data:    sanitizeXML(truncateAlertDetails(runtimeDetails)),
+				Data:    sanitizeXML(truncateDetails(runtimeDetails)),
 			},
 		})
 	}
@@ -149,7 +149,7 @@ func (r *junitRenderer) renderExecution(
 		if details == "" {
 			details = "test failed without attributable diagnostic output; no failed descendant supplied the cause"
 		}
-		testcase.Failure = generateFailure(failureTypeFailed, sanitizeXML(truncateAlertDetails(details)))
+		testcase.Failure = generateFailure(failureTypeFailed, sanitizeXML(truncateDetails(details)))
 	case testSkipped:
 		testcase.Skipped = &junit.Result{Message: "Skipped"}
 	default:
@@ -259,7 +259,7 @@ func (r *junitRenderer) renderSyntheticFailures(result attemptResult, suffix str
 		cases = append(cases, junit.Testcase{
 			Name:    "testrunner.ExecutionError" + suffix,
 			Time:    formatDuration(0),
-			Failure: generateFailure(failureTypeCrash, sanitizeXML(truncateAlertDetails(details))),
+			Failure: generateFailure(failureTypeCrash, sanitizeXML(truncateDetails(details))),
 		})
 	}
 	if len(cases) == 0 {
@@ -285,7 +285,7 @@ func diagnosticFailureDetails(diagnostic diagnostic) string {
 	payload.WriteString(diagnosticDetails)
 
 	var details strings.Builder
-	details.WriteString(truncateAlertDetails(payload.String()))
+	details.WriteString(truncateDetails(payload.String()))
 	if len(diagnostic.tests) > 0 {
 		if details.Len() > 0 {
 			details.WriteString("\n\n")
@@ -358,7 +358,7 @@ func packageAbortDetails(result attemptResult, pkg packageResult) string {
 		details.WriteString("\n\nProcess stderr:\n")
 		details.WriteString(processStderr)
 	}
-	return sanitizeXML(truncateAlertDetails(details.String()))
+	return sanitizeXML(truncateDetails(details.String()))
 }
 
 func totalTimeoutDetails(result attemptResult) string {
@@ -368,7 +368,7 @@ func totalTimeoutDetails(result attemptResult) string {
 			details = append(details, packageAbortDetails(result, pkg))
 		}
 	}
-	return sanitizeXML(truncateAlertDetails(strings.TrimSpace(strings.Join(details, "\n\n"))))
+	return sanitizeXML(truncateDetails(strings.TrimSpace(strings.Join(details, "\n\n"))))
 }
 
 func diagnosticContextSummary(diagnostic diagnostic) string {

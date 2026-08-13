@@ -26,11 +26,9 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, []string{
-			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			// max-attempts has been stripped
-			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		}, args)
@@ -79,7 +77,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.ErrorContains(t, err, `invalid argument "--total-timeout="`)
 	})
 
-	t.Run("GoTestSumPathMissing", func(t *testing.T) {
+	t.Run("GoTestSumPathIsOptional", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--junitfile=test.xml",
@@ -91,7 +89,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
-		require.ErrorContains(t, err, `missing required argument "--gotestsum-path="`)
+		require.NoError(t, err)
 	})
 
 	t.Run("AttemptsInvalid1", func(t *testing.T) {
@@ -122,6 +120,35 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"baz",
 		})
 		require.ErrorContains(t, err, `invalid argument "--max-attempts=": strconv.Atoi: parsing "invalid"`)
+	})
+
+	t.Run("AttemptsNegative", func(t *testing.T) {
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--junitfile=test.xml",
+			"--max-attempts=-1",
+			"--",
+			"-coverprofile=test.cover.out",
+		})
+		require.ErrorContains(t, err, `invalid argument "--max-attempts=": must be greater than zero`)
+	})
+
+	t.Run("SeparatorOnlyEndsRunnerFlagsOnce", func(t *testing.T) {
+		r := newRunner()
+		args, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--junitfile=test.xml",
+			"--max-attempts=2",
+			"--",
+			"-coverprofile=test.cover.out",
+			"-args",
+			"--",
+			"--max-attempts=99",
+		})
+		require.NoError(t, err)
+		require.Equal(t, []string{
+			"-coverprofile=test.cover.out", "-args", "--", "--max-attempts=99",
+		}, args)
+		require.Equal(t, 2, r.maxAttempts)
 	})
 
 	t.Run("JunitfileMissing", func(t *testing.T) {
@@ -183,38 +210,73 @@ func TestStripRunFromArgs(t *testing.T) {
 }
 
 func TestWriteCurrentReport(t *testing.T) {
-	out, err := os.CreateTemp("", "junit-report-*.xml")
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(out.Name()) }()
-
 	r := newRunner()
-	r.junitOutputPath = out.Name()
+	r.junitOutputPath = filepath.Join(t.TempDir(), "junit.xml")
 
 	// Simulate attempt 1 completing with failures.
-	j1 := mustReadReportFixture(t, "testdata/junit-attempt-1.xml")
 	a1 := r.newAttempt()
-	a1.junitReport = j1
+	a1.result = attemptResult{
+		packages: []packageResult{{
+			name:    "example.com/tests",
+			outcome: packageFailed,
+			executions: []testExecution{{
+				id:      testID{packageName: "example.com/tests", testName: "TestOne"},
+				outcome: testFailed,
+			}},
+		}},
+		process: processResult{state: processExited, exitCode: 1},
+	}
 
 	r.writeCurrentReport()
 
-	result, err := readReport(out.Name())
+	result, err := junit.Read(r.junitOutputPath)
 	require.NoError(t, err)
-	require.Equal(t, 2, result.Failures)
+	require.Equal(t, 1, result.Failures)
 	require.Len(t, result.Suites, 1)
 
 	// Simulate attempt 2 also completing. The intermediate write should now
 	// contain failures from both attempts, so that if the process is killed
 	// before attempt 3 the file on disk already has the full picture.
-	j2 := mustReadReportFixture(t, "testdata/junit-attempt-2.xml")
 	a2 := r.newAttempt()
-	a2.junitReport = j2
+	a2.result = attemptResult{
+		packages: []packageResult{{
+			name:    "example.com/tests",
+			outcome: packageFailed,
+			executions: []testExecution{{
+				id:      testID{packageName: "example.com/tests", testName: "TestOne"},
+				outcome: testFailed,
+			}},
+		}},
+		process: processResult{state: processExited, exitCode: 1},
+	}
 
 	r.writeCurrentReport()
 
-	result2, err := readReport(out.Name())
+	result2, err := junit.Read(r.junitOutputPath)
 	require.NoError(t, err)
-	require.Equal(t, 4, result2.Failures) // 2 from attempt 1 + 2 from attempt 2
+	require.Equal(t, 2, result2.Failures) // 1 retained leaf from each attempt
 	require.Len(t, result2.Suites, 2)
+	require.NoError(t, junit.ValidateCounters(result2))
+}
+
+func TestWriteReportRejectsInvalidCounters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "junit.xml")
+	require.NoError(t, os.WriteFile(path, []byte("previous report"), 0o644))
+	r := newRunner()
+	r.junitOutputPath = path
+	report := junit.Testsuites{
+		Tests: 2,
+		Suites: []junit.Testsuite{{
+			Name:      "suite",
+			Tests:     1,
+			Testcases: []junit.Testcase{{Name: "TestOne"}},
+		}},
+	}
+
+	require.ErrorContains(t, r.writeReport(&report), "invalid JUnit report: root tests counter is 2, want 1")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "previous report", string(content))
 }
 
 func TestRunnerReportCrash(t *testing.T) {
@@ -229,23 +291,30 @@ func TestRunnerReportCrash(t *testing.T) {
 	require.NoError(t, err)
 
 	r.reportCrash()
-	requireReportEquals(t, "testdata/junit-crash-output.xml", out)
+	report, err := junit.Read(out)
+	require.NoError(t, err)
+	require.Len(t, report.Suites, 1)
+	require.Len(t, report.Suites[0].Testcases, 1)
+	require.Equal(t, "my-test (crash)", report.Suites[0].Testcases[0].Name)
+	require.NotNil(t, report.Suites[0].Testcases[0].Failure)
+	require.Equal(t, string(failureTypeCrash), report.Suites[0].Testcases[0].Failure.Type)
+	require.Equal(t, 1, report.Failures)
 }
 
 func TestRunnerPrintSummary(t *testing.T) {
 	dir := t.TempDir()
-	report1 := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
+	report1 := mustReadTestsuitesFixture(t, "testdata/junit-single-failure.xml")
 	report1.Suites[0].Name = "SuiteA"
 	report1.Suites[0].Testcases[0].Name = "TestAlpha"
 	report1.Suites[0].Testcases[0].Failure.Type = string(failureTypeFailed)
 	report1.Suites[0].Testcases[0].Failure.Data = "alpha failure"
-	require.NoError(t, junit.Write(filepath.Join(dir, "junit.alpha.xml"), &report1.Testsuites))
-	report2 := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
+	require.NoError(t, junit.Write(filepath.Join(dir, "junit.alpha.xml"), report1))
+	report2 := mustReadTestsuitesFixture(t, "testdata/junit-single-failure.xml")
 	report2.Suites[0].Name = "SuiteB"
 	report2.Suites[0].Testcases[0].Name = "TestBeta"
 	report2.Suites[0].Testcases[0].Failure.Type = string(failureTypeFailed)
 	report2.Suites[0].Testcases[0].Failure.Data = "beta failure"
-	require.NoError(t, junit.Write(filepath.Join(dir, "junit.beta.xml"), &report2.Testsuites))
+	require.NoError(t, junit.Write(filepath.Join(dir, "junit.beta.xml"), report2))
 
 	r := newRunner()
 	summaryMarkdownPath := filepath.Join(dir, "test-summary.md")
@@ -271,8 +340,8 @@ func TestRunnerPrintSummary(t *testing.T) {
 
 func TestRunnerPrintSummarySkipsEmptySummary(t *testing.T) {
 	dir := t.TempDir()
-	report := mustReadReportFixture(t, "testdata/junit-empty.xml")
-	require.NoError(t, junit.Write(filepath.Join(dir, "junit.empty.xml"), &report.Testsuites))
+	report := mustReadTestsuitesFixture(t, "testdata/junit-empty.xml")
+	require.NoError(t, junit.Write(filepath.Join(dir, "junit.empty.xml"), report))
 
 	r := newRunner()
 	_, err := r.sanitizeAndParseArgs(summaryCommand, []string{

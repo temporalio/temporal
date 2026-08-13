@@ -200,7 +200,7 @@ func TestRenderJUnitTotalTimeoutIncludesIncompleteTests(t *testing.T) {
 }
 
 func TestRenderJUnitBoundsFailurePayloads(t *testing.T) {
-	details := strings.Repeat("x", junitAlertDetailsMaxBytes+100)
+	details := strings.Repeat("x", junitDetailsMaxBytes+100)
 	tests := []struct {
 		name     string
 		result   attemptResult
@@ -236,11 +236,11 @@ func TestRenderJUnitBoundsFailurePayloads(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			testcase := findJUnitTestcase(t, renderJUnit([]attemptResult{test.result}), test.caseName)
 			if testcase.Failure != nil {
-				require.LessOrEqual(t, len(testcase.Failure.Data), junitAlertDetailsMaxBytes)
+				require.LessOrEqual(t, len(testcase.Failure.Data), junitDetailsMaxBytes)
 				return
 			}
 			require.NotNil(t, testcase.Error)
-			require.LessOrEqual(t, len(testcase.Error.Data), junitAlertDetailsMaxBytes)
+			require.LessOrEqual(t, len(testcase.Error.Data), junitDetailsMaxBytes)
 		})
 	}
 }
