@@ -103,3 +103,29 @@ func TestExtractFailureEvidence(t *testing.T) {
 		})
 	}
 }
+
+func TestCollectAttemptDiagnosticsScopesFiltersAndDeduplicates(t *testing.T) {
+	observed := testID{"example.com/tests", "TestObserved"}
+	testRace := "WARNING: DATA RACE\nexample.TestObserved()\nFAIL\n"
+	packageRace := "WARNING: DATA RACE\nexample.TestUnobserved()\nFAIL\n"
+	duplicatePanic := "panic: duplicate\nFAIL\n"
+	result := attemptResult{
+		packages: []packageResult{{
+			name: "example.com/tests",
+			executions: []testExecution{{
+				id:      observed,
+				outcome: testFailed,
+				output:  testRace,
+			}},
+			output: packageRace,
+		}},
+		process:            processResult{stderr: duplicatePanic},
+		unstructuredOutput: duplicatePanic,
+	}
+
+	diagnostics := collectAttemptDiagnostics(result)
+	require.Len(t, diagnostics, 3)
+	require.Equal(t, []testID{observed}, diagnostics[0].tests)
+	require.Empty(t, diagnostics[1].tests)
+	require.Equal(t, diagnosticPanic, diagnostics[2].kind)
+}

@@ -186,6 +186,28 @@ func diagnosticTestIDs(scope outputScope, names []string) []testID {
 	return ids
 }
 
+func collectAttemptDiagnostics(result attemptResult) []diagnostic {
+	var diagnostics []diagnostic
+	for _, pkg := range result.packages {
+		for _, execution := range pkg.executions {
+			id := execution.id
+			diagnostics = append(diagnostics, extractDiagnostics(outputScope{
+				packageName: pkg.name,
+				test:        &id,
+			}, execution.output)...)
+		}
+		diagnostics = append(diagnostics, extractDiagnostics(outputScope{packageName: pkg.name}, pkg.output)...)
+	}
+	diagnostics = append(diagnostics, extractDiagnostics(outputScope{}, result.process.stderr)...)
+	diagnostics = append(diagnostics, extractDiagnostics(outputScope{}, result.unstructuredOutput)...)
+	for i := range diagnostics {
+		diagnostics[i].tests = slices.DeleteFunc(diagnostics[i].tests, func(id testID) bool {
+			return !result.observed(id)
+		})
+	}
+	return dedupeDiagnostics(diagnostics)
+}
+
 func dedupeDiagnostics(diagnostics []diagnostic) []diagnostic {
 	seen := make(map[string]struct{}, len(diagnostics))
 	result := make([]diagnostic, 0, len(diagnostics))
