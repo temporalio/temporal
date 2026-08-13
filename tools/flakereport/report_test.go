@@ -51,7 +51,7 @@ func TestGenerateSuiteBreakdownTable(t *testing.T) {
 
 func TestGenerateReportLimitsAllTableRows(t *testing.T) {
 	const (
-		maxRows = 100
+		maxRows = maxReportRowsPerTable
 		total   = maxRows + 1
 	)
 	makeTestReports := func(prefix string) []TestReport {
