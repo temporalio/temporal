@@ -370,9 +370,8 @@ func (e *ChasmEngine) updateExecution(
 	actualRef := executionRef
 	actualRef.RunID = workflowKey.RunID
 
-	// UpdateWithStart's update-of-existing path does not dedup on the request ID, so
-	// it is always left empty here. Instead,  conflict policy decides which execution
-	// to update.
+	// TODO(awln-temporal): Add a separate execution-scoped request-ID set for
+	// UpdateWithStart updates. Retries currently reapply updateFn.
 	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn, "")
 	if err != nil {
 		return chasm.ExecutionKey{}, nil, err
