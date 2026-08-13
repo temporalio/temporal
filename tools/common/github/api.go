@@ -91,30 +91,12 @@ func get(ctx context.Context, path string) (*http.Response, error) {
 	var rateLimitStatus string
 	var retryDelay time.Duration
 	for attempt := 0; attempt <= maxAPIRetries; attempt++ {
-		if err := apiLimiter.Wait(ctx); err != nil {
+		response, err := getResponse(ctx, path, token)
+		if err != nil {
 			if attempt > 0 {
-				return nil, &RateLimitError{Status: rateLimitStatus, RetryAfter: retryDelay, RetryAttempted: true, Err: fmt.Errorf("failed while waiting to retry GitHub request: %w", err)}
+				return nil, retryFailure(rateLimitStatus, retryDelay, fmt.Errorf("GitHub retry request failed: %w", err))
 			}
 			return nil, err
-		}
-
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+path, nil)
-		if err != nil {
-			if attempt > 0 {
-				return nil, &RateLimitError{Status: rateLimitStatus, RetryAfter: retryDelay, RetryAttempted: true, Err: fmt.Errorf("failed to create retry GitHub request: %w", err)}
-			}
-			return nil, fmt.Errorf("failed to create GitHub request: %w", err)
-		}
-		request.Header.Set("Accept", "application/vnd.github+json")
-		request.Header.Set("Authorization", "Bearer "+token)
-		request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-
-		response, err := apiClient.Do(request)
-		if err != nil {
-			if attempt > 0 {
-				return nil, &RateLimitError{Status: rateLimitStatus, RetryAfter: retryDelay, RetryAttempted: true, Err: fmt.Errorf("GitHub retry request failed: %w", err)}
-			}
-			return nil, fmt.Errorf("GitHub request failed: %w", err)
 		}
 		if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 			return response, nil
@@ -136,10 +118,34 @@ func get(ctx context.Context, path string) (*http.Response, error) {
 		_ = response.Body.Close()
 		fmt.Printf("GitHub API rate limited (%s); retrying request in %s\n", response.Status, retryAfter)
 		if err := waitForRetry(ctx, retryAfter); err != nil {
-			return nil, &RateLimitError{Status: response.Status, RetryAfter: retryAfter, Err: fmt.Errorf("failed while waiting to retry GitHub request: %w", err)}
+			return nil, retryFailure(response.Status, retryAfter, fmt.Errorf("failed while waiting to retry GitHub request: %w", err))
 		}
 	}
 	return nil, errors.New("unreachable GitHub request retry state")
+}
+
+func getResponse(ctx context.Context, path, token string) (*http.Response, error) {
+	if err := apiLimiter.Wait(ctx); err != nil {
+		return nil, err
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GitHub request: %w", err)
+	}
+	request.Header.Set("Accept", "application/vnd.github+json")
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	response, err := apiClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("GitHub request failed: %w", err)
+	}
+	return response, nil
+}
+
+func retryFailure(status string, retryAfter time.Duration, err error) error {
+	return &RateLimitError{Status: status, RetryAfter: retryAfter, RetryAttempted: true, Err: err}
 }
 
 func retryAfter(response *http.Response) (time.Duration, bool) {
