@@ -66,6 +66,7 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 			left, right := s.SplitByRange(stuckRange.InclusiveMin)
 			remaining = append(remaining, left)
 			s = right
+			r = s.Scope().Range
 		}
 
 		if r.CanSplitStrictly(stuckRange.ExclusiveMax) {
@@ -75,8 +76,7 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 		}
 
 		if len(remaining) == 0 {
-			// s lies outside the stuck range or only abuts it, so any split here
-			// would produce an empty slice.
+			// s does not overlap the stuck range.
 			return nil, false
 		}
 

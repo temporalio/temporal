@@ -66,9 +66,9 @@ type (
 		shutdownCh     chan struct{}
 	}
 
-	// Progress is tracked per slice and per reader so that neither an unrelated slice
-	// covering the same fire time window nor a previous owner of the slice contributes
-	// to stuck detection. alerted keeps one window from alerting on every later read.
+	// readProgress counts consecutive reads of one slice by one reader that ended on
+	// the same watermark. Another slice covering the same window, or a previous owner
+	// of this slice, must not count. alerted limits a window to one alert.
 	readProgress struct {
 		readerID  int64
 		watermark tasks.Key
@@ -166,18 +166,16 @@ func (m *monitorImpl) SetSliceReadWatermark(slice Slice, readerID int64, waterma
 	stats.progress.attempts++
 
 	criticalAttempts := m.options.ReaderStuckCriticalAttempts()
-	if stats.progress.alerted || criticalAttempts <= 0 || stats.progress.attempts < criticalAttempts {
-		m.sliceStats[slice] = stats
-		return
+	if !stats.progress.alerted && criticalAttempts > 0 && stats.progress.attempts >= criticalAttempts {
+		stats.progress.alerted = m.sendAlertLocked(&Alert{
+			AlertType: AlertTypeReaderStuck,
+			AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
+				ReaderID:         readerID,
+				CurrentWatermark: stats.progress.watermark,
+			},
+		})
 	}
 
-	stats.progress.alerted = m.sendAlertLocked(&Alert{
-		AlertType: AlertTypeReaderStuck,
-		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
-			ReaderID:         readerID,
-			CurrentWatermark: stats.progress.watermark,
-		},
-	})
 	m.sliceStats[slice] = stats
 }
 
@@ -236,12 +234,7 @@ func (m *monitorImpl) RemoveReader(readerID int64) {
 	m.Lock()
 	defer m.Unlock()
 
-	sliceCount, ok := m.readerSliceCount[readerID]
-	if !ok {
-		return
-	}
-
-	m.totalSliceCount -= sliceCount
+	m.totalSliceCount -= m.readerSliceCount[readerID]
 	delete(m.readerSliceCount, readerID)
 }
 

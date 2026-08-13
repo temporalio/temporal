@@ -424,11 +424,18 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	}).AnyTimes()
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
+	loadSlice := reader.nextReadSlice.Value.(Slice)
 	reader.loadAndSubmitTasks()
 	<-reader.notifyCh // should trigger next round of load
 	s.Equal(reader.options.BatchSize(), taskSubmitted)
 	s.True(scopes[0].Equals(reader.nextReadSlice.Value.(Slice).Scope()))
 	s.False(completionFnCalled)
+
+	// Read progress has to be attributed to the slice that was read, otherwise
+	// unrelated slices covering the same fire time window share a counter.
+	progress := s.monitor.sliceStats[loadSlice].progress
+	s.Equal(reader.readerID, progress.readerID)
+	s.Equal(1, progress.attempts)
 }
 
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {

@@ -38,8 +38,7 @@ func newReaderStuckTestSlice(monitor Monitor, r Range) Slice {
 		defaultMaxPendingKeys,
 		metrics.NoopMetricsHandler,
 	)
-	// paginationFnProvider is nil, so these slices must never be read. Clearing the
-	// iterators keeps MoreTasks false so no reader ever selects them.
+	// These slices must never be read; paginationFnProvider is nil.
 	slice.iterators = nil
 	return slice
 }
@@ -203,8 +202,6 @@ func TestReaderStuckActionRun(t *testing.T) {
 
 			nextReader, ok := readerGroup.ReaderByID(tc.readerID + 1)
 			if tc.wantMoved == nil {
-				// Also guards against the next reader being created for an empty slice;
-				// SplitSlices drops those, so the kept ranges alone would not notice.
 				require.False(t, ok, "next reader should not be created when nothing moved")
 				return
 			}
