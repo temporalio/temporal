@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -24,6 +26,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -37,6 +40,18 @@ var _ common.RPCFactory = (*RPCFactory)(nil)
 
 // Minimum interval between (traffic-triggered) sweeps of shut-down connections.
 const internodeConnCleanupInterval = 30 * time.Minute
+
+type Option func(*RPCFactory)
+
+// WithOTELTracing instruments local frontend HTTP clients with OpenTelemetry.
+func WithOTELTracing(
+	provider trace.TracerProvider,
+	propagator propagation.TextMapPropagator) Option {
+	return func(r *RPCFactory) {
+		r.otelTracerProvider = provider
+		r.otelPropagator = propagator
+	}
+}
 
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
@@ -75,10 +90,14 @@ type RPCFactory struct {
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
 	EnableInternodeClientKeepalive bool
+
+	// otelTracerProvider and otelPropagator are used to instrument the local frontend HTTP
+	// client constructed by CreateLocalFrontendHTTPClient. Set via WithOTELTracing().
+	otelTracerProvider trace.TracerProvider
+	otelPropagator     propagation.TextMapPropagator
 }
 
-// NewFactory builds a new RPCFactory
-// conforming to the underlying configuration
+// NewFactory builds a new RPCFactory conforming to the underlying configuration.
 func NewFactory(
 	cfg *config.Config,
 	sName primitives.ServiceName,
@@ -93,6 +112,7 @@ func NewFactory(
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
 	tokenProvider auth.TokenProvider,
+	opts ...Option,
 ) *RPCFactory {
 	authHeaderName := "authorization"
 	requireRemoteClusterAuth := false
@@ -122,6 +142,11 @@ func NewFactory(
 	f.internodeGRPCConnections.conns = make(map[string]*grpc.ClientConn)
 	f.internodeConnCleanupTicker = time.NewTicker(internodeConnCleanupInterval)
 	f.localFrontendGRPCConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
+
+	for _, opt := range opts {
+		opt(f)
+	}
+
 	return f
 }
 
@@ -436,8 +461,6 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 	if err != nil {
 		return nil, err
 	}
-	client := http.Client{}
-
 	// Default to http unless TLS is configured.
 	scheme := "http"
 	if d.frontendTLSConfig != nil {
@@ -445,8 +468,9 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 	}
 
 	var address string
+	var clientTransport http.RoundTripper
 	if r := serviceResolverFromGRPCURL(d.frontendHTTPURL); r != nil {
-		client.Transport = &roundTripper{
+		clientTransport = &roundTripper{
 			resolver:   r,
 			underlying: transport,
 			httpPort:   d.frontendHTTPPort,
@@ -454,8 +478,11 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		address = "internal" // This will be replaced by the roundTripper
 	} else {
 		// Use the URL as-is and leave the transport unmodified.
-		client.Transport = transport
+		clientTransport = transport
 		address = d.frontendHTTPURL
+	}
+	client := http.Client{
+		Transport: telemetry.NewHTTPClientTransport(clientTransport, d.otelTracerProvider, d.otelPropagator),
 	}
 
 	return &common.FrontendHTTPClient{
