@@ -194,7 +194,7 @@ func generateBisectSummary(reports []TestBisectReport, repo string, minProb floa
 	threshold := fmt.Sprintf("%.0f%%", minProb*100)
 
 	var sb strings.Builder
-	sb.WriteString("\n## Bayesian Commit Suspects\n\n")
+	sb.WriteString("\n### Bayesian Commit Suspects\n\n")
 
 	if qualifying == 0 {
 		sb.WriteString("No actionable commit suspects found")

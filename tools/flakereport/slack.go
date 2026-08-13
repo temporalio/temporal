@@ -16,6 +16,10 @@ func buildSuccessMessage(summary *ReportSummary, runID, repo string, days int) *
 	if summary.TotalWorkflowRuns > 0 {
 		ciSuccessRate = (float64(summary.SuccessfulRuns) / float64(summary.TotalWorkflowRuns)) * 100.0
 	}
+	testRunnerTimeouts := 0
+	for _, report := range summary.TestRunnerTimeouts {
+		testRunnerTimeouts += report.FailureCount
+	}
 
 	// Summary stats
 	summaryText := fmt.Sprintf("*CI Success Rate:* %d/%d (%.2f%%)\n*Total Test Runs:* %d\n*Total Failures:* %d\n*Failure Rate:* %.2f per 1000 tests\n\n*Test Runner Timeouts:* %d\n*Final-Retry Test Failures:* %d\n*Crashes:* %d\n*Flaky Tests:* %d\n*Timeouts:* %d",
@@ -25,7 +29,7 @@ func buildSuccessMessage(summary *ReportSummary, runID, repo string, days int) *
 		summary.TotalTestRuns,
 		summary.TotalFailures,
 		summary.OverallFailureRate,
-		len(summary.TestRunnerTimeouts),
+		testRunnerTimeouts,
 		len(summary.CIBreakers),
 		len(summary.Crashes),
 		summary.TotalFlakyCount,
