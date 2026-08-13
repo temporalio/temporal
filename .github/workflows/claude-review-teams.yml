@@ -261,12 +261,12 @@ jobs:
             When posting inline comments, use repository-relative PR file paths from the diff, without the `pr-head/` prefix.
 
             The top-level comment is a status marker, not a review.
-            Its entire body must be one line: `Reviewed N files, M findings.`
+            Its body is a single line: `Reviewed N files, M findings.`
             It must not contain a checklist, a summary of the PR or of your findings, your
             process or reasoning, praise, the PR number or title, a job link, or notes about
             commands and tools you could not run.
-            If a finding cannot be attached to a changed line, add it to that comment under a
-            `### Not attached to a line` heading, formatted like an inline finding.
+            The one exception: a finding with no changed line to attach to goes below that status
+            line, formatted like an inline finding. Only when there is genuinely no such line.
             Only post GitHub comments - don't submit review text as messages.
           claude_args: |
             --add-dir pr-head --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*)"
