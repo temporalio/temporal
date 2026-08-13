@@ -495,7 +495,10 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 			uniqueSHAs = append(uniqueSHAs, sha)
 		}
 	}
-	commitMetas := fetchCommitMetasParallel(ctx, cfg.Repo, uniqueSHAs, defaultConcurrency)
+	commitMetas, err := fetchCommitMetasParallel(ctx, cfg.Repo, uniqueSHAs, defaultConcurrency)
+	if err != nil {
+		return nil, err
+	}
 	fmt.Printf("Fetched metadata for %d/%d unique commits\n", len(commitMetas), len(uniqueSHAs))
 
 	// Run bisect for each test
@@ -511,9 +514,9 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 }
 
 // fetchCommitMetasParallel fetches commit metadata for a list of SHAs concurrently,
-// bounded by maxConcurrency. Returns an immutable map of SHA → github.Commit; failed
-// fetches are logged and omitted (heuristic priors fall back to 1.0).
-func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, maxConcurrency int) map[string]github.Commit {
+// bounded by maxConcurrency. Returns an immutable map of SHA → github.Commit; non-rate-limit
+// fetch failures are logged and omitted because heuristic priors fall back to 1.0.
+func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, maxConcurrency int) (map[string]github.Commit, error) {
 	metas := make([]github.Commit, len(shas))
 	ok := make([]bool, len(shas))
 
@@ -523,6 +526,9 @@ func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, m
 		g.Go(func() error {
 			meta, err := github.GetCommit(ctx, repo, sha)
 			if err != nil {
+				if isGitHubRateLimitError(err) {
+					return fmt.Errorf("GitHub API rate limit while fetching metadata for commit %s: %w", sha[:7], err)
+				}
 				fmt.Printf("Warning: failed to fetch metadata for commit %s: %v\n", sha[:7], err)
 				return nil
 			}
@@ -531,7 +537,9 @@ func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, m
 			return nil
 		})
 	}
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("cannot generate complete report: %w", err)
+	}
 
 	commitMetas := make(map[string]github.Commit, len(shas))
 	for i, sha := range shas {
@@ -539,5 +547,5 @@ func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, m
 			commitMetas[sha] = metas[i]
 		}
 	}
-	return commitMetas
+	return commitMetas, nil
 }
