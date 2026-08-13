@@ -2,6 +2,7 @@ package flakereport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,11 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/tools/common/github"
 )
+
+func isGitHubRateLimitError(err error) bool {
+	var rateLimitErr *github.RateLimitError
+	return errors.As(err, &rateLimitErr)
+}
 
 const (
 	minFlakyFailures    = 3
@@ -155,6 +161,9 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []github.Run, te
 	for i, run := range runs {
 		artifacts, err := fetchRunArtifacts(ctx, repo, run.DatabaseID)
 		if err != nil {
+			if isGitHubRateLimitError(err) {
+				return nil, fmt.Errorf("cannot generate complete report: GitHub API rate limit while fetching artifacts for workflow run %d: %w", run.DatabaseID, err)
+			}
 			fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", run.DatabaseID, err)
 			continue
 		}
@@ -285,7 +294,10 @@ func runGenerateCommand(c *cli.Context) (err error) {
 
 	// Process artifacts in parallel
 	fmt.Println("\n=== Processing artifacts in parallel ===")
-	allFailures, allTestRuns, processedArtifacts := processArtifactsParallel(ctx, jobs, concurrency)
+	allFailures, allTestRuns, processedArtifacts, err := processArtifactsParallel(ctx, jobs, concurrency)
+	if err != nil {
+		return err
+	}
 
 	fmt.Println("\n=== Processing Results ===")
 	fmt.Printf("Total test runs: %d\n", len(allTestRuns))
