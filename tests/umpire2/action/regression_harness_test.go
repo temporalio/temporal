@@ -43,7 +43,7 @@ func TestResponsePolicyEmitsCanonicalCallbackFact(t *testing.T) {
 		RequestID: "handler-request-id",
 	})
 	require.NoError(t, err)
-	require.Len(t, observer.facts, 1)
+	require.Len(t, observer.facts, 2)
 	observed, ok := observer.facts[0].(*fact.NexusCallbackObservation)
 	require.True(t, ok)
 	require.Equal(t, "operation-id", observed.OperationID)
@@ -99,6 +99,49 @@ func TestResponsePolicyDefersStartResponseUntilReleased(t *testing.T) {
 	case <-t.Context().Done():
 		require.Fail(t, "handler did not return after release")
 	}
+}
+
+func TestResponsePolicyEmitsDeferredStartResponse(t *testing.T) {
+	token, err := (&commonnexus.CallbackTokenGenerator{}).Tokenize(&tokenspb.NexusOperationCompletion{
+		NamespaceId: "namespace-id",
+		WorkflowId:  "operation-id",
+		RunId:       "run-id",
+		Ref:         &persistencespb.StateMachineRef{},
+	})
+	require.NoError(t, err)
+	observer := &capturingFactObserver{}
+	policy := NewResponsePolicy()
+	policy.setFactObserver("namespace-id", observer)
+	policy.setDeferredStart(&nexus.HandlerStartOperationResultAsync{OperationToken: "operation-token"}, nil)
+	result := make(chan error, 1)
+
+	go func() {
+		_, err := policy.Handler().OnStartOperation(
+			context.Background(),
+			"service",
+			"operation",
+			nil,
+			nexus.StartOperationOptions{
+				CallbackURL:    "https://callback",
+				CallbackHeader: nexus.Header{commonnexus.CallbackTokenHeader: token},
+				RequestID:      "request-id",
+			},
+		)
+		result <- err
+	}()
+
+	select {
+	case <-policy.captured:
+	case <-t.Context().Done():
+		require.Fail(t, "handler did not capture callback")
+	}
+	policy.releaseDeferredStart()
+	require.NoError(t, <-result)
+	require.Len(t, observer.facts, 2)
+	response, ok := observer.facts[1].(*fact.NexusStartResponse)
+	require.True(t, ok)
+	require.Equal(t, "async_success", response.ResponseKind)
+	require.NotZero(t, response.ObservedAt)
 }
 
 func TestResponsePolicyFailsOneCancellationRequest(t *testing.T) {

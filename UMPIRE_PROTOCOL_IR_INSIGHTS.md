@@ -1,9 +1,9 @@
 # Umpire — Protocol IR Insights
 
 > **Status: current architecture and forward design.** The v2 protocol, sparse regression domain,
-> typed runtime relation store, focused semantic coverage/pairwise exploration, and normalized
-> trace refinement are implemented. Richer constraints, causal refinement, and exporters remain
-> subsequent phases.
+> typed runtime relation store, protocol-derived semantic coverage, pairwise exploration,
+> normalized trace refinement, and bounded Ivy/P/TLA+ exporters are implemented. Richer
+> constraints and causal refinement remain subsequent phases.
 
 Insights distilled from the shared ChatGPT discussion
 [“Declarative vs Imperative Programming”](https://chatgpt.com/share/6a78d045-b678-83ea-85c2-09886bd17384),
@@ -47,9 +47,10 @@ default `testcore` monitor while retaining v1 as an explicit compatibility
 factory. A neutral testcore monitor boundary and an action-owned environment
 interface remove Umpire 2's temporary transitive v1 coupling. Protocol-declared
 relations now feed an indexed runtime store and the first lineage/link consumers;
-focused coverage, pairwise generation, and trace refinement primitives are also
-available. Generic constraints, relation-aware exploration, causal refinement,
-and exporters remain future work.
+protocol-derived coverage, pairwise generation, trace refinement primitives, and bounded model
+generation for Ivy, P, and TLA+ are also available. Generic constraints, relation-aware
+exploration, causal refinement, and broader backend semantics remain future work. See
+[`UMPIRE_GENMODELS.md`](./UMPIRE_GENMODELS.md).
 
 This model can remain executable in Go while eventually supporting exporters to model checkers or
 proof tools. The source of truth is the IR, not any one backend's syntax or worldview.
@@ -319,10 +320,11 @@ failure insertion, replay, and counterexample minimization before adding a forei
 Success criterion: the same declared action sequence runs against both the pure interpreter and a
 Temporal realizer, with comparable observations.
 
-### Phase 5 — One exporter as a semantic test
+### Phase 5 — Exporters as semantic tests (initial bounded slice implemented)
 
-Choose P or TLA+ based on the first concrete property that exceeds the Go explorer. Treat exporter
-construction as a test of IR clarity, not as the initial architecture driver.
+The initial Ivy, P, and TLA+ exporters derive bounded models from the compiled protocol and run
+their available verification toolchains. Treat further exporter construction as a test of IR
+clarity, not as the architecture driver.
 
 Success criterion: differential checks show the Go interpreter and exported model agree over a
 bounded corpus; unsupported semantics fail explicitly.

@@ -12,6 +12,7 @@ import (
 // run). It targets the run-precise WorkflowRun entity, so a run is observed — with its lineage — at
 // start, not only at completion. See UMPIRE_IDENTITY.md.
 type WorkflowRunStarted struct {
+	EventTimeCarrier
 	WorkflowID    string
 	RunID         string
 	FirstRunID    string

@@ -50,18 +50,19 @@ type EnvFunc func(t *testing.T, iter int) (*testcore.TestEnv, DriveFunc)
 // Probe is the fluent entry point. Build it with Umpire, describe a target with
 // Reach, say how to create+drive each execution with Execution, arm faults, then Judge.
 type Probe struct {
-	t         *testing.T
-	mk        EnvFunc
-	entity    string
-	state     string
-	routes    [][]string
-	faults    []string
-	holds     []holdFault
-	observe   bool
-	maxFaults int
-	dropN     int
-	timeout   time.Duration
-	cov       *Coverage
+	t                *testing.T
+	mk               EnvFunc
+	entity           string
+	state            string
+	routes           [][]string
+	faults           []string
+	holds            []holdFault
+	observe          bool
+	maxFaults        int
+	dropN            int
+	timeout          time.Duration
+	cov              *Coverage
+	semanticCoverage *umpire.Coverage
 }
 
 // holdFault delays a matching call by d before letting it through.
@@ -178,6 +179,12 @@ func (s *Probe) Coverage() *Coverage { return s.cov }
 // across runs) rather than its own.
 func (s *Probe) WithCoverage(c *Coverage) *Probe { s.cov = c; return s }
 
+// WithSemanticCoverage installs a shared framework coverage collector on monitors that support it.
+func (s *Probe) WithSemanticCoverage(coverage *umpire.Coverage) *Probe {
+	s.semanticCoverage = coverage
+	return s
+}
+
 // recordAndRun drives the happy path once in a fresh namespace with a recording
 // callback, returning the sorted set of distinct gRPC methods it made and the baseline.
 func (s *Probe) recordAndRun() ([]string, Scenario) {
@@ -188,6 +195,7 @@ func (s *Probe) recordAndRun() ([]string, Scenario) {
 	// Own subtest / own *testing.T, so the env teardown is scoped to this execution (see run).
 	s.t.Run(uniqueSubtestName("baseline-observe"), func(t *testing.T) {
 		env, drive := s.mk(t, 0)
+		s.installSemanticCoverage(env)
 		nsID := env.NamespaceID().String()
 		cleanup := s.record(env, nsID, seen, &mu)
 
@@ -242,6 +250,7 @@ func (s *Probe) run(iter int, method, label string, arm fault) Scenario {
 	// end of the whole test (where a still-cycling op would have re-dirtied the namespace).
 	s.t.Run(uniqueSubtestName(label), func(t *testing.T) {
 		env, drive := s.mk(t, iter)
+		s.installSemanticCoverage(env)
 		nsID := env.NamespaceID().String()
 
 		sc = Scenario{Label: label, Method: method}
@@ -261,6 +270,15 @@ func (s *Probe) run(iter int, method, label string, arm fault) Scenario {
 		env.GetMonitor().PurgeNamespace(nsID)
 	})
 	return sc
+}
+
+func (s *Probe) installSemanticCoverage(env *testcore.TestEnv) {
+	if s.semanticCoverage == nil {
+		return
+	}
+	if monitor, ok := env.GetMonitor().(interface{ SetCoverage(*umpire.Coverage) }); ok {
+		monitor.SetCoverage(s.semanticCoverage)
+	}
 }
 
 // stopExecutions terminates every caller workflow the Monitor observed in this
@@ -326,7 +344,11 @@ func subtestName(label string) string {
 // the outcome is hand-written.
 func (s *Probe) judge(env *testcore.TestEnv, nsID string, sc *Scenario) {
 	for _, v := range env.GetMonitor().CheckNamespace(context.Background(), nsID) {
-		sc.Violations = append(sc.Violations, v.Rule)
+		detail := v.Rule
+		if entity, ok := v.Tags["entity"]; ok {
+			detail += fmt.Sprintf(" (entity=%s state=%s)", entity, v.Tags["state"])
+		}
+		sc.Violations = append(sc.Violations, detail)
 	}
 	sc.Terminal, sc.Disposition = s.inspectTarget(env, nsID)
 	switch {

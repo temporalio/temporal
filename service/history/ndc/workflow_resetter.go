@@ -1002,7 +1002,8 @@ func reapplyEvents(
 			if attr.GetIdentity() == consts.IdentityHistoryService || attr.GetIdentity() == consts.IdentityResetter {
 				continue
 			}
-			if err := workflow.TerminateWorkflow(
+			if err := workflow.TerminateWorkflowWithContext(
+				ctx,
 				mutableState,
 				attr.GetReason(),
 				attr.GetDetails(),

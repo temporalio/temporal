@@ -231,6 +231,7 @@ func (p *ResponsePolicy) Handler() nexustest.Handler {
 			links := append([]nexus.Link(nil), p.handlerLinks...)
 			namespaceID, observer := p.namespaceID, p.factObserver
 			p.mu.Unlock()
+			callbackID := ""
 			if observer != nil {
 				header := make(map[string]string, len(opts.CallbackHeader))
 				for key, value := range opts.CallbackHeader {
@@ -241,25 +242,34 @@ func (p *ResponsePolicy) Handler() nexustest.Handler {
 					Callback:       opts.CallbackURL,
 					CallbackHeader: header,
 				})
+				callbackID = observed.CallbackID
 				if err := observer.ObserveFact(hctx, observed); err != nil {
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "umpire callback observation failed")
 				}
 			}
 			if hook != nil {
-				return hook(hctx, opts)
-			}
-			if len(links) != 0 {
-				nexus.AddHandlerLinks(hctx, links...)
-			}
-			if block {
-				<-hctx.Done() // hold the attempt so the operation stays scheduled
-				return nil, hctx.Err()
-			}
-			if deferred {
-				select {
-				case <-release:
-				case <-hctx.Done():
+				r, err = hook(hctx, opts)
+			} else {
+				if len(links) != 0 {
+					nexus.AddHandlerLinks(hctx, links...)
+				}
+				if block {
+					<-hctx.Done() // hold the attempt so the operation stays scheduled
 					return nil, hctx.Err()
+				}
+				if deferred {
+					select {
+					case <-release:
+					case <-hctx.Done():
+						return nil, hctx.Err()
+					}
+				}
+			}
+			if observer != nil && err == nil {
+				if observed := fact.NewNexusHTTPStartResponse(namespaceID, callbackID, opts.RequestID, nexusStartResponse(r)); observed != nil {
+					if err := observer.ObserveFact(hctx, observed); err != nil {
+						return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "umpire start response observation failed")
+					}
 				}
 			}
 			return r, err
@@ -275,6 +285,25 @@ func (p *ResponsePolicy) Handler() nexustest.Handler {
 			p.mu.Unlock()
 			return err
 		},
+	}
+}
+
+func nexusStartResponse(result nexus.HandlerStartOperationResult[any]) *nexuspb.StartOperationResponse {
+	switch result := result.(type) {
+	case *nexus.HandlerStartOperationResultAsync:
+		return &nexuspb.StartOperationResponse{Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+			AsyncSuccess: &nexuspb.StartOperationResponse_Async{OperationToken: result.OperationToken},
+		}}
+	case *nexus.HandlerStartOperationResultSync[any]:
+		encoded, err := payload.Encode(result.Value)
+		if err != nil {
+			return nil
+		}
+		return &nexuspb.StartOperationResponse{Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+			SyncSuccess: &nexuspb.StartOperationResponse_Sync{Payload: encoded},
+		}}
+	default:
+		return nil
 	}
 }
 

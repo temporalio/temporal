@@ -121,6 +121,15 @@ var (
 		regress.SymbolParameter("callback", CallbackType),
 		regress.SymbolParameter("operation", OperationType),
 	)
+	callbackReferenceSchema = regress.OutcomeSchema(
+		"nexus.callback_reference_consistent",
+		regress.SymbolParameter("operation", OperationType),
+		regress.SymbolParameter("handler", WorkflowType),
+	)
+	lateStartResponseSchema = regress.OutcomeSchema(
+		"nexus.late_start_response_accepted",
+		regress.SymbolParameter("operation", OperationType),
+	)
 	resultDigestSchema = regress.OutcomeSchema(
 		"nexus.result_digest",
 		regress.SymbolParameter("operation", OperationType),
@@ -207,6 +216,14 @@ func CallbackOperation(callback, operation string) regress.Instruction {
 	return regress.Relation(callbackOperationSchema, regress.Symbol(callback), regress.Symbol(operation))
 }
 
+func CallbackReferenceConsistent(operation, handler string) regress.Instruction {
+	return regress.Outcome(callbackReferenceSchema, regress.Symbol(operation), regress.Symbol(handler))
+}
+
+func LateStartResponseAccepted(operation string) regress.Instruction {
+	return regress.Outcome(lateStartResponseSchema, regress.Symbol(operation))
+}
+
 func ResultDigest(operation, digest string) regress.Instruction {
 	return regress.Outcome(resultDigestSchema, regress.Symbol(operation), regress.Literal(digest))
 }
@@ -240,6 +257,8 @@ func HandlerWorkflowSchema() regress.Schema   { return handlerWorkflowSchema }
 func ChildOfSchema() regress.Schema           { return childOfSchema }
 func StartToCloseSchema() regress.Schema      { return startToCloseSchema }
 func CallbackOperationSchema() regress.Schema { return callbackOperationSchema }
+func CallbackReferenceSchema() regress.Schema { return callbackReferenceSchema }
+func LateStartResponseSchema() regress.Schema { return lateStartResponseSchema }
 func ResultDigestSchema() regress.Schema      { return resultDigestSchema }
 func LinkEndpointSchema() regress.Schema      { return linkEndpointSchema }
 func DropSchema() regress.Schema              { return dropSchema }

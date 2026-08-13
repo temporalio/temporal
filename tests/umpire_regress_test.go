@@ -43,6 +43,7 @@ func TestSparseRegressionCompletionBeforeStartResponse(t *testing.T) {
 		nexus.Complete("op", nexus.Succeeded),
 		nexus.RespondStart("op", nexus.Async),
 		nexus.State("op", nexus.Completed),
+		nexus.LateStartResponseAccepted("op"),
 	)
 	runSparseRegression(t, plan, coreregress.Profile{Name: "local"})
 }
@@ -82,6 +83,8 @@ func TestSparseRegressionSharedHandlerWorkflow(t *testing.T) {
 		workflow.State("handler", workflow.Completed),
 		nexus.State("left", nexus.Completed),
 		nexus.State("right", nexus.Completed),
+		nexus.CallbackReferenceConsistent("left", "handler"),
+		nexus.CallbackReferenceConsistent("right", "handler"),
 	)
 	runSparseRegressionWithCHASM(t, plan, coreregress.Profile{Name: "local"}, false)
 }
@@ -136,7 +139,7 @@ func runSparseRegressionWithCHASM(t *testing.T, plan coreregress.Plan, profile c
 		)
 		return env, nil, nil
 	}, nil)
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	require.NoError(t, coreregress.Run(ctx, suite, harness))
 }

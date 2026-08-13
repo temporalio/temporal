@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire/verify"
 	"go.temporal.io/server/tests/umpire2/model"
 	"go.temporal.io/server/tests/umpire2/protocol"
 )
@@ -54,40 +55,113 @@ func checkRelationLinks(
 	activities map[string]*model.Activity,
 	changedNamespaces map[string]bool,
 ) {
+	verificationModel, state := relationVerificationState(c.Config.Relations, operations, activities, changedNamespaces)
+	properties := protocol.NexusActivityLinkConsistencyProperties()
 	for _, edge := range c.Config.Relations.Snapshot() {
-		namespaceID := relationNamespace(edge.Source.ID)
-		if !changedNamespaces[namespaceID] {
+		if !changedNamespaces[relationNamespace(edge.Source.ID)] {
 			continue
 		}
+		var property verify.Property
+		var message, operationID, activityID string
 		switch edge.Type {
 		case protocol.NexusActivityRelation:
 			if operations[edge.Source.ID] == nil || activities[edge.Target.ID] == nil {
 				continue
 			}
-			matched := slices.Contains(c.Config.Relations.Targets(protocol.ActivityNexusRelation, edge.Target), edge.Source)
-			c.Eval(edge.Source.ID+":"+edge.Target.ID, matched, umpire.Violation{
-				Message: "Nexus operation Activity link has no matching activity back-link",
-				Tags: map[string]string{
-					"operationID": relationSubject(edge.Source.ID),
-					"activityID":  relationSubject(edge.Target.ID),
-				},
-			})
+			property = properties[0]
+			message = "Nexus operation Activity link has no matching activity back-link"
+			operationID, activityID = edge.Source.ID, edge.Target.ID
 		case protocol.ActivityNexusRelation:
 			if activities[edge.Source.ID] == nil || operations[edge.Target.ID] == nil {
 				continue
 			}
-			matched := slices.Contains(c.Config.Relations.Targets(protocol.NexusActivityRelation, edge.Target), edge.Source)
-			c.Eval(edge.Source.ID+":"+edge.Target.ID, matched, umpire.Violation{
-				Message: "activity Nexus operation link has no matching Nexus-side link",
-				Tags: map[string]string{
-					"operationID": relationSubject(edge.Target.ID),
-					"activityID":  relationSubject(edge.Source.ID),
-				},
-			})
+			property = properties[1]
+			message = "activity Nexus operation link has no matching Nexus-side link"
+			operationID, activityID = edge.Target.ID, edge.Source.ID
 		default:
 			continue
 		}
+		if len(property.Expr.Args) != 1 || len(property.Expr.Args[0].Args) != 1 {
+			c.Eval(edge.Source.ID+":"+edge.Target.ID, false, umpire.Violation{Message: "invalid generated Nexus activity consistency property shape"})
+			continue
+		}
+		condition := property.Expr.Args[0].Args[0]
+		holds, err := verify.EvaluateExpr(verificationModel, state, condition, verify.Bindings{
+			"source": edge.Source.ID,
+			"target": edge.Target.ID,
+		})
+		if err != nil {
+			c.Eval(edge.Source.ID+":"+edge.Target.ID, false, umpire.Violation{Message: "invalid generated Nexus activity consistency property: " + err.Error()})
+			continue
+		}
+		c.Eval(edge.Source.ID+":"+edge.Target.ID, holds, umpire.Violation{
+			Message: message,
+			Tags: map[string]string{
+				"operationID": relationSubject(operationID),
+				"activityID":  relationSubject(activityID),
+			},
+		})
 	}
+}
+
+func relationVerificationState(
+	relations *umpire.RelationStore,
+	operations map[string]*model.NexusOperation,
+	activities map[string]*model.Activity,
+	changedNamespaces map[string]bool,
+) (verify.Model, verify.ModelState) {
+	operationIDs := verificationEntityIDs(operations, changedNamespaces)
+	activityIDs := verificationEntityIDs(activities, changedNamespaces)
+	verificationModel := verify.Model{
+		Version: "umpire2/runtime-link-consistency/v1",
+		Entities: []verify.EntityType{
+			{Name: string(model.NexusOperationType), IDs: operationIDs},
+			{Name: string(model.ActivityType), IDs: activityIDs},
+		},
+		Relations: []verify.Relation{
+			{Name: string(protocol.NexusActivityRelation), Source: string(model.NexusOperationType), Target: string(model.ActivityType), SourceCardinality: verify.One, TargetCardinality: verify.One},
+			{Name: string(protocol.ActivityNexusRelation), Source: string(model.ActivityType), Target: string(model.NexusOperationType), SourceCardinality: verify.One, TargetCardinality: verify.One},
+		},
+	}
+	state := verify.ModelState{
+		Entities: map[string]map[string]string{
+			string(model.NexusOperationType): existingVerificationEntities(operationIDs),
+			string(model.ActivityType):       existingVerificationEntities(activityIDs),
+		},
+		Relations: map[string][]verify.RelationTuple{
+			string(protocol.NexusActivityRelation): nil,
+			string(protocol.ActivityNexusRelation): nil,
+		},
+	}
+	for _, edge := range relations.Snapshot() {
+		if !changedNamespaces[relationNamespace(edge.Source.ID)] {
+			continue
+		}
+		if edge.Type != protocol.NexusActivityRelation && edge.Type != protocol.ActivityNexusRelation {
+			continue
+		}
+		state.Relations[string(edge.Type)] = append(state.Relations[string(edge.Type)], verify.RelationTuple{Source: edge.Source.ID, Target: edge.Target.ID})
+	}
+	return verificationModel, state
+}
+
+func verificationEntityIDs[T any](entities map[string]T, changedNamespaces map[string]bool) []string {
+	result := make([]string, 0, len(entities))
+	for id := range entities {
+		if changedNamespaces[relationNamespace(id)] {
+			result = append(result, id)
+		}
+	}
+	slices.Sort(result)
+	return result
+}
+
+func existingVerificationEntities(ids []string) map[string]string {
+	result := make(map[string]string, len(ids))
+	for _, id := range ids {
+		result[id] = ""
+	}
+	return result
 }
 
 func checkLegacyLinks(c *umpire.SafetyContext, operations map[string]*model.NexusOperation, activities map[string]*model.Activity) {

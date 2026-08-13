@@ -225,14 +225,15 @@ There is a spectrum:
 
 ## Status
 
-- **Built and tested today** (`tests/umpirev1/planner`, no server needed): the `DefaultModels()`
-  catalog (fully-qualified `(entity, state)` targets) and the planner it fronts —
+- **Built and tested today** (`tests/umpire2/protocol` and the preserved
+  `tests/umpirev1/planner` compatibility surface): fully-qualified `(entity, state)` targets,
+  compiled lifecycle/action catalogs, and planning through
   `PlanTo` (Shortest/AllRoutes/Random), `Explore`, `Constraints` (enforced by construction),
   fail-fast reachability, and `Plan.Run` over a `Driver`. The examples above are taken from the
   package's passing unit tests.
-- **The next seam**: a concrete Temporal `Driver` (events → RPCs / worker polls), wired to the
-  same client and namespace the Monitor scopes, so `Run` drives a real cluster and the Monitor
-  judges. See [`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md).
+- **The concrete seam is implemented**: Temporal action realizers drive RPC, SDK worker,
+  kitchensink, timer/fault, and sparse-regression traffic in the same namespace the Monitor
+  scopes. See [`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md).
 - **The hard next step**: **cross-entity targets** ("an update `accepted` while its workflow is
   `completed`") — the interesting bugs. Planning over the *product* of entity graphs needs the
   cross-entity coupling that today's per-entity models don't carry; it ties into the "enrich the

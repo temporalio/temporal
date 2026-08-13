@@ -25,12 +25,14 @@ const (
 	AttrPreviousRunID attribute.Key = "workflow.previous_run_id"
 	// AttrRunInitiator labels how a successor run was created — the typed graph edge from its
 	// predecessor. One of the RunInitiator* values below; empty for a first run.
-	AttrRunInitiator  attribute.Key = "workflow.run_initiator"
-	AttrNamespaceID   attribute.Key = "namespace.id"
-	AttrTaskQueue     attribute.Key = "task.queue"
-	AttrUpdateID      attribute.Key = "update.id"
-	AttrAbortReason   attribute.Key = "abort.reason"
-	AttrUpdateOutcome attribute.Key = "update.outcome"
+	AttrRunInitiator           attribute.Key = "workflow.run_initiator"
+	AttrWorkflowCloseOutcome   attribute.Key = "workflow.close_outcome"
+	AttrWorkflowSuccessorRunID attribute.Key = "workflow.successor_run_id"
+	AttrNamespaceID            attribute.Key = "namespace.id"
+	AttrTaskQueue              attribute.Key = "task.queue"
+	AttrUpdateID               attribute.Key = "update.id"
+	AttrAbortReason            attribute.Key = "abort.reason"
+	AttrUpdateOutcome          attribute.Key = "update.outcome"
 
 	// Generic CHASM transition telemetry (emitted by chasm.Transition.Apply under
 	// TEMPORAL_OTEL_DEBUG). Carries the component identity so the umpire can observe
@@ -68,6 +70,7 @@ const (
 	EventWorkflowExecutionStarted         = "WorkflowExecutionStarted"
 	EventWorkflowExecutionCompleted       = "WorkflowExecutionCompleted"
 	EventWorkflowExecutionContinuedAsNew  = "WorkflowExecutionContinuedAsNew"
+	EventWorkflowExecutionClosed          = "WorkflowExecutionClosed"
 	EventWorkflowTerminated               = "WorkflowTerminated"
 
 	// RunInitiator* are the values of AttrRunInitiator — the typed run-graph edge from a
@@ -76,6 +79,13 @@ const (
 	RunInitiatorRetry          = "retry"
 	RunInitiatorCron           = "cron"
 	RunInitiatorReset          = "reset"
+
+	WorkflowCloseOutcomeCompleted      = "completed"
+	WorkflowCloseOutcomeFailed         = "failed"
+	WorkflowCloseOutcomeCanceled       = "canceled"
+	WorkflowCloseOutcomeTerminated     = "terminated"
+	WorkflowCloseOutcomeTimedOut       = "timed_out"
+	WorkflowCloseOutcomeContinuedAsNew = "continued_as_new"
 
 	EventNexusOperationScheduled     = "NexusOperationScheduled"
 	EventNexusOperationAttemptFailed = "NexusOperationAttemptFailed" // scheduled -> backing_off

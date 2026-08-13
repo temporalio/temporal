@@ -409,6 +409,25 @@ func TestDomainRejectsPredicateVariableTypeMismatch(t *testing.T) {
 	require.ErrorContains(t, err, "of type Entity<Task>")
 }
 
+func TestDomainSnapshotIsSortedAndDefensive(t *testing.T) {
+	domain := regress.NewDomain("snapshot/v1")
+	predicateZ := regress.PredicateCapability{Schema: regress.OutcomeSchema("z", regress.SymbolParameter("job", regress.EntityType("Job")))}
+	predicateA := regress.PredicateCapability{Schema: regress.OutcomeSchema("a", regress.SymbolParameter("job", regress.EntityType("Job")))}
+	require.NoError(t, domain.AddPredicate(predicateZ))
+	require.NoError(t, domain.AddPredicate(predicateA))
+	action := regress.ActionCapability{
+		Schema:    regress.ActionSchema("act", regress.SymbolParameter("job", regress.EntityType("Job"))),
+		Variables: []regress.Variable{{Name: "job", Type: regress.EntityType("Job")}},
+		Effects:   []regress.AtomTemplate{regress.Atom("a", regress.TemplateVar("job"))},
+	}
+	require.NoError(t, domain.AddAction(action))
+
+	snapshot := domain.Snapshot()
+	require.Equal(t, []string{"a", "z"}, []string{snapshot.Predicates[0].Schema.Name, snapshot.Predicates[1].Schema.Name})
+	snapshot.Actions[0].Variables[0].Name = "changed"
+	require.Equal(t, "job", domain.Snapshot().Actions[0].Variables[0].Name)
+}
+
 func TestCompileRejectsStaleTypedConstructorSchema(t *testing.T) {
 	domain := newTaskDomain(t)
 	stale := regress.OutcomeSchema(

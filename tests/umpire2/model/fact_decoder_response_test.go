@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -15,8 +16,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/fact"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestImportPollNexusResponseCapturesCallbackTarget(t *testing.T) {
@@ -43,6 +46,91 @@ func TestImportPollNexusResponseCapturesCallbackTarget(t *testing.T) {
 	require.Equal(t, "operation-id", observed.OperationID)
 }
 
+func TestFactDecoderCorrelatesSuccessfulNexusStartResponseAndPurgesNamespace(t *testing.T) {
+	token, err := (&commonnexus.CallbackTokenGenerator{}).Tokenize(&tokenspb.NexusOperationCompletion{
+		NamespaceId: "namespace-id",
+		WorkflowId:  "operation-id",
+		RunId:       "run-id",
+		Ref:         &persistencespb.StateMachineRef{},
+		RequestId:   "operation-request-id",
+	})
+	require.NoError(t, err)
+	taskToken := []byte("secret-task-token")
+	pollResponse := &workflowservice.PollNexusTaskQueueResponse{
+		TaskToken: taskToken,
+		Request: &nexuspb.Request{Variant: &nexuspb.Request_StartOperation{StartOperation: &nexuspb.StartOperationRequest{
+			Callback:       "https://callback",
+			CallbackHeader: map[string]string{commonnexus.CallbackTokenHeader: token},
+		}}},
+	}
+	decoder := NewFactDecoder()
+	pollFacts := decoder.ImportResponses(&workflowservice.PollNexusTaskQueueRequest{}, pollResponse, "namespace-id")
+	require.Len(t, pollFacts, 1)
+	callback := pollFacts[0].(*fact.NexusCallbackObservation)
+	request := &workflowservice.RespondNexusTaskCompletedRequest{
+		TaskToken: taskToken,
+		Response: &nexuspb.Response{Variant: &nexuspb.Response_StartOperation{StartOperation: &nexuspb.StartOperationResponse{
+			Variant: &nexuspb.StartOperationResponse_AsyncSuccess{AsyncSuccess: &nexuspb.StartOperationResponse_Async{OperationToken: "operation-token"}},
+		}}},
+	}
+
+	decoded := decoder.ImportResponses(request, &workflowservice.RespondNexusTaskCompletedResponse{}, "namespace-id")
+	require.Len(t, decoded, 1)
+	response, ok := decoded[0].(*fact.NexusStartResponse)
+	require.True(t, ok)
+	require.Equal(t, callback.CallbackID, response.CallbackID)
+	require.Equal(t, "async_success", response.ResponseKind)
+	require.NotEmpty(t, response.DeliveryID)
+	require.NotEmpty(t, response.ResponseFingerprint)
+	require.NotZero(t, response.ObservedAt)
+
+	decoder.PurgeNamespace("namespace-id")
+	require.Empty(t, decoder.ImportResponses(request, &workflowservice.RespondNexusTaskCompletedResponse{}, "namespace-id"))
+}
+
+func TestFactDecoderCorrelatesConcurrentNexusStartResponses(t *testing.T) {
+	token, err := (&commonnexus.CallbackTokenGenerator{}).Tokenize(&tokenspb.NexusOperationCompletion{
+		NamespaceId: "namespace-id",
+		WorkflowId:  "operation-id",
+		RunId:       "run-id",
+		Ref:         &persistencespb.StateMachineRef{},
+		RequestId:   "operation-request-id",
+	})
+	require.NoError(t, err)
+	taskToken := []byte("secret-task-token")
+	decoder := NewFactDecoder()
+	decoder.ImportResponses(&workflowservice.PollNexusTaskQueueRequest{}, &workflowservice.PollNexusTaskQueueResponse{
+		TaskToken: taskToken,
+		Request: &nexuspb.Request{Variant: &nexuspb.Request_StartOperation{StartOperation: &nexuspb.StartOperationRequest{
+			CallbackHeader: map[string]string{commonnexus.CallbackTokenHeader: token},
+		}}},
+	}, "namespace-id")
+	request := &workflowservice.RespondNexusTaskCompletedRequest{
+		TaskToken: taskToken,
+		Response: &nexuspb.Response{Variant: &nexuspb.Response_StartOperation{StartOperation: &nexuspb.StartOperationResponse{
+			Variant: &nexuspb.StartOperationResponse_AsyncSuccess{AsyncSuccess: &nexuspb.StartOperationResponse_Async{OperationToken: "operation-token"}},
+		}}},
+	}
+
+	const workers = 32
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(workers)
+	results := make(chan []umpire.Fact, workers)
+	for range workers {
+		go func() {
+			defer waitGroup.Done()
+			results <- decoder.ImportResponses(request, &workflowservice.RespondNexusTaskCompletedResponse{}, "namespace-id")
+		}()
+	}
+	waitGroup.Wait()
+	close(results)
+	for decoded := range results {
+		require.Len(t, decoded, 1)
+		_, ok := decoded[0].(*fact.NexusStartResponse)
+		require.True(t, ok)
+	}
+}
+
 func TestImportStartWorkflowResponseReturnsEveryCallbackAttachment(t *testing.T) {
 	callback := func(url string) *commonpb.Callback {
 		return &commonpb.Callback{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: url}}}
@@ -62,6 +150,61 @@ func TestImportStartWorkflowResponseReturnsEveryCallbackAttachment(t *testing.T)
 	require.True(t, ok)
 	require.NotEqual(t, first.CallbackID, second.CallbackID)
 	require.Equal(t, "handler-run-id", first.HandlerRunID)
+}
+
+func TestImportHistoryResponseCapturesCallbackAttachmentReferences(t *testing.T) {
+	startedAt := time.Date(2026, time.August, 12, 16, 0, 0, 0, time.UTC)
+	attachedAt := startedAt.Add(time.Minute)
+	callback := func(url string) *commonpb.Callback {
+		return &commonpb.Callback{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: url}}}
+	}
+	request := &workflowservice.GetWorkflowExecutionHistoryRequest{Execution: &commonpb.WorkflowExecution{
+		WorkflowId: "handler-id",
+		RunId:      "handler-run-id",
+	}}
+	response := &workflowservice.GetWorkflowExecutionHistoryResponse{History: &historypb.History{Events: []*historypb.HistoryEvent{
+		{
+			EventId:   1,
+			EventTime: timestamppb.New(startedAt),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{CompletionCallbacks: []*commonpb.Callback{callback("https://start")}},
+			},
+		},
+		{
+			EventId:   7,
+			EventTime: timestamppb.New(attachedAt),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+				WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+					AttachedRequestId:           "attach-request-id",
+					AttachedCompletionCallbacks: []*commonpb.Callback{callback("https://attached")},
+				},
+			},
+		},
+	}}}
+
+	decoded := fromResponses(request, response, "namespace-id")
+	require.Len(t, decoded, 2)
+	startAttachment, ok := decoded[0].(*fact.WorkflowCallbackAttachment)
+	require.True(t, ok)
+	require.Equal(t, startedAt, startAttachment.HandlerWorkflowStartTime)
+	require.Equal(t, startedAt, startAttachment.AttachmentEventTime)
+	require.Equal(t, int64(1), startAttachment.AttachmentEventID)
+	require.Equal(t, "event", startAttachment.ReferenceKind)
+	require.Equal(t, "1", startAttachment.ReferenceValue)
+	require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startAttachment.ReferencedEventType)
+	require.Empty(t, startAttachment.RequestID)
+
+	requestAttachment, ok := decoded[1].(*fact.WorkflowCallbackAttachment)
+	require.True(t, ok)
+	require.Equal(t, startedAt, requestAttachment.HandlerWorkflowStartTime)
+	require.Equal(t, attachedAt, requestAttachment.AttachmentEventTime)
+	require.Equal(t, int64(7), requestAttachment.AttachmentEventID)
+	require.Equal(t, "request", requestAttachment.ReferenceKind)
+	require.Equal(t, "attach-request-id", requestAttachment.ReferenceValue)
+	require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, requestAttachment.ReferencedEventType)
+	require.Equal(t, "attach-request-id", requestAttachment.RequestID)
 }
 
 func TestImportHistoryResponseReturnsExistingAndTerminalFacts(t *testing.T) {
@@ -143,6 +286,42 @@ func TestImportHistoryResponseCapturesNexusTimeoutSemantics(t *testing.T) {
 		TimeoutMessage:      "operation timed out",
 		EntityPath:          snapshot.EntityPath,
 	}, snapshot)
+}
+
+func TestImportHistoryResponseCapturesNexusStartedWorkflowReference(t *testing.T) {
+	startedAt := time.Date(2026, time.August, 12, 17, 0, 0, 0, time.UTC)
+	request := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Execution: &commonpb.WorkflowExecution{WorkflowId: "caller-id", RunId: "caller-run-id"},
+	}
+	response := &workflowservice.GetWorkflowExecutionHistoryResponse{History: &historypb.History{Events: []*historypb.HistoryEvent{{
+		EventId:   8,
+		EventTime: timestamppb.New(startedAt),
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED,
+		Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{ScheduledEventId: 5},
+		},
+		Links: []*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: &commonpb.Link_WorkflowEvent{
+			WorkflowId: "handler-id",
+			RunId:      "handler-run-id",
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			}},
+		}}}},
+	}}}}
+
+	decoded := fromResponses(request, response, "namespace-id")
+	require.Len(t, decoded, 1)
+	observed, ok := decoded[0].(*fact.NexusOperationStartedHistory)
+	require.True(t, ok)
+	require.Equal(t, startedAt, observed.EventTime())
+	require.Equal(t, "caller-id", observed.WorkflowID)
+	require.Equal(t, "5", observed.ScheduledEventID)
+	require.Equal(t, "handler-id", observed.HandlerWorkflowID)
+	require.Equal(t, "handler-run-id", observed.HandlerRunID)
+	require.Equal(t, "event", observed.ReferenceKind)
+	require.Equal(t, "1", observed.ReferenceValue)
+	require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, observed.ReferencedEventType)
 }
 
 func TestImportHistoryResponseCapturesNexusCancelRequestFailure(t *testing.T) {

@@ -30,6 +30,7 @@ func TestRepresentativePlansCompileAgainstDefaultDomain(t *testing.T) {
 			nexus.Complete("op", nexus.Succeeded),
 			nexus.RespondStart("op", nexus.Async),
 			nexus.State("op", nexus.Completed),
+			nexus.LateStartResponseAccepted("op"),
 		),
 		"two callers share handler": coreregress.AllPaths(
 			coreregress.AnyOrder(
@@ -39,6 +40,8 @@ func TestRepresentativePlansCompileAgainstDefaultDomain(t *testing.T) {
 			workflow.State("handler", workflow.Completed),
 			nexus.State("left", nexus.Completed),
 			nexus.State("right", nexus.Completed),
+			nexus.CallbackReferenceConsistent("left", "handler"),
+			nexus.CallbackReferenceConsistent("right", "handler"),
 		),
 		"cancellation retried": coreregress.OnePath(
 			nexus.State("op", nexus.Started),

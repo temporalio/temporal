@@ -23,15 +23,18 @@ var _ umpire.Lifecycled = (*WorkflowRun)(nil)
 // the RunID. fail/cancel/terminate/timeout and the lineage *edges* are follow-ups
 // (UMPIRE_IDENTITY.md).
 type WorkflowRun struct {
-	WorkflowID    string
-	RunID         string
-	FirstRunID    string
-	PreviousRunID string
-	Initiator     string // how this run was created (the typed edge from PreviousRunID)
-	FSM           *umpire.Lifecycle
-	StartedAt     time.Time
-	CompletedAt   time.Time
-	LastSeenAt    time.Time
+	WorkflowID     string
+	RunID          string
+	FirstRunID     string
+	PreviousRunID  string
+	Initiator      string // how this run was created (the typed edge from PreviousRunID)
+	FSM            *umpire.Lifecycle
+	StartedAt      time.Time
+	CompletedAt    time.Time
+	ClosedAt       time.Time
+	CloseOutcome   string
+	SuccessorRunID string
+	LastSeenAt     time.Time
 }
 
 func NewWorkflowRun() *WorkflowRun {
@@ -41,7 +44,11 @@ func NewWorkflowRun() *WorkflowRun {
 		States: umpire.States{
 			WorkflowRunCreated:        {},
 			WorkflowRunStarted:        {},
-			WorkflowRunCompleted:      {},
+			WorkflowRunCompleted:      {umpire.Success},
+			WorkflowRunFailed:         {umpire.Failure},
+			WorkflowRunCanceled:       {},
+			WorkflowRunTerminated:     {},
+			WorkflowRunTimedOut:       {umpire.Failure},
 			WorkflowRunContinuedAsNew: {},
 		},
 		Transitions: []umpire.Transition{
@@ -50,6 +57,10 @@ func NewWorkflowRun() *WorkflowRun {
 				From:  []string{WorkflowRunCreated},
 				To:    WorkflowRunStarted,
 			},
+			{Event: WorkflowRunFail, From: []string{WorkflowRunStarted}, To: WorkflowRunFailed},
+			{Event: WorkflowRunCancel, From: []string{WorkflowRunStarted}, To: WorkflowRunCanceled},
+			{Event: WorkflowRunTerminate, From: []string{WorkflowRunStarted}, To: WorkflowRunTerminated},
+			{Event: WorkflowRunTimeout, From: []string{WorkflowRunStarted}, To: WorkflowRunTimedOut},
 			{
 				Event: WorkflowRunComplete,
 				From:  []string{WorkflowRunStarted},
@@ -80,8 +91,8 @@ func (r *WorkflowRun) OnFact(ctx context.Context, _ *umpire.EntityPath, facts it
 			r.FirstRunID = e.FirstRunID
 			r.PreviousRunID = e.PreviousRunID
 			r.Initiator = e.Initiator
-			if r.FSM.Fire(ctx, WorkflowRunStart) {
-				r.StartedAt = time.Now()
+			if r.FSM.FireAt(ctx, WorkflowRunStart, e.EventTime()) {
+				r.StartedAt = eventTimeOrNow(e.EventTime())
 			}
 			r.LastSeenAt = time.Now()
 		case *fact.WorkflowRunCompleted:
@@ -91,6 +102,8 @@ func (r *WorkflowRun) OnFact(ctx context.Context, _ *umpire.EntityPath, facts it
 			}
 			if r.FSM.Fire(ctx, WorkflowRunComplete) {
 				r.CompletedAt = time.Now()
+				r.ClosedAt = r.CompletedAt
+				r.CloseOutcome = factOutcomeCompleted
 			}
 			r.LastSeenAt = time.Now()
 		case *fact.WorkflowRunContinuedAsNew:
@@ -98,7 +111,30 @@ func (r *WorkflowRun) OnFact(ctx context.Context, _ *umpire.EntityPath, facts it
 				r.WorkflowID = e.WorkflowID
 				r.RunID = e.RunID
 			}
-			r.FSM.Fire(ctx, WorkflowRunContinueAsNew)
+			if r.FSM.Fire(ctx, WorkflowRunContinueAsNew) {
+				r.ClosedAt = time.Now()
+				r.CloseOutcome = "continued_as_new"
+			}
+			r.LastSeenAt = time.Now()
+		case *fact.WorkflowRunClosed:
+			if r.WorkflowID == "" {
+				r.WorkflowID = e.WorkflowID
+				r.RunID = e.RunID
+			}
+			event := workflowCloseTransition(e.Outcome)
+			if r.CloseOutcome != "" && r.CloseOutcome != e.Outcome {
+				r.FSM.RecordIllegalAt(event, e.EventTime())
+				r.LastSeenAt = time.Now()
+				continue
+			}
+			if r.FSM.FireAt(ctx, event, e.EventTime()) {
+				r.ClosedAt = eventTimeOrNow(e.EventTime())
+				r.CloseOutcome = e.Outcome
+				r.SuccessorRunID = e.SuccessorRunID
+				if e.Outcome == factOutcomeCompleted {
+					r.CompletedAt = r.ClosedAt
+				}
+			}
 			r.LastSeenAt = time.Now()
 		}
 	}
@@ -114,9 +150,17 @@ const (
 	WorkflowRunCreated        WorkflowState = "created"
 	WorkflowRunStarted        WorkflowState = "started"
 	WorkflowRunCompleted      WorkflowState = "completed"
+	WorkflowRunFailed         WorkflowState = "failed"
+	WorkflowRunCanceled       WorkflowState = "canceled"
+	WorkflowRunTerminated     WorkflowState = "terminated"
+	WorkflowRunTimedOut       WorkflowState = "timed_out"
 	WorkflowRunContinuedAsNew WorkflowState = "continued_as_new"
 
 	WorkflowRunStart         WorkflowEvent = "start"
 	WorkflowRunComplete      WorkflowEvent = "complete"
+	WorkflowRunFail          WorkflowEvent = "fail"
+	WorkflowRunCancel        WorkflowEvent = "cancel"
+	WorkflowRunTerminate     WorkflowEvent = "terminate"
+	WorkflowRunTimeout       WorkflowEvent = "timeout"
 	WorkflowRunContinueAsNew WorkflowEvent = "continue_as_new"
 )

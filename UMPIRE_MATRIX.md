@@ -327,8 +327,8 @@ Phased, each phase independently useful and testable. Pure core first, server wi
 - **Phase 4 — Two suites, one space.** Stand up the exhaustive regression suite (CI, `Full`, small
   layers, hard budget) and the exploratory suite (soak, `Sample`/`Pairwise`, budget). Coverage
   accumulates across the whole matrix; a matrix-size gate mirrors the completeness gates.
-- **Phase 5 — Pairwise generator.** A real t-way covering-array builder (constraint-aware) for the
-  large layer-4 space, so bounded runs still hit every pair.
+- **Phase 5 — Pairwise generator (implemented).** The generic deterministic, constraint-aware,
+  bounded pairwise generator and pure Temporal protocol adapter cover the large layer-4 space.
 - **Phase 6 (future) — Model interaction.** The `models: SetOf{…}` axis and a cross-model
   interleaving scheduler (layer 5). Sampling-only; property-based over schedules.
 

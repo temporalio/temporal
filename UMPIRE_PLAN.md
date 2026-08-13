@@ -17,7 +17,7 @@ Current state, a critical read against the goals, gap analysis, and rule invento
   `WithUmpireMonitorFactory(umpirev1.NewMonitor)`.
 - **V2:** `tests/umpire2` is the suite-wide `testcore` default. Its protocol compiles the fact,
   entity, action, action-gap, relation, and sparse-regression catalogs before monitor
-  construction. Its active monitor registers four safety and two liveness rules and adds
+  construction. Its active monitor registers six safety and two liveness rules and adds
   WorkflowRun, Activity, richer Nexus observations, and relation-backed link consistency.
 - **Parity:** focused contracts cover active v1 plans, representative routing and completion
   payloads, rule registration, and the default-factory cutover. V2 is intentionally a strict
@@ -28,10 +28,16 @@ Current state, a critical read against the goals, gap analysis, and rule invento
   completion now also proves a canonical result digest, canonical handler link endpoint, and
   explicit HSM/CHASM operation-storage deletion. Shared-handler resolution is grounded through
   callback-operation and callback-handler-run relations. The imperative v1 tests remain available.
+- **Close and callback parity:** Workflow and WorkflowRun consume one normalized, event-timed close
+  observation for every close outcome. Public history supplies callback attachment references and
+  handler start time; successful Nexus start responses are correlated by non-secret delivery
+  digests and judged by reusable reference and response-consistency rules.
 - **Reusable slices:** typed runtime relations, semantic coverage, deterministic pairwise
   generation plus a Temporal protocol adapter, bounded normalized action/verdict tracing,
   checked-in causal footprints, and validator-backed duration/link/payload/enum/integer domains
-  are implemented. The external generated validator registry remains a future integration point.
+  are implemented. The compiled v2 protocol derives deterministic fact, transition, relation, and
+  executable-action coverage catalogs; live Nexus exploration gates its transition subset with
+  `Coverage.Unmet()`. The external generated validator registry remains a future integration point.
 
 ### Bounded v2-default triage
 
@@ -45,18 +51,17 @@ The repeatable local prefixes are:
 - `go test -tags test_dep ./tests -run '^TestNexus' -count=1`
 - `go test -tags test_dep ./tests -run '^Test.*Workflow' -count=1`
 
-The focused framework, v2, testcore, and sparse prefixes pass. The combined Umpire prefix retains
-the known `TestProbeNexusExploration` model-coverage expectation (17 declared Nexus edges versus
-11 exercised by that bounded probe). The broad Nexus and Workflow prefixes also reproduce the
-unrelated `TestWorkflowUpdateAsyncNexusOperation` duplicate workflow registration panic for
-`func1`; it is outside this parity change. Neither result justifies selecting v1 implicitly.
+The focused framework, v2, testcore, sparse, and live Nexus exploration prefixes are the bounded
+gate. Live exploration exercises all 17 declared NexusOperation edges and also requires the
+protocol-derived transition catalog to have no unmet point. Broader suite failures must be
+classified independently; they do not justify selecting v1 implicitly.
 
 ## Ordered next steps
 
 1. Broaden v2-default functional triage beyond the bounded prefixes and classify only reproducible
    model-fidelity gaps; use explicit v1 solely for a documented compatibility exception.
-2. Add the remaining imperative callback assertions—request-reference timestamps and duplicate
-   response semantics—as reusable facts/rules before considering any test retirement.
+2. Expand callback rule adoption beyond the completion-before-start and shared-handler sparse
+   plans before considering any imperative test retirement.
 3. Extend causal association across task and process boundaries, then use the checked-in semantic
    footprints to drive opt-in trace-derived fault targeting.
 4. Build the matrix scenario assembler and environment-flag constraints over the pure Temporal
@@ -427,7 +432,11 @@ missing close-signal fidelity, not the rules themselves.
 4. **Housekeeping.** Remove dead `cache.go` instrumentation and unused symbols; confirm the
    teardown wiring covers each test exactly once.
 
-## Coverpoints & coverage (planned)
+## Coverpoints & coverage (historical proposal; semantic substrate implemented)
+
+The generic `Coverage` collector and compiled-protocol fact/transition/relation/action catalog now
+implement the declared-versus-observed substrate described below. A separately registered catalog
+of arbitrary rule-precondition predicates remains future work.
 
 A **coverpoint** is a named, documented *situation of interest* plus a predicate that
 recognizes it in the observed model. It is a third subsystem alongside facts→entities→rules,

@@ -2,7 +2,9 @@ package rule
 
 import (
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/fact"
 	"go.temporal.io/server/tests/umpire2/model"
@@ -30,6 +32,17 @@ func makeNexusSucceeded(workflowID, schedEventID string) *fact.NexusOperationSuc
 	f := &fact.NexusOperationSucceeded{}
 	f.ScheduledEventID, f.WorkflowID, f.EntityPath = schedEventID, workflowID, nexusPath(workflowID, schedEventID)
 	return f
+}
+
+func makeWorkflowClosedAt(workflowID, outcome string, eventTime time.Time) *fact.WorkflowExecutionClosed {
+	closed := &fact.WorkflowExecutionClosed{}
+	closed.WorkflowID = workflowID
+	closed.RunID = "run-id"
+	closed.NamespaceID = "namespace-id"
+	closed.Outcome = outcome
+	closed.SetEventTime(eventTime)
+	closed.EntityPath = &umpire.EntityPath{EntityID: umpire.NewEntityID(model.WorkflowType, workflowID)}
+	return closed
 }
 
 func TestNexusOperationClosure_DetectsStartedAfterClose(t *testing.T) {
@@ -82,4 +95,38 @@ func TestNexusOperationClosure_NoViolation_WorkflowNotClosed(t *testing.T) {
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations when caller workflow is not closed, got %d", len(violations))
 	}
+}
+
+func TestNexusOperationClosureUsesEventTimeForEveryWorkflowCloseOutcome(t *testing.T) {
+	closedAt := time.Date(2026, time.August, 12, 15, 0, 0, 0, time.UTC)
+	startedAt := closedAt.Add(time.Second)
+	reg := newTestModelState()
+	closed := makeWorkflowClosedAt("wf1", "failed", closedAt)
+	started := makeNexusStarted("wf1", "5")
+	started.SetEventTime(startedAt)
+	scheduled := makeNexusScheduled("wf1", "5")
+	scheduled.SetEventTime(closedAt.Add(-time.Second))
+
+	routeFact(t, reg, closed)
+	routeFact(t, reg, scheduled)
+	routeFact(t, reg, started)
+
+	violations := checkSafetyRule(reg, &NexusOperationClosure{})
+	require.Len(t, violations, 1)
+	require.Contains(t, violations[0].Message, "started after caller workflow closed")
+}
+
+func TestNexusOperationClosureIgnoresDeliveryOrderWhenEventTimeIsValid(t *testing.T) {
+	closedAt := time.Date(2026, time.August, 12, 15, 0, 0, 0, time.UTC)
+	reg := newTestModelState()
+	closed := makeWorkflowClosedAt("wf1", "completed", closedAt)
+	routeFact(t, reg, closed)
+	scheduled := makeNexusScheduled("wf1", "5")
+	scheduled.SetEventTime(closedAt.Add(-2 * time.Second))
+	succeeded := makeNexusSucceeded("wf1", "5")
+	succeeded.SetEventTime(closedAt.Add(-time.Second))
+	routeFact(t, reg, scheduled)
+	routeFact(t, reg, succeeded)
+
+	require.Empty(t, checkSafetyRule(reg, &NexusOperationClosure{}))
 }

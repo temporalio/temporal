@@ -8,16 +8,15 @@ import (
 )
 
 // NexusOperationClosure checks that no Nexus operation transitions after its
-// caller workflow has reached a terminal state. Workflow close is observed for
-// only one path; *At timestamps are observation-time. Triage against the real
-// Nexus suite before relying on it (see UMPIRE_NEXUS.md).
+// caller workflow has reached a terminal state. Workflow and operation ordering
+// uses source event time, so out-of-order span delivery does not change the verdict.
 type NexusOperationClosure struct{}
 
 func (m *NexusOperationClosure) Name() string { return "NexusOperationClosureRule" }
 
 func (m *NexusOperationClosure) CheckSafety(c *umpire.SafetyContext) {
-	// Build the set of completed caller workflows with their completion times.
-	completedWorkflows := make(map[string]time.Time)
+	// Build the set of closed caller workflows with their close times.
+	closedWorkflows := make(map[string]time.Time)
 	for r := range c.ChangedLifecycles() {
 		wf, ok := r.Entity.(*model.Workflow)
 		if !ok {
@@ -26,8 +25,8 @@ func (m *NexusOperationClosure) CheckSafety(c *umpire.SafetyContext) {
 		if wf.WorkflowID == "" {
 			continue
 		}
-		if wf.FSM.Current() == "completed" && !wf.CompletedAt.IsZero() {
-			completedWorkflows[wf.WorkflowID] = wf.CompletedAt
+		if wf.FSM.IsTerminal() && !wf.ClosedAt.IsZero() {
+			closedWorkflows[wf.WorkflowID] = wf.ClosedAt
 		}
 	}
 
@@ -39,7 +38,7 @@ func (m *NexusOperationClosure) CheckSafety(c *umpire.SafetyContext) {
 		if op.WorkflowID == "" {
 			continue
 		}
-		closedAt, closed := completedWorkflows[op.WorkflowID]
+		closedAt, closed := closedWorkflows[op.WorkflowID]
 		if !closed {
 			continue
 		}

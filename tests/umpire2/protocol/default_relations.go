@@ -146,7 +146,7 @@ func deriveCallbackRelations(observed umpire.Fact) []RelationMutation {
 			Target: scopedRelationEntity(model.NexusOperationType, callback.NamespaceID, callback.OperationID),
 		}}}
 	case *fact.WorkflowCallbackAttachment:
-		if callback.Malformed || callback.NamespaceID == "" || callback.CallbackID == "" || callback.HandlerRunID == "" {
+		if callback.NamespaceID == "" || callback.CallbackID == "" || callback.HandlerRunID == "" {
 			return nil
 		}
 		return []RelationMutation{{Edge: umpire.RelationEdge{

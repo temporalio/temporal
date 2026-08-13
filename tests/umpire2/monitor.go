@@ -82,6 +82,8 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusOperationClosure{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusActivityLinkConsistency{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusOperationTimeoutSemantics{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.CallbackReferenceConsistency{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.CallbackResponseConsistency{} })
 	// Illegal-transition conformance is not registered as a rule: it is a built-in
 	// framework check (RuleRegistry.Check → checkConformance) that surfaces, for every
 	// Lifecycled entity, the illegal transitions Lifecycle.Fire records at fire-time —
@@ -360,7 +362,7 @@ func (u *Monitor) recordCoverage(facts []umpirefw.Fact) {
 			for _, edge := range lifecycled.Lifecycle().VisitedEdges() {
 				coverage.Record(umpirefw.CoveragePoint{
 					Kind: umpirefw.CoverageTransition,
-					ID:   fmt.Sprintf("%s:%s/%s/%s", entry.Entity.Type(), edge.From, edge.Event, edge.To),
+					ID:   protocol.TransitionCoverageID(entry.Entity.Type(), edge),
 				})
 			}
 		}
@@ -422,7 +424,7 @@ func (u *Monitor) recordTrace(facts []umpirefw.Fact) error {
 				continue
 			}
 			for _, edge := range lifecycled.Lifecycle().VisitedEdges() {
-				name := fmt.Sprintf("%s:%s/%s/%s", entry.Entity.Type(), edge.From, edge.Event, edge.To)
+				name := protocol.TransitionCoverageID(entry.Entity.Type(), edge)
 				semanticKey := "transition:" + entry.Key + ":" + name
 				if _, seen := u.traceSeen[semanticKey]; seen {
 					continue
@@ -497,6 +499,7 @@ func (u *Monitor) recordRuleCoverage(violations []umpirefw.Violation) {
 // given namespace, so a shared monitor carries nothing between tests.
 func (u *Monitor) PurgeNamespace(namespaceID string) {
 	root := u.namespaceRoot(namespaceID)
+	u.decoder.PurgeNamespace(namespaceID)
 	u.registry.PurgeScope(root)
 	u.factLog.PurgeScope(root)
 	u.rulebook.PurgeScope(root)

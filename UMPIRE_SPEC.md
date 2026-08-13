@@ -25,8 +25,9 @@ pair that drives:
 
 The parts close a cycle: **plan → drive → observe → model → judge → steer**. The Planner plans
 over the same model the Monitor builds; the Driver realizes those routes as traffic; the Monitor
-judges the result. Lifecycle edge coverage and novelty-guided fault scheduling exist today; a
-unified `Coverage.Unmet()` catalog remains planned. The server under test is the SUT.
+judges the result. The compiled v2 protocol derives fact, lifecycle-transition, relation, and
+executable-action coverage catalogs consumed through `Coverage.Unmet()`; novelty-guided fault
+scheduling also exists. The server under test is the SUT.
 Workloads are reused from **Omes** (kitchensink workflows; see [`UMPIRE_PRIOR_ART.md` (Omes)](./UMPIRE_PRIOR_ART.md#what-umpire-can-learn-from-omes-kitchen-sink-approach)) rather
 than a bespoke DSL.
 
@@ -54,9 +55,10 @@ than a bespoke DSL.
 - **RuleRegistry** *(declared)* — the name-validated registry of rules.
 - **Violation** — a rule's output when an invariant fails; the Monitor's only product.
 - **Coverpoint** — a named, interesting condition worth reaching at least once (e.g. a rule's precondition, or a notable state).
-- **CoverpointRegistry** *(planned)* — a name-validated registry of semantic coverpoints.
-- **Coverage** *(partially implemented)* — lifecycle-edge and fault-pair tallies exist; a unified
-  semantic catalog and `Unmet()` reward signal remain planned.
+- **CoverpointRegistry** *(planned)* — a name-validated registry of arbitrary predicate coverpoints.
+- **Coverage** *(implemented substrate)* — a thread-safe declared-versus-observed semantic catalog
+  with deterministic snapshots and `Unmet()`; v2 derives fact, transition, relation, and action
+  denominators from the compiled protocol.
 
 **Planning (Planner) — high-level, over the model**
 - **target** — the state you ask the Planner to reach, fully-qualified by entity (e.g. `WorkflowUpdate:completed`).
@@ -225,13 +227,14 @@ than a bespoke DSL.
 
   Portability falls out: push each rule and action to the widest set of environments its
   capabilities allow.
-- **Coverage is the reward signal.** The coverpoint catalog (planned, `UMPIRE_PLAN.md`)
-  turns a rule's precondition into a coverpoint; `Coverage.Unmet()` is the list of
-  interesting states nobody reached — the seam the Planner's guided-fuzz mode steers toward.
+- **Coverage is the reward signal.** Protocol-derived semantic catalogs make
+  `Coverage.Unmet()` the list of declared facts, transitions, relations, or actions nobody
+  reached. Arbitrary rule-precondition coverpoints remain a later extension.
 - **Pluggable registries.** Rules register in a name-validated `RuleRegistry`, coverpoints in a
   `CoverpointRegistry`, and routes in a `RouteRegistry`. Adding one ≠ touching the framework.
-- **Framework / domain split.** `common/testing/umpire` is generic and reusable; `tests/umpirev1`
-  holds all Temporal specifics (entities, facts, rules, and — later — actions).
+- **Framework / domain split.** `common/testing/umpire` is generic and reusable;
+  `tests/umpire2` holds the current Temporal facts, entities, protocol, actions, and rules, while
+  `tests/umpirev1` remains an explicit compatibility/reference implementation.
 
 ## Shape
 

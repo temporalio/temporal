@@ -21,6 +21,11 @@ testdata/
 *.html
 /test.log
 
+# Umpire verification tool output
+/tests/umpire2/genmodels-results/
+/tests/umpire2/genmodels/tla/_apalache-out/
+/tests/umpire2/genmodels/p/PGenerated/
+
 # Executables produced by temporal repo
 /temporal-*
 /tctl*

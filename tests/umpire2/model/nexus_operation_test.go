@@ -3,8 +3,10 @@ package model
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/fact"
 )
@@ -95,4 +97,80 @@ func TestNexusOperation_SyncCompletionSkipsStarted(t *testing.T) {
 	)
 	require.Equal(t, "succeeded", op.FSM.Current())
 	require.True(t, op.StartedAt().IsZero(), "STARTED must not be marked reached on sync completion")
+}
+
+func TestNexusOperation_UsesSpanEventTimes(t *testing.T) {
+	scheduledAt := time.Date(2026, time.August, 12, 14, 0, 0, 0, time.UTC)
+	startedAt := scheduledAt.Add(time.Second)
+	settledAt := startedAt.Add(time.Second)
+	scheduled := &fact.NexusOperationScheduled{}
+	scheduled.SetEventTime(scheduledAt)
+	started := &fact.NexusOperationStarted{}
+	started.SetEventTime(startedAt)
+	succeeded := succeededFact("success")
+	succeeded.SetEventTime(settledAt)
+
+	op := NewNexusOperation()
+	fireNexus(t, op, scheduled, started, succeeded)
+
+	require.Equal(t, scheduledAt, op.ScheduledAt())
+	require.Equal(t, startedAt, op.StartedAt())
+	actualSettledAt, ok := op.SettledAt()
+	require.True(t, ok)
+	require.Equal(t, settledAt, actualSettledAt)
+}
+
+func TestNexusOperationRetainsStartedHistoryReference(t *testing.T) {
+	startedAt := time.Date(2026, time.August, 12, 14, 0, 0, 0, time.UTC)
+	history := &fact.NexusOperationStartedHistory{
+		WorkflowID:          "wf1",
+		ScheduledEventID:    "5",
+		StartedEventID:      "8",
+		HandlerWorkflowID:   "handler-id",
+		HandlerRunID:        "handler-run-id",
+		ReferenceKind:       "event",
+		ReferenceValue:      "1",
+		ReferencedEventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+	}
+	history.SetEventTime(startedAt)
+	op := NewNexusOperation()
+	fireNexus(t, op, &fact.NexusOperationScheduled{}, history)
+
+	require.Equal(t, startedAt, op.StartedAt())
+	require.Equal(t, startedAt, op.StartHistoryEventTime)
+	require.Equal(t, "handler-id", op.HandlerWorkflowID)
+	require.Equal(t, "handler-run-id", op.HandlerRunID)
+	require.Equal(t, "event", op.StartReferenceKind)
+	require.Equal(t, "1", op.StartReferenceValue)
+	require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, op.StartReferencedEventType)
+}
+
+func TestNexusOperationTerminalHistoryAdvancesLifecycle(t *testing.T) {
+	settledAt := time.Date(2026, time.August, 12, 15, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		kind  enumspb.EventType
+		state string
+	}{
+		{kind: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, state: NexusSucceeded},
+		{kind: enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, state: NexusFailed},
+		{kind: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, state: NexusCanceled},
+		{kind: enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, state: NexusTimedOut},
+	} {
+		t.Run(test.kind.String(), func(t *testing.T) {
+			terminal := &fact.NexusOperationTerminal{
+				NamespaceID:      "namespace-id",
+				WorkflowID:       "wf1",
+				ScheduledEventID: "5",
+				Kind:             test.kind.String(),
+			}
+			terminal.SetEventTime(settledAt)
+			op := NewNexusOperation()
+			fireNexus(t, op, &fact.NexusOperationScheduled{}, &fact.NexusOperationStarted{}, terminal)
+
+			require.Equal(t, test.state, op.FSM.Current())
+			actual, ok := op.SettledAt()
+			require.True(t, ok)
+			require.Equal(t, settledAt, actual)
+		})
+	}
 }

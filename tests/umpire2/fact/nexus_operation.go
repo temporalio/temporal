@@ -41,6 +41,7 @@ func importNexusSpanEvent(attrs attribute.Set) (scheduledEventID, workflowID str
 // embeds it and supplies only its own Name(), so the fact type ⇔ span-event name
 // mapping stays one-to-one (the type-switch discriminator entities rely on).
 type nexusOperationFact struct {
+	EventTimeCarrier
 	ScheduledEventID string
 	WorkflowID       string
 	Outcome          string // set for terminal events from AttrNexusOutcome; "" otherwise

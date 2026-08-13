@@ -33,6 +33,13 @@ type NexusOperation struct {
 	TimeoutMessage           string
 	CancelRequestFailures    int
 	LastCancelRequestFailure string
+	HandlerWorkflowID        string
+	HandlerRunID             string
+	StartReferenceKind       string
+	StartReferenceValue      string
+	StartReferencedEventType enumspb.EventType
+	StartHistoryEventTime    time.Time
+	StartHistoryMalformed    bool
 	FSM                      *umpire.Lifecycle
 }
 
@@ -182,30 +189,36 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 		switch e := f.(type) {
 		case *fact.NexusOperationScheduled:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			op.FSM.Fire(ctx, NexusSchedule)
+			op.FSM.FireAt(ctx, NexusSchedule, e.EventTime())
 		case *fact.NexusOperationAttemptFailed:
-			op.FSM.Fire(ctx, NexusAttemptFailed)
+			op.FSM.FireAt(ctx, NexusAttemptFailed, e.EventTime())
 		case *fact.NexusOperationStarted:
-			op.FSM.Fire(ctx, NexusStart)
+			op.FSM.FireAt(ctx, NexusStart, e.EventTime())
 		case *fact.NexusOperationSucceeded:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			if op.FSM.Fire(ctx, NexusSucceed) {
+			if op.FSM.FireAt(ctx, NexusSucceed, e.EventTime()) {
 				op.Outcome = e.Outcome
 			}
 		case *fact.NexusOperationFailed:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			if op.FSM.Fire(ctx, NexusFail) {
+			if op.FSM.FireAt(ctx, NexusFail, e.EventTime()) {
 				op.Outcome = e.Outcome
 			}
 		case *fact.NexusOperationCanceled:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			if op.FSM.Fire(ctx, NexusCancel) {
+			if op.FSM.FireAt(ctx, NexusCancel, e.EventTime()) {
 				op.Outcome = e.Outcome
 			}
 		case *fact.NexusOperationTimedOut:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			if op.FSM.Fire(ctx, NexusTimeout) {
+			if op.FSM.FireAt(ctx, NexusTimeout, e.EventTime()) {
 				op.Outcome = e.Outcome
+			}
+		case *fact.NexusOperationTerminal:
+			op.capture(e.ScheduledEventID, e.WorkflowID)
+			op.NamespaceID = e.NamespaceID
+			if event := nexusTerminalHistoryEvent(e.Kind); event != "" && op.FSM.FireAt(ctx, event, e.EventTime()) {
+				op.Outcome = e.Kind
 			}
 		case *fact.NexusOperationRejected:
 			// A synchronous rejection: no telemetry, so the operation's identity is its request id
@@ -228,7 +241,7 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 				op.Attempt = e.Attempt // attempt count is monotonic
 			}
 			if event := nexusEventForStatus(e.Destination); event != "" {
-				if op.FSM.Fire(ctx, event) && op.FSM.IsTerminal() {
+				if op.FSM.FireAt(ctx, event, e.EventTime()) && op.FSM.IsTerminal() {
 					op.Outcome = e.Destination
 				}
 			}
@@ -247,9 +260,39 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			op.TimeoutType = e.TimeoutType
 			op.TimeoutMessage = e.TimeoutMessage
 			op.advanceToTimeout(ctx, e.TimeoutType)
+		case *fact.NexusOperationStartedHistory:
+			op.capture(e.ScheduledEventID, e.WorkflowID)
+			op.NamespaceID = e.NamespaceID
+			if op.StartHistoryEventTime.IsZero() {
+				op.StartHistoryEventTime = e.EventTime()
+			}
+			setIfEmpty(&op.HandlerWorkflowID, e.HandlerWorkflowID)
+			setIfEmpty(&op.HandlerRunID, e.HandlerRunID)
+			setIfEmpty(&op.StartReferenceKind, e.ReferenceKind)
+			setIfEmpty(&op.StartReferenceValue, e.ReferenceValue)
+			if op.StartReferencedEventType == enumspb.EVENT_TYPE_UNSPECIFIED {
+				op.StartReferencedEventType = e.ReferencedEventType
+			}
+			op.StartHistoryMalformed = op.StartHistoryMalformed || e.Malformed
+			op.FSM.FireAt(ctx, NexusStart, e.EventTime())
 		}
 	}
 	return nil
+}
+
+func nexusTerminalHistoryEvent(kind string) string {
+	switch kind {
+	case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED.String():
+		return NexusSucceed
+	case enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED.String():
+		return NexusFail
+	case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED.String():
+		return NexusCancel
+	case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT.String():
+		return NexusTimeout
+	default:
+		return ""
+	}
 }
 
 func (op *NexusOperation) advanceToTimeout(ctx context.Context, timeoutType enumspb.TimeoutType) {

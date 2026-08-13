@@ -20,9 +20,10 @@ import (
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/server/tests/umpirev1/action"
-	"go.temporal.io/server/tests/umpirev1/model"
-	"go.temporal.io/server/tests/umpirev1/planner"
+	"go.temporal.io/server/tests/umpire2/action"
+	"go.temporal.io/server/tests/umpire2/model"
+	"go.temporal.io/server/tests/umpire2/planner"
+	umpire2protocol "go.temporal.io/server/tests/umpire2/protocol"
 )
 
 // TEMPORAL_OTEL_DEBUG enables the generic chasm.transition telemetry the umpire Monitor
@@ -364,10 +365,18 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	// deferred, so the negative-space drive can't silently skip a field (see action.mutation_gate).
 	require.NoError(t, action.ValidateMutationCoverage(), "mutation coverage must be exhaustive")
 	cov := probe.NewCoverage()
+	compiled, err := umpire2protocol.Default()
+	require.NoError(t, err)
+	semanticCoverage, err := compiled.NewCoverage(true, umpire2protocol.CoverageCatalogOptions{
+		EntityTypes: []umpire.EntityType{model.NexusOperationType},
+		Kinds:       []umpire.CoverageKind{umpire.CoverageTransition},
+	})
+	require.NoError(t, err)
 
 	exploreEnv := func(exec probe.EnvFunc, timeout time.Duration) {
 		probe.Umpire(t).
 			WithCoverage(cov).
+			WithSemanticCoverage(semanticCoverage).
 			Reach("NexusOperation", "succeeded"). // plan validation only; the handler+caller drive the actual outcome
 			Execution(exec).
 			Timeout(timeout).
@@ -422,6 +431,10 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	// count reflects the machine's real shape.
 	require.Equal(t, rep.Total, rep.Covered,
 		"every modelled NexusOperation edge should be exercised across the workflow and standalone drivers")
+	for _, point := range semanticCoverage.Unmet() {
+		t.Logf("[exploration]   MISSING semantic %s: %s", point.Kind, point.ID)
+	}
+	require.Empty(t, semanticCoverage.Unmet(), "every protocol-declared NexusOperation transition should be exercised")
 }
 
 // TestProbeWorkflowGenerated is the second-entity proof: a WorkflowRun — not a NexusOperation — is

@@ -179,7 +179,8 @@ tries each:
 ### Entities — Temporal FSMs (`model/`)
 
 V2 declares `Workflow`, `WorkflowRun`, `WorkflowTask`, `TaskQueue`, `NexusOperation`, and
-`Activity` (with `Namespace` as a scoping identity). Each implements `Entity` and uses
+`Activity`, plus the non-lifecycled `Callback` correlation entity (with `Namespace` as a scoping
+identity). Lifecycled entities use
 `umpire.Lifecycle` for executable state. `model.DefaultEntities` and `model.DefaultFacts` feed the
 compiled protocol, which declares subscriptions and executable actions together.
 
@@ -187,7 +188,7 @@ compiled protocol, which declares subscriptions and executable actions together.
 
 - **`fact/`** — one struct per observable thing, implementing `SpanFact` or `RequestFact`.
   Its `Name()` equals the struct name (and, for span facts, the OTEL event name).
-- **`rule/`** — v1 registers two safety and two liveness rules; v2 registers four safety and two
+- **`rule/`** — v1 registers two safety and two liveness rules; v2 registers six safety and two
   liveness rules. Each reads entity state via `ChangedEntities[T]` and emits `Violation`s.
 - **`entity_key.go`** — a small fluent builder (`Workflow(id).Update(id)` / `.Task(…)`)
   that produces the same registry key strings the router uses, so tests can name the exact

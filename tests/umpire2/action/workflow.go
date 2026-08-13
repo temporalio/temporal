@@ -14,9 +14,9 @@ import (
 // Workflow is the second entity driven by the actions model — proof the framework/registration
 // split generalizes past NexusOperation. Nothing in the generic layer (Drive/Reconcile/planner) or
 // the entity-agnostic planEdge changes; a second entity is just its lifecycle (already modelled by
-// the Monitor) plus an actionFor registry and realizers. The Workflow lifecycle is minimal
-// (created→started→completed); richer edges (fail/cancel/terminate/timeout) are a follow-up on both
-// the model and these actions.
+// the Monitor) plus an actionFor registry and realizers. The Workflow lifecycle models every close
+// outcome; this action registry currently drives start and successful completion, while the
+// protocol records explicit gaps for the remaining outcomes.
 
 // completableWorkflow blocks until a "finish" signal, then returns — so a workflow's start and its
 // completion are two separately drivable transitions (WorkflowStart, WorkflowComplete), matching

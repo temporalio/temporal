@@ -19,6 +19,7 @@ import (
 // struct name, so it is registered only with the decoder (routing is by
 // TargetEntity, not by RegisterFact subscription).
 type ChasmTransition struct {
+	EventTimeCarrier
 	ComponentType string
 	ComponentPath string
 	Source        string

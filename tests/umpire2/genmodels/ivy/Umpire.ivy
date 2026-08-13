@@ -1,0 +1,600 @@
+#lang ivy1.7
+
+# Generated from the Umpire verification snapshot. Do not edit.
+
+type activity
+type activity_state = {activity_state_backing_off,activity_state_canceled,activity_state_completed,activity_state_failed,activity_state_scheduled,activity_state_started,activity_state_timed_out,activity_state_unspecified}
+individual activity_0:activity
+relation exists_activity(X:activity)
+function state_activity(X:activity):activity_state
+
+type callback
+individual callback_0:callback
+relation exists_callback(X:callback)
+
+type nexusoperation
+type nexusoperation_state = {nexusoperation_state_backing_off,nexusoperation_state_canceled,nexusoperation_state_failed,nexusoperation_state_rejected,nexusoperation_state_scheduled,nexusoperation_state_started,nexusoperation_state_succeeded,nexusoperation_state_terminated,nexusoperation_state_timed_out,nexusoperation_state_unspecified}
+individual nexusoperation_0:nexusoperation
+relation exists_nexusoperation(X:nexusoperation)
+function state_nexusoperation(X:nexusoperation):nexusoperation_state
+
+type taskqueue
+individual taskqueue_0:taskqueue
+relation exists_taskqueue(X:taskqueue)
+
+type workflow
+type workflow_state = {workflow_state_canceled,workflow_state_completed,workflow_state_created,workflow_state_failed,workflow_state_started,workflow_state_terminated,workflow_state_timed_out}
+individual workflow_0:workflow
+relation exists_workflow(X:workflow)
+function state_workflow(X:workflow):workflow_state
+
+type workflowrun
+type workflowrun_state = {workflowrun_state_canceled,workflowrun_state_completed,workflowrun_state_continued_as_new,workflowrun_state_created,workflowrun_state_failed,workflowrun_state_started,workflowrun_state_terminated,workflowrun_state_timed_out}
+individual workflowrun_0:workflowrun
+relation exists_workflowrun(X:workflowrun)
+function state_workflowrun(X:workflowrun):workflowrun_state
+
+type workflowtask
+type workflowtask_state = {workflowtask_state_added,workflowtask_state_created,workflowtask_state_discarded,workflowtask_state_polled,workflowtask_state_stored,workflowtask_state_terminated}
+individual workflowtask_0:workflowtask
+relation exists_workflowtask(X:workflowtask)
+function state_workflowtask(X:workflowtask):workflowtask_state
+
+relation relation_activity_nexus(X:activity, Y:nexusoperation)
+relation relation_callback_handler_run(X:callback, Y:workflowrun)
+relation relation_callback_operation(X:callback, Y:nexusoperation)
+relation relation_nexus_activity(X:nexusoperation, Y:activity)
+relation relation_workflow_run_successor(X:workflowrun, Y:workflowrun)
+relation relation_workflow_runs(X:workflow, Y:workflowrun)
+
+after init {
+    exists_activity(X) := false;
+    state_activity(X) := activity_state_unspecified;
+    exists_callback(X) := false;
+    exists_nexusoperation(X) := false;
+    state_nexusoperation(X) := nexusoperation_state_unspecified;
+    exists_taskqueue(X) := false;
+    exists_workflow(X) := false;
+    state_workflow(X) := workflow_state_created;
+    exists_workflowrun(X) := false;
+    state_workflowrun(X) := workflowrun_state_created;
+    exists_workflowtask(X) := false;
+    state_workflowtask(X) := workflowtask_state_created;
+    relation_activity_nexus(X,Y) := false;
+    relation_callback_handler_run(X,Y) := false;
+    relation_callback_operation(X,Y) := false;
+    relation_nexus_activity(X,Y) := false;
+    relation_workflow_run_successor(X,Y) := false;
+    relation_workflow_runs(X,Y) := false
+}
+
+action activity_backing_off_cancel_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_backing_off;
+    state_activity(entity) := activity_state_canceled
+}
+
+action activity_backing_off_schedule_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_backing_off;
+    state_activity(entity) := activity_state_scheduled
+}
+
+action activity_backing_off_timeout_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_backing_off;
+    state_activity(entity) := activity_state_timed_out
+}
+
+action activity_scheduled_cancel_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_scheduled;
+    state_activity(entity) := activity_state_canceled
+}
+
+action activity_scheduled_fail_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_scheduled;
+    state_activity(entity) := activity_state_failed
+}
+
+action activity_scheduled_start_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_scheduled;
+    state_activity(entity) := activity_state_started
+}
+
+action activity_scheduled_timeout_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_scheduled;
+    state_activity(entity) := activity_state_timed_out
+}
+
+action activity_started_attempt_failed_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_started;
+    state_activity(entity) := activity_state_backing_off
+}
+
+action activity_started_cancel_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_started;
+    state_activity(entity) := activity_state_canceled
+}
+
+action activity_started_complete_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_started;
+    state_activity(entity) := activity_state_completed
+}
+
+action activity_started_fail_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_started;
+    state_activity(entity) := activity_state_failed
+}
+
+action activity_started_timeout_anyhosting(entity:activity) = {
+    require exists_activity(entity);
+    require state_activity(entity) = activity_state_started;
+    state_activity(entity) := activity_state_timed_out
+}
+
+action activity_unspecified_schedule_anyhosting(entity:activity) = {
+    require ~exists_activity(entity);
+    require state_activity(entity) = activity_state_unspecified;
+    exists_activity(entity) := true;
+    state_activity(entity) := activity_state_scheduled
+}
+
+action nexusoperation_backing_off_schedule_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action nexusoperation_backing_off_schedule_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action nexusoperation_backing_off_terminate_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_backing_off;
+    state_nexusoperation(entity) := nexusoperation_state_terminated
+}
+
+action nexusoperation_backing_off_terminate_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_terminated
+}
+
+action nexusoperation_backing_off_timeout_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_backing_off_timeout_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_scheduled_attempt_failed_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_backing_off
+}
+
+action nexusoperation_scheduled_attempt_failed_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_backing_off
+}
+
+action nexusoperation_scheduled_cancel_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_scheduled_cancel_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_scheduled_fail_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_scheduled_fail_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_scheduled_start_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_started
+}
+
+action nexusoperation_scheduled_start_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_started
+}
+
+action nexusoperation_scheduled_succeed_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_scheduled_succeed_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_scheduled_terminate_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_scheduled;
+    state_nexusoperation(entity) := nexusoperation_state_terminated
+}
+
+action nexusoperation_scheduled_terminate_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_terminated
+}
+
+action nexusoperation_scheduled_timeout_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_scheduled_timeout_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_started_cancel_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_started_cancel_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_started_fail_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_started_fail_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_started_succeed_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_started_succeed_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_started_terminate_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_started;
+    state_nexusoperation(entity) := nexusoperation_state_terminated
+}
+
+action nexusoperation_started_terminate_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_terminated
+}
+
+action nexusoperation_started_timeout_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_started;
+    state_nexusoperation(entity) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_started_timeout_standalone(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_started;
+    state_nexusoperation(entity) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_unspecified_reject_embedded(entity:nexusoperation) = {
+    require ~exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_unspecified;
+    exists_nexusoperation(entity) := true;
+    state_nexusoperation(entity) := nexusoperation_state_rejected
+}
+
+action nexusoperation_unspecified_reject_standalone(entity:nexusoperation) = {
+    require ~exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_unspecified;
+    exists_nexusoperation(entity) := true;
+    state_nexusoperation(entity) := nexusoperation_state_rejected
+}
+
+action nexusoperation_unspecified_schedule_embedded(op:nexusoperation) = {
+    require ~exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_unspecified;
+    exists_nexusoperation(op) := true;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action nexusoperation_unspecified_schedule_standalone(op:nexusoperation) = {
+    require ~exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_unspecified;
+    exists_nexusoperation(op) := true;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action workflow_created_start_standalone(wf:workflow) = {
+    require ~exists_workflow(wf);
+    require state_workflow(wf) = workflow_state_created;
+    exists_workflow(wf) := true;
+    state_workflow(wf) := workflow_state_started
+}
+
+action workflow_started_cancel_standalone(entity:workflow) = {
+    require exists_workflow(entity);
+    require state_workflow(entity) = workflow_state_started;
+    state_workflow(entity) := workflow_state_canceled
+}
+
+action workflow_started_complete_standalone(wf:workflow) = {
+    require exists_workflow(wf);
+    require state_workflow(wf) = workflow_state_started;
+    state_workflow(wf) := workflow_state_completed
+}
+
+action workflow_started_fail_standalone(entity:workflow) = {
+    require exists_workflow(entity);
+    require state_workflow(entity) = workflow_state_started;
+    state_workflow(entity) := workflow_state_failed
+}
+
+action workflow_started_terminate_standalone(entity:workflow) = {
+    require exists_workflow(entity);
+    require state_workflow(entity) = workflow_state_started;
+    state_workflow(entity) := workflow_state_terminated
+}
+
+action workflow_started_timeout_standalone(entity:workflow) = {
+    require exists_workflow(entity);
+    require state_workflow(entity) = workflow_state_started;
+    state_workflow(entity) := workflow_state_timed_out
+}
+
+action workflowrun_created_start_anyhosting(entity:workflowrun) = {
+    require ~exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_created;
+    exists_workflowrun(entity) := true;
+    state_workflowrun(entity) := workflowrun_state_started
+}
+
+action workflowrun_started_cancel_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_canceled
+}
+
+action workflowrun_started_complete_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_completed
+}
+
+action workflowrun_started_continue_as_new_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_continued_as_new
+}
+
+action workflowrun_started_fail_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_failed
+}
+
+action workflowrun_started_terminate_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_terminated
+}
+
+action workflowrun_started_timeout_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_timed_out
+}
+
+action workflowtask_added_discard_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_added;
+    state_workflowtask(entity) := workflowtask_state_discarded
+}
+
+action workflowtask_added_poll_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_added;
+    state_workflowtask(entity) := workflowtask_state_polled
+}
+
+action workflowtask_added_store_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_added;
+    state_workflowtask(entity) := workflowtask_state_stored
+}
+
+action workflowtask_added_terminate_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_added;
+    state_workflowtask(entity) := workflowtask_state_terminated
+}
+
+action workflowtask_created_add_anyhosting(entity:workflowtask) = {
+    require ~exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_created;
+    exists_workflowtask(entity) := true;
+    state_workflowtask(entity) := workflowtask_state_added
+}
+
+action workflowtask_created_terminate_anyhosting(entity:workflowtask) = {
+    require ~exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_created;
+    exists_workflowtask(entity) := true;
+    state_workflowtask(entity) := workflowtask_state_terminated
+}
+
+action workflowtask_stored_discard_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_stored;
+    state_workflowtask(entity) := workflowtask_state_discarded
+}
+
+action workflowtask_stored_poll_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_stored;
+    state_workflowtask(entity) := workflowtask_state_polled
+}
+
+action workflowtask_stored_terminate_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_stored;
+    state_workflowtask(entity) := workflowtask_state_terminated
+}
+
+action regression_nexus_start_activity(activity:activity,operation:nexusoperation) = {
+    require ~exists_activity(activity);
+    require exists_nexusoperation(operation);
+    require state_nexusoperation(operation) = nexusoperation_state_scheduled;
+    exists_activity(activity) := true;
+    state_activity(activity) := activity_state_completed;
+    state_nexusoperation(operation) := nexusoperation_state_succeeded;
+    relation_nexus_activity(operation,activity) := true;
+    relation_activity_nexus(activity,operation) := true
+}
+
+invariant [relation_activity_nexus_endpoints] forall S:activity,T:nexusoperation. relation_activity_nexus(S,T) -> exists_activity(S) & exists_nexusoperation(T)
+invariant [cardinality_activity_nexus_source] forall S:activity,T1:nexusoperation,T2:nexusoperation. relation_activity_nexus(S,T1) & relation_activity_nexus(S,T2) -> T1 = T2
+invariant [cardinality_activity_nexus_target] forall S1:activity,S2:activity,T:nexusoperation. relation_activity_nexus(S1,T) & relation_activity_nexus(S2,T) -> S1 = S2
+invariant [relation_callback_handler_run_endpoints] forall S:callback,T:workflowrun. relation_callback_handler_run(S,T) -> exists_callback(S) & exists_workflowrun(T)
+invariant [cardinality_callback_handler_run_source] forall S:callback,T1:workflowrun,T2:workflowrun. relation_callback_handler_run(S,T1) & relation_callback_handler_run(S,T2) -> T1 = T2
+invariant [relation_callback_operation_endpoints] forall S:callback,T:nexusoperation. relation_callback_operation(S,T) -> exists_callback(S) & exists_nexusoperation(T)
+invariant [cardinality_callback_operation_source] forall S:callback,T1:nexusoperation,T2:nexusoperation. relation_callback_operation(S,T1) & relation_callback_operation(S,T2) -> T1 = T2
+invariant [relation_nexus_activity_endpoints] forall S:nexusoperation,T:activity. relation_nexus_activity(S,T) -> exists_nexusoperation(S) & exists_activity(T)
+invariant [cardinality_nexus_activity_source] forall S:nexusoperation,T1:activity,T2:activity. relation_nexus_activity(S,T1) & relation_nexus_activity(S,T2) -> T1 = T2
+invariant [cardinality_nexus_activity_target] forall S1:nexusoperation,S2:nexusoperation,T:activity. relation_nexus_activity(S1,T) & relation_nexus_activity(S2,T) -> S1 = S2
+invariant [relation_workflow_run_successor_endpoints] forall S:workflowrun,T:workflowrun. relation_workflow_run_successor(S,T) -> exists_workflowrun(S) & exists_workflowrun(T)
+invariant [cardinality_workflow_run_successor_source] forall S:workflowrun,T1:workflowrun,T2:workflowrun. relation_workflow_run_successor(S,T1) & relation_workflow_run_successor(S,T2) -> T1 = T2
+invariant [cardinality_workflow_run_successor_target] forall S1:workflowrun,S2:workflowrun,T:workflowrun. relation_workflow_run_successor(S1,T) & relation_workflow_run_successor(S2,T) -> S1 = S2
+invariant [relation_workflow_runs_endpoints] forall S:workflow,T:workflowrun. relation_workflow_runs(S,T) -> exists_workflow(S) & exists_workflowrun(T)
+invariant [cardinality_workflow_runs_target] forall S1:workflow,S2:workflow,T:workflowrun. relation_workflow_runs(S1,T) & relation_workflow_runs(S2,T) -> S1 = S2
+# unsupported property Activity.backing_off.quiescent-progress: Ivy generation supports inductive safety properties only
+# unsupported property Activity.scheduled.quiescent-progress: Ivy generation supports inductive safety properties only
+# unsupported property Activity.started.quiescent-progress: Ivy generation supports inductive safety properties only
+invariant [nexusactivityforwardlinkconsistency] (forall Q_source:nexusoperation. exists_nexusoperation(Q_source) -> ((forall Q_target:activity. exists_activity(Q_target) -> ((relation_nexus_activity(Q_source,Q_target) -> relation_activity_nexus(Q_target,Q_source))))))
+invariant [nexusactivityreverselinkconsistency] (forall Q_source:activity. exists_activity(Q_source) -> ((forall Q_target:nexusoperation. exists_nexusoperation(Q_target) -> ((relation_activity_nexus(Q_source,Q_target) -> relation_nexus_activity(Q_target,Q_source))))))
+invariant [nexusactivityterminalrefinement] (forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((forall Q_activity:activity. exists_activity(Q_activity) -> ((relation_nexus_activity(Q_operation,Q_activity) -> (state_nexusoperation(Q_operation) = nexusoperation_state_succeeded & state_activity(Q_activity) = activity_state_completed))))))
+# unsupported property NexusOperation.backing_off.quiescent-progress: Ivy generation supports inductive safety properties only
+# unsupported property NexusOperation.scheduled.quiescent-progress: Ivy generation supports inductive safety properties only
+# unsupported property NexusOperation.started.quiescent-progress: Ivy generation supports inductive safety properties only
+# unsupported property Workflow.started.quiescent-progress: Ivy generation supports inductive safety properties only
+
+export activity_backing_off_cancel_anyhosting
+export activity_backing_off_schedule_anyhosting
+export activity_backing_off_timeout_anyhosting
+export activity_scheduled_cancel_anyhosting
+export activity_scheduled_fail_anyhosting
+export activity_scheduled_start_anyhosting
+export activity_scheduled_timeout_anyhosting
+export activity_started_attempt_failed_anyhosting
+export activity_started_cancel_anyhosting
+export activity_started_complete_anyhosting
+export activity_started_fail_anyhosting
+export activity_started_timeout_anyhosting
+export activity_unspecified_schedule_anyhosting
+export nexusoperation_backing_off_schedule_embedded
+export nexusoperation_backing_off_schedule_standalone
+export nexusoperation_backing_off_terminate_embedded
+export nexusoperation_backing_off_terminate_standalone
+export nexusoperation_backing_off_timeout_embedded
+export nexusoperation_backing_off_timeout_standalone
+export nexusoperation_scheduled_attempt_failed_embedded
+export nexusoperation_scheduled_attempt_failed_standalone
+export nexusoperation_scheduled_cancel_embedded
+export nexusoperation_scheduled_cancel_standalone
+export nexusoperation_scheduled_fail_embedded
+export nexusoperation_scheduled_fail_standalone
+export nexusoperation_scheduled_start_embedded
+export nexusoperation_scheduled_start_standalone
+export nexusoperation_scheduled_succeed_embedded
+export nexusoperation_scheduled_succeed_standalone
+export nexusoperation_scheduled_terminate_embedded
+export nexusoperation_scheduled_terminate_standalone
+export nexusoperation_scheduled_timeout_embedded
+export nexusoperation_scheduled_timeout_standalone
+export nexusoperation_started_cancel_embedded
+export nexusoperation_started_cancel_standalone
+export nexusoperation_started_fail_embedded
+export nexusoperation_started_fail_standalone
+export nexusoperation_started_succeed_embedded
+export nexusoperation_started_succeed_standalone
+export nexusoperation_started_terminate_embedded
+export nexusoperation_started_terminate_standalone
+export nexusoperation_started_timeout_embedded
+export nexusoperation_started_timeout_standalone
+export nexusoperation_unspecified_reject_embedded
+export nexusoperation_unspecified_reject_standalone
+export nexusoperation_unspecified_schedule_embedded
+export nexusoperation_unspecified_schedule_standalone
+export workflow_created_start_standalone
+export workflow_started_cancel_standalone
+export workflow_started_complete_standalone
+export workflow_started_fail_standalone
+export workflow_started_terminate_standalone
+export workflow_started_timeout_standalone
+export workflowrun_created_start_anyhosting
+export workflowrun_started_cancel_anyhosting
+export workflowrun_started_complete_anyhosting
+export workflowrun_started_continue_as_new_anyhosting
+export workflowrun_started_fail_anyhosting
+export workflowrun_started_terminate_anyhosting
+export workflowrun_started_timeout_anyhosting
+export workflowtask_added_discard_anyhosting
+export workflowtask_added_poll_anyhosting
+export workflowtask_added_store_anyhosting
+export workflowtask_added_terminate_anyhosting
+export workflowtask_created_add_anyhosting
+export workflowtask_created_terminate_anyhosting
+export workflowtask_stored_discard_anyhosting
+export workflowtask_stored_poll_anyhosting
+export workflowtask_stored_terminate_anyhosting
+export regression_nexus_start_activity

@@ -413,6 +413,15 @@ func (l *Lifecycle) classifyFrom(from, event string) Outcome {
 // returns false. This replaces the guarded `if Can(x) { Event(x) }` pattern, which
 // silently dropped both impossible transitions and benign re-observations alike.
 func (l *Lifecycle) Fire(ctx context.Context, event string) bool {
+	return l.FireAt(ctx, event, time.Now())
+}
+
+// FireAt applies event using the supplied event time for destination entry and
+// illegal-transition evidence. A zero event time falls back to observation time.
+func (l *Lifecycle) FireAt(ctx context.Context, event string, eventTime time.Time) bool {
+	if eventTime.IsZero() {
+		eventTime = time.Now()
+	}
 	switch o := l.Classify(event); o.Kind {
 	case Advance:
 		if _, isEdge := l.edges[o.From][event]; isEdge {
@@ -421,20 +430,24 @@ func (l *Lifecycle) Fire(ctx context.Context, event string) bool {
 		} else {
 			l.fsm.SetState(o.To) // forward jump over unobserved intermediate states
 		}
-		l.stampEntry()
+		l.stampEntryAt(eventTime)
 		return true
 	case NoOp:
 		return false
 	default: // Illegal
-		l.illegal = append(l.illegal, IllegalTransition{From: o.From, Event: event, At: time.Now()})
+		l.illegal = append(l.illegal, IllegalTransition{From: o.From, Event: event, At: eventTime})
 		return false
 	}
 }
 
 func (l *Lifecycle) stampEntry() {
+	l.stampEntryAt(time.Now())
+}
+
+func (l *Lifecycle) stampEntryAt(eventTime time.Time) {
 	st := l.fsm.Current()
 	if _, ok := l.entered[st]; !ok {
-		l.entered[st] = time.Now()
+		l.entered[st] = eventTime
 	}
 }
 
@@ -478,6 +491,10 @@ func (l *Lifecycle) IsTerminal() bool { return l.terminal[l.fsm.Current()] }
 // MustProgress reports whether the current state is one the entity is required
 // to eventually leave (declared via LifecycleSpec.MustProgress).
 func (l *Lifecycle) MustProgress() bool { return l.mustProgress[l.fsm.Current()] }
+
+// StateMustProgress reports whether the given state is one the entity is required
+// to eventually leave (declared via LifecycleSpec.MustProgress).
+func (l *Lifecycle) StateMustProgress(state string) bool { return l.mustProgress[state] }
 
 // Terminal reports whether the given state is terminal.
 func (l *Lifecycle) Terminal(state string) bool { return l.terminal[state] }
@@ -538,6 +555,15 @@ func (l *Lifecycle) EdgeRequires(from, event string) []Capability {
 
 // Illegal returns the illegal transitions observed so far.
 func (l *Lifecycle) Illegal() []IllegalTransition { return l.illegal }
+
+// RecordIllegalAt retains domain-level branch evidence that cannot be represented
+// as a legal transition from the lifecycle's current terminal state.
+func (l *Lifecycle) RecordIllegalAt(event string, eventTime time.Time) {
+	if eventTime.IsZero() {
+		eventTime = time.Now()
+	}
+	l.illegal = append(l.illegal, IllegalTransition{From: l.Current(), Event: event, At: eventTime})
+}
 
 func (l *Lifecycle) recordVisit(from, event, to string) {
 	if l.visited == nil {

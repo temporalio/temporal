@@ -132,7 +132,7 @@ func (p *regressionPath) Close(ctx context.Context) error {
 func violationsError(violations []umpirefw.Violation) error {
 	var result []error
 	for _, violation := range violations {
-		result = append(result, fmt.Errorf("%s: %s", violation.Rule, violation.Message))
+		result = append(result, fmt.Errorf("%s: %s (entity=%s state=%s)", violation.Rule, violation.Message, violation.Tags["entity"], violation.Tags["state"]))
 	}
 	return errors.Join(result...)
 }
@@ -169,22 +169,48 @@ func (p *regressionPath) callbackObservationSummary() string {
 		return "relations unavailable"
 	}
 	var callbackFacts []string
+	seenFacts := make(map[string]struct{})
 	root := umpirefw.NewEntityID(model.NamespaceType, p.environment.NamespaceID().String())
 	for _, observed := range p.environment.GetMonitor().FactLog().QueryByID(root) {
+		var summary string
 		switch value := observed.(type) {
 		case *fact.NexusCallbackObservation:
-			callbackFacts = append(callbackFacts, fmt.Sprintf("NexusCallback(callback=%s operation=%s malformed=%t class=%s)", value.CallbackID, value.OperationID, value.Malformed, value.ErrorClass))
+			summary = fmt.Sprintf("NexusCallback(callback=%s operation=%s malformed=%t class=%s)", value.CallbackID, value.OperationID, value.Malformed, value.ErrorClass)
 		case *fact.WorkflowCallbackAttachment:
-			callbackFacts = append(callbackFacts, fmt.Sprintf("WorkflowCallback(callback=%s run=%s malformed=%t class=%s)", value.CallbackID, value.HandlerRunID, value.Malformed, value.ErrorClass))
+			summary = fmt.Sprintf("WorkflowCallback(callback=%s run=%s malformed=%t class=%s)", value.CallbackID, value.HandlerRunID, value.Malformed, value.ErrorClass)
 		default:
 			continue
 		}
+		if _, exists := seenFacts[summary]; exists {
+			continue
+		}
+		seenFacts[summary] = struct{}{}
+		callbackFacts = append(callbackFacts, summary)
+	}
+	var states []string
+	for _, entry := range p.environment.GetMonitor().ModelState().QueryEntities(model.CallbackType, 0, &root) {
+		callback, ok := entry.Entity.(*model.Callback)
+		if ok {
+			states = append(states, fmt.Sprintf("Callback(id=%s handler=%s/%s start=%s ref=%s:%s/%s)", callback.CallbackID, callback.HandlerWorkflowID, callback.HandlerRunID, callback.HandlerWorkflowStartTime, callback.ReferenceKind, callback.ReferenceValue, callback.ReferencedEventType))
+		}
+	}
+	for _, entry := range p.environment.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &root) {
+		operation, ok := entry.Entity.(*model.NexusOperation)
+		if ok {
+			states = append(states, fmt.Sprintf("NexusOperation(workflow=%s handler=%s/%s start=%s ref=%s:%s/%s)", operation.WorkflowID, operation.HandlerWorkflowID, operation.HandlerRunID, operation.StartHistoryEventTime, operation.StartReferenceKind, operation.StartReferenceValue, operation.StartReferencedEventType))
+		}
 	}
 	relations := strings.ReplaceAll(fmt.Sprint(monitor.Relations().Snapshot()), "\x00", "/")
-	return fmt.Sprintf("facts=%v relations=%s", callbackFacts, relations)
+	return fmt.Sprintf("facts=%v states=%v relations=%s", callbackFacts, states, relations)
 }
 
 func (p *regressionPath) atomSatisfied(ctx context.Context, atom coreregress.CompletedAtom, bindings coreregress.Bindings, historical bool) bool {
+	if atom.Predicate == "nexus.callback_reference_consistent" && len(atom.Arguments) == 2 {
+		return p.callbackReferenceSatisfied(ctx, atom, bindings)
+	}
+	if atom.Predicate == "nexus.late_start_response_accepted" && len(atom.Arguments) == 1 {
+		return p.lateStartResponseSatisfied(atom, bindings)
+	}
 	if atom.Predicate == "nexus.result_digest" && len(atom.Arguments) == 2 {
 		return p.terminalObservationSatisfied(ctx, atom, bindings, func(observed *fact.NexusOperationTerminal, expected string) bool {
 			return observed.ResultDigest == expected
@@ -251,6 +277,96 @@ func (p *regressionPath) atomSatisfied(ctx context.Context, atom coreregress.Com
 		}
 	}
 	return p.historyNexusStateReached(ctx, identity, state)
+}
+
+func (p *regressionPath) callbackReferenceSatisfied(ctx context.Context, atom coreregress.CompletedAtom, bindings coreregress.Bindings) bool {
+	operationID, operationBound := bindingString(bindings, atom.Arguments[0].SymbolName)
+	handlerID, handlerBound := bindingString(bindings, atom.Arguments[1].SymbolName)
+	if !operationBound || !handlerBound {
+		return false
+	}
+	for _, workflowID := range []string{operationID, handlerID} {
+		if _, err := p.environment.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: p.environment.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		}); err != nil {
+			return false
+		}
+	}
+	monitor, ok := p.environment.GetMonitor().(relationMonitor)
+	if !ok {
+		return false
+	}
+	namespaceID := p.environment.NamespaceID().String()
+	root := umpirefw.NewEntityID(model.NamespaceType, namespaceID)
+	var operation *model.NexusOperation
+	for _, entry := range p.environment.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &root) {
+		candidate, typed := entry.Entity.(*model.NexusOperation)
+		if typed && candidate.WorkflowID == operationID {
+			operation = candidate
+			break
+		}
+	}
+	if operation == nil || operation.StartReferenceKind == "" || operation.StartedAt().IsZero() {
+		return false
+	}
+	for _, entry := range p.environment.GetMonitor().ModelState().QueryEntities(model.CallbackType, 0, &root) {
+		callback, typed := entry.Entity.(*model.Callback)
+		if !typed || callback.OperationID != operationID || callback.HandlerWorkflowID != handlerID || callback.ReferenceKind == "" {
+			continue
+		}
+		callbackID := umpirefw.NewEntityID(model.CallbackType, namespaceID+"\x00"+callback.CallbackID)
+		handlerRun := umpirefw.NewEntityID(model.WorkflowRunType, namespaceID+"\x00"+callback.HandlerRunID)
+		if !slices.Contains(monitor.Relations().Targets(model.CallbackHandlerRunRelation, callbackID), handlerRun) {
+			continue
+		}
+		return operation.HandlerWorkflowID == callback.HandlerWorkflowID &&
+			operation.HandlerRunID == callback.HandlerRunID &&
+			operation.StartReferenceKind == callback.ReferenceKind &&
+			operation.StartReferenceValue == callback.ReferenceValue &&
+			operation.StartReferencedEventType == callback.ReferencedEventType &&
+			callbackReferenceTimeConsistent(operation, callback)
+	}
+	return false
+}
+
+func callbackReferenceTimeConsistent(operation *model.NexusOperation, callback *model.Callback) bool {
+	referencedAt := callback.HandlerWorkflowStartTime
+	if callback.ReferenceKind == "request" {
+		referencedAt = callback.AttachmentEventTime
+	}
+	return !referencedAt.IsZero() && !operation.StartHistoryEventTime.Before(referencedAt)
+}
+
+func (p *regressionPath) lateStartResponseSatisfied(atom coreregress.CompletedAtom, bindings coreregress.Bindings) bool {
+	operationID, ok := bindingString(bindings, atom.Arguments[0].SymbolName)
+	if !ok {
+		return false
+	}
+	namespaceID := p.environment.NamespaceID().String()
+	root := umpirefw.NewEntityID(model.NamespaceType, namespaceID)
+	var settledAt time.Time
+	for _, entry := range p.environment.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &root) {
+		operation, typed := entry.Entity.(*model.NexusOperation)
+		if !typed || operation.WorkflowID != operationID {
+			continue
+		}
+		if observedAt, settled := operation.SettledAt(); settled {
+			settledAt = observedAt
+			break
+		}
+	}
+	if settledAt.IsZero() {
+		return false
+	}
+	for _, entry := range p.environment.GetMonitor().ModelState().QueryEntities(model.CallbackType, 0, &root) {
+		callback, typed := entry.Entity.(*model.Callback)
+		if typed && callback.OperationID == operationID && callback.ResponseKind == "async_success" &&
+			len(callback.DeliveryResponses) > 0 && len(callback.ConflictingResponses) == 0 && callback.FirstResponseTime.After(settledAt) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *regressionPath) terminalObservationSatisfied(

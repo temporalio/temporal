@@ -406,4 +406,3 @@ Built on top of the actions model (`UMPIRE_ACTIONS.md`). The current Temporal co
   — the server's own per-field `ValidateAndNormalize` becomes umpire's differential oracle and param
   enumeration where granted (§6); the preferred path, with contract + grounding as the portable
   fallback.
-```

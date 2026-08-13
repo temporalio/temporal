@@ -1,12 +1,16 @@
 package rule
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/fact"
+	"go.temporal.io/server/tests/umpire2/protocol"
 )
 
 func TestNexusActivityLinkConsistencyAcceptsMatchingPair(t *testing.T) {
@@ -32,6 +36,7 @@ func TestNexusActivityLinkConsistencyRejectsMissingActivityBackLink(t *testing.T
 	violations := checkSafetyRule(state, &NexusActivityLinkConsistency{})
 	require.Len(t, violations, 1)
 	require.Contains(t, violations[0].Message, "no matching activity back-link")
+	require.Equal(t, map[string]string{"operationID": "operation-id", "activityID": "activity-id"}, violations[0].Tags)
 }
 
 func TestNexusActivityLinkConsistencyRejectsMissingNexusLink(t *testing.T) {
@@ -42,6 +47,25 @@ func TestNexusActivityLinkConsistencyRejectsMissingNexusLink(t *testing.T) {
 	violations := checkSafetyRule(state, &NexusActivityLinkConsistency{})
 	require.Len(t, violations, 1)
 	require.Contains(t, violations[0].Message, "no matching Nexus-side link")
+	require.Equal(t, map[string]string{"operationID": "operation-id", "activityID": "activity-id"}, violations[0].Tags)
+}
+
+func TestNexusActivityLinkConsistencyUsesSharedPropertyWithRelationStore(t *testing.T) {
+	state := newTestModelState()
+	operationFact := fact.NewNexusOperationExecutionSnapshot("namespace-id", "operation-id", []*commonpb.Link{activityLink("activity-id")})
+	activityFact := fact.NewActivityExecutionSnapshot("namespace-id", "activity-id", enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, nil)
+	routeFact(t, state, operationFact)
+	routeFact(t, state, activityFact)
+	compiled, err := protocol.Default()
+	require.NoError(t, err)
+	store, err := compiled.NewRelationStore()
+	require.NoError(t, err)
+	require.Empty(t, compiled.ApplyRelations(store, []umpire.Fact{operationFact, activityFact}))
+
+	violations := umpire.CheckSafetyRule(context.Background(), &NexusActivityLinkConsistency{}, state, log.NewNoopLogger(), umpire.RuleConfig{Relations: store})
+	require.Len(t, violations, 1)
+	require.Contains(t, violations[0].Message, "no matching activity back-link")
+	require.Equal(t, map[string]string{"operationID": "operation-id", "activityID": "activity-id"}, violations[0].Tags)
 }
 
 func activityLink(activityID string) *commonpb.Link {

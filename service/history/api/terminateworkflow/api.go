@@ -64,7 +64,8 @@ func Invoke(
 				}
 			}
 
-			return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
+			return api.UpdateWorkflowTerminate, workflow.TerminateWorkflowWithContext(
+				ctx,
 				mutableState,
 				request.GetReason(),
 				request.GetDetails(),

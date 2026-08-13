@@ -15,8 +15,9 @@ generalises is in [`UMPIRE_ERR.md`](./UMPIRE_ERR.md).
 > cron / reset, with `continued_as_new` terminals); and the action model drives + reconciles
 > multi-run scenarios with `LinkedFrom` refs bound *by observation* (no driver-side successor
 > RunID). `TestProbeWorkflowContinueAsNewGenerated` proves the whole loop. Namespace stays pre-seed
-> throughout. Remaining follow-ups are enumerated under *Open questions* (reset/retry terminals,
-> failed/canceled/timed-out run states, child-workflow edges).
+> throughout. Run closes now cover completed, failed, canceled, terminated, timed-out, and
+> continued-as-new outcomes with event time and successor identity. Remaining follow-ups are
+> enumerated under *Open questions* (notably child-workflow edges).
 
 ## Why
 

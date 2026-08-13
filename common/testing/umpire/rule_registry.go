@@ -184,6 +184,18 @@ type EntityResult[T any] struct {
 	Entity *T
 }
 
+// ChangedEntities yields every entity changed since this rule's last check.
+// It is the type-erased counterpart of Changed[T] for rules that select by type switch.
+func (c *ruleContext) ChangedEntities() iter.Seq[EntityEntry] {
+	return func(yield func(EntityEntry) bool) {
+		for _, entry := range c.ModelState.QueryAll(c.sinceGeneration, c.scope) {
+			if c.Err() != nil || !yield(entry) {
+				return
+			}
+		}
+	}
+}
+
 // Changed yields entities of type T that received facts since this rule's last
 // check (respecting the rule's dirty-generation watermark and namespace scope).
 // Iteration stops early if the context is cancelled.

@@ -3,6 +3,7 @@ package umpire
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -83,6 +84,48 @@ func TestLifecycle_FireIllegalTransitionIsRecordedNotApplied(t *testing.T) {
 	// A subsequent legal transition still works and is not recorded as illegal.
 	require.True(t, l.Fire(ctx, "b2"))
 	require.Len(t, l.Illegal(), 1)
+}
+
+func TestLifecycle_FireAtUsesEventTime(t *testing.T) {
+	ctx := context.Background()
+	l := NewLifecycle(branchSpec())
+	enteredAt := time.Date(2026, time.August, 12, 10, 30, 0, 0, time.UTC)
+	illegalAt := enteredAt.Add(time.Second)
+
+	require.True(t, l.FireAt(ctx, "toB", enteredAt))
+	require.False(t, l.FireAt(ctx, "toC", illegalAt))
+
+	actualEnteredAt, ok := l.EnteredAt("b")
+	require.True(t, ok)
+	require.Equal(t, enteredAt, actualEnteredAt)
+	require.Equal(t, illegalAt, l.Illegal()[0].At)
+}
+
+func TestLifecycle_FireAtPreservesFirstEntryAndDuplicateIsNoOp(t *testing.T) {
+	ctx := context.Background()
+	l := NewLifecycle(testSpec())
+	first := time.Date(2026, time.August, 12, 10, 30, 0, 0, time.UTC)
+
+	require.True(t, l.FireAt(ctx, "admit", first))
+	require.False(t, l.FireAt(ctx, "admit", first.Add(time.Hour)))
+
+	enteredAt, ok := l.EnteredAt("admitted")
+	require.True(t, ok)
+	require.Equal(t, first, enteredAt)
+	require.Empty(t, l.Illegal())
+}
+
+func TestLifecycle_FireAtZeroTimeFallsBackToNow(t *testing.T) {
+	ctx := context.Background()
+	l := NewLifecycle(testSpec())
+	before := time.Now()
+
+	require.True(t, l.FireAt(ctx, "admit", time.Time{}))
+
+	enteredAt, ok := l.EnteredAt("admitted")
+	require.True(t, ok)
+	require.False(t, enteredAt.Before(before))
+	require.False(t, enteredAt.After(time.Now()))
 }
 
 func TestLifecycle_FireForwardJumpAdvancesToTarget(t *testing.T) {

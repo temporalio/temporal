@@ -23,6 +23,7 @@ func defaultDeclaration() Declaration {
 		switch entityType {
 		case model.WorkflowType:
 			declaration.Actions = workflowActions()
+			declaration.ActionGaps = workflowActionGaps()
 		case model.NexusOperationType:
 			declaration.Actions = nexusActions()
 			declaration.ActionGaps = nexusActionGaps()
@@ -44,6 +45,15 @@ func workflowActions() []ActionBinding {
 	return []ActionBinding{
 		bind(model.WorkflowType, model.WorkflowCreated, model.WorkflowStart, umpire.Standalone, action.StartWorkflow),
 		bind(model.WorkflowType, model.WorkflowStarted, model.WorkflowComplete, umpire.Standalone, action.CompleteWorkflow),
+	}
+}
+
+func workflowActionGaps() []ActionGap {
+	return []ActionGap{
+		gap(model.WorkflowType, model.WorkflowStarted, model.WorkflowFail, umpire.Standalone, "needs a workflow failure command driver"),
+		gap(model.WorkflowType, model.WorkflowStarted, model.WorkflowCancel, umpire.Standalone, "needs a workflow cancellation command driver"),
+		gap(model.WorkflowType, model.WorkflowStarted, model.WorkflowTerminate, umpire.Standalone, "needs a workflow termination RPC driver"),
+		gap(model.WorkflowType, model.WorkflowStarted, model.WorkflowTimeout, umpire.Standalone, "server-driven timeout has no atomic action"),
 	}
 }
 

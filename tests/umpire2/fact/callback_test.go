@@ -100,6 +100,17 @@ func TestWorkflowCallbackAttachmentUsesSameRoutingIdentity(t *testing.T) {
 	require.Equal(t, observed.CallbackID, NewWorkflowCallbackAttachment("namespace-id", "handler-id", "handler-run-id", "request-id", reordered).CallbackID)
 }
 
+func TestNexusHTTPStartResponseUsesNonSecretDigests(t *testing.T) {
+	observed := NewNexusHTTPStartResponse("namespace-id", "callback-id", "secret-request-id", &nexuspb.StartOperationResponse{
+		Variant: &nexuspb.StartOperationResponse_AsyncSuccess{AsyncSuccess: &nexuspb.StartOperationResponse_Async{OperationToken: "secret-operation-token"}},
+	})
+
+	require.NotNil(t, observed)
+	require.Equal(t, "async_success", observed.ResponseKind)
+	require.NotContains(t, observed.DeliveryID, "secret-request-id")
+	require.NotContains(t, observed.ResponseFingerprint, "secret-operation-token")
+}
+
 func TestNexusTerminalObservationHashesResultAndSortsLinks(t *testing.T) {
 	left := &commonpb.Link{Variant: &commonpb.Link_Activity_{Activity: &commonpb.Link_Activity{
 		Namespace: "namespace", ActivityId: "activity-b", RunId: "run-b",

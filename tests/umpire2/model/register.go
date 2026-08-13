@@ -21,11 +21,11 @@ func DefaultEntities() []DefaultEntity {
 	return []DefaultEntity{
 		{
 			New:   func() umpire.Entity { return NewWorkflow() },
-			Facts: []umpire.Fact{&fact.WorkflowStarted{}, &fact.WorkflowExecutionCompleted{}, &fact.WorkflowNexusStorageSnapshot{}},
+			Facts: []umpire.Fact{&fact.WorkflowStarted{}, &fact.WorkflowExecutionClosed{}, &fact.WorkflowNexusStorageSnapshot{}},
 		},
 		{
 			New:   func() umpire.Entity { return NewWorkflowRun() },
-			Facts: []umpire.Fact{&fact.WorkflowRunStarted{}, &fact.WorkflowRunCompleted{}, &fact.WorkflowRunContinuedAsNew{}},
+			Facts: []umpire.Fact{&fact.WorkflowRunStarted{}, &fact.WorkflowRunClosed{}},
 		},
 		{
 			New:   func() umpire.Entity { return NewTaskQueue() },
@@ -54,6 +54,7 @@ func DefaultEntities() []DefaultEntity {
 				&fact.NexusOperationCancelRequestFailed{},
 				&fact.NexusOperationExecutionSnapshot{},
 				&fact.NexusOperationHistorySnapshot{},
+				&fact.NexusOperationStartedHistory{},
 				&fact.NexusOperationTerminal{},
 			},
 		},
@@ -66,6 +67,7 @@ func DefaultEntities() []DefaultEntity {
 			Facts: []umpire.Fact{
 				&fact.NexusCallbackObservation{},
 				&fact.WorkflowCallbackAttachment{},
+				&fact.NexusStartResponse{},
 			},
 		},
 	}

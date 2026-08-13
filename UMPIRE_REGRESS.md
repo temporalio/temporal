@@ -15,6 +15,7 @@ plan := regress.AllPaths(
 	nexus.Complete("op", nexus.Succeeded),
 	nexus.RespondStart("op", nexus.Async),
 	nexus.State("op", nexus.Completed),
+	nexus.LateStartResponseAccepted("op"),
 )
 ```
 
@@ -649,6 +650,7 @@ regress.AllPaths(
 	nexus.Complete("op", nexus.Succeeded),
 	nexus.RespondStart("op", nexus.Async),
 	nexus.State("op", nexus.Completed),
+	nexus.LateStartResponseAccepted("op"),
 )
 ```
 
@@ -666,6 +668,8 @@ regress.AllPaths(
 	workflow.State("handler", workflow.Completed),
 	nexus.State("left", nexus.Completed),
 	nexus.State("right", nexus.Completed),
+	nexus.CallbackReferenceConsistent("left", "handler"),
+	nexus.CallbackReferenceConsistent("right", "handler"),
 )
 ```
 
@@ -868,8 +872,10 @@ Current migration inventory:
   handler-supplied workflow-event link endpoint, and explicit HSM/CHASM state-machine deletion.
   The imperative test remains as a detailed compatibility oracle; v1 is not deleted.
 - Completion-before-start and shared-handler coverage now use normalized callback facts and typed
-  callback-operation/callback-handler-run relations. Their imperative tests remain for timestamp
-  precision and duplicate start-response behavior that is not yet a reusable global rule.
+  callback-operation/callback-handler-run relations. They now include milestones backed by public
+  history, monitor entities, and relations for exact callback references and successful late start
+  responses; reusable callback-reference and response-consistency rules judge the same evidence.
+  Their imperative tests remain as detailed compatibility oracles.
 
 ## Trade-offs
 

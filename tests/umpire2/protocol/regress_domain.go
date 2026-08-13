@@ -22,6 +22,8 @@ func defaultRegressionDomain() *coreregress.Domain {
 	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.StartToCloseSchema(), ExclusiveBy: []int{0}})
 	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.CancelRequestFailedSchema(), ExclusiveBy: []int{0}})
 	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.CallbackOperationSchema(), ExclusiveBy: []int{0}})
+	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.CallbackReferenceSchema(), ExclusiveBy: []int{0}})
+	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.LateStartResponseSchema(), ExclusiveBy: []int{0}})
 	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: workflow.CallbackHandlerRunSchema(), ExclusiveBy: []int{0}})
 	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.ResultDigestSchema(), ExclusiveBy: []int{0}})
 	mustAddPredicate(domain, coreregress.PredicateCapability{Schema: nexus.LinkEndpointSchema(), ExclusiveBy: []int{0}})
@@ -125,9 +127,13 @@ func registerNexusActions(domain *coreregress.Domain) {
 		{from: nexus.CompletionPending, to: nexus.Completed, response: nexus.Async},
 		{from: nexus.Scheduled, to: nexus.Completed, response: nexus.Sync},
 	} {
+		mode := coreregress.ReactiveAction
+		if start.from == nexus.CompletionPending {
+			mode = coreregress.ProactiveAction
+		}
 		mustAddAction(domain, coreregress.ActionCapability{
 			Schema:        nexus.RespondStartSchema(),
-			Mode:          coreregress.ReactiveAction,
+			Mode:          mode,
 			Variables:     []coreregress.Variable{op, response},
 			Preconditions: []coreregress.AtomTemplate{nexusState("operation", start.from)},
 			Effects:       []coreregress.AtomTemplate{nexusState("operation", start.to)},
@@ -262,10 +268,36 @@ func registerWorkflowActions(domain *coreregress.Domain) {
 
 func registerObservationActions(domain *coreregress.Domain) {
 	operation := coreregress.Variable{Name: "operation", Type: nexus.OperationType}
+	handler := coreregress.Variable{Name: "handler", Type: workflow.WorkflowType}
 	digest := coreregress.Variable{Name: "digest", Type: nexus.DigestType}
 	endpoint := coreregress.Variable{Name: "endpoint", Type: nexus.LinkType}
 	workflowVar := coreregress.Variable{Name: "workflow", Type: workflow.WorkflowType}
 
+	mustAddAction(domain, coreregress.ActionCapability{
+		Schema: coreregress.ActionSchema(
+			"nexus.observe_callback_reference",
+			coreregress.SymbolParameter("operation", nexus.OperationType),
+			coreregress.SymbolParameter("handler", workflow.WorkflowType),
+		),
+		Mode:      coreregress.ObservationAction,
+		Variables: []coreregress.Variable{operation, handler},
+		Effects: []coreregress.AtomTemplate{
+			coreregress.Atom("nexus.callback_reference_consistent", coreregress.TemplateVar("operation"), coreregress.TemplateVar("handler")),
+		},
+		Realization: action.RegressionObserve,
+	})
+	mustAddAction(domain, coreregress.ActionCapability{
+		Schema: coreregress.ActionSchema(
+			"nexus.observe_late_start_response",
+			coreregress.SymbolParameter("operation", nexus.OperationType),
+		),
+		Mode:      coreregress.ObservationAction,
+		Variables: []coreregress.Variable{operation},
+		Effects: []coreregress.AtomTemplate{
+			coreregress.Atom("nexus.late_start_response_accepted", coreregress.TemplateVar("operation")),
+		},
+		Realization: action.RegressionObserve,
+	})
 	mustAddAction(domain, coreregress.ActionCapability{
 		Schema: coreregress.ActionSchema(
 			"nexus.observe_result_digest",

@@ -43,12 +43,14 @@ var _ umpire.Lifecycled = (*Workflow)(nil)
 
 // Workflow represents a workflow execution entity with live Markers.
 type Workflow struct {
-	WorkflowID  string
-	NamespaceID string
-	FSM         *umpire.Lifecycle
-	StartedAt   time.Time
-	CompletedAt time.Time
-	LastSeenAt  time.Time
+	WorkflowID   string
+	NamespaceID  string
+	FSM          *umpire.Lifecycle
+	StartedAt    time.Time
+	CompletedAt  time.Time
+	ClosedAt     time.Time
+	CloseOutcome string
+	LastSeenAt   time.Time
 }
 
 func NewWorkflow() *Workflow {
@@ -59,9 +61,13 @@ func NewWorkflow() *Workflow {
 		// in WorkflowStarted at teardown (workflow-completion liveness). Benign in-flight
 		// closes are settled by the observed-close signal, not teardown timing.
 		States: umpire.States{
-			WorkflowCreated:   {},
-			WorkflowStarted:   {umpire.MustProgress},
-			WorkflowCompleted: {},
+			WorkflowCreated:    {},
+			WorkflowStarted:    {umpire.MustProgress},
+			WorkflowCompleted:  {umpire.Success},
+			WorkflowFailed:     {umpire.Failure},
+			WorkflowCanceled:   {},
+			WorkflowTerminated: {},
+			WorkflowTimedOut:   {umpire.Failure},
 		},
 		Transitions: []umpire.Transition{
 			{
@@ -74,6 +80,10 @@ func NewWorkflow() *Workflow {
 				From:  []string{WorkflowStarted},
 				To:    WorkflowCompleted,
 			},
+			{Event: WorkflowFail, From: []string{WorkflowStarted}, To: WorkflowFailed},
+			{Event: WorkflowCancel, From: []string{WorkflowStarted}, To: WorkflowCanceled},
+			{Event: WorkflowTerminate, From: []string{WorkflowStarted}, To: WorkflowTerminated},
+			{Event: WorkflowTimeout, From: []string{WorkflowStarted}, To: WorkflowTimedOut},
 		},
 	})
 	return wf
@@ -106,6 +116,24 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, facts iter
 			}
 			if wf.FSM.Fire(ctx, WorkflowComplete) {
 				wf.CompletedAt = time.Now()
+				wf.ClosedAt = wf.CompletedAt
+				wf.CloseOutcome = factOutcomeCompleted
+			}
+			wf.LastSeenAt = time.Now()
+		case *fact.WorkflowExecutionClosed:
+			if wf.WorkflowID == "" {
+				wf.WorkflowID = e.WorkflowID
+				wf.NamespaceID = e.NamespaceID
+			}
+			if e.SuccessorRunID == "" {
+				event := workflowCloseTransition(e.Outcome)
+				if wf.FSM.FireAt(ctx, event, e.EventTime()) {
+					wf.ClosedAt = eventTimeOrNow(e.EventTime())
+					wf.CloseOutcome = e.Outcome
+					if e.Outcome == factOutcomeCompleted {
+						wf.CompletedAt = wf.ClosedAt
+					}
+				}
 			}
 			wf.LastSeenAt = time.Now()
 		}
@@ -125,10 +153,18 @@ type (
 )
 
 const (
-	WorkflowCreated   WorkflowState = "created"
-	WorkflowStarted   WorkflowState = "started"
-	WorkflowCompleted WorkflowState = "completed"
+	WorkflowCreated    WorkflowState = "created"
+	WorkflowStarted    WorkflowState = "started"
+	WorkflowCompleted  WorkflowState = "completed"
+	WorkflowFailed     WorkflowState = "failed"
+	WorkflowCanceled   WorkflowState = "canceled"
+	WorkflowTerminated WorkflowState = "terminated"
+	WorkflowTimedOut   WorkflowState = "timed_out"
 
-	WorkflowStart    WorkflowEvent = "start"
-	WorkflowComplete WorkflowEvent = "complete"
+	WorkflowStart     WorkflowEvent = "start"
+	WorkflowComplete  WorkflowEvent = "complete"
+	WorkflowFail      WorkflowEvent = "fail"
+	WorkflowCancel    WorkflowEvent = "cancel"
+	WorkflowTerminate WorkflowEvent = "terminate"
+	WorkflowTimeout   WorkflowEvent = "timeout"
 )

@@ -29,7 +29,7 @@ A concrete driver is constructed for one target entity and maps events onto RPCs
 polls / fault injection:
 
 ```go
-// Illustrative — the concrete driver is the next thing to build (see status).
+// Illustrative update-specific driver; current workflow and Nexus drivers use action realizers.
 type updateDriver struct {
     client         workflowservice.WorkflowServiceClient
     wfID, updateID string

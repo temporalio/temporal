@@ -98,6 +98,15 @@ type Domain struct {
 	policies   map[string]PolicyCapability
 }
 
+// CatalogSnapshot is a deterministic defensive view of a compiled domain.
+type CatalogSnapshot struct {
+	Version    string
+	Predicates []PredicateCapability
+	Actions    []ActionCapability
+	Resources  []ResourceCapability
+	Policies   []PolicyCapability
+}
+
 func NewDomain(version string) *Domain {
 	return &Domain{
 		version:    version,
@@ -109,6 +118,40 @@ func NewDomain(version string) *Domain {
 
 func (d *Domain) Version() string { return d.version }
 
+// Snapshot returns all catalog declarations in stable name/declaration order.
+func (d *Domain) Snapshot() CatalogSnapshot {
+	if d == nil {
+		return CatalogSnapshot{}
+	}
+	result := CatalogSnapshot{Version: d.version}
+	for _, predicate := range d.predicates {
+		result.Predicates = append(result.Predicates, clonePredicateCapability(predicate))
+	}
+	slices.SortFunc(result.Predicates, func(left, right PredicateCapability) int {
+		return compareCatalogName(left.Schema.Name, right.Schema.Name)
+	})
+	for _, action := range d.actions {
+		result.Actions = append(result.Actions, cloneActionCapability(action))
+	}
+	for _, resource := range d.resources {
+		resource.DependsOn = slices.Clone(resource.DependsOn)
+		resource.Requires = slices.Clone(resource.Requires)
+		result.Resources = append(result.Resources, resource)
+	}
+	slices.SortFunc(result.Resources, func(left, right ResourceCapability) int {
+		return compareCatalogName(left.Name, right.Name)
+	})
+	for _, policy := range d.policies {
+		policy.Resources = slices.Clone(policy.Resources)
+		policy.Requires = slices.Clone(policy.Requires)
+		result.Policies = append(result.Policies, policy)
+	}
+	slices.SortFunc(result.Policies, func(left, right PolicyCapability) int {
+		return compareCatalogName(left.Schema.Name, right.Schema.Name)
+	})
+	return result
+}
+
 // Clone returns an independently mutable copy of the compiled catalog declaration.
 func (d *Domain) Clone() *Domain {
 	if d == nil {
@@ -116,18 +159,10 @@ func (d *Domain) Clone() *Domain {
 	}
 	result := NewDomain(d.version)
 	for name, predicate := range d.predicates {
-		predicate.ExclusiveBy = slices.Clone(predicate.ExclusiveBy)
-		result.predicates[name] = predicate
+		result.predicates[name] = clonePredicateCapability(predicate)
 	}
 	for _, action := range d.actions {
-		action.Variables = slices.Clone(action.Variables)
-		action.Preconditions = slices.Clone(action.Preconditions)
-		action.Effects = slices.Clone(action.Effects)
-		action.Resources = slices.Clone(action.Resources)
-		action.Requires = slices.Clone(action.Requires)
-		action.IndependentOf = slices.Clone(action.IndependentOf)
-		action.Fixed = cloneMap(action.Fixed)
-		result.actions = append(result.actions, action)
+		result.actions = append(result.actions, cloneActionCapability(action))
 	}
 	for name, resource := range d.resources {
 		resource.DependsOn = slices.Clone(resource.DependsOn)
@@ -140,6 +175,43 @@ func (d *Domain) Clone() *Domain {
 		result.policies[name] = policy
 	}
 	return result
+}
+
+func clonePredicateCapability(predicate PredicateCapability) PredicateCapability {
+	predicate.Schema.Parameters = slices.Clone(predicate.Schema.Parameters)
+	predicate.ExclusiveBy = slices.Clone(predicate.ExclusiveBy)
+	return predicate
+}
+
+func cloneActionCapability(action ActionCapability) ActionCapability {
+	action.Schema.Parameters = slices.Clone(action.Schema.Parameters)
+	action.Variables = slices.Clone(action.Variables)
+	action.Preconditions = cloneAtomTemplates(action.Preconditions)
+	action.Effects = cloneAtomTemplates(action.Effects)
+	action.Resources = slices.Clone(action.Resources)
+	action.Requires = slices.Clone(action.Requires)
+	action.IndependentOf = slices.Clone(action.IndependentOf)
+	action.Fixed = cloneMap(action.Fixed)
+	return action
+}
+
+func cloneAtomTemplates(atoms []AtomTemplate) []AtomTemplate {
+	result := slices.Clone(atoms)
+	for index := range result {
+		result[index].Terms = slices.Clone(result[index].Terms)
+	}
+	return result
+}
+
+func compareCatalogName(left, right string) int {
+	switch {
+	case left < right:
+		return -1
+	case left > right:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func cloneMap[K comparable, V any](source map[K]V) map[K]V {

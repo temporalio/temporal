@@ -105,6 +105,9 @@ func logScenario(t *testing.T, sc Scenario) {
 			detail += " [" + sc.Terminal + "]"
 		}
 	}
+	if sc.DriveErr != nil {
+		detail += ": drive error: " + sc.DriveErr.Error()
+	}
 	fired := ""
 	if sc.Method != "" {
 		fired = fmt.Sprintf("  (fault fired=%v)", sc.Fired)
