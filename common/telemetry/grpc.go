@@ -192,6 +192,9 @@ func (c *customServerStatsHandler) HandleConn(ctx context.Context, stat stats.Co
 }
 
 func isEnabled(tp trace.TracerProvider) bool {
+	if tp == nil {
+		return false
+	}
 	_, isNoop := tp.(otelnoop.TracerProvider)
 	return !isNoop
 }
