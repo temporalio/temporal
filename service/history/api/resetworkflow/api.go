@@ -78,7 +78,7 @@ func Invoke(
 
 	// Validate versioning override, if any.
 	shouldSkipReactivationPerOp, revisionNumberPerOp, err := validatePostResetOperationInputs(ctx, request.GetPostResetOperations(), matchingClient, versionCache,
-		baseMutableState.GetExecutionInfo().GetTaskQueue(), namespaceID.String())
+		baseMutableState.GetExecutionInfo().GetTaskQueue(), namespaceID.String(), shardContext.GetConfig().MaxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +191,8 @@ func Invoke(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
+		request.GetRequestId(),
+		request.GetIdentity(),
 		baseWorkflow,
 		currentWorkflow,
 		request.GetReason(),
@@ -274,12 +276,27 @@ func validatePostResetOperationInputs(ctx context.Context,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	taskQueue string,
-	namespaceID string) ([]bool, []int64, error) {
+	namespaceID string,
+	maxIDLength int,
+) ([]bool, []int64, error) {
 	shouldSkipReactivationPerOp := make([]bool, len(postResetOperations))
 	revisionNumberPerOp := make([]int64, len(postResetOperations))
 	for i, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
+		case *workflowpb.PostResetOperation_SignalWorkflow_:
+			if op.SignalWorkflow == nil {
+				return nil, nil, serviceerror.NewInvalidArgument("post reset signal workflow operation is not set")
+			}
+			if op.SignalWorkflow.GetSignalName() == "" {
+				return nil, nil, serviceerror.NewInvalidArgument("SignalName is not set on request.")
+			}
+			if len(op.SignalWorkflow.GetSignalName()) > maxIDLength {
+				return nil, nil, serviceerror.NewInvalidArgument("SignalName length exceeds limit.")
+			}
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
+			if op.UpdateWorkflowOptions == nil {
+				return nil, nil, serviceerror.NewInvalidArgument("post reset update workflow options operation is not set")
+			}
 			opts := op.UpdateWorkflowOptions.GetWorkflowExecutionOptions()
 			shouldSkipReactivation, revisionNumber, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, opts.GetVersioningOverride(), matchingClient, versionCache, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID)
 			if err != nil {

@@ -6435,6 +6435,42 @@ func (s *mutableStateSuite) TestHasRequestID_StateConsistency() {
 	s.True(s.mutableState.HasRequestID(requestID))
 }
 
+func (s *mutableStateSuite) TestSetResetRequestID() {
+	startRequestID := "start-request-id"
+	resetRequestID := "reset-request-id"
+	s.mutableState.executionState.CreateRequestId = startRequestID
+	s.mutableState.executionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+		startRequestID: {
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventId:   common.FirstEventID,
+		},
+	}
+	s.mutableState.SetBaseWorkflow("base-run-id", 10, 11)
+
+	s.mutableState.SetResetRequestID(resetRequestID)
+
+	s.Equal(resetRequestID, s.mutableState.executionState.GetCreateRequestId())
+	protorequire.ProtoEqual(
+		s.T(),
+		&persistencespb.RequestIDInfo{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventId:   common.FirstEventID,
+		},
+		s.mutableState.executionState.GetRequestIds()[startRequestID],
+	)
+	protorequire.ProtoEqual(
+		s.T(),
+		&persistencespb.RequestIDInfo{
+			EventType: enumspb.EVENT_TYPE_UNSPECIFIED,
+			EventId:   common.EmptyEventID,
+		},
+		s.mutableState.executionState.GetRequestIds()[resetRequestID],
+	)
+	s.True(s.mutableState.HasRequestID(resetRequestID))
+	s.Equal(startRequestID, s.mutableState.executionInfo.GetBaseExecutionInfo().GetStartRequestId())
+	s.Equal(resetRequestID, s.mutableState.executionInfo.GetBaseExecutionInfo().GetResetRequestId())
+}
+
 func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
 	// Ensure execution state has no request IDs initially
 	if s.mutableState.executionState.RequestIds == nil {

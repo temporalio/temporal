@@ -1092,6 +1092,7 @@ func (ms *MutableStateImpl) SetBaseWorkflow(
 		RunId:                            baseRunID,
 		LowestCommonAncestorEventId:      baseRunLowestCommonAncestorEventID,
 		LowestCommonAncestorEventVersion: baseRunLowestCommonAncestorEventVersion,
+		StartRequestId:                   ms.executionState.GetCreateRequestId(),
 	}
 }
 
@@ -2598,6 +2599,24 @@ func (ms *MutableStateImpl) AttachRequestID(
 		ms.executionState.CreateRequestId = requestID
 	}
 	ms.approximateSize += ms.executionState.Size()
+}
+
+func (ms *MutableStateImpl) SetResetRequestID(requestID string) {
+	ms.approximateSize -= ms.executionState.Size()
+	ms.approximateSize -= ms.executionInfo.Size()
+	if ms.executionState.RequestIds == nil {
+		ms.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+	}
+	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+		EventType: enumspb.EVENT_TYPE_UNSPECIFIED,
+		EventId:   common.EmptyEventID,
+	}
+	ms.executionState.CreateRequestId = requestID
+	if ms.executionInfo.BaseExecutionInfo != nil {
+		ms.executionInfo.BaseExecutionInfo.ResetRequestId = requestID
+	}
+	ms.approximateSize += ms.executionState.Size()
+	ms.approximateSize += ms.executionInfo.Size()
 }
 
 func (ms *MutableStateImpl) HasRequestID(

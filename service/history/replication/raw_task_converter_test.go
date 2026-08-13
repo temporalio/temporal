@@ -303,6 +303,8 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 		RunId:                            uuid.NewString(),
 		LowestCommonAncestorEventId:      rand.Int63(),
 		LowestCommonAncestorEventVersion: rand.Int63(),
+		StartRequestId:                   uuid.NewString(),
+		ResetRequestId:                   uuid.NewString(),
 	}
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte{},
@@ -653,6 +655,8 @@ func (s *rawTaskConverterSuite) TestConvertHistoryReplicationTask_WithNewRun() {
 		RunId:                            uuid.NewString(),
 		LowestCommonAncestorEventId:      rand.Int63(),
 		LowestCommonAncestorEventVersion: rand.Int63(),
+		StartRequestId:                   uuid.NewString(),
+		ResetRequestId:                   uuid.NewString(),
 	}
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: []byte("branch token"),
