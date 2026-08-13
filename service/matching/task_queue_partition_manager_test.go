@@ -2353,42 +2353,24 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	dbq := pm.defaultQueue()
 	require.NotNil(t, dbq)
 
-	// Simulate tasks being added and dispatched on the sticky queue.
-	// In production, TrySyncMatch increments tasksAdded and PollTask increments tasksDispatched.
+	// Simulate a task being added and dispatched on the sticky queue.
 	dbqImpl := dbq.(*physicalTaskQueueManagerImpl)
-	for range 100 {
-		dbqImpl.incTaskTracker(dbqImpl.tasksAdded, 3, 1)
-		dbqImpl.incTaskTracker(dbqImpl.tasksDispatched, 3, 1)
-	}
+	dbqImpl.incTaskTracker(dbqImpl.tasksAdded, 3, 1)
+	dbqImpl.incTaskTracker(dbqImpl.tasksDispatched, 3, 1)
 
 	// Advance time so the task tracker has positive elapsed time for rate calculation.
-	// Must be less than the bucket size (totalInterval/buckets = 30s/10 = 3s) to keep
-	// tasks in the current bucket.
 	ts.Advance(time.Second)
 
-	// Verify the raw stats on the physical queue have non-zero rates.
+	// Verify the raw stats have non-zero rates (precondition for the test to be meaningful).
 	rawStats := dbq.GetStatsByPriority(true)
-	require.NotEmpty(t, rawStats, "raw stats should be populated")
-	var rawAddRate, rawDispatchRate float32
-	for _, s := range rawStats {
-		rawAddRate += s.TasksAddRate
-		rawDispatchRate += s.TasksDispatchRate
-	}
-	require.Greater(t, rawAddRate, float32(0), "raw add rate should be positive")
-	require.Greater(t, rawDispatchRate, float32(0), "raw dispatch rate should be positive")
+	require.Greater(t, rawStats[3].TasksAddRate, float32(0))
+	require.Greater(t, rawStats[3].TasksDispatchRate, float32(0))
 
-	// Now call GetPhysicalQueueAdjustedStats — this goes through Describe which applies
-	// the versioning attribution logic.
+	// GetPhysicalQueueAdjustedStats goes through Describe which applies versioning
+	// attribution. For sticky queues, attribution should be skipped, so adjusted rates
+	// should exactly match the raw rates.
 	adjustedStats := pm.GetPhysicalQueueAdjustedStats(context.Background(), dbq)
-
-	// Versioning attribution is skipped for sticky queues, so adjusted rates should
-	// exactly match the raw rates (time source is fixed, so no drift between reads).
-	require.NotNil(t, adjustedStats, "adjusted stats should not be nil")
-	t.Logf("Raw rates: add=%.4f dispatch=%.4f", rawAddRate, rawDispatchRate)
-	t.Logf("Adjusted rates: add=%.4f dispatch=%.4f", adjustedStats.TasksAddRate, adjustedStats.TasksDispatchRate)
-
-	require.Equal(t, rawAddRate, adjustedStats.TasksAddRate,
-		"adjusted add rate should equal raw rate for sticky queues (versioning attribution must be skipped)")
-	require.Equal(t, rawDispatchRate, adjustedStats.TasksDispatchRate,
-		"adjusted dispatch rate should equal raw rate for sticky queues (versioning attribution must be skipped)")
+	require.NotNil(t, adjustedStats)
+	require.Equal(t, rawStats[3].TasksAddRate, adjustedStats.TasksAddRate)
+	require.Equal(t, rawStats[3].TasksDispatchRate, adjustedStats.TasksDispatchRate)
 }
