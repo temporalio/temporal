@@ -51,26 +51,13 @@ func ListRunArtifacts(ctx context.Context, repo string, githubActionsRunID int64
 // DownloadArtifact downloads a single GitHub Actions artifact zip file.
 func DownloadArtifact(ctx context.Context, repo string, artifactID int64, outputDir string) (string, error) {
 	path := fmt.Sprintf("/repos/%s/actions/artifacts/%d/zip", repo, artifactID)
-	return downloadArtifact(ctx, path, artifactID, outputDir)
-}
-
-func downloadArtifact(
-	ctx context.Context,
-	path string,
-	artifactID int64,
-	outputDir string,
-) (_ string, retErr error) {
 	downloadCtx, cancel := context.WithTimeout(ctx, artifactDownloadTimeout)
 	defer cancel()
 	response, err := get(downloadCtx, path)
 	if err != nil {
 		return "", fmt.Errorf("failed to download artifact %d: %w", artifactID, err)
 	}
-	defer func() {
-		if err := response.Body.Close(); err != nil && retErr == nil {
-			retErr = fmt.Errorf("failed to close artifact %d response: %w", artifactID, err)
-		}
-	}()
+	defer func() { _ = response.Body.Close() }()
 
 	tempFile, err := os.CreateTemp(outputDir, fmt.Sprintf("artifact-%d-*.zip", artifactID))
 	if err != nil {

@@ -14,9 +14,8 @@ import (
 const defaultTimeout = 30 * time.Second
 
 var fallbackToken struct {
-	sync.Once
+	mu    sync.Mutex
 	value string
-	err   error
 }
 
 func apiToken(ctx context.Context) (string, error) {
@@ -27,13 +26,14 @@ func apiToken(ctx context.Context) (string, error) {
 		return token, nil
 	}
 
-	fallbackToken.Do(func() {
+	fallbackToken.mu.Lock()
+	defer fallbackToken.mu.Unlock()
+	if fallbackToken.value == "" {
 		output, err := commandOutput(ctx, defaultTimeout, "auth", "token")
+		if err != nil {
+			return "", fmt.Errorf("failed to get GitHub token: %w", err)
+		}
 		fallbackToken.value = strings.TrimSpace(string(output))
-		fallbackToken.err = err
-	})
-	if fallbackToken.err != nil {
-		return "", fmt.Errorf("failed to get GitHub token: %w", fallbackToken.err)
 	}
 	if fallbackToken.value == "" {
 		return "", errors.New("GitHub token is empty")
