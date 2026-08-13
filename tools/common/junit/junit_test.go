@@ -150,6 +150,37 @@ func TestWrite(t *testing.T) {
 `, string(content))
 }
 
+func TestValidateCounters(t *testing.T) {
+	report := &Testsuites{
+		Tests:    4,
+		Failures: 1,
+		Errors:   1,
+		Skipped:  1,
+		Disabled: 2,
+		Suites: []Testsuite{{
+			Name:     "suite",
+			Tests:    4,
+			Failures: 1,
+			Errors:   1,
+			Skipped:  1,
+			Disabled: 2,
+			Testcases: []Testcase{
+				{Name: "pass"},
+				{Name: "fail", Failure: &Result{}},
+				{Name: "error", Error: &Result{}},
+				{Name: "skip", Skipped: &Result{}},
+			},
+		}},
+	}
+	require.NoError(t, ValidateCounters(report))
+
+	report.Suites[0].Failures = 0
+	require.ErrorContains(t, ValidateCounters(report), `suite "suite" failures counter is 0, want 1`)
+	report.Suites[0].Failures = 1
+	report.Tests = 3
+	require.ErrorContains(t, ValidateCounters(report), "root tests counter is 3, want 4")
+}
+
 func TestWriteAtomicallyReplacesExistingTarget(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "junit.xml")

@@ -24,6 +24,9 @@ type Testcase = junitxml.Testcase
 // Result is a JUnit test-case failure or error.
 type Result = junitxml.Result
 
+// Output is captured JUnit test output.
+type Output = junitxml.Output
+
 var errRead = errors.New("failed to read JUnit report file")
 
 // Read reads a JUnit XML file with either a testsuites or testsuite root.
@@ -93,6 +96,72 @@ func validateDocumentEnd(decoder *xml.Decoder) error {
 			return fmt.Errorf("unexpected trailing XML token %T", token)
 		}
 	}
+}
+
+// ValidateCounters verifies that suite and root counters describe the emitted
+// testcase tree exactly.
+func ValidateCounters(testsuites *Testsuites) error {
+	if testsuites == nil {
+		return errors.New("JUnit report is nil")
+	}
+
+	var rootTests, rootErrors, rootFailures, rootSkipped, rootDisabled int
+	for i := range testsuites.Suites {
+		suite := &testsuites.Suites[i]
+		tests := len(suite.Testcases)
+		var errorCount, failures, skipped int
+		for _, testcase := range suite.Testcases {
+			if testcase.Error != nil {
+				errorCount++
+			}
+			if testcase.Failure != nil {
+				failures++
+			}
+			if testcase.Skipped != nil {
+				skipped++
+			}
+		}
+		if err := validateCounter(fmt.Sprintf("suite %q tests", suite.Name), suite.Tests, tests); err != nil {
+			return err
+		}
+		if err := validateCounter(fmt.Sprintf("suite %q errors", suite.Name), suite.Errors, errorCount); err != nil {
+			return err
+		}
+		if err := validateCounter(fmt.Sprintf("suite %q failures", suite.Name), suite.Failures, failures); err != nil {
+			return err
+		}
+		if err := validateCounter(fmt.Sprintf("suite %q skipped", suite.Name), suite.Skipped, skipped); err != nil {
+			return err
+		}
+		rootTests += suite.Tests
+		rootErrors += suite.Errors
+		rootFailures += suite.Failures
+		rootSkipped += suite.Skipped
+		rootDisabled += suite.Disabled
+	}
+	for _, counter := range []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"root tests", testsuites.Tests, rootTests},
+		{"root errors", testsuites.Errors, rootErrors},
+		{"root failures", testsuites.Failures, rootFailures},
+		{"root skipped", testsuites.Skipped, rootSkipped},
+		{"root disabled", testsuites.Disabled, rootDisabled},
+	} {
+		if err := validateCounter(counter.name, counter.got, counter.want); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCounter(name string, got, want int) error {
+	if got != want {
+		return fmt.Errorf("%s counter is %d, want %d", name, got, want)
+	}
+	return nil
 }
 
 // Write atomically replaces a JUnit XML file.

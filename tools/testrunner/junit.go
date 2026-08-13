@@ -10,8 +10,7 @@ import (
 	"go.temporal.io/server/tools/common/junit"
 )
 
-// alertsSuiteName is the JUnit suite name used for structural alerts (data
-// races, panics, fatal errors).
+const testrunnerSuiteName = "testrunner"
 const alertsSuiteName = "ALERTS"
 
 const junitAlertDetailsMaxBytes = 64 * 1024
@@ -21,6 +20,7 @@ type failureType string
 const (
 	// failureTypeFailed marks a failed assertion.
 	failureTypeFailed   failureType = "Failed"
+	failureTypeAborted  failureType = "ABORTED"
 	failureTypeTimeout  failureType = "TIMEOUT"
 	failureTypeCrash    failureType = "CRASH"
 	failureTypeDataRace failureType = "DATA RACE"

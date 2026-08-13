@@ -5,21 +5,34 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/tools/common/junit"
 )
 
-func TestParseTestTimeouts(t *testing.T) {
-	logInput, err := os.ReadFile("testdata/timeout-input.log")
+func TestExtractTimeoutDiagnostic(t *testing.T) {
+	input, err := os.ReadFile("testdata/timeout-input.log")
 	require.NoError(t, err)
-	logOutput, err := os.ReadFile("testdata/timeout-output.log")
+	expected, err := os.ReadFile("testdata/timeout-output.log")
 	require.NoError(t, err)
 
-	stacktrace, tests := parseTestTimeouts(string(logInput))
-	require.Equal(t, []string{
-		"TestActivityApiResetClientTestSuite",
-		"TestNDCFuncTestSuite",
-		"TestActivityApiStateReplicationSuite",
-	}, tests)
-	require.Equal(t, string(logOutput), stacktrace)
+	timeout := extractTimeoutDiagnostic(outputScope{packageName: "example.com/tests"}, string(input))
+	require.NotNil(t, timeout)
+	require.Equal(t, diagnosticTimeout, timeout.kind)
+	require.Equal(t, string(expected), timeout.details)
+	require.Equal(t, []testID{
+		{"example.com/tests", "TestActivityApiResetClientTestSuite"},
+		{"example.com/tests", "TestNDCFuncTestSuite"},
+		{"example.com/tests", "TestActivityApiStateReplicationSuite"},
+	}, timeout.tests)
+
+	report := renderJUnit([]attemptResult{{
+		diagnostics: []diagnostic{*timeout},
+		process:     processResult{state: processExited, exitCode: 1},
+	}})
+	require.NoError(t, junit.ValidateCounters(&report))
+	testcase := findJUnitTestcase(t, report, "TestActivityApiResetClientTestSuite (timed out)")
+	require.NotNil(t, testcase.Failure)
+	require.Contains(t, testcase.Failure.Data, "panic: test timed out after 5s")
+	require.Contains(t, testcase.Failure.Data, "abridged stacktrace:")
 }
 
 func TestParseTestTimeoutsTruncatedAfterPanic(t *testing.T) {

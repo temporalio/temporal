@@ -76,18 +76,3 @@ func parseFailureDetails(data string) string {
 	}
 	return evidence.details
 }
-
-func failureTypeForDiagnostic(kind diagnosticKind) failureType {
-	switch kind {
-	case diagnosticDataRace:
-		return failureTypeDataRace
-	case diagnosticPanic:
-		return failureTypePanic
-	case diagnosticFatal:
-		return failureTypeFatal
-	case diagnosticTimeout:
-		return failureTypeTimeout
-	default:
-		return failureTypeFailed
-	}
-}

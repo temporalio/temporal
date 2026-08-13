@@ -148,6 +148,15 @@ func (p packageResult) hasAttributableFailureDescendant(parent testExecution) bo
 	})
 }
 
+func (p packageResult) hasExecutionDescendant(parent testExecution) bool {
+	prefix := parent.id.testName + "/"
+	return slices.ContainsFunc(p.executions, func(execution testExecution) bool {
+		return execution.id.packageName == parent.id.packageName &&
+			execution.occurrence == parent.occurrence &&
+			strings.HasPrefix(execution.id.testName, prefix)
+	})
+}
+
 func compareTestID(a, b testID) int {
 	if byPackage := strings.Compare(a.packageName, b.packageName); byPackage != 0 {
 		return byPackage
