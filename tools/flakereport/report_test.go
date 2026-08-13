@@ -63,7 +63,12 @@ func TestGenerateGitHubSummaryPutsBayesianSuspectsBeforeFailureCategories(t *tes
 
 	content := generateGitHubSummary(summary, bisectReports, "temporalio/temporal", "123", 1, 0.5)
 
-	require.Less(t, strings.Index(content, "### Bayesian Commit Suspects"), strings.Index(content, "### Failure Categories Summary"))
+	bayesianIndex := strings.Index(content, "### Bayesian Commit Suspects")
+	failureCategoriesIndex := strings.Index(content, "### Failure Categories Summary")
+	require.NotEqual(t, -1, bayesianIndex)
+	require.NotEqual(t, -1, failureCategoriesIndex)
+	require.Less(t, bayesianIndex, failureCategoriesIndex)
+	require.Contains(t, content, "| CI Execution Interruptions |")
 	require.Contains(t, content, "### CI Execution Interruptions")
 	require.Contains(t, content, "### Final-Retry Test Failures")
 }

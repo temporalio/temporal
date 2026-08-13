@@ -22,7 +22,7 @@ func buildSuccessMessage(summary *ReportSummary, runID, repo string, days int) *
 	}
 
 	// Summary stats
-	summaryText := fmt.Sprintf("*CI Success Rate:* %d/%d (%.2f%%)\n*Total Test Runs:* %d\n*Total Failures:* %d\n*Failure Rate:* %.2f per 1000 tests\n\n*Test Runner Timeouts:* %d\n*Final-Retry Test Failures:* %d\n*Crashes:* %d\n*Flaky Tests:* %d\n*Timeouts:* %d",
+	summaryText := fmt.Sprintf("*CI Success Rate:* %d/%d (%.2f%%)\n*Total Test Runs:* %d\n*Total Failures:* %d\n*Failure Rate:* %.2f per 1000 tests\n\n*CI Execution Interruptions:* %d\n*Final-Retry Test Failures:* %d\n*Crashes:* %d\n*Flaky Tests:* %d\n*Timeouts:* %d",
 		summary.SuccessfulRuns,
 		summary.TotalWorkflowRuns,
 		ciSuccessRate,

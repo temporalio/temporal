@@ -62,6 +62,21 @@ func TestSplitTestRunnerTimeoutFailures(t *testing.T) {
 	require.Equal(t, []TestRun{{Name: "TestFoo"}}, runs)
 }
 
+func TestConvertEventReportsCountsArtifacts(t *testing.T) {
+	until := time.Now()
+	window := newReportWindow(until.AddDate(0, 0, -7), until)
+	reports := convertEventReports(map[string][]TestFailure{
+		testRunnerTotalTimeout: {
+			{ArtifactID: "artifact-1"},
+			{ArtifactID: "artifact-1"},
+			{ArtifactID: "artifact-2"},
+		},
+	}, "temporalio/temporal", 3, window)
+
+	require.Len(t, reports, 1)
+	require.Equal(t, 2, reports[0].FailureCount)
+}
+
 func TestParseArtifactName(t *testing.T) {
 	tests := []struct {
 		name               string

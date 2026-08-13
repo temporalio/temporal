@@ -65,7 +65,7 @@ func generateGitHubSummary(summary *ReportSummary, bisectReports []TestBisectRep
 	content += "### Failure Categories Summary\n\n"
 	content += "| Category | Unique Entries |\n"
 	content += "|----------|----------------|\n"
-	content += fmt.Sprintf("| Test Runner Timeouts | %d |\n", len(summary.TestRunnerTimeouts))
+	content += fmt.Sprintf("| CI Execution Interruptions | %d |\n", len(summary.TestRunnerTimeouts))
 	content += fmt.Sprintf("| Final-Retry Test Failures | %d |\n", len(summary.CIBreakers))
 	content += fmt.Sprintf("| Crashes | %d |\n", len(summary.Crashes))
 	content += fmt.Sprintf("| Timeouts | %d |\n", len(summary.Timeouts))

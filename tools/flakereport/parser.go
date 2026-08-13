@@ -293,9 +293,17 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 
 func convertEventReports(grouped map[string][]TestFailure, repo string, maxLinks int, window reportWindow) []TestReport {
 	return buildReports(grouped,
-		func(_ string, failures []TestFailure) int { return len(failures) },
+		func(_ string, failures []TestFailure) int { return countArtifacts(failures) },
 		func(string, []TestFailure) int { return 0 },
 		repo, maxLinks, window)
+}
+
+func countArtifacts(failures []TestFailure) int {
+	artifacts := make(map[string]struct{}, len(failures))
+	for _, failure := range failures {
+		artifacts[failure.ArtifactID] = struct{}{}
+	}
+	return len(artifacts)
 }
 
 // filterParentTests removes top-level test names from grouped when subtests of
