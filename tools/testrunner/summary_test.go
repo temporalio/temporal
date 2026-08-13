@@ -20,7 +20,8 @@ func TestNewSummaryFromReports_RendersAssertionFailureRow(t *testing.T) {
 }
 
 func TestNewSummaryFromReports_EmptyWhenNoFailures(t *testing.T) {
-	s := newSummaryFromReports([]*junitReport{mustReadReportFixture(t, "testdata/junit-empty.xml")})
+	report := mustReadReportFixture(t, "testdata/junit-empty.xml")
+	s := newSummaryFromReports(&report.Testsuites)
 	require.Empty(t, s.Rows)
 }
 
@@ -52,7 +53,7 @@ func TestNewSummaryFromReports_RendersTrimmedFailureBodyRow(t *testing.T) {
 func TestNewSummaryFromReports_RendersAlertRow(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-alert-data-race.xml")
 
-	s := newSummaryFromReports([]*junitReport{report})
+	s := newSummaryFromReports(&report.Testsuites)
 	require.Equal(t, []summaryRow{{
 		Kind:    failureTypeDataRace,
 		Name:    "DATA RACE: Data race detected in TestFoo",
@@ -71,7 +72,7 @@ func TestNewSummaryFromReports_MergesMultipleReports(t *testing.T) {
 	reportNew.Suites[0].Testcases[0].Name = "TestNew"
 	reportNew.Suites[0].Testcases[0].Failure.Data = "new failure"
 
-	summary := newSummaryFromReports([]*junitReport{reportOld, reportNew})
+	summary := newSummaryFromReports(&reportOld.Testsuites, &reportNew.Testsuites)
 	require.Equal(t, []summaryRow{
 		{Kind: failureTypeFailed, Name: "TestNew", Details: "new failure"},
 		{Kind: failureTypeFailed, Name: "TestOld", Details: "old failure"},
@@ -119,13 +120,14 @@ func TestRenderSummaryFromReports_Markdown_RendersTrimmedFailureBody(t *testing.
 func TestRenderSummaryFromReports_Markdown_RendersAlertRow(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-alert-data-race.xml")
 
-	rendered := newSummaryFromReports([]*junitReport{report}).Markdown()
+	rendered := newSummaryFromReports(&report.Testsuites).Markdown()
 	require.Contains(t, rendered, failureTypeDataRace)
 	require.Contains(t, rendered, "Write at 0x00c000123456 by goroutine 7")
 }
 
 func TestRenderSummaryFromReports_Markdown_EmptyWhenNoFailures(t *testing.T) {
-	s := newSummaryFromReports([]*junitReport{mustReadReportFixture(t, "testdata/junit-empty.xml")})
+	report := mustReadReportFixture(t, "testdata/junit-empty.xml")
+	s := newSummaryFromReports(&report.Testsuites)
 	require.Empty(t, s.Markdown())
 }
 
@@ -191,5 +193,5 @@ func mustNewMergedSummary(t *testing.T, reports ...*junitReport) summary {
 	t.Helper()
 	merged, err := mergeReports(reports)
 	require.NoError(t, err)
-	return newSummaryFromReports([]*junitReport{merged})
+	return newSummaryFromReports(&merged.Testsuites)
 }

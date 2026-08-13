@@ -250,7 +250,7 @@ func Main() {
 // nolint:revive,deep-exit
 func (r *runner) reportCrash() {
 	jr := generateReport([]string{r.crashName}, "crash", failureTypeCrash)
-	if err := r.writeReport(jr); err != nil {
+	if err := r.writeReport(&jr.Testsuites); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -262,16 +262,16 @@ func (r *runner) generateSummary() error {
 	}
 	slices.Sort(paths)
 
-	reports := make([]*junitReport, 0, len(paths))
+	reports := make([]*junit.Testsuites, 0, len(paths))
 	for _, path := range paths {
-		report, err := readReport(path)
+		report, err := junit.Read(path)
 		if err != nil {
-			return fmt.Errorf("failed to read junit report %q: %w", path, err)
+			return err
 		}
 		reports = append(reports, report)
 	}
 
-	summary := newSummaryFromReports(reports)
+	summary := newSummaryFromReports(reports...)
 	if len(summary.Rows) == 0 {
 		fmt.Println("no failed tests found in junit reports; skipping test summary")
 		return nil
@@ -295,8 +295,8 @@ func (r *runner) generateSummary() error {
 	return nil
 }
 
-func (r *runner) writeReport(report *junitReport) error {
-	if err := junit.Write(r.junitOutputPath, &report.Testsuites); err != nil {
+func (r *runner) writeReport(report *junit.Testsuites) error {
+	if err := junit.Write(r.junitOutputPath, report); err != nil {
 		return err
 	}
 	log.Printf("wrote junit report to %s", r.junitOutputPath)
@@ -321,7 +321,7 @@ func (r *runner) writeCurrentReport() {
 	if len(r.alerts) > 0 {
 		merged.appendAlertsSuite(r.alerts)
 	}
-	if err := r.writeReport(merged); err != nil {
+	if err := r.writeReport(&merged.Testsuites); err != nil {
 		log.Printf("warning: failed to write intermediate report: %v", err)
 	}
 }
@@ -436,7 +436,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	if len(r.alerts) > 0 {
 		mergedReport.appendAlertsSuite(r.alerts)
 	}
-	if err = r.writeReport(mergedReport); err != nil {
+	if err = r.writeReport(&mergedReport.Testsuites); err != nil {
 		log.Fatal(err)
 	}
 
