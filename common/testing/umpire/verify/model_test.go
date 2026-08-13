@@ -158,6 +158,19 @@ func TestEvaluateExprChecksQuantifiedCrossEntityProperty(t *testing.T) {
 	require.True(t, holds)
 }
 
+func TestEvaluateExprRejectsExistentialWithoutMatchingBody(t *testing.T) {
+	model := Model{
+		Version:  "test/v1",
+		Entities: []EntityType{{Name: "job", IDs: []string{"job-0"}, InitiallyExists: []string{"job-0"}, Initial: "ready", States: []State{{Name: "ready"}, {Name: "done"}}}},
+	}
+	state := ModelState{Entities: map[string]map[string]string{"job": {"job-0": "ready"}}, Relations: map[string][]RelationTuple{}}
+	expression := Expr{Op: ExistsExpr, Entity: "job", Var: "job", Args: []Expr{StateIs("job", "job", "done")}}
+
+	holds, err := EvaluateExpr(model, state, expression, nil)
+	require.NoError(t, err)
+	require.False(t, holds)
+}
+
 func TestMarshalModelIsIndependentOfDeclarationOrder(t *testing.T) {
 	left := nexusModel()
 	right := nexusModel()

@@ -1,0 +1,376 @@
+{
+  "schemaVersion": "umpire-verification-manifest/v1",
+  "generatorVersion": "umpire-genmodels/v1",
+  "target": "foundation-delivery-safety",
+  "targetOwners": [
+    "history",
+    "matching"
+  ],
+  "targetModules": [
+    "history-authorization",
+    "history-outbox",
+    "matching-delivery"
+  ],
+  "targetCompositions": [
+    "foundation-delivery"
+  ],
+  "targetProperties": [
+    "delivery.ambiguous-commit-resolved",
+    "delivery.coarse-retirement-safety",
+    "delivery.destination-isolation",
+    "delivery.failed-start-is-not-accepted",
+    "delivery.no-phantom-dispatch",
+    "delivery.no-resurrection",
+    "delivery.no-split-commit",
+    "delivery.path-equivalence",
+    "delivery.retry-preserves-obligation",
+    "delivery.single-accepted-start"
+  ],
+  "modelFamilyVersion": "umpire2/model-family-v1",
+  "modelFamilyHash": "sha256:a8597df7e9466e8f07790cdb5fde26aea8a0cd41f00efdaec91d8c552b7e36e3",
+  "backendRequirements": [
+    "ivy",
+    "p",
+    "tla"
+  ],
+  "minimumBounds": {
+    "DeliveryAttempt": 2,
+    "DeliveryQueue": 2,
+    "DeliveryTask": 2,
+    "Poller": 2,
+    "WorkObligation": 2
+  },
+  "failurePolicy": [
+    "ambiguous-persistence",
+    "lost-authorization-response",
+    "retry-after-dispatch-failure"
+  ],
+  "interfaces": [
+    {
+      "name": "durable-intent",
+      "provider": {
+        "module": "history-outbox",
+        "owner": "history"
+      },
+      "consumers": [
+        {
+          "module": "matching-delivery",
+          "owner": "matching"
+        }
+      ],
+      "identities": [
+        "DeliveryTask",
+        "WorkObligation"
+      ],
+      "obligations": [
+        "atomic-intent"
+      ]
+    },
+    {
+      "name": "start-authorization",
+      "provider": {
+        "module": "history-authorization",
+        "owner": "history"
+      },
+      "consumers": [
+        {
+          "module": "matching-delivery",
+          "owner": "matching"
+        }
+      ],
+      "identities": [
+        "DeliveryAttempt",
+        "WorkObligation"
+      ],
+      "obligations": [
+        "single-acceptance"
+      ]
+    }
+  ],
+  "modelVersion": "umpire2/verification-v1",
+  "modelHash": "sha256:b75e71ce3b243370e7d833bb9c87c42f1b536322fe320901a02d960fd193dc42",
+  "requestedGuarantee": "finite-exhaustive",
+  "bounds": {
+    "DeliveryAttempt": 2,
+    "DeliveryQueue": 2,
+    "DeliveryTask": 2,
+    "Poller": 2,
+    "WorkObligation": 2
+  },
+  "identityPools": {
+    "DeliveryAttempt": [
+      "DeliveryAttempt#0",
+      "DeliveryAttempt#1"
+    ],
+    "DeliveryQueue": [
+      "DeliveryQueue#0",
+      "DeliveryQueue#1"
+    ],
+    "DeliveryTask": [
+      "DeliveryTask#0",
+      "DeliveryTask#1"
+    ],
+    "Poller": [
+      "Poller#0",
+      "Poller#1"
+    ],
+    "WorkObligation": [
+      "WorkObligation#0",
+      "WorkObligation#1"
+    ]
+  },
+  "actions": [
+    "delivery.acknowledge",
+    "delivery.authorize.accept",
+    "delivery.authorize.reject",
+    "delivery.dispatch",
+    "delivery.expire",
+    "delivery.offer-sync",
+    "delivery.persist.ambiguous",
+    "delivery.persist.success",
+    "delivery.reserve",
+    "delivery.resolve-persisted",
+    "delivery.retire",
+    "delivery.retry",
+    "delivery.spool"
+  ],
+  "environmentActions": [
+    "delivery.acknowledge",
+    "delivery.authorize.accept",
+    "delivery.authorize.reject",
+    "delivery.dispatch",
+    "delivery.expire",
+    "delivery.offer-sync",
+    "delivery.persist.ambiguous",
+    "delivery.persist.success",
+    "delivery.reserve",
+    "delivery.resolve-persisted",
+    "delivery.retire",
+    "delivery.retry",
+    "delivery.spool"
+  ],
+  "properties": [
+    "delivery.ambiguous-commit-resolved",
+    "delivery.coarse-retirement-safety",
+    "delivery.destination-isolation",
+    "delivery.failed-start-is-not-accepted",
+    "delivery.no-phantom-dispatch",
+    "delivery.no-resurrection",
+    "delivery.no-split-commit",
+    "delivery.path-equivalence",
+    "delivery.retry-preserves-obligation",
+    "delivery.single-accepted-start"
+  ],
+  "abstractions": [
+    {
+      "name": "delivery.acknowledge",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.authorize.accept",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.authorize.reject",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.dispatch",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.expire",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.offer-sync",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.ambiguous",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.success",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.reserve",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.resolve-persisted",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.retire",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.retry",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    },
+    {
+      "name": "delivery.spool",
+      "reason": "abstract foundation delivery protocol",
+      "source": {}
+    }
+  ],
+  "unsupported": [
+    {
+      "backend": "ivy",
+      "construct": "property delivery.ambiguous-commit-resolved",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    }
+  ],
+  "tools": [
+    {
+      "name": "apalache",
+      "version": "0.61.0",
+      "sha256": "f2d761315667f977c7c33792d95167f12e83b8a775909180886bcb67660470c5"
+    },
+    {
+      "name": "ivy",
+      "version": "1.8.26",
+      "artifacts": [
+        {
+          "platform": "darwin-universal2",
+          "sha256": "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c"
+        },
+        {
+          "platform": "linux-x86_64",
+          "sha256": "2a71da0bb2ce6314ddb40b6d76c6d734b8102db51c158477c2ef85b45da65dc1"
+        }
+      ]
+    },
+    {
+      "name": "p",
+      "version": "3.1.0",
+      "sha256": "b2a212e3b1af1bf2fdc9b80899da2901d6625d1a2e478d478e30028872a4bdc1"
+    },
+    {
+      "name": "tla2tools",
+      "version": "1.7.4",
+      "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+    }
+  ],
+  "refinements": [
+    {
+      "name": "delivery.acknowledge.foundation",
+      "action": "delivery.acknowledge",
+      "lifecycleActions": [
+        "delivery.acknowledge"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.authorize.accept.foundation",
+      "action": "delivery.authorize.accept",
+      "lifecycleActions": [
+        "delivery.authorize.accept"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.authorize.reject.foundation",
+      "action": "delivery.authorize.reject",
+      "lifecycleActions": [
+        "delivery.authorize.reject"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.dispatch.foundation",
+      "action": "delivery.dispatch",
+      "lifecycleActions": [
+        "delivery.dispatch"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.expire.foundation",
+      "action": "delivery.expire",
+      "lifecycleActions": [
+        "delivery.expire"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.offer-sync.foundation",
+      "action": "delivery.offer-sync",
+      "lifecycleActions": [
+        "delivery.offer-sync"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.ambiguous.foundation",
+      "action": "delivery.persist.ambiguous",
+      "lifecycleActions": [
+        "delivery.persist.ambiguous"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.success.foundation",
+      "action": "delivery.persist.success",
+      "lifecycleActions": [
+        "delivery.persist.success"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.reserve.foundation",
+      "action": "delivery.reserve",
+      "lifecycleActions": [
+        "delivery.reserve"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.resolve-persisted.foundation",
+      "action": "delivery.resolve-persisted",
+      "lifecycleActions": [
+        "delivery.resolve-persisted"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.retire.foundation",
+      "action": "delivery.retire",
+      "lifecycleActions": [
+        "delivery.retire"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.retry.foundation",
+      "action": "delivery.retry",
+      "lifecycleActions": [
+        "delivery.retry"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.spool.foundation",
+      "action": "delivery.spool",
+      "lifecycleActions": [
+        "delivery.spool"
+      ],
+      "source": {}
+    }
+  ]
+}

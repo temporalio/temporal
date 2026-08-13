@@ -198,6 +198,8 @@ func TestClassifyBackendGuarantees(t *testing.T) {
 func TestClassifyCarriesModelAssumptions(t *testing.T) {
 	request := Request{
 		Backend:      SANY,
+		Target:       "protocol-atomic",
+		Profile:      "smoke",
 		Fairness:     []string{"weak-schedule"},
 		Abstractions: []verify.Abstraction{{Name: "environment", Reason: "unrealized"}},
 		Unsupported:  []verify.Unsupported{{Backend: "ivy", Construct: "progress", Reason: "not inductive"}},
@@ -206,4 +208,6 @@ func TestClassifyCarriesModelAssumptions(t *testing.T) {
 	require.Equal(t, request.Fairness, result.Fairness)
 	require.Equal(t, request.Abstractions, result.Abstractions)
 	require.Equal(t, request.Unsupported, result.Unsupported)
+	require.Equal(t, "protocol-atomic", result.Target)
+	require.Equal(t, "smoke", result.Profile)
 }

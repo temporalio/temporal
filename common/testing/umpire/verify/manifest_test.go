@@ -19,8 +19,24 @@ func TestManifestRecordsAssuranceBoundaryDeterministically(t *testing.T) {
 	model.Properties[0].Fairness = []string{"weak-schedule"}
 
 	manifest, err := NewManifest(model, ManifestOptions{
-		GeneratorVersion: "umpire-genmodels/v1",
-		Guarantee:        FiniteExhaustive,
+		GeneratorVersion:    "umpire-genmodels/v1",
+		Target:              "feature-workflow",
+		TargetOwners:        []CapabilityOwner{"workflow", "delivery"},
+		TargetModules:       []string{"workflow", "delivery"},
+		TargetCompositions:  []string{"workflow-delivery"},
+		TargetProperties:    []string{"safe"},
+		ModelFamilyVersion:  "test-family/v1",
+		ModelFamilyHash:     "sha256:family",
+		BackendRequirements: []string{"tla", "ivy"},
+		MinimumBounds:       map[string]int{"job": 2},
+		FailurePolicy:       []string{"ambiguous-persistence"},
+		Interfaces: []ManifestInterface{{
+			Name:        "delivery",
+			Provider:    ManifestModuleRef{Module: "delivery", Owner: "delivery"},
+			Consumers:   []ManifestModuleRef{{Module: "workflow", Owner: "workflow"}},
+			Obligations: []string{"accepted"},
+		}},
+		Guarantee: FiniteExhaustive,
 		Tools: []ToolVersion{
 			{Name: "tlc", Version: "1.7.4", SHA256: "abc"},
 			{Name: "p", Version: "3.1.0"},
@@ -34,6 +50,12 @@ func TestManifestRecordsAssuranceBoundaryDeterministically(t *testing.T) {
 	require.Equal(t, []string{"safe"}, manifest.Properties)
 	require.Equal(t, []string{"weak-schedule"}, manifest.Fairness)
 	require.Equal(t, []Abstraction{{Name: "schedule", Reason: "model-only"}}, manifest.Abstractions)
+	require.Equal(t, "feature-workflow", manifest.Target)
+	require.Equal(t, []CapabilityOwner{"delivery", "workflow"}, manifest.TargetOwners)
+	require.Equal(t, []string{"delivery", "workflow"}, manifest.TargetModules)
+	require.Equal(t, map[string]int{"job": 2}, manifest.MinimumBounds)
+	require.Equal(t, []string{"ambiguous-persistence"}, manifest.FailurePolicy)
+	require.Equal(t, "delivery", manifest.Interfaces[0].Name)
 
 	first, err := MarshalManifest(manifest)
 	require.NoError(t, err)

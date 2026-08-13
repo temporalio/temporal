@@ -33,6 +33,8 @@ const (
 
 type Request struct {
 	Backend       Backend
+	Target        string
+	Profile       string
 	ToolPath      string
 	JavaPath      string
 	ToolVersion   string
@@ -450,6 +452,8 @@ func classify(request Request, execution execution) verify.Result {
 	output := execution.output
 	result := verify.Result{
 		Backend:      string(request.Backend),
+		Target:       request.Target,
+		Profile:      request.Profile,
 		ToolVersion:  request.ToolVersion,
 		Termination:  verify.Completed,
 		Fairness:     slices.Clone(request.Fairness),

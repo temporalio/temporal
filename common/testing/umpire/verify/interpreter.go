@@ -86,6 +86,14 @@ func EvaluateExpr(model Model, state ModelState, expression Expr, bindings Bindi
 	return interpreter.eval(state, expression, cloneBindings(bindings)), nil
 }
 
+func CheckState(model Model, state ModelState, quiescent bool) ([]PropertyViolation, error) {
+	interpreter, err := NewInterpreter(model)
+	if err != nil {
+		return nil, err
+	}
+	return interpreter.violations(0, state, quiescent), nil
+}
+
 func (i *Interpreter) InitialState() ModelState {
 	state := ModelState{
 		Entities:  make(map[string]map[string]string, len(i.model.Entities)),
@@ -369,7 +377,6 @@ func (i *Interpreter) eval(state ModelState, expr Expr, bindings Bindings) bool 
 		return slices.Contains(state.Relations[expr.Relation], tuple)
 	case ForAllExpr, ExistsExpr:
 		entity := i.entities[expr.Entity]
-		matched := false
 		for _, id := range entity.IDs {
 			if _, exists := state.Entities[expr.Entity][id]; !exists {
 				continue
@@ -383,9 +390,8 @@ func (i *Interpreter) eval(state ModelState, expr Expr, bindings Bindings) bool 
 			if expr.Op == ForAllExpr && !current {
 				return false
 			}
-			matched = true
 		}
-		return expr.Op == ForAllExpr || matched
+		return expr.Op == ForAllExpr
 	default:
 		return false
 	}

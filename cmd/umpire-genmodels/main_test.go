@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,13 +23,15 @@ func TestGenerateWritesCompleteDeterministicArtifactSet(t *testing.T) {
 
 	names := []string{
 		"manifest.json",
-		"model.ir.json",
-		"tla/Umpire.tla",
-		"tla/Umpire-smoke.cfg",
-		"tla/Umpire-nightly.cfg",
-		"p/Umpire.p",
-		"p/Umpire.pproj",
-		"ivy/Umpire.ivy",
+		"protocol-atomic/closure.json",
+		"protocol-atomic/manifest.json",
+		"protocol-atomic/model.ir.json",
+		"protocol-atomic/tla/Umpire.tla",
+		"protocol-atomic/tla/Umpire-smoke.cfg",
+		"protocol-atomic/tla/Umpire-nightly.cfg",
+		"protocol-atomic/p/Umpire.p",
+		"protocol-atomic/p/Umpire.pproj",
+		"protocol-atomic/ivy/Umpire.ivy",
 	}
 	first := map[string][]byte{}
 	for _, name := range names {
@@ -43,6 +46,79 @@ func TestGenerateWritesCompleteDeterministicArtifactSet(t *testing.T) {
 		require.NoError(t, err, name)
 		require.Equal(t, first[name], contents, name)
 	}
+}
+
+func TestGenerateWritesTargetScopedArtifacts(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, generate(directory, 1))
+
+	for _, name := range []string{
+		"manifest.json",
+		"foundation-delivery-safety/closure.json",
+		"foundation-delivery-safety/manifest.json",
+		"foundation-delivery-safety/model.ir.json",
+		"foundation-delivery-safety/tla/Umpire.tla",
+		"foundation-delivery-safety/p/Umpire.p",
+		"foundation-delivery-safety/ivy/Umpire.ivy",
+		"protocol-atomic/closure.json",
+		"protocol-atomic/manifest.json",
+		"protocol-atomic/model.ir.json",
+		"protocol-atomic/tla/Umpire.tla",
+		"protocol-atomic/tla/Umpire-smoke.cfg",
+		"protocol-atomic/tla/Umpire-nightly.cfg",
+		"protocol-atomic/p/Umpire.p",
+		"protocol-atomic/p/Umpire.pproj",
+		"protocol-atomic/ivy/Umpire.ivy",
+	} {
+		contents, err := os.ReadFile(filepath.Join(directory, name))
+		require.NoError(t, err, name)
+		require.NotEmpty(t, contents, name)
+	}
+	_, err := os.Stat(filepath.Join(directory, "model.ir.json"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	indexContents, err := os.ReadFile(filepath.Join(directory, "manifest.json"))
+	require.NoError(t, err)
+	var index targetIndex
+	require.NoError(t, json.Unmarshal(indexContents, &index))
+	require.Equal(t, "umpire2/model-family-v1", index.ModelFamily)
+	require.NotEmpty(t, index.ModelFamilyHash)
+	require.Len(t, index.Targets, 2)
+	require.Equal(t, targetIndexEntry{
+		Name:                "foundation-delivery-safety",
+		ModelHash:           index.Targets[0].ModelHash,
+		Owners:              []verify.CapabilityOwner{"history", "matching"},
+		BackendRequirements: []string{"ivy", "p", "tla"},
+	}, index.Targets[0])
+	require.Equal(t, targetIndexEntry{
+		Name:                "protocol-atomic",
+		ModelHash:           index.Targets[1].ModelHash,
+		Owners:              []verify.CapabilityOwner{"activity", "callback", "matching", "nexus", "workflow"},
+		BackendRequirements: []string{"ivy", "p", "tla"},
+	}, index.Targets[1])
+
+	targetContents, err := os.ReadFile(filepath.Join(directory, "protocol-atomic", "manifest.json"))
+	require.NoError(t, err)
+	var targetManifest verify.Manifest
+	require.NoError(t, json.Unmarshal(targetContents, &targetManifest))
+	require.Equal(t, "protocol-atomic", targetManifest.Target)
+	require.Equal(t, []string{"activity", "callback", "matching", "nexus", "workflow"}, targetManifest.TargetModules)
+	require.Equal(t, index.ModelFamilyHash, targetManifest.ModelFamilyHash)
+
+	foundationContents, err := os.ReadFile(filepath.Join(directory, "foundation-delivery-safety", "manifest.json"))
+	require.NoError(t, err)
+	var foundationManifest verify.Manifest
+	require.NoError(t, json.Unmarshal(foundationContents, &foundationManifest))
+	require.Equal(t, map[string]int{
+		"DeliveryAttempt": 2,
+		"DeliveryQueue":   2,
+		"DeliveryTask":    2,
+		"Poller":          2,
+		"WorkObligation":  2,
+	}, foundationManifest.MinimumBounds)
+	require.Contains(t, foundationManifest.TargetProperties, "delivery.no-split-commit")
+	require.Contains(t, foundationManifest.TargetProperties, "delivery.path-equivalence")
+	require.Len(t, foundationManifest.Interfaces, 2)
 }
 
 func TestCheckGeneratedRejectsUnexpectedArtifact(t *testing.T) {
@@ -83,6 +159,44 @@ func TestRequestedBackendsRunsInductiveProofOnlyForNightlyAll(t *testing.T) {
 	explicit, err := requestedBackends("apalache-proof", "smoke")
 	require.NoError(t, err)
 	require.Equal(t, []runner.Backend{runner.ApalacheProof}, explicit)
+}
+
+func TestTargetBackendsSelectsOnlyRequiredBackendFamilies(t *testing.T) {
+	backends := []runner.Backend{runner.SANY, runner.TLC, runner.Apalache, runner.ApalacheProof, runner.P, runner.PEx, runner.Ivy}
+	selected, err := targetBackends(backends, []string{"tla", "ivy"})
+	require.NoError(t, err)
+	require.Equal(t,
+		[]runner.Backend{runner.SANY, runner.TLC, runner.Apalache, runner.ApalacheProof, runner.Ivy},
+		selected,
+	)
+
+	_, err = targetBackends([]runner.Backend{runner.P}, []string{"tla"})
+	require.ErrorContains(t, err, "none of the requested backends satisfy target requirements")
+}
+
+func TestRequestedVerificationTargetsSelectsAllOrOne(t *testing.T) {
+	family, err := verificationFamily(1)
+	require.NoError(t, err)
+
+	all, err := requestedVerificationTargets(family, "all")
+	require.NoError(t, err)
+	require.Equal(t, []string{"foundation-delivery-safety", "protocol-atomic"}, []string{all[0].Name, all[1].Name})
+
+	selected, err := requestedVerificationTargets(family, "protocol-atomic")
+	require.NoError(t, err)
+	require.Equal(t, []verify.VerificationTarget{family.Targets[0]}, selected)
+
+	_, err = requestedVerificationTargets(family, "missing")
+	require.ErrorContains(t, err, `unknown verification target "missing"`)
+}
+
+func TestRunnerRequestUsesTargetScopedModelAndResultDirectories(t *testing.T) {
+	request, err := runnerRequest(runner.TLC, checkOptions{
+		output: "/models", artifacts: "/artifacts", target: "protocol-atomic", profile: "smoke", tlaJar: "/tools/tla2tools.jar",
+	}, verify.Bounds{}, verify.Model{})
+	require.NoError(t, err)
+	require.Equal(t, "/models/protocol-atomic/tla", request.ModelDir)
+	require.Equal(t, "/artifacts/protocol-atomic/smoke", request.ArtifactDir)
 }
 
 func TestGeneratorsCoverEverySourceActionAndProperty(t *testing.T) {

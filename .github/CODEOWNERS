@@ -94,6 +94,13 @@
 
 /tools/ @temporalio/server
 
+# Umpire verification model family
+/common/testing/umpire/verify/ @temporalio/server
+/tests/umpire2/protocol/verification_family.go @temporalio/cgs @temporalio/act @temporalio/oss-matching @temporalio/nexus
+/tests/umpire2/protocol/verification_delivery.go @temporalio/cgs @temporalio/oss-matching
+/tests/umpire2/genmodels/ @temporalio/cgs @temporalio/act @temporalio/oss-matching @temporalio/nexus
+/tests/umpire2/genmodels/foundation-delivery-safety/ @temporalio/cgs @temporalio/oss-matching
+
 # Generated code
 *.pb.go        @temporalio/server @temporalio/cgs @temporalio/nexus
 *.pb.mock.go   @temporalio/server @temporalio/cgs @temporalio/nexus

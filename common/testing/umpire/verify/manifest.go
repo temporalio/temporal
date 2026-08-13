@@ -27,38 +27,73 @@ type Unsupported struct {
 	Source    Provenance `json:"source,omitempty"`
 }
 
+type ManifestModuleRef struct {
+	Module string          `json:"module"`
+	Owner  CapabilityOwner `json:"owner"`
+}
+
+type ManifestInterface struct {
+	Name        string              `json:"name"`
+	Provider    ManifestModuleRef   `json:"provider"`
+	Consumers   []ManifestModuleRef `json:"consumers,omitempty"`
+	Identities  []string            `json:"identities,omitempty"`
+	Obligations []string            `json:"obligations,omitempty"`
+}
+
 type ManifestOptions struct {
-	GeneratorVersion string
-	Guarantee        Status
-	Tools            []ToolVersion
-	Unsupported      []Unsupported
-	Omitted          []Abstraction
-	Symmetry         []string
-	StateConstraints []string
+	GeneratorVersion    string
+	Target              string
+	TargetOwners        []CapabilityOwner
+	TargetModules       []string
+	TargetCompositions  []string
+	TargetProperties    []string
+	ModelFamilyVersion  string
+	ModelFamilyHash     string
+	BackendRequirements []string
+	MinimumBounds       map[string]int
+	FailurePolicy       []string
+	Interfaces          []ManifestInterface
+	Guarantee           Status
+	Tools               []ToolVersion
+	Unsupported         []Unsupported
+	Omitted             []Abstraction
+	Symmetry            []string
+	StateConstraints    []string
 }
 
 type Manifest struct {
-	SchemaVersion      string              `json:"schemaVersion"`
-	GeneratorVersion   string              `json:"generatorVersion"`
-	ModelVersion       string              `json:"modelVersion"`
-	ModelHash          string              `json:"modelHash"`
-	Guarantee          Status              `json:"requestedGuarantee"`
-	Bounds             map[string]int      `json:"bounds"`
-	IdentityPools      map[string][]string `json:"identityPools"`
-	Actions            []string            `json:"actions"`
-	EnvironmentActions []string            `json:"environmentActions,omitempty"`
-	Properties         []string            `json:"properties"`
-	Strengthening      []string            `json:"strengthening,omitempty"`
-	Fairness           []string            `json:"fairness,omitempty"`
-	Sources            []Provenance        `json:"sources,omitempty"`
-	Abstractions       []Abstraction       `json:"abstractions,omitempty"`
-	Omitted            []Abstraction       `json:"omitted,omitempty"`
-	Unsupported        []Unsupported       `json:"unsupported,omitempty"`
-	Tools              []ToolVersion       `json:"tools"`
-	Inventory          []InventoryItem     `json:"inventory,omitempty"`
-	Refinements        []Refinement        `json:"refinements,omitempty"`
-	Symmetry           []string            `json:"symmetry,omitempty"`
-	StateConstraints   []string            `json:"stateConstraints,omitempty"`
+	SchemaVersion       string              `json:"schemaVersion"`
+	GeneratorVersion    string              `json:"generatorVersion"`
+	Target              string              `json:"target,omitempty"`
+	TargetOwners        []CapabilityOwner   `json:"targetOwners,omitempty"`
+	TargetModules       []string            `json:"targetModules,omitempty"`
+	TargetCompositions  []string            `json:"targetCompositions,omitempty"`
+	TargetProperties    []string            `json:"targetProperties,omitempty"`
+	ModelFamilyVersion  string              `json:"modelFamilyVersion,omitempty"`
+	ModelFamilyHash     string              `json:"modelFamilyHash,omitempty"`
+	BackendRequirements []string            `json:"backendRequirements,omitempty"`
+	MinimumBounds       map[string]int      `json:"minimumBounds,omitempty"`
+	FailurePolicy       []string            `json:"failurePolicy,omitempty"`
+	Interfaces          []ManifestInterface `json:"interfaces,omitempty"`
+	ModelVersion        string              `json:"modelVersion"`
+	ModelHash           string              `json:"modelHash"`
+	Guarantee           Status              `json:"requestedGuarantee"`
+	Bounds              map[string]int      `json:"bounds"`
+	IdentityPools       map[string][]string `json:"identityPools"`
+	Actions             []string            `json:"actions"`
+	EnvironmentActions  []string            `json:"environmentActions,omitempty"`
+	Properties          []string            `json:"properties"`
+	Strengthening       []string            `json:"strengthening,omitempty"`
+	Fairness            []string            `json:"fairness,omitempty"`
+	Sources             []Provenance        `json:"sources,omitempty"`
+	Abstractions        []Abstraction       `json:"abstractions,omitempty"`
+	Omitted             []Abstraction       `json:"omitted,omitempty"`
+	Unsupported         []Unsupported       `json:"unsupported,omitempty"`
+	Tools               []ToolVersion       `json:"tools"`
+	Inventory           []InventoryItem     `json:"inventory,omitempty"`
+	Refinements         []Refinement        `json:"refinements,omitempty"`
+	Symmetry            []string            `json:"symmetry,omitempty"`
+	StateConstraints    []string            `json:"stateConstraints,omitempty"`
 }
 
 func NewManifest(model Model, options ManifestOptions) (Manifest, error) {
@@ -74,21 +109,32 @@ func NewManifest(model Model, options ManifestOptions) (Manifest, error) {
 	}
 	model = normalizeModel(model)
 	result := Manifest{
-		SchemaVersion:    "umpire-verification-manifest/v1",
-		GeneratorVersion: options.GeneratorVersion,
-		ModelVersion:     model.Version,
-		ModelHash:        hash,
-		Guarantee:        options.Guarantee,
-		Bounds:           make(map[string]int, len(model.Entities)),
-		IdentityPools:    make(map[string][]string, len(model.Entities)),
-		Abstractions:     slices.Clone(model.Abstractions),
-		Omitted:          slices.Clone(options.Omitted),
-		Unsupported:      slices.Clone(options.Unsupported),
-		Tools:            slices.Clone(options.Tools),
-		Inventory:        slices.Clone(model.Inventory),
-		Refinements:      slices.Clone(model.Refinements),
-		Symmetry:         slices.Clone(options.Symmetry),
-		StateConstraints: slices.Clone(options.StateConstraints),
+		SchemaVersion:       "umpire-verification-manifest/v1",
+		GeneratorVersion:    options.GeneratorVersion,
+		Target:              options.Target,
+		TargetOwners:        slices.Clone(options.TargetOwners),
+		TargetModules:       slices.Clone(options.TargetModules),
+		TargetCompositions:  slices.Clone(options.TargetCompositions),
+		TargetProperties:    slices.Clone(options.TargetProperties),
+		ModelFamilyVersion:  options.ModelFamilyVersion,
+		ModelFamilyHash:     options.ModelFamilyHash,
+		BackendRequirements: slices.Clone(options.BackendRequirements),
+		MinimumBounds:       cloneBounds(options.MinimumBounds),
+		FailurePolicy:       slices.Clone(options.FailurePolicy),
+		Interfaces:          cloneManifestInterfaces(options.Interfaces),
+		ModelVersion:        model.Version,
+		ModelHash:           hash,
+		Guarantee:           options.Guarantee,
+		Bounds:              make(map[string]int, len(model.Entities)),
+		IdentityPools:       make(map[string][]string, len(model.Entities)),
+		Abstractions:        slices.Clone(model.Abstractions),
+		Omitted:             slices.Clone(options.Omitted),
+		Unsupported:         slices.Clone(options.Unsupported),
+		Tools:               slices.Clone(options.Tools),
+		Inventory:           slices.Clone(model.Inventory),
+		Refinements:         slices.Clone(model.Refinements),
+		Symmetry:            slices.Clone(options.Symmetry),
+		StateConstraints:    slices.Clone(options.StateConstraints),
 	}
 	sourceSet := map[Provenance]struct{}{}
 	for _, entity := range model.Entities {
@@ -124,6 +170,25 @@ func NewManifest(model Model, options ManifestOptions) (Manifest, error) {
 		result.Sources = append(result.Sources, source)
 	}
 	slices.Sort(result.Fairness)
+	slices.Sort(result.TargetOwners)
+	slices.Sort(result.TargetModules)
+	slices.Sort(result.TargetCompositions)
+	slices.Sort(result.TargetProperties)
+	slices.Sort(result.BackendRequirements)
+	slices.Sort(result.FailurePolicy)
+	slices.SortFunc(result.Interfaces, func(left, right ManifestInterface) int {
+		return compareString(left.Name, right.Name)
+	})
+	for index := range result.Interfaces {
+		slices.SortFunc(result.Interfaces[index].Consumers, func(left, right ManifestModuleRef) int {
+			if comparison := compareString(left.Module, right.Module); comparison != 0 {
+				return comparison
+			}
+			return compareString(string(left.Owner), string(right.Owner))
+		})
+		slices.Sort(result.Interfaces[index].Identities)
+		slices.Sort(result.Interfaces[index].Obligations)
+	}
 	slices.Sort(result.Strengthening)
 	slices.Sort(result.EnvironmentActions)
 	slices.SortFunc(result.Sources, compareProvenance)
@@ -144,6 +209,27 @@ func NewManifest(model Model, options ManifestOptions) (Manifest, error) {
 	slices.Sort(result.Symmetry)
 	slices.Sort(result.StateConstraints)
 	return result, nil
+}
+
+func cloneBounds(bounds map[string]int) map[string]int {
+	if bounds == nil {
+		return nil
+	}
+	result := make(map[string]int, len(bounds))
+	for name, bound := range bounds {
+		result[name] = bound
+	}
+	return result
+}
+
+func cloneManifestInterfaces(interfaces []ManifestInterface) []ManifestInterface {
+	result := slices.Clone(interfaces)
+	for index := range result {
+		result[index].Consumers = slices.Clone(result[index].Consumers)
+		result[index].Identities = slices.Clone(result[index].Identities)
+		result[index].Obligations = slices.Clone(result[index].Obligations)
+	}
+	return result
 }
 
 func MarshalManifest(manifest Manifest) ([]byte, error) {

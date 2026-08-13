@@ -57,6 +57,8 @@ type TraceStep struct {
 
 type Result struct {
 	Backend         string            `json:"backend"`
+	Target          string            `json:"target,omitempty"`
+	Profile         string            `json:"profile,omitempty"`
 	ToolVersion     string            `json:"toolVersion,omitempty"`
 	Status          Status            `json:"status"`
 	Termination     TerminationReason `json:"termination"`

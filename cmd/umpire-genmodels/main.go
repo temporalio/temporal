@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -36,6 +37,7 @@ func main() {
 		mode         = flag.String("mode", "generate", "generate, check-generated, or verify")
 		output       = flag.String("out", "tests/umpire2/genmodels", "generated model directory")
 		artifacts    = flag.String("artifacts", "tests/umpire2/genmodels-results", "verification result directory")
+		target       = flag.String("target", "all", "verification target name or all")
 		backend      = flag.String("backend", "all", "sany, tlc, apalache, apalache-proof, p, pex, ivy, or all")
 		profile      = flag.String("profile", "smoke", "smoke or nightly")
 		defaultBound = flag.Int("default-bound", 1, "finite identity pool size per entity type")
@@ -56,7 +58,7 @@ func main() {
 		err = checkGenerated(*output, *defaultBound)
 	case "verify":
 		err = checkModels(context.Background(), checkOptions{
-			output: *output, artifacts: *artifacts, backend: *backend, profile: *profile,
+			output: *output, artifacts: *artifacts, target: *target, backend: *backend, profile: *profile,
 			timeout: *timeout, tlaJar: *tlaJar, javaTool: *javaTool, pTool: *pTool,
 			apalacheTool: *apalacheTool, ivyTool: *ivyTool, defaultBound: *defaultBound,
 		})
@@ -70,59 +72,216 @@ func main() {
 }
 
 func generate(output string, defaultBound int) error {
-	model, err := verificationModel(defaultBound)
+	family, err := verificationFamily(defaultBound)
 	if err != nil {
 		return err
 	}
-	tlaFiles, err := tla.Generate(model)
+	familyHash, err := verify.HashModelFamily(family)
 	if err != nil {
 		return err
+	}
+	index := targetIndex{
+		SchemaVersion:    "umpire-verification-target-index/v1",
+		GeneratorVersion: generatorVersion,
+		ModelFamily:      family.Version,
+		ModelFamilyHash:  familyHash,
+	}
+	files := map[string][]byte{}
+	targets := slices.Clone(family.Targets)
+	slices.SortFunc(targets, func(left, right verify.VerificationTarget) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+	for _, target := range targets {
+		model, report, err := verify.Project(family, target.Name)
+		if err != nil {
+			return err
+		}
+		targetFiles, entry, err := generateTarget(family, familyHash, target, model, report)
+		if err != nil {
+			return err
+		}
+		mergeFiles(files, target.Name, targetFiles)
+		index.Targets = append(index.Targets, entry)
+	}
+	indexJSON, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return err
+	}
+	files["manifest.json"] = append(indexJSON, '\n')
+	return writeFiles(output, files)
+}
+
+type targetIndex struct {
+	SchemaVersion    string             `json:"schemaVersion"`
+	GeneratorVersion string             `json:"generatorVersion"`
+	ModelFamily      string             `json:"modelFamilyVersion"`
+	ModelFamilyHash  string             `json:"modelFamilyHash"`
+	Targets          []targetIndexEntry `json:"targets"`
+}
+
+type targetIndexEntry struct {
+	Name                string                   `json:"name"`
+	ModelHash           string                   `json:"modelHash"`
+	Owners              []verify.CapabilityOwner `json:"owners"`
+	BackendRequirements []string                 `json:"backendRequirements,omitempty"`
+}
+
+func generateTarget(
+	family verify.ModelFamily,
+	familyHash string,
+	target verify.VerificationTarget,
+	model verify.Model,
+	report verify.ClosureReport,
+) (map[string][]byte, targetIndexEntry, error) {
+	tlaFiles, err := tla.Generate(model)
+	if err != nil {
+		return nil, targetIndexEntry{}, err
 	}
 	pFiles, err := pgenerator.Generate(model)
 	if err != nil {
-		return err
+		return nil, targetIndexEntry{}, err
 	}
 	ivyFiles, ivyDiagnostics, err := ivy.Generate(model)
 	if err != nil {
-		return err
+		return nil, targetIndexEntry{}, err
 	}
 	unsupported := make([]verify.Unsupported, len(ivyDiagnostics))
 	for index, diagnostic := range ivyDiagnostics {
 		unsupported[index] = verify.Unsupported{Backend: "ivy", Construct: diagnostic.Construct, Reason: diagnostic.Reason}
 	}
 	manifest, err := verify.NewManifest(model, verify.ManifestOptions{
-		GeneratorVersion: generatorVersion,
-		Guarantee:        verify.FiniteExhaustive,
-		Tools:            pinnedTools,
-		Unsupported:      unsupported,
+		GeneratorVersion:    generatorVersion,
+		Target:              target.Name,
+		TargetOwners:        target.Owners,
+		TargetModules:       targetModuleNames(family, target),
+		TargetCompositions:  target.Compositions,
+		TargetProperties:    targetPropertyNames(family, target),
+		ModelFamilyVersion:  family.Version,
+		ModelFamilyHash:     familyHash,
+		BackendRequirements: target.BackendRequirements,
+		MinimumBounds:       target.MinimumBounds,
+		FailurePolicy:       target.FailurePolicy,
+		Interfaces:          targetManifestInterfaces(family, target),
+		Guarantee:           verify.FiniteExhaustive,
+		Tools:               pinnedTools,
+		Unsupported:         unsupported,
 	})
 	if err != nil {
-		return err
+		return nil, targetIndexEntry{}, err
 	}
 	manifestJSON, err := verify.MarshalManifest(manifest)
 	if err != nil {
-		return err
+		return nil, targetIndexEntry{}, err
 	}
 	modelJSON, err := verify.MarshalModel(model)
 	if err != nil {
-		return err
+		return nil, targetIndexEntry{}, err
+	}
+	closureJSON, err := verify.MarshalClosureReport(report)
+	if err != nil {
+		return nil, targetIndexEntry{}, err
+	}
+	modelHash, err := verify.HashModel(model)
+	if err != nil {
+		return nil, targetIndexEntry{}, err
 	}
 	files := map[string][]byte{
+		"closure.json":  closureJSON,
 		"manifest.json": manifestJSON,
 		"model.ir.json": modelJSON,
 	}
 	mergeFiles(files, "tla", tlaFiles)
 	mergeFiles(files, "p", pFiles)
 	mergeFiles(files, "ivy", ivyFiles)
-	return writeFiles(output, files)
+	entry := targetIndexEntry{
+		Name:                target.Name,
+		ModelHash:           modelHash,
+		Owners:              slices.Clone(target.Owners),
+		BackendRequirements: slices.Clone(target.BackendRequirements),
+	}
+	slices.Sort(entry.Owners)
+	slices.Sort(entry.BackendRequirements)
+	return files, entry, nil
+}
+
+func targetModuleNames(family verify.ModelFamily, target verify.VerificationTarget) []string {
+	modules := slices.Clone(target.Modules)
+	for _, selected := range target.Compositions {
+		for _, composition := range family.Compositions {
+			if composition.Name == selected {
+				modules = append(modules, composition.Modules...)
+				break
+			}
+		}
+	}
+	slices.Sort(modules)
+	return slices.Compact(modules)
+}
+
+func targetPropertyNames(family verify.ModelFamily, target verify.VerificationTarget) []string {
+	properties := slices.Clone(target.Properties)
+	for _, selected := range target.Compositions {
+		for _, composition := range family.Compositions {
+			if composition.Name == selected {
+				properties = append(properties, composition.Properties...)
+				break
+			}
+		}
+	}
+	slices.Sort(properties)
+	return slices.Compact(properties)
+}
+
+func targetManifestInterfaces(family verify.ModelFamily, target verify.VerificationTarget) []verify.ManifestInterface {
+	selected := make(map[string]struct{})
+	for _, module := range targetModuleNames(family, target) {
+		selected[module] = struct{}{}
+	}
+	owners := make(map[string]verify.CapabilityOwner, len(family.Modules))
+	for _, module := range family.Modules {
+		owners[module.Name] = module.Owner
+	}
+	var result []verify.ManifestInterface
+	for _, declared := range family.Interfaces {
+		_, providerSelected := selected[declared.Provider]
+		var consumers []verify.ManifestModuleRef
+		for _, consumer := range declared.Consumers {
+			if _, consumerSelected := selected[consumer]; consumerSelected {
+				consumers = append(consumers, verify.ManifestModuleRef{Module: consumer, Owner: owners[consumer]})
+			}
+		}
+		if !providerSelected && len(consumers) == 0 {
+			continue
+		}
+		manifestInterface := verify.ManifestInterface{
+			Name:       declared.Name,
+			Provider:   verify.ManifestModuleRef{Module: declared.Provider, Owner: owners[declared.Provider]},
+			Consumers:  consumers,
+			Identities: slices.Clone(declared.Identities),
+		}
+		for _, obligation := range declared.Obligations {
+			manifestInterface.Obligations = append(manifestInterface.Obligations, obligation.Name)
+		}
+		result = append(result, manifestInterface)
+	}
+	return result
 }
 
 func verificationModel(defaultBound int) (verify.Model, error) {
+	family, err := verificationFamily(defaultBound)
+	if err != nil {
+		return verify.Model{}, err
+	}
+	model, _, err := verify.Project(family, protocol.ProtocolAtomicTarget)
+	return model, err
+}
+
+func verificationFamily(defaultBound int) (verify.ModelFamily, error) {
 	compiled, err := protocol.Default()
 	if err != nil {
-		return verify.Model{}, fmt.Errorf("compile default Umpire protocol: %w", err)
+		return verify.ModelFamily{}, fmt.Errorf("compile default Umpire protocol: %w", err)
 	}
-	return compiled.VerificationModel(protocol.VerificationOptions{DefaultBound: defaultBound})
+	return compiled.VerificationFamily(protocol.VerificationOptions{DefaultBound: defaultBound})
 }
 
 func mergeFiles(destination map[string][]byte, directory string, files map[string][]byte) {
@@ -210,6 +369,7 @@ func checkGenerated(output string, defaultBound int) (retErr error) {
 type checkOptions struct {
 	output       string
 	artifacts    string
+	target       string
 	backend      string
 	profile      string
 	timeout      time.Duration
@@ -230,29 +390,101 @@ func checkModels(ctx context.Context, options checkOptions) error {
 	if err != nil {
 		return err
 	}
-	model, err := verificationModel(options.defaultBound)
+	family, err := verificationFamily(options.defaultBound)
 	if err != nil {
 		return err
 	}
-	bounds.Identities = make(map[string]int, len(model.Entities))
-	for _, entity := range model.Entities {
-		bounds.Identities[entity.Name] = len(entity.IDs)
+	targets, err := requestedVerificationTargets(family, options.target)
+	if err != nil {
+		return err
 	}
-	for _, backend := range backends {
-		request, err := runnerRequest(backend, options, bounds, model)
+	for _, target := range targets {
+		model, _, err := verify.Project(family, target.Name)
 		if err != nil {
 			return err
 		}
-		result, err := runner.Check(ctx, request)
-		if err != nil {
-			return err
+		targetBounds := bounds
+		targetBounds.Identities = make(map[string]int, len(model.Entities))
+		for _, entity := range model.Entities {
+			targetBounds.Identities[entity.Name] = len(entity.IDs)
 		}
-		fmt.Printf("%s: %s (%s)\n", backend, result.Status, result.Termination)
-		if result.Status == verify.Counterexample || result.Status == verify.Inconclusive || result.Status == verify.UnsupportedStatus {
-			return fmt.Errorf("%s verification returned %s: %s", backend, result.Status, result.Diagnostic)
+		options.target = target.Name
+		selectedBackends, err := targetBackends(backends, target.BackendRequirements)
+		if err != nil {
+			return fmt.Errorf("verification target %q: %w", target.Name, err)
+		}
+		for _, backend := range selectedBackends {
+			request, err := runnerRequest(backend, options, targetBounds, model)
+			if err != nil {
+				return err
+			}
+			result, err := runner.Check(ctx, request)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s/%s: %s (%s)\n", target.Name, backend, result.Status, result.Termination)
+			if result.Status == verify.Counterexample || result.Status == verify.Inconclusive || result.Status == verify.UnsupportedStatus {
+				return fmt.Errorf("%s/%s verification returned %s: %s", target.Name, backend, result.Status, result.Diagnostic)
+			}
 		}
 	}
 	return nil
+}
+
+func requestedVerificationTargets(family verify.ModelFamily, value string) ([]verify.VerificationTarget, error) {
+	if value == "all" {
+		result := slices.Clone(family.Targets)
+		slices.SortFunc(result, func(left, right verify.VerificationTarget) int {
+			return strings.Compare(left.Name, right.Name)
+		})
+		return result, nil
+	}
+	target, found := targetByName(family.Targets, value)
+	if !found {
+		return nil, fmt.Errorf("unknown verification target %q", value)
+	}
+	return []verify.VerificationTarget{target}, nil
+}
+
+func targetByName(targets []verify.VerificationTarget, name string) (verify.VerificationTarget, bool) {
+	for _, target := range targets {
+		if target.Name == name {
+			return target, true
+		}
+	}
+	return verify.VerificationTarget{}, false
+}
+
+func targetBackends(backends []runner.Backend, requirements []string) ([]runner.Backend, error) {
+	if len(requirements) == 0 {
+		return slices.Clone(backends), nil
+	}
+	allowed := make(map[string]struct{}, len(requirements))
+	for _, requirement := range requirements {
+		allowed[requirement] = struct{}{}
+	}
+	result := make([]runner.Backend, 0, len(backends))
+	for _, backend := range backends {
+		family := string(backend)
+		switch backend {
+		case runner.SANY, runner.TLC, runner.Apalache, runner.ApalacheProof:
+			family = "tla"
+		case runner.P, runner.PEx:
+			family = "p"
+		case runner.Ivy:
+			family = "ivy"
+		default:
+		}
+		_, exact := allowed[string(backend)]
+		_, familyAllowed := allowed[family]
+		if exact || familyAllowed {
+			result = append(result, backend)
+		}
+	}
+	if len(result) == 0 {
+		return nil, errors.New("none of the requested backends satisfy target requirements")
+	}
+	return result, nil
 }
 
 func requestedBackends(value, profile string) ([]runner.Backend, error) {
@@ -320,20 +552,21 @@ func runnerRequest(
 	}
 	slices.Sort(fairness)
 	request := runner.Request{
-		Backend: backend, ArtifactDir: options.artifacts, Timeout: options.timeout, Bounds: bounds,
+		Backend: backend, Target: options.target, Profile: options.profile,
+		ArtifactDir: filepath.Join(options.artifacts, options.target, options.profile), Timeout: options.timeout, Bounds: bounds,
 		JavaPath: options.javaTool, ActionNames: actionNames, PropertyNames: propertyNames,
 		Fairness: fairness, Abstractions: model.Abstractions, Unsupported: unsupported,
 	}
 	switch backend {
 	case runner.SANY, runner.TLC:
-		request.ModelDir = filepath.Join(options.output, "tla")
+		request.ModelDir = filepath.Join(options.output, options.target, "tla")
 		request.ToolPath = options.tlaJar
 		request.ToolVersion = "1.7.4"
 		if request.ToolPath == "" {
 			return request, errors.New("TLA+ verification requires -tla-jar or UMPIRE_TLA_JAR")
 		}
 	case runner.Apalache, runner.ApalacheProof:
-		request.ModelDir = filepath.Join(options.output, "tla")
+		request.ModelDir = filepath.Join(options.output, options.target, "tla")
 		request.ToolPath = options.apalacheTool
 		request.ToolVersion = "0.61.0"
 		if backend == runner.Apalache {
@@ -347,7 +580,7 @@ func runnerRequest(
 			return request, errors.New("apalache verification requires -apalache-tool or UMPIRE_APALACHE_TOOL")
 		}
 	case runner.P, runner.PEx:
-		request.ModelDir = filepath.Join(options.output, "p")
+		request.ModelDir = filepath.Join(options.output, options.target, "p")
 		request.ToolPath = options.pTool
 		request.ToolVersion = "3.1.0"
 		if backend == runner.PEx && request.Bounds.MaxDepth > 100 {
@@ -357,7 +590,7 @@ func runnerRequest(
 			return request, errors.New("p verification requires -p-tool or UMPIRE_P_TOOL")
 		}
 	case runner.Ivy:
-		request.ModelDir = filepath.Join(options.output, "ivy")
+		request.ModelDir = filepath.Join(options.output, options.target, "ivy")
 		request.ToolPath = options.ivyTool
 		request.ToolVersion = "1.8.26"
 		if request.ToolPath == "" {

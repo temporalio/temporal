@@ -187,6 +187,8 @@ remain specialized when their contract sits below the protocol abstraction.
 | `tests/umpire2/genmodels` | Deterministically generated verification artifacts and manifest |
 
 The implementation and tests are authoritative for current vocabulary. The generated
-[`manifest.json`](./tests/umpire2/genmodels/manifest.json) is authoritative for the bounded formal
-verification scope. Planned work belongs in tracked issues rather than status sections in this
-document.
+[`manifest.json`](./tests/umpire2/genmodels/manifest.json) inventories semantic targets and their
+hashes; each target manifest, such as
+[`protocol-atomic/manifest.json`](./tests/umpire2/genmodels/protocol-atomic/manifest.json), is
+authoritative for that target's bounded formal verification scope. Planned work belongs in tracked
+issues rather than status sections in this document.
