@@ -255,16 +255,14 @@ jobs:
             Use `mcp__github_inline_comment__create_inline_comment` with `confirmed: true` to highlight specific code issues.
             When posting inline comments, use repository-relative PR file paths from the diff, without the `pr-head/` prefix.
 
-            The top-level comment is a status marker, not a review.
-            These rules override the default instructions above where they conflict.
-            Keep the status elements those instructions ask for - the spinner while you work,
-            the job run link, the header the action writes - and add nothing beyond the single
-            line `Reviewed N files, M findings.`
-            In particular, no todo checklist, no summary of the PR or of your findings, no
-            account of your process or reasoning, no praise, no PR number or title, and no
-            report of commands or tools you could not run, even where you are told to add them.
-            The only permitted addition is a finding that has no changed line to attach to,
-            placed below that line and formatted like an inline finding.
+            The top-level comment tracks status; the review itself is the inline comments.
+            Reviewing is a single task, so track it as one: while working, that comment reads
+            `Reviewing...`; once finished, it reads `Reviewed N files, M findings.`
+            That line is your closing summary. The findings are already inline, so restating
+            them there, or your process, or what you could not run, adds nothing to it.
+            The spinner and the job run link are status, so keep them.
+            One thing may follow that line: a finding with no changed line to attach to,
+            formatted like an inline finding.
             Only post GitHub comments - don't submit review text as messages.
           claude_args: |
             --add-dir pr-head --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*)"
