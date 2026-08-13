@@ -185,6 +185,10 @@ func (c *clients) ensureMatching() {
 			monitor,
 			c.tokenProvider,
 		)
+		cleanup := func() {
+			rpcFactory.Close()
+			unregisterResolver()
+		}
 		clientFactory := client.NewFactoryProvider().NewFactory(
 			rpcFactory,
 			monitor,
@@ -208,15 +212,11 @@ func (c *clients) ensureMatching() {
 			matchingclient.DefaultLongPollTimeout,
 		)
 		if err != nil {
-			rpcFactory.Close()
-			unregisterResolver()
+			cleanup()
 			c.logger.Fatal("unable to create matching test client", tag.Error(err))
 		}
 		c.matching.client = matchingClient
-		c.matching.cleanup = func() {
-			rpcFactory.Close()
-			unregisterResolver()
-		}
+		c.matching.cleanup = cleanup
 	})
 }
 

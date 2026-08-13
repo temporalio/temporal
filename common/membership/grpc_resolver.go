@@ -1,7 +1,6 @@
 package membership
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -31,6 +30,7 @@ type (
 	// GRPCResolver and the resolvers map in grpcBuilder is used to pass a Monitor through a string url.
 	GRPCResolver struct {
 		registrationID string
+		cleanup        runtime.Cleanup
 	}
 
 	grpcResolverRegistration struct {
@@ -74,44 +74,30 @@ func GetServiceResolverFromURL(u *url.URL) (ServiceResolver, error) {
 // This should only be used in unit tests. For normal code, use the *GRPCResolver provided by fx.
 // Monitor may be nil if it's not needed, but then note that GetServiceResolverFromURL will panic.
 func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) (string, func()) {
-	res, register, cleanup := newGRPCResolverRegistration(monitor)
-	register()
-	return res.MakeURL(service), cleanup
+	res := newGRPCResolverRegistration(monitor)
+	return res.MakeURL(service), res.unregister
 }
 
 func newGRPCResolver(lifecycle fx.Lifecycle, monitor Monitor) *GRPCResolver {
-	res, register, cleanup := newGRPCResolverRegistration(monitor)
-	register()
-	lifecycle.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			cleanup()
-			return nil
-		},
-	})
+	res := newGRPCResolverRegistration(monitor)
+	lifecycle.Append(fx.StopHook(res.unregister))
 	return res
 }
 
-func newGRPCResolverRegistration(monitor Monitor) (
-	grpcResolver *GRPCResolver,
-	register func(),
-	cleanup func(),
-) {
-	registrationID := newGRPCResolverRegistrationID()
+func newGRPCResolverRegistration(monitor Monitor) *GRPCResolver {
+	registrationID := fmt.Sprintf("%d", grpcResolverID.Add(1))
 	res := &GRPCResolver{registrationID: registrationID}
-	registration := &grpcResolverRegistration{monitor: monitor}
-	runtime.AddCleanup(res, func(registrationID string) {
+	globalGrpcBuilder.resolvers.Store(registrationID, &grpcResolverRegistration{monitor: monitor})
+	// Fx does not run OnStop hooks when graph construction fails, so retain a GC fallback.
+	res.cleanup = runtime.AddCleanup(res, func(registrationID string) {
 		globalGrpcBuilder.resolvers.Delete(registrationID)
 	}, registrationID)
-	return res, func() {
-			globalGrpcBuilder.resolvers.Store(registrationID, registration)
-		}, func() {
-			globalGrpcBuilder.resolvers.Delete(registrationID)
-			runtime.KeepAlive(res)
-		}
+	return res
 }
 
-func newGRPCResolverRegistrationID() string {
-	return fmt.Sprintf("0x%x", grpcResolverID.Add(1))
+func (g *GRPCResolver) unregister() {
+	g.cleanup.Stop()
+	globalGrpcBuilder.resolvers.Delete(g.registrationID)
 }
 
 func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
@@ -126,11 +112,11 @@ func (m *grpcBuilder) getServiceResolver(u *url.URL) (ServiceResolver, error) {
 	if u.Scheme != grpcResolverScheme {
 		return nil, errInvalidUrl
 	}
-	service, ptr, found := strings.Cut(u.Host, delim)
+	service, registrationID, found := strings.Cut(u.Host, delim)
 	if !found {
 		return nil, errInvalidUrl
 	}
-	v, ok := m.resolvers.Load(ptr)
+	v, ok := m.resolvers.Load(registrationID)
 	if !ok {
 		return nil, errNotInitialized
 	}

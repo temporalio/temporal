@@ -63,7 +63,7 @@ func TestGRPCBuilder(t *testing.T) {
 	// protocol, and then our resolver should resolve this to the localhost:1234 address.
 	url, cleanup := GRPCResolverURLForTesting(monitor, primitives.FrontendService)
 	t.Cleanup(cleanup)
-	assert.Regexp(t, "membership://frontend~0x[[:xdigit:]]*", url)
+	assert.Regexp(t, "membership://frontend~[0-9]+$", url)
 
 	// dialedAddress is the actual address that the gRPC framework dialed after resolving the URL using our resolver.
 	var dialedAddress string
