@@ -19,41 +19,22 @@ const (
 	maxAPIErrorBody = 4 << 10
 )
 
-type apiClient struct {
-	baseURL    string
-	httpClient *http.Client
-	limiter    *rate.Limiter
-	token      func(context.Context) (string, error)
-}
-
-var defaultAPIClient = newAPIClient()
-
-func getJSON(ctx context.Context, path string, out any) error {
-	return defaultAPIClient.getJSON(ctx, path, out)
-}
-
-func newAPIClient() *apiClient {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.ResponseHeaderTimeout = defaultTimeout
-	return &apiClient{
-		baseURL:    githubAPIURL,
-		httpClient: &http.Client{Transport: transport},
-		limiter:    rate.NewLimiter(DefaultAPIRPS, githubAPIBurst),
-		token:      apiToken,
-	}
-}
+var githubAPILimiter = rate.NewLimiter(DefaultAPIRPS, githubAPIBurst)
 
 // SetAPIRPS sets the request rate limit for GitHub API requests.
 func SetAPIRPS(rps int) error {
 	if rps < 1 {
 		return errors.New("GitHub API requests per second must be at least 1")
 	}
-	defaultAPIClient.limiter.SetLimit(rate.Limit(rps))
+	githubAPILimiter.SetLimit(rate.Limit(rps))
 	return nil
 }
 
-func (c *apiClient) getJSON(ctx context.Context, path string, out any) (retErr error) {
-	response, err := c.get(ctx, path)
+func getJSON(ctx context.Context, path string, out any) (retErr error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	response, err := get(ctx, path)
 	if err != nil {
 		return err
 	}
@@ -68,16 +49,16 @@ func (c *apiClient) getJSON(ctx context.Context, path string, out any) (retErr e
 	return nil
 }
 
-func (c *apiClient) get(ctx context.Context, path string) (*http.Response, error) {
-	token, err := c.token(ctx)
+func get(ctx context.Context, path string) (*http.Response, error) {
+	token, err := apiToken(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := c.limiter.Wait(ctx); err != nil {
+	if err := githubAPILimiter.Wait(ctx); err != nil {
 		return nil, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, githubAPIURL+path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitHub request: %w", err)
 	}
@@ -85,7 +66,7 @@ func (c *apiClient) get(ctx context.Context, path string) (*http.Response, error
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	response, err := c.httpClient.Do(request)
+	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("GitHub request failed: %w", err)
 	}
