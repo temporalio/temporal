@@ -146,6 +146,9 @@ func NewStreamReceiver(
 		}
 	}
 	receiver.flowController = NewReceiverFlowControl(taskTrackerMap, processToolBox.Config)
+	if receiver.NamespaceThrottler == nil {
+		receiver.NamespaceThrottler = NoopNamespaceThrottler{}
+	}
 	return receiver
 }
 
