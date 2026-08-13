@@ -19,4 +19,17 @@ const (
 	NexusOperationKey = "nexus.operation"
 	NexusRequestIDKey = "nexus.request_id"
 	NexusServiceKey   = "nexus.service"
+
+	WorkerTaskTypeKey = "temporal.worker_task.type"
+	WorkerTaskIDKey   = "temporal.worker_task.id"
+
+	WorkerTaskNamespaceIDKey = "temporal.worker_task.namespace_id"
+	WorkerTaskWorkflowIDKey  = "temporal.worker_task.workflow_id"
+	WorkerTaskRunIDKey       = "temporal.worker_task.run_id"
+	WorkerTaskActivityIDKey  = "temporal.worker_task.activity_id"
+	WorkerTaskTaskQueueKey   = "temporal.worker_task.task_queue"
+
+	WorkerTaskTypeWorkflow = "workflow"
+	WorkerTaskTypeActivity = "activity"
+	WorkerTaskTypeNexus    = "nexus"
 )

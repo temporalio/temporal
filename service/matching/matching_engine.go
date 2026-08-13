@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -57,6 +59,7 @@ import (
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -720,7 +723,18 @@ pollLoop:
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
 			// no need to emit task dispatch latency metric because the parent partition already did it.
-			return e.convertPollWorkflowTaskQueueResponse(task.pollWorkflowTaskQueueResponse(), task.namespace)
+			response, err := e.convertPollWorkflowTaskQueueResponse(task.pollWorkflowTaskQueueResponse(), task.namespace)
+			if err != nil {
+				return nil, err
+			}
+			trace.SpanFromContext(ctx).SetAttributes(
+				attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeWorkflow),
+				attribute.String(telemetry.WorkerTaskIDKey, fmt.Sprint(response.GetStartedEventId())),
+				attribute.String(telemetry.WorkerTaskNamespaceIDKey, req.GetNamespaceId()),
+				attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
+				attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
+			)
+			return response, nil
 		}
 
 		if task.isQuery() {
@@ -769,7 +783,15 @@ pollLoop:
 
 			// Local query match. Emit the dispatch latency metric. This metric does not include the query response time.
 			e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
-			return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
+			response := e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics)
+			trace.SpanFromContext(ctx).SetAttributes(
+				attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeWorkflow),
+				attribute.String(telemetry.WorkerTaskIDKey, fmt.Sprint(response.GetStartedEventId())),
+				attribute.String(telemetry.WorkerTaskNamespaceIDKey, req.GetNamespaceId()),
+				attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
+				attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
+			)
+			return response, nil
 		}
 
 		requestClone := request
@@ -859,7 +881,15 @@ pollLoop:
 
 		task.finish(taskFinishResult{consumedToken: true})
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
-		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
+		response := e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics)
+		trace.SpanFromContext(ctx).SetAttributes(
+			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeWorkflow),
+			attribute.String(telemetry.WorkerTaskIDKey, fmt.Sprint(response.GetStartedEventId())),
+			attribute.String(telemetry.WorkerTaskNamespaceIDKey, req.GetNamespaceId()),
+			attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
+			attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
+		)
+		return response, nil
 	}
 }
 
@@ -997,7 +1027,16 @@ pollLoop:
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
-			return task.pollActivityTaskQueueResponse(), nil
+			response := task.pollActivityTaskQueueResponse()
+			trace.SpanFromContext(ctx).SetAttributes(
+				attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeActivity),
+				attribute.String(telemetry.WorkerTaskIDKey, response.GetActivityId()),
+				attribute.String(telemetry.WorkerTaskNamespaceIDKey, req.GetNamespaceId()),
+				attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
+				attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
+				attribute.String(telemetry.WorkerTaskActivityIDKey, response.GetActivityId()),
+			)
+			return response, nil
 		}
 		requestClone := request
 		if versionSetUsed {
@@ -1102,7 +1141,16 @@ pollLoop:
 		}
 		task.finish(taskFinishResult{consumedToken: true})
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
-		return e.createPollActivityTaskQueueResponse(task, resp, opMetrics), nil
+		response := e.createPollActivityTaskQueueResponse(task, resp, opMetrics)
+		trace.SpanFromContext(ctx).SetAttributes(
+			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeActivity),
+			attribute.String(telemetry.WorkerTaskIDKey, response.GetActivityId()),
+			attribute.String(telemetry.WorkerTaskNamespaceIDKey, req.GetNamespaceId()),
+			attribute.String(telemetry.WorkerTaskWorkflowIDKey, response.GetWorkflowExecution().GetWorkflowId()),
+			attribute.String(telemetry.WorkerTaskRunIDKey, response.GetWorkflowExecution().GetRunId()),
+			attribute.String(telemetry.WorkerTaskActivityIDKey, response.GetActivityId()),
+		)
+		return response, nil
 	}
 }
 
@@ -2659,6 +2707,12 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	if err != nil {
 		return nil, err
 	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeNexus),
+		attribute.String(telemetry.WorkerTaskIDKey, taskID),
+		attribute.String(telemetry.WorkerTaskNamespaceIDKey, request.GetNamespaceId()),
+		attribute.String(telemetry.WorkerTaskTaskQueueKey, request.GetTaskQueue().GetName()),
+	)
 
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
@@ -2790,6 +2844,12 @@ pollLoop:
 		}
 
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), ns.Name().String(), pollMetadata)
+		trace.SpanFromContext(ctx).SetAttributes(
+			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeNexus),
+			attribute.String(telemetry.WorkerTaskIDKey, task.nexus.taskID),
+			attribute.String(telemetry.WorkerTaskNamespaceIDKey, req.GetNamespaceId()),
+			attribute.String(telemetry.WorkerTaskTaskQueueKey, taskQueueName),
+		)
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken:             serializedToken,
@@ -2801,6 +2861,12 @@ pollLoop:
 }
 
 func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeNexus),
+		attribute.String(telemetry.WorkerTaskIDKey, request.GetTaskId()),
+		attribute.String(telemetry.WorkerTaskNamespaceIDKey, request.GetNamespaceId()),
+		attribute.String(telemetry.WorkerTaskTaskQueueKey, request.GetTaskQueue().GetName()),
+	)
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
@@ -2814,6 +2880,12 @@ func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, requ
 }
 
 func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+	trace.SpanFromContext(ctx).SetAttributes(
+		attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeNexus),
+		attribute.String(telemetry.WorkerTaskIDKey, request.GetTaskId()),
+		attribute.String(telemetry.WorkerTaskNamespaceIDKey, request.GetNamespaceId()),
+		attribute.String(telemetry.WorkerTaskTaskQueueKey, request.GetTaskQueue().GetName()),
+	)
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
