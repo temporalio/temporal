@@ -63,6 +63,20 @@ func isGoTestSuite(name string) bool {
 	return strings.HasPrefix(name, "Test") && strings.Contains(name, "Suite")
 }
 
+func isNeverExecutedPlaceholder(testcase junit.Testcase) bool {
+	if testcase.Failure == nil || !strings.HasPrefix(testcase.Time, "-") {
+		return false
+	}
+
+	lines := strings.Split(strings.TrimSpace(testcase.Failure.Data), "\n")
+	if len(lines) != 2 {
+		return false
+	}
+	runName, hasRun := strings.CutPrefix(strings.TrimSpace(lines[0]), "=== RUN   ")
+	pauseName, hasPause := strings.CutPrefix(strings.TrimSpace(lines[1]), "=== PAUSE ")
+	return hasRun && hasPause && runName == testcase.Name && pauseName == testcase.Name
+}
+
 // extractFailures extracts all test failures from parsed JUnit data
 // Filters for: passed = false AND skipped = false (matching tringa SQL query)
 func extractFailures(suites *junit.Testsuites, artifactName string, runID int64, timestamp time.Time) []TestFailure {
@@ -73,6 +87,9 @@ func extractFailures(suites *junit.Testsuites, artifactName string, runID int64,
 
 	for _, suite := range suites.Suites {
 		for _, testcase := range suite.Testcases {
+			if isNeverExecutedPlaceholder(testcase) {
+				continue
+			}
 			// Filter: failure present AND not skipped
 			if testcase.Failure != nil && testcase.Skipped == nil {
 				failure := TestFailure{
@@ -100,6 +117,9 @@ func extractAllTestRuns(suites *junit.Testsuites, runID int64, jobID, matrixName
 
 	for _, suite := range suites.Suites {
 		for _, testcase := range suite.Testcases {
+			if isNeverExecutedPlaceholder(testcase) {
+				continue
+			}
 			run := TestRun{
 				SuiteName:  topLevelTestName(testcase.Name),
 				Name:       testcase.Name,

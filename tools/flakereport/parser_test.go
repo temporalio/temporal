@@ -4,9 +4,43 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jstemmer/go-junit-report/v2/junit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestExtractTestResultsIgnoresNeverExecutedPlaceholder(t *testing.T) {
+	suites := &junit.Testsuites{
+		Suites: []junit.Testsuite{
+			{
+				Testcases: []junit.Testcase{
+					{
+						Name: "TestNeverExecuted",
+						Time: "-0.000000",
+						Failure: &junit.Result{
+							Data: "=== RUN   TestNeverExecuted\n=== PAUSE TestNeverExecuted\n",
+						},
+					},
+					{
+						Name: "TestGenuineFailure",
+						Time: "-0.000000",
+						Failure: &junit.Result{
+							Data: "=== RUN   TestGenuineFailure\n=== PAUSE TestGenuineFailure\nassertion failed\n",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	failures := extractFailures(suites, "artifact", 1, time.Time{})
+	runs := extractAllTestRuns(suites, 1, "job", "matrix")
+
+	require.Len(t, failures, 1)
+	require.Equal(t, "TestGenuineFailure", failures[0].Name)
+	require.Len(t, runs, 1)
+	require.Equal(t, "TestGenuineFailure", runs[0].Name)
+}
 
 func TestNormalizeTestName(t *testing.T) {
 	tests := []struct {
