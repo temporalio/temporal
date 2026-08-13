@@ -126,24 +126,27 @@ type bisectTableRow struct {
 }
 
 func buildBisectTableRows(reports []TestBisectReport) []bisectTableRow {
-	var rows []bisectTableRow
+	rankedReports := make([]TestBisectReport, 0, len(reports))
 	for _, report := range reports {
-		if report.Skipped {
-			continue
+		if !report.Skipped && len(report.TopSuspects) > 0 {
+			rankedReports = append(rankedReports, report)
 		}
+	}
+	sort.Slice(rankedReports, func(i, j int) bool {
+		pi := rankedReports[i].TopSuspects[0].Probability
+		pj := rankedReports[j].TopSuspects[0].Probability
+		if pi != pj {
+			return pi > pj
+		}
+		return rankedReports[i].TestName < rankedReports[j].TestName
+	})
+
+	var rows []bisectTableRow
+	for _, report := range rankedReports {
 		for _, suspect := range report.TopSuspects {
 			rows = append(rows, bisectTableRow{testName: report.TestName, suspect: suspect})
 		}
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].suspect.Probability != rows[j].suspect.Probability {
-			return rows[i].suspect.Probability > rows[j].suspect.Probability
-		}
-		if rows[i].testName != rows[j].testName {
-			return rows[i].testName < rows[j].testName
-		}
-		return rows[i].suspect.CommitSHA < rows[j].suspect.CommitSHA
-	})
 	return rows
 }
 

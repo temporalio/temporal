@@ -63,20 +63,28 @@ func TestGenerateReportLimitsAllTableRows(t *testing.T) {
 	}
 
 	suites := make([]SuiteReport, total)
-	bisectReports := make([]TestBisectReport, total)
+	bisectReports := make([]TestBisectReport, maxRows)
 	for i := range total {
+		suiteRank := total - i
 		suites[i] = SuiteReport{
-			SuiteName: "Suite" + strconv.Itoa(i+1),
-			FlakeRate: float64(i + 1),
+			SuiteName: "Suite" + strconv.Itoa(suiteRank),
+			FlakeRate: float64(suiteRank),
+		}
+		if i == maxRows {
+			continue
 		}
 		bisectReports[i] = TestBisectReport{
 			TestName: "Bisect" + strconv.Itoa(i+1),
 			TopSuspects: []BisectResult{{
 				CommitSHA:   "abcdef0",
-				Probability: float64(i+1) / total,
+				Probability: float64(i+1) / maxRows,
 			}},
 		}
 	}
+	bisectReports[maxRows-1].TopSuspects = append(bisectReports[maxRows-1].TopSuspects, BisectResult{
+		CommitSHA:   "1234567",
+		Probability: 0.5,
+	})
 	summary := &ReportSummary{
 		CIBreakers:      makeTestReports("CIBreaker"),
 		Crashes:         makeTestReports("Crash"),
@@ -99,8 +107,45 @@ func TestGenerateReportLimitsAllTableRows(t *testing.T) {
 	require.NotContains(t, summaryContent, "`Suite1`")
 	require.Contains(t, summaryContent, "`Suite101`")
 	require.Equal(t, maxRows, strings.Count(summaryContent, "| `Suite"))
+	var bisectRows []string
+	for line := range strings.Lines(summaryContent) {
+		if strings.HasPrefix(line, "| `Bisect") {
+			bisectRows = append(bisectRows, line)
+		}
+	}
+	require.Len(t, bisectRows, maxRows)
+	require.Contains(t, bisectRows[0], "`Bisect100`")
+	require.Contains(t, bisectRows[1], "`Bisect100`")
 	require.NotContains(t, summaryContent, "`Bisect1`")
-	require.Contains(t, summaryContent, "`Bisect101`")
-	require.Equal(t, maxRows, strings.Count(summaryContent, "| `Bisect"))
 	require.Equal(t, 6, strings.Count(summaryContent, "Showing the top 100 of 101 entries."))
+}
+
+func TestBuildBisectTableRowsSortsReportsByTopSuspect(t *testing.T) {
+	reports := []TestBisectReport{
+		{
+			TestName:    "TestB",
+			TopSuspects: []BisectResult{{CommitSHA: "b", Probability: 0.5}},
+		},
+		{
+			TestName: "TestA",
+			TopSuspects: []BisectResult{
+				{CommitSHA: "a1", Probability: 0.5},
+				{CommitSHA: "a2", Probability: 0.25},
+			},
+		},
+		{
+			TestName:    "TestC",
+			TopSuspects: []BisectResult{{CommitSHA: "c", Probability: 0.75}},
+		},
+	}
+
+	rows := buildBisectTableRows(reports)
+
+	require.Len(t, rows, 4)
+	require.Equal(t, []string{"TestC", "TestA", "TestA", "TestB"}, []string{
+		rows[0].testName,
+		rows[1].testName,
+		rows[2].testName,
+		rows[3].testName,
+	})
 }

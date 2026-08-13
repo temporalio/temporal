@@ -3,7 +3,6 @@ package flakereport
 import (
 	"fmt"
 	"math"
-	"sort"
 	"strings"
 	"time"
 )
@@ -89,13 +88,6 @@ func generateSuiteBreakdownTable(suiteReports []SuiteReport) string {
 		return ""
 	}
 
-	suiteReports = append([]SuiteReport(nil), suiteReports...)
-	sort.Slice(suiteReports, func(i, j int) bool {
-		if suiteReports[i].FlakeRate != suiteReports[j].FlakeRate {
-			return suiteReports[i].FlakeRate > suiteReports[j].FlakeRate
-		}
-		return suiteReports[i].SuiteName < suiteReports[j].SuiteName
-	})
 	suiteReports, total := limitReportRows(suiteReports)
 
 	var sb strings.Builder
