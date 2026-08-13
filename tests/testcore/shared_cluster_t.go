@@ -38,11 +38,8 @@ func (s *sharedClusterT) addTest(t testlogger.CleanupCapableT) {
 func (s *sharedClusterT) removeTest(t testlogger.CleanupCapableT) (wasLast bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, x := range s.activeTests {
-		if x == t {
-			s.activeTests = slices.Delete(s.activeTests, i, i+1)
-			break
-		}
+	if i := slices.Index(s.activeTests, t); i >= 0 {
+		s.activeTests = slices.Delete(s.activeTests, i, i+1)
 	}
 	return len(s.activeTests) == 0
 }
