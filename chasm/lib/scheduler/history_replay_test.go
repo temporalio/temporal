@@ -208,11 +208,12 @@ type observedStartFailure struct {
 }
 
 type observedStartAttempt struct {
-	workflowID string
-	runID      string
-	time       time.Time
-	request    *workflowservice.StartWorkflowExecutionRequest
-	failed     bool
+	workflowID                   string
+	runID                        string
+	time                         time.Time
+	request                      *workflowservice.StartWorkflowExecutionRequest
+	workflowTaskCompletedEventID int64
+	failed                       bool
 }
 
 type chasmStart struct {
@@ -843,8 +844,16 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 					if attempt.failed {
 						message = "V1 and CHASM emitted different failed StartWorkflowExecution requests"
 					}
+					classification := replayClassificationSignificant
+					knownDifference := ""
+					if slices.Contains(fields, "input") &&
+						workflowTaskContainsUpdateBeforeStart(trace.history, attempt.workflowTaskCompletedEventID) {
+						classification = replayClassificationInconclusive
+						knownDifference = "v1_workflow_task_input_ordering"
+						message += "; V1 processed an update delivered with the same workflow task, after the replay had already fired the nominal CHASM deadline"
+					}
 					divergences = append(divergences, replayDivergence{
-						Classification:   replayClassificationSignificant,
+						Classification:   classification,
 						Kind:             "action_request",
 						Message:          message,
 						WorkflowID:       workflowID,
@@ -852,6 +861,7 @@ func replayV1HistoryAgainstCHASM(t *testing.T, history *historypb.History) repla
 						CHASMTime:        timePointer(chasmTime),
 						Fields:           fields,
 						FieldDifferences: startWorkflowRequestFieldDifferences(attempt.request, request, fields),
+						KnownDifference:  knownDifference,
 					})
 				}
 				if attempt.failed {
@@ -1680,6 +1690,51 @@ func fieldsAreKnownSkipCascade(fields []string) bool {
 	return true
 }
 
+func workflowTaskContainsUpdateBeforeStart(history *historypb.History, completedEventID int64) bool {
+	if history == nil || completedEventID == 0 {
+		return false
+	}
+	var scheduledEventID, startedEventID int64
+	for _, event := range history.GetEvents() {
+		if event.GetEventId() == completedEventID {
+			attributes := event.GetWorkflowTaskCompletedEventAttributes()
+			scheduledEventID = attributes.GetScheduledEventId()
+			startedEventID = attributes.GetStartedEventId()
+			break
+		}
+	}
+	if scheduledEventID == 0 || startedEventID == 0 {
+		return false
+	}
+	for _, event := range history.GetEvents() {
+		if event.GetEventId() <= scheduledEventID || event.GetEventId() >= startedEventID {
+			continue
+		}
+		if event.GetWorkflowExecutionSignaledEventAttributes().GetSignalName() == legacyscheduler.SignalNameUpdate {
+			return true
+		}
+	}
+	return false
+}
+
+func TestWorkflowTaskContainsUpdateBeforeStart(t *testing.T) {
+	history := &historypb.History{Events: []*historypb.HistoryEvent{
+		{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+		{EventId: 3, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
+			WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{SignalName: legacyscheduler.SignalNameUpdate},
+		}},
+		{EventId: 4, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED},
+		{EventId: 5, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
+			WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{ScheduledEventId: 2, StartedEventId: 4},
+		}},
+	}}
+	require.True(t, workflowTaskContainsUpdateBeforeStart(history, 5))
+	require.False(t, workflowTaskContainsUpdateBeforeStart(history, 0))
+
+	history.Events[1].EventId = 6
+	require.False(t, workflowTaskContainsUpdateBeforeStart(history, 5))
+}
+
 func TestAnnotateKnownCompatibilityDivergences(t *testing.T) {
 	divergences := []replayDivergence{
 		{Classification: replayClassificationSignificant, Kind: "missing_action"},
@@ -2262,7 +2317,7 @@ func extractV1HistoryTrace(t *testing.T, history *historypb.History) *v1HistoryT
 				trace.starts = append(trace.starts, start)
 				trace.startAttempts = append(trace.startAttempts, observedStartAttempt{
 					workflowID: start.workflowID, runID: start.runID, time: start.time,
-					request: proto.CloneOf(start.request),
+					request: proto.CloneOf(start.request), workflowTaskCompletedEventID: event.GetMarkerRecordedEventAttributes().GetWorkflowTaskCompletedEventId(),
 				})
 			}
 			if metadata.ActivityType == "WatchWorkflow" {
