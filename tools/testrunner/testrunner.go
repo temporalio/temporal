@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -457,35 +456,4 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		log.Printf("exiting with failure: total timeout (%s) reached", r.totalTimeout)
 		os.Exit(1)
 	}
-}
-
-func stripRunFromArgs(args []string) (argsNoRun []string) {
-	var skipNext bool
-	for _, arg := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		} else if arg == "-run" {
-			skipNext = true
-			continue
-		} else if strings.HasPrefix(arg, "-run=") {
-			continue
-		}
-		argsNoRun = append(argsNoRun, arg)
-	}
-	return
-}
-
-func goTestNameToRunFlagRegexp(test string) string {
-	parts := strings.Split(test, "/")
-	var sb strings.Builder
-	for i, p := range parts {
-		if i > 0 {
-			sb.WriteByte('/')
-		}
-		sb.WriteByte('^')
-		sb.WriteString(regexp.QuoteMeta(p))
-		sb.WriteByte('$')
-	}
-	return sb.String()
 }

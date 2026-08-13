@@ -166,6 +166,25 @@ func (r attemptResult) observed(id testID) bool {
 	return false
 }
 
+// packageBlockedObservation reports whether a package-level failure makes an
+// absent targeted test inconclusive rather than a retry-plan violation.
+func (r attemptResult) packageBlockedObservation(packageName string) bool {
+	if r.process.state != processExited {
+		return true
+	}
+	for _, pkg := range r.packages {
+		if pkg.name != packageName {
+			continue
+		}
+		if pkg.failedBuild != "" || len(pkg.meaningfulIncompleteExecutions()) > 0 || r.packageHasTimeout(packageName) {
+			return true
+		}
+		return pkg.outcome == packageFailed &&
+			!slices.ContainsFunc(pkg.executions, testExecution.isAttributableFailure)
+	}
+	return false
+}
+
 func (p packageResult) meaningfulIncompleteExecutions() []testExecution {
 	if p.outcome != packageFailed && p.outcome != packageIncomplete {
 		return nil
