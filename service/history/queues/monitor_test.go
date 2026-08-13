@@ -99,22 +99,21 @@ func (s *monitorSuite) TestPendingTasksStats() {
 	s.Equal(1, s.monitor.GetTotalPendingTaskCount())
 }
 
-func (s *monitorSuite) TestReaderWatermarkStats() {
-	_, ok := s.monitor.GetReaderWatermark(DefaultReaderId)
+func (s *monitorSuite) TestSliceReadWatermarkStats() {
+	slice := &SliceImpl{}
+
+	_, ok := s.monitor.GetSliceReadWatermark(slice)
 	s.False(ok)
 
 	now := time.Now().Truncate(monitorWatermarkPrecision)
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
-	watermark, ok := s.monitor.GetReaderWatermark(DefaultReaderId)
+	s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
+	watermark, ok := s.monitor.GetSliceReadWatermark(slice)
 	s.True(ok)
-	s.Equal(tasks.NewKey(
-		now.Truncate(monitorWatermarkPrecision),
-		0,
-	), watermark)
+	s.Equal(tasks.NewKey(now, 0), watermark)
 
 	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
 		now = now.Add(time.Millisecond * 100)
-		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+		s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
 	}
 
 	alert := <-s.alertCh
@@ -130,17 +129,76 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	}
 	s.Equal(expectedAlert, *alert)
 
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
 	select {
 	case <-s.alertCh:
-		s.Fail("should have only one outstanding slice count alert")
+		s.Fail("should have only one outstanding reader stuck alert")
 	default:
 	}
 
 	s.monitor.ResolveAlert(alert.AlertType)
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
 	alert = <-s.alertCh
 	s.Equal(expectedAlert, *alert)
+}
+
+func (s *monitorSuite) TestSliceReadWatermarkStats_ReadsSpreadAcrossSlices() {
+	// A shard that keeps generating tasks gets a new slice per notification, and
+	// several of them can cover the same fire time second. Every read makes progress
+	// in its own slice, so this must not be reported as a stuck reader.
+	now := time.Now().Truncate(monitorWatermarkPrecision)
+	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts()*2; i++ {
+		s.monitor.SetSliceReadWatermark(DefaultReaderId, &SliceImpl{}, tasks.NewKey(now, rand.Int63()))
+	}
+
+	select {
+	case <-s.alertCh:
+		s.Fail("reads spread across distinct slices should not trigger reader stuck alert")
+	default:
+	}
+}
+
+func (s *monitorSuite) TestSliceReadWatermarkStats_NonDefaultReader() {
+	slice := &SliceImpl{}
+	readerID := DefaultReaderId + 1
+
+	now := time.Now().Truncate(monitorWatermarkPrecision)
+	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
+		s.monitor.SetSliceReadWatermark(readerID, slice, tasks.NewKey(now, rand.Int63()))
+	}
+
+	alert := <-s.alertCh
+	s.Equal(AlertTypeReaderStuck, alert.AlertType)
+	s.Equal(readerID, alert.AlertAttributesReaderStuck.ReaderID)
+}
+
+func (s *monitorSuite) TestSliceReadWatermarkStats_ImmediateQueueNotTracked() {
+	monitor := newMonitor(tasks.CategoryTypeImmediate, s.mockTimeSource, s.monitor.options)
+	defer monitor.Close()
+
+	slice := &SliceImpl{}
+	for i := 0; i != monitor.options.ReaderStuckCriticalAttempts()*2; i++ {
+		monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(tasks.DefaultFireTime, int64(i)))
+	}
+
+	select {
+	case <-monitor.AlertCh():
+		s.Fail("immediate queue should not track slice read progress")
+	default:
+	}
+}
+
+func (s *monitorSuite) TestRemoveSliceClearsReadProgress() {
+	slice := &SliceImpl{}
+
+	now := time.Now().Truncate(monitorWatermarkPrecision)
+	s.monitor.SetSliceReadWatermark(DefaultReaderId, slice, tasks.NewKey(now, rand.Int63()))
+	_, ok := s.monitor.GetSliceReadWatermark(slice)
+	s.True(ok)
+
+	s.monitor.RemoveSlice(slice)
+	_, ok = s.monitor.GetSliceReadWatermark(slice)
+	s.False(ok)
 }
 
 func (s *monitorSuite) TestSliceCount() {

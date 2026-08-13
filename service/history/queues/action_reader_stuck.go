@@ -10,18 +10,21 @@ var _ Action = (*actionReaderStuck)(nil)
 
 type (
 	actionReaderStuck struct {
-		attributes *AlertAttributesReaderStuck
-		logger     log.Logger
+		attributes     *AlertAttributesReaderStuck
+		maxReaderCount int64
+		logger         log.Logger
 	}
 )
 
 func newReaderStuckAction(
 	attributes *AlertAttributesReaderStuck,
+	maxReaderCount int,
 	logger log.Logger,
 ) *actionReaderStuck {
 	return &actionReaderStuck{
-		attributes: attributes,
-		logger:     logger,
+		attributes:     attributes,
+		maxReaderCount: int64(maxReaderCount),
+		logger:         logger,
 	}
 }
 
@@ -30,6 +33,12 @@ func (a *actionReaderStuck) Name() string {
 }
 
 func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
+	nextReaderID := a.attributes.ReaderID + 1
+	if nextReaderID >= a.maxReaderCount {
+		a.logger.Info("Skipped reader stuck action, no lower priority reader available", tag.QueueReaderID(a.attributes.ReaderID))
+		return false
+	}
+
 	reader, ok := readerGroup.ReaderByID(a.attributes.ReaderID)
 	if !ok {
 		a.logger.Info("Failed to get queue with readerID for reader stuck action", tag.QueueReaderID(a.attributes.ReaderID))
@@ -47,29 +56,29 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 	var splitSlices []Slice
 	reader.SplitSlices(func(s Slice) ([]Slice, bool) {
 		r := s.Scope().Range
+		if r.InclusiveMin.CompareTo(stuckRange.ExclusiveMax) >= 0 ||
+			stuckRange.InclusiveMin.CompareTo(r.ExclusiveMax) >= 0 {
+			return nil, false
+		}
+
 		if stuckRange.ContainsRange(r) {
 			splitSlices = append(splitSlices, s)
 			return nil, true
 		}
 
+		// s only partially overlaps the stuck range, so at least one of the bounds
+		// below falls strictly inside s and splitting can not produce an empty slice.
 		remaining := make([]Slice, 0, 2)
-		if s.CanSplitByRange(stuckRange.InclusiveMin) {
+		if r.InclusiveMin.CompareTo(stuckRange.InclusiveMin) < 0 {
 			left, right := s.SplitByRange(stuckRange.InclusiveMin)
 			remaining = append(remaining, left)
 			s = right
 		}
 
-		if s.CanSplitByRange(stuckRange.ExclusiveMax) {
+		if s.Scope().Range.ExclusiveMax.CompareTo(stuckRange.ExclusiveMax) > 0 {
 			left, right := s.SplitByRange(stuckRange.ExclusiveMax)
 			remaining = append(remaining, right)
 			s = left
-		}
-
-		if len(remaining) == 0 {
-			// s can't split by both min and max of stuck range,
-			// and stuck range does not contain the range of s,
-			// the only possible case is s is not overlapping with stuck range at all.
-			return nil, false
 		}
 
 		splitSlices = append(splitSlices, s)
@@ -80,7 +89,7 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) bool {
 		return false
 	}
 
-	nextReader := readerGroup.GetOrCreateReader(a.attributes.ReaderID + 1)
+	nextReader := readerGroup.GetOrCreateReader(nextReaderID)
 	nextReader.MergeSlices(splitSlices...)
 	return true
 }

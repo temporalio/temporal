@@ -26,8 +26,8 @@ type (
 		GetSlicePendingTaskCount(slice Slice) int
 		SetSlicePendingTaskCount(slice Slice, count int)
 
-		GetReaderWatermark(readerID int64) (tasks.Key, bool)
-		SetReaderWatermark(readerID int64, watermark tasks.Key)
+		GetSliceReadWatermark(slice Slice) (tasks.Key, bool)
+		SetSliceReadWatermark(readerID int64, slice Slice, watermark tasks.Key)
 
 		GetTotalSliceCount() int
 		GetSliceCount(readerID int64) int
@@ -68,17 +68,21 @@ type (
 	}
 
 	readerStats struct {
-		progress   readerProgress
 		sliceCount int
 	}
 
-	readerProgress struct {
+	// readProgress tracks how many consecutive times a reader loaded tasks from a
+	// slice without advancing past watermark. Attributing this to a slice rather
+	// than to wall clock time keeps a burst of newly created slices covering the
+	// same fire time window from looking like a stuck reader.
+	readProgress struct {
 		watermark tasks.Key
 		attempts  int
 	}
 
 	sliceStats struct {
 		pendingTaskCount int
+		readProgress     readProgress
 	}
 )
 
@@ -139,21 +143,23 @@ func (m *monitorImpl) SetSlicePendingTaskCount(slice Slice, count int) {
 	}
 }
 
-func (m *monitorImpl) GetReaderWatermark(readerID int64) (tasks.Key, bool) {
+func (m *monitorImpl) GetSliceReadWatermark(slice Slice) (tasks.Key, bool) {
 	m.Lock()
 	defer m.Unlock()
 
-	stats, ok := m.readerStats[readerID]
-	if !ok {
+	stats, ok := m.sliceStats[slice]
+	if !ok || stats.readProgress.attempts == 0 {
 		return tasks.MinimumKey, false
 	}
 
-	return stats.progress.watermark, true
+	return stats.readProgress.watermark, true
 }
 
-func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key) {
-	// TODO: currently only tracking default reader progress for scheduled queue
-	if readerID != DefaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
+func (m *monitorImpl) SetSliceReadWatermark(readerID int64, slice Slice, watermark tasks.Key) {
+	// Fire time is only comparable across reads for scheduled queues. Immediate
+	// task keys all carry tasks.DefaultFireTime, so a watermark window there would
+	// cover the entire queue.
+	if m.categoryType != tasks.CategoryTypeScheduled {
 		return
 	}
 
@@ -163,26 +169,26 @@ func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key) {
 	watermark.FireTime = watermark.FireTime.Truncate(monitorWatermarkPrecision)
 	watermark.TaskID = 0
 
-	stats := m.readerStats[readerID]
-	if stats.progress.watermark.CompareTo(watermark) != 0 {
-		stats.progress = readerProgress{
+	stats := m.sliceStats[slice]
+	if stats.readProgress.watermark.CompareTo(watermark) != 0 {
+		stats.readProgress = readProgress{
 			watermark: watermark,
 			attempts:  1,
 		}
-		m.readerStats[readerID] = stats
+		m.sliceStats[slice] = stats
 		return
 	}
 
-	stats.progress.attempts++
-	m.readerStats[readerID] = stats
+	stats.readProgress.attempts++
+	m.sliceStats[slice] = stats
 
 	criticalAttempts := m.options.ReaderStuckCriticalAttempts()
-	if criticalAttempts > 0 && stats.progress.attempts >= criticalAttempts {
+	if criticalAttempts > 0 && stats.readProgress.attempts >= criticalAttempts {
 		m.sendAlertLocked(&Alert{
 			AlertType: AlertTypeReaderStuck,
 			AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
 				ReaderID:         readerID,
-				CurrentWatermark: stats.progress.watermark,
+				CurrentWatermark: stats.readProgress.watermark,
 			},
 		})
 	}
