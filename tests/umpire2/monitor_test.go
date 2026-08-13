@@ -88,7 +88,7 @@ func TestMonitor_CheckNamespaceSafetyDoesNotPromotePendingLiveness(t *testing.T)
 	require.NotEmpty(t, u.CheckNamespace(ctx, namespaceID))
 }
 
-func TestMonitorRoutesAndPurgesProtocolRelations(t *testing.T) {
+func TestEvidenceIngestorRecordsRoutesAndPurgesProtocolFacts(t *testing.T) {
 	ctx := context.Background()
 	u, err := NewMonitor(log.NewNoopLogger())
 	require.NoError(t, err)
@@ -107,7 +107,8 @@ func TestMonitorRoutesAndPurgesProtocolRelations(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, u.routeFacts(ctx, []umpirefw.Fact{started}))
+	require.NoError(t, u.evidence.ingest(ctx, []umpirefw.Fact{started}))
+	require.Contains(t, u.FactLog().QueryByID(umpirefw.NewEntityID(model.NamespaceType, namespaceID)), started)
 	require.Equal(t, []umpirefw.EntityID{
 		umpirefw.NewEntityID(model.WorkflowRunType, namespaceID+"\x00run"),
 	}, u.Relations().Targets(
@@ -119,7 +120,7 @@ func TestMonitorRoutesAndPurgesProtocolRelations(t *testing.T) {
 	require.Empty(t, u.Relations().Snapshot())
 }
 
-func TestMonitorRetainsCallbackRelationConflictAsScopedConformance(t *testing.T) {
+func TestEvidenceIngestorRetainsFailedFactsAndScopedRelationConformance(t *testing.T) {
 	u, err := NewMonitor(log.NewNoopLogger())
 	require.NoError(t, err)
 	callbackFact := func(operation string) umpirefw.Fact {
@@ -131,9 +132,10 @@ func TestMonitorRetainsCallbackRelationConflictAsScopedConformance(t *testing.T)
 			},
 		}
 	}
-	require.NoError(t, u.routeFacts(context.Background(), []umpirefw.Fact{callbackFact("accepted")}))
-	require.ErrorIs(t, u.routeFacts(context.Background(), []umpirefw.Fact{callbackFact("conflict")}), umpirefw.ErrRelationCardinality)
-	require.ErrorIs(t, u.routeFacts(context.Background(), []umpirefw.Fact{callbackFact("conflict")}), umpirefw.ErrRelationCardinality)
+	require.NoError(t, u.evidence.ingest(context.Background(), []umpirefw.Fact{callbackFact("accepted")}))
+	require.ErrorIs(t, u.evidence.ingest(context.Background(), []umpirefw.Fact{callbackFact("conflict")}), umpirefw.ErrRelationCardinality)
+	require.ErrorIs(t, u.evidence.ingest(context.Background(), []umpirefw.Fact{callbackFact("conflict")}), umpirefw.ErrRelationCardinality)
+	require.Len(t, u.FactLog().QueryByID(umpirefw.NewEntityID(model.NamespaceType, "namespace")), 3)
 
 	violations := u.CheckNamespaceSafety(context.Background(), "namespace")
 	require.Len(t, violations, 1)
@@ -181,7 +183,7 @@ func TestMonitorNexusActivityConsistencyUsesProtocolRelations(t *testing.T) {
 	require.NoError(t, err)
 	const namespaceID = "namespace"
 	activityLink := &commonpb.Link{Variant: &commonpb.Link_Activity_{Activity: &commonpb.Link_Activity{ActivityId: "activity"}}}
-	require.NoError(t, u.routeFacts(ctx, []umpirefw.Fact{
+	require.NoError(t, u.evidence.ingest(ctx, []umpirefw.Fact{
 		fact.NewNexusOperationExecutionSnapshot(namespaceID, "operation", []*commonpb.Link{activityLink}),
 		fact.NewActivityExecutionSnapshot(namespaceID, "activity", enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, nil),
 	}))
@@ -217,7 +219,7 @@ func TestMonitorRecordsOptionalSemanticCoverage(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, u.routeFacts(context.Background(), []umpirefw.Fact{started}))
+	require.NoError(t, u.evidence.ingest(context.Background(), []umpirefw.Fact{started}))
 	points := coverage.Snapshot()
 	require.True(t, slices.Contains(points, umpirefw.CoveragePoint{Kind: umpirefw.CoverageFact, ID: "WorkflowRunStarted"}))
 	require.True(t, slices.Contains(points, umpirefw.CoveragePoint{Kind: umpirefw.CoverageRelation, ID: "workflow-runs"}))
@@ -247,7 +249,7 @@ func TestMonitorRecordsOptionalNormalizedTrace(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, u.routeFacts(context.Background(), []umpirefw.Fact{started}))
+	require.NoError(t, u.evidence.ingest(context.Background(), []umpirefw.Fact{started}))
 	trace := recorder.Snapshot()
 	require.True(t, traceContains(trace, umpirefw.TraceFact, "WorkflowRunStarted"))
 	require.True(t, traceContains(trace, umpirefw.TraceTransition, "WorkflowRun:created/start/started"))
@@ -270,7 +272,7 @@ func TestMonitorRecordsActionCoverageAndCausalWindows(t *testing.T) {
 	require.NoError(t, u.ObserveExecution(t.Context(), umpirefw.ExecutionObservation{
 		Kind: umpirefw.ExecutionActionStart, Scope: namespaceID, Action: "handler.respond", Phase: "install", Outcome: umpirefw.ExecutionOutcomeStarted,
 	}))
-	require.NoError(t, u.routeFacts(t.Context(), []umpirefw.Fact{startedWorkflowIn(namespaceID, "workflow")}))
+	require.NoError(t, u.evidence.ingest(t.Context(), []umpirefw.Fact{startedWorkflowIn(namespaceID, "workflow")}))
 	require.NoError(t, u.ObserveExecution(t.Context(), umpirefw.ExecutionObservation{
 		Kind: umpirefw.ExecutionActionFinish, Scope: namespaceID, Action: "test.complete", Phase: "reconcile", Outcome: umpirefw.ExecutionOutcomeSucceeded,
 	}))
@@ -302,8 +304,8 @@ func TestMonitorRecordsActionCoverageAndCausalWindows(t *testing.T) {
 	require.Equal(t, "true", verdictEvent.Fields["pass"])
 
 	u.PurgeNamespace(namespaceID)
-	require.NotContains(t, u.executionTrace.active, namespaceID)
-	require.NotContains(t, u.executionTrace.last, namespaceID)
+	require.NotContains(t, u.evidence.trace.active, namespaceID)
+	require.NotContains(t, u.evidence.trace.last, namespaceID)
 }
 
 func traceContains(trace umpirefw.Trace, kind umpirefw.TraceKind, name string) bool {

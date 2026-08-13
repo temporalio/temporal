@@ -2,7 +2,6 @@ package umpire2
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -25,23 +24,16 @@ import (
 // Monitor implements sdktrace.SpanProcessor so it can receive spans
 // synchronously (no batching delay) and process them inline.
 type Monitor struct {
-	logger    log.Logger
-	registry  *umpirefw.ModelState
-	decoder   *model.FactDecoder
-	rulebook  *umpirefw.RuleRegistry
-	factLog   *umpirefw.FactLog
-	protocol  *protocol.Protocol
-	relations *umpirefw.RelationStore
+	logger   log.Logger
+	decoder  *model.FactDecoder
+	evidence *evidenceIngestor
 
 	// nsIDByName resolves a namespace name (all a frontend request carries) to the id the model
 	// scopes entities by. A synchronous rejection produces no telemetry, so its fact must be
 	// namespace-id-rooted from the request alone; the driver seeds this map (it knows both) before
 	// driving. See SetNamespaceID and UMPIRE.md.
-	nsMu           sync.RWMutex
-	nsIDByName     map[string]string
-	coverageMu     sync.RWMutex
-	coverage       *umpirefw.Coverage
-	executionTrace *executionTrace
+	nsMu       sync.RWMutex
+	nsIDByName map[string]string
 }
 
 // NewMonitor creates a new Monitor with all default rules registered.
@@ -93,19 +85,13 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 		tag.NewInt("livenessRules", liveness),
 	)
 
-	u := &Monitor{
+	trace := newExecutionTrace(registry, relations, defaultProtocol.CausalFootprints())
+	return &Monitor{
 		logger:     logger,
-		registry:   registry,
 		decoder:    decoder,
-		rulebook:   rb,
-		factLog:    el,
-		protocol:   defaultProtocol,
-		relations:  relations,
+		evidence:   newEvidenceIngestor(registry, rb, el, defaultProtocol, relations, trace),
 		nsIDByName: map[string]string{},
-	}
-	u.executionTrace = newExecutionTrace(registry, relations, defaultProtocol.CausalFootprints())
-
-	return u, nil
+	}, nil
 }
 
 // SetNamespaceID records a namespace name→id mapping so a synchronous rejection (which carries only
@@ -136,8 +122,7 @@ func (u *Monitor) OnEnd(span sdktrace.ReadOnlySpan) {
 	if len(facts) == 0 {
 		return
 	}
-	u.factLog.AddAll(facts)
-	if err := u.routeFacts(context.Background(), facts); err != nil {
+	if err := u.evidence.ingest(context.Background(), facts); err != nil {
 		u.logger.Warn("monitor: failed to route OTEL facts", tag.Error(err))
 	}
 }
@@ -154,8 +139,7 @@ func (u *Monitor) RecordFact(ctx context.Context, request any) {
 	if ev == nil {
 		return
 	}
-	u.factLog.Add(ev)
-	if err := u.routeFacts(ctx, []umpirefw.Fact{ev}); err != nil {
+	if err := u.evidence.ingest(ctx, []umpirefw.Fact{ev}); err != nil {
 		u.logger.Warn("monitor: failed to route gRPC event", tag.Error(err))
 	}
 }
@@ -165,8 +149,7 @@ func (u *Monitor) ObserveFact(ctx context.Context, observed umpirefw.Fact) error
 	if observed == nil {
 		return nil
 	}
-	u.factLog.Add(observed)
-	return u.routeFacts(ctx, []umpirefw.Fact{observed})
+	return u.evidence.ingest(ctx, []umpirefw.Fact{observed})
 }
 
 // RecordResponse converts a gRPC response to an event (if any) and routes it.
@@ -179,8 +162,7 @@ func (u *Monitor) RecordResponse(ctx context.Context, req, resp any) {
 	if len(facts) == 0 {
 		return
 	}
-	u.factLog.AddAll(facts)
-	if err := u.routeFacts(ctx, facts); err != nil {
+	if err := u.evidence.ingest(ctx, facts); err != nil {
 		u.logger.Warn("monitor: failed to route response event", tag.Error(err))
 	}
 }
@@ -201,86 +183,14 @@ func (u *Monitor) RecordRejection(ctx context.Context, req any, err error) {
 	if ev == nil {
 		return
 	}
-	u.factLog.Add(ev)
-	if routeErr := u.routeFacts(ctx, []umpirefw.Fact{ev}); routeErr != nil {
+	if routeErr := u.evidence.ingest(ctx, []umpirefw.Fact{ev}); routeErr != nil {
 		u.logger.Warn("monitor: failed to route rejection event", tag.Error(routeErr))
 	}
 }
 
-func (u *Monitor) routeFacts(ctx context.Context, facts []umpirefw.Fact) error {
-	modelErr := u.registry.RouteFacts(ctx, facts)
-	relationErrors := u.protocol.ApplyRelations(u.relations, facts)
-	for _, relationErr := range relationErrors {
-		u.recordRelationConflict(relationErr)
-	}
-	relationErr := errors.Join(relationErrors...)
-	u.recordCoverage(facts)
-	traceErr := u.executionTrace.recordFacts(facts)
-	return errors.Join(modelErr, relationErr, traceErr)
-}
-
 // ObserveExecution records a neutral runtime action window or verdict.
 func (u *Monitor) ObserveExecution(_ context.Context, observed umpirefw.ExecutionObservation) error {
-	if observed.Kind == umpirefw.ExecutionActionStart && observed.Action != "" {
-		u.coverageMu.RLock()
-		coverage := u.coverage
-		u.coverageMu.RUnlock()
-		if coverage != nil {
-			coverage.Record(umpirefw.CoveragePoint{Kind: umpirefw.CoverageAction, ID: observed.Action})
-		}
-	}
-
-	return u.executionTrace.observeExecution(observed)
-}
-
-func (u *Monitor) recordRelationConflict(err error) {
-	var relationErr *umpirefw.RelationError
-	if !errors.As(err, &relationErr) || relationErr.Scope.Type == "" || relationErr.Scope.ID == "" {
-		return
-	}
-	key := fmt.Sprintf("%s:%s:%s:%s", relationErr.Type, relationErr.Source, relationErr.Target, relationErr.Reason)
-	u.rulebook.RecordConformance(relationErr.Scope, key, umpirefw.Violation{
-		Rule:    "Conformance",
-		Message: fmt.Sprintf("relation %s rejected: %s", relationErr.Type, relationErr.Reason),
-		Tags: map[string]string{
-			"relation": string(relationErr.Type),
-			"source":   relationErr.Source.String(),
-			"target":   relationErr.Target.String(),
-		},
-	})
-}
-
-func (u *Monitor) recordCoverage(facts []umpirefw.Fact) {
-	u.coverageMu.RLock()
-	coverage := u.coverage
-	u.coverageMu.RUnlock()
-	if coverage == nil {
-		return
-	}
-	roots := map[umpirefw.EntityID]struct{}{}
-	for _, observed := range facts {
-		coverage.Record(umpirefw.CoveragePoint{Kind: umpirefw.CoverageFact, ID: observed.Name()})
-		if path := observed.TargetEntity(); path != nil {
-			roots[path.Root()] = struct{}{}
-		}
-	}
-	for _, edge := range u.relations.Snapshot() {
-		coverage.Record(umpirefw.CoveragePoint{Kind: umpirefw.CoverageRelation, ID: string(edge.Type)})
-	}
-	for root := range roots {
-		for _, entry := range u.registry.QueryAll(0, &root) {
-			lifecycled, ok := entry.Entity.(umpirefw.Lifecycled)
-			if !ok {
-				continue
-			}
-			for _, edge := range lifecycled.Lifecycle().VisitedEdges() {
-				coverage.Record(umpirefw.CoveragePoint{
-					Kind: umpirefw.CoverageTransition,
-					ID:   protocol.TransitionCoverageID(entry.Entity.Type(), edge),
-				})
-			}
-		}
-	}
+	return u.evidence.observeExecution(observed)
 }
 
 // CheckNamespace runs a final check scoped to a single namespace: only entities
@@ -289,32 +199,13 @@ func (u *Monitor) recordCoverage(facts []umpirefw.Fact) {
 // at teardown, then PurgeNamespace to drop the collected data.
 func (u *Monitor) CheckNamespace(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
-	violations := u.rulebook.Check(ctx, true, &root)
-	u.recordRuleCoverage(violations)
-	return violations
+	return u.evidence.check(ctx, root, true)
 }
 
 // CheckNamespaceSafety applies the global rulebook without promoting pending liveness obligations.
 func (u *Monitor) CheckNamespaceSafety(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
-	violations := u.rulebook.Check(ctx, false, &root)
-	u.recordRuleCoverage(violations)
-	return violations
-}
-
-func (u *Monitor) recordRuleCoverage(violations []umpirefw.Violation) {
-	u.coverageMu.RLock()
-	coverage := u.coverage
-	u.coverageMu.RUnlock()
-	if coverage == nil {
-		return
-	}
-	for _, stats := range u.rulebook.Stats() {
-		coverage.Record(umpirefw.CoveragePoint{Kind: umpirefw.CoverageRuleEvaluated, ID: stats.Name})
-	}
-	for _, violation := range violations {
-		coverage.Record(umpirefw.CoveragePoint{Kind: umpirefw.CoverageRuleViolated, ID: violation.Rule})
-	}
+	return u.evidence.check(ctx, root, false)
 }
 
 // PurgeNamespace removes all entities, facts, and rule state collected for the
@@ -322,11 +213,7 @@ func (u *Monitor) recordRuleCoverage(violations []umpirefw.Violation) {
 func (u *Monitor) PurgeNamespace(namespaceID string) {
 	root := u.namespaceRoot(namespaceID)
 	u.decoder.PurgeNamespace(namespaceID)
-	u.registry.PurgeScope(root)
-	u.factLog.PurgeScope(root)
-	u.rulebook.PurgeScope(root)
-	u.relations.PurgeScope(root)
-	u.executionTrace.purgeScope(namespaceID)
+	u.evidence.purgeScope(root)
 }
 
 func (u *Monitor) namespaceRoot(namespaceID string) umpirefw.EntityID {
@@ -335,39 +222,37 @@ func (u *Monitor) namespaceRoot(namespaceID string) umpirefw.EntityID {
 
 // FactLog returns the event log for querying events in tests.
 func (u *Monitor) FactLog() *umpirefw.FactLog {
-	return u.factLog
+	return u.evidence.factLog
 }
 
 // ModelState returns the entity registry for querying entities in tests.
 func (u *Monitor) ModelState() *umpirefw.ModelState {
-	return u.registry
+	return u.evidence.registry
 }
 
 // Relations returns the protocol's runtime relation state.
 func (u *Monitor) Relations() *umpirefw.RelationStore {
-	return u.relations
+	return u.evidence.relations
 }
 
 // SetCoverage installs an optional semantic coverage collector.
 func (u *Monitor) SetCoverage(coverage *umpirefw.Coverage) {
-	u.coverageMu.Lock()
-	u.coverage = coverage
-	u.coverageMu.Unlock()
+	u.evidence.setCoverage(coverage)
 }
 
 // SetTraceRecorder installs an optional normalized trace recorder.
 func (u *Monitor) SetTraceRecorder(recorder *umpirefw.TraceRecorder) {
-	u.executionTrace.setRecorder(recorder)
+	u.evidence.trace.setRecorder(recorder)
 }
 
 // RuleStats returns per-rule evaluation statistics.
 func (u *Monitor) RuleStats() []umpirefw.RuleStats {
-	return u.rulebook.Stats()
+	return u.evidence.rulebook.Stats()
 }
 
 // PassedKeys returns entity keys that the named rule evaluated and found healthy.
 func (u *Monitor) PassedKeys(ruleName string) []string {
-	return u.rulebook.PassedKeys(ruleName)
+	return u.evidence.rulebook.PassedKeys(ruleName)
 }
 
 // RequireRulePassed asserts that the given rule evaluated the entity identified
@@ -376,7 +261,7 @@ func (u *Monitor) PassedKeys(ruleName string) []string {
 func (u *Monitor) RequireRulePassed(t testing.TB, rule interface{ Name() string }, entityKey string) {
 	t.Helper()
 	name := rule.Name()
-	passed := u.rulebook.PassedKeys(name)
+	passed := u.evidence.rulebook.PassedKeys(name)
 	if !slices.Contains(passed, entityKey) {
 		t.Errorf("rule %s did not pass entity %q; passed keys: %v", name, entityKey, passed)
 	}
