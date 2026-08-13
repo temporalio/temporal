@@ -13,13 +13,28 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type httpClientTransport struct {
-	rt      http.RoundTripper
-	isDebug bool
+const maxHTTPDebugPayloadSize = 2 * 1024 * 1024
+
+type debugHTTPClientTransport struct {
+	rt http.RoundTripper
 }
 
 type debugHTTPHandler struct {
 	handler http.Handler
+}
+
+type payloadCapture struct {
+	payload  bytes.Buffer
+	overflow bool
+}
+
+type payloadCapturingReadCloser struct {
+	io.ReadCloser
+	capture       payloadCapture
+	contentLength int64
+	readSize      int64
+	finished      bool
+	onFinish      func(string)
 }
 
 // NewHTTPClientTransport wraps an HTTP RoundTripper with otelhttp so outbound requests
@@ -35,11 +50,14 @@ func NewHTTPClientTransport(
 	if propagator == nil {
 		propagator = propagation.TraceContext{}
 	}
+	if DebugMode() {
+		if rt == nil {
+			rt = http.DefaultTransport
+		}
+		rt = &debugHTTPClientTransport{rt: rt}
+	}
 	return otelhttp.NewTransport(
-		&httpClientTransport{
-			rt:      rt,
-			isDebug: DebugMode(),
-		},
+		rt,
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
 	)
@@ -70,41 +88,33 @@ func NewHTTPHandler(
 	)
 }
 
-func (t *httpClientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	span := trace.SpanFromContext(req.Context())
-	if t.isDebug {
-		annotateHTTPHeaders(span, "http.request.headers.", req.Header)
-		if payload, ok := captureBody(&req.Body, &req.GetBody); ok {
-			span.SetAttributes(attribute.String("http.request.payload", string(payload)))
-		}
-	}
+	annotateHTTPHeaders(span, "http.request.headers.", req.Header)
+	req.Body = newPayloadCapturingReadCloser(req.Body, req.ContentLength, func(payload string) {
+		span.SetAttributes(attribute.String("http.request.payload", payload))
+	})
 
-	rt := t.rt
-	if rt == nil {
-		rt = http.DefaultTransport
-	}
-	resp, err := rt.RoundTrip(req)
+	resp, err := t.rt.RoundTrip(req)
 	if resp == nil {
 		return resp, err
 	}
 
-	if t.isDebug {
-		annotateHTTPHeaders(span, "http.response.headers.", resp.Header)
-		if payload, ok := captureBody(&resp.Body, nil); ok {
-			span.SetAttributes(attribute.String("http.response.payload", string(payload)))
-		}
-	}
+	annotateHTTPHeaders(span, "http.response.headers.", resp.Header)
+	resp.Body = newPayloadCapturingReadCloser(resp.Body, resp.ContentLength, func(payload string) {
+		span.SetAttributes(attribute.String("http.response.payload", payload))
+	})
 	return resp, err
 }
 
 func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	span := trace.SpanFromContext(r.Context())
 	annotateHTTPHeaders(span, "http.request.headers.", r.Header)
-	if payload, ok := captureBody(&r.Body, &r.GetBody); ok {
-		span.SetAttributes(attribute.String("http.request.payload", string(payload)))
-	}
+	r.Body = newPayloadCapturingReadCloser(r.Body, r.ContentLength, func(payload string) {
+		span.SetAttributes(attribute.String("http.request.payload", payload))
+	})
 
-	var responseBody bytes.Buffer
+	var responseBody payloadCapture
 	w = httpsnoop.Wrap(w, httpsnoop.Hooks{
 		Write: func(next httpsnoop.WriteFunc) httpsnoop.WriteFunc {
 			return func(p []byte) (int, error) {
@@ -120,8 +130,8 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handler.ServeHTTP(w, r)
 
 	annotateHTTPHeaders(span, "http.response.headers.", w.Header())
-	if responseBody.Len() > 0 {
-		span.SetAttributes(attribute.String("http.response.payload", responseBody.String()))
+	if payload, ok := responseBody.Value(); ok {
+		span.SetAttributes(attribute.String("http.response.payload", payload))
 	}
 }
 
@@ -131,21 +141,51 @@ func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
 	}
 }
 
-func captureBody(
-	body *io.ReadCloser,
-	getBody *func() (io.ReadCloser, error),
-) ([]byte, bool) {
-	if body == nil || *body == nil || *body == http.NoBody {
-		return nil, false
+func newPayloadCapturingReadCloser(body io.ReadCloser, contentLength int64, onFinish func(string)) io.ReadCloser {
+	if body == nil || body == http.NoBody {
+		return body
 	}
+	return &payloadCapturingReadCloser{
+		ReadCloser:    body,
+		contentLength: contentLength,
+		onFinish:      onFinish,
+	}
+}
 
-	payload, err := io.ReadAll(*body)
-	_ = (*body).Close()
-	*body = io.NopCloser(bytes.NewReader(payload))
-	if getBody != nil {
-		*getBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(payload)), nil
-		}
+func (r *payloadCapturingReadCloser) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if n > 0 {
+		r.capture.Write(p[:n])
+		r.readSize += int64(n)
 	}
-	return payload, err == nil
+	if err == io.EOF || r.contentLength > 0 && r.readSize == r.contentLength {
+		r.finish()
+	}
+	return n, err
+}
+
+func (r *payloadCapturingReadCloser) finish() {
+	if r.finished {
+		return
+	}
+	r.finished = true
+	if payload, ok := r.capture.Value(); ok {
+		r.onFinish(payload)
+	}
+}
+
+func (c *payloadCapture) Write(p []byte) {
+	if c.overflow {
+		return
+	}
+	if c.payload.Len()+len(p) > maxHTTPDebugPayloadSize {
+		c.payload.Reset()
+		c.overflow = true
+		return
+	}
+	_, _ = c.payload.Write(p)
+}
+
+func (c *payloadCapture) Value() (string, bool) {
+	return c.payload.String(), !c.overflow && c.payload.Len() > 0
 }
