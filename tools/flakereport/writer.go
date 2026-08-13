@@ -38,7 +38,7 @@ func writeFailuresJSON(outputDir string, failures []TestFailure, repo string) er
 }
 
 // generateGitHubSummary creates markdown summary for GitHub Actions
-func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks, maxFlakyTests int) string {
+func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) string {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 
 	var content string
@@ -88,9 +88,9 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks, maxFl
 	if len(summary.FlakyTests) > 0 {
 		content += "### Flaky Tests\n\n"
 		flakyTests := summary.FlakyTests
-		if len(flakyTests) > maxFlakyTests {
-			flakyTests = flakyTests[:maxFlakyTests]
-			content += fmt.Sprintf("Showing the top %d of %d flaky tests. See the full report artifact for the complete list.\n\n",
+		if len(flakyTests) > githubSummaryMaxFlakyTests {
+			flakyTests = flakyTests[:githubSummaryMaxFlakyTests]
+			content += fmt.Sprintf("Showing the top %d of %d flaky tests.\n\n",
 				len(flakyTests), len(summary.FlakyTests))
 		}
 		content += generateTestReportTable(flakyTests, "Flake Rate", maxLinks) + "\n"
@@ -206,12 +206,12 @@ func pct(num, denom int) float64 {
 	return float64(num) / float64(denom) * 100.0
 }
 
-// writeGitHubSummary writes actionsContent to GITHUB_STEP_SUMMARY (if set)
-// and always writes fullContent to outputDir/github-report.md.
-func writeGitHubSummary(fullContent, actionsContent, outputDir string) error {
+// writeGitHubSummary writes content to GITHUB_STEP_SUMMARY (if set)
+// and always writes it to outputDir/github-report.md.
+func writeGitHubSummary(content, outputDir string) error {
 	// Always write to output dir
 	outPath := filepath.Join(outputDir, "github-report.md")
-	if err := os.WriteFile(outPath, []byte(fullContent), 0644); err != nil {
+	if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write github-report.md: %w", err)
 	}
 	fmt.Printf("GitHub report written to %s\n", outPath)
@@ -232,7 +232,7 @@ func writeGitHubSummary(fullContent, actionsContent, outputDir string) error {
 		}
 	}()
 
-	if _, err := file.WriteString(actionsContent); err != nil {
+	if _, err := file.WriteString(content); err != nil {
 		return fmt.Errorf("failed to write summary: %w", err)
 	}
 

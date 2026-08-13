@@ -52,7 +52,7 @@ func TestGenerateSuiteBreakdownTable(t *testing.T) {
 }
 
 func TestGenerateGitHubSummaryLimitsFlakyTests(t *testing.T) {
-	flakyTests := make([]TestReport, 3)
+	flakyTests := make([]TestReport, githubSummaryMaxFlakyTests+1)
 	for i := range flakyTests {
 		flakyTests[i].TestName = "TestFlake" + strconv.Itoa(i+1)
 	}
@@ -61,28 +61,27 @@ func TestGenerateGitHubSummaryLimitsFlakyTests(t *testing.T) {
 		TotalFlakyCount: len(flakyTests),
 	}
 
-	actionsSummary := generateGitHubSummary(summary, "", 0, 2)
-	fullReport := generateGitHubSummary(summary, "", 0, len(flakyTests))
+	summaryContent := generateGitHubSummary(summary, "", 0)
 
-	require.Contains(t, actionsSummary, "| Flaky Tests | 3 |")
-	require.Contains(t, actionsSummary, "`TestFlake1`")
-	require.Contains(t, actionsSummary, "`TestFlake2`")
-	require.NotContains(t, actionsSummary, "`TestFlake3`")
-	require.Contains(t, actionsSummary, "Showing the top 2 of 3 flaky tests")
-	require.Equal(t, 3, strings.Count(fullReport, "| `TestFlake"))
-	require.NotContains(t, fullReport, "Showing the top")
+	require.Contains(t, summaryContent, "| Flaky Tests | 101 |")
+	require.Contains(t, summaryContent, "`TestFlake1`")
+	require.Contains(t, summaryContent, "`TestFlake100`")
+	require.NotContains(t, summaryContent, "`TestFlake101`")
+	require.Contains(t, summaryContent, "Showing the top 100 of 101 flaky tests")
+	require.NotContains(t, summaryContent, "complete list")
+	require.Equal(t, githubSummaryMaxFlakyTests, strings.Count(summaryContent, "| `TestFlake"))
 }
 
-func TestWriteGitHubSummaryPreservesFullArtifact(t *testing.T) {
+func TestWriteGitHubSummaryWritesSameContentToArtifactAndActionsSummary(t *testing.T) {
 	outputDir := t.TempDir()
 	actionsSummaryPath := filepath.Join(t.TempDir(), "summary.md")
 	t.Setenv("GITHUB_STEP_SUMMARY", actionsSummaryPath)
 
-	require.NoError(t, writeGitHubSummary("full report", "limited summary", outputDir))
+	require.NoError(t, writeGitHubSummary("limited summary", outputDir))
 
 	artifact, err := os.ReadFile(filepath.Join(outputDir, "github-report.md"))
 	require.NoError(t, err)
-	require.Equal(t, "full report", string(artifact))
+	require.Equal(t, "limited summary", string(artifact))
 	actionsSummary, err := os.ReadFile(actionsSummaryPath)
 	require.NoError(t, err)
 	require.Equal(t, "limited summary", string(actionsSummary))
