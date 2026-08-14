@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/wideevents"
 )
 
 type ExecutableDeleteExecutionTask struct {
@@ -81,6 +82,12 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 		return nil
 	}
 	e.MarkExecutionStart()
+
+	if e.Config.EmitReplicationLifecycleEvents() {
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(),
+			definition.NewWorkflowKey(e.NamespaceID, e.BusinessID, e.RunID),
+			wideevents.ReplTaskDeleteExecution, int32(e.Attempt()), e.SourceClusterName(), e.SourceShardKey().ShardID)
+	}
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(

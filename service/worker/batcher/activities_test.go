@@ -1387,3 +1387,15 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	s.Require().Error(err)
 	s.Contains(err.Error(), "unknown admin batch type")
 }
+
+// TestDeterministicRequestID_ScopedToJob ensures idempotency within a batch job.
+func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
+	const (
+		jobA = "job-a"
+		jobB = "job-b"
+	)
+	parts := []string{"signal", "workflow-id", "run-id", "signal-name"}
+
+	s.NotEqual(deterministicRequestID(jobA, parts...), deterministicRequestID(jobB, parts...))
+	s.NotEqual(deterministicRequestID(jobA, "signal", "workflow-id", "run-id", "other-signal"), deterministicRequestID(jobA, parts...))
+}
