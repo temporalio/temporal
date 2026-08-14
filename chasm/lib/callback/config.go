@@ -76,15 +76,11 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 type Config struct {
 	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
 	RetryPolicy    func() backoff.RetryPolicy
-	// PayloadSizeLimit caps the input a Worker callback delivers, mirroring the limit the frontend
-	// enforces on the Nexus tasks it dispatches.
-	PayloadSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		RequestTimeout:   RequestTimeout.Get(dc),
-		PayloadSizeLimit: dynamicconfig.BlobSizeLimitError.Get(dc),
+		RequestTimeout: RequestTimeout.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
