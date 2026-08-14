@@ -430,6 +430,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	s.Equal(reader.options.BatchSize(), taskSubmitted)
 	s.True(scopes[0].Equals(reader.nextReadSlice.Value.(Slice).Scope()))
 	s.False(completionFnCalled)
+	s.Equal(1, s.monitor.readerStats[DefaultReaderId].progress.attempts)
 }
 
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
@@ -464,6 +465,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 	s.Equal(1, taskSubmitted)
 	s.True(scopes[1].Equals(reader.nextReadSlice.Value.(Slice).Scope()))
 	s.False(completionFnCalled)
+	s.Equal(0, s.monitor.readerStats[DefaultReaderId].progress.attempts)
 }
 
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {

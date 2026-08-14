@@ -212,15 +212,14 @@ func (s *monitorSuite) TestReaderWatermarkStats_AdvancingWatermarkResetsAttempts
 	s.False(s.receivedStuckAlert(), "attempts from earlier windows must not carry into the current one")
 }
 
-func (s *monitorSuite) TestReaderWatermarkStats_ReadsInOneWindowShareTheirCount() {
-	criticalAttempts := s.monitor.options.ReaderStuckCriticalAttempts()
-	for i := 0; i != criticalAttempts; i++ {
-		// Distinct fire times inside one window have to accumulate together.
-		fireTime := monitorTestFireTime.Add(time.Duration(i) * 100 * time.Millisecond)
-		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(fireTime, 1), true)
+func (s *monitorSuite) TestReaderWatermarkStats_ZeroThresholdDisablesTheAlert() {
+	s.monitor.options.ReaderStuckCriticalAttempts = dynamicconfig.GetIntPropertyFn(0)
+
+	for i := 0; i != 10; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
 	}
 
-	s.True(s.receivedStuckAlert(), "reads inside one window must count toward the same total")
+	s.False(s.receivedStuckAlert(), "a threshold of zero must disable the alert")
 }
 
 func (s *monitorSuite) TestReaderWatermarkStats_ShadowModeReportsWithoutAlerting() {
@@ -253,6 +252,28 @@ func (s *monitorSuite) TestReaderWatermarkStats_ShadowModeReportsWithoutAlerting
 	s.mockTimeSource.Update(start.Add(defaultAlertSilenceDuration + time.Second))
 	monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
 	s.Len(capture.Snapshot()["queue_alert_shadow"], 2, "a reader still stuck must report again once the silence expires")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_ShadowModeStopsReportingAfterClose() {
+	options := *s.monitor.options
+	options.ReaderStuckShadowMode = dynamicconfig.GetBoolPropertyFn(true)
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	monitor := newMonitor(tasks.CategoryTypeScheduled, s.mockTimeSource, log.NewTestLogger(), metricsHandler, &options)
+	start := s.mockTimeSource.Now()
+	for i := 0; i != options.ReaderStuckCriticalAttempts(); i++ {
+		monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+	}
+	s.Len(capture.Snapshot()["queue_alert_shadow"], 1)
+
+	monitor.Close()
+	s.mockTimeSource.Update(start.Add(defaultAlertSilenceDuration + time.Second))
+	monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+
+	s.Len(capture.Snapshot()["queue_alert_shadow"], 1, "a closed monitor must not keep reporting")
 }
 
 func (s *monitorSuite) TestSliceCount() {
