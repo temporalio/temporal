@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -19,6 +20,10 @@ const (
 )
 
 type debugHTTPClientTransport struct {
+	rt http.RoundTripper
+}
+
+type debugHTTPRequestTransport struct {
 	rt http.RoundTripper
 }
 
@@ -40,6 +45,27 @@ type payloadCapturingReadCloser struct {
 	onFinish      func(string)
 }
 
+type payloadCapturingReadWriteCloser struct {
+	*payloadCapturingReadCloser
+	writer io.Writer
+}
+
+type closeFinishingReadCloser struct {
+	io.ReadCloser
+	onClose func()
+}
+
+type closeFinishingReadWriteCloser struct {
+	*closeFinishingReadCloser
+	writer io.Writer
+}
+
+type debugHTTPClientRequestStateKey struct{}
+
+type debugHTTPClientRequestState struct {
+	responseCapture *payloadCapturingReadCloser
+}
+
 // NewHTTPClientTransport wraps an HTTP RoundTripper with otelhttp so outbound requests
 // carry TraceContext headers and produce a client span.
 func NewHTTPClientTransport(
@@ -53,17 +79,22 @@ func NewHTTPClientTransport(
 	if propagator == nil {
 		propagator = propagation.TraceContext{}
 	}
-	if DebugMode() {
+	isDebug := DebugMode()
+	if isDebug {
 		if rt == nil {
 			rt = http.DefaultTransport
 		}
-		rt = &debugHTTPClientTransport{rt: rt}
+		rt = &debugHTTPRequestTransport{rt: rt}
 	}
-	return otelhttp.NewTransport(
+	rt = otelhttp.NewTransport(
 		rt,
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
 	)
+	if isDebug {
+		rt = &debugHTTPClientTransport{rt: rt}
+	}
+	return rt
 }
 
 // NewHTTPHandler wraps an HTTP handler with otelhttp so inbound requests extract
@@ -92,6 +123,17 @@ func NewHTTPHandler(
 }
 
 func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	state := &debugHTTPClientRequestState{}
+	req = req.WithContext(context.WithValue(req.Context(), debugHTTPClientRequestStateKey{}, state))
+	resp, err := t.rt.RoundTrip(req)
+	if resp == nil || state.responseCapture == nil {
+		return resp, err
+	}
+	resp.Body = newCloseFinishingReadCloser(resp.Body, state.responseCapture.finish)
+	return resp, err
+}
+
+func (t *debugHTTPRequestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	span := trace.SpanFromContext(req.Context())
 	annotateHTTPHeaders(span, "http.request.headers.", req.Header)
 	req.Body = newPayloadCapturingReadCloser(req.Body, req.ContentLength, func(payload string) {
@@ -104,9 +146,13 @@ func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response,
 	}
 
 	annotateHTTPHeaders(span, "http.response.headers.", resp.Header)
-	resp.Body = newPayloadCapturingReadCloser(resp.Body, resp.ContentLength, func(payload string) {
+	var responseCapture *payloadCapturingReadCloser
+	resp.Body, responseCapture = newPayloadCapturingReadCloserWithCapture(resp.Body, resp.ContentLength, func(payload string) {
 		span.SetAttributes(attribute.String("http.response.payload", payload))
 	})
+	if state, ok := req.Context().Value(debugHTTPClientRequestStateKey{}).(*debugHTTPClientRequestState); ok {
+		state.responseCapture = responseCapture
+	}
 	return resp, err
 }
 
@@ -154,7 +200,12 @@ func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
 
 func isSensitiveHTTPHeader(key string) bool {
 	switch http.CanonicalHeaderKey(key) {
-	case "Authorization", "Cookie", "Set-Cookie", "Proxy-Authorization":
+	case "Authorization",
+		"Cookie",
+		"Nexus-Callback-Temporal-Callback-Token",
+		"Proxy-Authorization",
+		"Set-Cookie",
+		"Temporal-Callback-Token":
 		return true
 	default:
 		return false
@@ -162,20 +213,50 @@ func isSensitiveHTTPHeader(key string) bool {
 }
 
 func newPayloadCapturingReadCloser(body io.ReadCloser, contentLength int64, onFinish func(string)) io.ReadCloser {
+	wrappedBody, _ := newPayloadCapturingReadCloserWithCapture(body, contentLength, onFinish)
+	return wrappedBody
+}
+
+func newPayloadCapturingReadCloserWithCapture(
+	body io.ReadCloser,
+	contentLength int64,
+	onFinish func(string),
+) (io.ReadCloser, *payloadCapturingReadCloser) {
 	if body == nil || body == http.NoBody {
-		return body
+		return body, nil
 	}
-	return &payloadCapturingReadCloser{
+	capturingBody := &payloadCapturingReadCloser{
 		ReadCloser:    body,
 		contentLength: contentLength,
 		onFinish:      onFinish,
 	}
+	if writer, ok := body.(io.Writer); ok {
+		return &payloadCapturingReadWriteCloser{
+			payloadCapturingReadCloser: capturingBody,
+			writer:                     writer,
+		}, capturingBody
+	}
+	return capturingBody, capturingBody
+}
+
+func newCloseFinishingReadCloser(body io.ReadCloser, onClose func()) io.ReadCloser {
+	finishingBody := &closeFinishingReadCloser{
+		ReadCloser: body,
+		onClose:    onClose,
+	}
+	if writer, ok := body.(io.Writer); ok {
+		return &closeFinishingReadWriteCloser{
+			closeFinishingReadCloser: finishingBody,
+			writer:                   writer,
+		}
+	}
+	return finishingBody
 }
 
 func (r *payloadCapturingReadCloser) Read(p []byte) (int, error) {
 	n, err := r.ReadCloser.Read(p)
 	if n > 0 {
-		r.capture.Write(p[:n])
+		_, _ = r.capture.Write(p[:n])
 		r.readSize += int64(n)
 	}
 	if err == io.EOF || r.contentLength > 0 && r.readSize == r.contentLength {
@@ -185,9 +266,21 @@ func (r *payloadCapturingReadCloser) Read(p []byte) (int, error) {
 }
 
 func (r *payloadCapturingReadCloser) Close() error {
-	err := r.ReadCloser.Close()
 	r.finish()
-	return err
+	return r.ReadCloser.Close()
+}
+
+func (r *payloadCapturingReadWriteCloser) Write(p []byte) (int, error) {
+	return r.writer.Write(p)
+}
+
+func (r *closeFinishingReadCloser) Close() error {
+	r.onClose()
+	return r.ReadCloser.Close()
+}
+
+func (r *closeFinishingReadWriteCloser) Write(p []byte) (int, error) {
+	return r.writer.Write(p)
 }
 
 func (r *payloadCapturingReadCloser) finish() {
