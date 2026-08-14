@@ -142,10 +142,12 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 		return tv.Any().String(), nil
 	})
 	service.MustRegister(operation)
+
 	nexusWorker := worker.New(env.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
 	nexusWorker.RegisterNexusService(service)
 	s.NoError(nexusWorker.Start())
 	s.T().Cleanup(nexusWorker.Stop)
+
 	s.Await(func(s *NexusOTELSuite) {
 		response, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
@@ -155,8 +157,8 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 		s.NoError(err)
 		s.NotEmpty(response.GetPollers())
 	}, 10*time.Second, 100*time.Millisecond)
-	endpoint := env.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), tv.TaskQueue().GetName())
 
+	endpoint := env.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), tv.TaskQueue().GetName())
 	_, err := env.FrontendClient().StartNexusOperationExecution(s.Context(), &workflowservice.StartNexusOperationExecutionRequest{
 		Namespace:              env.Namespace().String(),
 		OperationId:            tv.Any().String(),
