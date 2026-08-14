@@ -91,14 +91,20 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(bytes.NewBufferString("response body")),
-				Header:     http.Header{"Response-Header": []string{"response-value"}},
-				Request:    r,
+				Header: http.Header{
+					"Response-Header": []string{"response-value"},
+					"Set-Cookie":      []string{"session=secret", "csrf=secret"},
+				},
+				Request: r,
 			}, nil
 		})
 
 		wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
 		req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
 		req.Header.Set("Request-Header", "request-value")
+		req.Header.Set("Authorization", "Bearer secret")
+		req.Header.Set("Cookie", "session=secret")
+		req.Header.Set("Proxy-Authorization", "Basic secret")
 
 		resp, err := wrapped.RoundTrip(req)
 		require.NoError(t, err)
@@ -112,6 +118,10 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		require.Equal(t, "response body", attrs["http.response.payload"].Value.AsString())
 		require.Equal(t, []string{"request-value"}, attrs["http.request.headers.request-header"].Value.AsStringSlice())
 		require.Equal(t, []string{"response-value"}, attrs["http.response.headers.response-header"].Value.AsStringSlice())
+		require.Equal(t, []string{"<redacted>"}, attrs["http.request.headers.authorization"].Value.AsStringSlice())
+		require.Equal(t, []string{"<redacted>"}, attrs["http.request.headers.cookie"].Value.AsStringSlice())
+		require.Equal(t, []string{"<redacted>"}, attrs["http.request.headers.proxy-authorization"].Value.AsStringSlice())
+		require.Equal(t, []string{"<redacted>"}, attrs["http.response.headers.set-cookie"].Value.AsStringSlice())
 	})
 
 	t.Run("DoesNotReadResponseBodyBeforeCallerInDebugMode", func(t *testing.T) {

@@ -13,7 +13,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const maxHTTPDebugPayloadSize = 2 * 1024 * 1024
+const (
+	maxHTTPDebugPayloadSize = 2 * 1024 * 1024
+	redactedHTTPHeaderValue = "<redacted>"
+)
 
 type debugHTTPClientTransport struct {
 	rt http.RoundTripper
@@ -142,7 +145,19 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
 	for key, values := range headers {
+		if isSensitiveHTTPHeader(key) {
+			values = []string{redactedHTTPHeaderValue}
+		}
 		span.SetAttributes(attribute.StringSlice(prefix+strings.ToLower(key), values))
+	}
+}
+
+func isSensitiveHTTPHeader(key string) bool {
+	switch http.CanonicalHeaderKey(key) {
+	case "Authorization", "Cookie", "Set-Cookie", "Proxy-Authorization":
+		return true
+	default:
+		return false
 	}
 }
 
