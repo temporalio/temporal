@@ -94,10 +94,10 @@ func getArchetypeMetricTag(
 	case chasm.UnspecifiedArchetypeID:
 		return metrics.ArchetypeTag(""), true
 	case chasm.WorkflowArchetypeID:
-		return metrics.ArchetypeTag(chasm.WorkflowComponentName), true
+		return metrics.ArchetypeTag(chasm.WorkflowArchetype), true
 	}
 
-	if name, ok := chasmRegistry.ArchetypeDisplayName(archetypeID); ok {
+	if name, ok := chasmRegistry.ArchetypeFqnByID(archetypeID); ok {
 		return metrics.ArchetypeTag(name), true
 	}
 	return metrics.ArchetypeTag(strconv.FormatUint(uint64(archetypeID), 10)), true

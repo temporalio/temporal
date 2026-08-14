@@ -915,11 +915,11 @@ func taskBaseMetricTagsWithoutArchetype(
 
 func getArchetypeTag(task tasks.Task, chasmRegistry *chasm.Registry) metrics.Tag {
 	if t, ok := task.(tasks.HasArchetypeID); ok {
-		if name, ok := chasmRegistry.ArchetypeDisplayName(t.GetArchetypeID()); ok {
+		if name, ok := chasmRegistry.ArchetypeFqnByID(t.GetArchetypeID()); ok {
 			return metrics.ArchetypeTag(name)
 		}
 	}
-	return metrics.ArchetypeTag(chasm.WorkflowComponentName)
+	return metrics.ArchetypeTag(chasm.WorkflowArchetype)
 }
 
 // CircuitBreakerExecutable wraps Executable with a circuit breaker.
