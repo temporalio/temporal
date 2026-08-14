@@ -248,7 +248,14 @@ func (s *streamReceiverSuite) TestMemberLane_NonRetireTrafficRevivesRetiringLane
 	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", false)
 	s.NoError(err)
 	tracker.TrackTasks(WatermarkInfo{Watermark: 100, Timestamp: time.Now()})
-	s.streamReceiver.retireMemberLane("ns-a")
+	s.streamReceiver.finishLaneBatch("ns-a", false)
+
+	// A retire marker arrives: the lane is now retiring.
+	markerTracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", true)
+	s.NoError(err)
+	s.Same(tracker, markerTracker)
+	markerTracker.TrackTasks(WatermarkInfo{Watermark: 200, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("ns-a", true)
 
 	// The namespace is re-isolated before the lane drains: new traffic clears the
 	// stale retiring flag so a transient drain can't delete the active lane.
@@ -256,24 +263,51 @@ func (s *streamReceiverSuite) TestMemberLane_NonRetireTrafficRevivesRetiringLane
 	s.NoError(err)
 	s.Same(tracker, trackerAgain)
 	wms := s.streamReceiver.memberLaneWatermarks()
-	s.Equal(int64(100), wms["ns-a"].Watermark)
+	s.Equal(int64(200), wms["ns-a"].Watermark)
 	s.Contains(s.streamReceiver.memberLanes, "ns-a")
+	s.streamReceiver.finishLaneBatch("ns-a", false)
 }
 
-func (s *streamReceiverSuite) TestMemberLane_RetiringNeverTrackedLaneNotDeleted() {
-	// A lane can be created and marked retiring before its retire batch reaches
-	// TrackTasks (the batch is tracked after the flag in processMessages, but the
-	// ack loop runs concurrently). With no watermark yet it must survive the
-	// snapshot; once the (watermark-only) retire batch is tracked and the lane is
-	// drained, it is dropped.
+func (s *streamReceiverSuite) TestMemberLane_RetireBatchMidTrackSurvivesAckSnapshot() {
+	// A lane whose retire batch has been resolved but not yet tracked must survive
+	// the ack loop's snapshot; once the (watermark-only) retire batch is tracked
+	// and finished, the drained lane is dropped.
 	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", true)
 	s.NoError(err)
-	s.streamReceiver.retireMemberLane("ns-a")
 
 	s.streamReceiver.memberLaneWatermarks()
 	s.Contains(s.streamReceiver.memberLanes, "ns-a")
 
 	tracker.TrackTasks(WatermarkInfo{Watermark: 50, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("ns-a", true)
+	s.streamReceiver.memberLaneWatermarks()
+	s.NotContains(s.streamReceiver.memberLanes, "ns-a")
+}
+
+func (s *streamReceiverSuite) TestMemberLane_RetireBatchOnRetiringLaneNotOrphaned() {
+	// A lane that already retired and drained can receive a second retire-tagged
+	// batch (e.g. a duplicate retirement marker after the namespace re-isolated and
+	// merged back before its lane was dropped). The ack loop must not delete the
+	// lane between the batch's lane resolution and its TrackTasks call, or the
+	// batch would be tracked on an orphaned lane and never re-enter the ack fold.
+	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", true)
+	s.NoError(err)
+	tracker.TrackTasks(WatermarkInfo{Watermark: 100, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("ns-a", true)
+
+	// The lane is now retiring and drained. A second retire batch resolves to it...
+	trackerAgain, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", true)
+	s.NoError(err)
+	s.Same(tracker, trackerAgain)
+
+	// ...and the concurrent ack snapshot must find it undeletable mid-track.
+	wms := s.streamReceiver.memberLaneWatermarks()
+	s.Contains(s.streamReceiver.memberLanes, "ns-a")
+	s.Equal(int64(100), wms["ns-a"].Watermark)
+
+	// Once the batch is tracked and finished, the drained lane is dropped as before.
+	trackerAgain.TrackTasks(WatermarkInfo{Watermark: 200, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("ns-a", true)
 	s.streamReceiver.memberLaneWatermarks()
 	s.NotContains(s.streamReceiver.memberLanes, "ns-a")
 }
@@ -297,14 +331,20 @@ func (s *streamReceiverSuite) TestMemberLane_RetiredLaneDroppedOnceDrained() {
 	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", false)
 	s.NoError(err)
 	tracker.TrackTasks(WatermarkInfo{Watermark: 100, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("ns-a", false)
 
 	// Active lane reports its watermark.
 	wms := s.streamReceiver.memberLaneWatermarks()
 	s.Equal(int64(100), wms["ns-a"].Watermark)
 
-	// Retired and drained: dropped on the next snapshot, so it can never pin the
+	// A retire marker arrives and is tracked (watermark-only batch): retired and
+	// drained, the lane is dropped on the next snapshot, so it can never pin the
 	// overall ack minimum.
-	s.streamReceiver.retireMemberLane("ns-a")
+	markerTracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", true)
+	s.NoError(err)
+	s.Same(tracker, markerTracker)
+	markerTracker.TrackTasks(WatermarkInfo{Watermark: 200, Timestamp: time.Now()})
+	s.streamReceiver.finishLaneBatch("ns-a", true)
 	wms = s.streamReceiver.memberLaneWatermarks()
 	s.NotContains(wms, "ns-a")
 

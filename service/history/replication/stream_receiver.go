@@ -76,6 +76,10 @@ type (
 		// retiring is set when the sender marks the lane retired; the lane is
 		// dropped once its tracker drains.
 		retiring bool
+		// tracking counts batches resolved to this lane whose TrackTasks call has
+		// not finished yet; the ack loop must not drop the lane while one is in
+		// flight.
+		tracking int
 	}
 )
 
@@ -443,12 +447,12 @@ func (r *StreamReceiverImpl) processMessages(
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, convertedTasks...)
-		// Retire strictly AFTER TrackTasks: marking first would let the concurrent
-		// ack loop observe "retiring + empty tracker" mid-batch and delete the lane
-		// while its final batch is about to be tracked in the orphaned tracker —
-		// dropping those tasks from the ack fold.
-		if messages.GetRetireIsolatedLane() && messages.GetIsolatedNamespaceId() != "" {
-			r.retireMemberLane(messages.GetIsolatedNamespaceId())
+		if isolatedNamespaceID := messages.GetIsolatedNamespaceId(); isolatedNamespaceID != "" {
+			// Finish strictly after TrackTasks: the ack loop may only delete a
+			// retiring lane once no batch sits between lane resolution and tracking,
+			// or the batch would be tracked on an orphaned lane and dropped from the
+			// ack fold.
+			r.finishLaneBatch(isolatedNamespaceID, messages.GetRetireIsolatedLane())
 		}
 		for _, task := range trackedTasks {
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
@@ -511,6 +515,8 @@ func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (Exe
 // getTaskTrackerForLane returns the tracker for a message's lane: an isolated
 // namespace's lane gets its own lazily-created tracker so each lane stays a single
 // monotonic stream; an empty namespace routes by priority (HIGH / default-LOW).
+// Every lane resolution must be paired with finishLaneBatch after the batch's
+// TrackTasks call, so the ack loop never deletes the lane mid-batch.
 func (r *StreamReceiverImpl) getTaskTrackerForLane(priority enumsspb.TaskPriority, isolatedNamespaceID string, retire bool) (ExecutableTaskTracker, error) {
 	if isolatedNamespaceID == "" {
 		return r.getTaskTracker(priority)
@@ -541,17 +547,24 @@ func (r *StreamReceiverImpl) getTaskTrackerForLane(priority enumsspb.TaskPriorit
 		// transient drain, dropping its watermark from the ack fold.
 		lane.retiring = false
 	}
+	lane.tracking++
 	return lane.tracker, nil
 }
 
-// retireMemberLane marks an isolated namespace's lane retired: the sender has merged
-// the namespace back to the shared lane and will send no further traffic on it. The
-// lane keeps reporting until its pending work drains, then is dropped — so a retired
-// lane can never pin the overall ack minimum.
-func (r *StreamReceiverImpl) retireMemberLane(isolatedNamespaceID string) {
+// finishLaneBatch completes a batch that getTaskTrackerForLane resolved to a lane,
+// called after the batch's TrackTasks: it releases the batch's hold on the lane and
+// applies the message's retire flag. A retiring lane is only dropped once it is
+// drained and no batch is mid-track — so a retired lane can never pin the overall
+// ack minimum, and a batch can never be orphaned onto a deleted lane.
+func (r *StreamReceiverImpl) finishLaneBatch(isolatedNamespaceID string, retire bool) {
 	r.memberLaneMu.Lock()
 	defer r.memberLaneMu.Unlock()
-	if lane, ok := r.memberLanes[isolatedNamespaceID]; ok {
+	lane, ok := r.memberLanes[isolatedNamespaceID]
+	if !ok {
+		return
+	}
+	lane.tracking--
+	if retire {
 		lane.retiring = true
 	}
 }
@@ -578,11 +591,11 @@ func (r *StreamReceiverImpl) memberLaneWatermarks() map[string]WatermarkInfo {
 	out := make(map[string]WatermarkInfo, len(r.memberLanes))
 	for ns, lane := range r.memberLanes {
 		wm := lane.tracker.LowWatermark()
-		// Drop only lanes that are retiring, drained, AND have tracked at least one
-		// batch (wm != nil): a retiring lane whose retire batch hasn't reached
-		// TrackTasks yet is momentarily empty with no watermark, and deleting it
-		// then would orphan that batch outside the ack fold.
-		if lane.retiring && lane.tracker.Size() == 0 && wm != nil {
+		// Drop only lanes that are retiring, drained, have tracked at least one
+		// batch (wm != nil), and have no batch between lane resolution and
+		// tracking: deleting a lane mid-batch would orphan that batch outside the
+		// ack fold.
+		if lane.retiring && lane.tracking == 0 && lane.tracker.Size() == 0 && wm != nil {
 			delete(r.memberLanes, ns)
 			continue
 		}
