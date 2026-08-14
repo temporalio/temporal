@@ -162,10 +162,11 @@ func (s *NexusOTELSuite) requireExportedClientSpan(
 	requestHeaders <-chan headerGetter,
 ) headerGetter {
 	var headers headerGetter
+	var headers headerGetter
 	select {
 	case headers = <-requestHeaders:
-	case <-time.After(10 * time.Second):
-		s.FailNow("timed out waiting for Nexus request")
+	case <-s.Context().Done():
+		s.FailNow("timed out waiting for Nexus request", s.Context().Err().Error())
 		return nil
 	}
 
