@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -32,8 +30,7 @@ func httpCallerProviderProvider(
 	rpcFactory common.RPCFactory,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
-	tracerProvider trace.TracerProvider,
-	propagator propagation.TextMapPropagator,
+	httpClientTransportProvider telemetry.HTTPClientTransportProvider,
 ) (HTTPCallerProvider, error) {
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -44,7 +41,7 @@ func httpCallerProviderProvider(
 		return nil, err
 	}
 	defaultClient := &http.Client{
-		Transport: telemetry.NewHTTPClientTransport(defaultTransport, tracerProvider, propagator),
+		Transport: httpClientTransportProvider.Wrap(defaultTransport),
 	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 

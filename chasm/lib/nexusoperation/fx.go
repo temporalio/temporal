@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -125,8 +123,7 @@ func clientProviderFactory(
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
 	rpcFactory common.RPCFactory,
-	tracerProvider trace.TracerProvider,
-	propagator propagation.TextMapPropagator,
+	httpClientTransportProvider telemetry.HTTPClientTransportProvider,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -140,7 +137,7 @@ func clientProviderFactory(
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
 		return &http.Client{
-			Transport: telemetry.NewHTTPClientTransport(responseSizeLimiter{transport}, tracerProvider, propagator),
+			Transport: httpClientTransportProvider.Wrap(responseSizeLimiter{transport}),
 		}, nil
 	})
 

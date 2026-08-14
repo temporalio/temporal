@@ -7,8 +7,6 @@ import (
 	"os"
 	"time"
 
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -438,8 +436,7 @@ func RPCFactoryProvider(
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
 	tokenProvider auth.TokenProvider,
-	tracerProvider trace.TracerProvider,
-	propagator propagation.TextMapPropagator,
+	frontendHTTPTransportProvider telemetry.HTTPClientTransportProvider,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -462,11 +459,11 @@ func RPCFactoryProvider(
 		frontendHTTPURL,
 		frontendHTTPPort,
 		frontendTLSConfig,
+		frontendHTTPTransportProvider,
 		options,
 		perServiceDialOptions,
 		monitor,
 		tokenProvider,
-		rpc.WithOTELTracing(tracerProvider, propagator),
 	)
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive
@@ -478,10 +475,9 @@ func RPCFactoryProvider(
 func FrontendHTTPClientCacheProvider(
 	metadata cluster.Metadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	tracerProvider trace.TracerProvider,
-	propagator propagation.TextMapPropagator,
+	httpClientTransportProvider telemetry.HTTPClientTransportProvider,
 ) *cluster.FrontendHTTPClientCache {
-	return cluster.NewFrontendHTTPClientCacheWithTracing(metadata, tlsConfigProvider, tracerProvider, propagator)
+	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider, httpClientTransportProvider)
 }
 
 func getFrontendConnectionDetails(

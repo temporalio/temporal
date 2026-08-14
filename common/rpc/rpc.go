@@ -13,8 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -41,18 +39,6 @@ var _ common.RPCFactory = (*RPCFactory)(nil)
 // Minimum interval between (traffic-triggered) sweeps of shut-down connections.
 const internodeConnCleanupInterval = 30 * time.Minute
 
-type Option func(*RPCFactory)
-
-// WithOTELTracing instruments local frontend HTTP clients with OpenTelemetry.
-func WithOTELTracing(
-	provider trace.TracerProvider,
-	propagator propagation.TextMapPropagator) Option {
-	return func(r *RPCFactory) {
-		r.otelTracerProvider = provider
-		r.otelPropagator = propagator
-	}
-}
-
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
 	config         *config.Config
@@ -60,10 +46,11 @@ type RPCFactory struct {
 	logger         log.Logger
 	metricsHandler metrics.Handler
 
-	frontendURL       string
-	frontendHTTPURL   string
-	frontendHTTPPort  int
-	frontendTLSConfig *tls.Config
+	frontendURL                   string
+	frontendHTTPURL               string
+	frontendHTTPPort              int
+	frontendTLSConfig             *tls.Config
+	frontendHTTPTransportProvider telemetry.HTTPClientTransportProvider
 
 	grpcListener             func() net.Listener
 	tlsFactory               encryption.TLSConfigProvider
@@ -90,11 +77,6 @@ type RPCFactory struct {
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
 	EnableInternodeClientKeepalive bool
-
-	// otelTracerProvider and otelPropagator are used to instrument the local frontend HTTP
-	// client constructed by CreateLocalFrontendHTTPClient. Set via WithOTELTracing().
-	otelTracerProvider trace.TracerProvider
-	otelPropagator     propagation.TextMapPropagator
 }
 
 // NewFactory builds a new RPCFactory conforming to the underlying configuration.
@@ -108,11 +90,11 @@ func NewFactory(
 	frontendHTTPURL string,
 	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
+	frontendHTTPTransportProvider telemetry.HTTPClientTransportProvider,
 	commonDialOptions []grpc.DialOption,
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
 	tokenProvider auth.TokenProvider,
-	opts ...Option,
 ) *RPCFactory {
 	authHeaderName := "authorization"
 	requireRemoteClusterAuth := false
@@ -121,32 +103,28 @@ func NewFactory(
 		requireRemoteClusterAuth = cfg.Global.Authorization.RemoteClusterAuth.Require
 	}
 	f := &RPCFactory{
-		config:                   cfg,
-		serviceName:              sName,
-		logger:                   logger,
-		metricsHandler:           metricsHandler,
-		frontendURL:              frontendURL,
-		frontendHTTPURL:          frontendHTTPURL,
-		frontendHTTPPort:         frontendHTTPPort,
-		frontendTLSConfig:        frontendTLSConfig,
-		tlsFactory:               tlsProvider,
-		commonDialOptions:        commonDialOptions,
-		perServiceDialOptions:    perServiceDialOptions,
-		tokenProvider:            tokenProvider,
-		authHeaderName:           authHeaderName,
-		requireRemoteClusterAuth: requireRemoteClusterAuth,
-		monitor:                  monitor,
+		config:                        cfg,
+		serviceName:                   sName,
+		logger:                        logger,
+		metricsHandler:                metricsHandler,
+		frontendURL:                   frontendURL,
+		frontendHTTPURL:               frontendHTTPURL,
+		frontendHTTPPort:              frontendHTTPPort,
+		frontendTLSConfig:             frontendTLSConfig,
+		frontendHTTPTransportProvider: frontendHTTPTransportProvider,
+		tlsFactory:                    tlsProvider,
+		commonDialOptions:             commonDialOptions,
+		perServiceDialOptions:         perServiceDialOptions,
+		tokenProvider:                 tokenProvider,
+		authHeaderName:                authHeaderName,
+		requireRemoteClusterAuth:      requireRemoteClusterAuth,
+		monitor:                       monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
 	f.internodeGRPCConnections.conns = make(map[string]*grpc.ClientConn)
 	f.internodeConnCleanupTicker = time.NewTicker(internodeConnCleanupInterval)
 	f.localFrontendGRPCConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
-
-	for _, opt := range opts {
-		opt(f)
-	}
-
 	return f
 }
 
@@ -482,7 +460,7 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		address = d.frontendHTTPURL
 	}
 	client := http.Client{
-		Transport: telemetry.NewHTTPClientTransport(clientTransport, d.otelTracerProvider, d.otelPropagator),
+		Transport: d.frontendHTTPTransportProvider.Wrap(clientTransport),
 	}
 
 	return &common.FrontendHTTPClient{

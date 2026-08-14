@@ -6,8 +6,6 @@ import (
 	"net"
 	"net/http"
 
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
@@ -19,31 +17,21 @@ type tlsConfigProvider interface {
 }
 
 type FrontendHTTPClientCache struct {
-	metadata       Metadata
-	tlsProvider    tlsConfigProvider
-	tracerProvider trace.TracerProvider
-	propagator     propagation.TextMapPropagator
-	clients        *collection.FallibleOnceMap[string, *common.FrontendHTTPClient]
+	metadata                    Metadata
+	tlsProvider                 tlsConfigProvider
+	httpClientTransportProvider telemetry.HTTPClientTransportProvider
+	clients                     *collection.FallibleOnceMap[string, *common.FrontendHTTPClient]
 }
 
 func NewFrontendHTTPClientCache(
 	metadata Metadata,
 	tlsProvider tlsConfigProvider,
-) *FrontendHTTPClientCache {
-	return NewFrontendHTTPClientCacheWithTracing(metadata, tlsProvider, nil, nil)
-}
-
-func NewFrontendHTTPClientCacheWithTracing(
-	metadata Metadata,
-	tlsProvider tlsConfigProvider,
-	tracerProvider trace.TracerProvider,
-	propagator propagation.TextMapPropagator,
+	httpClientTransportProvider telemetry.HTTPClientTransportProvider,
 ) *FrontendHTTPClientCache {
 	cache := &FrontendHTTPClientCache{
-		metadata:       metadata,
-		tlsProvider:    tlsProvider,
-		tracerProvider: tracerProvider,
-		propagator:     propagator,
+		metadata:                    metadata,
+		tlsProvider:                 tlsProvider,
+		httpClientTransportProvider: httpClientTransportProvider,
 	}
 	cache.clients = collection.NewFallibleOnceMap(cache.newClientForCluster)
 	metadata.RegisterMetadataChangeCallback(cache, cache.evictionCallback)
@@ -90,7 +78,7 @@ func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) 
 		Address: targetInfo.HTTPAddress,
 		Scheme:  urlScheme,
 		Client: http.Client{
-			Transport: telemetry.NewHTTPClientTransport(transport, c.tracerProvider, c.propagator),
+			Transport: c.httpClientTransportProvider.Wrap(transport),
 		},
 	}, nil
 }

@@ -354,7 +354,7 @@ func TestRouteSystemCallbackRequest_Success(t *testing.T) {
 
 			localClient := newTestFrontendHTTPClient(ts)
 			// Create a cache that will fail for the requested cluster since we don't set up metadata fully.
-			httpClientCache := cluster.NewFrontendHTTPClientCache(clusterMeta, nil)
+			httpClientCache := cluster.NewFrontendHTTPClientCache(clusterMeta, nil, nil)
 
 			r, err := http.NewRequest(http.MethodPost, commonnexus.SystemCallbackURL, nil)
 			require.NoError(t, err)
