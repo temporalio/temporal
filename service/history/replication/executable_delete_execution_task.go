@@ -86,7 +86,7 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	if e.Config.EmitReplicationLifecycleEvents() {
 		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(),
 			definition.NewWorkflowKey(e.NamespaceID, e.BusinessID, e.RunID),
-			wideevents.ReplTaskDeleteExecution, int32(e.Attempt()))
+			wideevents.ReplTaskDeleteExecution, int32(e.Attempt()), e.SourceClusterName(), e.SourceShardKey().ShardID)
 	}
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
