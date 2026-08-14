@@ -102,6 +102,7 @@ type (
 		EnableHistoryTaskRecorder bool
 		EnableReplicationRecorder bool
 		EnableArchival            bool
+		SpanExporter              sdktrace.SpanExporter
 		AdditionalServerOptions   []temporal.ServerOption
 	}
 	TestClusterOption func(params *testClusterParams)
@@ -177,6 +178,12 @@ func WithClusterHistoryTaskRecorder() TestClusterOption {
 func WithReplicationStreamRecorder() TestClusterOption {
 	return func(params *testClusterParams) {
 		params.EnableReplicationRecorder = true
+	}
+}
+
+func withSpanExporter(exporter sdktrace.SpanExporter) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.SpanExporter = exporter
 	}
 }
 
@@ -308,6 +315,11 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableArchival:            params.EnableArchival,
 		AdditionalServerOptions:   params.AdditionalServerOptions,
 		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
+	}
+	if params.SpanExporter != nil {
+		s.testClusterConfig.SpanExporters = map[telemetry.SpanExporterType]sdktrace.SpanExporter{
+			telemetry.OtelTracesOtlpExporterType: params.SpanExporter,
+		}
 	}
 
 	// Apply configuration for shared clusters.
