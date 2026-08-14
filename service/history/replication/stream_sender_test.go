@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -1149,9 +1150,12 @@ func (s *streamSenderSuite) setupSingleFailingTask(convertErr error) (beginInclu
 			Clusters: []string{"source_cluster", "target_cluster"},
 		}, 100), nil).AnyTimes()
 	// Only exercised when EmitReplicationLifecycleEvents is on (the skipped wide event resolves the
-	// namespace name); harmless for tests that keep lifecycle events off.
+	// namespace name and the source cluster); harmless for tests that keep lifecycle events off.
 	mockRegistry.EXPECT().GetNamespaceName(namespace.ID("1")).Return(namespace.Name("test-ns"), nil).AnyTimes()
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("source_cluster").AnyTimes()
+	s.shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata).AnyTimes()
 	s.historyEngine.EXPECT().GetReplicationTasksIter(
 		gomock.Any(),
 		string(s.clientShardKey.ClusterID),
@@ -1186,7 +1190,8 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_Enabled() {
 func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_EmitsWideEvent() {
 	s.config.ReplicationStreamSenderSkipStuckTask = func() bool { return true }
 	// With lifecycle events on, skipping a stuck task must emit exactly one terminal "skipped"
-	// ReplicationLifecycle event carrying the source_task_id join key.
+	// ReplicationLifecycle event carrying the source_cluster/source_shard/source_task_id join key,
+	// the target_cluster now missing the state, and the mapped task_type.
 	s.config.EmitReplicationLifecycleEvents = func() bool { return true }
 	capture := &eventCaptureLogger{}
 	s.shardContext.EXPECT().GetEventLogger().Return(capture).AnyTimes()
@@ -1210,9 +1215,13 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_EmitsWideEvent() {
 		return true
 	})
 	s.Equal(string(wideevents.ReplicationSkipped), fields["phase"].AsString())
+	// item is a HISTORY task, mapped to the shared task_type vocabulary rather than the raw enum name.
+	s.Equal(wideevents.ReplTaskHistory, fields["task_type"].AsString())
 	s.Equal(beginInclusiveWatermark, fields["source_task_id"].AsInt64())
+	s.Equal("source_cluster", fields["source_cluster"].AsString())
+	s.Equal(int64(s.serverShardKey.ShardID), fields["source_shard"].AsInt64())
 	s.Equal("convert: boom", fields["error"].AsString())
-	s.Equal(int64(s.clientShardKey.ClusterID), fields["to_cluster"].AsInt64())
+	s.Equal(s.streamSender.clientClusterName, fields["target_cluster"].AsString())
 	s.Equal(enumsspb.TASK_PRIORITY_UNSPECIFIED.String(), fields["priority"].AsString())
 }
 

@@ -26,58 +26,115 @@ const (
 	ReplTaskSyncWorkflowState         = "sync_workflow_state"
 	ReplTaskSyncVersionedTransition   = "sync_versioned_transition"
 	ReplTaskVerifyVersionedTransition = "verify_versioned_transition"
+	ReplTaskDeleteExecution           = "delete_execution"
+	// The three below have no sent/executing/applied event today (emitReplicationSent does not build
+	// them), but a raw queue task of these types can still be skipped, so the skipped event maps them
+	// to keep task_type a single vocabulary across every phase.
+	ReplTaskHistory      = "history"
+	ReplTaskSyncActivity = "sync_activity"
+	ReplTaskSyncHSM      = "sync_hsm"
+)
+
+// A mutation carries only what changed within (ExclusiveStartVT, HydratedVT]; a snapshot carries
+// whole mutable state and has no lower bound.
+const (
+	ArtifactKindSnapshot = "snapshot"
+	ArtifactKindMutation = "mutation"
 )
 
 type ReplicationLifecyclePayload struct {
-	Phase    ReplicationPhase
+	// Phase is sent, executing, applied or skipped.
+	Phase ReplicationPhase
+	// TaskType is which replication task this is.
 	TaskType string
-	Shard    int32
-	// task identity + cross-phase join key: (namespace_id, workflow_id, run_id, transition_count, task_type)
-	Namespace       string
-	NamespaceID     string
-	WorkflowID      string
-	RunID           string
+	// Shard is the SENDING shard on sent, and the TARGET shard on executing and applied.
+	Shard int32
+	// Namespace is the namespace name, resolved best-effort.
+	Namespace string
+	// NamespaceID/WorkflowID/RunID identify the execution being replicated.
+	NamespaceID string
+	WorkflowID  string
+	RunID       string
+	// FailoverVersion/TransitionCount are the TASK's versioned transition, and with the identity above
+	// the cross-phase join key. On sent this describes the queue entry, not the payload; see HydratedVT.
 	FailoverVersion int64
 	TransitionCount int64
-	// parent info: populated at every phase where mutable state is in hand (sent + applied) when
-	// this workflow is itself a child. Only the child->parent direction is emitted (a child points
-	// at its parent); the parent->children direction is intentionally not recorded here.
+	// ParentWorkflowID/ParentRunID/ParentInitiatedID point at this workflow's parent when it is a child,
+	// on any phase holding mutable state. Only child->parent is recorded, never parent->children.
 	ParentWorkflowID  string
 	ParentRunID       string
 	ParentInitiatedID int64
-	Details           map[string]any
+	// Details carries phase-specific extras, e.g. verify's expected-vs-actual comparison.
+	Details map[string]any
+
+	// SourceCluster/SourceShard/SourceTaskID identify the sending cluster, the sending shard and the
+	// sender's replication-queue task id; together they are the cross-cluster join key.
+	SourceCluster string
+	SourceShard   int32
+	SourceTaskID  int64
+
 	// sent-only
+
+	// NewRunID is the successor run a verify task targets, or whose event 1 a sync task also shipped.
 	NewRunID string
-	// SourceTaskID is the sender's replication-queue task id for this event, recorded so a "sent"
-	// event can be correlated with the source cluster's replication queue.
-	SourceTaskID int64
-	IsFirstSync  bool
+	// IsFirstSync marks the first sync of a newly created run.
+	IsFirstSync bool
+	// FirstEventID/NextEventID are the task's own event range, not what the artifact carried.
 	FirstEventID int64
 	NextEventID  int64
-	// received-only
+
+	// What the task carried (sent-only). Not recoverable later: the bounds come from the sender's
+	// in-memory per-(run, target) progress cache, and per-entity stamps get overwritten.
+
+	// TargetCluster is the target streamed to; progress is cached per target. Also emitted on skipped,
+	// where it is the passive now missing the dropped task's state.
+	TargetCluster string
+	// Priority is the stream it went out on. Also emitted on skipped.
+	Priority string
+	// ArtifactKind is snapshot (whole state) or mutation (a diff).
+	ArtifactKind string
+	// ExclusiveStartVT is the diff's exclusive lower bound. Nil for a snapshot.
+	ExclusiveStartVT *VersionedTransitionEntry
+	// HydratedVT is the versioned transition of the state serialized; >= the task's own VT.
+	HydratedVT *VersionedTransitionEntry
+	// ShippedFirstEventID/Version is the first event carried; the version says which branch it is on.
+	ShippedFirstEventID      int64
+	ShippedFirstEventVersion int64
+	// ShippedLastEventID/Version is the last event carried. Its version can differ from the first
+	// when the shipped range crosses a failover.
+	ShippedLastEventID      int64
+	ShippedLastEventVersion int64
+
+	// executing-only
+
+	// Attempt is which delivery attempt this is; > 0 means the apply is being retried. On a skipped
+	// event it is instead the source-side send/convert attempts exhausted before the task was dropped.
 	Attempt int32
-	// skipped-only
-	// ToCluster is the target (client) cluster the sender stream feeds; Priority is the task's
-	// replication priority tier. Both are recorded on a skip because a skipped task emits no
-	// downstream events: ToCluster identifies which passive is missing the dropped state, and
-	// Priority tells whether it was live traffic (high) or force replication (low).
-	ToCluster int32
-	Priority  string
-	// event_version_history is the (event_id, version) branch. It is emitted on executing (from the
-	// task) and applied (from the resulting mutable state); the version disambiguates which history
-	// branch the events are on.
+
+	// EventVersionHistory is the (event_id, version) branch, from the task on executing and from
+	// mutable state on applied. The version says which history branch the events are on.
 	EventVersionHistory []VersionHistoryEntry
-	// applied-only: post-apply mutable-state SUMMARY (no blob)
-	State               string
-	Status              string
-	AppliedNextEventID  int64
-	TransitionHistory   []VersionedTransitionEntry
-	LastEventID         int64
-	LastEventVersion    int64
-	Outcome             string
-	Error               string
-	NewExecutionRunID   string
-	ResetRunID          string
+
+	// applied-only: a summary of post-apply mutable state, never a blob
+
+	// State/Status are the execution state and status after applying.
+	State  string
+	Status string
+	// AppliedNextEventID is the next event id after applying.
+	AppliedNextEventID int64
+	// TransitionHistory is where the target landed; its last entry is this event's versioned transition.
+	TransitionHistory []VersionedTransitionEntry
+	// LastEventID/LastEventVersion are the last event on the target's current branch after applying.
+	LastEventID      int64
+	LastEventVersion int64
+	// Outcome is applied, verified, resend_needed or error. Failed applies emit no event at all.
+	Outcome string
+	// Error is the failure message when Outcome is error.
+	Error string
+	// NewExecutionRunID is the continue-as-new successor, ResetRunID the reset successor.
+	NewExecutionRunID string
+	ResetRunID        string
+	// Counts are the post-apply pending totals, useful for spotting unbounded state growth.
 	SignalCount         int64
 	ActivityCount       int64
 	UserTimerCount      int64
@@ -127,6 +184,15 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 			attrs = append(attrs, log.Int64("parent_initiated_id", p.ParentInitiatedID))
 		}
 	}
+	if p.SourceCluster != "" {
+		attrs = append(attrs, log.String("source_cluster", p.SourceCluster))
+	}
+	if p.SourceShard != 0 {
+		attrs = append(attrs, log.Int64("source_shard", int64(p.SourceShard)))
+	}
+	if p.SourceTaskID != 0 {
+		attrs = append(attrs, log.Int64("source_task_id", p.SourceTaskID))
+	}
 	if len(p.Details) > 0 {
 		attrs = append(attrs, jsonAttr("details", p.Details))
 	}
@@ -151,9 +217,6 @@ func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyV
 	if p.NewRunID != "" {
 		attrs = append(attrs, log.String("new_run_id", p.NewRunID))
 	}
-	if p.SourceTaskID != 0 {
-		attrs = append(attrs, log.Int64("source_task_id", p.SourceTaskID))
-	}
 	attrs = append(attrs, log.Bool("is_first_sync", p.IsFirstSync))
 	if p.FirstEventID != 0 {
 		attrs = append(attrs, log.Int64("first_event_id", p.FirstEventID))
@@ -161,19 +224,44 @@ func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyV
 	if p.NextEventID != 0 {
 		attrs = append(attrs, log.Int64("next_event_id", p.NextEventID))
 	}
-	return attrs
-}
-
-// appendSkipped emits the fields for a terminal "skipped" event: source_task_id ties it back to
-// the source cluster's replication queue, attempt records how many convert attempts were exhausted
-// before giving up, and error carries the last convert failure so an operator can investigate.
-func (p ReplicationLifecyclePayload) appendSkipped(attrs []log.KeyValue) []log.KeyValue {
-	attrs = append(attrs, log.Int64("to_cluster", int64(p.ToCluster)))
+	if p.TargetCluster != "" {
+		attrs = append(attrs, log.String("target_cluster", p.TargetCluster))
+	}
 	if p.Priority != "" {
 		attrs = append(attrs, log.String("priority", p.Priority))
 	}
-	if p.SourceTaskID != 0 {
-		attrs = append(attrs, log.Int64("source_task_id", p.SourceTaskID))
+	if p.ArtifactKind != "" {
+		attrs = append(attrs, log.String("artifact_kind", p.ArtifactKind))
+	}
+	if p.ExclusiveStartVT != nil {
+		attrs = append(attrs, jsonAttr("exclusive_start_versioned_transition", p.ExclusiveStartVT))
+	}
+	if p.HydratedVT != nil {
+		attrs = append(attrs, jsonAttr("hydrated_versioned_transition", p.HydratedVT))
+	}
+	if p.ShippedFirstEventID != 0 {
+		attrs = append(attrs,
+			log.Int64("shipped_first_event_id", p.ShippedFirstEventID),
+			log.Int64("shipped_first_event_version", p.ShippedFirstEventVersion),
+			log.Int64("shipped_last_event_id", p.ShippedLastEventID),
+			log.Int64("shipped_last_event_version", p.ShippedLastEventVersion),
+		)
+	}
+	return attrs
+}
+
+// appendSkipped emits the fields for a terminal "skipped" event: target_cluster identifies the
+// passive now missing the dropped state, priority tells whether it was live traffic (high) or force
+// replication (low), attempt records how many convert attempts were exhausted before giving up, and
+// error carries the last convert failure so an operator can investigate. The source_cluster /
+// source_shard / source_task_id join key back to the source queue is emitted by Attributes for every
+// phase, so it is not repeated here.
+func (p ReplicationLifecyclePayload) appendSkipped(attrs []log.KeyValue) []log.KeyValue {
+	if p.TargetCluster != "" {
+		attrs = append(attrs, log.String("target_cluster", p.TargetCluster))
+	}
+	if p.Priority != "" {
+		attrs = append(attrs, log.String("priority", p.Priority))
 	}
 	attrs = append(attrs, log.Int64("attempt", int64(p.Attempt)))
 	if p.Error != "" {
