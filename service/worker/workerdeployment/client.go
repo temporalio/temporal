@@ -2001,9 +2001,11 @@ func (d *ClientImpl) checkForMissingTaskQueues(prevCurrentVersionInfo, newCurren
 	missingTaskQueues := []*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{}
 	for _, prevTaskQueue := range prevCurrentVersionTaskQueues {
 		// Defensive check: worker commands task queues (temporal-sys/worker-commands/...)
-		// don't support versioning but may have been incorrectly registered in a version.
-		// Exclude them from the missing TQ check.
-		if primitives.IsWorkerCommandsTaskQueue(prevTaskQueue.GetName()) {
+		// don't support versioning but may have been incorrectly registered in a version
+		// due to an SDK bug that sent versioning metadata on worker commands nexus polls.
+		// These are always nexus type, so also check the type to avoid false positives.
+		if primitives.IsWorkerCommandsTaskQueue(prevTaskQueue.GetName()) &&
+			prevTaskQueue.GetType() == enumspb.TASK_QUEUE_TYPE_NEXUS {
 			continue
 		}
 		found := false
