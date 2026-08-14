@@ -8,6 +8,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/grpc/status"
 )
@@ -45,6 +46,20 @@ func KindOf(cb *commonpb.Callback) Kind {
 		return KindWorker
 	case *commonpb.Callback_Internal_:
 		return KindInternal
+	default:
+		return KindUnspecified
+	}
+}
+
+// Kind reports which [Kind] the persisted callback is. CHASM has no Internal variant, so a
+// callback of an unrecognized kind is one written by a server that knows a variant this one does
+// not.
+func (c *Callback) Kind() Kind {
+	switch c.GetCallback().GetVariant().(type) {
+	case *callbackspb.Callback_Nexus_:
+		return KindNexus
+	case *callbackspb.Callback_Worker_:
+		return KindWorker
 	default:
 		return KindUnspecified
 	}
