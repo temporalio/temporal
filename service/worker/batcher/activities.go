@@ -47,7 +47,8 @@ const (
 )
 
 var (
-	errNamespaceMismatch = errors.New("namespace mismatch")
+	errNamespaceMismatch            = errors.New("namespace mismatch")
+	errAdminBatchNamespaceNotSystem = errors.New("admin batches should run in the system namespace")
 
 	batchQuotaRequest = quotas.Request{
 		Token: 1,
@@ -383,32 +384,25 @@ type activities struct {
 	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-// checkNamespace validates that batchParams targets the worker's own namespace.
-// This prevents cross-namespace escalation via the privileged internal-frontend connection
-// (NoopClaimMapper → RoleAdmin).
-//
-// The temporal-system worker is exempt for admin batches: it has to reach namespaces that are
-// passive in this cluster, which have no per-namespace worker of their own. Safe because
-// AdminRequest is only set by StartAdminBatchOperation (admin claims required), and frontend
-// StartWorkflowExecution rejects user starts on PerNSWorkerTaskQueue.
-func (a *activities) checkNamespace(batchParams *batchspb.BatchOperationInput) error {
-
-	// we allow admins to run batch jobs in the system namespace for other user namespaces
-	if a.namespaceID.String() == primitives.SystemNamespaceID && isAdminRequest(batchParams) {
-		return nil
+func (a *activities) checkAndGetTargetNamespace(batchParams *batchspb.BatchOperationInput) (string, error) {
+	activityNamespaceID := a.namespaceID.String()
+	batchInputNamespaceID := batchParams.GetNamespaceId()
+	// admin batches
+	if isAdminRequest(batchParams) {
+		if activityNamespaceID != primitives.SystemNamespaceID {
+			return "", errAdminBatchNamespaceNotSystem
+		}
+		adminReq := batchParams.GetAdminRequest()
+		return adminReq.Namespace, nil
 	}
-
-	if batchParams.NamespaceId != a.namespaceID.String() {
-		return errNamespaceMismatch
+	// user batch
+	if batchInputNamespaceID != activityNamespaceID {
+		return "", errNamespaceMismatch
 	}
-	ns := a.namespace.String()
-	if req := batchParams.GetRequest(); req != nil && req.GetNamespace() != ns {
-		return errNamespaceMismatch
+	if req := batchParams.GetRequest(); req != nil && req.GetNamespace() != a.namespace.String() {
+		return "", errNamespaceMismatch
 	}
-	if req := batchParams.GetAdminRequest(); req != nil && req.GetNamespace() != ns {
-		return errNamespaceMismatch
-	}
-	return nil
+	return a.namespace.String(), nil
 }
 
 // todo: check if this a solid and safe way
@@ -423,15 +417,11 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
 
-	if err := a.checkNamespace(batchParams); err != nil {
+	targetNS, err := a.checkAndGetTargetNamespace(batchParams)
+	if err != nil {
 		metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
-	}
-
-	targetNS := a.namespace.String()
-	if isAdminRequest(batchParams) {
-		targetNS = batchParams.GetAdminRequest().GetNamespace()
 	}
 
 	sdkClientForTargetNS := a.ClientFactory.NewClient(sdkclient.Options{
