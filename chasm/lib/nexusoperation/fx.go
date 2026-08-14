@@ -123,7 +123,7 @@ func clientProviderFactory(
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
 	rpcFactory common.RPCFactory,
-	httpClientTransportProvider telemetry.HTTPClientTransportProvider,
+	httpClientTransportWrapper telemetry.HTTPClientTransportWrapper,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -137,7 +137,7 @@ func clientProviderFactory(
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
 		return &http.Client{
-			Transport: httpClientTransportProvider.Wrap(responseSizeLimiter{transport}),
+			Transport: httpClientTransportWrapper.Wrap(responseSizeLimiter{transport}),
 		}, nil
 	})
 

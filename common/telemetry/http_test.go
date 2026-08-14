@@ -125,16 +125,16 @@ var errTestBodyRead = errors.New("body read failed")
 
 // Verifies client transport construction, propagation, and debug body handling.
 func TestNewHTTPClientTransport(t *testing.T) {
-	// The provider carries HTTP tracing configuration without exposing it to transport owners.
-	t.Run("TransportProvider", func(t *testing.T) {
+	// The wrapper carries HTTP tracing configuration without exposing it to transport owners.
+	t.Run("TransportWrapper", func(t *testing.T) {
 		t.Parallel()
 
 		rt := http.DefaultTransport
-		var disabled HTTPClientTransportProvider
+		var disabled HTTPClientTransportWrapper
 		require.Same(t, rt, disabled.Wrap(rt))
 
-		provider := NewHTTPClientTransportProvider(trace.NewTracerProvider(), nil)
-		require.NotSame(t, rt, provider.Wrap(rt))
+		wrapper := NewHTTPClientTransportWrapper(trace.NewTracerProvider(), nil)
+		require.NotSame(t, rt, wrapper.Wrap(rt))
 	})
 
 	// A nil tracer provider disables instrumentation without changing the transport identity.

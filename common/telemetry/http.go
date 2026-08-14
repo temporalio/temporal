@@ -14,25 +14,25 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// HTTPClientTransportProvider wraps HTTP transports with the service's tracing configuration.
-type HTTPClientTransportProvider func(http.RoundTripper) http.RoundTripper
+// HTTPClientTransportWrapper wraps HTTP transports with the service's tracing configuration.
+type HTTPClientTransportWrapper func(http.RoundTripper) http.RoundTripper
 
-// NewHTTPClientTransportProvider binds a tracer provider and propagator to HTTP transports.
-func NewHTTPClientTransportProvider(
+// NewHTTPClientTransportWrapper binds a tracer provider and propagator to HTTP transports.
+func NewHTTPClientTransportWrapper(
 	tracerProvider trace.TracerProvider,
 	propagator propagation.TextMapPropagator,
-) HTTPClientTransportProvider {
+) HTTPClientTransportWrapper {
 	return func(rt http.RoundTripper) http.RoundTripper {
 		return NewHTTPClientTransport(rt, tracerProvider, propagator)
 	}
 }
 
-// Wrap instruments rt, or returns it unchanged when the provider is unset.
-func (p HTTPClientTransportProvider) Wrap(rt http.RoundTripper) http.RoundTripper {
-	if p == nil {
+// Wrap instruments rt, or returns it unchanged when the wrapper is unset.
+func (w HTTPClientTransportWrapper) Wrap(rt http.RoundTripper) http.RoundTripper {
+	if w == nil {
 		return rt
 	}
-	return p(rt)
+	return w(rt)
 }
 
 // NewHTTPClientTransport instruments outbound HTTP requests with OpenTelemetry client spans

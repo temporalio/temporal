@@ -99,8 +99,7 @@ func TestTokenAuthHeader_SentOnRemoteConnection(t *testing.T) {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler, env.provider,
 		"dns:///127.0.0.1:0", "dns:///127.0.0.1:0", 0, nil,
-		nil,
-		nil, nil, nil,
+		nil, nil, nil, nil,
 		tokenProvider,
 	)
 
@@ -152,8 +151,7 @@ func TestTokenAuthHeader_NotSentWhenNoProvider(t *testing.T) {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler, env.provider,
 		"dns:///127.0.0.1:0", "dns:///127.0.0.1:0", 0, nil,
-		nil,
-		nil, nil, nil,
+		nil, nil, nil, nil,
 		nil,
 	)
 
@@ -211,8 +209,7 @@ func TestTokenAuthHeader_ReceiverRejectsWrongToken(t *testing.T) {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler, env.provider,
 		"dns:///127.0.0.1:0", "dns:///127.0.0.1:0", 0, nil,
-		nil,
-		nil, nil, nil,
+		nil, nil, nil, nil,
 		tokenProvider,
 	)
 
@@ -259,8 +256,7 @@ func TestTokenAuthHeader_StrictModeRejectsEmptyToken(t *testing.T) {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler, env.provider,
 		"dns:///127.0.0.1:0", "dns:///127.0.0.1:0", 0, nil,
-		nil,
-		nil, nil, nil,
+		nil, nil, nil, nil,
 		tokenProvider,
 	)
 

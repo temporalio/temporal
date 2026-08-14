@@ -436,7 +436,7 @@ func RPCFactoryProvider(
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
 	tokenProvider auth.TokenProvider,
-	frontendHTTPTransportProvider telemetry.HTTPClientTransportProvider,
+	frontendHTTPTransportWrapper telemetry.HTTPClientTransportWrapper,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -459,7 +459,7 @@ func RPCFactoryProvider(
 		frontendHTTPURL,
 		frontendHTTPPort,
 		frontendTLSConfig,
-		frontendHTTPTransportProvider,
+		frontendHTTPTransportWrapper,
 		options,
 		perServiceDialOptions,
 		monitor,
@@ -475,9 +475,9 @@ func RPCFactoryProvider(
 func FrontendHTTPClientCacheProvider(
 	metadata cluster.Metadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	httpClientTransportProvider telemetry.HTTPClientTransportProvider,
+	httpClientTransportWrapper telemetry.HTTPClientTransportWrapper,
 ) *cluster.FrontendHTTPClientCache {
-	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider, httpClientTransportProvider)
+	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider, httpClientTransportWrapper)
 }
 
 func getFrontendConnectionDetails(
