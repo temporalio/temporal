@@ -7,7 +7,7 @@ import (
 
 // linkValidator validates links attached to standalone Nexus operation executions.
 type linkValidator struct {
-	// Wrapped so that nexusoperation.linkValidator is a distinct typed.
+	// Wrapped so that nexusoperation.linkValidator is a distinct, injectable type.
 	*chasm.LinkValidator
 }
 

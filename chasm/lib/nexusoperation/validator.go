@@ -109,8 +109,10 @@ func (v *validator) validateAndNormalizeStartRequest(
 			return err
 		}
 	}
-	if err := v.linkValidator.ValidateRequest(ns, req.GetLinks()); err != nil {
-		return err
+	if links := req.GetLinks(); len(links) > 0 {
+		if err := v.linkValidator.ValidateRequest(ns, links); err != nil {
+			return err
+		}
 	}
 	if err := v.validateOnConflictOptions(req); err != nil {
 		return err

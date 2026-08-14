@@ -6,12 +6,8 @@ import (
 )
 
 // linkValidator validates links attached to standalone activity executions.
-//
-// It is a library-local named type over chasm.LinkValidator, which holds the logic. The wrapper
-// exists so that fx can tell this library's validator apart from the equivalent one provided by
-// other CHASM libraries (e.g. standalone Nexus operations), which share the same underlying type
-// and live in the same graph.
 type linkValidator struct {
+	// Wrapped so that activity.linkValidator is a distinct, injectable type.
 	*chasm.LinkValidator
 }
 
