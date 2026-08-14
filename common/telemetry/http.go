@@ -14,8 +14,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const maxHTTPDebugPayloadSize = 2 * 1024 * 1024
-
 type debugHTTPClientTransport struct {
 	rt http.RoundTripper
 }
@@ -29,8 +27,7 @@ type debugHTTPHandler struct {
 }
 
 type payloadCapture struct {
-	payload  bytes.Buffer
-	overflow bool
+	bytes.Buffer
 }
 
 type payloadCapturingReadCloser struct {
@@ -279,18 +276,6 @@ func (r *payloadCapturingReadCloser) finish() {
 	}
 }
 
-func (c *payloadCapture) Write(p []byte) (int, error) {
-	if c.overflow {
-		return len(p), nil
-	}
-	if c.payload.Len()+len(p) > maxHTTPDebugPayloadSize {
-		c.payload.Reset()
-		c.overflow = true
-		return len(p), nil
-	}
-	return c.payload.Write(p)
-}
-
 func (c *payloadCapture) Value() (string, bool) {
-	return c.payload.String(), !c.overflow && c.payload.Len() > 0
+	return c.String(), c.Len() > 0
 }

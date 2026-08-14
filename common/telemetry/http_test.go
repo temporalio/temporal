@@ -427,7 +427,7 @@ func TestNewHTTPHandler(t *testing.T) {
 			require.Equal(t, int64(len("response body")), attrs["http.response.body.size"])
 		})
 
-		t.Run("OmitsOversizedPayloads", func(t *testing.T) {
+		t.Run("AnnotatesLargePayloads", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 			payload := bytes.Repeat([]byte("a"), 2*1024*1024+1)
@@ -443,8 +443,8 @@ func TestNewHTTPHandler(t *testing.T) {
 			require.Equal(t, payload, rec.Body.Bytes())
 
 			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
-			require.NotContains(t, attrs, "http.request.payload")
-			require.NotContains(t, attrs, "http.response.payload")
+			require.Equal(t, string(payload), attrs["http.request.payload"])
+			require.Equal(t, string(payload), attrs["http.response.payload"])
 		})
 	})
 }
