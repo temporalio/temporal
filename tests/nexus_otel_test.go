@@ -29,9 +29,8 @@ func TestNexusOTELSuite(t *testing.T) {
 
 // Verifies production callback wiring propagates trace context and stored headers end to end.
 func (s *NexusOTELSuite) TestCallback() {
-	t := s.T()
 	exporter := tracetest.NewInMemoryExporter()
-	env := newNexusTestEnv(t, true,
+	env := newNexusTestEnv(s.T(), true,
 		testcore.WithSpanExporter(exporter),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
@@ -47,16 +46,15 @@ func (s *NexusOTELSuite) TestCallback() {
 		requestHeaders <- r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(server.Close)
+	s.T().Cleanup(server.Close)
 
 	env.SdkWorker().RegisterWorkflowWithOptions(
 		func(workflow.Context) error { return nil },
 		workflow.RegisterOptions{Name: tv.WorkflowType().GetName()},
 	)
 
-	ctx := s.Context()
 	callbackHeaderValue := tv.Any().String()
-	startResponse, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	startResponse, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.RequestID(),
 		Namespace:          env.Namespace().String(),
 		WorkflowId:         tv.WorkflowID(),
@@ -76,8 +74,9 @@ func (s *NexusOTELSuite) TestCallback() {
 		}},
 	})
 	s.NoError(err)
-	s.NoError(env.SdkClient().GetWorkflow(ctx, tv.WorkflowID(), startResponse.RunId).Get(ctx, nil))
+	s.NoError(env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), startResponse.RunId).Get(s.Context(), nil))
 
+	// Wait for the Nexus callback.
 	var headers http.Header
 	select {
 	case headers = <-requestHeaders:
@@ -86,12 +85,15 @@ func (s *NexusOTELSuite) TestCallback() {
 	}
 	s.Equal(callbackHeaderValue, headers.Get("X-Callback-Header"))
 
+	// Extract trace context from headers.
 	traceparent := strings.Split(headers.Get("traceparent"), "-")
 	s.Len(traceparent, 4)
 	traceID, err := oteltrace.TraceIDFromHex(traceparent[1])
 	s.NoError(err)
 	spanID, err := oteltrace.SpanIDFromHex(traceparent[2])
 	s.NoError(err)
+
+	// Verify the trace context.
 	s.AwaitTrue(func() bool {
 		for _, span := range exporter.GetSpans() {
 			if span.SpanKind == oteltrace.SpanKindClient &&
