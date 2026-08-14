@@ -185,16 +185,16 @@ func (r *payloadCapturingReadCloser) finish() {
 	}
 }
 
-func (c *payloadCapture) Write(p []byte) {
+func (c *payloadCapture) Write(p []byte) (int, error) {
 	if c.overflow {
-		return
+		return len(p), nil
 	}
 	if c.payload.Len()+len(p) > maxHTTPDebugPayloadSize {
 		c.payload.Reset()
 		c.overflow = true
-		return
+		return len(p), nil
 	}
-	_, _ = c.payload.Write(p)
+	return c.payload.Write(p)
 }
 
 func (c *payloadCapture) Value() (string, bool) {
