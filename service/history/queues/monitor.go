@@ -210,8 +210,6 @@ func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key, mo
 			tag.QueueAlert(alert), tag.Attempt(int32(stats.progress.attempts)))
 		metrics.QueueAlertShadowCounter.With(m.metricsHandler).
 			Record(1, metrics.QueueActionTag(readerStuckActionName))
-		// Reuse the alert silence so a stuck reader reports once per silence interval
-		// rather than on every read that stays past the threshold.
 		m.silenceAlertLocked(AlertTypeReaderStuck)
 		return
 	}
