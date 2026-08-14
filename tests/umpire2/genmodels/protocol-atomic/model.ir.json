@@ -4484,50 +4484,74 @@
     },
     {
       "kind": "rule",
-      "name": "EntityProgress",
+      "name": "CallbackReferenceConsistencyRule",
+      "reason": "imperative runtime rule has not been migrated to the shared property algebra",
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "CallbackReferenceConsistencyRule"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "CallbackResponseConsistencyRule",
+      "reason": "imperative runtime rule has not been migrated to the shared property algebra",
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "CallbackResponseConsistencyRule"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "EntityProgressRule",
       "included": true,
       "source": {
-        "path": "tests/umpire2/rule"
+        "path": "tests/umpire2/rule",
+        "symbol": "EntityProgressRule"
       }
     },
     {
       "kind": "rule",
-      "name": "NexusActivityLinkConsistency",
+      "name": "NexusActivityLinkConsistencyRule",
       "included": true,
       "source": {
-        "path": "tests/umpire2/rule"
+        "path": "tests/umpire2/rule",
+        "symbol": "NexusActivityLinkConsistencyRule"
       }
     },
     {
       "kind": "rule",
-      "name": "NexusOperationClosure",
+      "name": "NexusOperationClosureRule",
       "reason": "imperative runtime rule has not been migrated to the shared property algebra",
       "source": {
-        "path": "tests/umpire2/rule"
+        "path": "tests/umpire2/rule",
+        "symbol": "NexusOperationClosureRule"
       }
     },
     {
       "kind": "rule",
-      "name": "NexusOperationTimeoutSemantics",
+      "name": "NexusOperationTimeoutSemanticsRule",
       "reason": "imperative runtime rule has not been migrated to the shared property algebra",
       "source": {
-        "path": "tests/umpire2/rule"
+        "path": "tests/umpire2/rule",
+        "symbol": "NexusOperationTimeoutSemanticsRule"
       }
     },
     {
       "kind": "rule",
-      "name": "SpeculativeTaskCreation",
+      "name": "SpeculativeTaskCreationRule",
       "reason": "imperative runtime rule has not been migrated to the shared property algebra",
       "source": {
-        "path": "tests/umpire2/rule"
+        "path": "tests/umpire2/rule",
+        "symbol": "SpeculativeTaskCreationRule"
       }
     },
     {
       "kind": "rule",
-      "name": "WorkflowTaskStarvation",
+      "name": "WorkflowTaskStarvationRule",
       "reason": "imperative runtime rule has not been migrated to the shared property algebra",
       "source": {
-        "path": "tests/umpire2/rule"
+        "path": "tests/umpire2/rule",
+        "symbol": "WorkflowTaskStarvationRule"
       }
     },
     {

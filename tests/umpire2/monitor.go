@@ -11,9 +11,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/tests/umpire2/assurance"
 	"go.temporal.io/server/tests/umpire2/model"
 	"go.temporal.io/server/tests/umpire2/protocol"
-	"go.temporal.io/server/tests/umpire2/rule"
 	"google.golang.org/grpc"
 )
 
@@ -56,14 +56,13 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	decoder := model.NewFactDecoder()
 	el := umpirefw.NewFactLog()
 	rb := umpirefw.NewRuleRegistry()
-
-	// Safety rules — checked on every observation.
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.SpeculativeTaskCreation{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusOperationClosure{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusActivityLinkConsistency{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusOperationTimeoutSemantics{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.CallbackReferenceConsistency{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.CallbackResponseConsistency{} })
+	catalog, err := assurance.Default()
+	if err != nil {
+		return nil, fmt.Errorf("monitor: failed to compile assurance catalog: %w", err)
+	}
+	if err := catalog.Register(rb); err != nil {
+		return nil, fmt.Errorf("monitor: failed to register assurance catalog: %w", err)
+	}
 	// Illegal-transition conformance is not registered as a rule: it is a built-in
 	// framework check (RuleRegistry.Check → checkConformance) that surfaces, for every
 	// Lifecycled entity, the illegal transitions Lifecycle.Fire records at fire-time —
@@ -71,11 +70,7 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	// states because an unobserved intermediate is indistinguishable from a skipped transition;
 	// events outside that reachable path remain illegal.
 
-	// Liveness rules — checked at test teardown.
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.EntityProgress{} })
-
-	if err := rb.InitRules(registry, logger, umpirefw.RuleConfig{Relations: relations}); err != nil {
+	if err := rb.InitRules(registry, logger, umpirefw.RuleConfig{Relations: relations}, catalog.Names()...); err != nil {
 		return nil, fmt.Errorf("monitor: failed to initialize rules: %w", err)
 	}
 

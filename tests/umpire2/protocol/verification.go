@@ -15,8 +15,9 @@ import (
 )
 
 type VerificationOptions struct {
-	DefaultBound int
-	Bounds       map[umpire.EntityType]int
+	DefaultBound  int
+	Bounds        map[umpire.EntityType]int
+	RuleInventory []verify.InventoryItem
 }
 
 func (p *Protocol) VerificationModel(options VerificationOptions) (verify.Model, error) {
@@ -110,7 +111,7 @@ func (p *Protocol) VerificationModel(options VerificationOptions) (verify.Model,
 	if err := p.addRegressionVerification(&result, lifecycles); err != nil {
 		return verify.Model{}, err
 	}
-	p.addVerificationInventory(&result)
+	p.addVerificationInventory(&result, options.RuleInventory)
 	addLifecycleRefinements(&result)
 	if err := verify.Validate(result); err != nil {
 		return verify.Model{}, fmt.Errorf("protocol verification: %w", err)
@@ -190,7 +191,7 @@ func lowerRegressionStartActivity(
 	}, nil
 }
 
-func (p *Protocol) addVerificationInventory(result *verify.Model) {
+func (p *Protocol) addVerificationInventory(result *verify.Model, ruleInventory []verify.InventoryItem) {
 	for _, entity := range result.Entities {
 		result.Inventory = append(result.Inventory, verify.InventoryItem{Kind: "entity", Name: entity.Name, Included: true, Source: entity.Source})
 		for _, state := range entity.States {
@@ -212,17 +213,7 @@ func (p *Protocol) addVerificationInventory(result *verify.Model) {
 			Source: verify.Provenance{Path: "tests/umpire2/model"},
 		})
 	}
-	for _, rule := range []string{"SpeculativeTaskCreation", "NexusOperationClosure", "NexusActivityLinkConsistency", "NexusOperationTimeoutSemantics", "WorkflowTaskStarvation", "EntityProgress"} {
-		included := rule == "NexusActivityLinkConsistency" || rule == "EntityProgress"
-		reason := ""
-		if !included {
-			reason = "imperative runtime rule has not been migrated to the shared property algebra"
-		}
-		result.Inventory = append(result.Inventory, verify.InventoryItem{
-			Kind: "rule", Name: rule, Included: included, Reason: reason,
-			Source: verify.Provenance{Path: "tests/umpire2/rule"},
-		})
-	}
+	result.Inventory = append(result.Inventory, ruleInventory...)
 	if p.regression != nil {
 		catalog := p.regression.Snapshot()
 		actionNameCounts := make(map[string]int, len(catalog.Actions))

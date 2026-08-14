@@ -104,6 +104,22 @@ func TestGenerateWritesTargetScopedArtifacts(t *testing.T) {
 	require.Equal(t, "protocol-atomic", targetManifest.Target)
 	require.Equal(t, []string{"activity", "callback", "matching", "nexus", "workflow"}, targetManifest.TargetModules)
 	require.Equal(t, index.ModelFamilyHash, targetManifest.ModelFamilyHash)
+	var ruleNames []string
+	for _, item := range targetManifest.Inventory {
+		if item.Kind == "rule" {
+			ruleNames = append(ruleNames, item.Name)
+		}
+	}
+	require.Equal(t, []string{
+		"CallbackReferenceConsistencyRule",
+		"CallbackResponseConsistencyRule",
+		"EntityProgressRule",
+		"NexusActivityLinkConsistencyRule",
+		"NexusOperationClosureRule",
+		"NexusOperationTimeoutSemanticsRule",
+		"SpeculativeTaskCreationRule",
+		"WorkflowTaskStarvationRule",
+	}, ruleNames)
 
 	foundationContents, err := os.ReadFile(filepath.Join(directory, "foundation-delivery-safety", "manifest.json"))
 	require.NoError(t, err)

@@ -2,7 +2,7 @@
   "schemaVersion": "umpire-verification-target-index/v1",
   "generatorVersion": "umpire-genmodels/v1",
   "modelFamilyVersion": "umpire2/model-family-v1",
-  "modelFamilyHash": "sha256:a8597df7e9466e8f07790cdb5fde26aea8a0cd41f00efdaec91d8c552b7e36e3",
+  "modelFamilyHash": "sha256:a6a3bfdb77da5af1137598507762cacbfe00a0c22c6d4023a69cf3f5e95e255f",
   "targets": [
     {
       "name": "foundation-delivery-safety",
@@ -19,7 +19,7 @@
     },
     {
       "name": "protocol-atomic",
-      "modelHash": "sha256:01c8584ac8c13262c0dbb36dfaee8404a4094cf3edf9138dff8ef0c9fee880f4",
+      "modelHash": "sha256:a42ab55e4e7a508b5e38417f30fede3121f935813454265716548f550dccafdd",
       "owners": [
         "activity",
         "callback",

@@ -17,6 +17,7 @@ import (
 	pgenerator "go.temporal.io/server/common/testing/umpire/verify/p"
 	"go.temporal.io/server/common/testing/umpire/verify/runner"
 	"go.temporal.io/server/common/testing/umpire/verify/tla"
+	"go.temporal.io/server/tests/umpire2/assurance"
 	"go.temporal.io/server/tests/umpire2/protocol"
 )
 
@@ -206,7 +207,14 @@ func verificationFamily(defaultBound int) (verify.ModelFamily, error) {
 	if err != nil {
 		return verify.ModelFamily{}, fmt.Errorf("compile default Umpire protocol: %w", err)
 	}
-	return compiled.VerificationFamily(protocol.VerificationOptions{DefaultBound: defaultBound})
+	catalog, err := assurance.Default()
+	if err != nil {
+		return verify.ModelFamily{}, fmt.Errorf("compile default Umpire assurance catalog: %w", err)
+	}
+	return compiled.VerificationFamily(protocol.VerificationOptions{
+		DefaultBound:  defaultBound,
+		RuleInventory: catalog.VerificationInventory(),
+	})
 }
 
 func mergeFiles(destination map[string][]byte, directory string, files map[string][]byte) {
