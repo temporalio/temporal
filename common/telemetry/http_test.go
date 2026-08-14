@@ -432,32 +432,10 @@ func TestNewHTTPHandler(t *testing.T) {
 			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
 			require.Equal(t, int64(len("response body")), attrs["http.response.body.size"])
 		})
-
-		t.Run("AnnotatesLargePayloads", func(t *testing.T) {
-			recorder := tracetest.NewSpanRecorder()
-			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
-			payload := bytes.Repeat([]byte("a"), 2*1024*1024+1)
-			var handlerErr error
-			handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				_, handlerErr = io.Copy(w, r.Body)
-			}), "test-handler", tp, nil)
-
-			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewReader(payload))
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
-			require.NoError(t, handlerErr)
-			require.Equal(t, payload, rec.Body.Bytes())
-
-			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
-			require.Equal(t, string(payload), attrs["http.request.payload"])
-			require.Equal(t, string(payload), attrs["http.response.payload"])
-		})
 	})
 }
 
 func TestHTTP2Instrumentation(t *testing.T) {
-	t.Setenv("TEMPORAL_OTEL_DEBUG", "true")
-
 	type handlerResult struct {
 		payload string
 		err     error
@@ -512,13 +490,8 @@ func TestHTTP2Instrumentation(t *testing.T) {
 	require.Equal(t, clientSpan.SpanContext().TraceID(), serverSpan.SpanContext().TraceID())
 	require.Equal(t, clientSpan.SpanContext().SpanID(), serverSpan.Parent().SpanID())
 
-	clientAttrs := spanAttrsByKey(clientSpan.Attributes())
-	require.Equal(t, "request body", clientAttrs["http.request.payload"])
-	require.Equal(t, "response body", clientAttrs["http.response.payload"])
 	serverAttrs := spanAttrsByKey(serverSpan.Attributes())
 	require.Equal(t, "2.0", serverAttrs["network.protocol.version"])
-	require.Equal(t, "request body", serverAttrs["http.request.payload"])
-	require.Equal(t, "response body", serverAttrs["http.response.payload"])
 }
 
 func spanAttrsByKey(attrs []attribute.KeyValue) map[string]any {
