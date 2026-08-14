@@ -118,13 +118,15 @@ func TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory(t *
 func TestScheduleMigrationV1ToV2_RolloutMigration(t *testing.T) {
 	// The eligibility-check ordering fix (property 1) is gated on
 	// MigrationHandoffFixes, which is intentionally not yet the shipped
-	// CurrentTweakablePolicies.Version -- it is activated in a follow-up deploy for
-	// rollback safety (see the TODO on CurrentTweakablePolicies in
-	// service/worker/scheduler/workflow.go). Until then an actively-firing schedule
-	// still never observes an idle window, so migration never completes here.
-	// Remove this skip in the deploy that bumps the current version.
-	t.Skip("arms once CurrentTweakablePolicies.Version is bumped to MigrationHandoffFixes " +
-		"(deferred to a follow-up deploy for rollback safety)")
+	// CurrentTweakablePolicies.Version -- it is activated in a follow-up deploy
+	// for rollback safety (see the TODO on CurrentTweakablePolicies in
+	// service/worker/scheduler/workflow.go). Force it here so this test exercises
+	// the fix regardless of the current rollout state, mirroring how the
+	// scheduler package's own unit tests (e.g.
+	// TestAutoMigrateReconcilesRunningWorkflowBeforeCheck) pin the version.
+	prevVersion := scheduler.CurrentTweakablePolicies.Version
+	scheduler.CurrentTweakablePolicies.Version = scheduler.MigrationHandoffFixes
+	defer func() { scheduler.CurrentTweakablePolicies.Version = prevVersion }()
 
 	env := testcore.NewEnv(t, testcore.WithWorkerService("V1 scheduler"))
 	ctx := testcore.NewContext()

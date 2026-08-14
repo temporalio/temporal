@@ -2717,6 +2717,76 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 	s.True(canArgs.State.PendingMigration, "PendingMigration should be set in CAN state")
 }
 
+// TestMigrateRollbackDoesNotBlockScheduleActions verifies the actual
+// rollback-safety property: once EnableCHASMSchedulerMigration is rolled back
+// mid-flight, the pending migration keeps failing (mirroring the real
+// activity's own live disabled-check -- see
+// TestMigrateScheduleToChasm_MigrationDisabled), but the V1 schedule itself
+// is entirely unaffected -- it keeps firing its own actions on schedule. A
+// stuck, perpetually-failing migration must never block the schedule's real
+// work.
+func (s *workflowSuite) TestMigrateRollbackDoesNotBlockScheduleActions() {
+	enableMigration := true
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			if !enableMigration {
+				// What the real activity returns once its own live
+				// migrationEnabled() check goes false.
+				return errors.New("MigrateScheduleToChasm: migration is currently disabled")
+			}
+			return errors.New("migration failed")
+		})
+
+	startCalls := 0
+	s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Return(
+		func(_ context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+			startCalls++
+			return &schedulespb.StartWorkflowResponse{
+				RunId:         uuid.NewString(),
+				RealStartTime: timestamppb.New(s.now()),
+			}, nil
+		})
+	// Report every fired workflow as immediately completed so the default
+	// SKIP overlap policy never withholds the next scheduled action.
+	s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, mock.Anything).Return(
+		&schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil)
+
+	// Roll the flag back shortly after start -- well before the schedule's
+	// own hourly actions fire -- simulating an operator reverting the
+	// migration switch shortly after a bounced attempt.
+	s.env.RegisterDelayedCallback(func() {
+		enableMigration = false
+	}, 1*time.Minute)
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			func() bool { return enableMigration }, func() bool { return true })
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()), "schedule should keep running (CAN), not fail or get stuck")
+	s.Greater(migrateCalls, 1, "migration should keep retrying (and failing) throughout")
+	s.GreaterOrEqual(startCalls, 3, "schedule should keep firing its own actions on schedule despite the stuck migration")
+}
+
 func (s *workflowSuite) TestMigrateDynamicConfig() {
 	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe).
 	// Mock MigrateSchedule activity to succeed.
