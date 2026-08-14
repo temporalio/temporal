@@ -49,7 +49,7 @@ make install-schema-es
 ## For production
 
 ### Create the binaries
-- Run `make temporal-elasticsearch-tool`
+- From the root of this repository, run `make temporal-elasticsearch-tool`
 - You should see an executable `temporal-elasticsearch-tool`
 
 ### Schema setup
