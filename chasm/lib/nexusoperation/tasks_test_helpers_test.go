@@ -108,6 +108,10 @@ func (m *mockStoreComponent) OnNexusOperationCancellationFailed(ctx chasm.Mutabl
 	return TransitionCancellationFailed.Apply(cancellation, ctx, EventCancellationFailed{Failure: cause})
 }
 
+func (m *mockStoreComponent) OnNexusOperationAutoCloseCancelRequested(ctx chasm.MutableContext, op *Operation) error {
+	return op.RequestCancel(ctx, &nexusoperationpb.CancellationState{AutoClose: true})
+}
+
 func (m *mockStoreComponent) WorkflowTypeName() string {
 	return ""
 }

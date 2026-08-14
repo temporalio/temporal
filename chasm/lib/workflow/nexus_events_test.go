@@ -451,3 +451,50 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 	require.True(t, hasCancellation)
 	require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, cancellation.StateMachineState())
 }
+
+// TestTimedOutEventDefinitionApply_DeferredRemoval covers case [D]: when an operation times out on its
+// own schedule-to-close with a pending auto-close cancellation, the TimedOut event keeps the operation
+// resident so the cancel can still be delivered, and removes it only once the cancel resolves. This
+// exercises the replay path — reset re-applies these events in the same order.
+func TestTimedOutEventDefinitionApply_DeferredRemoval(t *testing.T) {
+	tcx := newTestContext(t, defaultConfig)
+	scheduledEvent, key := scheduleOperation(t, tcx)
+	applyStartedEvent(t, tcx, scheduledEvent.EventId, time.Now().UTC())
+
+	// Auto-close cancel requested (op's own schedule-to-close timeout) before the timeout resolves.
+	applyEventDefinition[CancelRequestedEventDefinition](t, tcx, &historypb.HistoryEvent{
+		EventId:   int64(20),
+		EventTime: timestamppb.Now(),
+		Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId: scheduledEvent.EventId,
+			},
+		},
+	})
+
+	// TimedOut with a pending cancellation must retain the operation (deferred removal).
+	applyEventDefinition[TimedOutEventDefinition](t, tcx, &historypb.HistoryEvent{
+		EventTime: timestamppb.Now(),
+		Attributes: &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+			NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
+				ScheduledEventId: scheduledEvent.EventId,
+				Failure:          &failurepb.Failure{Message: "operation timed out"},
+			},
+		},
+	})
+	field, ok := tcx.wf.Operations[key]
+	require.True(t, ok, "timed-out operation with a pending cancellation must be retained")
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, field.Get(tcx.chasmCtx).Status)
+
+	// Once the cancel resolves, the terminal operation is removed.
+	applyEventDefinition[CancelRequestCompletedEventDefinition](t, tcx, &historypb.HistoryEvent{
+		EventTime: timestamppb.Now(),
+		Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+			NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+				ScheduledEventId: scheduledEvent.EventId,
+			},
+		},
+	})
+	_, ok = tcx.wf.Operations[key]
+	require.False(t, ok, "timed-out operation must be removed after the cancel resolves")
+}

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/sdk/client"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -193,21 +195,11 @@ func (s *NexusCancelPolicyTestSuite) TestContinueAsNew_Delivered() {
 	nexusCancelAwaitNewRunNoPendingOps(s.T(), env, run)
 }
 
-// The operation's own schedule-to-close timeout (caller workflow stays running). The cancel is now
-// scheduled (the STC-timeout handler calls RequestCancelOnAutoClose), but the schedule-to-close
-// timeout is itself a timer/pure task, so it hits the same timer-driven dispatch bug: the outbound
-// cancel task is scheduled but not dispatched.
+// Case [D]: the operation's own schedule-to-close timeout fires while the caller workflow keeps
+// running. The timeout resolution event-sources a cancel request and defers removing the operation
+// until the cancel is delivered, so the handler is notified. Once the cancel completes the operation
+// is removed (no longer pending on the still-running caller).
 func (s *NexusCancelPolicyTestSuite) TestOperationScheduleToCloseTimeout_Delivered() {
-	s.T().Skip("KNOWN LIMITATION: when a workflow-backed operation hits its own schedule-to-close timeout, the " +
-		"timeout resolution removes the operation from the caller workflow's pending-operations map in the same CHASM " +
-		"transaction. The auto-close Cancellation is created as a child of that operation, so its node is never " +
-		"materialized (syncSubField is skipped for a to-be-deleted node) and the outbound CancelOperation task is " +
-		"dropped. WithDetached only governs access after parent close, not structural survival when the parent is " +
-		"removed. Delivering here requires either deferring the operation's timeout resolution until the cancel " +
-		"round-trip completes, or relocating the auto-close cancellation off the operation onto a longer-lived parent. " +
-		"Workflow-close (terminate/fail/complete/cancel/run-timeout/execution-timeout) and SANO timeout keep the " +
-		"operation alive (or use the closed-entity snapshot path) and do deliver.")
-
 	cancelCh := make(chan struct{}, 1)
 	env, taskQueue, endpointName := s.nexusCancelEnv(cancelCh)
 
@@ -218,6 +210,16 @@ func (s *NexusCancelPolicyTestSuite) TestOperationScheduleToCloseTimeout_Deliver
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
 	requireCancelDelivered(s.T(), cancelCh)
+
+	// After the cancel is delivered the timed-out operation is removed from the still-running caller.
+	await.Require(s.Context(), s.T(), func(c *await.T) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		})
+		require.NoError(c, err)
+		require.Empty(c, resp.PendingNexusOperations, "timed-out operation should be removed after the cancel is delivered")
+	}, 20*time.Second, 200*time.Millisecond)
 }
 
 // --- Standalone (SANO) under REQUEST_CANCEL -------------------------------------------------------

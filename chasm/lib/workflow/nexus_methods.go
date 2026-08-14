@@ -265,33 +265,54 @@ func (w *Workflow) RequestCancelPendingNexusOperations(ctx chasm.MutableContext)
 		if op.LifecycleState(ctx) != chasm.LifecycleStateRunning {
 			continue // already terminal
 		}
-		if _, ok := op.Cancellation.TryGet(ctx); ok {
-			continue // cancellation already requested (e.g. by the workflow itself)
-		}
-
-		_, err := addAndApplyHistoryEvent[CancelRequestedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
-			e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
-				NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
-					ScheduledEventId: scheduledEventID,
-				},
-			}
-			// nolint:revive // We must mutate here even if the linter doesn't like it.
-			e.WorkerMayIgnore = true // For compatibility with older SDKs.
-		})
-		if err != nil {
-			if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) ||
-				errors.Is(err, nexusoperation.ErrOperationAlreadyCompleted) {
-				continue
-			}
+		if err := w.requestAutoCloseCancel(ctx, scheduledEventID, op); err != nil {
 			return err
 		}
+	}
+	return nil
+}
 
-		// Mark the cancellation as auto-close (system-initiated) so the cancel call is not clamped to
-		// the operation's remaining schedule-to-close time — which is ~0 when the workflow closed at its
-		// run/execution timeout, and would otherwise starve the cancel call.
-		if cancel, ok := op.Cancellation.TryGet(ctx); ok {
-			cancel.AutoClose = true
+// OnNexusOperationAutoCloseCancelRequested event-sources an auto-close cancel request for a single
+// operation. Used by the operation's own schedule-to-close timeout, where the operation (not the
+// workflow) is closing while the caller keeps running.
+func (w *Workflow) OnNexusOperationAutoCloseCancelRequested(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+	return w.requestAutoCloseCancel(ctx, parentData.GetScheduledEventId(), op)
+}
+
+// requestAutoCloseCancel records a NexusOperationCancelRequested event for the operation (so a reset
+// can rebuild the cancellation) and flags the resulting cancellation as auto-close. No-op if a
+// cancellation already exists.
+func (w *Workflow) requestAutoCloseCancel(ctx chasm.MutableContext, scheduledEventID int64, op *nexusoperation.Operation) error {
+	if _, ok := op.Cancellation.TryGet(ctx); ok {
+		return nil // cancellation already requested (e.g. by the workflow itself)
+	}
+
+	_, err := addAndApplyHistoryEvent[CancelRequestedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId: scheduledEventID,
+			},
 		}
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.WorkerMayIgnore = true // For compatibility with older SDKs.
+	})
+	if err != nil {
+		if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) ||
+			errors.Is(err, nexusoperation.ErrOperationAlreadyCompleted) {
+			return nil
+		}
+		return err
+	}
+
+	// Mark the cancellation as auto-close (system-initiated) so the cancel call is not clamped to the
+	// operation's remaining schedule-to-close time — which is ~0 when closing at a timeout, and would
+	// otherwise starve the cancel call.
+	if cancel, ok := op.Cancellation.TryGet(ctx); ok {
+		cancel.AutoClose = true
 	}
 	return nil
 }
