@@ -250,9 +250,15 @@ func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, 
 //     cancellation is only recorded caller-side (via the event added here), not forwarded to
 //     the handler.
 //
-// KNOWN LIMITATION: this must be called from the pre-close hooks (before the close event is added).
-// On timer-driven close paths (run/execution timeout) the outbound cancel task is scheduled but not
-// dispatched — see the skipped tests in tests/nexus_cancel_policy_test.go.
+// Must be called from the pre-close hooks (before the close event is added) so the recorded
+// NexusOperationCancelRequested events land in the caller's history ahead of the close event.
+//
+// KNOWN LIMITATION: the auto_close flag is set on the cancellation component after the
+// NexusOperationCancelRequested event is applied, and is not carried in the event attributes. A reset
+// that rebuilds a still-pending auto-close cancellation from history therefore recreates it with
+// auto_close=false, which re-clamps the cancel call to the operation's (already ~expired)
+// schedule-to-close and may fail to deliver. The window is narrow (reset mid-cancel-delivery); a
+// durable fix needs the flag event-sourced (see design doc open items).
 //
 // CONSIDER(stephanos): this fans out inline within the workflow-close transaction, one event +
 // cancellation component per pending operation. The count is bounded by

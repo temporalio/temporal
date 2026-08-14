@@ -355,9 +355,11 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, e
 	}); err != nil {
 		return err
 	}
-	// If a cancellation is pending (auto-close on the operation's own schedule-to-close timeout), keep
-	// the timed-out operation resident so the cancel can still be delivered to the handler. It is
-	// removed once the cancel resolves (see CancelRequestCompleted/Failed apply).
+	// If any cancellation is pending when the operation times out — auto-close on the operation's own
+	// schedule-to-close timeout, or a user cancel still in flight — keep the timed-out operation
+	// resident so the cancel can still be delivered to the handler. It is removed once the cancel
+	// resolves (see CancelRequestCompleted/Failed apply). The retained operation keeps counting against
+	// the per-workflow pending-operation limit until then.
 	if _, ok := op.Cancellation.TryGet(ctx); ok {
 		return nil
 	}
