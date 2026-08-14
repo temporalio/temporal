@@ -76,7 +76,6 @@ func NewHTTPClientTransport(
 		propagator = propagation.TraceContext{}
 	}
 	isDebug := DebugMode()
-	// Wrapper order ensures payload capture finishes before otelhttp ends the span on response close.
 	if isDebug {
 		if rt == nil {
 			rt = http.DefaultTransport
