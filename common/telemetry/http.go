@@ -180,7 +180,7 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 
 	h.handler.ServeHTTP(w, r)
-	// Unknown-length bodies may be fully consumed without a final read returning EOF.
+	// Handlers can consume an unknown-length body without performing the extra read that returns EOF.
 	if requestCapture != nil {
 		requestCapture.finish()
 	}
