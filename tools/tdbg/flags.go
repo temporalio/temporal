@@ -6,6 +6,7 @@ var (
 	FlagHistoryAddress             = "history-address"
 	FlagNamespaceID                = "namespace-id"
 	FlagNamespace                  = "namespace"
+	FlagNamespaces                 = "namespaces"
 	FlagNamespaceAlias             = []string{"n"}
 	FlagShardID                    = "shard-id"
 	FlagWorkflowID                 = "workflow-id"

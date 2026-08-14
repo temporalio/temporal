@@ -208,6 +208,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Name:  FlagVisibilityQuery,
 					Usage: "Visibility query to select workflows",
 				},
+				&cli.StringSliceFlag{
+					Name:  FlagNamespaces,
+					Usage: "Namespaces targeted by the batch jobs",
+				},
 				&cli.StringFlag{
 					Name:  FlagReason,
 					Usage: "Reason for starting the batch job",

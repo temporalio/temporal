@@ -3,6 +3,8 @@ package tdbg
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,6 +22,8 @@ type (
 		adminservice.AdminServiceClient
 		currentCluster string
 		lastRequest    *adminservice.StartAdminBatchOperationRequest
+		requests       []*adminservice.StartAdminBatchOperationRequest
+		startErrors    map[string]error
 	}
 
 	batchTestWorkflowClient struct {
@@ -93,6 +97,10 @@ func (t *batchTestAdminClient) StartAdminBatchOperation(
 	_ ...grpc.CallOption,
 ) (*adminservice.StartAdminBatchOperationResponse, error) {
 	t.lastRequest = request
+	t.requests = append(t.requests, request)
+	if err := t.startErrors[request.GetNamespace()]; err != nil {
+		return nil, err
+	}
 	return &adminservice.StartAdminBatchOperationResponse{}, nil
 }
 
@@ -189,4 +197,79 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		s.ErrorContains(err, "must be started in the active cluster")
 		s.Nil(s.client.admin.lastRequest, "the job must not be started")
 	})
+}
+
+func (s *batchCommandTestSuite) TestAdminBatchStart_MultipleNamespaces() {
+	err := s.run(
+		"--"+FlagNamespaces, "target-ns",
+		"--"+FlagNamespaces, "other-ns",
+		"--batch-type", batchTypeTerminateWorkflows,
+		"--query", "WorkflowType='MyWorkflow'",
+		"--reason", "cleanup",
+		"--job-id", "my-job",
+	)
+	s.NoError(err)
+	s.Len(s.client.admin.requests, 2)
+	s.Equal("target-ns", s.client.admin.requests[0].GetNamespace())
+	s.Equal("my-job:target-ns", s.client.admin.requests[0].GetJobId())
+	s.Equal("other-ns", s.client.admin.requests[1].GetNamespace())
+	s.Equal("my-job:other-ns", s.client.admin.requests[1].GetJobId())
+	s.Contains(s.output.String(), `"target-ns": 3 workflows`)
+	s.Contains(s.output.String(), `"other-ns": 3 workflows`)
+	s.Contains(s.output.String(), "Currently matching: 6 workflows across 2 namespaces")
+	s.Contains(s.output.String(), "Submission summary: 2 started, 0 failed.")
+}
+
+func (s *batchCommandTestSuite) TestAdminBatchStart_MultipleNamespacesPartialFailure() {
+	s.client.admin.startErrors = map[string]error{"other-ns": errors.New("start failed")}
+	err := s.run(
+		"--"+FlagNamespaces, "target-ns",
+		"--"+FlagNamespaces, "other-ns",
+		"--batch-type", batchTypeTerminateWorkflows,
+		"--query", "WorkflowType='MyWorkflow'",
+		"--reason", "cleanup",
+		"--job-id", "my-job",
+	)
+	s.ErrorContains(err, `namespace "other-ns": start failed`)
+	s.Len(s.client.admin.requests, 2)
+	s.Contains(s.output.String(), `Batch operation started successfully for namespace "target-ns"`)
+	s.Contains(s.output.String(), `Failed to start batch operation for namespace "other-ns"`)
+	s.Contains(s.output.String(), "Submission summary: 1 started, 1 failed.")
+}
+
+func (s *batchCommandTestSuite) TestAdminBatchRefreshWorkflowTasks_MultipleNamespaces() {
+	s.output.Reset()
+	err := s.app.Run([]string{
+		"tdbg", "--namespace", "target-ns", "--yes",
+		"execution", "refresh-tasks",
+		"--" + FlagNamespaces, "target-ns",
+		"--" + FlagNamespaces, "other-ns",
+		"--query", "WorkflowType='MyWorkflow'",
+		"--reason", "refresh",
+		"--job-id", "my-job",
+	})
+	s.NoError(err)
+	s.Len(s.client.admin.requests, 2)
+	s.NotNil(s.client.admin.requests[0].GetRefreshTasksOperation())
+	s.NotNil(s.client.admin.requests[1].GetRefreshTasksOperation())
+	s.Equal("my-job:target-ns", s.client.admin.requests[0].GetJobId())
+	s.Equal("my-job:other-ns", s.client.admin.requests[1].GetJobId())
+	s.Contains(s.output.String(), `"target-ns": 3 execution(s)`)
+	s.Contains(s.output.String(), `"other-ns": 3 execution(s)`)
+	s.Contains(s.output.String(), "Submission summary: 2 started, 0 failed.")
+}
+
+func (s *batchCommandTestSuite) TestAdminBatchStart_RejectsMoreThanMaximumNamespaces() {
+	args := []string{
+		"--batch-type", batchTypeTerminateWorkflows,
+		"--query", "WorkflowType='MyWorkflow'",
+		"--reason", "cleanup",
+	}
+	for i := 0; i <= maxBatchNamespaces; i++ {
+		args = append(args, "--"+FlagNamespaces, fmt.Sprintf("namespace-%d", i))
+	}
+
+	err := s.run(args...)
+	s.ErrorContains(err, "at most 100 namespaces are supported, got 101")
+	s.Empty(s.client.admin.requests)
 }

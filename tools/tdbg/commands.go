@@ -750,7 +750,7 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	adminClient := clientFactory.AdminClient(c)
 	workflowClient := clientFactory.WorkflowClient(c)
 
-	nsName, err := getRequiredOption(c, FlagNamespace)
+	nsNames, err := getBatchNamespaces(c)
 	if err != nil {
 		return err
 	}
@@ -769,41 +769,50 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	if jobID == "" {
 		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
 	}
-	jobIDWithNS := fmt.Sprintf("%s:%s", jobID, nsName)
-
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	// Count workflows matching the query to confirm with user
-	countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-		Namespace: nsName,
-		Query:     query,
-	})
-	if err != nil {
-		return fmt.Errorf("unable to count workflow executions: %w", err)
+	counts := make([]int64, len(nsNames))
+	var totalCount int64
+	for i, nsName := range nsNames {
+		countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: nsName,
+			Query:     query,
+		})
+		if err != nil {
+			return fmt.Errorf("unable to count workflow executions in namespace %q: %w", nsName, err)
+		}
+		counts[i] = countResp.GetCount()
+		totalCount += countResp.GetCount()
 	}
 
-	msg := fmt.Sprintf("A workflow will be started in temporal-system to refresh tasks for %d execution(s) matching query %q in namespace %q. Continue Y/N?",
-		countResp.GetCount(), query, nsName)
-	prompter.Prompt(msg)
-
-	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace:       nsName,
-		VisibilityQuery: query,
-		JobId:           jobIDWithNS,
-		Reason:          reason,
-		Identity:        getCurrentUserFromEnv(),
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("unable to start batch refresh workflow tasks: %w", err)
+	msg := fmt.Sprintf("A workflow will be started in temporal-system to refresh tasks for %d execution(s) matching query %q in namespace %q.",
+		totalCount, query, nsNames[0])
+	if len(nsNames) > 1 {
+		var countSummary string
+		for i, nsName := range nsNames {
+			countSummary += fmt.Sprintf("  %q: %d execution(s)\n", nsName, counts[i])
+		}
+		msg = fmt.Sprintf("A workflow per namespace will be started in temporal-system to refresh tasks for %d execution(s) matching query %q across %d namespaces:\n%s",
+			totalCount, query, len(nsNames), countSummary)
 	}
+	if _, err := fmt.Fprintln(c.App.Writer, msg); err != nil {
+		return fmt.Errorf("unable to write batch operation summary: %w", err)
+	}
+	prompter.Prompt(fmt.Sprintf("Proceed with refreshing tasks for the currently matching %d execution(s)?", totalCount))
 
-	// nolint:errcheck // assuming that write will succeed.
-	fmt.Fprintf(c.App.Writer, "Batch Refresh Workflow Tasks started successfully for Job ID: %s\n", jobIDWithNS)
-	return nil
+	return startAdminBatchOperations(ctx, c.App.Writer, adminClient, nsNames, jobID, func(nsName, jobIDWithNS string) *adminservice.StartAdminBatchOperationRequest {
+		return &adminservice.StartAdminBatchOperationRequest{
+			Namespace:       nsName,
+			VisibilityQuery: query,
+			JobId:           jobIDWithNS,
+			Reason:          reason,
+			Identity:        getCurrentUserFromEnv(),
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+			},
+		}
+	})
 }
 
 // AdminRebuildMutableState rebuild a workflow mutable state using persisted history events
