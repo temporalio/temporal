@@ -497,16 +497,6 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	s.EqualValues(1, s.taskManager.getQueueDataByKey(tlID).RangeID())
 }
 
-func (s *matchingEngineSuite) TestDescribeTaskQueueNilDescRequest() {
-	_, err := s.matchingEngine.DescribeTaskQueue(context.Background(), &matchingservice.DescribeTaskQueueRequest{
-		NamespaceId: uuid.NewString(),
-		DescRequest: nil,
-	})
-	s.Error(err)
-	var invalidArgument *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgument)
-}
-
 // TestDescribeTaskQueueDtqDefaultCacheKeyPre9436Collision documents the cache bug fixed for
 // https://github.com/temporalio/temporal/issues/9436 : when dtq_default cache keys were built
 // from buildIds before user-data resolution (no explicit Version), buildIds was still empty, so

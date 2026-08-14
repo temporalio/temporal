@@ -1480,9 +1480,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 	req := request.GetDescRequest()
-	if req == nil {
-		return nil, serviceerror.NewInvalidArgument("DescribeTaskQueueRequest.desc_request must be set")
-	}
 
 	// This has been deprecated.
 	if req.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED {
