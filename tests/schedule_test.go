@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -32,7 +31,6 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
@@ -2624,20 +2622,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 	wid := "sched-test-reset-extra-cb-wf"
 	wt := "sched-test-reset-extra-cb-wt"
 
-	ch := &completionHandler{
-		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-		requestCompleteCh: make(chan error, 1),
-	}
-	defer func() {
-		close(ch.requestCh)
-		close(ch.requestCompleteCh)
-	}()
-	secondCallbackURL := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch})
-		srv := httptest.NewServer(hh)
-		t.Cleanup(func() { srv.Close() })
-		return srv.URL + "/callback"
-	}()
+	ch, secondCallbackURL := newNexusCompletionHandler(t)
 
 	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 		sigCh := workflow.GetSignalChannel(ctx, "complete")

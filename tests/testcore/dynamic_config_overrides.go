@@ -49,7 +49,15 @@ var (
 		dynamicconfig.TaskQueueScannerEnabled.Key():                             false,
 		dynamicconfig.ExecutionsScannerEnabled.Key():                            false,
 		dynamicconfig.BuildIdScavengerEnabled.Key():                             false,
-
+		// Functional test clusters don't need production-scale scheduler concurrency.
+		// Keep these pools small to reduce per-cluster goroutine and memory overhead.
+		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key():               64,
+		dynamicconfig.TimerProcessorSchedulerWorkerCount.Key():                  64,
+		dynamicconfig.VisibilityProcessorSchedulerWorkerCount.Key():             64,
+		dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Key():            64,
+		dynamicconfig.ArchivalProcessorSchedulerWorkerCount.Key():               64,
+		dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Key():            64,
+		dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Key(): 64,
 		// Better to read through in tests than add artificial sleeps (which is what we previously had).
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
 

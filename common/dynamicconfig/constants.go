@@ -1912,7 +1912,7 @@ This can help reduce effects of shard movement.`,
 	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",
-		false,
+		true,
 		`EnableHostLevelEventsCache controls if the events cache is host level. Requires service restart to take effect.`,
 	)
 	AcquireShardInterval = NewGlobalDurationSetting(
@@ -2608,6 +2608,18 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 		10000,
 		`MaximumSignalsPerExecution is max number of signals supported by single execution`,
 	)
+	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
+		"history.maximumRequestIDsPerExecution",
+		25,
+		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained per
+execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to disable the count cap.`,
+	)
+	RequestIDMaxAge = NewNamespaceDurationSetting(
+		"history.requestIDMaxAge",
+		7*24*time.Hour,
+		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
+UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
+	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
 		5*time.Minute,
@@ -3066,6 +3078,11 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 		"history.ReplicationStreamSenderErrorRetryExpiration",
 		3*time.Minute,
 		`ReplicationStreamSenderErrorRetryExpiration is the max retry duration for sending replication tasks`,
+	)
+	ReplicationStreamSenderSkipStuckTask = NewGlobalBoolSetting(
+		"history.ReplicationStreamSenderSkipStuckTask",
+		false,
+		`ReplicationStreamSenderSkipStuckTask, when true, makes the replication stream sender log, emit a metric, and skip (advance the watermark past) a task that could not be built ("converted") after exhausting retries, instead of failing and wedging the whole stream. Only unbuildable tasks (corrupt/unusable source info) are skipped; transient send/rate-limit failures and infra/teardown errors (shard-ownership-lost, stream error, context canceled) are not, so they still tear the stream down. Deterministic non-retryable send failures such as an oversized gRPC message are not handled here (left to the transport-layer message-size fix).`,
 	)
 	ReplicationExecutableTaskErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationExecutableTaskErrorRetryWait",
