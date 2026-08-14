@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -143,16 +142,6 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	nexusWorker.RegisterNexusService(service)
 	s.NoError(nexusWorker.Start())
 	s.T().Cleanup(nexusWorker.Stop)
-
-	s.Await(func(s *NexusOTELSuite) {
-		response, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
-			Namespace:     env.Namespace().String(),
-			TaskQueue:     tv.TaskQueue(),
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_NEXUS,
-		})
-		s.NoError(err)
-		s.NotEmpty(response.GetPollers())
-	}, 10*time.Second, 100*time.Millisecond)
 
 	endpoint := env.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), tv.TaskQueue().GetName())
 	_, err := env.FrontendClient().StartNexusOperationExecution(s.Context(), &workflowservice.StartNexusOperationExecutionRequest{
