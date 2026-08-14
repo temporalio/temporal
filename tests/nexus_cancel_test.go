@@ -432,11 +432,10 @@ func (s *NexusCancelTestSuite) TestContinueAsNew_NotDelivered() {
 	nexusCancelAwaitNewRunNoPendingOps(s.T(), env, run)
 }
 
-// Continue-as-new does NOT fire the close policy even when REQUEST_CANCEL is enabled — the CaN command
-// handler is intentionally not hooked. CaN also does not carry the pending operations into the new
-// run (it starts a fresh mutable state); the operations are simply dropped and the handler is left
-// running. This locks in that intentional decision.
-func (s *NexusCancelTestSuite) TestContinueAsNew_RequestCancelPolicy_StillNotDelivered() {
+// Continue-as-new under REQUEST_CANCEL fires the close policy like any other forced close: the
+// operations are not carried into the new run, so the handler is notified. The new run still starts
+// with no pending operations.
+func (s *NexusCancelTestSuite) TestContinueAsNew_RequestCancelPolicy_Delivered() {
 	cancelCh := make(chan struct{}, 1)
 	env, taskQueue, endpointName := s.nexusCancelEnv(cancelCh,
 		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1)) // 1 = REQUEST_CANCEL
@@ -457,7 +456,7 @@ func (s *NexusCancelTestSuite) TestContinueAsNew_RequestCancelPolicy_StillNotDel
 			},
 		},
 	})
-	requireCancelNotDelivered(s.T(), cancelCh, 3*time.Second)
+	requireCancelDelivered(s.T(), cancelCh)
 	nexusCancelAwaitNewRunNoPendingOps(s.T(), env, run)
 }
 

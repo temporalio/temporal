@@ -167,11 +167,9 @@ func (s *NexusCancelPolicyTestSuite) TestExecutionTimeoutCaller_Delivered() {
 	requireCancelDelivered(s.T(), cancelCh)
 }
 
-// --- Still not delivered (intentional or not-yet-implemented under REQUEST_CANCEL) ----------------
-
-// Continue-as-new does NOT fire the policy even under REQUEST_CANCEL — the new run inherits the
-// operations and applies the policy on its own close (intentional; CaN is not hooked).
-func (s *NexusCancelPolicyTestSuite) TestContinueAsNew_StillNotDelivered() {
+// Continue-as-new abandons the caller's pending operations (they are not carried into the new run),
+// so under REQUEST_CANCEL it fires the policy like any other forced close and notifies the handler.
+func (s *NexusCancelPolicyTestSuite) TestContinueAsNew_Delivered() {
 	cancelCh := make(chan struct{}, 1)
 	env, taskQueue, endpointName := s.nexusCancelEnv(cancelCh)
 
@@ -191,7 +189,7 @@ func (s *NexusCancelPolicyTestSuite) TestContinueAsNew_StillNotDelivered() {
 			},
 		},
 	})
-	requireCancelNotDelivered(s.T(), cancelCh, 3*time.Second)
+	requireCancelDelivered(s.T(), cancelCh)
 	nexusCancelAwaitNewRunNoPendingOps(s.T(), env, run)
 }
 

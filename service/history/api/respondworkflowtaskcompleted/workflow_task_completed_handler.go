@@ -1150,6 +1150,13 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		}
 	}
 
+	// Continue-as-new abandons the caller's pending Nexus operations (they are not carried into the
+	// new run), so — like the other forced closes — notify their handlers under the auto-close policy.
+	if err := nexusclose.CancelPendingNexusOperations(ctx, handler.mutableState,
+		nexusclose.NexusOperationAutoClosePolicy(handler.config.NexusOperationAutoClosePolicy())); err != nil {
+		return nil, err
+	}
+
 	event, newMutableState, err := handler.mutableState.AddContinueAsNewEvent(
 		ctx,
 		handler.workflowTaskCompletedID,

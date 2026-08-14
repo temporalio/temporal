@@ -3990,10 +3990,10 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ScheduledState_TerminateCa
 	}
 }
 
-// TestNexusClosePolicy_ContinueAsNew_DoesNotCancelHandler documents that a Continue-as-New does
-// NOT trigger the close policy for pending Nexus operations. CaN is treated as "the run continues"
-// rather than "the caller closed", consistent with the TBD open question in the design doc.
-func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ContinueAsNew_DoesNotCancelHandler(chasmEnabled bool) {
+// TestNexusClosePolicy_ContinueAsNew_CancelsHandler verifies that Continue-as-New triggers the close
+// policy: because CaN abandons the caller's pending Nexus operations (they are not carried into the
+// new run), the handler is notified under REQUEST_CANCEL, like any other forced close.
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ContinueAsNew_CancelsHandler(chasmEnabled bool) {
 	if !chasmEnabled {
 		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
 	}
@@ -4041,12 +4041,12 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ContinueAsNew_DoesNotCance
 		require.NoError(t, err)
 	}, 20*time.Second, 200*time.Millisecond)
 
-	// CaN should not cancel the pending Nexus operation.
+	// CaN fires the close policy: the handler receives a CancelOperation.
 	select {
 	case <-cancelCh:
-		s.Fail("handler should not have received CancelOperation on ContinueAsNew")
-	case <-time.After(3 * time.Second):
-		// Expected — no cancel arrived.
+		// Expected — handler notified.
+	case <-time.After(20 * time.Second):
+		s.Fail("handler should have received CancelOperation on ContinueAsNew")
 	}
 
 	// CaN starts a fresh mutable state, so the pending operation is not carried into the new run.
