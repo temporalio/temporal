@@ -20,6 +20,41 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
 )
 
+// The workflow and update settings live here rather than with the rest of the frontend.* keys
+// to avoid a circular dependency.
+var EnabledWorkflowCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"frontend.enabledWorkflowCallbackKinds",
+	ConvertEnabledKinds,
+	EnabledCallbackKinds{KindNexus},
+	`The list of completion callback kinds that may be attached to a workflow execution.
+Must be a non-empty list naming only "nexus" and/or "worker".`,
+)
+
+var EnabledWorkflowUpdateCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"frontend.enabledWorkflowUpdateCallbackKinds",
+	ConvertEnabledKinds,
+	EnabledCallbackKinds{KindNexus},
+	`The list of completion callback kinds that may be attached to a workflow update.
+Must be a non-empty list naming only "nexus" and/or "worker".
+Callbacks are only recorded if history.enableUpdateCallbacks is also set.`,
+)
+
+var WorkerNameMaxLength = dynamicconfig.NewNamespaceIntSetting(
+	"callback.worker.maxNameLength",
+	1000,
+	`The maximum allowed length of the task queue, service, and operation names that address the
+handler of a Worker completion callback. Uses Go's len() function to determine the length.`,
+)
+
+// TODO(chrsmith): This just caps the size of an individual source context payload.
+// We also need to wire through an aggregate max size, for all callbacks in an execution.
+var WorkerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
+	"callback.worker.maxSourceContextSize",
+	4096,
+	`The maximum allowed size, in bytes, of the opaque source context attached to a Worker completion
+callback. The server carries this payload to the callback's handler untouched.`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"callback.request.timeout",
 	time.Second*10,
