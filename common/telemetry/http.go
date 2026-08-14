@@ -14,10 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const (
-	maxHTTPDebugPayloadSize = 2 * 1024 * 1024
-	redactedHTTPHeaderValue = "<redacted>"
-)
+const maxHTTPDebugPayloadSize = 2 * 1024 * 1024
 
 type debugHTTPClientTransport struct {
 	rt http.RoundTripper
@@ -159,7 +156,8 @@ func (t *debugHTTPRequestTransport) RoundTrip(req *http.Request) (*http.Response
 func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	span := trace.SpanFromContext(r.Context())
 	annotateHTTPHeaders(span, "http.request.headers.", r.Header)
-	r.Body = newPayloadCapturingReadCloser(r.Body, r.ContentLength, func(payload string) {
+	var requestCapture *payloadCapturingReadCloser
+	r.Body, requestCapture = newPayloadCapturingReadCloserWithCapture(r.Body, r.ContentLength, func(payload string) {
 		span.SetAttributes(attribute.String("http.request.payload", payload))
 	})
 
@@ -174,14 +172,18 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return n, err
 			}
 		},
-		ReadFrom: func(next httpsnoop.ReadFromFunc) httpsnoop.ReadFromFunc {
+		ReadFrom: func(httpsnoop.ReadFromFunc) httpsnoop.ReadFromFunc {
 			return func(src io.Reader) (int64, error) {
-				return next(io.TeeReader(src, &responseBody))
+				// Hide ReaderFrom so io.Copy uses Write and otelhttp can account for response bytes.
+				return io.Copy(struct{ io.Writer }{w}, src)
 			}
 		},
 	})
 
 	h.handler.ServeHTTP(w, r)
+	if requestCapture != nil {
+		requestCapture.finish()
+	}
 
 	annotateHTTPHeaders(span, "http.response.headers.", w.Header())
 	if payload, ok := responseBody.Value(); ok {
@@ -190,25 +192,9 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
+	// Debug mode is explicitly opt-in, so sensitive header values are intentionally recorded verbatim for diagnostics.
 	for key, values := range headers {
-		if isSensitiveHTTPHeader(key) {
-			values = []string{redactedHTTPHeaderValue}
-		}
 		span.SetAttributes(attribute.StringSlice(prefix+strings.ToLower(key), values))
-	}
-}
-
-func isSensitiveHTTPHeader(key string) bool {
-	switch http.CanonicalHeaderKey(key) {
-	case "Authorization",
-		"Cookie",
-		"Nexus-Callback-Temporal-Callback-Token",
-		"Proxy-Authorization",
-		"Set-Cookie",
-		"Temporal-Callback-Token":
-		return true
-	default:
-		return false
 	}
 }
 

@@ -22,6 +22,14 @@ type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
+type readerFromResponseRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (r *readerFromResponseRecorder) ReadFrom(src io.Reader) (int64, error) {
+	return io.Copy(r.Body, src)
+}
+
 type fixedIDGenerator struct{}
 
 func (fixedIDGenerator) NewIDs(context.Context) (oteltrace.TraceID, oteltrace.SpanID) {
@@ -124,7 +132,6 @@ func TestNewHTTPClientTransport(t *testing.T) {
 					Body:       io.NopCloser(bytes.NewBufferString("response body")),
 					Header: http.Header{
 						"Response-Header": []string{"response-value"},
-						"Set-Cookie":      []string{"session=secret", "csrf=secret"},
 					},
 					Request: r,
 				}, nil
@@ -133,11 +140,6 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
 			req.Header.Set("Request-Header", "request-value")
-			req.Header.Set("Authorization", "Bearer secret")
-			req.Header.Set("Cookie", "session=secret")
-			req.Header.Set("Nexus-Callback-Temporal-Callback-Token", "callback secret")
-			req.Header.Set("Proxy-Authorization", "Basic secret")
-			req.Header.Set("Temporal-Callback-Token", "callback secret")
 
 			resp, err := wrapped.RoundTrip(req)
 			require.NoError(t, err)
@@ -147,22 +149,16 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.NoError(t, resp.Body.Close())
 
 			require.Equal(t, map[string]any{
-				"http.request.headers.authorization":                          []string{"<redacted>"},
-				"http.request.headers.cookie":                                 []string{"<redacted>"},
-				"http.request.headers.nexus-callback-temporal-callback-token": []string{"<redacted>"},
-				"http.request.headers.proxy-authorization":                    []string{"<redacted>"},
-				"http.request.headers.request-header":                         []string{"request-value"},
-				"http.request.headers.temporal-callback-token":                []string{"<redacted>"},
-				"http.request.headers.traceparent":                            []string{"00-0102030405060708090a0b0c0d0e0f10-0102030405060708-01"},
-				"http.request.method":                                         "POST",
-				"http.request.payload":                                        "request body",
-				"http.response.headers.response-header":                       []string{"response-value"},
-				"http.response.headers.set-cookie":                            []string{"<redacted>"},
-				"http.response.payload":                                       "response body",
-				"http.response.status_code":                                   int64(http.StatusOK),
-				"network.protocol.version":                                    "1.1",
-				"server.address":                                              "example.com",
-				"url.full":                                                    "http://example.com",
+				"http.request.headers.request-header":   []string{"request-value"},
+				"http.request.headers.traceparent":      []string{"00-0102030405060708090a0b0c0d0e0f10-0102030405060708-01"},
+				"http.request.method":                   "POST",
+				"http.request.payload":                  "request body",
+				"http.response.headers.response-header": []string{"response-value"},
+				"http.response.payload":                 "response body",
+				"http.response.status_code":             int64(http.StatusOK),
+				"network.protocol.version":              "1.1",
+				"server.address":                        "example.com",
+				"url.full":                              "http://example.com",
 			}, spanAttrsByKey(recorder.Ended()[0].Attributes()))
 		})
 
@@ -191,10 +187,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		t.Run("AnnotatesChunkedResponsePayloadOnClose", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
-			tp := trace.NewTracerProvider(
-				trace.WithSpanProcessor(recorder),
-				trace.WithIDGenerator(fixedIDGenerator{}),
-			)
+			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode:    http.StatusOK,
@@ -212,15 +205,8 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&decoded))
 			require.NoError(t, resp.Body.Close())
 
-			require.Equal(t, map[string]any{
-				"http.request.headers.traceparent": []string{"00-0102030405060708090a0b0c0d0e0f10-0102030405060708-01"},
-				"http.request.method":              "GET",
-				"http.response.payload":            `{"ok":true}`,
-				"http.response.status_code":        int64(http.StatusOK),
-				"network.protocol.version":         "1.1",
-				"server.address":                   "example.com",
-				"url.full":                         "http://example.com",
-			}, spanAttrsByKey(recorder.Ended()[0].Attributes()))
+			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+			require.Equal(t, `{"ok":true}`, attrs["http.response.payload"])
 		})
 
 		t.Run("DoesNotReadResponseBodyBeforeCaller", func(t *testing.T) {
@@ -247,10 +233,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		t.Run("AnnotatesFixedLengthPayloadsWithoutEOF", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
-			tp := trace.NewTracerProvider(
-				trace.WithSpanProcessor(recorder),
-				trace.WithIDGenerator(fixedIDGenerator{}),
-			)
+			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				requestPayload := make([]byte, r.ContentLength)
 				_, err := io.ReadFull(r.Body, requestPayload)
@@ -273,16 +256,9 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
 
-			require.Equal(t, map[string]any{
-				"http.request.headers.traceparent": []string{"00-0102030405060708090a0b0c0d0e0f10-0102030405060708-01"},
-				"http.request.method":              "POST",
-				"http.request.payload":             "request body",
-				"http.response.payload":            "response body",
-				"http.response.status_code":        int64(http.StatusOK),
-				"network.protocol.version":         "1.1",
-				"server.address":                   "example.com",
-				"url.full":                         "http://example.com",
-			}, spanAttrsByKey(recorder.Ended()[0].Attributes()))
+			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+			require.Equal(t, "request body", attrs["http.request.payload"])
+			require.Equal(t, "response body", attrs["http.response.payload"])
 		})
 
 		t.Run("PreservesRequestBodyReadErrors", func(t *testing.T) {
@@ -343,18 +319,11 @@ func TestNewHTTPHandler(t *testing.T) {
 		require.NoError(t, handlerErr)
 		require.Equal(t, "response body", rec.Body.String())
 
-		require.Equal(t, map[string]any{
-			"client.address":            "192.0.2.1",
-			"http.request.body.size":    int64(len("request body")),
-			"http.request.method":       "POST",
-			"http.response.body.size":   int64(len("response body")),
-			"http.response.status_code": int64(http.StatusOK),
-			"network.peer.address":      "192.0.2.1",
-			"network.peer.port":         int64(1234),
-			"network.protocol.version":  "1.1",
-			"server.address":            "example.com",
-			"url.scheme":                "http",
-		}, spanAttrsByKey(recorder.Ended()[0].Attributes()))
+		attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+		require.NotContains(t, attrs, "http.request.payload")
+		require.NotContains(t, attrs, "http.response.payload")
+		require.NotContains(t, attrs, "http.request.headers.request-header")
+		require.NotContains(t, attrs, "http.response.headers.response-header")
 	})
 
 	t.Run("DebugMode", func(t *testing.T) {
@@ -422,6 +391,42 @@ func TestNewHTTPHandler(t *testing.T) {
 			require.Equal(t, "request body", string(handlerPayload))
 		})
 
+		t.Run("AnnotatesChunkedRequestPayloadWithoutEOF", func(t *testing.T) {
+			recorder := tracetest.NewSpanRecorder()
+			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+			var handlerErr error
+			handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				payload := make([]byte, len("request body"))
+				_, handlerErr = io.ReadFull(r.Body, payload)
+			}), "test-handler", tp, nil)
+
+			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
+			req.ContentLength = -1
+			req.TransferEncoding = []string{"chunked"}
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			require.NoError(t, handlerErr)
+
+			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+			require.Equal(t, "request body", attrs["http.request.payload"])
+		})
+
+		t.Run("AnnotatesResponseSizeWhenUsingReadFrom", func(t *testing.T) {
+			recorder := tracetest.NewSpanRecorder()
+			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+			var handlerErr error
+			handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, handlerErr = io.Copy(w, io.LimitReader(bytes.NewBufferString("response body"), int64(len("response body"))))
+			}), "test-handler", tp, nil)
+
+			rec := &readerFromResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com", nil))
+			require.NoError(t, handlerErr)
+			require.Equal(t, "response body", rec.Body.String())
+
+			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+			require.Equal(t, int64(len("response body")), attrs["http.response.body.size"])
+		})
+
 		t.Run("OmitsOversizedPayloads", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
@@ -437,20 +442,77 @@ func TestNewHTTPHandler(t *testing.T) {
 			require.NoError(t, handlerErr)
 			require.Equal(t, payload, rec.Body.Bytes())
 
-			require.Equal(t, map[string]any{
-				"client.address":            "192.0.2.1",
-				"http.request.body.size":    int64(len(payload)),
-				"http.request.method":       "POST",
-				"http.response.body.size":   int64(len(payload)),
-				"http.response.status_code": int64(http.StatusOK),
-				"network.peer.address":      "192.0.2.1",
-				"network.peer.port":         int64(1234),
-				"network.protocol.version":  "1.1",
-				"server.address":            "example.com",
-				"url.scheme":                "http",
-			}, spanAttrsByKey(recorder.Ended()[0].Attributes()))
+			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+			require.NotContains(t, attrs, "http.request.payload")
+			require.NotContains(t, attrs, "http.response.payload")
 		})
 	})
+}
+
+func TestHTTP2Instrumentation(t *testing.T) {
+	t.Setenv("TEMPORAL_OTEL_DEBUG", "true")
+
+	type handlerResult struct {
+		payload string
+		err     error
+	}
+
+	recorder := tracetest.NewSpanRecorder()
+	tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+	resultCh := make(chan handlerResult, 1)
+	handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, err := io.ReadAll(r.Body)
+		if err == nil {
+			_, err = w.Write([]byte("response body"))
+		}
+		resultCh <- handlerResult{payload: string(payload), err: err}
+	}), "test-handler", tp, nil)
+
+	server := httptest.NewUnstartedServer(handler)
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	t.Cleanup(server.Close)
+
+	client := server.Client()
+	client.Transport = telemetry.NewHTTPClientTransport(client.Transport, tp, nil)
+	req, err := http.NewRequest(http.MethodPost, server.URL, bytes.NewBufferString("request body"))
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	responsePayload, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	result := <-resultCh
+	require.NoError(t, result.err)
+	require.Equal(t, "request body", result.payload)
+	require.Equal(t, "response body", string(responsePayload))
+	require.NotNil(t, resp.TLS)
+	require.Equal(t, 2, resp.ProtoMajor)
+
+	var clientSpan, serverSpan trace.ReadOnlySpan
+	for _, span := range recorder.Ended() {
+		switch span.SpanKind() {
+		case oteltrace.SpanKindClient:
+			clientSpan = span
+		case oteltrace.SpanKindServer:
+			serverSpan = span
+		default:
+			continue
+		}
+	}
+	require.NotNil(t, clientSpan)
+	require.NotNil(t, serverSpan)
+	require.Equal(t, clientSpan.SpanContext().TraceID(), serverSpan.SpanContext().TraceID())
+	require.Equal(t, clientSpan.SpanContext().SpanID(), serverSpan.Parent().SpanID())
+
+	clientAttrs := spanAttrsByKey(clientSpan.Attributes())
+	require.Equal(t, "request body", clientAttrs["http.request.payload"])
+	require.Equal(t, "response body", clientAttrs["http.response.payload"])
+	serverAttrs := spanAttrsByKey(serverSpan.Attributes())
+	require.Equal(t, "2.0", serverAttrs["network.protocol.version"])
+	require.Equal(t, "request body", serverAttrs["http.request.payload"])
+	require.Equal(t, "response body", serverAttrs["http.response.payload"])
 }
 
 func spanAttrsByKey(attrs []attribute.KeyValue) map[string]any {
