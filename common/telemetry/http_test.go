@@ -79,6 +79,7 @@ func (r *failingReadCloser) Close() error { return nil }
 
 var errTestBodyRead = errors.New("body read failed")
 
+// Verifies client transport construction, propagation, and debug body handling.
 func TestNewHTTPClientTransport(t *testing.T) {
 	// A nil tracer provider disables instrumentation without changing the transport identity.
 	t.Run("Disabled", func(t *testing.T) {
@@ -88,6 +89,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		require.Same(t, rt, telemetry.NewHTTPClientTransport(rt, nil, nil))
 	})
 
+	// Downstream services need the injected trace context to continue the client span's trace.
 	t.Run("InjectsTraceContext", func(t *testing.T) {
 		t.Parallel()
 
@@ -114,9 +116,11 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		require.NotEmpty(t, recorder.Ended())
 	})
 
+	// Debug mode adds diagnostic HTTP headers and payloads to client spans.
 	t.Run("DebugMode", func(t *testing.T) {
 		t.Setenv("TEMPORAL_OTEL_DEBUG", "true")
 
+		// Debug spans must contain the headers and payloads needed to diagnose an exchange.
 		t.Run("AnnotatesHeadersAndPayloads", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(
@@ -212,6 +216,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.Equal(t, `{"ok":true}`, attrs["http.response.payload"])
 		})
 
+		// Instrumentation must not consume a streaming response before application code reads it.
 		t.Run("DoesNotReadResponseBodyBeforeCaller", func(t *testing.T) {
 			tp := trace.NewTracerProvider()
 			body := &readTrackingCloser{Reader: bytes.NewBufferString("response body")}
@@ -265,6 +270,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.Equal(t, "response body", attrs["http.response.payload"])
 		})
 
+		// Wrapping the request body must not mask errors returned by the original body.
 		t.Run("PreservesRequestBodyReadErrors", func(t *testing.T) {
 			tp := trace.NewTracerProvider()
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -279,6 +285,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.ErrorIs(t, err, errTestBodyRead)
 		})
 
+		// Wrapping the response body must not mask errors returned by the original body.
 		t.Run("PreservesResponseBodyReadErrors", func(t *testing.T) {
 			tp := trace.NewTracerProvider()
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -300,7 +307,9 @@ func TestNewHTTPClientTransport(t *testing.T) {
 	})
 }
 
+// Verifies server handler construction, standard tracing, and debug body handling.
 func TestNewHTTPHandler(t *testing.T) {
+	// Debug-only headers and payloads must remain absent unless debug mode is enabled.
 	t.Run("SkipsHeadersAndPayloadsByDefault", func(t *testing.T) {
 		t.Parallel()
 
@@ -330,9 +339,11 @@ func TestNewHTTPHandler(t *testing.T) {
 		require.NotContains(t, attrs, "http.response.headers.response-header")
 	})
 
+	// Debug mode adds diagnostic HTTP headers and payloads to server spans.
 	t.Run("DebugMode", func(t *testing.T) {
 		t.Setenv("TEMPORAL_OTEL_DEBUG", "true")
 
+		// Debug spans must contain the headers and payloads needed to diagnose an exchange.
 		t.Run("AnnotatesHeadersAndPayloads", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
@@ -375,6 +386,7 @@ func TestNewHTTPHandler(t *testing.T) {
 			}, spanAttrsByKey(recorder.Ended()[0].Attributes()))
 		})
 
+		// Instrumentation must leave request consumption under the application handler's control.
 		t.Run("DoesNotReadRequestBodyBeforeHandler", func(t *testing.T) {
 			tp := trace.NewTracerProvider()
 			body := &readTrackingCloser{Reader: bytes.NewBufferString("request body")}
@@ -435,6 +447,7 @@ func TestNewHTTPHandler(t *testing.T) {
 	})
 }
 
+// Verifies end-to-end span propagation and protocol attribution over TLS-negotiated HTTP/2.
 func TestHTTP2Instrumentation(t *testing.T) {
 	type handlerResult struct {
 		payload string
