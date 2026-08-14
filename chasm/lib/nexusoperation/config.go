@@ -6,6 +6,7 @@ import (
 	"text/template"
 	"time"
 
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
@@ -33,6 +34,20 @@ var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableStandalone",
 	false,
 	`Toggles standalone Nexus operation functionality on the server.`,
+)
+
+var EnableCallbacks = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.enableCallbacks",
+	false,
+	`Allows attaching completion callbacks to standalone Nexus operation executions.`,
+)
+
+var EnabledCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.enabledCallbackKinds",
+	callback.ConvertEnabledKinds,
+	callback.EnabledCallbackKinds{callback.KindNexus},
+	`The list of completion callback kinds that may be attached to a standalone Nexus operation execution.
+Must be a non-empty list naming only "nexus" and/or "worker". Requires nexusoperation.enableCallbacks.`,
 )
 
 var EnableChasmWorkflowOperations = dynamicconfig.NewNamespaceBoolSetting(
@@ -243,6 +258,9 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 type Config struct {
 	Enabled                                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCallbacks                            dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnabledCallbackKinds                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.EnabledCallbackKinds]
+	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumHistoryShards                           int32
@@ -275,6 +293,9 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 	return &Config{
 		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
+		EnableCallbacks:                    EnableCallbacks.Get(dc),
+		EnabledCallbackKinds:               EnabledCallbackKinds.Get(dc),
+		MaxCallbacksPerExecution:           callback.MaxPerExecution.Get(dc),
 		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
