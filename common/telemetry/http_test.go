@@ -214,14 +214,10 @@ func TestNewHTTPHandler(t *testing.T) {
 		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 		handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, err := io.ReadAll(r.Body)
-			if err != nil {
-				t.Errorf("ReadAll() error = %v", err)
-			}
+			require.NoError(t, err)
 			w.Header().Set("Response-Header", "response-value")
 			_, err = w.Write([]byte("response body"))
-			if err != nil {
-				t.Errorf("Write() error = %v", err)
-			}
+			require.NoError(t, err)
 		}), "test-handler", tp, nil)
 
 		req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
