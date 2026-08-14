@@ -15,7 +15,7 @@ import (
 )
 
 // NewHTTPClientTransport instruments outbound HTTP requests with OpenTelemetry client spans
-// and injects trace context using propagator. It uses TraceContext when propagator is nil.
+// and injects trace context using propagator. If propagator is nil, it defaults to W3C Trace Context.
 func NewHTTPClientTransport(
 	rt http.RoundTripper,
 	tracerProvider trace.TracerProvider,
@@ -46,7 +46,7 @@ func NewHTTPClientTransport(
 }
 
 // NewHTTPHandler instruments inbound HTTP requests with OpenTelemetry server spans
-// and extracts trace context using propagator. It uses TraceContext when propagator is nil.
+// and extracts trace context using propagator. If propagator is nil, it defaults to W3C Trace Context.
 func NewHTTPHandler(
 	handler http.Handler,
 	operation string,
