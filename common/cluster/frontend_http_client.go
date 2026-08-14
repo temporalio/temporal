@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/telemetry"
 )
 
 type tlsConfigProvider interface {
@@ -17,21 +16,18 @@ type tlsConfigProvider interface {
 }
 
 type FrontendHTTPClientCache struct {
-	metadata                   Metadata
-	tlsProvider                tlsConfigProvider
-	httpClientTransportWrapper telemetry.HTTPClientTransportWrapper
-	clients                    *collection.FallibleOnceMap[string, *common.FrontendHTTPClient]
+	metadata    Metadata
+	tlsProvider tlsConfigProvider
+	clients     *collection.FallibleOnceMap[string, *common.FrontendHTTPClient]
 }
 
 func NewFrontendHTTPClientCache(
 	metadata Metadata,
 	tlsProvider tlsConfigProvider,
-	httpClientTransportWrapper telemetry.HTTPClientTransportWrapper,
 ) *FrontendHTTPClientCache {
 	cache := &FrontendHTTPClientCache{
-		metadata:                   metadata,
-		tlsProvider:                tlsProvider,
-		httpClientTransportWrapper: httpClientTransportWrapper,
+		metadata:    metadata,
+		tlsProvider: tlsProvider,
 	}
 	cache.clients = collection.NewFallibleOnceMap(cache.newClientForCluster)
 	metadata.RegisterMetadataChangeCallback(cache, cache.evictionCallback)
@@ -77,9 +73,7 @@ func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) 
 	return &common.FrontendHTTPClient{
 		Address: targetInfo.HTTPAddress,
 		Scheme:  urlScheme,
-		Client: http.Client{
-			Transport: c.httpClientTransportWrapper.Wrap(transport),
-		},
+		Client:  http.Client{Transport: transport},
 	}, nil
 }
 
