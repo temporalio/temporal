@@ -1228,7 +1228,7 @@ Default is 0, means, namespace will be deleted immediately.`,
 	MatchingNamespaceRPS = NewNamespaceIntSetting(
 		"matching.namespaceRPS",
 		0,
-		`MatchingNamespaceRPS is namespace rate limit per second for each matching host. 
+		`MatchingNamespaceRPS is namespace rate limit per second for each matching host.
 If value less or equal to 0, will fall back to MatchingRPS`,
 	)
 	MatchingPersistenceMaxQPS = NewGlobalIntSetting(
@@ -1747,7 +1747,7 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 	HistoryNamespaceRPS = NewNamespaceIntSetting(
 		"history.namespaceRPS",
 		0,
-		`HistoryNamespaceRPS is namespace rate limit per second for each history host. 
+		`HistoryNamespaceRPS is namespace rate limit per second for each history host.
 If value less or equal to 0, will fall back to HistoryRPS`,
 	)
 	HistoryPersistenceMaxQPS = NewGlobalIntSetting(
@@ -2017,6 +2017,11 @@ NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskC
 		`QueueReaderStuckCriticalAttempts is the max number of task loading attempts for a certain task range
 before that task range is split into a separate slice to unblock loading for later range.
 currently only work for scheduled queues and the task range is 1s.`,
+	)
+	QueueReaderStuckShadowMode = NewGlobalBoolSetting(
+		"history.queueReaderStuckShadowMode",
+		false,
+		`QueueReaderStuckShadowMode controls whether reader stuck alerts are suppressed and only logged.`,
 	)
 	QueueCriticalSlicesCount = NewGlobalIntSetting(
 		"history.queueCriticalSlicesCount",
@@ -3495,7 +3500,7 @@ When enabled, the scavenger will delete completed workflow execution data that a
 		"worker.adminBatcherGlobalRPS",
 		0,
 		`AdminBatcherGlobalRPS controls the rps of all admin batch operations across all worker hosts.
-The configured value will be divided by the number of worker hosts to get the per host rps limit. 
+The configured value will be divided by the number of worker hosts to get the per host rps limit.
 0 means no global limit and each host will use AdminBatcherHostRPS.`,
 	)
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = NewGlobalIntSetting(

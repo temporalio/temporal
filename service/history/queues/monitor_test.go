@@ -9,6 +9,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -38,9 +41,12 @@ func (s *monitorSuite) SetupTest() {
 	s.monitor = newMonitor(
 		tasks.CategoryTypeScheduled,
 		s.mockTimeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
 		&MonitorOptions{
 			PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+			ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(false),
 			SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 		},
 	)
@@ -215,6 +221,38 @@ func (s *monitorSuite) TestReaderWatermarkStats_ReadsInOneWindowShareTheirCount(
 	}
 
 	s.True(s.receivedStuckAlert(), "reads inside one window must count toward the same total")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_ShadowModeReportsWithoutAlerting() {
+	options := *s.monitor.options
+	options.ReaderStuckShadowMode = dynamicconfig.GetBoolPropertyFn(true)
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	monitor := newMonitor(tasks.CategoryTypeScheduled, s.mockTimeSource, log.NewTestLogger(), metricsHandler, &options)
+	defer monitor.Close()
+
+	start := s.mockTimeSource.Now()
+	for i := 0; i != options.ReaderStuckCriticalAttempts()*2; i++ {
+		monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+	}
+
+	select {
+	case <-monitor.AlertCh():
+		s.Fail("shadow mode must not raise the alert")
+	default:
+	}
+
+	// Silenced after the first report, so a run of reads past the threshold reports once.
+	records := capture.Snapshot()["queue_alert_shadow"]
+	s.Len(records, 1)
+	s.Equal(readerStuckActionName, records[0].Tags[metrics.QueueActionTagName])
+
+	s.mockTimeSource.Update(start.Add(defaultAlertSilenceDuration + time.Second))
+	monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+	s.Len(capture.Snapshot()["queue_alert_shadow"], 2, "a reader still stuck must report again once the silence expires")
 }
 
 func (s *monitorSuite) TestSliceCount() {

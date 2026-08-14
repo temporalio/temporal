@@ -954,6 +954,7 @@ var (
 	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueActionCounter           = NewCounterDef("queue_actions")
+	QueueAlertShadowCounter      = NewCounterDef("queue_alert_shadow")
 	QueuePredicateResolutionLoss = NewCounterDef(
 		"queue_predicate_resolution_loss",
 		WithDescription("The number of times a queue slice lost predicate resolution by keeping a broad predicate "+
