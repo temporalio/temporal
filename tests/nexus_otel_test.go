@@ -162,7 +162,6 @@ func (s *NexusOTELSuite) requireExportedClientSpan(
 	requestHeaders <-chan headerGetter,
 ) headerGetter {
 	var headers headerGetter
-	var headers headerGetter
 	select {
 	case headers = <-requestHeaders:
 	case <-s.Context().Done():
