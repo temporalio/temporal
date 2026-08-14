@@ -14,8 +14,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// NewHTTPClientTransport wraps an HTTP RoundTripper with otelhttp so outbound requests
-// carry TraceContext headers and produce a client span.
+// NewHTTPClientTransport instruments outbound HTTP requests with OpenTelemetry client spans
+// and injects trace context using propagator. It uses TraceContext when propagator is nil.
 func NewHTTPClientTransport(
 	rt http.RoundTripper,
 	tracerProvider trace.TracerProvider,
@@ -45,8 +45,8 @@ func NewHTTPClientTransport(
 	return rt
 }
 
-// NewHTTPHandler wraps an HTTP handler with otelhttp so inbound requests extract
-// TraceContext headers and produce a server span.
+// NewHTTPHandler instruments inbound HTTP requests with OpenTelemetry server spans
+// and extracts trace context using propagator. It uses TraceContext when propagator is nil.
 func NewHTTPHandler(
 	handler http.Handler,
 	operation string,
@@ -72,7 +72,8 @@ func NewHTTPHandler(
 
 type debugHTTPClientRequestStateKey struct{}
 
-// The request state bridges the inner capture to the outer closer so annotation precedes span completion.
+// debugHTTPClientSpanTransport stores response finalization here through the request context.
+// debugHTTPClientTransport runs it before otelhttp ends the span when the body closes before EOF.
 type debugHTTPClientRequestState struct {
 	finishResponse func()
 }
@@ -98,7 +99,7 @@ type debugHTTPClientSpanTransport struct {
 
 func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	span := trace.SpanFromContext(req.Context())
-	// Skip debug capture as a performance optimization when the span discards attributes.
+	// Non-recording spans discard attributes, so skip the debug-capture work.
 	if !span.IsRecording() {
 		return t.rt.RoundTrip(req)
 	}
@@ -129,7 +130,7 @@ type debugHTTPHandler struct {
 
 func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	span := trace.SpanFromContext(r.Context())
-	// Skip debug capture as a performance optimization when the span discards attributes.
+	// Non-recording spans discard attributes, so skip the debug-capture work.
 	if !span.IsRecording() {
 		h.handler.ServeHTTP(w, r)
 		return
@@ -155,14 +156,16 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 		ReadFrom: func(httpsnoop.ReadFromFunc) httpsnoop.ReadFromFunc {
 			return func(src io.Reader) (int64, error) {
-				// Hide ReaderFrom so io.Copy uses Write and otelhttp can account for response bytes.
+				// Prevent io.Copy from using ReaderFrom so bytes pass through Write, where the debug
+				// response wrapper captures payloads and otelhttp counts response size.
 				return io.Copy(struct{ io.Writer }{w}, src)
 			}
 		},
 	})
 
 	h.handler.ServeHTTP(w, r)
-	// Handlers can consume an unknown-length body without performing the extra read that returns EOF.
+	// Finalize after the handler returns because an unknown-length request may be fully consumed
+	// without a read that returns EOF.
 	if requestCapture != nil {
 		requestCapture.finish()
 	}
@@ -171,7 +174,8 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	responseBody.finish()
 }
 
-// Debug mode intentionally buffers complete payloads without a size limit.
+// Debug mode favors complete diagnostics, so it buffers all observed payload bytes in memory
+// without a size limit.
 type payloadCapture struct {
 	bytes.Buffer
 	finished bool
@@ -215,7 +219,7 @@ func (r *payloadCapturingReadCloser) Read(p []byte) (int, error) {
 	if n > 0 {
 		_, _ = r.capture.Write(p[:n])
 	}
-	// A final successful read can consume the declared length without returning EOF.
+	// Finalize after ContentLength bytes because callers may stop without another read that returns EOF.
 	if err == io.EOF || r.contentLength > 0 && int64(r.capture.Len()) == r.contentLength {
 		r.capture.finish()
 	}
@@ -256,7 +260,8 @@ func preserveBodyWriter(body io.ReadCloser, wrapped io.ReadCloser) io.ReadCloser
 }
 
 func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
-	// Debug mode is explicitly opt-in, so sensitive header values are intentionally recorded verbatim for diagnostics.
+	// Debug mode is explicit opt-in for diagnostics, so all header values, including sensitive ones,
+	// are recorded verbatim.
 	for key, values := range headers {
 		span.SetAttributes(attribute.StringSlice(prefix+strings.ToLower(key), values))
 	}
