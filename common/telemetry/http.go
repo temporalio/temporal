@@ -26,6 +26,7 @@ type debugHTTPHandler struct {
 	handler http.Handler
 }
 
+// Debug mode intentionally buffers complete payloads without a size limit.
 type payloadCapture struct {
 	bytes.Buffer
 }
@@ -56,6 +57,7 @@ type closeFinishingReadWriteCloser struct {
 
 type debugHTTPClientRequestStateKey struct{}
 
+// The request state bridges the inner capture to the outer closer so annotation precedes span completion.
 type debugHTTPClientRequestState struct {
 	responseCapture *payloadCapturingReadCloser
 }
@@ -74,6 +76,7 @@ func NewHTTPClientTransport(
 		propagator = propagation.TraceContext{}
 	}
 	isDebug := DebugMode()
+	// Wrapper order ensures payload capture finishes before otelhttp ends the span on response close.
 	if isDebug {
 		if rt == nil {
 			rt = http.DefaultTransport
@@ -178,6 +181,7 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 
 	h.handler.ServeHTTP(w, r)
+	// Unknown-length bodies may be fully consumed without a final read returning EOF.
 	if requestCapture != nil {
 		requestCapture.finish()
 	}
@@ -242,6 +246,7 @@ func (r *payloadCapturingReadCloser) Read(p []byte) (int, error) {
 		_, _ = r.capture.Write(p[:n])
 		r.readSize += int64(n)
 	}
+	// A final successful read can consume the declared length without returning EOF.
 	if err == io.EOF || r.contentLength > 0 && r.readSize == r.contentLength {
 		r.finish()
 	}
