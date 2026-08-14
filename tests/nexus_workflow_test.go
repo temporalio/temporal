@@ -4048,4 +4048,17 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ContinueAsNew_DoesNotCance
 	case <-time.After(3 * time.Second):
 		// Expected — no cancel arrived.
 	}
+
+	// CaN starts a fresh mutable state, so the pending operation is not carried into the new run.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		})
+		require.NoError(t, err)
+		require.NotEqual(t, run.GetRunID(), resp.GetWorkflowExecutionInfo().GetExecution().GetRunId(),
+			"expected a new run after continue-as-new")
+		require.Empty(t, resp.PendingNexusOperations,
+			"continue-as-new should not carry pending Nexus operations into the new run")
+	}, 20*time.Second, 200*time.Millisecond)
 }

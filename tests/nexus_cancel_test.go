@@ -149,6 +149,25 @@ func nexusCancelAwaitOpState(t *testing.T, env *NexusTestEnv, run client.Workflo
 	}, 20*time.Second, 200*time.Millisecond)
 }
 
+// nexusCancelAwaitNewRunNoPendingOps waits until the workflow has continued-as-new (its current run
+// ID differs from run's) and asserts the new run carries no pending Nexus operations. Continue-as-new
+// starts a fresh mutable state, so the caller's pending operations are dropped rather than carried
+// into the new run.
+func nexusCancelAwaitNewRunNoPendingOps(t *testing.T, env *NexusTestEnv, run client.WorkflowRun) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(env.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		})
+		require.NoError(c, err)
+		require.NotEqual(c, run.GetRunID(), resp.GetWorkflowExecutionInfo().GetExecution().GetRunId(),
+			"expected a new run after continue-as-new")
+		require.Empty(c, resp.PendingNexusOperations,
+			"continue-as-new should not carry pending Nexus operations into the new run")
+	}, 20*time.Second, 200*time.Millisecond)
+}
+
 // nexusCancelPollAndRequestCancel polls for a workflow task (which the caller must have triggered,
 // e.g. via a signal or a cancel request), locates the NexusOperationScheduled event, and responds
 // with a RequestCancelNexusOperation command. This is the explicit-cancel path.
@@ -386,7 +405,8 @@ func (s *NexusCancelTestSuite) TestRunTimeoutCaller_NotDelivered() {
 	requireCancelNotDelivered(s.T(), cancelCh, 10*time.Second)
 }
 
-// Caller workflow continues-as-new with a STARTED op → not delivered (and not carried to the new run).
+// Caller workflow continues-as-new with a STARTED op → no cancel delivered, and the op is not carried
+// into the new run (fresh mutable state drops it).
 func (s *NexusCancelTestSuite) TestContinueAsNew_NotDelivered() {
 	cancelCh := make(chan struct{}, 1)
 	env, taskQueue, endpointName := s.nexusCancelEnv(cancelCh)
@@ -408,11 +428,13 @@ func (s *NexusCancelTestSuite) TestContinueAsNew_NotDelivered() {
 		},
 	})
 	requireCancelNotDelivered(s.T(), cancelCh, 3*time.Second)
+	nexusCancelAwaitNewRunNoPendingOps(s.T(), env, run)
 }
 
-// Continue-as-new does NOT fire the close policy even when REQUEST_CANCEL is enabled — CaN is a
-// logical continuation, so the operations are meant to carry to the new run, which applies the
-// policy on its own close. This locks in that intentional decision (the CaN path is not hooked).
+// Continue-as-new does NOT fire the close policy even when REQUEST_CANCEL is enabled — the CaN command
+// handler is intentionally not hooked. CaN also does not carry the pending operations into the new
+// run (it starts a fresh mutable state); the operations are simply dropped and the handler is left
+// running. This locks in that intentional decision.
 func (s *NexusCancelTestSuite) TestContinueAsNew_RequestCancelPolicy_StillNotDelivered() {
 	cancelCh := make(chan struct{}, 1)
 	env, taskQueue, endpointName := s.nexusCancelEnv(cancelCh,
@@ -435,6 +457,7 @@ func (s *NexusCancelTestSuite) TestContinueAsNew_RequestCancelPolicy_StillNotDel
 		},
 	})
 	requireCancelNotDelivered(s.T(), cancelCh, 3*time.Second)
+	nexusCancelAwaitNewRunNoPendingOps(s.T(), env, run)
 }
 
 // The operation's own schedule-to-close timeout fires while the caller workflow keeps running → not delivered.

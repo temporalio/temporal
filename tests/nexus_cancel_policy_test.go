@@ -191,6 +191,7 @@ func (s *NexusCancelPolicyTestSuite) TestContinueAsNew_StillNotDelivered() {
 		},
 	})
 	requireCancelNotDelivered(s.T(), cancelCh, 3*time.Second)
+	nexusCancelAwaitNewRunNoPendingOps(s.T(), env, run)
 }
 
 // The operation's own schedule-to-close timeout (caller workflow stays running). The cancel is now
