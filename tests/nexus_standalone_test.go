@@ -15,6 +15,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	apinexusoperationpb "go.temporal.io/api/nexusoperation/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -222,6 +224,145 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		s.Equal(resp1.RunId, resp2.RunId)
 		s.False(resp2.GetStarted())
 	})
+}
+
+// standaloneNexusTestLink returns a workflow event link usable as a caller-supplied link on a
+// standalone Nexus operation request.
+func standaloneNexusTestLink(env *NexusTestEnv, workflowID string) *commonpb.Link {
+	return &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  env.Namespace().String(),
+				WorkflowId: workflowID,
+				RunId:      "wf-run-id",
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+	}
+}
+
+// TestStandaloneNexusOperationLinks covers links a caller attaches to a standalone Nexus operation,
+// on start and via on_conflict_options, along with the limits enforced on both paths.
+func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationLinks() {
+	env := s.newTestEnv()
+	// The operation stays STARTED, so it remains open for on-conflict attaches.
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+		},
+	})
+
+	// Takes t explicitly: subtests get their own *testing.T, and the outer suite's must not be used
+	// once Run has been called.
+	describeLinks := func(t *testing.T, operationID string) []*commonpb.Link {
+		t.Helper()
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: operationID,
+		})
+		require.NoError(t, err)
+		return descResp.GetInfo().GetLinks()
+	}
+
+	s.Run("AttachedOnStart", func(s *NexusStandaloneTestSuite) {
+		t := s.T()
+		operationID := testvars.New(t).Any().String()
+		links := []*commonpb.Link{
+			standaloneNexusTestLink(env, "start-wf-1"),
+			standaloneNexusTestLink(env, "start-wf-2"),
+		}
+
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+			Links:       links,
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		protorequire.ProtoSliceEqual(t, links, describeLinks(t, operationID))
+	})
+
+	s.Run("AttachLinksOnConflictUnionsLinks", func(s *NexusStandaloneTestSuite) {
+		t := s.T()
+		operationID := testvars.New(t).Any().String()
+		firstLink := standaloneNexusTestLink(env, "union-wf-1")
+		secondLink := standaloneNexusTestLink(env, "union-wf-2")
+
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+			RequestId:   "first-request",
+			Links:       []*commonpb.Link{firstLink},
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		attachReq := &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:      operationID,
+			Endpoint:         endpointName,
+			RequestId:        "second-request",
+			Links:            []*commonpb.Link{secondLink},
+			IdConflictPolicy: enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
+				AttachLinks: true,
+			},
+		}
+		attachResp, err := s.startNexusOperation(env, attachReq)
+		s.NoError(err)
+		s.False(attachResp.GetStarted())
+		s.Equal(startResp.GetRunId(), attachResp.GetRunId())
+
+		expected := []*commonpb.Link{firstLink, secondLink}
+		// Links are stored per request ID, so their relative order is non-deterministic.
+		protorequire.ProtoElementsMatch(t, expected, describeLinks(t, operationID))
+
+		// Replaying the same attach must not duplicate the links it already attached.
+		_, err = s.startNexusOperation(env, attachReq)
+		s.NoError(err)
+		protorequire.ProtoElementsMatch(t, expected, describeLinks(t, operationID))
+	})
+
+	s.Run("LinksIgnoredOnConflictWithoutAttachLinks", func(s *NexusStandaloneTestSuite) {
+		t := s.T()
+		operationID := testvars.New(t).Any().String()
+		firstLink := standaloneNexusTestLink(env, "ignored-wf-1")
+
+		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+			RequestId:   "first-request",
+			Links:       []*commonpb.Link{firstLink},
+		})
+		s.NoError(err)
+
+		_, err = s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:      operationID,
+			Endpoint:         endpointName,
+			RequestId:        "second-request",
+			Links:            []*commonpb.Link{standaloneNexusTestLink(env, "ignored-wf-2")},
+			IdConflictPolicy: enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+			// attach_links intentionally omitted — the second request's links must be dropped.
+		})
+		s.NoError(err)
+
+		protorequire.ProtoSliceEqual(t, []*commonpb.Link{firstLink}, describeLinks(t, operationID))
+	})
+
+	// The per-request and per-execution link caps are covered by unit tests
+	// (TestNewStandaloneOperationAttachesLinks, TestOperationAttachLinks) rather than here: the
+	// subtests above run in parallel against a shared cluster, so a dynamic config override for one
+	// of them would leak into the others.
 }
 
 func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
@@ -1199,7 +1340,11 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		s.Contains(err.Error(), "already terminated")
 	})
 
-	s.Run("AlreadyCanceled", func(s *NexusStandaloneTestSuite) {
+	// Covers a *pending cancellation request*, which leaves the operation open. Terminating an
+	// operation that already reached the terminal CANCELED status is rejected instead; that path
+	// requires a handler-side cancel completion, so it is covered by the unit test
+	// TestTerminateRejectedForClosedOperation.
+	s.Run("AfterCancelRequested", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
 		endpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
 

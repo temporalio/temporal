@@ -1,13 +1,13 @@
-package activity
+package nexusoperation
 
 import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-// linkValidator validates links attached to standalone activity executions.
+// linkValidator validates links attached to standalone Nexus operation executions.
 type linkValidator struct {
-	// Wrapped so that activity.linkValidator is a distinct, injectable type.
+	// Wrapped so that nexusoperation.linkValidator is a distinct, injectable type.
 	*chasm.LinkValidator
 }
 
@@ -18,7 +18,7 @@ func newLinkValidator(
 ) *linkValidator {
 	return &linkValidator{
 		chasm.NewLinkValidator(
-			"an activity",
+			"a nexus operation",
 			maxLinksPerRequest,
 			maxLinksPerComponent,
 			linkMaxSize,
