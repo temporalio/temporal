@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
@@ -31,7 +32,11 @@ type invocationResult interface {
 }
 
 // invocationResultOK marks an invocation as successful.
-type invocationResultOK struct{}
+type invocationResultOK struct {
+	// Links that were received along with the invocationResult, and should be
+	// added to the calling Callback.
+	receivedLinks []*commonpb.Link
+}
 
 func (invocationResultOK) mustImplementInvocationResult() {}
 

@@ -232,7 +232,7 @@ func (n invocableWorker) classifyDispatchResult(
 	// an operation to process it. The callback does not wait for that operation to finish.
 	err := commonnexus.MatchingDispatchResponseToError(resp)
 	if err == nil {
-		return invocationResultOK{}, outcome
+		return invocationResultOK{receivedLinks: dispatchResponseLinks(logger, resp)}, outcome
 	}
 
 	if !recognized {
@@ -265,6 +265,30 @@ func (n invocableWorker) classifyDispatchResult(
 		return invocationResultRetry{err}, outcome
 	}
 	return invocationResultFail{err}, outcome
+}
+
+// dispatchResponseLinks converts the links a worker returned with a successful delivery. They name
+// the resources the handler created to process the completion, e.g. the workflow backing the
+// operation it started, so that a caller describing the source execution can follow the callback to
+// what handled it.
+//
+// Links are informational, so anything this server cannot parse is dropped with a warning rather
+// than failing a delivery the handler already accepted.
+func dispatchResponseLinks(logger log.Logger, resp *matchingservice.DispatchNexusTaskResponse) []*commonpb.Link {
+	var protoLinks []*nexuspb.Link
+	switch variant := resp.GetResponse().GetStartOperation().GetVariant().(type) {
+	case *nexuspb.StartOperationResponse_SyncSuccess:
+		protoLinks = variant.SyncSuccess.GetLinks()
+	case *nexuspb.StartOperationResponse_AsyncSuccess:
+		protoLinks = variant.AsyncSuccess.GetLinks()
+	default:
+		// Only a successful start carries links to record.
+		return nil
+	}
+	if len(protoLinks) == 0 {
+		return nil
+	}
+	return commonnexus.ConvertNexusLinksToProtoLinks(commonnexus.ConvertLinksFromProto(protoLinks), logger)
 }
 
 // dispatchOutcomeTag names a dispatch outcome for metrics. Values are hyphenated to match the ones
@@ -340,4 +364,35 @@ func startOperationFailed(resp *matchingservice.DispatchNexusTaskResponse) bool 
 	default:
 		return false
 	}
+}
+
+// rewriteWorkerCallbackLinks converts converts the backlinks for a worker callback delivery into
+// the appropriate Link_Callback variant instead. (Requires exactly one link, exactly of type
+// Nexus operation.)
+func rewriteWorkerCallbackLinks(links []nexus.Link, requestID string) ([]nexus.Link, error) {
+	if len(links) != 1 {
+		return nil, fmt.Errorf("got unexpected number of links (%d)", len(links))
+	}
+
+	// Worker callbacks are only supported for standalone Nexus operations. So we reject
+	// any other type of Nexus link.
+	sanoLink, err := commonnexus.ConvertNexusLinkToLinkNexusOperation(links[0])
+	if err != nil {
+		return nil, fmt.Errorf("converting link to NexusOp (%w)", err)
+	}
+
+	callbackLink := &commonpb.Link_Callback{
+		Namespace: sanoLink.Namespace,
+		Execution: &commonpb.Execution{
+			Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+			BusinessId: sanoLink.OperationId,
+			RunId:      sanoLink.RunId,
+		},
+		RequestId: requestID,
+	}
+	gotNexusLink, err := commonnexus.ConvertLinkCallbackToNexusLink(callbackLink)
+	if err != nil {
+		return nil, fmt.Errorf("converting to callback into nexus link: %w", err)
+	}
+	return []nexus.Link{gotNexusLink}, nil
 }

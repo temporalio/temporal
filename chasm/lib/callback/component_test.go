@@ -7,6 +7,7 @@ import (
 	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -130,6 +131,62 @@ func TestFromAPICallback(t *testing.T) {
 				require.NotSame(t, links[1], gotLinks[1])
 			})
 		}
+	})
+}
+
+// TestRecordReceivedLinks covers how links returned by a delivery's target are merged onto the
+// callback they were delivered for.
+func TestRecordReceivedLinks(t *testing.T) {
+	registeredLink := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "caller-wf-id"},
+		},
+	}
+	receivedLink := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{Namespace: "ns", WorkflowId: "handler-wf-id"},
+		},
+	}
+
+	newCallback := func(links ...*commonpb.Link) *Callback {
+		return &Callback{CallbackState: &callbackspb.CallbackState{
+			Callback: &callbackspb.Callback{
+				Variant: &callbackspb.Callback_Worker_{Worker: &callbackspb.Callback_Worker{}},
+				Links:   links,
+			},
+		}}
+	}
+
+	t.Run("AppendsToExistingLinks", func(t *testing.T) {
+		// A callback may already carry links from the request that registered it, so a delivery adds
+		// to them rather than replacing them.
+		cb := newCallback(registeredLink)
+		cb.recordReceivedLinks([]*commonpb.Link{receivedLink})
+		protorequire.ProtoSliceEqual(t,
+			[]*commonpb.Link{registeredLink, receivedLink},
+			cb.GetCallback().GetLinks())
+	})
+
+	t.Run("StoresACopy", func(t *testing.T) {
+		// The links come off an RPC response, so what is persisted must not alias it.
+		received := common.CloneProto(receivedLink)
+		cb := newCallback()
+		cb.recordReceivedLinks([]*commonpb.Link{received})
+		require.NotSame(t, received, cb.GetCallback().GetLinks()[0])
+		protorequire.ProtoSliceEqual(t, []*commonpb.Link{receivedLink}, cb.GetCallback().GetLinks())
+	})
+
+	t.Run("NoLinksIsANoOp", func(t *testing.T) {
+		cb := newCallback(registeredLink)
+		cb.recordReceivedLinks(nil)
+		protorequire.ProtoSliceEqual(t, []*commonpb.Link{registeredLink}, cb.GetCallback().GetLinks())
+	})
+
+	t.Run("CallbackWithoutAVariantIsANoOp", func(t *testing.T) {
+		// Defensive: such a callback never reaches an invocation, so there is nothing to link to.
+		cb := &Callback{CallbackState: &callbackspb.CallbackState{}}
+		cb.recordReceivedLinks([]*commonpb.Link{receivedLink})
+		require.Empty(t, cb.GetCallback().GetLinks())
 	})
 }
 

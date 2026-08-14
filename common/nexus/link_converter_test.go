@@ -562,3 +562,288 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertNexusLinkToLinkNexusOperation(t *testing.T) {
+	type testcase struct {
+		name     string
+		input    nexus.Link
+		expected *commonpb.Link_NexusOperation
+		errMsg   string
+	}
+
+	cases := []testcase{
+		{
+			name: "valid",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme: "temporal",
+					Path:   "/namespaces/ns/nexus-operations/op-id/run-id/details",
+				},
+				Type: "temporal.api.common.v1.Link.NexusOperation",
+			},
+			expected: &commonpb.Link_NexusOperation{
+				Namespace:   "ns",
+				OperationId: "op-id",
+				RunId:       "run-id",
+			},
+		},
+		{
+			name: "round-trip with escaped path",
+			input: func() nexus.Link {
+				l := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+					Namespace:   "ns/with/slash",
+					OperationId: "op id with space",
+					RunId:       "run-id",
+				})
+				return l
+			}(),
+			expected: &commonpb.Link_NexusOperation{
+				Namespace:   "ns/with/slash",
+				OperationId: "op id with space",
+				RunId:       "run-id",
+			},
+		},
+		{
+			name: "wrong type",
+			input: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/nexus-operations/op-id/run-id/details"},
+				Type: "temporal.api.common.v1.Link.Callback",
+			},
+			errMsg: "cannot parse link type",
+		},
+		{
+			name: "invalid scheme",
+			input: nexus.Link{
+				URL:  &url.URL{Scheme: "http", Path: "/namespaces/ns/nexus-operations/op-id/run-id/details"},
+				Type: "temporal.api.common.v1.Link.NexusOperation",
+			},
+			errMsg: "invalid scheme",
+		},
+		{
+			name: "malformed path",
+			input: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/activities/act-id/run-id/details"},
+				Type: "temporal.api.common.v1.Link.NexusOperation",
+			},
+			errMsg: "malformed URL path",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			output, err := commonnexus.ConvertNexusLinkToLinkNexusOperation(tc.input)
+			if tc.errMsg != "" {
+				require.ErrorContains(t, err, tc.errMsg)
+				return
+			}
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, tc.expected, output)
+		})
+	}
+}
+
+func TestConvertLinkCallbackToNexusLink(t *testing.T) {
+	type testcase struct {
+		name      string
+		input     *commonpb.Link_Callback
+		output    nexus.Link
+		outputURL string
+		errMsg    string
+	}
+
+	cases := []testcase{
+		{
+			name: "valid",
+			input: &commonpb.Link_Callback{
+				Namespace: "ns",
+				Execution: &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+					BusinessId: "op-id",
+					RunId:      "run-id",
+				},
+				RequestId: "request-id",
+			},
+			output: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/nexus-operations/op-id/run-id/details",
+					RawPath:  "/namespaces/ns/nexus-operations/op-id/run-id/details",
+					RawQuery: "callback-request-id=request-id",
+				},
+				Type: "temporal.api.common.v1.Link.Callback",
+			},
+			outputURL: "temporal:///namespaces/ns/nexus-operations/op-id/run-id/details?callback-request-id=request-id",
+		},
+		{
+			name: "valid with slash",
+			input: &commonpb.Link_Callback{
+				Namespace: "ns",
+				Execution: &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+					BusinessId: "op-id/",
+					RunId:      "run-id",
+				},
+				RequestId: "request id/with space",
+			},
+			output: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/nexus-operations/op-id//run-id/details",
+					RawPath:  "/namespaces/ns/nexus-operations/op-id%2F/run-id/details",
+					RawQuery: "callback-request-id=request+id%2Fwith+space",
+				},
+				Type: "temporal.api.common.v1.Link.Callback",
+			},
+			outputURL: "temporal:///namespaces/ns/nexus-operations/op-id%2F/run-id/details?callback-request-id=request+id%2Fwith+space",
+		},
+		{
+			name: "unsupported execution type",
+			input: &commonpb.Link_Callback{
+				Namespace: "ns",
+				Execution: &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+					BusinessId: "wf-id",
+					RunId:      "run-id",
+				},
+				RequestId: "request-id",
+			},
+			errMsg: "unsupported execution for linking",
+		},
+		{
+			name:   "missing execution",
+			input:  &commonpb.Link_Callback{Namespace: "ns", RequestId: "request-id"},
+			errMsg: "unsupported execution for linking",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			output, err := commonnexus.ConvertLinkCallbackToNexusLink(tc.input)
+			if tc.errMsg != "" {
+				require.ErrorContains(t, err, tc.errMsg)
+				return
+			}
+			require.NoError(t, err)
+			protorequire.DeepEqual(t, tc.output, output)
+			require.Equal(t, tc.outputURL, output.URL.String())
+		})
+	}
+}
+
+func TestConvertNexusLinkToLinkCallback(t *testing.T) {
+	type testcase struct {
+		name     string
+		input    nexus.Link
+		expected *commonpb.Link_Callback
+		errMsg   string
+	}
+
+	cases := []testcase{
+		{
+			name: "valid",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/nexus-operations/op-id/run-id/details",
+					RawQuery: "callback-request-id=request-id",
+				},
+				Type: "temporal.api.common.v1.Link.Callback",
+			},
+			expected: &commonpb.Link_Callback{
+				Namespace: "ns",
+				Execution: &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+					BusinessId: "op-id",
+					RunId:      "run-id",
+				},
+				RequestId: "request-id",
+			},
+		},
+		{
+			name: "round-trip with escaped path and query",
+			input: func() nexus.Link {
+				l, err := commonnexus.ConvertLinkCallbackToNexusLink(&commonpb.Link_Callback{
+					Namespace: "ns/with/slash",
+					Execution: &commonpb.Execution{
+						Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+						BusinessId: "op id with space",
+						RunId:      "run-id",
+					},
+					RequestId: "request id/with space",
+				})
+				require.NoError(t, err)
+				return l
+			}(),
+			expected: &commonpb.Link_Callback{
+				Namespace: "ns/with/slash",
+				Execution: &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+					BusinessId: "op id with space",
+					RunId:      "run-id",
+				},
+				RequestId: "request id/with space",
+			},
+		},
+		{
+			name: "wrong type",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/nexus-operations/op-id/run-id/details",
+					RawQuery: "callback-request-id=request-id",
+				},
+				Type: "temporal.api.common.v1.Link.NexusOperation",
+			},
+			errMsg: "cannot parse link type",
+		},
+		{
+			name: "invalid scheme",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "http",
+					Path:     "/namespaces/ns/nexus-operations/op-id/run-id/details",
+					RawQuery: "callback-request-id=request-id",
+				},
+				Type: "temporal.api.common.v1.Link.Callback",
+			},
+			errMsg: "invalid scheme",
+		},
+		{
+			name: "malformed path",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/activities/act-id/run-id/details",
+					RawQuery: "callback-request-id=request-id",
+				},
+				Type: "temporal.api.common.v1.Link.Callback",
+			},
+			errMsg: "malformed URL path",
+		},
+		{
+			name: "missing request ID",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme: "temporal",
+					Path:   "/namespaces/ns/nexus-operations/op-id/run-id/details",
+				},
+				Type: "temporal.api.common.v1.Link.Callback",
+			},
+			errMsg: `missing "callback-request-id" query parameter`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			output, err := commonnexus.ConvertNexusLinkToLinkCallback(tc.input)
+			if tc.errMsg != "" {
+				require.ErrorContains(t, err, tc.errMsg)
+				return
+			}
+			require.NoError(t, err)
+			if diff := cmp.Diff(tc.expected, output, protocmp.Transform()); diff != "" {
+				assert.Fail(t, "Proto mismatch (-want +got):\n", diff)
+			}
+		})
+	}
+}

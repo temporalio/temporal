@@ -130,7 +130,9 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.True(t, ok)
 		cb := first.Get(ctx)
 		require.Equal(t, callbackspb.CALLBACK_STATUS_STANDBY, cb.Status)
-		require.Equal(t, "req-id", cb.RequestId)
+		// A callback is invoked under the same ID it is keyed by, so two callbacks registered by a
+		// single request are still distinguishable to the handler they are delivered to.
+		require.Equal(t, "req-id-0", cb.RequestId)
 		require.Equal(t, defaultTime, cb.RegistrationTime.AsTime())
 		require.Equal(t, testCallbackURL, cb.GetCallback().GetNexus().GetUrl())
 		require.Equal(t, map[string]string{"key": "value"}, cb.GetCallback().GetNexus().GetHeader())
@@ -138,6 +140,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 
 		second, ok := op.Callbacks["req-id-1"]
 		require.True(t, ok)
+		require.Equal(t, "req-id-1", second.Get(ctx).RequestId)
 		require.Equal(t, "http://localhost:8080/cb2", second.Get(ctx).GetCallback().GetNexus().GetUrl())
 
 		// STANDBY means no invocation task yet; only the scheduled transition's tasks are present.
