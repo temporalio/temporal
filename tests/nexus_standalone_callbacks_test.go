@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -350,22 +351,61 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		}
 	})
 
-	s.Run("RejectsAttachLinks", func(s *NexusStandaloneCallbacksTestSuite) {
+	// Links and callbacks are attached by independent options, so a single request may carry both.
+	s.Run("AttachLinksAndCallbacksOnConflict", func(s *NexusStandaloneCallbacksTestSuite) {
 		ctx := s.Context()
-		// The start request carries no links, so attach_links cannot be honored.
-		_, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
-			OperationId:         testvars.New(s.T()).Any().String(),
-			Endpoint:            alwaysSuccessEndpointName,
-			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb")},
+		t := s.T()
+
+		endpointName := env.createRandomExternalNexusServer(s.Context(), t, nexustest.Handler{
+			OnStartOperation: func(
+				ctx context.Context,
+				service, operation string,
+				input *nexus.LazyValue,
+				options nexus.StartOperationOptions,
+			) (nexus.HandlerStartOperationResult[any], error) {
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+			},
+		})
+
+		firstLink := standaloneNexusTestLink(env, "first-wf")
+		secondLink := standaloneNexusTestLink(env, "second-wf")
+
+		operationID := testvars.New(t).Any().String()
+		startResp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "first-request",
+			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb1")},
+			Links:               []*commonpb.Link{firstLink},
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		attachResp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           "second-request",
+			CompletionCallbacks: []*commonpb.Callback{nexusCompletionCallback("http://localhost/cb2")},
+			Links:               []*commonpb.Link{secondLink},
+			IdConflictPolicy:    enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
 			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
 				AttachRequestId:           true,
 				AttachCompletionCallbacks: true,
 				AttachLinks:               true,
 			},
 		})
-		var unimplementedErr *serviceerror.Unimplemented
-		s.ErrorAs(err, &unimplementedErr)
-		s.ErrorContains(err, "attach_links is not supported")
+		s.NoError(err)
+		s.False(attachResp.GetStarted(), "the second request must not have created an operation")
+
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: operationID,
+		})
+		s.NoError(err)
+		// Links are stored per request ID, so their relative order is non-deterministic.
+		protorequire.ProtoElementsMatch(t,
+			[]*commonpb.Link{firstLink, secondLink},
+			descResp.GetInfo().GetLinks())
 	})
 }
 

@@ -1,17 +1,13 @@
-package activity
+package nexusoperation
 
 import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-// linkValidator validates links attached to standalone activity executions.
-//
-// It is a library-local named type over chasm.LinkValidator, which holds the logic. The wrapper
-// exists so that fx can tell this library's validator apart from the equivalent one provided by
-// other CHASM libraries (e.g. standalone Nexus operations), which share the same underlying type
-// and live in the same graph.
+// linkValidator validates links attached to standalone Nexus operation executions.
 type linkValidator struct {
+	// Wrapped so that nexusoperation.linkValidator is a distinct typed.
 	*chasm.LinkValidator
 }
 
@@ -22,7 +18,7 @@ func newLinkValidator(
 ) *linkValidator {
 	return &linkValidator{
 		chasm.NewLinkValidator(
-			"an activity",
+			"a nexus operation",
 			maxLinksPerRequest,
 			maxLinksPerComponent,
 			linkMaxSize,

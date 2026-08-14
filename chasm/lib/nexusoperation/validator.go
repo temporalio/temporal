@@ -40,6 +40,7 @@ type validator struct {
 	saMapperProvider  searchattribute.MapperProvider
 	saValidator       *searchattribute.Validator
 	callbackValidator callback.Validator
+	linkValidator     *linkValidator
 }
 
 func newValidator(
@@ -48,6 +49,7 @@ func newValidator(
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 	callbackValidator callback.Validator,
+	linkValidator *linkValidator,
 ) *validator {
 	return &validator{
 		config:            config,
@@ -55,6 +57,7 @@ func newValidator(
 		saMapperProvider:  saMapperProvider,
 		saValidator:       saValidator,
 		callbackValidator: callbackValidator,
+		linkValidator:     linkValidator,
 	}
 }
 
@@ -105,6 +108,9 @@ func (v *validator) validateAndNormalizeStartRequest(
 		if err := v.callbackValidator.Validate(ctx, ns, cbs, opts); err != nil {
 			return err
 		}
+	}
+	if err := v.linkValidator.ValidateRequest(ns, req.GetLinks()); err != nil {
+		return err
 	}
 	if err := v.validateOnConflictOptions(req); err != nil {
 		return err
@@ -336,28 +342,26 @@ func (v *validator) normalizeIDPolicies(req *workflowservice.StartNexusOperation
 }
 
 // validateOnConflictOptions validates the on_conflict_options of a start request:
-//   - attach_links is not supported: StartNexusOperationExecutionRequest has no links field, so there is
-//     nothing to attach. Reject rather than silently drop the caller's intent.
-//   - attach_completion_callbacks requires attach_request_id, since it embedded into the keys we use to
-//     persist them on the Operation's Callbacks map.
-//   - attach_request_id requires at least one completion callback, since attaching a request ID is only
-//     meaningful alongside something to attach.
+//   - attach_completion_callbacks requires attach_request_id, since it is embedded into the keys we use
+//     to persist them on the Operation's Callbacks map.
+//   - attach_request_id requires at least one completion callback or link, since attaching a request ID
+//     is only meaningful alongside something to attach.
+//
+// attach_links is independent and may be set on its own.
 func (v *validator) validateOnConflictOptions(req *workflowservice.StartNexusOperationExecutionRequest) error {
 	onConflictOptions := req.GetOnConflictOptions()
 	if onConflictOptions == nil {
 		return nil
 	}
-	if onConflictOptions.GetAttachLinks() {
-		return serviceerror.NewUnimplemented(
-			"on_conflict_options: attach_links is not supported for Nexus operation executions")
-	}
 	if onConflictOptions.GetAttachCompletionCallbacks() && !onConflictOptions.GetAttachRequestId() {
 		return serviceerror.NewInvalidArgument(
 			"on_conflict_options: attach_completion_callbacks requires attach_request_id to be set")
 	}
-	if onConflictOptions.GetAttachRequestId() && len(req.GetCompletionCallbacks()) == 0 {
+	if onConflictOptions.GetAttachRequestId() &&
+		len(req.GetCompletionCallbacks()) == 0 &&
+		len(req.GetLinks()) == 0 {
 		return serviceerror.NewInvalidArgument(
-			"on_conflict_options: attach_request_id requires at least one completion callback")
+			"on_conflict_options: attach_request_id requires at least one completion callback or link")
 	}
 	return nil
 }

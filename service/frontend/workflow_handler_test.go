@@ -241,6 +241,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			s.mockResource.GetSearchAttributesMapperProvider(),
 			nil,
 			nil,
+			nil,
 		),
 		nil, // Not testing CHASM registry here
 		quotas.NoopRequestRateLimiter,

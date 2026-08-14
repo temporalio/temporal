@@ -69,7 +69,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 		ctx := newCallbackTestContext()
 
 		req := newStartReq(testNexusCallback(testCallbackURL))
-		op, err := newStandaloneOperation(ctx, req, 10)
+		op, err := newStandaloneOperation(ctx, req, 10, newTestLinkValidator(10, 10))
 		require.NoError(t, err)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
 
@@ -82,7 +82,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 	t.Run("WithoutCallbacks", func(t *testing.T) {
 		ctx := newCallbackTestContext()
 
-		op, err := newStandaloneOperation(ctx, newStartReq(), 10)
+		op, err := newStandaloneOperation(ctx, newStartReq(), 10, newTestLinkValidator(10, 10))
 		require.NoError(t, err)
 		require.Nil(t, op.Callbacks)
 	})
@@ -93,7 +93,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 		_, err := newStandaloneOperation(ctx, newStartReq(
 			testNexusCallback("http://localhost:8080/url1"),
 			testNexusCallback("http://localhost:8080/url2"),
-		), 1)
+		), 1, newTestLinkValidator(10, 10))
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.Contains(t, err.Error(), "cannot attach more than 1 callbacks")

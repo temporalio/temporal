@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -27,7 +28,14 @@ import (
 )
 
 func newTestValidator(config *Config) *validator {
-	return newValidator(config, log.NewNoopLogger(), nil, nil, callback.NewValidator(newTestValidatorConfig()))
+	return newValidator(
+		config,
+		log.NewNoopLogger(),
+		nil,
+		nil,
+		callback.NewValidator(newTestValidatorConfig()),
+		newTestLinkValidator(10, 10),
+	)
 }
 
 // newTestValidatorConfig returns a config with permissive limits, for tests that tighten only the
@@ -388,6 +396,31 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "links - accepts a valid link",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.Links = []*commonpb.Link{testLink("wf-id")}
+			},
+		},
+		{
+			name: "links - rejects an incomplete variant",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.Links = []*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{WorkflowId: "wf-id", RunId: "wf-run-id"},
+				}}}
+			},
+			wantErr: "must not have an empty namespace",
+		},
+		{
+			name: "links - rejects more than the per-request limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				// newTestLinkValidator below allows 10 links per request.
+				for i := range 11 {
+					r.Links = append(r.Links, testLink(fmt.Sprintf("wf-%d", i)))
+				}
+			},
+			wantErr: "cannot attach more than 10 links per request",
+		},
+		{
 			name: "on_conflict_options - attach_completion_callbacks requires attach_request_id",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.CompletionCallbacks = []*commonpb.Callback{testNexusCallback("http://localhost/cb")}
@@ -396,6 +429,34 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				}
 			},
 			wantErr: "attach_completion_callbacks requires attach_request_id",
+		},
+		{
+			name: "on_conflict_options - attach_request_id requires a completion callback or a link",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.OnConflictOptions = &apinexusoperationpb.OnConflictOptions{
+					AttachRequestId: true,
+				}
+			},
+			wantErr: "attach_request_id requires at least one completion callback or link",
+		},
+		{
+			name: "on_conflict_options - attach_request_id is satisfied by links alone",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.Links = []*commonpb.Link{testLink("wf-id")}
+				r.OnConflictOptions = &apinexusoperationpb.OnConflictOptions{
+					AttachRequestId: true,
+					AttachLinks:     true,
+				}
+			},
+		},
+		{
+			name: "on_conflict_options - attach_links may be set on its own",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.Links = []*commonpb.Link{testLink("wf-id")}
+				r.OnConflictOptions = &apinexusoperationpb.OnConflictOptions{
+					AttachLinks: true,
+				}
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -420,7 +481,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				tc.mutateConfig(&caseConfig)
 			}
 			cbValidator := callback.NewValidator(newTestValidatorConfig())
-			err := newValidator(&caseConfig, log.NewNoopLogger(), nil, saValidator, cbValidator).
+			err := newValidator(&caseConfig, log.NewNoopLogger(), nil, saValidator, cbValidator, newTestLinkValidator(10, 10)).
 				validateAndNormalizeStartRequest(context.Background(), req)
 			if tc.wantErr != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
@@ -909,13 +970,40 @@ func TestValidateOnConflictOptions(t *testing.T) {
 		require.Contains(t, err.Error(), "attach_completion_callbacks requires attach_request_id")
 	})
 
-	t.Run("AttachRequestIdWithoutCallback", func(t *testing.T) {
+	t.Run("AttachRequestIdOnlyWithLink", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			Links:             []*commonpb.Link{testLink("wf-id")},
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{AttachRequestId: true},
+		}))
+	})
+
+	t.Run("AttachLinksOnly", func(t *testing.T) {
+		// attach_links stands on its own: links are keyed by the request ID the caller always supplies.
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			Links:             []*commonpb.Link{testLink("wf-id")},
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{AttachLinks: true},
+		}))
+	})
+
+	t.Run("AttachLinksAndCallbacks", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{cb},
+			Links:               []*commonpb.Link{testLink("wf-id")},
+			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+				AttachLinks:               true,
+			},
+		}))
+	})
+
+	t.Run("AttachRequestIdWithoutCallbackOrLink", func(t *testing.T) {
 		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
 			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{AttachRequestId: true},
 		})
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
-		require.Contains(t, err.Error(), "attach_request_id requires at least one completion callback")
+		require.Contains(t, err.Error(), "attach_request_id requires at least one completion callback or link")
 	})
 
 	t.Run("AttachRequestIdAndCallbacksWithoutCallbackProvided", func(t *testing.T) {
@@ -930,19 +1018,4 @@ func TestValidateOnConflictOptions(t *testing.T) {
 		require.Contains(t, err.Error(), "attach_request_id requires at least one completion callback")
 	})
 
-	t.Run("AttachLinksIsUnimplemented", func(t *testing.T) {
-		// StartNexusOperationExecutionRequest carries no links, so honoring attach_links is impossible.
-		// Reject loudly rather than silently dropping the caller's intent.
-		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
-			CompletionCallbacks: []*commonpb.Callback{cb},
-			OnConflictOptions: &apinexusoperationpb.OnConflictOptions{
-				AttachRequestId:           true,
-				AttachCompletionCallbacks: true,
-				AttachLinks:               true,
-			},
-		})
-		var unimplementedErr *serviceerror.Unimplemented
-		require.ErrorAs(t, err, &unimplementedErr)
-		require.Contains(t, err.Error(), "attach_links is not supported")
-	})
 }

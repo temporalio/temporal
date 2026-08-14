@@ -51,13 +51,14 @@ func NewFrontendHandler(
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 	callbackValidator callback.Validator,
+	linkValidator *linkValidator,
 ) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
 		config:            config,
 		namespaceRegistry: namespaceRegistry,
 		endpointRegistry:  endpointRegistry,
-		validator:         newValidator(config, logger, saMapperProvider, saValidator, callbackValidator),
+		validator:         newValidator(config, logger, saMapperProvider, saValidator, callbackValidator, linkValidator),
 	}
 }
 

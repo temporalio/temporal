@@ -16,14 +16,16 @@ import (
 type handler struct {
 	nexusoperationpb.UnimplementedNexusOperationServiceServer
 
-	config *Config
-	logger log.Logger
+	config        *Config
+	linkValidator *linkValidator
+	logger        log.Logger
 }
 
-func newHandler(config *Config, logger log.Logger) *handler {
+func newHandler(config *Config, linkValidator *linkValidator, logger log.Logger) *handler {
 	return &handler{
-		config: config,
-		logger: logger,
+		config:        config,
+		linkValidator: linkValidator,
+		logger:        logger,
 	}
 }
 
@@ -46,7 +48,7 @@ func (h *handler) StartNexusOperation(
 			BusinessID:  frontendReq.GetOperationId(),
 		},
 		func(mutableCtx chasm.MutableContext, req *nexusoperationpb.StartNexusOperationRequest) (*Operation, error) {
-			return newStandaloneOperation(mutableCtx, req, maxCallbacks)
+			return newStandaloneOperation(mutableCtx, req, maxCallbacks, h.linkValidator)
 		},
 		req,
 		chasm.WithRequestID(frontendReq.GetRequestId()),
@@ -92,19 +94,33 @@ func (h *handler) applyOnConflictOptions(
 	maxCallbacks int,
 ) error {
 	cbs := req.GetCompletionCallbacks()
-	attachCallbacks := req.GetOnConflictOptions().GetAttachCompletionCallbacks() && len(cbs) > 0
-	if !attachCallbacks {
+	links := req.GetLinks()
+	onConflict := req.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+	if !attachCallbacks && !attachLinks {
 		return nil
 	}
 
 	requestID := req.GetRequestId()
+	namespaceName := req.GetNamespace()
 	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports
 	// BusinessIDConflictPolicyFail in the updateFn path. (Same for standalone Activities.)
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*Operation](key),
 		func(o *Operation, ctx chasm.MutableContext, _ any) (any, error) {
-			return nil, o.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks)
+			if attachCallbacks {
+				if err := o.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+					return nil, err
+				}
+			}
+			if attachLinks {
+				if err := o.attachLinks(ctx, links, requestID, h.linkValidator, namespaceName); err != nil {
+					return nil, err
+				}
+			}
+			return nil, nil
 		},
 		nil,
 	)

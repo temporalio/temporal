@@ -119,6 +119,7 @@ func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,
 	maxCallbacks int,
+	linkValidator *linkValidator,
 ) (*Operation, error) {
 	frontendReq := req.GetFrontendRequest()
 	op := NewOperation(&nexusoperationpb.OperationState{
@@ -148,6 +149,15 @@ func newStandaloneOperation(
 		frontendReq.GetRequestId(),
 		frontendReq.GetCompletionCallbacks(),
 		maxCallbacks,
+	); err != nil {
+		return nil, err
+	}
+	if err := op.attachLinks(
+		ctx,
+		frontendReq.GetLinks(),
+		frontendReq.GetRequestId(),
+		linkValidator,
+		frontendReq.GetNamespace(),
 	); err != nil {
 		return nil, err
 	}
@@ -322,6 +332,12 @@ func (o *Operation) loadStartArgs(
 	} else {
 		// Standalone operation: there is no workflow caller, so add a nexus_operation self-link
 		// as the caller link for the completion callback.
+		//
+		// Only the caller link goes to the handler. Links the client attached to the start request
+		// (and any it attached later via on_conflict_options) are recorded on the operation and
+		// surfaced through Describe, but are not forwarded: this matches the workflow-backed case,
+		// where the handler likewise receives only the workflow_event caller link and not the links
+		// carried on the StartWorkflowExecution request.
 		requestData := o.RequestData.Get(ctx)
 		invocationData = InvocationData{
 			Input:  requestData.GetInput(),
@@ -476,6 +492,62 @@ func (o *Operation) addCompletionCallbacks(
 		o.Callbacks[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
+}
+
+// attachLinks records the given links on the operation keyed by requestID. Duplicates within the same
+// batch are kept as-is, matching the workflow and standalone activity start paths. If the requestID has
+// already been used to attach links the call is a no-op, making retries idempotent even after the
+// operation has closed. Returns an error if the operation is closed (and the requestID is new), if the
+// per-component cap would be exceeded, or if the request's per-link size, per-request count, or variant
+// shape is invalid.
+func (o *Operation) attachLinks(
+	ctx chasm.MutableContext,
+	links []*commonpb.Link,
+	requestID string,
+	validator *linkValidator,
+	namespaceName string,
+) error {
+	if len(links) == 0 {
+		return nil
+	}
+	// Idempotency check must run before isClosed: if a prior attach succeeded but the response was
+	// lost and the operation closed before the client retried, we must still return success rather
+	// than FailedPrecondition for work already persisted.
+	priorForRequest, err := ctx.RequestLinks(o, requestID)
+	if err != nil {
+		return err
+	}
+	if len(priorForRequest) > 0 {
+		return nil
+	}
+	if o.isClosed() {
+		return serviceerror.NewFailedPrecondition("cannot attach links to a closed nexus operation")
+	}
+	if err := validator.ValidateRequest(namespaceName, links); err != nil {
+		return err
+	}
+	// The cap bounds caller-attached links only; links returned by the Nexus handler
+	// (OperationState.links) arrive on a separate path and are not counted here.
+	if err := validator.ValidateComponentTotal(namespaceName, len(ctx.Links(o)), len(links)); err != nil {
+		return err
+	}
+	return ctx.SetRequestLinks(o, requestID, links)
+}
+
+// allLinks returns every link associated with the operation: those attached by callers on their start
+// and on-conflict attach requests, plus any the Nexus handler returned on its start or completion
+// response (standalone operations only; workflow-backed ones carry theirs on history events).
+func (o *Operation) allLinks(ctx chasm.Context) []*commonpb.Link {
+	requestLinks := ctx.Links(o)
+	if len(requestLinks) == 0 {
+		return o.Links
+	}
+	if len(o.Links) == 0 {
+		return requestLinks
+	}
+	all := make([]*commonpb.Link, 0, len(requestLinks)+len(o.Links))
+	all = append(all, requestLinks...)
+	return append(all, o.Links...)
 }
 
 // completionCallbackID defines the stable key used for keeping track of attached completion callbacks.
@@ -728,7 +800,7 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		},
 		NexusHeader:  requestData.GetNexusHeader(),
 		UserMetadata: requestData.GetUserMetadata(),
-		Links:        o.Links,
+		Links:        o.allLinks(ctx),
 		Identity:     requestData.GetIdentity(),
 	}
 

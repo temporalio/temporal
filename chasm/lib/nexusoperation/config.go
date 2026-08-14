@@ -289,6 +289,15 @@ type Config struct {
 	RetryPolicy                                func() backoff.RetryPolicy
 }
 
+// linkValidatorProvider builds the linkValidator from dynamic config.
+func linkValidatorProvider(dc *dynamicconfig.Collection) *linkValidator {
+	return newLinkValidator(
+		dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
+		dynamicconfig.MaxLinksPerComponent.Get(dc),
+		dynamicconfig.FrontendLinkMaxSize.Get(dc),
+	)
+}
+
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
 		Enabled:                            Enabled.Get(dc),
