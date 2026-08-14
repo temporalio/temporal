@@ -120,17 +120,35 @@ func (c invocableInternal) Invoke(
 	return invocationResultOK{}
 }
 
+// grpcStatus extracts the gRPC status from an RPC error, reporting false if err didn't come from one.
+func grpcStatus(err error) (*status.Status, bool) {
+	if stGetter, ok := err.(interface{ Status() *status.Status }); ok {
+		return stGetter.Status(), true
+	}
+	return status.FromError(err)
+}
+
+// isRequestRejection reports whether err is a callee rejecting the request as malformed, rather than
+// reporting a problem of its own. Only the former is safe to surface to the caller: a delivery request
+// is built entirely out of the callback the caller registered, so a rejection tells them what to fix
+// and leaks nothing about the server. Everything else goes through logInternalError.
+//
+// Retryability is deliberately not the test here. codes.Internal and codes.DeadlineExceeded are
+// retryable but say nothing a caller can act on, while codes.NotFound is non-retryable and describes
+// server state.
+func isRequestRejection(err error) bool {
+	st, ok := grpcStatus(err)
+	if !ok {
+		return false
+	}
+	return st.Code() == codes.InvalidArgument
+}
+
 func isRetryableRPCResponse(err error) bool {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// Not a gRPC induced error
-			return false
-		}
+	st, ok := grpcStatus(err)
+	if !ok {
+		// Not a gRPC induced error
+		return false
 	}
 	// nolint:exhaustive
 	switch st.Code() {

@@ -288,13 +288,54 @@ func TestExecuteInvocationTaskWorker_Outcomes(t *testing.T) {
 			},
 		},
 		{
-			name:                  "non-retryable-rpc-error",
-			responseErr:           status.Error(codes.InvalidArgument, "no such task queue"),
+			// Matching rejecting the request describes the callback the caller registered, so it is
+			// surfaced verbatim rather than blinded.
+			name:                  "rejected-rpc-request",
+			responseErr:           status.Error(codes.InvalidArgument, "malformed task queue name"),
 			expectedMetricOutcome: "rpc-error",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
-				// The RPC error is hidden behind a reference ID, so only the shape is asserted.
+				requireTerminalFailure(t, cb, "malformed task queue name")
+			},
+		},
+		{
+			// Any other RPC failure describes the state of the server, so it is hidden behind a
+			// reference ID and only the shape is asserted.
+			name:                  "non-retryable-rpc-error",
+			responseErr:           status.Error(codes.NotFound, "namespace not found"),
+			expectedMetricOutcome: "rpc-error",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.NotContains(t, cb.LastAttemptFailure.GetMessage(), "namespace not found")
 				requireTerminalFailure(t, cb, "internal error, reference-id:")
+			},
+		},
+		{
+			// A response this server cannot interpret is not actionable and no retry would make it
+			// so, so the callback fails permanently instead of retrying forever.
+			name:                  "unrecognized-outcome",
+			response:              &matchingservice.DispatchNexusTaskResponse{},
+			expectedMetricOutcome: "unrecognized-outcome",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+				require.True(t, cb.LastAttemptFailure.GetApplicationFailureInfo().GetNonRetryable())
+			},
+		},
+		{
+			// A handler error type outside the Nexus spec is collapsed so a worker cannot introduce
+			// unbounded metric cardinality.
+			name:                  "handler-error-with-an-unknown-type",
+			response:              handlerFailureResponse("SOMETHING_MADE_UP"),
+			expectedMetricOutcome: "handler-error:UNKNOWN",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				// An unrecognized handler error type is retryable per the Nexus spec, so the delivery
+				// is retried. The type is collapsed only in the metric tag; the recorded failure keeps
+				// what the worker actually said.
+				var destDownErr *queueserrors.DestinationDownError
+				require.ErrorAs(t, err, &destDownErr)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
+				require.Contains(t, cb.LastAttemptFailure.GetMessage(), "SOMETHING_MADE_UP")
 			},
 		},
 	}
@@ -331,8 +372,7 @@ func TestExecuteInvocationTaskWorker_Outcomes(t *testing.T) {
 
 			handler := &invocationTaskHandler{
 				config: &Config{
-					RequestTimeout:   dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-					PayloadSizeLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(1024 * 1024),
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -443,8 +483,7 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 
 			handler := &invocationTaskHandler{
 				config: &Config{
-					RequestTimeout:   dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-					PayloadSizeLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(1024 * 1024),
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -457,6 +496,7 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 
 			callback := newWorkerCallback(t)
 			engineCtx, callbackRef := newInvocationTaskTest(t, handler, callback, tc.completion)
+			dispatchStart := time.Now()
 			require.NoError(t, handler.Execute(
 				engineCtx,
 				callbackRef,
@@ -466,6 +506,9 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 
 			require.NotNil(t, dispatched)
 			require.Equal(t, "namespace-id", dispatched.GetNamespaceId())
+			// The worker's poller measures task latencies against the scheduled time, so it has to
+			// reflect when this delivery attempt started.
+			require.WithinDuration(t, dispatchStart, dispatched.GetRequest().GetScheduledTime().AsTime(), time.Minute)
 			require.Equal(t, testWorkerTaskQueue, dispatched.GetTaskQueue().GetName())
 			require.Equal(t, enumspb.TASK_QUEUE_KIND_NORMAL, dispatched.GetTaskQueue().GetKind())
 
@@ -493,24 +536,19 @@ func TestInvocableWorkerCannotDispatch(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		callback    *callbackspb.Callback_Worker
-		sizeLimit   int
 		completion  nexusrpc.CompleteOperationOptions
 		wantMessage string
 	}{
 		{
 			name:        "without a task queue",
 			callback:    &callbackspb.Callback_Worker{Service: testWorkerService},
-			sizeLimit:   1024,
 			wantMessage: "missing a task queue name",
 		},
 		{
-			// Matching would reject an oversized input with a retryable error, so the size has to be
-			// caught here or the delivery is retried forever.
-			name:        "with an input over the size limit",
+			name:        "with a result that isn't a payload",
 			callback:    &callbackspb.Callback_Worker{TaskQueueName: testWorkerTaskQueue, Service: testWorkerService},
-			sizeLimit:   1,
-			completion:  nexusrpc.CompleteOperationOptions{Result: &commonpb.Payload{Data: []byte("result-data")}},
-			wantMessage: "exceeds size limit",
+			completion:  nexusrpc.CompleteOperationOptions{Result: "not-a-payload"},
+			wantMessage: "invalid result, expected a payload",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -518,9 +556,7 @@ func TestInvocableWorkerCannotDispatch(t *testing.T) {
 			defer ctrl.Finish()
 
 			handler := &invocationTaskHandler{
-				config: &Config{
-					PayloadSizeLimit: dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.sizeLimit),
-				},
+				config:         &Config{},
 				metricsHandler: metrics.NoopMetricsHandler,
 				logger:         log.NewTestLogger(),
 				// Dispatch must not be attempted, so the mock is left without expectations.

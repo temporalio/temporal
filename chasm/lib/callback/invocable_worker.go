@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // invocableWorker is an invocable that delivers a completion to a Temporal worker by dispatching a Nexus
@@ -70,7 +71,7 @@ func (n invocableWorker) Invoke(
 	)
 
 	startTime := time.Now()
-	result, outcome := n.dispatch(ctx, logger, h, ns)
+	result, outcome := n.dispatch(ctx, logger, h, ns, startTime)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(taskAttr.Destination)
@@ -88,8 +89,9 @@ func (n invocableWorker) dispatch(
 	logger log.Logger,
 	h *invocationTaskHandler,
 	ns *namespace.Namespace,
+	scheduledTime time.Time,
 ) (invocationResult, string) {
-	request, err := n.buildDispatchRequest(h.config, ns)
+	request, err := n.buildDispatchRequest(ns, scheduledTime)
 	if err != nil {
 		// No attempt can make this callback dispatchable, so fail it permanently.
 		logger.Error("Worker callback cannot be dispatched", tag.Error(err))
@@ -101,8 +103,8 @@ func (n invocableWorker) dispatch(
 }
 
 func (n invocableWorker) buildDispatchRequest(
-	config *Config,
 	ns *namespace.Namespace,
+	scheduledTime time.Time,
 ) (*matchingservice.DispatchNexusTaskRequest, error) {
 	taskQueueName := n.callback.GetTaskQueueName()
 	if taskQueueName == "" {
@@ -123,12 +125,9 @@ func (n invocableWorker) buildDispatchRequest(
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode worker callback input: %w", err)
 	}
-	// An input matching cannot carry is rejected here rather than left to fail the RPC, where the
-	// gRPC message limit surfaces as a retryable ResourceExhausted and the delivery would be
-	// retried forever.
-	if limit := config.PayloadSizeLimit(ns.Name().String()); input.Size() > limit {
-		return nil, fmt.Errorf("worker callback input exceeds size limit. Size=%d Limit=%d", input.Size(), limit)
-	}
+	// The size of the input is deliberately not checked here. The completion it carries already passed
+	// BlobSizeLimitError where it entered the server, and matching's gRPC limit is orders of magnitude
+	// above that, so a second check could only reject a completion that is legal everywhere else.
 
 	req := &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: ns.ID().String(),
@@ -137,6 +136,7 @@ func (n invocableWorker) buildDispatchRequest(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 		Request: &nexuspb.Request{
+			ScheduledTime: timestamppb.New(scheduledTime),
 			Variant: &nexuspb.Request_StartOperation{
 				StartOperation: &nexuspb.StartOperationRequest{
 					Service:   n.callback.GetService(),
@@ -205,11 +205,18 @@ func (n invocableWorker) classifyDispatchResult(
 	if rpcErr != nil {
 		// The RPC to matching itself failed, e.g. matching is unavailable or rejected the request.
 		retryable := isRetryableRPCResponse(rpcErr)
-		userFacingErr := logInternalError(
-			log.With(logger, tag.Bool("retryable", retryable)),
-			"Worker callback dispatch failed",
-			rpcErr,
-		)
+		logger = log.With(logger, tag.Bool("retryable", retryable))
+
+		// A rejection describes the request we sent, which is built entirely out of what the caller
+		// registered, so it is theirs to fix and safe to surface. Everything else describes the state
+		// of the server and is blinded behind a reference ID.
+		var userFacingErr error
+		if isRequestRejection(rpcErr) {
+			logger.Error("Worker callback dispatch rejected", tag.Error(rpcErr))
+			userFacingErr = rpcErr
+		} else {
+			userFacingErr = logInternalError(logger, "Worker callback dispatch failed", rpcErr)
+		}
 
 		if retryable {
 			return invocationResultRetry{userFacingErr}, "rpc-error"
@@ -219,13 +226,23 @@ func (n invocableWorker) classifyDispatchResult(
 
 	// There wasn't an RPC error, but any application-level (e.g. the end Handler) errors would be
 	// part of the response.
-	outcome := dispatchOutcomeTag(resp)
+	outcome, recognized := dispatchOutcomeTag(resp)
 
 	// Note that an async response counts as delivered: the handler accepted the completion and started
 	// an operation to process it. The callback does not wait for that operation to finish.
 	err := commonnexus.MatchingDispatchResponseToError(resp)
 	if err == nil {
 		return invocationResultOK{}, outcome
+	}
+
+	if !recognized {
+		// A response this server cannot interpret, e.g. an empty outcome or a variant added by a newer
+		// matching. There is nothing to act on and no attempt would produce an outcome we understand
+		// any better, so fail permanently rather than retry forever and hold the destination's circuit
+		// breaker open. Note that MatchingDispatchResponseToError reports this as a retryable internal
+		// handler error, so the check has to come before the retryability check below.
+		logger.Error("Worker callback received an unrecognized dispatch response", tag.Error(err))
+		return invocationResultFail{err}, outcome
 	}
 
 	if startOperationFailed(resp) {
@@ -235,8 +252,8 @@ func (n invocableWorker) classifyDispatchResult(
 		return invocationResultFail{err}, outcome
 	}
 
-	// Everything else is a delivery-level error: no worker polling the task queue (an upstream timeout),
-	// a handler error returned by the worker, or an unrecognized response.
+	// Everything else is a delivery-level error: no worker polling the task queue (an upstream timeout)
+	// or a handler error returned by the worker.
 	//
 	// Only a handler error says whether another attempt is worthwhile. Anything else is a failure the
 	// worker chose to report, e.g. an application error sent via RespondNexusTaskFailed, and repeating
@@ -252,33 +269,61 @@ func (n invocableWorker) classifyDispatchResult(
 
 // dispatchOutcomeTag names a dispatch outcome for metrics. Values are hyphenated to match the ones
 // invocableOutbound records on the same metric.
-func dispatchOutcomeTag(resp *matchingservice.DispatchNexusTaskResponse) string {
+//
+// The second return value reports whether the outcome is one this server knows how to interpret; see
+// classifyDispatchResult for why that matters.
+func dispatchOutcomeTag(resp *matchingservice.DispatchNexusTaskResponse) (string, bool) {
 	switch t := resp.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
 		handlerFailure := t.Failure.GetNexusHandlerFailureInfo()
 		if handlerFailure == nil {
 			// The worker failed the task with something other than a handler error.
-			return "worker-failure"
+			return "worker-failure", true
 		}
-		return "handler-error:" + handlerFailure.GetType()
+		return "handler-error:" + handlerErrorTypeTag(handlerFailure.GetType()), true
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError: //nolint:staticcheck // Deprecated, still sent by older workers.
 		//nolint:staticcheck // Deprecated field on a deprecated variant.
-		return "handler-error:" + t.HandlerError.GetErrorType()
+		return "handler-error:" + handlerErrorTypeTag(t.HandlerError.GetErrorType()), true
 	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
-		return "handler-timeout"
+		return "handler-timeout", true
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		switch t.Response.GetStartOperation().GetVariant().(type) {
 		case *nexuspb.StartOperationResponse_SyncSuccess:
-			return "sync-success"
+			return "sync-success", true
 		case *nexuspb.StartOperationResponse_AsyncSuccess:
-			return "async-success"
+			return "async-success", true
 		case *nexuspb.StartOperationResponse_OperationError: //nolint:staticcheck // Deprecated, still sent by older workers.
-			return "operation-error"
+			return "operation-error", true
 		case *nexuspb.StartOperationResponse_Failure:
-			return "failure"
+			return "failure", true
 		}
 	}
-	return "handler-error:EMPTY_OUTCOME"
+	return "unrecognized-outcome", false
+}
+
+// handlerErrorTypes are the handler error types that may appear in a metric tag. The type a worker
+// reports is an arbitrary string it chose when constructing the handler error, so anything outside
+// the Nexus spec is collapsed rather than given its own time series.
+var handlerErrorTypes = map[string]struct{}{
+	string(nexus.HandlerErrorTypeBadRequest):        {},
+	string(nexus.HandlerErrorTypeUnauthenticated):   {},
+	string(nexus.HandlerErrorTypeUnauthorized):      {},
+	string(nexus.HandlerErrorTypeNotFound):          {},
+	string(nexus.HandlerErrorTypeRequestTimeout):    {},
+	string(nexus.HandlerErrorTypeConflict):          {},
+	string(nexus.HandlerErrorTypeResourceExhausted): {},
+	string(nexus.HandlerErrorTypeInternal):          {},
+	string(nexus.HandlerErrorTypeNotImplemented):    {},
+	string(nexus.HandlerErrorTypeUnavailable):       {},
+	string(nexus.HandlerErrorTypeUpstreamTimeout):   {},
+}
+
+// handlerErrorTypeTag bounds the cardinality a worker can introduce into the outcome tag.
+func handlerErrorTypeTag(errType string) string {
+	if _, ok := handlerErrorTypes[errType]; ok {
+		return errType
+	}
+	return "UNKNOWN"
 }
 
 // startOperationFailed reports whether the worker handled the task and failed the operation, as opposed to
