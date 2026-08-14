@@ -120,9 +120,14 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return func(p []byte) (int, error) {
 				n, err := next(p)
 				if n > 0 {
-					responseBody.Write(p[:n])
+					_, _ = responseBody.Write(p[:n])
 				}
 				return n, err
+			}
+		},
+		ReadFrom: func(next httpsnoop.ReadFromFunc) httpsnoop.ReadFromFunc {
+			return func(src io.Reader) (int64, error) {
+				return next(io.TeeReader(src, &responseBody))
 			}
 		},
 	})
