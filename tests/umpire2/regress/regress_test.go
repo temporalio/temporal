@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	coreregress "go.temporal.io/server/common/testing/umpire/regress"
+	"go.temporal.io/server/tests/umpire2/action"
 	"go.temporal.io/server/tests/umpire2/protocol"
 	"go.temporal.io/server/tests/umpire2/regress/activity"
 	"go.temporal.io/server/tests/umpire2/regress/capability"
@@ -84,6 +85,7 @@ func TestRepresentativePlansCompileAgainstDefaultDomain(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			suite, err := coreregress.Compile(plan, domain, profile)
 			require.NoError(t, err)
+			require.NoError(t, action.NewRegressionHarness(nil, nil).Preflight(suite))
 			require.NotEmpty(t, suite.Paths)
 		})
 	}

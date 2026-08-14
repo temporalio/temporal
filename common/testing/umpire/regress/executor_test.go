@@ -156,6 +156,22 @@ func TestRunRejectsInvalidCompletedSuiteBeforeCreatingEnvironment(t *testing.T) 
 	require.Empty(t, harness.events)
 }
 
+func TestRunRejectsHarnessPreflightBeforeCreatingEnvironment(t *testing.T) {
+	preflightErr := errors.New("unsupported realization")
+	harness := &preflightHarness{
+		recordingHarness: &recordingHarness{},
+		err:              preflightErr,
+	}
+
+	err := regress.Run(context.Background(), regress.Suite{
+		Paths:     []regress.CompletedPath{{}},
+		PathCount: 1,
+	}, harness)
+
+	require.ErrorIs(t, err, preflightErr)
+	require.Empty(t, harness.events)
+}
+
 func TestRunCleansUpAfterCancellationOrTimeout(t *testing.T) {
 	for _, driveErr := range []error{context.Canceled, context.DeadlineExceeded} {
 		t.Run(driveErr.Error(), func(t *testing.T) {
@@ -206,6 +222,15 @@ type recordingHarness struct {
 type recordingExecutionObserver struct {
 	observations []umpire.ExecutionObservation
 	err          error
+}
+
+type preflightHarness struct {
+	*recordingHarness
+	err error
+}
+
+func (h *preflightHarness) Preflight(regress.Suite) error {
+	return h.err
 }
 
 func (o *recordingExecutionObserver) ObserveExecution(_ context.Context, observed umpire.ExecutionObservation) error {

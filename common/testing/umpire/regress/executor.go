@@ -20,6 +20,11 @@ type Harness interface {
 	NewPath(context.Context, int, CompletedPath) (PathHarness, error)
 }
 
+// SuitePreflight validates harness-specific capabilities before execution creates environments.
+type SuitePreflight interface {
+	Preflight(Suite) error
+}
+
 // PathHarness realizes only capabilities already selected and validated by Compile.
 type PathHarness interface {
 	SetupResource(context.Context, CompletedResource) (Cleanup, error)
@@ -91,6 +96,11 @@ func RunWithOptions(ctx context.Context, suite Suite, harness Harness, options R
 	}
 	if err := ValidateSuite(suite); err != nil {
 		return fmt.Errorf("regress run: invalid completed suite: %w", err)
+	}
+	if preflight, ok := harness.(SuitePreflight); ok {
+		if err := preflight.Preflight(suite); err != nil {
+			return fmt.Errorf("regress run: suite preflight: %w", err)
+		}
 	}
 	var sink ArtifactSink
 	if provider, ok := harness.(ArtifactHarness); ok {

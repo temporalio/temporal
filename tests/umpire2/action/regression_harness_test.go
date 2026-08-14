@@ -186,6 +186,32 @@ func TestNexusOperationOptionsPreserveStartToCloseTimeoutKind(t *testing.T) {
 	require.Equal(t, workflow.NexusOperationOptions{StartToCloseTimeout: 2 * time.Second}, options)
 }
 
+func TestRegressionHarnessPreflightRejectsUnsupportedRealizations(t *testing.T) {
+	tests := map[string]coreregress.CompletedPath{
+		"action": {
+			Steps: []coreregress.CompletedStep{{Action: coreregress.CompletedAction{Realization: "missing.action"}}},
+		},
+		"action mode": {
+			Steps: []coreregress.CompletedStep{{Action: coreregress.CompletedAction{Realization: RegressionObserve}, Mode: coreregress.ProactiveAction}},
+		},
+		"policy": {
+			Steps:    []coreregress.CompletedStep{{Action: coreregress.CompletedAction{Realization: RegressionNexusCancel}}},
+			Policies: []coreregress.CompletedPolicy{{Realization: "missing.policy", Start: 0, End: 1}},
+		},
+		"resource": {
+			Resources: []coreregress.CompletedResource{{Name: "missing", Realization: "missing.resource"}},
+		},
+	}
+	harness := NewRegressionHarness(nil, nil)
+	for name, path := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := harness.Preflight(coreregress.Suite{Paths: []coreregress.CompletedPath{path}, PathCount: 1})
+			require.Error(t, err)
+			require.ErrorContains(t, err, name)
+		})
+	}
+}
+
 func TestObserveWorkflowRunIDGroundsServerMintedValue(t *testing.T) {
 	bindings := coreregress.Bindings{"handler": "handler-id"}
 	atom := coreregress.CompletedAtom{
