@@ -169,6 +169,12 @@ func (r *payloadCapturingReadCloser) Read(p []byte) (int, error) {
 	return n, err
 }
 
+func (r *payloadCapturingReadCloser) Close() error {
+	err := r.ReadCloser.Close()
+	r.finish()
+	return err
+}
+
 func (r *payloadCapturingReadCloser) finish() {
 	if r.finished {
 		return
