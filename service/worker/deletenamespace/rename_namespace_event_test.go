@@ -37,8 +37,8 @@ func attrString(rec otellog.Record, key string) string {
 	return out
 }
 
-// Renaming a namespace to its tombstone name emits namespace_deleted with the original name/id.
-func Test_RenameNamespaceActivity_EmitsNamespaceDeleted(t *testing.T) {
+// Renaming a namespace to its tombstone name emits namespace_renamed with the original name/id.
+func Test_RenameNamespaceActivity_EmitsNamespaceRenamed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	metadataManager := persistence.NewMockMetadataManager(ctrl)
 	lg := &captureEventLogger{}
@@ -57,7 +57,7 @@ func Test_RenameNamespaceActivity_EmitsNamespaceDeleted(t *testing.T) {
 	require.NoError(t, a.RenameNamespaceActivity(context.Background(), "namespace-id", "namespace", "namespace-deleted-xyz"))
 
 	require.Len(t, lg.records, 1)
-	require.Equal(t, wideevents.PhaseNamespaceDeleted, attrString(lg.records[0], "phase"))
+	require.Equal(t, wideevents.PhaseNamespaceRenamed, attrString(lg.records[0], "phase"))
 	require.Equal(t, "namespace", attrString(lg.records[0], "namespace"))
 	require.Equal(t, "namespace-id", attrString(lg.records[0], "namespace_id"))
 }

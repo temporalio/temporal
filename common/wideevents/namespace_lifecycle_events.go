@@ -188,9 +188,9 @@ func handoverExitReason(err error) string {
 // is_promotion / is_failover flags rather than separate phases; the before/after field snapshots
 // already carry the distinguishing data (active cluster, failover version, failover history).
 //
-// namespace_deleted is emitted from the worker delete pipeline (not the frontend): namespace
-// deletion is local and never replicated, so it can only be observed there. See
-// service/worker/deletenamespace.
+// namespace_renamed is emitted from the worker delete pipeline (not the frontend), at the point the
+// namespace is renamed to its tombstone name — the observable step of a local, never-replicated
+// deletion, so it can only be seen there. See service/worker/deletenamespace.
 //
 // The register/update input structs are built by the frontend from its domain objects (see
 // service/frontend/namespace_lifecycle_events.go), mirroring how service/history/replication relates
@@ -198,7 +198,7 @@ func handoverExitReason(err error) string {
 const (
 	PhaseNamespaceRegistered = "namespace_registered"
 	PhaseNamespaceUpdated    = "namespace_updated"
-	PhaseNamespaceDeleted    = "namespace_deleted"
+	PhaseNamespaceRenamed    = "namespace_renamed"
 )
 
 // FailoverHistoryEntry is one entry of a global namespace's failover history. It mirrors
@@ -208,42 +208,73 @@ type FailoverHistoryEntry struct {
 	FailoverTime    string `json:"failover_time"`
 }
 
-// NamespaceStateFields is the snapshot of a namespace's fields the lifecycle events report.
-// namespace_updated carries a Before and an After; namespace_registered carries only the created
-// state.
+// NamespaceStateFields is the snapshot of a namespace's fields the lifecycle events report — the full
+// NamespaceInfo / NamespaceConfig / NamespaceReplicationConfig field set. namespace_updated carries a
+// Before and an After; namespace_registered carries only the created state. Name and id are not
+// repeated here; they are the event's namespace / namespace_id envelope fields. WorkflowRuleIDs holds
+// only the rule ids (the full specs are large and managed by a separate API, not namespace CRUD).
+// BadBinaries maps each checksum to its BadBinaryInfo text (reason/operator/create_time).
 type NamespaceStateFields struct {
 	Description                 string                 `json:"description"`
+	Owner                       string                 `json:"owner"`
 	State                       string                 `json:"state"`
 	IsGlobalNamespace           bool                   `json:"is_global_namespace"`
+	Data                        map[string]string      `json:"data"`
 	ConfigVersion               int64                  `json:"config_version"`
 	FailoverVersion             int64                  `json:"failover_version"`
 	FailoverNotificationVersion int64                  `json:"failover_notification_version"`
 	FailoverEndTime             string                 `json:"failover_end_time"`
 	Retention                   string                 `json:"retention"`
 	HistoryArchivalState        string                 `json:"history_archival_state"`
+	HistoryArchivalURI          string                 `json:"history_archival_uri"`
 	VisibilityArchivalState     string                 `json:"visibility_archival_state"`
+	VisibilityArchivalURI       string                 `json:"visibility_archival_uri"`
+	ArchivalBucket              string                 `json:"archival_bucket"`
+	CustomSearchAttributeAlias  map[string]string      `json:"custom_search_attribute_aliases"`
+	BadBinaries                 map[string]string      `json:"bad_binaries"`
+	WorkflowRuleIDs             []string               `json:"workflow_rule_ids"`
 	ActiveCluster               string                 `json:"active_cluster"`
 	Clusters                    []string               `json:"clusters"`
 	ReplicationState            string                 `json:"replication_state"`
 	FailoverHistory             []FailoverHistoryEntry `json:"failover_history"`
 }
 
-// NamespaceRegisteredInput is the input to EmitNamespaceRegistered.
+// NamespaceRegisteredInput is the input to EmitNamespaceRegistered. Requested is the field snapshot
+// built from the RegisterNamespace RPC request as received, so a difference between what the client
+// sent and what was persisted (Fields) is visible on the event. It is built from the request's
+// namespace fields only — the request's security_token is never read.
 type NamespaceRegisteredInput struct {
 	Namespace   string
 	NamespaceID string
 	Fields      NamespaceStateFields
+	Requested   NamespaceStateFields
 }
 
 // NamespaceUpdatedInput is the input to EmitNamespaceUpdated. IsFailover marks an active-cluster
-// change; IsPromotion marks a local->global promotion. Before/After carry the full field snapshots.
+// change; IsPromotion marks a local->global promotion; DeleteBadBinary is the checksum the request
+// asked to remove, if any; WorkflowRuleCreated / WorkflowRuleDeleted name the rule id a
+// CreateWorkflowRule / DeleteWorkflowRule op changed, with WorkflowRuleCreatedDetail /
+// WorkflowRuleDeletedDetail carrying that rule's content (WorkflowRule text) so the event is a
+// durable record of what was created/removed even after the rule is gone. These are request
+// directives that are not namespace state, so they sit on the event rather than in the field
+// snapshots. Requested is the snapshot built from the UpdateNamespace RPC request as received, so
+// what the client asked to change is visible alongside the persisted before/after; it is built from
+// the request's namespace fields only — the request's security_token is never read.
+// (DeprecateNamespace and the workflow-rule ops reuse this event and carry no request body, so their
+// Requested is empty.)
 type NamespaceUpdatedInput struct {
-	Namespace   string
-	NamespaceID string
-	IsFailover  bool
-	IsPromotion bool
-	Before      NamespaceStateFields
-	After       NamespaceStateFields
+	Namespace                 string
+	NamespaceID               string
+	IsFailover                bool
+	IsPromotion               bool
+	DeleteBadBinary           string
+	WorkflowRuleCreated       string
+	WorkflowRuleCreatedDetail string
+	WorkflowRuleDeleted       string
+	WorkflowRuleDeletedDetail string
+	Before                    NamespaceStateFields
+	After                     NamespaceStateFields
+	Requested                 NamespaceStateFields
 }
 
 // EmitNamespaceRegistered emits a namespace_registered event for a newly persisted namespace.
@@ -252,7 +283,10 @@ func EmitNamespaceRegistered(logger otellog.Logger, in NamespaceRegisteredInput)
 		Phase:       PhaseNamespaceRegistered,
 		Namespace:   in.Namespace,
 		NamespaceID: in.NamespaceID,
-		Details:     map[string]any{"after": in.Fields},
+		Details: map[string]any{
+			"requested": in.Requested,
+			"after":     in.Fields,
+		},
 	})
 }
 
@@ -263,28 +297,34 @@ func EmitNamespaceUpdated(logger otellog.Logger, in NamespaceUpdatedInput) {
 		Namespace:   in.Namespace,
 		NamespaceID: in.NamespaceID,
 		Details: map[string]any{
-			"is_failover":  in.IsFailover,
-			"is_promotion": in.IsPromotion,
-			"before":       in.Before,
-			"after":        in.After,
+			"is_failover":                  in.IsFailover,
+			"is_promotion":                 in.IsPromotion,
+			"delete_bad_binary":            in.DeleteBadBinary,
+			"workflow_rule_created":        in.WorkflowRuleCreated,
+			"workflow_rule_created_detail": in.WorkflowRuleCreatedDetail,
+			"workflow_rule_deleted":        in.WorkflowRuleDeleted,
+			"workflow_rule_deleted_detail": in.WorkflowRuleDeletedDetail,
+			"requested":                    in.Requested,
+			"before":                       in.Before,
+			"after":                        in.After,
 		},
 	})
 }
 
-// NamespaceDeletedInput is the input to EmitNamespaceDeleted. Namespace is the original name;
+// NamespaceRenamedInput is the input to EmitNamespaceRenamed. Namespace is the original name;
 // RenamedTo is the tombstone name the record is renamed to as part of deletion.
-type NamespaceDeletedInput struct {
+type NamespaceRenamedInput struct {
 	Namespace   string
 	NamespaceID string
 	RenamedTo   string
 }
 
-// EmitNamespaceDeleted emits a namespace_deleted event when a namespace is deleted. It is emitted at
-// the point the namespace is renamed to its tombstone name (see service/worker/deletenamespace),
-// which is when it ceases to exist under its real name.
-func EmitNamespaceDeleted(logger otellog.Logger, in NamespaceDeletedInput) {
+// EmitNamespaceRenamed emits a namespace_renamed event when a namespace is renamed to its tombstone
+// name (see service/worker/deletenamespace), which is when it ceases to exist under its real name —
+// the observable step of a local, never-replicated deletion.
+func EmitNamespaceRenamed(logger otellog.Logger, in NamespaceRenamedInput) {
 	Emit(logger, NamespaceLifecyclePayload{
-		Phase:       PhaseNamespaceDeleted,
+		Phase:       PhaseNamespaceRenamed,
 		Namespace:   in.Namespace,
 		NamespaceID: in.NamespaceID,
 		Details:     map[string]any{"renamed_to": in.RenamedTo},

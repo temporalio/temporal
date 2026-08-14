@@ -152,6 +152,7 @@ func TestEmitNamespaceRegistered(t *testing.T) {
 		Namespace:   "ns",
 		NamespaceID: "ns-id",
 		Fields:      NamespaceStateFields{ActiveCluster: "clusterA", IsGlobalNamespace: true, FailoverVersion: 7},
+		Requested:   NamespaceStateFields{Description: "requested-desc"},
 	})
 
 	require.Len(t, lg.records, 1)
@@ -162,6 +163,9 @@ func TestEmitNamespaceRegistered(t *testing.T) {
 	require.Equal(t, "clusterA", after["active_cluster"])
 	require.Equal(t, true, after["is_global_namespace"])
 	require.EqualValues(t, 7, after["failover_version"])
+
+	requested := lagDetails(t, lg.records[0])["requested"].(map[string]any)
+	require.Equal(t, "requested-desc", requested["description"])
 }
 
 // A failover is a namespace_updated with is_failover set; the before/after snapshots carry the
@@ -170,11 +174,13 @@ func TestEmitNamespaceUpdatedCarriesBeforeAfterAndFlags(t *testing.T) {
 	lg := &captureLogger{}
 
 	EmitNamespaceUpdated(lg, NamespaceUpdatedInput{
-		Namespace:   "ns",
-		NamespaceID: "ns-id",
-		IsFailover:  true,
-		Before:      NamespaceStateFields{ActiveCluster: "clusterA", FailoverVersion: 10},
-		After:       NamespaceStateFields{ActiveCluster: "clusterB", FailoverVersion: 21},
+		Namespace:       "ns",
+		NamespaceID:     "ns-id",
+		IsFailover:      true,
+		DeleteBadBinary: "cksum-old",
+		Before:          NamespaceStateFields{ActiveCluster: "clusterA", FailoverVersion: 10},
+		After:           NamespaceStateFields{ActiveCluster: "clusterB", FailoverVersion: 21},
+		Requested:       NamespaceStateFields{ActiveCluster: "clusterB"},
 	})
 
 	require.Len(t, lg.records, 1)
@@ -183,18 +189,55 @@ func TestEmitNamespaceUpdatedCarriesBeforeAfterAndFlags(t *testing.T) {
 	d := lagDetails(t, lg.records[0])
 	require.Equal(t, true, d["is_failover"])
 	require.Equal(t, false, d["is_promotion"])
+	require.Equal(t, "cksum-old", d["delete_bad_binary"])
 	require.Equal(t, "clusterA", d["before"].(map[string]any)["active_cluster"])
 	require.Equal(t, "clusterB", d["after"].(map[string]any)["active_cluster"])
 	require.EqualValues(t, 21, d["after"].(map[string]any)["failover_version"])
+	require.Equal(t, "clusterB", d["requested"].(map[string]any)["active_cluster"])
 }
 
-func TestEmitNamespaceDeleted(t *testing.T) {
+// A workflow-rule create/delete reuses namespace_updated: the directive names the rule, the
+// before/after workflow_rule_ids carry the resulting set. Only one directive is populated per op.
+func TestEmitNamespaceUpdatedWorkflowRuleDirectives(t *testing.T) {
+	created := &captureLogger{}
+	EmitNamespaceUpdated(created, NamespaceUpdatedInput{
+		Namespace:                 "ns",
+		NamespaceID:               "ns-id",
+		WorkflowRuleCreated:       "rule-x",
+		WorkflowRuleCreatedDetail: `spec:{id:"rule-x"} created_by_identity:"alice"`,
+		Before:                    NamespaceStateFields{WorkflowRuleIDs: []string{"rule-a"}},
+		After:                     NamespaceStateFields{WorkflowRuleIDs: []string{"rule-a", "rule-x"}},
+	})
+	dc := lagDetails(t, created.records[0])
+	require.Equal(t, "rule-x", dc["workflow_rule_created"])
+	require.Equal(t, `spec:{id:"rule-x"} created_by_identity:"alice"`, dc["workflow_rule_created_detail"])
+	require.Equal(t, "", dc["workflow_rule_deleted"])
+	require.Equal(t, "", dc["workflow_rule_deleted_detail"])
+	require.Equal(t, []any{"rule-a", "rule-x"}, dc["after"].(map[string]any)["workflow_rule_ids"])
+
+	deleted := &captureLogger{}
+	EmitNamespaceUpdated(deleted, NamespaceUpdatedInput{
+		Namespace:                 "ns",
+		NamespaceID:               "ns-id",
+		WorkflowRuleDeleted:       "rule-x",
+		WorkflowRuleDeletedDetail: `spec:{id:"rule-x"} created_by_identity:"alice"`,
+		Before:                    NamespaceStateFields{WorkflowRuleIDs: []string{"rule-a", "rule-x"}},
+		After:                     NamespaceStateFields{WorkflowRuleIDs: []string{"rule-a"}},
+	})
+	dd := lagDetails(t, deleted.records[0])
+	require.Equal(t, "rule-x", dd["workflow_rule_deleted"])
+	require.Equal(t, `spec:{id:"rule-x"} created_by_identity:"alice"`, dd["workflow_rule_deleted_detail"])
+	require.Equal(t, "", dd["workflow_rule_created"])
+	require.Equal(t, "", dd["workflow_rule_created_detail"])
+}
+
+func TestEmitNamespaceRenamed(t *testing.T) {
 	lg := &captureLogger{}
 
-	EmitNamespaceDeleted(lg, NamespaceDeletedInput{Namespace: "ns", NamespaceID: "ns-id", RenamedTo: "ns-deleted-abc"})
+	EmitNamespaceRenamed(lg, NamespaceRenamedInput{Namespace: "ns", NamespaceID: "ns-id", RenamedTo: "ns-deleted-abc"})
 
 	require.Len(t, lg.records, 1)
-	require.Equal(t, PhaseNamespaceDeleted, attrValue(lg.records[0], "phase"))
+	require.Equal(t, PhaseNamespaceRenamed, attrValue(lg.records[0], "phase"))
 	require.Equal(t, "ns", attrValue(lg.records[0], "namespace"))
 	require.Equal(t, "ns-id", attrValue(lg.records[0], "namespace_id"))
 	require.Equal(t, "ns-deleted-abc", lagDetails(t, lg.records[0])["renamed_to"])

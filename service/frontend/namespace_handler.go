@@ -253,7 +253,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		return nil, err
 	}
 
-	wideevents.EmitNamespaceRegistered(d.eventLogger, buildNamespaceRegisteredInput(namespaceRequest, namespaceResponse.ID))
+	wideevents.EmitNamespaceRegistered(d.eventLogger, buildNamespaceRegisteredInput(namespaceRequest, namespaceResponse.ID, registerRequest))
 
 	err = d.namespaceReplicator.HandleTransmissionTask(
 		ctx,
@@ -638,6 +638,7 @@ func (d *namespaceHandler) UpdateNamespace(
 			isGlobalNamespace,
 			activeClusterChanged && isGlobalNamespace,
 			needsNamespacePromotion,
+			updateRequest,
 		))
 	}
 
@@ -725,6 +726,7 @@ func (d *namespaceHandler) DeprecateNamespace(
 		getResponse.IsGlobalNamespace,
 		false,
 		false,
+		nil,
 	))
 	return nil, nil
 }
@@ -752,6 +754,10 @@ func (d *namespaceHandler) CreateWorkflowRule(
 
 	existingNamespace := getNamespaceResponse.Namespace
 	config := getNamespaceResponse.Namespace.Config
+
+	// Snapshot pre-mutation fields for the namespace_updated event emitted on success below; a
+	// workflow-rule create is a config mutation, mirroring how DeprecateNamespace reuses this event.
+	eventBefore := namespaceStateFields(existingNamespace, getNamespaceResponse.IsGlobalNamespace)
 
 	if config.WorkflowRules == nil {
 		config.WorkflowRules = make(map[string]*rulespb.WorkflowRule)
@@ -794,6 +800,11 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	if err != nil {
 		return nil, err
 	}
+
+	updatedInput := buildNamespaceUpdatedInput(eventBefore, updateReq.Namespace, getNamespaceResponse.IsGlobalNamespace, false, false, nil)
+	updatedInput.WorkflowRuleCreated = ruleSpec.GetId()
+	updatedInput.WorkflowRuleCreatedDetail = workflowRule.String()
+	wideevents.EmitNamespaceUpdated(d.eventLogger, updatedInput)
 
 	return workflowRule, nil
 }
@@ -867,10 +878,14 @@ func (d *namespaceHandler) DeleteWorkflowRule(
 	if config.WorkflowRules == nil {
 		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
 	}
-	_, ok := config.WorkflowRules[ruleID]
+	deletedRule, ok := config.WorkflowRules[ruleID]
 	if !ok {
 		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
 	}
+
+	// Snapshot pre-mutation fields for the namespace_updated event emitted on success below; a
+	// workflow-rule delete is a config mutation, mirroring how DeprecateNamespace reuses this event.
+	eventBefore := namespaceStateFields(existingNamespace, getNamespaceResponse.IsGlobalNamespace)
 
 	delete(config.WorkflowRules, ruleID)
 
@@ -886,7 +901,15 @@ func (d *namespaceHandler) DeleteWorkflowRule(
 		IsGlobalNamespace:   getNamespaceResponse.IsGlobalNamespace,
 		NotificationVersion: metadata.NotificationVersion,
 	}
-	return d.metadataMgr.UpdateNamespace(ctx, updateReq)
+	if err := d.metadataMgr.UpdateNamespace(ctx, updateReq); err != nil {
+		return err
+	}
+
+	updatedInput := buildNamespaceUpdatedInput(eventBefore, updateReq.Namespace, getNamespaceResponse.IsGlobalNamespace, false, false, nil)
+	updatedInput.WorkflowRuleDeleted = ruleID
+	updatedInput.WorkflowRuleDeletedDetail = deletedRule.String()
+	wideevents.EmitNamespaceUpdated(d.eventLogger, updatedInput)
+	return nil
 }
 
 func (d *namespaceHandler) ListWorkflowRules(

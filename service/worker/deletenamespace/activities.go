@@ -230,10 +230,10 @@ func (a *localActivities) RenameNamespaceActivity(ctx context.Context, nsID name
 	a.logger.Info("Namespace renamed successfully.", tag.WorkflowNamespace(previousName.String()), tag.WorkflowNamespace(newName.String()))
 
 	// Renaming the namespace to its tombstone name is the point it ceases to exist under its real
-	// name, so this is where the namespace_deleted lifecycle event is emitted. The physical record
+	// name, so this is where the namespace_renamed lifecycle event is emitted. The physical record
 	// removal happens later, in the abandoned ReclaimResourcesWorkflow, by which point the original
 	// name is already gone.
-	wideevents.EmitNamespaceDeleted(a.eventLogger, wideevents.NamespaceDeletedInput{
+	wideevents.EmitNamespaceRenamed(a.eventLogger, wideevents.NamespaceRenamedInput{
 		Namespace:   previousName.String(),
 		NamespaceID: nsID.String(),
 		RenamedTo:   newName.String(),
