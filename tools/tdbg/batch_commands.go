@@ -38,6 +38,10 @@ func newAdminBatchCommands(clientFactory ClientFactory, prompterFactory Prompter
 					Name:  FlagVisibilityQuery,
 					Usage: "Visibility query selecting the executions to operate on",
 				},
+				&cli.StringSliceFlag{
+					Name:  FlagNamespaces,
+					Usage: "Namespaces targeted by the batch job",
+				},
 				&cli.StringFlag{
 					Name:  FlagReason,
 					Usage: "Reason for starting the batch job",
@@ -62,10 +66,11 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 	adminClient := clientFactory.AdminClient(c)
 	workflowClient := clientFactory.WorkflowClient(c)
 
-	nsName, err := getRequiredOption(c, FlagNamespace)
+	nsNames, err := getBatchNamespaces(c)
 	if err != nil {
 		return err
 	}
+	nsName := nsNames[0]
 
 	query, err := getRequiredOption(c, FlagVisibilityQuery)
 	if err != nil {
@@ -92,41 +97,54 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 		jobID = fmt.Sprintf("batch-%s-%d", batchType, time.Now().UnixNano())
 	}
 	// The workflow ID lives in the system namespace, so it has to distinguish target namespaces.
-	jobIDWithNS := fmt.Sprintf("%s:%s", jobID, nsName)
+	jobIDWithNS := fmt.Sprintf("%s:%s", jobID, strings.Join(nsNames, ","))
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	if err := checkTargetNamespaceActive(ctx, adminClient, workflowClient, nsName); err != nil {
-		return err
+	var matchCount int64
+	var targetKind string
+	for _, targetNamespace := range nsNames {
+		if err := checkTargetNamespaceActive(ctx, adminClient, workflowClient, targetNamespace); err != nil {
+			return err
+		}
+		count, kind, err := countDelegatedBatchExecutions(ctx, workflowClient, targetNamespace, query, delegatedType)
+		if err != nil {
+			return err
+		}
+		matchCount += count
+		targetKind = kind
 	}
-
-	matchCount, targetKind, err := countDelegatedBatchExecutions(ctx, workflowClient, nsName, query, delegatedType)
-	if err != nil {
-		return err
+	namespaceLabel := "namespace"
+	requestNamespaces := []string(nil)
+	if len(nsNames) > 1 {
+		namespaceLabel = "namespaces"
+		requestNamespaces = nsNames
 	}
 
 	summary := fmt.Sprintf(
 		"DANGER: destructive delegated batch operation\n\n"+
-			"User namespace: %q\n"+
+			"User %s: %q\n"+
 			"Batch workflow namespace: %q\n"+
 			"Cluster eligibility: passed\n"+
 			"Operation: %s\n"+
 			"Visibility query: %q\n"+
 			"Currently matching: %d %s\n\n"+
-			"This delegates termination of matching %s in user namespace %q to a batch workflow running in %q.\n"+
+			"This delegates termination of matching %s in user %s %q to a batch workflow running in %q.\n"+
 			"For a global namespace, this operation must be submitted through its active cluster.\n"+
 			"Supported operations are limited to %s and %s.\n\n"+
 			"Review the user namespace, visibility query, and current match count carefully.\n"+
 			"Visibility results can change while the batch is running.",
-		nsName,
+		namespaceLabel,
+		strings.Join(nsNames, ","),
 		primitives.SystemLocalNamespace,
 		batchType,
 		query,
 		matchCount,
 		targetKind,
 		targetKind,
-		nsName,
+		namespaceLabel,
+		strings.Join(nsNames, ","),
 		primitives.SystemLocalNamespace,
 		batchTypeTerminateWorkflows,
 		batchTypeTerminateActivities,
@@ -138,6 +156,7 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 
 	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,
+		Namespaces:      requestNamespaces,
 		VisibilityQuery: query,
 		JobId:           jobIDWithNS,
 		Reason:          reason,
@@ -152,9 +171,33 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 
 	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintf(c.App.Writer,
-		"Batch operation %q started successfully in namespace %s, targeting namespace %q, with Job ID: %s\n",
-		batchType, primitives.SystemLocalNamespace, nsName, jobIDWithNS)
+		"Batch operation %q started successfully in namespace %s, targeting %s %q, with Job ID: %s\n",
+		batchType, primitives.SystemLocalNamespace, namespaceLabel, strings.Join(nsNames, ","), jobIDWithNS)
 	return nil
+}
+
+func getBatchNamespaces(c *cli.Context) ([]string, error) {
+	namespaces := c.StringSlice(FlagNamespaces)
+	if len(namespaces) == 0 {
+		namespaceName, err := getRequiredOption(c, FlagNamespace)
+		if err != nil {
+			return nil, err
+		}
+		namespaces = []string{namespaceName}
+	}
+	seen := make(map[string]struct{}, len(namespaces))
+	for i, namespaceName := range namespaces {
+		namespaceName = strings.TrimSpace(namespaceName)
+		if namespaceName == "" {
+			return nil, fmt.Errorf("namespace is empty")
+		}
+		if _, ok := seen[namespaceName]; ok {
+			return nil, fmt.Errorf("namespace %q is duplicated", namespaceName)
+		}
+		seen[namespaceName] = struct{}{}
+		namespaces[i] = namespaceName
+	}
+	return namespaces, nil
 }
 
 func countDelegatedBatchExecutions(

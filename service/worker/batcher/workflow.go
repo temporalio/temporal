@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -145,16 +146,46 @@ func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOper
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
 	var ac *activities
-	err := workflow.ExecuteActivity(opt, ac.BatchActivityWithProtobuf, batchParams).Get(ctx, &result)
-	if err != nil {
-		return HeartBeatDetails{}, err
+	targets := batchParams.GetAdminTargets()
+	if len(targets) == 0 {
+		err := workflow.ExecuteActivity(opt, ac.BatchActivityWithProtobuf, batchParams).Get(ctx, &result)
+		if err != nil {
+			return HeartBeatDetails{}, err
+		}
+	} else {
+		for _, target := range targets {
+			var targetResult HeartBeatDetails
+			targetParams := batchParamsForAdminTarget(batchParams, target)
+			err := workflow.ExecuteActivity(opt, ac.BatchActivityWithProtobuf, targetParams).Get(ctx, &targetResult)
+			if err != nil {
+				return HeartBeatDetails{}, err
+			}
+			result.TotalEstimate += targetResult.TotalEstimate
+			result.SuccessCount += targetResult.SuccessCount
+			result.ErrorCount += targetResult.ErrorCount
+		}
 	}
 
-	err = attachBatchOperationStats(ctx, result)
+	err := attachBatchOperationStats(ctx, result)
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}
 	return result, err
+}
+
+func batchParamsForAdminTarget(
+	batchParams *batchspb.BatchOperationInput,
+	target *batchspb.AdminBatchTarget,
+) *batchspb.BatchOperationInput {
+	targetParams := proto.Clone(batchParams).(*batchspb.BatchOperationInput)
+	targetParams.NamespaceId = target.GetNamespaceId()
+	targetParams.AdminTargets = nil
+	targetParams.AdminRequest.Namespace = target.GetNamespace()
+	targetParams.AdminRequest.Namespaces = nil
+	if targetParams.GetRequest() != nil {
+		targetParams.Request.Namespace = target.GetNamespace()
+	}
+	return targetParams
 }
 
 type BatchOperationStats struct {

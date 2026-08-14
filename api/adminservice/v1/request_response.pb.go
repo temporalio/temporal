@@ -5502,7 +5502,8 @@ type StartAdminBatchOperationRequest struct {
 	// This field and `visibility_query` are mutually exclusive.
 	Executions []*v1.WorkflowExecution `protobuf:"bytes,5,rep,name=executions,proto3" json:"executions,omitempty"`
 	// The identity of the worker/client.
-	Identity string `protobuf:"bytes,6,opt,name=identity,proto3" json:"identity,omitempty"`
+	Identity   string   `protobuf:"bytes,6,opt,name=identity,proto3" json:"identity,omitempty"`
+	Namespaces []string `protobuf:"bytes,7,rep,name=namespaces,proto3" json:"namespaces,omitempty"`
 	// The admin batch operation to perform.
 	//
 	// Types that are valid to be assigned to Operation:
@@ -5584,6 +5585,13 @@ func (x *StartAdminBatchOperationRequest) GetIdentity() string {
 		return x.Identity
 	}
 	return ""
+}
+
+func (x *StartAdminBatchOperationRequest) GetNamespaces() []string {
+	if x != nil {
+		return x.Namespaces
+	}
+	return nil
 }
 
 func (x *StartAdminBatchOperationRequest) GetOperation() isStartAdminBatchOperationRequest_Operation {
@@ -6387,7 +6395,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\fpartition_id\x18\x04 \x01(\x05R\vpartitionId\"\x90\x01\n" +
 	"\x1cGetTaskQueueUserDataResponse\x12V\n" +
 	"\tuser_data\x18\x01 \x01(\v29.temporal.server.api.persistence.v1.TaskQueueTypeUserDataR\buserData\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\"\xfc\x03\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"\x9c\x04\n" +
 	"\x1fStartAdminBatchOperationRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12)\n" +
 	"\x10visibility_query\x18\x02 \x01(\tR\x0fvisibilityQuery\x12\x15\n" +
@@ -6396,7 +6404,10 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\n" +
 	"executions\x18\x05 \x03(\v2).temporal.api.common.v1.WorkflowExecutionR\n" +
 	"executions\x12\x1a\n" +
-	"\bidentity\x18\x06 \x01(\tR\bidentity\x12y\n" +
+	"\bidentity\x18\x06 \x01(\tR\bidentity\x12\x1e\n" +
+	"\n" +
+	"namespaces\x18\a \x03(\tR\n" +
+	"namespaces\x12y\n" +
 	"\x17refresh_tasks_operation\x18\n" +
 	" \x01(\v2?.temporal.server.api.adminservice.v1.BatchOperationRefreshTasksH\x00R\x15refreshTasksOperation\x12r\n" +
 	"\x14delegation_operation\x18\v \x01(\v2=.temporal.server.api.adminservice.v1.BatchOperationDelegationH\x00R\x13delegationOperationB\v\n" +

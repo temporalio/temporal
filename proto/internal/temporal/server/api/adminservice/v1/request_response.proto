@@ -642,6 +642,8 @@ message StartAdminBatchOperationRequest {
   // The identity of the worker/client.
   string identity = 6;
 
+  repeated string namespaces = 7;
+
   // The admin batch operation to perform.
   oneof operation {
     BatchOperationRefreshTasks refresh_tasks_operation = 10;

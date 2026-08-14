@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,4 +182,61 @@ func (s *AdminBatchDelegationTestSuite) TestTdbgBatchTerminate_RunsInSystemNames
 		s.Equal(2, hbd.SuccessCount)
 		s.Equal(0, hbd.ErrorCount)
 	}
+}
+
+func (s *AdminBatchDelegationTestSuite) TestTdbgBatchTerminate_SharedQueryAcrossNamespaces() {
+	env := s.newTestEnv()
+
+	namespaces := []string{env.Namespace().String(), env.ExternalNamespace().String()}
+	workflowTypeName := "admin-batch-delegation-wf-" + uuid.NewString()
+	query := fmt.Sprintf("WorkflowType = '%s'", workflowTypeName)
+	executions := make(map[string]*commonpb.WorkflowExecution, len(namespaces))
+	for _, namespace := range namespaces {
+		executions[namespace] = s.startUnworkedWorkflows(env, namespace, workflowTypeName, 1)[0]
+		s.awaitVisibilityCount(env, namespace, query, 1)
+	}
+
+	jobID := uuid.NewString()
+	s.Require().NoError(s.runTdbg(env,
+		"--"+tdbg.FlagYes,
+		"delegated-batch", "start",
+		"--"+tdbg.FlagNamespaces, namespaces[0],
+		"--"+tdbg.FlagNamespaces, namespaces[1],
+		"--"+tdbg.FlagBatchType, "terminate-workflows",
+		"--"+tdbg.FlagVisibilityQuery, query,
+		"--"+tdbg.FlagReason, "test shared query across namespaces",
+		"--"+tdbg.FlagJobID, jobID,
+	))
+
+	batchWorkflowID := jobID + ":" + strings.Join(namespaces, ",")
+	s.Await(func(s *AdminBatchDelegationTestSuite) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: primitives.SystemLocalNamespace,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: batchWorkflowID},
+		})
+		s.Require().NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
+	}, 60*time.Second, time.Second)
+
+	for namespace, execution := range executions {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespace,
+			Execution: execution,
+		})
+		s.Require().NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, resp.GetWorkflowExecutionInfo().GetStatus())
+	}
+
+	systemClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  env.FrontendGRPCAddress(),
+		Namespace: primitives.SystemLocalNamespace,
+	})
+	s.Require().NoError(err)
+	defer systemClient.Close()
+
+	var hbd batcher.HeartBeatDetails
+	s.Require().NoError(systemClient.GetWorkflow(s.Context(), batchWorkflowID, "").Get(s.Context(), &hbd))
+	s.Equal(int64(2), hbd.TotalEstimate)
+	s.Equal(2, hbd.SuccessCount)
+	s.Equal(0, hbd.ErrorCount)
 }
