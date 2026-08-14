@@ -544,6 +544,173 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() 
 	s.Zero(db.getTotalApproximateBacklogCount())
 }
 
+// initPriReaderAtEnd initializes the db without starting the background reader pump, and returns
+// a reader that is caught up to the end of the queue (readLevel == ackLevel == maxReadLevel) so
+// the test can drive it deterministically.
+func (s *BacklogManagerTestSuite) initPriReaderAtEnd() (*priBacklogManagerImpl, *priTaskReader, int64) {
+	blm := s.blm.(*priBacklogManagerImpl)
+	_, err := blm.db.RenewLease(blm.tqCtx)
+	s.Require().NoError(err)
+	start := blm.db.GetMaxReadLevel(subqueueZero)
+	return blm, newPriTaskReader(blm, subqueueZero, start), start
+}
+
+// createTasksAt writes tasks with the given ids straight through the db, and returns the
+// subqueue-zero response that priTaskWriter would have handed to signalNewTasks.
+func (s *BacklogManagerTestSuite) createTasksAt(blm *priBacklogManagerImpl, ids ...int64) subqueueCreateTasksResponse {
+	reqs := make([]*writeTaskRequest, len(ids))
+	for i, id := range ids {
+		reqs[i] = &writeTaskRequest{
+			subqueue:  subqueueZero,
+			fairLevel: fairLevel{id: id},
+			taskInfo: &persistencespb.TaskInfo{
+				CreateTime: timestamp.TimeNowPtrUtc(),
+				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			},
+		}
+	}
+	resp, err := blm.db.CreateTasks(blm.tqCtx, reqs)
+	s.Require().NoError(err)
+	return resp.bySubqueue[subqueueZero]
+}
+
+func (s *BacklogManagerTestSuite) dbAckLevel(blm *priBacklogManagerImpl) int64 {
+	blm.db.Lock()
+	defer blm.db.Unlock()
+	return blm.db.subqueues[subqueueZero].AckLevel
+}
+
+// TestSetReadLevelAfterGap_IgnoresStaleLevels covers the read/write race where getTaskBatch
+// reports "read to the end, found nothing" based on levels that signalNewTasks has already moved
+// past. Applying that stale result used to move readLevel backwards over loaded tasks, which then
+// let the reader re-read and re-dispatch them once they were acked.
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_IgnoresStaleLevels() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+	s.setupToCaptureTasks()
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	// The pump snapshots readLevel and maxReadLevel, both == start, so getTaskBatch does no IO.
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Empty(batch.tasks)
+	s.Require().True(batch.isReadBatchDone)
+	s.Require().Equal(start, batch.readLevel)
+
+	// A write lands before the pump applies that snapshot. maxReadLevelBefore == tr.readLevel,
+	// so signalNewTasks takes the direct-add path and advances readLevel past the snapshot.
+	tr.signalNewTasks(s.createTasksAt(blm, start+1, start+2))
+	readLevel, ackLevel := tr.getLevels()
+	s.Require().Equal(start+2, readLevel)
+	s.Require().Equal(start, ackLevel)
+	s.Require().Len(s.capturedTasks(), 2)
+
+	// Applying the stale snapshot must not move either level backwards.
+	tr.setReadLevelAfterGap(batch.readLevel)
+	readLevel, ackLevel = tr.getLevels()
+	s.Equal(start+2, readLevel)
+	s.Equal(start, ackLevel)
+
+	// It must also ask for another read: the caller decides that from isReadBatchDone, which
+	// came from the same stale snapshot.
+	select {
+	case <-tr.notifyC:
+	default:
+		s.Fail("expected setReadLevelAfterGap to signal a reload after discarding stale levels")
+	}
+}
+
+// TestSetReadLevelAfterGap_NoReloadSignalWhenCaughtUp guards the boundary: a scan that ends
+// exactly where readLevel already is isn't stale, and signalling there would spin the pump
+// (empty batch -> signal -> empty batch -> ...).
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_NoReloadSignalWhenCaughtUp() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Equal(start, batch.readLevel)
+
+	tr.setReadLevelAfterGap(batch.readLevel)
+
+	readLevel, ackLevel := tr.getLevels()
+	s.Equal(start, readLevel)
+	s.Equal(start, ackLevel)
+
+	select {
+	case <-tr.notifyC:
+		s.Fail("setReadLevelAfterGap should not signal a reload when already at the given level")
+	default:
+	}
+}
+
+// TestProcessTaskBatch_IgnoresAlreadyAckedTasks covers the other half of the same read/write
+// race: here the in-flight read does return the newly-written rows, but they get acked before the
+// pump processes them. outstandingTasks only remembers tasks above the ack level, so its dedup
+// check can't see them and they used to be dispatched and acked a second time.
+func (s *BacklogManagerTestSuite) TestProcessTaskBatch_IgnoresAlreadyAckedTasks() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+	s.setupToCaptureTasks()
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	ignored := s.logger.Expect(testlogger.Info, "ignoring already-acked task read from persistence")
+
+	// A read is in flight: it snapshotted readLevel == start, and its GetTasks will pick up the
+	// rows written just below. Meanwhile signalNewTasks direct-adds the same tasks.
+	tr.signalNewTasks(s.createTasksAt(blm, start+1, start+2))
+
+	// Both tasks are dispatched and acked, which advances the ack level over them and removes
+	// them from outstandingTasks.
+	tasks := s.capturedTasks()
+	s.Require().Len(tasks, 2)
+	for _, t := range tasks {
+		t.finish(taskFinishResult{consumedToken: true})
+	}
+	_, ackLevel := tr.getLevels()
+	s.Require().Equal(start+2, ackLevel)
+	s.Require().Zero(totalApproximateBacklogCount(s.blm))
+
+	// Now the read that was already in flight comes back with those same rows.
+	readResp, err := blm.db.GetTasks(blm.tqCtx, subqueueZero, start+1, start+3, 100)
+	s.Require().NoError(err)
+	s.Require().Len(readResp.Tasks, 2)
+
+	tr.processTaskBatch(readResp.Tasks)
+
+	s.Len(s.capturedTasks(), 2, "already-acked tasks must not be dispatched again")
+	s.True(ignored.Matched(), "expected the already-acked tasks to be logged as ignored")
+
+	readLevel, ackLevel := tr.getLevels()
+	s.Equal(start+2, readLevel)
+	s.Equal(start+2, ackLevel)
+	s.Equal(start+2, s.dbAckLevel(blm))
+	s.Zero(totalApproximateBacklogCount(s.blm))
+}
+
+// TestUpdateAckLevel_DoesNotMoveBackwards checks that a caller racing itself into a lower ack
+// level gets flagged but cannot regress what we persist.
+func (s *BacklogManagerTestSuite) TestUpdateAckLevel_DoesNotMoveBackwards() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+	blm, _, _ := s.initPriReaderAtEnd()
+
+	blm.db.updateAckLevelAndBacklogStats(subqueueZero, 50, 0, time.Time{})
+	s.Require().EqualValues(50, s.dbAckLevel(blm))
+
+	moved := s.logger.Expect(testlogger.Error,
+		"failed assertion: ack level in subqueue should not move backwards")
+	blm.db.updateAckLevelAndBacklogStats(subqueueZero, 40, 0, time.Time{})
+
+	s.True(moved.Matched(), "expected the backwards ack level to be flagged")
+	s.EqualValues(50, s.dbAckLevel(blm), "persisted ack level must not regress")
+}
+
 func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 	if !s.newMatcher {
 		s.T().Skip("SyncState is only used by the new backlog manager")
