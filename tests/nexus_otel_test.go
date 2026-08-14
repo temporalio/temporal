@@ -208,7 +208,7 @@ func (s *NexusOTELSuite) TestOperation() {
 	})
 }
 
-// Verifies worker-target Nexus operations trace requests routed through the local frontend client.
+// Verifies worker-target Nexus operations connect local frontend client and server spans.
 func (s *NexusOTELSuite) TestWorkerOperation() {
 	exporter := tracetest.NewInMemoryExporter()
 	env := s.newTestEnv(exporter)
@@ -330,4 +330,34 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 		})
 	}
 	return result, httpSpans
+}
+
+func (s *NexusOTELSuite) requireExportedServerSpan(
+	exporter *tracetest.InMemoryExporter,
+	headers headerGetter,
+	operation string,
+) {
+	traceID, clientSpanID := s.requireTraceContext(headers)
+	s.AwaitTrue(func() bool {
+		for _, span := range exporter.GetSpans() {
+			if span.Name == operation &&
+				span.SpanKind == oteltrace.SpanKindServer &&
+				span.SpanContext.TraceID() == traceID &&
+				span.Parent.SpanID() == clientSpanID {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *NexusOTELSuite) requireTraceContext(headers headerGetter) (oteltrace.TraceID, oteltrace.SpanID) {
+	// Extract trace context from headers.
+	traceparent := strings.Split(headers.Get("traceparent"), "-")
+	s.Len(traceparent, 4)
+	traceID, err := oteltrace.TraceIDFromHex(traceparent[1])
+	s.NoError(err)
+	spanID, err := oteltrace.SpanIDFromHex(traceparent[2])
+	s.NoError(err)
+	return traceID, spanID
 }

@@ -10,8 +10,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -47,8 +45,7 @@ type NexusOperationHTTPHandler struct {
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
-	tracerProvider                       trace.TracerProvider
-	propagator                           propagation.TextMapPropagator
+	httpHandlerWrapper                   telemetry.HTTPHandlerWrapper
 }
 
 func NewNexusOperationHTTPHandler(
@@ -69,8 +66,7 @@ func NewNexusOperationHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
-	tracerProvider trace.TracerProvider,
-	propagator propagation.TextMapPropagator,
+	httpHandlerWrapper telemetry.HTTPHandlerWrapper,
 ) *NexusOperationHTTPHandler {
 	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
@@ -86,8 +82,7 @@ func NewNexusOperationHTTPHandler(
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
-		tracerProvider:                       tracerProvider,
-		propagator:                           propagator,
+		httpHandlerWrapper:                   httpHandlerWrapper,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
 				logger:                        logger,
@@ -116,22 +111,9 @@ func NewNexusOperationHTTPHandler(
 
 func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
-		Handler(h.wrapWithTracing(http.HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue), "DispatchNexusTaskByNamespaceAndTaskQueue"))
+		Handler(h.httpHandlerWrapper.Wrap(http.HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue), "DispatchNexusTaskByNamespaceAndTaskQueue"))
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
-		Handler(h.wrapWithTracing(http.HandlerFunc(h.dispatchNexusTaskByEndpoint), "DispatchNexusTaskByEndpoint"))
-}
-
-// wrapWithTracing wraps an HTTP handler with otelhttp so that incoming Nexus requests produce a
-// server span carrying http.* semantic-convention attributes and extract any upstream W3C
-// TraceContext into the request's context. The span name matches the Nexus route's
-// representation, mirroring the gRPC stats handler that names spans after the RPC method.
-func (h *NexusOperationHTTPHandler) wrapWithTracing(handler http.Handler, route string) http.Handler {
-	return telemetry.NewHTTPHandler(
-		handler,
-		route,
-		h.tracerProvider,
-		h.propagator,
-	)
+		Handler(h.httpHandlerWrapper.Wrap(http.HandlerFunc(h.dispatchNexusTaskByEndpoint), "DispatchNexusTaskByEndpoint"))
 }
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {

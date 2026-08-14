@@ -419,6 +419,24 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 // Verifies server handler construction, standard tracing, and debug body handling.
 func TestNewHTTPHandler(t *testing.T) {
+	// The wrapper carries HTTP tracing configuration without exposing it to handler owners.
+	t.Run("HandlerWrapper", func(t *testing.T) {
+		t.Parallel()
+
+		handler := http.NewServeMux()
+		var disabled HTTPHandlerWrapper
+		require.Same(t, handler, disabled.Wrap(handler, "test-handler"))
+
+		recorder := tracetest.NewSpanRecorder()
+		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+		wrapper := NewHTTPHandlerWrapper(tp, nil)
+		wrapper.Wrap(handler, "test-handler").ServeHTTP(
+			httptest.NewRecorder(),
+			httptest.NewRequest(http.MethodGet, "http://example.com", nil),
+		)
+		require.Equal(t, "test-handler", recorder.Ended()[0].Name())
+	})
+
 	// Debug-only headers and payloads must remain absent unless debug mode is enabled.
 	t.Run("SkipsHeadersAndPayloadsByDefault", func(t *testing.T) {
 		t.Parallel()
