@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,20 +59,31 @@ func TestJobIDFromArtifactName(t *testing.T) {
 }
 
 func TestUniqueDataRaces(t *testing.T) {
-	// The same race is reported by every shard/attempt that hit it.
+	// The same race reported by two shards: identical source lines, but the race
+	// detector prints different memory addresses and goroutine ids each run.
+	shard1 := readWriteRaceDetails
+	shard2 := strings.NewReplacer(
+		"0x00c0001121e8", "0xdeadbeef",
+		"goroutine 8", "goroutine 42",
+		"goroutine 7", "goroutine 99",
+	).Replace(shard1)
+
+	// A race at a different source line is a distinct race.
+	otherLine := strings.ReplaceAll(shard1, "mutable_state.go:130", "mutable_state.go:200")
+
 	races := []DataRace{
-		{Location: "TestBar", Details: "race body"},
-		{Location: "TestBar", Details: "race body"},
-		{Location: "TestBaz", Details: "race body"},  // same details, different location
-		{Location: "TestBar", Details: "other body"}, // same location, different details
+		{Location: "service/history.TestMS", Details: shard1, JobID: "1"},
+		{Location: "service/history.TestMS", Details: shard2, JobID: "2"}, // dup of shard1
+		{Location: "service/history.TestMS", Details: otherLine},          // different line
+		{Location: "service/matching.TestCache", Details: shard1},         // different test
 	}
 
 	unique := uniqueDataRaces(races)
 
 	require.Len(t, unique, 3)
-	require.Equal(t, "TestBar", unique[0].Location)
-	require.Equal(t, "TestBaz", unique[1].Location)
-	require.Equal(t, "other body", unique[2].Details)
+	require.Equal(t, "1", unique[0].JobID) // first occurrence wins
+	require.Equal(t, "service/history.TestMS", unique[1].Location)
+	require.Equal(t, "service/matching.TestCache", unique[2].Location)
 }
 
 func TestSummaryRowsFromZipParsesDataRaceDetails(t *testing.T) {

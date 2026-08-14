@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -132,30 +133,59 @@ func dataRaceLocation(name string) string {
 	return strings.TrimPrefix(loc, temporalModulePrefix)
 }
 
-// raceSites reduces a race detector report to the conflicting memory accesses
-// and the source line each occurred at, e.g.
-//
-//	Read at (goroutine 8): service/history/mutable_state.go:127
-//	Previous write at (goroutine 7): service/history/mutable_state.go:130
-//
-// It handles read/write and write/write races. Returns nil when the report can't
-// be parsed, so callers can degrade to just the location and job link.
-func raceSites(details string) []string {
+// raceSite is one conflicting memory access from a race detector report.
+type raceSite struct {
+	access    string // "Read", "Write", "Previous read", or "Previous write"
+	goroutine string // "goroutine 8" or "main goroutine"
+	location  string // "service/history/mutable_state.go:127"
+}
+
+// parseRaceSites reduces a race detector report to the conflicting memory
+// accesses and the source line each occurred at. It handles read/write and
+// write/write races. Returns nil when the report can't be parsed, so callers can
+// degrade to just the location and job link.
+func parseRaceSites(details string) []raceSite {
 	lines := strings.Split(details, "\n")
-	var sites []string
+	var sites []raceSite
 	for i, line := range lines {
 		m := raceAccessRegex.FindStringSubmatch(strings.TrimSpace(line))
 		if m == nil {
 			continue
 		}
 		if loc := firstGoFrame(lines[i+1:]); loc != "" {
-			sites = append(sites, fmt.Sprintf("%s at (%s): %s", m[1], m[2], loc))
+			sites = append(sites, raceSite{access: m[1], goroutine: m[2], location: loc})
 			if len(sites) == maxRaceSites {
 				break
 			}
 		}
 	}
 	return sites
+}
+
+// raceSites formats the conflicting accesses for display, e.g.
+//
+//	Read at (goroutine 8): service/history/mutable_state.go:127
+//	Previous write at (goroutine 7): service/history/mutable_state.go:130
+func raceSites(details string) []string {
+	sites := parseRaceSites(details)
+	out := make([]string, 0, len(sites))
+	for _, s := range sites {
+		out = append(out, fmt.Sprintf("%s at (%s): %s", s.access, s.goroutine, s.location))
+	}
+	return out
+}
+
+// raceAffectedLines returns the sorted, de-duplicated source lines involved in a
+// race. Unlike the raw report, this excludes memory addresses and goroutine ids
+// (which differ every run), so it identifies a race stably across shards.
+func raceAffectedLines(details string) []string {
+	sites := parseRaceSites(details)
+	locations := make([]string, 0, len(sites))
+	for _, s := range sites {
+		locations = append(locations, s.location)
+	}
+	slices.Sort(locations)
+	return slices.Compact(locations)
 }
 
 // firstGoFrame returns "<path>.go:<line>" for the first application stack frame
@@ -194,12 +224,15 @@ func jobIDFromArtifactName(name string) string {
 }
 
 // uniqueDataRaces removes duplicate races (the same race is reported by every
-// shard/attempt that hit it) while preserving first-seen order.
+// shard/attempt that hit it) while preserving first-seen order. Races are keyed
+// by their test and affected source lines rather than the raw report, so the
+// same race still de-duplicates despite the differing memory addresses and
+// goroutine ids the detector prints each run.
 func uniqueDataRaces(races []DataRace) []DataRace {
 	seen := make(map[string]struct{}, len(races))
 	var unique []DataRace
 	for _, race := range races {
-		key := fmt.Sprintf("%s\n%s", race.Location, race.Details)
+		key := raceFingerprint(race)
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -207,4 +240,15 @@ func uniqueDataRaces(races []DataRace) []DataRace {
 		unique = append(unique, race)
 	}
 	return unique
+}
+
+// raceFingerprint is a stable identity for a race: its test plus the set of
+// affected source lines. Falls back to the raw report when no source lines can
+// be parsed, so unparseable reports aren't over-merged.
+func raceFingerprint(race DataRace) string {
+	lines := raceAffectedLines(race.Details)
+	if len(lines) == 0 {
+		return race.Location + "\n" + race.Details
+	}
+	return race.Location + "\n" + strings.Join(lines, "\n")
 }
