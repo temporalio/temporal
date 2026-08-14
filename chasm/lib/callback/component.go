@@ -81,21 +81,33 @@ func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (invocable, error) {
-	// Only Nexus-variant callbacks are supported.
-	callback := c.GetCallback().GetNexus()
-	if callback == nil {
+	// Reject unknown/unsupported callback variants.
+	switch c.GetCallback().GetVariant().(type) {
+	case *callbackspb.Callback_Nexus_, *callbackspb.Callback_Worker_:
+	default:
 		return nil, queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("unprocessable callback variant: %T", c.GetCallback().GetVariant()),
 		)
 	}
 
+	// Get the parent CHASM object's Nexus result to be delivered.
 	target := c.CompletionSource.Get(ctx)
 	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
 	if err != nil {
 		return nil, err
 	}
 
-	if callback.Url == chasm.NexusCompletionHandlerURL {
+	if worker := c.GetCallback().GetWorker(); worker != nil {
+		return invocableWorker{
+			callback:   worker,
+			completion: completion,
+			requestID:  c.RequestId,
+			attempt:    c.Attempt,
+		}, nil
+	}
+
+	callback := c.GetCallback().GetNexus()
+	if callback.GetUrl() == chasm.NexusCompletionHandlerURL {
 		return invocableInternal{
 			callback:   callback,
 			attempt:    c.Attempt,
@@ -196,8 +208,32 @@ func (c *Callback) setResult(apiCb *callbackpb.CallbackInfo) {
 	}
 }
 
-// APIState converts the CHASM callback status to the API CallbackState enum.
-func (c *Callback) APIState() (enumspb.CallbackState, error) {
+// APIState converts the CHASM callback status to the API CallbackState enum, along with the reason
+// the callback is blocked, if it is. A scheduled callback reports BLOCKED while the outbound queue
+// is holding back deliveries to its destination.
+//
+//nolint:revive // context.Context is an input parameter for chasm component methods, not a function parameter
+func (c *Callback) APIState(ctx chasm.Context) (enumspb.CallbackState, string, error) {
+	state, err := c.apiStatus()
+	if err != nil || state != enumspb.CALLBACK_STATE_SCHEDULED {
+		return state, "", err
+	}
+
+	cbCtx := callbackContextFromChasm(ctx)
+	if cbCtx == nil || cbCtx.destinationBlocked == nil {
+		return state, "", nil
+	}
+	destination, err := c.Destination()
+	if err != nil {
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, "", err
+	}
+	if !cbCtx.destinationBlocked(ctx.ExecutionKey().NamespaceID, destination) {
+		return state, "", nil
+	}
+	return enumspb.CALLBACK_STATE_BLOCKED, "The circuit breaker is open.", nil
+}
+
+func (c *Callback) apiStatus() (enumspb.CallbackState, error) {
 	switch c.Status {
 	case callbackspb.CALLBACK_STATUS_STANDBY:
 		return enumspb.CALLBACK_STATE_STANDBY, nil
@@ -217,21 +253,23 @@ func (c *Callback) APIState() (enumspb.CallbackState, error) {
 }
 
 // ToAPICallbackInfo returns the API CallbackInfo based on the current state of the CHASM component.
-func (c *Callback) ToAPICallbackInfo() (*callbackpb.CallbackInfo, error) {
+//
+//nolint:revive // context.Context is an input parameter for chasm component methods, not a function parameter
+func (c *Callback) ToAPICallbackInfo(ctx chasm.Context) (*callbackpb.CallbackInfo, error) {
 	apiCb, err := c.ToAPICallback()
 	if err != nil {
 		return nil, err
 	}
-	apiState, err := c.APIState()
+	apiState, blockedReason, err := c.APIState(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	info := &callbackpb.CallbackInfo{
-		Callback:         apiCb,
-		RegistrationTime: common.CloneProto(c.RegistrationTime),
-		State:            apiState,
-		// BlockedReason is unimplemented; only the workflow Describe path computes it.
+		Callback:                apiCb,
+		RegistrationTime:        common.CloneProto(c.RegistrationTime),
+		State:                   apiState,
+		BlockedReason:           blockedReason,
 		Attempt:                 c.Attempt,
 		LastAttemptCompleteTime: common.CloneProto(c.LastAttemptCompleteTime),
 		LastAttemptFailure:      common.CloneProto(c.LastAttemptFailure),
@@ -257,8 +295,6 @@ func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
 		}
 		return res, nil
 	case *commonpb.Callback_Worker_:
-		// Conversion is supported so worker callbacks can be persisted, but
-		// invoking them is not yet implemented.
 		res.Variant = &callbackspb.Callback_Worker_{
 			Worker: &callbackspb.Callback_Worker{
 				TaskQueueName: variant.Worker.GetTaskQueueName(),

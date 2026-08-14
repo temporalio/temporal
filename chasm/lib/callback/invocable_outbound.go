@@ -102,6 +102,8 @@ func outcomeTag(callCtx context.Context, callErr error) string {
 		}
 		var handlerErr *nexus.HandlerError
 		if errors.As(callErr, &handlerErr) {
+			// We are assuming that handlerErr is one of a known type, and one of the
+			// existing (low cardinality) nexus.HandlerErrorType values.
 			return "handler-error:" + string(handlerErr.Type)
 		}
 		return "unknown-error"

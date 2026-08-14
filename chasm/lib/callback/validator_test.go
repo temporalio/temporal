@@ -206,6 +206,13 @@ func TestValidateWorkerCallback(t *testing.T) {
 			errMsg: "completion_callbacks[1].worker.task_queue_name exceeds length limit. Length=11 Limit=10",
 		},
 		{
+			// A mangled partition name is rejected up front, so the caller gets a real error instead of
+			// an opaque callback failure once matching refuses to route it.
+			name:   "task_queue_name is mangled",
+			mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = "/_sys/tq" },
+			errMsg: "completion_callbacks[1].worker.task_queue_name is invalid",
+		},
+		{
 			name:   "service is required",
 			mutate: func(w *commonpb.Callback_Worker) { w.Service = "" },
 			errMsg: "completion_callbacks[1].worker.service is required",

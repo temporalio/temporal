@@ -140,29 +140,19 @@ func TestToAPICallbackUnsupportedVariant(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported CHASM callback type")
 }
 
-// Asserts that CHASM Callbacks do not support the new Worker callback variant.
-func TestWorkerCallbacksNotSupported(t *testing.T) {
-	apiCb := &commonpb.Callback{
-		Variant: &commonpb.Callback_Worker_{
-			Worker: &commonpb.Callback_Worker{},
-		},
-	}
-	chasmCB, err := FromAPICallback(apiCb)
-	require.NoError(t, err)
-
+// A callback whose variant this server doesn't know how to invoke can still be persisted (by a server that
+// does, or by a future version), so its invocation task has to be rejected rather than crash.
+func TestLoadInvocationArgsUnsupportedVariant(t *testing.T) {
 	cb := &Callback{
 		CallbackState: &callbackspb.CallbackState{
-			Callback: chasmCB,
+			Callback: &callbackspb.Callback{},
 		},
 	}
-	// The bare mock has no controller, so loadInvocationArgs must reject the variant
-	// before it touches the context.
-	_, err = cb.loadInvocationArgs(&chasm.MockMutableContext{}, nil)
+	_, err := cb.loadInvocationArgs(&chasm.MockMutableContext{}, nil)
 
 	var unprocessableErr *queueserrors.UnprocessableTaskError
 	require.ErrorAs(t, err, &unprocessableErr)
 	require.ErrorContains(t, err, "unprocessable callback variant")
-	require.ErrorContains(t, err, "Callback_Worker_")
 }
 
 // Verify the awkward setResult method works correctly, populating the

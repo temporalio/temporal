@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -30,6 +31,23 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 	referenceID := uuid.NewString()
 	logger.Error(internalMsg, tag.Error(internalErr), tag.String("reference-id", referenceID))
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
+}
+
+// nexusToTemporalFailure converts an unsuccessful completion's operation error into a failurepb.Failure.
+func nexusToTemporalFailure(nexusErr *nexus.OperationError) (*failurepb.Failure, error) {
+	failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(nexusErr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert error to failure: %w", err)
+	}
+	// Unwrap the operation error, the handler on the other side is expecting to receive the underlying cause.
+	if failure.Cause != nil {
+		failure = *failure.Cause
+	}
+	apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert failure type: %w", err)
+	}
+	return apiFailure, nil
 }
 
 // invocableInternal is an invocable that delivers the Nexus operation completion data to History for cross-shard
@@ -102,17 +120,35 @@ func (c invocableInternal) Invoke(
 	return invocationResultOK{}
 }
 
+// grpcStatus extracts the gRPC status from an RPC error, reporting false if err didn't come from one.
+func grpcStatus(err error) (*status.Status, bool) {
+	if stGetter, ok := err.(interface{ Status() *status.Status }); ok {
+		return stGetter.Status(), true
+	}
+	return status.FromError(err)
+}
+
+// isRequestRejection reports whether err is a callee rejecting the request as malformed, rather than
+// reporting a problem of its own. Only the former is safe to surface to the caller: a delivery request
+// is built entirely out of the callback the caller registered, so a rejection tells them what to fix
+// and leaks nothing about the server. Everything else goes through logInternalError.
+//
+// Retryability is deliberately not the test here. codes.Internal and codes.DeadlineExceeded are
+// retryable but say nothing a caller can act on, while codes.NotFound is non-retryable and describes
+// server state.
+func isRequestRejection(err error) bool {
+	st, ok := grpcStatus(err)
+	if !ok {
+		return false
+	}
+	return st.Code() == codes.InvalidArgument
+}
+
 func isRetryableRPCResponse(err error) bool {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// Not a gRPC induced error
-			return false
-		}
+	st, ok := grpcStatus(err)
+	if !ok {
+		// Not a gRPC induced error
+		return false
 	}
 	// nolint:exhaustive
 	switch st.Code() {
@@ -158,17 +194,10 @@ func (c invocableInternal) getHistoryRequest(
 			Completion: completion,
 		}
 	} else {
-		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
+		// Convert the nexus.Failure into a failurepb.Failure.
+		apiFailure, err := nexusToTemporalFailure(c.completion.Error)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
-		}
-		// Unwrap the operation error, the handler on the other side is expecting to receive the underlying cause.
-		if failure.Cause != nil {
-			failure = *failure.Cause
-		}
-		apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert failure type: %w", err)
+			return nil, err
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
