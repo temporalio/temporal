@@ -22,6 +22,7 @@ const (
 	ErrorAmbiguousGrounding               ErrorCategory = "ambiguous grounding"
 	ErrorUnboundedCycle                   ErrorCategory = "unbounded cycle"
 	ErrorIncompleteAllPaths               ErrorCategory = "incomplete AllPaths enumeration"
+	ErrorInvalidCompletedSuite            ErrorCategory = "invalid completed suite"
 )
 
 var (
@@ -35,6 +36,7 @@ var (
 	ErrAmbiguousGrounding               = errors.New(string(ErrorAmbiguousGrounding))
 	ErrUnboundedCycle                   = errors.New(string(ErrorUnboundedCycle))
 	ErrIncompleteAllPaths               = errors.New(string(ErrorIncompleteAllPaths))
+	ErrInvalidCompletedSuite            = errors.New(string(ErrorInvalidCompletedSuite))
 )
 
 // CompileError retains source and causal information for a planning failure.
@@ -78,6 +80,8 @@ func (e *CompileError) Unwrap() error {
 		return ErrUnboundedCycle
 	case ErrorIncompleteAllPaths:
 		return ErrIncompleteAllPaths
+	case ErrorInvalidCompletedSuite:
+		return ErrInvalidCompletedSuite
 	default:
 		return ErrInvalidInstruction
 	}

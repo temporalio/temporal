@@ -45,6 +45,7 @@ func TestCompileOnePathSelectsCanonicalShortestRouteAndResources(t *testing.T) {
 		Capabilities: []string{"workers"},
 	})
 	require.NoError(t, err)
+	require.NoError(t, regress.ValidateSuite(suite))
 	require.Equal(t, "fake/v1", suite.ModelVersion)
 	require.Equal(t, "local", suite.Profile.Name)
 	require.Len(t, suite.Paths, 1)

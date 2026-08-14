@@ -1,6 +1,6 @@
 # Umpire sparse regressions: remaining work
 
-- [ ] Validate completed suites in `Compile` before returning them.
+- [x] Validate completed suites in `Compile` before returning them.
   - Call `ValidateSuite` after constructing the completed `Suite`.
   - Return a structured compilation error if validation fails.
   - Test that every successfully compiled suite passes `ValidateSuite`.

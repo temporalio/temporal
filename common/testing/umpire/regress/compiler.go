@@ -219,14 +219,24 @@ func Compile(plan Plan, domain *Domain, profile Profile) (Suite, error) {
 	if plan.Mode == OnePathMode && len(paths) > 1 {
 		paths = paths[:1]
 	}
-	return Suite{
+	return validateCompiledSuite(Suite{
 		Name:         plan.Name,
 		IR:           ir,
 		ModelVersion: domain.version,
 		Profile:      profile,
 		Paths:        paths,
 		PathCount:    len(paths),
-	}, nil
+	})
+}
+
+func validateCompiledSuite(suite Suite) (Suite, error) {
+	if err := ValidateSuite(suite); err != nil {
+		return Suite{}, &CompileError{
+			Category: ErrorInvalidCompletedSuite,
+			Detail:   fmt.Sprintf("completed suite is invalid: %v", err),
+		}
+	}
+	return suite, nil
 }
 
 func (c *searchContext) observedWorld(profile Profile) (world, error) {
