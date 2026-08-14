@@ -14,43 +14,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type debugHTTPClientTransport struct {
-	rt http.RoundTripper
-}
-
-type debugHTTPClientSpanTransport struct {
-	rt http.RoundTripper
-}
-
-type debugHTTPHandler struct {
-	handler http.Handler
-}
-
-// Debug mode intentionally buffers complete payloads without a size limit.
-type payloadCapture struct {
-	bytes.Buffer
-	finished bool
-	onFinish func(string)
-}
-
-type payloadCapturingReadCloser struct {
-	io.ReadCloser
-	capture       payloadCapture
-	contentLength int64
-}
-
-type closeFinishingReadCloser struct {
-	io.ReadCloser
-	onClose func()
-}
-
-type debugHTTPClientRequestStateKey struct{}
-
-// The request state bridges the inner capture to the outer closer so annotation precedes span completion.
-type debugHTTPClientRequestState struct {
-	finishResponse func()
-}
-
 // NewHTTPClientTransport wraps an HTTP RoundTripper with otelhttp so outbound requests
 // carry TraceContext headers and produce a client span.
 func NewHTTPClientTransport(
@@ -107,6 +70,17 @@ func NewHTTPHandler(
 	)
 }
 
+type debugHTTPClientRequestStateKey struct{}
+
+// The request state bridges the inner capture to the outer closer so annotation precedes span completion.
+type debugHTTPClientRequestState struct {
+	finishResponse func()
+}
+
+type debugHTTPClientTransport struct {
+	rt http.RoundTripper
+}
+
 func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	state := &debugHTTPClientRequestState{}
 	req = req.WithContext(context.WithValue(req.Context(), debugHTTPClientRequestStateKey{}, state))
@@ -116,6 +90,10 @@ func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response,
 	}
 	resp.Body = newCloseFinishingReadCloser(resp.Body, state.finishResponse)
 	return resp, err
+}
+
+type debugHTTPClientSpanTransport struct {
+	rt http.RoundTripper
 }
 
 func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -143,6 +121,10 @@ func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Respo
 		state.finishResponse = responseCapture.finish
 	}
 	return resp, err
+}
+
+type debugHTTPHandler struct {
+	handler http.Handler
 }
 
 func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -189,11 +171,27 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	responseBody.finish()
 }
 
-func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
-	// Debug mode is explicitly opt-in, so sensitive header values are intentionally recorded verbatim for diagnostics.
-	for key, values := range headers {
-		span.SetAttributes(attribute.StringSlice(prefix+strings.ToLower(key), values))
+// Debug mode intentionally buffers complete payloads without a size limit.
+type payloadCapture struct {
+	bytes.Buffer
+	finished bool
+	onFinish func(string)
+}
+
+func (c *payloadCapture) finish() {
+	if c.finished {
+		return
 	}
+	c.finished = true
+	if c.Len() > 0 {
+		c.onFinish(c.String())
+	}
+}
+
+type payloadCapturingReadCloser struct {
+	io.ReadCloser
+	capture       payloadCapture
+	contentLength int64
 }
 
 func newPayloadCapturingReadCloser(
@@ -210,24 +208,6 @@ func newPayloadCapturingReadCloser(
 		contentLength: contentLength,
 	}
 	return preserveBodyWriter(body, capturingBody), &capturingBody.capture
-}
-
-func newCloseFinishingReadCloser(body io.ReadCloser, onClose func()) io.ReadCloser {
-	finishingBody := &closeFinishingReadCloser{
-		ReadCloser: body,
-		onClose:    onClose,
-	}
-	return preserveBodyWriter(body, finishingBody)
-}
-
-func preserveBodyWriter(body io.ReadCloser, wrapped io.ReadCloser) io.ReadCloser {
-	if writer, ok := body.(io.Writer); ok {
-		return struct {
-			io.ReadCloser
-			io.Writer
-		}{wrapped, writer}
-	}
-	return wrapped
 }
 
 func (r *payloadCapturingReadCloser) Read(p []byte) (int, error) {
@@ -247,17 +227,37 @@ func (r *payloadCapturingReadCloser) Close() error {
 	return r.ReadCloser.Close()
 }
 
+type closeFinishingReadCloser struct {
+	io.ReadCloser
+	onClose func()
+}
+
+func newCloseFinishingReadCloser(body io.ReadCloser, onClose func()) io.ReadCloser {
+	finishingBody := &closeFinishingReadCloser{
+		ReadCloser: body,
+		onClose:    onClose,
+	}
+	return preserveBodyWriter(body, finishingBody)
+}
+
 func (r *closeFinishingReadCloser) Close() error {
 	r.onClose()
 	return r.ReadCloser.Close()
 }
 
-func (c *payloadCapture) finish() {
-	if c.finished {
-		return
+func preserveBodyWriter(body io.ReadCloser, wrapped io.ReadCloser) io.ReadCloser {
+	if writer, ok := body.(io.Writer); ok {
+		return struct {
+			io.ReadCloser
+			io.Writer
+		}{wrapped, writer}
 	}
-	c.finished = true
-	if c.Len() > 0 {
-		c.onFinish(c.String())
+	return wrapped
+}
+
+func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
+	// Debug mode is explicitly opt-in, so sensitive header values are intentionally recorded verbatim for diagnostics.
+	for key, values := range headers {
+		span.SetAttributes(attribute.StringSlice(prefix+strings.ToLower(key), values))
 	}
 }
