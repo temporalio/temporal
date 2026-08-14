@@ -1,4 +1,4 @@
-package telemetry_test
+package telemetry
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	oteltrace "go.opentelemetry.io/otel/trace"
-	"go.temporal.io/server/common/telemetry"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -86,7 +87,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		t.Parallel()
 
 		rt := http.DefaultTransport
-		require.Same(t, rt, telemetry.NewHTTPClientTransport(rt, nil, nil))
+		require.Same(t, rt, NewHTTPClientTransport(rt, nil, nil))
 	})
 
 	// Downstream services need the injected trace context to continue the client span's trace.
@@ -107,7 +108,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			}, nil
 		})
 
-		wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
+		wrapped := NewHTTPClientTransport(rt, tp, nil)
 		resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
@@ -142,7 +143,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
+			wrapped := NewHTTPClientTransport(rt, tp, nil)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
 			req.Header.Set("Request-Header", "request-value")
 
@@ -180,7 +181,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
+			wrapped := NewHTTPClientTransport(rt, tp, nil)
 			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			responseBody, ok := resp.Body.(io.ReadWriteCloser)
@@ -205,7 +206,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
+			wrapped := NewHTTPClientTransport(rt, tp, nil)
 			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			var decoded map[string]bool
@@ -229,7 +230,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
+			wrapped := NewHTTPClientTransport(rt, tp, nil)
 			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			require.False(t, body.read)
@@ -256,7 +257,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
+			wrapped := NewHTTPClientTransport(rt, tp, nil)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
 			resp, err := wrapped.RoundTrip(req)
 			require.NoError(t, err)
@@ -278,7 +279,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				return nil, err
 			})
 
-			wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
+			wrapped := NewHTTPClientTransport(rt, tp, nil)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", nil)
 			req.Body = &failingReadCloser{payload: []byte("partial request")}
 			_, err := wrapped.RoundTrip(req)
@@ -297,7 +298,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := telemetry.NewHTTPClientTransport(rt, tp, nil)
+			wrapped := NewHTTPClientTransport(rt, tp, nil)
 			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			_, err = io.ReadAll(resp.Body)
@@ -316,7 +317,7 @@ func TestNewHTTPHandler(t *testing.T) {
 		recorder := tracetest.NewSpanRecorder()
 		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 		var handlerErr error
-		handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, handlerErr = io.ReadAll(r.Body)
 			if handlerErr != nil {
 				return
@@ -347,7 +348,7 @@ func TestNewHTTPHandler(t *testing.T) {
 		t.Run("AnnotatesHeadersAndPayloads", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
-			handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				payload, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Errorf("ReadAll() error = %v", err)
@@ -393,7 +394,7 @@ func TestNewHTTPHandler(t *testing.T) {
 			var readBeforeHandler bool
 			var handlerErr error
 			var handlerPayload []byte
-			handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				readBeforeHandler = body.read
 				handlerPayload, handlerErr = io.ReadAll(r.Body)
 			}), "test-handler", tp, nil)
@@ -412,7 +413,7 @@ func TestNewHTTPHandler(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 			var handlerErr error
-			handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				payload := make([]byte, len("request body"))
 				_, handlerErr = io.ReadFull(r.Body, payload)
 			}), "test-handler", tp, nil)
@@ -432,7 +433,7 @@ func TestNewHTTPHandler(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 			var handlerErr error
-			handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_, handlerErr = io.Copy(w, io.LimitReader(bytes.NewBufferString("response body"), int64(len("response body"))))
 			}), "test-handler", tp, nil)
 
@@ -447,6 +448,58 @@ func TestNewHTTPHandler(t *testing.T) {
 	})
 }
 
+// Non-recording client spans should not pay debug payload-capture costs.
+func TestDebugHTTPClientSpanTransportSkipsNonRecordingSpan(t *testing.T) {
+	t.Parallel()
+
+	requestBody := &readTrackingCloser{Reader: strings.NewReader("request body")}
+	responseBody := &readTrackingCloser{Reader: strings.NewReader("response body")}
+	var receivedBody io.ReadCloser
+	transport := &debugHTTPClientSpanTransport{rt: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		receivedBody = r.Body
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       responseBody,
+			Header:     http.Header{},
+			Request:    r,
+		}, nil
+	})}
+
+	req := httptest.NewRequest(http.MethodPost, "http://example.com", nil)
+	req.Body = requestBody
+	_, span := noop.NewTracerProvider().Tracer("test").Start(req.Context(), "test")
+	req = req.WithContext(oteltrace.ContextWithSpan(req.Context(), span))
+
+	resp, err := transport.RoundTrip(req)
+	require.NoError(t, err)
+	require.Same(t, requestBody, receivedBody)
+	require.Same(t, responseBody, resp.Body)
+	require.NoError(t, resp.Body.Close())
+}
+
+// Non-recording server spans should not pay debug payload-capture costs.
+func TestDebugHTTPHandlerSkipsNonRecordingSpan(t *testing.T) {
+	t.Parallel()
+
+	requestBody := &readTrackingCloser{Reader: strings.NewReader("request body")}
+	recorder := httptest.NewRecorder()
+	var receivedBody io.ReadCloser
+	var receivedWriter http.ResponseWriter
+	handler := &debugHTTPHandler{handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedBody = r.Body
+		receivedWriter = w
+	})}
+
+	req := httptest.NewRequest(http.MethodPost, "http://example.com", nil)
+	req.Body = requestBody
+	_, span := noop.NewTracerProvider().Tracer("test").Start(req.Context(), "test")
+	req = req.WithContext(oteltrace.ContextWithSpan(req.Context(), span))
+	handler.ServeHTTP(recorder, req)
+
+	require.Same(t, requestBody, receivedBody)
+	require.Same(t, recorder, receivedWriter)
+}
+
 // Verifies end-to-end span propagation and protocol attribution over TLS-negotiated HTTP/2.
 func TestHTTP2Instrumentation(t *testing.T) {
 	type handlerResult struct {
@@ -457,7 +510,7 @@ func TestHTTP2Instrumentation(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
 	resultCh := make(chan handlerResult, 1)
-	handler := telemetry.NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		if err == nil {
 			_, err = w.Write([]byte("response body"))
@@ -471,7 +524,7 @@ func TestHTTP2Instrumentation(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	client := server.Client()
-	client.Transport = telemetry.NewHTTPClientTransport(client.Transport, tp, nil)
+	client.Transport = NewHTTPClientTransport(client.Transport, tp, nil)
 	req, err := http.NewRequest(http.MethodPost, server.URL, bytes.NewBufferString("request body"))
 	require.NoError(t, err)
 	resp, err := client.Do(req)

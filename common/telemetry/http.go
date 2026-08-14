@@ -120,6 +120,7 @@ func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response,
 
 func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	span := trace.SpanFromContext(req.Context())
+	// Skip debug capture as a performance optimization when the span discards attributes.
 	if !span.IsRecording() {
 		return t.rt.RoundTrip(req)
 	}
@@ -146,6 +147,7 @@ func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Respo
 
 func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	span := trace.SpanFromContext(r.Context())
+	// Skip debug capture as a performance optimization when the span discards attributes.
 	if !span.IsRecording() {
 		h.handler.ServeHTTP(w, r)
 		return
