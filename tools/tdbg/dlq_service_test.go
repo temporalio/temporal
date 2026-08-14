@@ -363,6 +363,32 @@ func TestDLQCommand_V2(t *testing.T) {
 				p.expectedErrSubstrings = []string{"failed to find last message ID", "connection failed"}
 			},
 		},
+		{
+			name: "merge archival DLQ (category 5) is supported",
+			override: func(p *dlqTestParams) {
+				p.command = "merge"
+				p.dlqType = strconv.Itoa(tasks.CategoryArchival.ID())
+				p.lastMessageID = "" // No last message ID provided
+				p.adminClient.err = nil
+				queueName := persistence.GetHistoryTaskQueueName(
+					tasks.CategoryArchival.ID(), "test-source-cluster", "test-target-cluster")
+				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
+					{
+						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
+							{
+								QueueName:     queueName,
+								MessageCount:  10,
+								LastMessageId: 150,
+							},
+						},
+						NextPageToken: nil,
+					},
+				}
+			},
+			validateStdout: func(t *testing.T, b *bytes.Buffer) {
+				assert.Contains(t, b.String(), "Found last message ID: 150")
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.version = "v2"
