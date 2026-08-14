@@ -152,6 +152,81 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	wideevents.Emit(logger, payload)
 }
 
+// emitReplicationSkipped emits a best-effort terminal "skipped" ReplicationLifecycle event when the
+// sender gives up building ("converting") a task and skips it. It mirrors emitReplicationSent but is
+// driven by the raw source task: conversion failed, so there is no built replication task to read
+// task-type/versioned-transition/parent detail from. It records the source task type, the
+// source_cluster/source_shard/source_task_id join key, the target_cluster now missing the state, the
+// priority tier, the exhausted attempt count, and the last convert error. It never affects control
+// flow.
+func (s *StreamSenderImpl) emitReplicationSkipped(
+	item tasks.Task,
+	attempt int64,
+	priority enumsspb.TaskPriority,
+	err error,
+) {
+	logger := s.shardContext.GetEventLogger()
+	if logger == nil {
+		return
+	}
+
+	nsID := item.GetNamespaceID()
+	nsName, nsErr := s.shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(nsID))
+	if nsErr != nil {
+		nsName = namespace.EmptyName
+	}
+
+	payload := wideevents.ReplicationLifecyclePayload{
+		Phase:    wideevents.ReplicationSkipped,
+		TaskType: replicationTaskTypeName(item),
+		Shard:    s.serverShardKey.ShardID,
+		// SourceCluster/SourceShard/SourceTaskID are the join key back to this cluster's replication
+		// queue. TargetCluster identifies the passive this stream feeds; it is recorded because a
+		// skipped task emits no downstream event there, so this is the only place the destination is
+		// captured — it tells an operator which passive is now missing this task's state.
+		SourceCluster: s.shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		SourceShard:   s.serverShardKey.ShardID,
+		SourceTaskID:  item.GetTaskID(),
+		TargetCluster: s.clientClusterName,
+		Priority:      priority.String(),
+		Namespace:     nsName.String(),
+		NamespaceID:   nsID,
+		WorkflowID:    item.GetWorkflowID(),
+		RunID:         item.GetRunID(),
+		Attempt:       int32(attempt),
+	}
+	if err != nil {
+		payload.Error = err.Error()
+	}
+	wideevents.Emit(logger, payload)
+}
+
+// replicationTaskTypeName maps a raw replication-queue task to the ReplicationLifecycle task_type
+// vocabulary, so a "skipped" event groups with the same task's sent/executing/applied events under
+// one task_type value. It reads the source task's own type because convert failed and produced no
+// built replication task to switch on. verify_versioned_transition is intentionally absent: it is
+// synthesized during convert and is never a raw queue task, so it cannot be skipped here.
+func replicationTaskTypeName(item tasks.Task) string {
+	switch item.GetType() {
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
+		return wideevents.ReplTaskSyncWorkflowState
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
+		return wideevents.ReplTaskSyncVersionedTransition
+	case enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION:
+		return wideevents.ReplTaskDeleteExecution
+	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
+		return wideevents.ReplTaskHistory
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+		return wideevents.ReplTaskSyncActivity
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
+		return wideevents.ReplTaskSyncHSM
+	default:
+		// A type with no vocabulary mapping still gets an event (a skip is data loss); fall back to
+		// the raw enum name rather than dropping it.
+		return item.GetType().String()
+	}
+}
+
 // populateSentArtifactInfo records the child->parent identity and what the task carried, from the
 // mutable state in the task payload. Task types that ship no mutable state (e.g. verify) are a no-op.
 //
