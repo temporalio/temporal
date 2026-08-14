@@ -80,6 +80,7 @@ func (r *failingReadCloser) Close() error { return nil }
 var errTestBodyRead = errors.New("body read failed")
 
 func TestNewHTTPClientTransport(t *testing.T) {
+	// A nil tracer provider disables instrumentation without changing the transport identity.
 	t.Run("Disabled", func(t *testing.T) {
 		t.Parallel()
 
@@ -162,6 +163,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			}, spanAttrsByKey(recorder.Ended()[0].Attributes()))
 		})
 
+		// Protocol upgrades require response bodies to retain bidirectional I/O.
 		t.Run("PreservesReadWriteCloserResponseBodies", func(t *testing.T) {
 			tp := trace.NewTracerProvider()
 			body := &readWriteCloser{Reader: bytes.NewBufferString("server message")}
@@ -185,6 +187,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.NoError(t, responseBody.Close())
 		})
 
+		// Decoders may stop after a complete value without reading a chunked body to EOF.
 		t.Run("AnnotatesChunkedResponsePayloadOnClose", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
@@ -231,6 +234,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.NoError(t, resp.Body.Close())
 		})
 
+		// io.ReadFull can consume the declared length without performing the read that returns EOF.
 		t.Run("AnnotatesFixedLengthPayloadsWithoutEOF", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
@@ -391,6 +395,7 @@ func TestNewHTTPHandler(t *testing.T) {
 			require.Equal(t, "request body", string(handlerPayload))
 		})
 
+		// Handlers may consume the expected bytes from an unknown-length body without reading EOF.
 		t.Run("AnnotatesChunkedRequestPayloadWithoutEOF", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
@@ -410,6 +415,7 @@ func TestNewHTTPHandler(t *testing.T) {
 			require.Equal(t, "request body", attrs["http.request.payload"])
 		})
 
+		// io.Copy can use ReaderFrom and bypass the Write hook that tracks standard response size.
 		t.Run("AnnotatesResponseSizeWhenUsingReadFrom", func(t *testing.T) {
 			recorder := tracetest.NewSpanRecorder()
 			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
