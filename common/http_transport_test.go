@@ -19,8 +19,11 @@ func TestNewHTTPTransport_ClonesTLSConfig(t *testing.T) {
 	tlsConfig := &tls.Config{ServerName: "some-host"}
 	transport, err := NewHTTPTransport(tlsConfig)
 	require.NoError(t, err)
+	// The transport must hold a copy, not the caller's config: it may be shared with other
+	// clients (both frontend clients pass one cached by localStoreTlsProvider).
+	require.NotSame(t, tlsConfig, transport.TLSClientConfig)
 	require.Equal(t, "some-host", transport.TLSClientConfig.ServerName)
 	require.Contains(t, transport.TLSClientConfig.NextProtos, "h2")
-	// The caller's config must not be mutated, it may be shared with other clients.
+	// ...and the caller's config must come back unmutated.
 	require.Empty(t, tlsConfig.NextProtos)
 }
