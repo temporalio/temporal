@@ -69,6 +69,9 @@ type cancelArgs struct {
 	startToCloseTimeout    time.Duration
 	headers                map[string]string
 	payload                *commonpb.Payload
+	// autoClose is true when this cancellation was initiated by the operation's auto-close policy.
+	// In that case the cancel call is not clamped to the operation's remaining schedule-to-close time.
+	autoClose bool
 }
 
 func (c *Cancellation) onCompleted(ctx chasm.MutableContext) error {
@@ -125,6 +128,7 @@ func (c *Cancellation) loadArgs(
 		startToCloseTimeout:    op.GetStartToCloseTimeout().AsDuration(),
 		headers:                maps.Clone(invocationData.Header),
 		payload:                invocationData.Input,
+		autoClose:              c.GetAutoClose(),
 	}, nil
 }
 

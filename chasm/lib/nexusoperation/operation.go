@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -198,6 +199,26 @@ func (o *Operation) RequestCancel(
 		return TransitionCancellationScheduled.Apply(cancel, ctx, EventCancellationScheduled{
 			Destination: o.GetEndpoint(),
 		})
+	}
+	return nil
+}
+
+// RequestCancelOnAutoClose schedules a CancelOperation to the handler when the operation is being
+// auto-closed (schedule-to-close timeout or standalone terminate) while a handler is running. It is
+// a no-op unless the operation is STARTED (a handler exists to notify) and no cancellation has
+// already been requested. Callers gate on the AutoClosePolicy.
+func (o *Operation) RequestCancelOnAutoClose(ctx chasm.MutableContext) error {
+	if o.Status != nexusoperationpb.OPERATION_STATUS_STARTED {
+		return nil
+	}
+	if _, ok := o.Cancellation.TryGet(ctx); ok {
+		return nil
+	}
+	if err := o.RequestCancel(ctx, &nexusoperationpb.CancellationState{AutoClose: true}); err != nil {
+		if errors.Is(err, ErrCancellationAlreadyRequested) || errors.Is(err, ErrOperationAlreadyCompleted) {
+			return nil
+		}
+		return err
 	}
 	return nil
 }

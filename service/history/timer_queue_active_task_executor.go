@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/service/history/api/nexusclose"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -704,6 +705,11 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		newRunID = uuid.NewString()
 	}
 
+	if err := nexusclose.CancelPendingNexusOperations(ctx, mutableState,
+		nexusclose.NexusOperationAutoClosePolicy(t.shardContext.GetConfig().NexusOperationAutoClosePolicy())); err != nil {
+		return err
+	}
+
 	// First add timeout workflow event, no matter what we're doing next.
 	if err := workflow.TimeoutWorkflow(
 		mutableState,
@@ -829,6 +835,11 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 	if !t.isValidWorkflowExecutionTimeoutTask(mutableState, task) {
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return errNoTimerFired
+	}
+
+	if err := nexusclose.CancelPendingNexusOperations(ctx, mutableState,
+		nexusclose.NexusOperationAutoClosePolicy(t.shardContext.GetConfig().NexusOperationAutoClosePolicy())); err != nil {
+		return err
 	}
 
 	if err := workflow.TimeoutWorkflow(mutableState, enumspb.RETRY_STATE_TIMEOUT, ""); err != nil {

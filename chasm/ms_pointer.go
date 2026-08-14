@@ -5,6 +5,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
@@ -50,6 +51,11 @@ func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.Histo
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.
 func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.backend.GetNexusCompletion(ctx.goContext(), requestID)
+}
+
+// IsRunning returns true if the workflow execution has not yet completed.
+func (m MSPointer) IsRunning() bool {
+	return m.backend.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 }
 
 // GetWorkflowTypeName retrieves the workflow type name from the underlying mutable state.

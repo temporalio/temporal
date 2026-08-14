@@ -123,16 +123,23 @@ func (h *cancellationInvocationTaskHandler) Execute(
 
 	callTimeout := h.config.RequestTimeout(ns.Name().String(), attrs.Destination)
 	var timeoutType enumspb.TimeoutType
-	if args.startToCloseTimeout > 0 {
-		if t := args.startToCloseTimeout - args.currentTime.Sub(args.startedTime); t < callTimeout {
-			callTimeout = t
-			timeoutType = enumspb.TIMEOUT_TYPE_START_TO_CLOSE
+	// For a system/auto-close cancellation the cancel fires at (or after) the operation's
+	// schedule-to-close deadline, so the remaining time is ~0. Clamping the cancel call to it would
+	// starve it below MinRequestTimeout and it would never reach the handler. The whole point of the
+	// auto-close policy is to notify the handler at that moment, so skip the clamp. A user-initiated
+	// cancel keeps the clamp (it should not outlive the operation's own timeout).
+	if !args.autoClose {
+		if args.startToCloseTimeout > 0 {
+			if t := args.startToCloseTimeout - args.currentTime.Sub(args.startedTime); t < callTimeout {
+				callTimeout = t
+				timeoutType = enumspb.TIMEOUT_TYPE_START_TO_CLOSE
+			}
 		}
-	}
-	if args.scheduleToCloseTimeout > 0 {
-		if t := args.scheduleToCloseTimeout - args.currentTime.Sub(args.scheduledTime); t < callTimeout {
-			callTimeout = t
-			timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		if args.scheduleToCloseTimeout > 0 {
+			if t := args.scheduleToCloseTimeout - args.currentTime.Sub(args.scheduledTime); t < callTimeout {
+				callTimeout = t
+				timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+			}
 		}
 	}
 

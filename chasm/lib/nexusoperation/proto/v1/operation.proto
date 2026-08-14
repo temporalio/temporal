@@ -122,6 +122,11 @@ message CancellationState {
   string request_id = 8;
   string identity = 9;
   string reason = 10;
+  // auto_close is true when the cancellation was initiated by the system as part of the operation's
+  // auto-close policy (caller workflow close, schedule-to-close timeout, or standalone terminate)
+  // rather than by an explicit user cancel. When set, the cancel call is not clamped to the
+  // operation's remaining schedule-to-close time, so it is delivered even at/after that deadline.
+  bool auto_close = 11;
 }
 
 enum CancellationStatus {

@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/nexusclose"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -62,6 +63,11 @@ func Invoke(
 					parentExecution.GetRunId() != executionInfo.ParentRunId {
 					return nil, consts.ErrWorkflowParent
 				}
+			}
+
+			if err := nexusclose.CancelPendingNexusOperations(ctx, mutableState,
+				nexusclose.NexusOperationAutoClosePolicy(shardContext.GetConfig().NexusOperationAutoClosePolicy())); err != nil {
+				return nil, err
 			}
 
 			return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(

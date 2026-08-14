@@ -913,7 +913,9 @@ func TestScheduleToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
 
-	handler := &operationScheduleToCloseTimeoutTaskHandler{}
+	handler := &operationScheduleToCloseTimeoutTaskHandler{
+		config: &Config{AutoClosePolicy: func() int { return 0 }},
+	}
 	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToCloseTimeoutTask{})
 	require.NoError(t, err)
 

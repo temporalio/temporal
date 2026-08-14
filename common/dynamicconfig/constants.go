@@ -2692,6 +2692,11 @@ the number of children greater than or equal to this threshold`,
 		1000,
 		`NumParentClosePolicySystemWorkflows is key for number of parentClosePolicy system workflows running in total`,
 	)
+	NexusOperationAutoClosePolicy = NewGlobalIntSetting(
+		"history.nexusOperationAutoClosePolicy",
+		0,
+		`NexusOperationAutoClosePolicy controls what happens to pending async Nexus operations when the caller workflow is terminated. 0 = abandon (default), 1 = request_cancel.`,
+	)
 	HistoryThrottledLogRPS = NewGlobalIntSetting(
 		"history.throttledLogRPS",
 		4,

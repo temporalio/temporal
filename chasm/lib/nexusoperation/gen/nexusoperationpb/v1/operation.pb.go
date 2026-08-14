@@ -580,10 +580,15 @@ type CancellationState struct {
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
 	// The cancellation component itself does not interpret this field.
-	ParentData    *anypb.Any `protobuf:"bytes,7,opt,name=parent_data,json=parentData,proto3" json:"parent_data,omitempty"`
-	RequestId     string     `protobuf:"bytes,8,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Identity      string     `protobuf:"bytes,9,opt,name=identity,proto3" json:"identity,omitempty"`
-	Reason        string     `protobuf:"bytes,10,opt,name=reason,proto3" json:"reason,omitempty"`
+	ParentData *anypb.Any `protobuf:"bytes,7,opt,name=parent_data,json=parentData,proto3" json:"parent_data,omitempty"`
+	RequestId  string     `protobuf:"bytes,8,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Identity   string     `protobuf:"bytes,9,opt,name=identity,proto3" json:"identity,omitempty"`
+	Reason     string     `protobuf:"bytes,10,opt,name=reason,proto3" json:"reason,omitempty"`
+	// auto_close is true when the cancellation was initiated by the system as part of the operation's
+	// auto-close policy (caller workflow close, schedule-to-close timeout, or standalone terminate)
+	// rather than by an explicit user cancel. When set, the cancel call is not clamped to the
+	// operation's remaining schedule-to-close time, so it is delivered even at/after that deadline.
+	AutoClose     bool `protobuf:"varint,11,opt,name=auto_close,json=autoClose,proto3" json:"auto_close,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -686,6 +691,13 @@ func (x *CancellationState) GetReason() string {
 		return x.Reason
 	}
 	return ""
+}
+
+func (x *CancellationState) GetAutoClose() bool {
+	if x != nil {
+		return x.AutoClose
+	}
+	return false
 }
 
 type OperationRequestData struct {
@@ -888,7 +900,7 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"\x06result\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x06result\x1aD\n" +
 	"\x06Failed\x12:\n" +
 	"\afailure\x18\x01 \x01(\v2 .temporal.api.failure.v1.FailureR\afailureB\t\n" +
-	"\avariant\"\xdf\x04\n" +
+	"\avariant\"\xfe\x04\n" +
 	"\x11CancellationState\x12]\n" +
 	"\x06status\x18\x01 \x01(\x0e2E.temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatusR\x06status\x12A\n" +
 	"\x0erequested_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rrequestedTime\x12\x18\n" +
@@ -902,7 +914,9 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"request_id\x18\b \x01(\tR\trequestId\x12\x1a\n" +
 	"\bidentity\x18\t \x01(\tR\bidentity\x12\x16\n" +
 	"\x06reason\x18\n" +
-	" \x01(\tR\x06reason\"\xee\x02\n" +
+	" \x01(\tR\x06reason\x12\x1d\n" +
+	"\n" +
+	"auto_close\x18\v \x01(\bR\tautoClose\"\xee\x02\n" +
 	"\x14OperationRequestData\x125\n" +
 	"\x05input\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05input\x12{\n" +
 	"\fnexus_header\x18\x02 \x03(\v2X.temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.NexusHeaderEntryR\vnexusHeader\x12F\n" +

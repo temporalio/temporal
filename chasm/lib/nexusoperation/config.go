@@ -269,7 +269,16 @@ type Config struct {
 	MaxIDLengthLimit                           dynamicconfig.IntPropertyFn
 	MaxReasonLength                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RetryPolicy                                func() backoff.RetryPolicy
+	// AutoClosePolicy controls whether the handler is notified (CancelOperation) when the operation
+	// is auto-closed — i.e. force-closed without the user explicitly cancelling it (caller workflow
+	// close, operation schedule-to-close timeout, or standalone terminate). 0 = abandon, 1 = request_cancel.
+	AutoClosePolicy dynamicconfig.IntPropertyFn
 }
+
+// AutoClosePolicyRequestCancel is the AutoClosePolicy value that requests a CancelOperation on
+// auto-close. Mirrors nexusclose.NexusOperationAutoClosePolicyRequestCancel (kept local to avoid an
+// import cycle into the history service).
+const AutoClosePolicyRequestCancel = 1
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
@@ -300,5 +309,6 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
 		MaxReasonLength:                    MaxReasonLength.Get(dc),
 		RetryPolicy:                        RetryPolicy.Get(dc),
+		AutoClosePolicy:                    dynamicconfig.NexusOperationAutoClosePolicy.Get(dc),
 	}
 }

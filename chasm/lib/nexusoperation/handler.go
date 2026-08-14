@@ -236,6 +236,12 @@ func (h *handler) TerminateNexusOperation(
 		ctx,
 		ref,
 		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.TerminateNexusOperationRequest) (*nexusoperationpb.TerminateNexusOperationResponse, error) {
+			// Notify the handler before terminating if the auto-close policy requests it.
+			if h.config.AutoClosePolicy() == AutoClosePolicyRequestCancel {
+				if err := o.RequestCancelOnAutoClose(ctx); err != nil {
+					return nil, err
+				}
+			}
 			if _, err := o.Terminate(ctx, chasm.TerminateComponentRequest{
 				RequestID: req.GetFrontendRequest().GetRequestId(),
 				Identity:  req.GetFrontendRequest().GetIdentity(),
