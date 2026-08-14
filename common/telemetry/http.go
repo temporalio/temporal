@@ -18,7 +18,7 @@ type debugHTTPClientTransport struct {
 	rt http.RoundTripper
 }
 
-type debugHTTPRequestTransport struct {
+type debugHTTPClientSpanTransport struct {
 	rt http.RoundTripper
 }
 
@@ -29,20 +29,14 @@ type debugHTTPHandler struct {
 // Debug mode intentionally buffers complete payloads without a size limit.
 type payloadCapture struct {
 	bytes.Buffer
+	finished bool
+	onFinish func(string)
 }
 
 type payloadCapturingReadCloser struct {
 	io.ReadCloser
 	capture       payloadCapture
 	contentLength int64
-	readSize      int64
-	finished      bool
-	onFinish      func(string)
-}
-
-type payloadCapturingReadWriteCloser struct {
-	*payloadCapturingReadCloser
-	writer io.Writer
 }
 
 type closeFinishingReadCloser struct {
@@ -50,16 +44,11 @@ type closeFinishingReadCloser struct {
 	onClose func()
 }
 
-type closeFinishingReadWriteCloser struct {
-	*closeFinishingReadCloser
-	writer io.Writer
-}
-
 type debugHTTPClientRequestStateKey struct{}
 
 // The request state bridges the inner capture to the outer closer so annotation precedes span completion.
 type debugHTTPClientRequestState struct {
-	responseCapture *payloadCapturingReadCloser
+	finishResponse func()
 }
 
 // NewHTTPClientTransport wraps an HTTP RoundTripper with otelhttp so outbound requests
@@ -80,7 +69,7 @@ func NewHTTPClientTransport(
 		if rt == nil {
 			rt = http.DefaultTransport
 		}
-		rt = &debugHTTPRequestTransport{rt: rt}
+		rt = &debugHTTPClientSpanTransport{rt: rt}
 	}
 	rt = otelhttp.NewTransport(
 		rt,
@@ -122,17 +111,20 @@ func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response,
 	state := &debugHTTPClientRequestState{}
 	req = req.WithContext(context.WithValue(req.Context(), debugHTTPClientRequestStateKey{}, state))
 	resp, err := t.rt.RoundTrip(req)
-	if resp == nil || state.responseCapture == nil {
+	if resp == nil || state.finishResponse == nil {
 		return resp, err
 	}
-	resp.Body = newCloseFinishingReadCloser(resp.Body, state.responseCapture.finish)
+	resp.Body = newCloseFinishingReadCloser(resp.Body, state.finishResponse)
 	return resp, err
 }
 
-func (t *debugHTTPRequestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	span := trace.SpanFromContext(req.Context())
+	if !span.IsRecording() {
+		return t.rt.RoundTrip(req)
+	}
 	annotateHTTPHeaders(span, "http.request.headers.", req.Header)
-	req.Body = newPayloadCapturingReadCloser(req.Body, req.ContentLength, func(payload string) {
+	req.Body, _ = newPayloadCapturingReadCloser(req.Body, req.ContentLength, func(payload string) {
 		span.SetAttributes(attribute.String("http.request.payload", payload))
 	})
 
@@ -142,25 +134,31 @@ func (t *debugHTTPRequestTransport) RoundTrip(req *http.Request) (*http.Response
 	}
 
 	annotateHTTPHeaders(span, "http.response.headers.", resp.Header)
-	var responseCapture *payloadCapturingReadCloser
-	resp.Body, responseCapture = newPayloadCapturingReadCloserWithCapture(resp.Body, resp.ContentLength, func(payload string) {
+	var responseCapture *payloadCapture
+	resp.Body, responseCapture = newPayloadCapturingReadCloser(resp.Body, resp.ContentLength, func(payload string) {
 		span.SetAttributes(attribute.String("http.response.payload", payload))
 	})
-	if state, ok := req.Context().Value(debugHTTPClientRequestStateKey{}).(*debugHTTPClientRequestState); ok {
-		state.responseCapture = responseCapture
+	if state, ok := req.Context().Value(debugHTTPClientRequestStateKey{}).(*debugHTTPClientRequestState); ok && responseCapture != nil {
+		state.finishResponse = responseCapture.finish
 	}
 	return resp, err
 }
 
 func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	span := trace.SpanFromContext(r.Context())
+	if !span.IsRecording() {
+		h.handler.ServeHTTP(w, r)
+		return
+	}
 	annotateHTTPHeaders(span, "http.request.headers.", r.Header)
-	var requestCapture *payloadCapturingReadCloser
-	r.Body, requestCapture = newPayloadCapturingReadCloserWithCapture(r.Body, r.ContentLength, func(payload string) {
+	var requestCapture *payloadCapture
+	r.Body, requestCapture = newPayloadCapturingReadCloser(r.Body, r.ContentLength, func(payload string) {
 		span.SetAttributes(attribute.String("http.request.payload", payload))
 	})
 
-	var responseBody payloadCapture
+	responseBody := payloadCapture{onFinish: func(payload string) {
+		span.SetAttributes(attribute.String("http.response.payload", payload))
+	}}
 	w = httpsnoop.Wrap(w, httpsnoop.Hooks{
 		Write: func(next httpsnoop.WriteFunc) httpsnoop.WriteFunc {
 			return func(p []byte) (int, error) {
@@ -186,9 +184,7 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	annotateHTTPHeaders(span, "http.response.headers.", w.Header())
-	if payload, ok := responseBody.Value(); ok {
-		span.SetAttributes(attribute.String("http.response.payload", payload))
-	}
+	responseBody.finish()
 }
 
 func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
@@ -198,31 +194,20 @@ func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
 	}
 }
 
-func newPayloadCapturingReadCloser(body io.ReadCloser, contentLength int64, onFinish func(string)) io.ReadCloser {
-	wrappedBody, _ := newPayloadCapturingReadCloserWithCapture(body, contentLength, onFinish)
-	return wrappedBody
-}
-
-func newPayloadCapturingReadCloserWithCapture(
+func newPayloadCapturingReadCloser(
 	body io.ReadCloser,
 	contentLength int64,
 	onFinish func(string),
-) (io.ReadCloser, *payloadCapturingReadCloser) {
+) (io.ReadCloser, *payloadCapture) {
 	if body == nil || body == http.NoBody {
 		return body, nil
 	}
 	capturingBody := &payloadCapturingReadCloser{
 		ReadCloser:    body,
+		capture:       payloadCapture{onFinish: onFinish},
 		contentLength: contentLength,
-		onFinish:      onFinish,
 	}
-	if writer, ok := body.(io.Writer); ok {
-		return &payloadCapturingReadWriteCloser{
-			payloadCapturingReadCloser: capturingBody,
-			writer:                     writer,
-		}, capturingBody
-	}
-	return capturingBody, capturingBody
+	return preserveBodyWriter(body, capturingBody), &capturingBody.capture
 }
 
 func newCloseFinishingReadCloser(body io.ReadCloser, onClose func()) io.ReadCloser {
@@ -230,35 +215,34 @@ func newCloseFinishingReadCloser(body io.ReadCloser, onClose func()) io.ReadClos
 		ReadCloser: body,
 		onClose:    onClose,
 	}
+	return preserveBodyWriter(body, finishingBody)
+}
+
+func preserveBodyWriter(body io.ReadCloser, wrapped io.ReadCloser) io.ReadCloser {
 	if writer, ok := body.(io.Writer); ok {
-		return &closeFinishingReadWriteCloser{
-			closeFinishingReadCloser: finishingBody,
-			writer:                   writer,
-		}
+		return struct {
+			io.ReadCloser
+			io.Writer
+		}{wrapped, writer}
 	}
-	return finishingBody
+	return wrapped
 }
 
 func (r *payloadCapturingReadCloser) Read(p []byte) (int, error) {
 	n, err := r.ReadCloser.Read(p)
 	if n > 0 {
 		_, _ = r.capture.Write(p[:n])
-		r.readSize += int64(n)
 	}
 	// A final successful read can consume the declared length without returning EOF.
-	if err == io.EOF || r.contentLength > 0 && r.readSize == r.contentLength {
-		r.finish()
+	if err == io.EOF || r.contentLength > 0 && int64(r.capture.Len()) == r.contentLength {
+		r.capture.finish()
 	}
 	return n, err
 }
 
 func (r *payloadCapturingReadCloser) Close() error {
-	r.finish()
+	r.capture.finish()
 	return r.ReadCloser.Close()
-}
-
-func (r *payloadCapturingReadWriteCloser) Write(p []byte) (int, error) {
-	return r.writer.Write(p)
 }
 
 func (r *closeFinishingReadCloser) Close() error {
@@ -266,20 +250,12 @@ func (r *closeFinishingReadCloser) Close() error {
 	return r.ReadCloser.Close()
 }
 
-func (r *closeFinishingReadWriteCloser) Write(p []byte) (int, error) {
-	return r.writer.Write(p)
-}
-
-func (r *payloadCapturingReadCloser) finish() {
-	if r.finished {
+func (c *payloadCapture) finish() {
+	if c.finished {
 		return
 	}
-	r.finished = true
-	if payload, ok := r.capture.Value(); ok {
-		r.onFinish(payload)
+	c.finished = true
+	if c.Len() > 0 {
+		c.onFinish(c.String())
 	}
-}
-
-func (c *payloadCapture) Value() (string, bool) {
-	return c.String(), c.Len() > 0
 }
