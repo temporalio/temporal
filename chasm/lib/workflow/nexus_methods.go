@@ -178,7 +178,7 @@ func (w *Workflow) OnNexusOperationTimedOut(
 }
 
 func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
-	if !w.MSPointer.IsRunning() {
+	if !w.IsRunning() {
 		// Caller workflow already closed (e.g. by close policy). The cancel was delivered;
 		// skip the history event to avoid ErrWorkflowFinished retry storms.
 		return nil
@@ -207,7 +207,7 @@ func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContex
 }
 
 func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, op *nexusoperation.Operation, failure *failurepb.Failure) error {
-	if !w.MSPointer.IsRunning() {
+	if !w.IsRunning() {
 		return nil
 	}
 	parentData := &chasmworkflowpb.NexusOperationParentData{}

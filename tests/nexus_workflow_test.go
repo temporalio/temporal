@@ -3623,7 +3623,7 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_TerminateCaller_CancelsHan
 	env := s.newTestEnv(chasmEnabled,
 		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
 	)
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
 
@@ -3654,7 +3654,7 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_CompleteCaller_CancelsHand
 	env := s.newTestEnv(chasmEnabled,
 		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
 	)
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
 
@@ -3706,7 +3706,7 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_FailCaller_CancelsHandler(
 	env := s.newTestEnv(chasmEnabled,
 		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
 	)
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
 
@@ -3760,7 +3760,7 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_CancelCaller_CancelsHandle
 	env := s.newTestEnv(chasmEnabled,
 		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
 	)
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
 
@@ -3811,7 +3811,7 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_RunTimeoutCaller_CancelsHa
 	env := s.newTestEnv(chasmEnabled,
 		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
 	)
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
 
@@ -3837,7 +3837,7 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_Abandon_HandlerKeepsRunnin
 	cancelCh := make(chan struct{}, 1)
 	// No NexusOperationAutoClosePolicy override → default 0 = ABANDON.
 	env := s.newTestEnv(chasmEnabled)
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
 
@@ -3865,7 +3865,7 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ExecutionTimeoutCaller_Can
 	env := s.newTestEnv(chasmEnabled,
 		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
 	)
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
 
@@ -3928,7 +3928,7 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ScheduledState_TerminateCa
 	env := s.newTestEnv(chasmEnabled,
 		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
 	)
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
@@ -4002,7 +4002,7 @@ func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ContinueAsNew_DoesNotCance
 	env := s.newTestEnv(chasmEnabled,
 		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
 	)
-	ctx := env.Context()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
 

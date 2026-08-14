@@ -48,10 +48,10 @@ func (s *NexusCancelPolicyTestSuite) newTestEnv(opts ...testcore.TestOption) *Ne
 	)...)
 }
 
-func (s *NexusCancelPolicyTestSuite) nexusCancelEnv(cancelCh chan struct{}) (*NexusTestEnv, string, string) {
-	env := s.newTestEnv()
-	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
+func (s *NexusCancelPolicyTestSuite) nexusCancelEnv(cancelCh chan struct{}) (env *NexusTestEnv, taskQueue, endpointName string) {
+	env = s.newTestEnv()
+	taskQueue = testcore.RandomizeStr(s.T().Name())
+	endpointName = env.createRandomExternalNexusServer(s.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
 	return env, taskQueue, endpointName
 }
 
@@ -67,7 +67,7 @@ func (s *NexusCancelPolicyTestSuite) TestExplicitRequestCancel_Delivered() {
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRequestCancel(s.T(), env, taskQueue)
 
 	requireCancelDelivered(s.T(), cancelCh)
@@ -86,7 +86,7 @@ func (s *NexusCancelPolicyTestSuite) TestTerminateCaller_Delivered() {
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().TerminateWorkflow(env.Context(), run.GetID(), run.GetRunID(), "test"))
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), run.GetID(), run.GetRunID(), "test"))
 	requireCancelDelivered(s.T(), cancelCh)
 }
 
@@ -101,7 +101,7 @@ func (s *NexusCancelPolicyTestSuite) TestFailCaller_Delivered() {
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRespondClose(s.T(), env, taskQueue, &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
@@ -124,7 +124,7 @@ func (s *NexusCancelPolicyTestSuite) TestCompleteCaller_Delivered() {
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRespondClose(s.T(), env, taskQueue, &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
@@ -181,7 +181,7 @@ func (s *NexusCancelPolicyTestSuite) TestContinueAsNew_StillNotDelivered() {
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRespondClose(s.T(), env, taskQueue, &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
@@ -228,7 +228,7 @@ func (s *NexusCancelPolicyTestSuite) TestOperationScheduleToCloseTimeout_Deliver
 func (s *NexusStandaloneTestSuite) TestNexusCancelPolicyStandalone_Terminate_Delivered() {
 	cancelCh := make(chan struct{}, 1)
 	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1))
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
 
 	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 		OperationId: "test-op",
@@ -237,7 +237,7 @@ func (s *NexusStandaloneTestSuite) TestNexusCancelPolicyStandalone_Terminate_Del
 	s.NoError(err)
 	s.True(startResp.GetStarted())
 
-	_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+	_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 		Namespace:   env.Namespace().String(),
 		OperationId: "test-op",
 		RunId:       startResp.RunId,
@@ -245,7 +245,7 @@ func (s *NexusStandaloneTestSuite) TestNexusCancelPolicyStandalone_Terminate_Del
 	})
 	s.NoError(err)
 
-	_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+	_, err = env.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
 		Namespace:   env.Namespace().String(),
 		OperationId: "test-op",
 		RunId:       startResp.RunId,
@@ -261,7 +261,7 @@ func (s *NexusStandaloneTestSuite) TestNexusCancelPolicyStandalone_Terminate_Del
 func (s *NexusStandaloneTestSuite) TestNexusCancelPolicyStandalone_ScheduleToCloseTimeout_Delivered() {
 	cancelCh := make(chan struct{}, 1)
 	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1))
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
 
 	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 		OperationId:            "test-op",

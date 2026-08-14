@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -19,6 +18,7 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -96,11 +96,11 @@ func nexusCancelStartSchedule(
 	scheduleToClose time.Duration,
 ) client.WorkflowRun {
 	t.Helper()
-	ctx := env.Context()
+	ctx := testcore.NewContext()
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, startOpts, "workflow")
 	require.NoError(t, err)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	await.Require(t.Context(), t, func(c *await.T) {
 		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: startOpts.TaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -139,8 +139,8 @@ func nexusCancelStartSchedule(
 // nexusCancelAwaitOpState waits until the caller's single pending Nexus operation reaches state.
 func nexusCancelAwaitOpState(t *testing.T, env *NexusTestEnv, run client.WorkflowRun, state enumspb.PendingNexusOperationState) {
 	t.Helper()
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := env.FrontendClient().DescribeWorkflowExecution(env.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+	await.Require(t.Context(), t, func(c *await.T) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 		})
@@ -156,8 +156,8 @@ func nexusCancelAwaitOpState(t *testing.T, env *NexusTestEnv, run client.Workflo
 // into the new run.
 func nexusCancelAwaitNewRunNoPendingOps(t *testing.T, env *NexusTestEnv, run client.WorkflowRun) {
 	t.Helper()
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := env.FrontendClient().DescribeWorkflowExecution(env.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+	await.Require(t.Context(), t, func(c *await.T) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 		})
@@ -174,8 +174,8 @@ func nexusCancelAwaitNewRunNoPendingOps(t *testing.T, env *NexusTestEnv, run cli
 // with a RequestCancelNexusOperation command. This is the explicit-cancel path.
 func nexusCancelPollAndRequestCancel(t *testing.T, env *NexusTestEnv, taskQueue string) {
 	t.Helper()
-	ctx := env.Context()
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	ctx := testcore.NewContext()
+	await.Require(t.Context(), t, func(c *await.T) {
 		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -213,8 +213,8 @@ func nexusCancelPollAndRequestCancel(t *testing.T, env *NexusTestEnv, taskQueue 
 // nexusCancelPollAndRespondClose polls for a workflow task and responds with the given close command.
 func nexusCancelPollAndRespondClose(t *testing.T, env *NexusTestEnv, taskQueue string, command *commandpb.Command) {
 	t.Helper()
-	ctx := env.Context()
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	ctx := testcore.NewContext()
+	await.Require(t.Context(), t, func(c *await.T) {
 		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -236,10 +236,10 @@ func nexusCancelPollAndRespondClose(t *testing.T, env *NexusTestEnv, taskQueue s
 
 // nexusCancelEnv builds a CHASM env with the external cancel-observing handler and returns the env,
 // a random task queue, and the endpoint name.
-func (s *NexusCancelTestSuite) nexusCancelEnv(cancelCh chan struct{}, opts ...testcore.TestOption) (*NexusTestEnv, string, string) {
-	env := s.newTestEnv(opts...)
-	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
+func (s *NexusCancelTestSuite) nexusCancelEnv(cancelCh chan struct{}, opts ...testcore.TestOption) (env *NexusTestEnv, taskQueue, endpointName string) {
+	env = s.newTestEnv(opts...)
+	taskQueue = testcore.RandomizeStr(s.T().Name())
+	endpointName = env.createRandomExternalNexusServer(s.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
 	return env, taskQueue, endpointName
 }
 
@@ -279,7 +279,7 @@ func (s *NexusCancelTestSuite) TestExplicitRequestCancel_Delivered() {
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
 	// A signal triggers a workflow task; respond with the cancel command.
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRequestCancel(s.T(), env, taskQueue)
 
 	requireCancelDelivered(s.T(), cancelCh)
@@ -292,7 +292,7 @@ func (s *NexusCancelTestSuite) TestExplicitRequestCancel_Scheduled_DeferredDeliv
 	startGate := make(chan struct{})
 	env := s.newTestEnv()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexusCancelBlockingStartHandler(startGate, cancelCh))
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexusCancelBlockingStartHandler(startGate, cancelCh))
 
 	run := nexusCancelStartSchedule(s.T(), env, endpointName, client.StartWorkflowOptions{
 		TaskQueue:           taskQueue,
@@ -303,7 +303,7 @@ func (s *NexusCancelTestSuite) TestExplicitRequestCancel_Scheduled_DeferredDeliv
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
 
 	// Requesting cancel now creates a pending cancellation but delivers nothing yet.
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRequestCancel(s.T(), env, taskQueue)
 	requireCancelNotDelivered(s.T(), cancelCh, time.Second)
 
@@ -324,7 +324,7 @@ func (s *NexusCancelTestSuite) TestWorkflowCanceledHonored_Delivered() {
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
 	// Cancellation-request produces a workflow task; the workflow "honors" it by cancelling the op.
-	s.NoError(env.SdkClient().CancelWorkflow(env.Context(), run.GetID(), run.GetRunID()))
+	s.NoError(env.SdkClient().CancelWorkflow(s.Context(), run.GetID(), run.GetRunID()))
 	nexusCancelPollAndRequestCancel(s.T(), env, taskQueue)
 
 	requireCancelDelivered(s.T(), cancelCh)
@@ -343,7 +343,7 @@ func (s *NexusCancelTestSuite) TestTerminateCaller_NotDelivered() {
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().TerminateWorkflow(env.Context(), run.GetID(), run.GetRunID(), "test"))
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), run.GetID(), run.GetRunID(), "test"))
 	requireCancelNotDelivered(s.T(), cancelCh, 3*time.Second)
 }
 
@@ -358,7 +358,7 @@ func (s *NexusCancelTestSuite) TestFailCaller_NotDelivered() {
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRespondClose(s.T(), env, taskQueue, &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
@@ -381,7 +381,7 @@ func (s *NexusCancelTestSuite) TestCompleteCaller_NotDelivered() {
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRespondClose(s.T(), env, taskQueue, &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
@@ -418,7 +418,7 @@ func (s *NexusCancelTestSuite) TestContinueAsNew_NotDelivered() {
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRespondClose(s.T(), env, taskQueue, &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
@@ -447,7 +447,7 @@ func (s *NexusCancelTestSuite) TestContinueAsNew_RequestCancelPolicy_StillNotDel
 	}, 0)
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
 
-	s.NoError(env.SdkClient().SignalWorkflow(env.Context(), run.GetID(), run.GetRunID(), "close", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "close", nil))
 	nexusCancelPollAndRespondClose(s.T(), env, taskQueue, &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
@@ -472,8 +472,8 @@ func (s *NexusCancelTestSuite) TestOperationScheduleToCloseTimeout_NotDelivered(
 	}, 5*time.Second)
 
 	// Wait for the operation to time out on its own (caller workflow stays running).
-	require.EventuallyWithT(s.T(), func(c *assert.CollectT) {
-		resp, err := env.FrontendClient().DescribeWorkflowExecution(env.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+	await.Require(s.Context(), s.T(), func(c *await.T) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 		})
@@ -490,7 +490,7 @@ func (s *NexusCancelTestSuite) TestOperationScheduleToCloseTimeout_NotDelivered(
 func (s *NexusStandaloneTestSuite) TestNexusCancelStandalone_ExplicitCancel_Delivered() {
 	cancelCh := make(chan struct{}, 1)
 	env := s.newTestEnv()
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
 
 	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 		OperationId: "test-op",
@@ -499,7 +499,7 @@ func (s *NexusStandaloneTestSuite) TestNexusCancelStandalone_ExplicitCancel_Deli
 	s.NoError(err)
 	s.True(startResp.GetStarted())
 
-	_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+	_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 		Namespace:   env.Namespace().String(),
 		OperationId: "test-op",
 		RunId:       startResp.RunId,
@@ -507,7 +507,7 @@ func (s *NexusStandaloneTestSuite) TestNexusCancelStandalone_ExplicitCancel_Deli
 	})
 	s.NoError(err)
 
-	_, err = env.FrontendClient().RequestCancelNexusOperationExecution(env.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+	_, err = env.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
 		Namespace:   env.Namespace().String(),
 		OperationId: "test-op",
 		RunId:       startResp.RunId,
@@ -522,7 +522,7 @@ func (s *NexusStandaloneTestSuite) TestNexusCancelStandalone_ExplicitCancel_Deli
 func (s *NexusStandaloneTestSuite) TestNexusCancelStandalone_Terminate_NotDelivered() {
 	cancelCh := make(chan struct{}, 1)
 	env := s.newTestEnv()
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
 
 	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 		OperationId: "test-op",
@@ -531,7 +531,7 @@ func (s *NexusStandaloneTestSuite) TestNexusCancelStandalone_Terminate_NotDelive
 	s.NoError(err)
 	s.True(startResp.GetStarted())
 
-	_, err = env.FrontendClient().PollNexusOperationExecution(env.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+	_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 		Namespace:   env.Namespace().String(),
 		OperationId: "test-op",
 		RunId:       startResp.RunId,
@@ -539,7 +539,7 @@ func (s *NexusStandaloneTestSuite) TestNexusCancelStandalone_Terminate_NotDelive
 	})
 	s.NoError(err)
 
-	_, err = env.FrontendClient().TerminateNexusOperationExecution(env.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+	_, err = env.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
 		Namespace:   env.Namespace().String(),
 		OperationId: "test-op",
 		RunId:       startResp.RunId,
@@ -554,7 +554,7 @@ func (s *NexusStandaloneTestSuite) TestNexusCancelStandalone_Terminate_NotDelive
 func (s *NexusStandaloneTestSuite) TestNexusCancelStandalone_ScheduleToCloseTimeout_NotDelivered() {
 	cancelCh := make(chan struct{}, 1)
 	env := s.newTestEnv()
-	endpointName := env.createRandomExternalNexusServer(env.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexusClosePolicyHandler(cancelCh))
 
 	startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 		OperationId:            "test-op",
