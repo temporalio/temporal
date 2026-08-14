@@ -422,11 +422,9 @@ func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.
 					WorkflowId: frontendReq.GetWorkflowId(),
 					RunId:      frontendReq.GetRunId(),
 				},
-				Activity:       &workflowservice.UnpauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
-				Jitter:         frontendReq.GetJitter(),
-				ResetAttempts:  frontendReq.GetResetAttempts(),
-				ResetHeartbeat: frontendReq.GetResetHeartbeat(),
-				Identity:       frontendReq.GetIdentity(),
+				Activity: &workflowservice.UnpauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				Jitter:   frontendReq.GetJitter(),
+				Identity: frontendReq.GetIdentity(),
 			},
 		})
 		if err != nil {
@@ -461,7 +459,7 @@ func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.Re
 					RunId:      frontendReq.GetRunId(),
 				},
 				Activity:               &workflowservice.ResetActivityRequest_Id{Id: frontendReq.GetActivityId()},
-				ResetHeartbeat:         true,
+				ResetHeartbeat:         frontendReq.GetResetHeartbeat(),
 				RestoreOriginalOptions: frontendReq.GetRestoreOriginalOptions(),
 				KeepPaused:             frontendReq.GetKeepPaused(),
 				Jitter:                 frontendReq.GetJitter(),

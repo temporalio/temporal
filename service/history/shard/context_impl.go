@@ -74,6 +74,8 @@ const (
 const (
 	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
 	queueMetricUpdateInterval = 5 * time.Minute
+	// Spreads the emit, and the task read it does, so shards owned by a host don't align on it.
+	queueMetricUpdateJitterCoefficient = 0.15
 )
 
 var (
@@ -1204,7 +1206,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 }
 
 func (s *ContextImpl) monitorQueueMetrics() {
-	timer := time.NewTimer(queueMetricUpdateInterval)
+	timer := time.NewTimer(backoff.Jitter(queueMetricUpdateInterval, queueMetricUpdateJitterCoefficient))
 	defer timer.Stop()
 
 	done := s.lifecycleCtx.Done()
@@ -1216,7 +1218,7 @@ func (s *ContextImpl) monitorQueueMetrics() {
 			s.emitShardInfoMetricsLogs()
 			// We reset the timer (rather than using a ticker) so that delays in grabbing the shard lock
 			// don't cause us to pile up
-			timer.Reset(queueMetricUpdateInterval)
+			timer.Reset(backoff.Jitter(queueMetricUpdateInterval, queueMetricUpdateJitterCoefficient))
 		}
 	}
 }
@@ -1282,15 +1284,79 @@ func (s *ContextImpl) updateShardInfo(
 	return nil
 }
 
-// Take the shard lock and update queue metrics
+type immediateBacklogRange struct {
+	category        tasks.Category
+	inclusiveMinKey tasks.Key
+	exclusiveMaxKey tasks.Key
+}
+
 func (s *ContextImpl) emitShardInfoMetricsLogs() {
+	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	immediateBacklogs := s.emitQueueLagMetrics(metricsHandler)
+
+	if !s.config.EmitImmediateQueueBacklogAge() {
+		return
+	}
+
+	// Immediate task keys carry no timestamp, so the age needs the task itself, read off the lock.
+	for _, backlog := range immediateBacklogs {
+		if s.lifecycleCtx.Err() != nil {
+			return
+		}
+		oldest, ok := s.oldestImmediateTaskVisibilityTime(
+			backlog.category,
+			backlog.inclusiveMinKey,
+			backlog.exclusiveMaxKey,
+		)
+		if !ok {
+			continue
+		}
+		metrics.ShardInfoImmediateQueueBacklogAge.
+			With(metricsHandler).
+			Record(max(0, s.timeSource.Now().Sub(oldest)), metrics.TaskCategoryTag(backlog.category.Name()))
+	}
+}
+
+func (s *ContextImpl) emitImmediateQueueLagLocked(
+	category tasks.Category,
+	queueState *persistencespb.QueueState,
+	metricsHandler metrics.Handler,
+	emitShardLagLog bool,
+) (immediateBacklogRange, bool) {
+	minTaskKey := getMinTaskKey(queueState)
+	if minTaskKey == nil {
+		return immediateBacklogRange{}, false
+	}
+	highWatermark := s.taskKeyManager.getExclusiveReaderHighWatermark(category)
+	lag := highWatermark.TaskID - minTaskKey.TaskID
+	if emitShardLagLog && lag > logWarnImmediateTaskLag {
+		s.contextTaggedLogger.Warn(
+			"Shard queue lag exceeds warn threshold.",
+			tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
+		)
+	}
+	metrics.ShardInfoImmediateQueueLagHistogram.
+		With(metricsHandler).
+		Record(lag, metrics.TaskCategoryTag(category.Name()))
+
+	if lag <= 0 {
+		return immediateBacklogRange{}, false
+	}
+	return immediateBacklogRange{
+		category:        category,
+		inclusiveMinKey: *minTaskKey,
+		exclusiveMaxKey: highWatermark,
+	}, true
+}
+
+func (s *ContextImpl) emitQueueLagMetrics(metricsHandler metrics.Handler) []immediateBacklogRange {
+	var immediateBacklogs []immediateBacklogRange
+
 	s.rLock()
 	defer s.rUnlock()
 
 	queueStates := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo)).QueueStates
 	emitShardLagLog := s.config.EmitShardLagLog()
-
-	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 
 Loop:
 	for categoryID, queueState := range queueStates {
@@ -1301,20 +1367,9 @@ Loop:
 
 		switch category.Type() {
 		case tasks.CategoryTypeImmediate:
-			minTaskKey := getMinTaskKey(queueState)
-			if minTaskKey == nil {
-				continue Loop
+			if backlog, ok := s.emitImmediateQueueLagLocked(category, queueState, metricsHandler, emitShardLagLog); ok {
+				immediateBacklogs = append(immediateBacklogs, backlog)
 			}
-			lag := s.taskKeyManager.getExclusiveReaderHighWatermark(category).TaskID - minTaskKey.TaskID
-			if emitShardLagLog && lag > logWarnImmediateTaskLag {
-				s.contextTaggedLogger.Warn(
-					"Shard queue lag exceeds warn threshold.",
-					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
-				)
-			}
-			metrics.ShardInfoImmediateQueueLagHistogram.
-				With(metricsHandler).
-				Record(lag, metrics.TaskCategoryTag(category.Name()))
 
 		case tasks.CategoryTypeScheduled:
 			minTaskKey := getMinTaskKey(queueState)
@@ -1334,6 +1389,42 @@ Loop:
 			s.contextTaggedLogger.Error("Unknown task category type", tag.Stringer("task-category", category.Type()))
 		}
 	}
+
+	return immediateBacklogs
+}
+
+func (s *ContextImpl) oldestImmediateTaskVisibilityTime(
+	category tasks.Category,
+	inclusiveMinKey tasks.Key,
+	exclusiveMaxKey tasks.Key,
+) (time.Time, bool) {
+	ctx, cancel := s.newIOContext()
+	defer cancel()
+	// Task loading holds a reserved persistence priority; a metric should be shed before it.
+	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
+
+	resp, err := s.executionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+		ShardID:             s.shardID,
+		TaskCategory:        category,
+		InclusiveMinTaskKey: inclusiveMinKey,
+		ExclusiveMaxTaskKey: exclusiveMaxKey,
+		BatchSize:           1,
+	})
+	if err != nil {
+		if !common.IsContextCanceledErr(err) {
+			s.throttledLogger.Warn("Failed to read oldest task for backlog age metric",
+				tag.Error(err), tag.TaskCategoryID(category.ID()))
+		}
+		return time.Time{}, false
+	}
+	if len(resp.Tasks) == 0 {
+		return time.Time{}, false
+	}
+	// An unset visibility time would date the age from the epoch.
+	if oldest := resp.Tasks[0].GetVisibilityTime(); !oldest.IsZero() {
+		return oldest, true
+	}
+	return time.Time{}, false
 }
 
 func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
@@ -2137,12 +2228,14 @@ func newContext(
 		},
 	)
 	shardContext.handoverTracker = handoverTrackerFactory(HandoverTrackerParams{
+		ShardID:                 shardID,
 		ClusterMetadata:         clusterMetadata,
 		GetMaxReplicationTaskID: shardContext.getMaxReplicationTaskID,
 		ErrorByStateFn:          shardContext.errorByState,
 		NotifyReplicationFn:     shardContext.notifyReplicationQueueProcessor,
 		NamespaceRegistry:       namespaceRegistry,
 		Logger:                  taggedLogger,
+		EventLogger:             eventLogger,
 	})
 	if shardContext.GetConfig().EnableHostLevelEventsCache() {
 		shardContext.eventsCache = eventsCache
