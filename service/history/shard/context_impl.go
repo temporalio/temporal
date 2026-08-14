@@ -2228,12 +2228,14 @@ func newContext(
 		},
 	)
 	shardContext.handoverTracker = handoverTrackerFactory(HandoverTrackerParams{
+		ShardID:                 shardID,
 		ClusterMetadata:         clusterMetadata,
 		GetMaxReplicationTaskID: shardContext.getMaxReplicationTaskID,
 		ErrorByStateFn:          shardContext.errorByState,
 		NotifyReplicationFn:     shardContext.notifyReplicationQueueProcessor,
 		NamespaceRegistry:       namespaceRegistry,
 		Logger:                  taggedLogger,
+		EventLogger:             eventLogger,
 	})
 	if shardContext.GetConfig().EnableHostLevelEventsCache() {
 		shardContext.eventsCache = eventsCache
