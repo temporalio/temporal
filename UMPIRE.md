@@ -54,7 +54,8 @@ The protocol has several derived views:
 - route planning and action lookup;
 - sparse regression compilation;
 - semantic coverage catalogs and pairwise matrix inputs; and
-- the bounded verification snapshot described in [UMPIRE_VERIFY.md](./UMPIRE_VERIFY.md).
+- the bounded verification snapshot and remaining work described in
+  [UMPIRE_GAP.md](./UMPIRE_GAP.md#umpire-generated-verification-models-remaining-work).
 
 ## Monitor: observe and evaluate
 
@@ -95,7 +96,8 @@ actions, binds newly observed identities, and reconciles declared effects with t
 
 Sparse regressions use the same concepts at a higher level. Their compiler fills the gaps between
 author-supplied semantic key frames, synthesizes resources and data flow, and emits a completed
-plan for the live harness. See [UMPIRE_REGRESS.md](./UMPIRE_REGRESS.md).
+plan for the live harness. See
+[UMPIRE_GAP.md](./UMPIRE_GAP.md#umpire-sparse-regressions-remaining-work).
 
 ## Identity and relations
 

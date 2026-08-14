@@ -8,7 +8,7 @@ on:
       - "common/testing/umpire/**"
       - "tests/umpire2/**"
       - "Makefile"
-      - "UMPIRE_VERIFY.md"
+      - "UMPIRE_GAP.md"
   schedule:
     - cron: "31 8 * * *"
 
