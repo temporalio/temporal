@@ -26,6 +26,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+type headerGetter interface {
+	Get(string) string
+}
+
 type NexusOTELSuite struct {
 	parallelsuite.Suite[*NexusOTELSuite]
 }
@@ -53,7 +57,7 @@ func (s *NexusOTELSuite) TestCallback() {
 	env := s.newTestEnv(exporter)
 	tv := env.Tv()
 
-	requestHeaders := make(chan http.Header, 1)
+	requestHeaders := make(chan headerGetter, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestHeaders <- r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
@@ -92,12 +96,7 @@ func (s *NexusOTELSuite) TestCallback() {
 	s.NoError(env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), startResponse.RunId).Get(s.Context(), nil))
 
 	// Wait for the Nexus callback.
-	var headers http.Header
-	select {
-	case headers = <-requestHeaders:
-	case <-time.After(10 * time.Second):
-		s.FailNow("timed out waiting for Nexus callback")
-	}
+	headers := s.receiveHeaders(requestHeaders)
 	s.Equal(callbackHeaderValue, headers.Get("X-Callback-Header"))
 	s.requireExportedClientSpan(exporter, headers.Get("traceparent"))
 }
@@ -108,10 +107,10 @@ func (s *NexusOTELSuite) TestExternalOperation() {
 	env := s.newTestEnv(exporter)
 	tv := env.Tv()
 
-	traceparents := make(chan string, 1)
+	requestHeaders := make(chan headerGetter, 1)
 	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
 		OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			traceparents <- options.Header.Get("traceparent")
+			requestHeaders <- options.Header
 			return &nexus.HandlerStartOperationResultSync[any]{Value: tv.Any().String()}, nil
 		},
 	})
@@ -126,7 +125,7 @@ func (s *NexusOTELSuite) TestExternalOperation() {
 		ScheduleToCloseTimeout: durationpb.New(time.Minute),
 	})
 	s.NoError(err)
-	s.requireExportedClientSpan(exporter, s.receiveTraceparent(traceparents))
+	s.requireExportedClientSpan(exporter, s.receiveHeaders(requestHeaders).Get("traceparent"))
 }
 
 // Verifies worker-target Nexus operations trace requests routed through the local frontend client.
@@ -135,10 +134,10 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	env := s.newTestEnv(exporter)
 	tv := env.Tv().WithTaskQueue(env.WorkerTaskQueue())
 
-	traceparents := make(chan string, 1)
+	requestHeaders := make(chan headerGetter, 1)
 	service := nexus.NewService("test-service")
 	operation := nexus.NewSyncOperation("test-operation", func(_ context.Context, _ nexus.NoValue, options nexus.StartOperationOptions) (string, error) {
-		traceparents <- options.Header.Get("traceparent")
+		requestHeaders <- options.Header
 		return tv.Any().String(), nil
 	})
 	service.MustRegister(operation)
@@ -169,16 +168,16 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 		ScheduleToCloseTimeout: durationpb.New(time.Minute),
 	})
 	s.NoError(err)
-	s.requireExportedClientSpan(exporter, s.receiveTraceparent(traceparents))
+	s.requireExportedClientSpan(exporter, s.receiveHeaders(requestHeaders).Get("traceparent"))
 }
 
-func (s *NexusOTELSuite) receiveTraceparent(traceparents <-chan string) string {
+func (s *NexusOTELSuite) receiveHeaders(requestHeaders <-chan headerGetter) headerGetter {
 	select {
-	case traceparent := <-traceparents:
-		return traceparent
+	case headers := <-requestHeaders:
+		return headers
 	case <-time.After(10 * time.Second):
 		s.FailNow("timed out waiting for Nexus request")
-		return ""
+		return nil
 	}
 }
 
