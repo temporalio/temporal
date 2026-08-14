@@ -39,7 +39,7 @@ func TestImportPollNexusResponseCapturesCallbackTarget(t *testing.T) {
 		}},
 	}}
 
-	decoded := fromResponses(&workflowservice.PollNexusTaskQueueRequest{}, response, "namespace-id")
+	decoded := NewFactDecoder().ImportResponses(&workflowservice.PollNexusTaskQueueRequest{}, response, "namespace-id")
 	require.Len(t, decoded, 1)
 	observed, ok := decoded[0].(*fact.NexusCallbackObservation)
 	require.True(t, ok)
@@ -142,7 +142,7 @@ func TestImportStartWorkflowResponseReturnsEveryCallbackAttachment(t *testing.T)
 	}
 	response := &workflowservice.StartWorkflowExecutionResponse{RunId: "handler-run-id"}
 
-	decoded := fromResponses(request, response, "namespace-id")
+	decoded := NewFactDecoder().ImportResponses(request, response, "namespace-id")
 	require.Len(t, decoded, 2)
 	first, ok := decoded[0].(*fact.WorkflowCallbackAttachment)
 	require.True(t, ok)
@@ -184,7 +184,7 @@ func TestImportHistoryResponseCapturesCallbackAttachmentReferences(t *testing.T)
 		},
 	}}}
 
-	decoded := fromResponses(request, response, "namespace-id")
+	decoded := NewFactDecoder().ImportResponses(request, response, "namespace-id")
 	require.Len(t, decoded, 2)
 	startAttachment, ok := decoded[0].(*fact.WorkflowCallbackAttachment)
 	require.True(t, ok)
@@ -225,7 +225,7 @@ func TestImportHistoryResponseReturnsExistingAndTerminalFacts(t *testing.T) {
 		},
 	}}}
 
-	decoded := fromResponses(request, response, "namespace-id")
+	decoded := NewFactDecoder().ImportResponses(request, response, "namespace-id")
 	require.Len(t, decoded, 2)
 	_, ok := decoded[0].(*fact.NexusOperationCancelRequestFailed)
 	require.True(t, ok)
@@ -237,7 +237,7 @@ func TestImportDescribeMutableStateReturnsExplicitEmptyStorageSnapshot(t *testin
 	request := &adminservice.DescribeMutableStateRequest{Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id"}}
 	response := &adminservice.DescribeMutableStateResponse{DatabaseMutableState: &persistencespb.WorkflowMutableState{}}
 
-	decoded := fromResponses(request, response, "namespace-id")
+	decoded := NewFactDecoder().ImportResponses(request, response, "namespace-id")
 	require.Len(t, decoded, 1)
 	observed, ok := decoded[0].(*fact.WorkflowNexusStorageSnapshot)
 	require.True(t, ok)
@@ -274,7 +274,7 @@ func TestImportHistoryResponseCapturesNexusTimeoutSemantics(t *testing.T) {
 		},
 	}}}
 
-	decoded := fromResponse(request, response, "namespace-id")
+	decoded := NewFactDecoder().ImportResponse(request, response, "namespace-id")
 	snapshot, ok := decoded.(*fact.NexusOperationHistorySnapshot)
 	require.True(t, ok)
 	require.Equal(t, &fact.NexusOperationHistorySnapshot{
@@ -310,7 +310,7 @@ func TestImportHistoryResponseCapturesNexusStartedWorkflowReference(t *testing.T
 		}}}},
 	}}}}
 
-	decoded := fromResponses(request, response, "namespace-id")
+	decoded := NewFactDecoder().ImportResponses(request, response, "namespace-id")
 	require.Len(t, decoded, 1)
 	observed, ok := decoded[0].(*fact.NexusOperationStartedHistory)
 	require.True(t, ok)
@@ -341,7 +341,7 @@ func TestImportHistoryResponseCapturesNexusCancelRequestFailure(t *testing.T) {
 		},
 	}}}
 
-	decoded := fromResponse(request, response, "namespace-id")
+	decoded := NewFactDecoder().ImportResponse(request, response, "namespace-id")
 	observed, ok := decoded.(*fact.NexusOperationCancelRequestFailed)
 	require.True(t, ok)
 	require.Equal(t, &fact.NexusOperationCancelRequestFailed{
@@ -363,7 +363,7 @@ func TestImportDescribeResponseCapturesStandaloneNexusCancelRequestFailure(t *te
 		},
 	}}
 
-	decoded := fromResponse(request, response, "namespace-id")
+	decoded := NewFactDecoder().ImportResponse(request, response, "namespace-id")
 	snapshot, ok := decoded.(*fact.NexusOperationExecutionSnapshot)
 	require.True(t, ok)
 	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, snapshot.CancellationState)
