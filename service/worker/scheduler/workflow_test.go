@@ -17,10 +17,12 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -33,7 +35,24 @@ type (
 	workflowSuite struct {
 		suite.Suite
 		testsuite.WorkflowTestSuite
-		env *testsuite.TestWorkflowEnvironment
+		env     *testsuite.TestWorkflowEnvironment
+		metrics *capturingMetricsHandler
+	}
+
+	capturingMetricsHandler struct {
+		timers []capturedTimer
+	}
+
+	capturedTimer struct {
+		name  string
+		value time.Duration
+	}
+
+	noopMetricsCounter    struct{}
+	noopMetricsGauge      struct{}
+	capturingMetricsTimer struct {
+		handler *capturingMetricsHandler
+		name    string
 	}
 )
 
@@ -46,7 +65,43 @@ func TestWorkflow(t *testing.T) {
 }
 
 func (s *workflowSuite) SetupTest() {
+	s.metrics = &capturingMetricsHandler{}
+	s.SetMetricsHandler(s.metrics)
 	s.env = s.NewTestWorkflowEnvironment()
+}
+
+func (h *capturingMetricsHandler) WithTags(map[string]string) sdkclient.MetricsHandler {
+	return h
+}
+
+func (h *capturingMetricsHandler) Counter(string) sdkclient.MetricsCounter {
+	return noopMetricsCounter{}
+}
+
+func (h *capturingMetricsHandler) Gauge(string) sdkclient.MetricsGauge {
+	return noopMetricsGauge{}
+}
+
+func (h *capturingMetricsHandler) Timer(name string) sdkclient.MetricsTimer {
+	return capturingMetricsTimer{handler: h, name: name}
+}
+
+func (h *capturingMetricsHandler) timerValues(name string) []time.Duration {
+	var values []time.Duration
+	for _, timer := range h.timers {
+		if timer.name == name {
+			values = append(values, timer.value)
+		}
+	}
+	return values
+}
+
+func (noopMetricsCounter) Inc(int64) {}
+
+func (noopMetricsGauge) Update(float64) {}
+
+func (t capturingMetricsTimer) Record(value time.Duration) {
+	t.handler.timers = append(t.handler.timers, capturedTimer{name: t.name, value: value})
 }
 
 func (s *workflowSuite) AfterTest(suiteName, testName string) {
@@ -372,7 +427,10 @@ func (s *workflowSuite) TestInitialPatch() {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:00:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		return &schedulespb.WatchWorkflowResponse{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(baseStartTime.Add(10 * time.Minute)),
+		}, nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
@@ -403,6 +461,7 @@ func (s *workflowSuite) TestInitialPatch() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.Equal([]time.Duration{5 * time.Minute}, s.metrics.timerValues(metrics.ScheduleActionDelay.Name()))
 }
 
 func (s *workflowSuite) TestCatchupWindow() {
