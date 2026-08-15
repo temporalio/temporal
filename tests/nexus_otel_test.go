@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -63,7 +62,7 @@ func (s *NexusOTELSuite) newTestEnv(exporter sdktrace.SpanExporter) *NexusTestEn
 }
 
 // Verifies production callback wiring propagates trace context and stored headers end to end.
-func (s *NexusOTELSuite) TestWorkflowCompletionCallback() {
+func (s *NexusOTELSuite) TestCallback() {
 	exporter := tracetest.NewInMemoryExporter()
 	env := s.newTestEnv(exporter)
 
@@ -243,7 +242,7 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	s.requireExportedServerSpan(
 		exporter,
 		requestHeaders,
-		strings.TrimPrefix(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, "/"),
+		"temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue",
 		"io.temporal.frontend",
 	)
 }
@@ -256,7 +255,7 @@ func (s *NexusOTELSuite) requireExportedNexusHTTPSpanPairs(
 	s.Await(func(s *NexusOTELSuite) {
 		pairs := 0
 		for _, serverSpan := range handlerExporter.GetSpans() {
-			if serverSpan.Name != strings.TrimPrefix(configs.DispatchNexusTaskByEndpointAPIName, "/") ||
+			if serverSpan.Name != "temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint" ||
 				serverSpan.SpanKind != oteltrace.SpanKindServer ||
 				spanServiceName(serverSpan) != "io.temporal.frontend" {
 				continue
