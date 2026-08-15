@@ -234,7 +234,7 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	requestHeaders := nexus.Header{
 		"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
 	}
-	_, err = nexusrpc.StartOperation(s.Context(), nexusClient, op, tv.Any().String(), nexus.StartOperationOptions{
+	_, err = nexusrpc.StartOperation(s.Context(), nexusClient, op, env.Tv().Any().String(), nexus.StartOperationOptions{
 		Header: requestHeaders,
 	})
 	s.NoError(err)
