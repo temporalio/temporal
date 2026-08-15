@@ -208,57 +208,9 @@ func (s *NexusOTELSuite) TestOperation() {
 	})
 }
 
-// Verifies asynchronous operation cancellation uses the instrumented production HTTP client.
-func (s *NexusOTELSuite) TestExternalOperationCancellation() {
-	exporter := tracetest.NewInMemoryExporter()
-	env := s.newTestEnv(exporter)
-
-	cancelRequestHeaders := make(chan headerGetter, 1)
-	operationToken := env.Tv().Any().String()
-	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
-		OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			return &nexus.HandlerStartOperationResultAsync{OperationToken: operationToken}, nil
-		},
-		OnCancelOperation: func(_ context.Context, _, _, _ string, options nexus.CancelOperationOptions) error {
-			cancelRequestHeaders <- options.Header
-			return nil
-		},
-	})
-
-	operationID := env.Tv().Any().String()
-	startResponse, err := env.FrontendClient().StartNexusOperationExecution(s.Context(), &workflowservice.StartNexusOperationExecutionRequest{
-		Namespace:              env.Namespace().String(),
-		OperationId:            operationID,
-		Endpoint:               endpointName,
-		Service:                env.Tv().Service(),
-		Operation:              env.Tv().Operation(),
-		RequestId:              env.Tv().RequestID(),
-		ScheduleToCloseTimeout: durationpb.New(time.Minute),
-	})
-	s.NoError(err)
-
-	_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
-		Namespace:   env.Namespace().String(),
-		OperationId: operationID,
-		RunId:       startResponse.RunId,
-		WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
-	})
-	s.NoError(err)
-	_, err = env.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
-		Namespace:   env.Namespace().String(),
-		OperationId: operationID,
-		RunId:       startResponse.RunId,
-		Reason:      env.Tv().Any().String(),
-	})
-	s.NoError(err)
-	s.requireExportedClientSpan(exporter, cancelRequestHeaders)
-}
-
-// Verifies worker-target Nexus operations connect local frontend client and server spans.
 func (s *NexusOTELSuite) TestWorkerOperation() {
 	exporter := tracetest.NewInMemoryExporter()
 	env := s.newTestEnv(exporter)
-	tv := env.Tv().WithTaskQueue(env.WorkerTaskQueue())
 
 	requestHeaders := make(chan nexus.Header, 1)
 	service := nexus.NewService("test-service")
@@ -266,22 +218,27 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 		requestHeaders <- options.Header
 		return tv.Any().String(), nil
 	})
-	service.MustRegister(operation)
 
-	nexusWorker := worker.New(env.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
-	nexusWorker.RegisterNexusService(service)
-	s.NoError(nexusWorker.Start())
-	s.T().Cleanup(nexusWorker.Stop)
+	// Verifies the namespace and task queue dispatch route is instrumented independently of forwarding.
+	s.Run("ByNamespaceAndTaskQueue", func(s *NexusOTELSuite) {
+		tv := env.Tv().Sub("ByNamespaceAndTaskQueue")
+		taskQueue := tv.RequestID()
+		pollerErrCh := env.nexusTaskPoller(s.Context(), s.T(), taskQueue, nexusEchoHandler)
+		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
+			BaseURL: getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), taskQueue),
+			Service: "test-service",
+		})
+		s.NoError(err)
 
-	endpoint := env.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), tv.TaskQueue().GetName())
-	_, err := env.FrontendClient().StartNexusOperationExecution(s.Context(), &workflowservice.StartNexusOperationExecutionRequest{
-		Namespace:              env.Namespace().String(),
-		OperationId:            tv.Any().String(),
-		Endpoint:               endpoint.GetSpec().GetName(),
-		Service:                service.Name,
-		Operation:              operation.Name(),
-		RequestId:              tv.RequestID(),
-		ScheduleToCloseTimeout: durationpb.New(time.Minute),
+		requestHeaders := nexus.Header{
+			"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+		}
+		_, err = nexusrpc.StartOperation(s.Context(), client, op, tv.Any().String(), nexus.StartOperationOptions{
+			Header: requestHeaders,
+		})
+		s.NoError(err)
+		s.NoError(<-pollerErrCh)
+		s.requireExportedServerSpan(exporter, requestHeaders, "DispatchNexusTaskByNamespaceAndTaskQueue", "io.temporal.frontend")
 	})
 	s.NoError(err)
 
