@@ -102,56 +102,37 @@ func bindFresh(rc umpire.RealizeContext, a umpire.Action, id string) {
 type Oracle struct{ Env *testcore.TestEnv }
 
 func (o Oracle) Current(t umpire.EntityType, id string) (string, bool) {
-	if lc := o.find(t, id); lc != nil {
-		return lc.Current(), true
+	if entity, ok := o.find(t, id); ok {
+		return entity.Current, true
 	}
 	return "", false
 }
 
 // Visited implements umpire.VisitedOracle for reconciliation.
 func (o Oracle) Visited(t umpire.EntityType, id string) ([]umpire.Edge, bool) {
-	if lc := o.find(t, id); lc != nil {
-		return lc.VisitedEdges(), true
+	if entity, ok := o.find(t, id); ok {
+		return entity.Visited, true
 	}
 	return nil, false
 }
 
-func (o Oracle) find(t umpire.EntityType, id string) *umpire.Lifecycle {
-	nsRoot := umpire.NewEntityID(model.NamespaceType, o.Env.NamespaceID().String())
-	for _, e := range o.Env.GetMonitor().ModelState().QueryEntities(t, 0, &nsRoot) {
-		if entityID(e.Entity) != id {
+func (o Oracle) find(t umpire.EntityType, id string) (umpire.EntitySnapshot, bool) {
+	for _, entity := range o.Env.GetMonitor().Snapshot(o.Env.NamespaceID().String()).EntitiesOfType(t) {
+		if entity.ID != id {
 			continue
 		}
-		if lced, ok := e.Entity.(umpire.Lifecycled); ok {
-			return lced.Lifecycle()
-		}
+		return entity, true
 	}
-	return nil
-}
-
-// entityID returns the identity an action binds an entity to — its captured WorkflowID (the
-// operation's execution id for a standalone op, the caller workflow id for an embedded one; the
-// workflow id for a Workflow). Per-type because the identity field is not a shared method.
-func entityID(e umpire.Entity) string {
-	switch x := e.(type) {
-	case *model.NexusOperation:
-		return x.WorkflowID
-	case *model.Workflow:
-		return x.WorkflowID
-	case *model.WorkflowRun:
-		return x.RunID
-	}
-	return ""
+	return umpire.EntitySnapshot{}, false
 }
 
 // Successor implements umpire.LineageOracle: the run the given run produced (continue-as-new /
 // reset / retry), found by its observed predecessor link. Lets Drive bind a LinkedFrom ref by
 // observation — the driver never needs the server-minted successor RunID (see UMPIRE.md).
 func (o Oracle) Successor(t umpire.EntityType, predecessorID string) (string, bool) {
-	nsRoot := umpire.NewEntityID(model.NamespaceType, o.Env.NamespaceID().String())
-	for _, e := range o.Env.GetMonitor().ModelState().QueryEntities(t, 0, &nsRoot) {
-		if r, ok := e.Entity.(*model.WorkflowRun); ok && r.PreviousRunID == predecessorID {
-			return r.RunID, true
+	for _, entity := range o.Env.GetMonitor().Snapshot(o.Env.NamespaceID().String()).EntitiesOfType(t) {
+		if entity.PredecessorID == predecessorID {
+			return entity.ID, true
 		}
 	}
 	return "", false

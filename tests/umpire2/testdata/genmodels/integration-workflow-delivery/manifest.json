@@ -1,0 +1,793 @@
+{
+  "schemaVersion": "umpire-verification-manifest/v1",
+  "generatorVersion": "umpire-genmodels/v1",
+  "target": "integration-workflow-delivery",
+  "targetOwners": [
+    "history",
+    "matching",
+    "workflow"
+  ],
+  "targetModules": [
+    "history-authorization",
+    "history-outbox",
+    "matching-delivery",
+    "workflow",
+    "workflow-delivery-authorization",
+    "workflow-delivery-intent"
+  ],
+  "targetCompositions": [
+    "workflow-delivery"
+  ],
+  "targetProperties": [
+    "delivery.ambiguous-commit-resolved",
+    "delivery.coarse-retirement-safety",
+    "delivery.destination-isolation",
+    "delivery.failed-start-is-not-accepted",
+    "delivery.no-phantom-dispatch",
+    "delivery.no-resurrection",
+    "delivery.no-split-commit",
+    "delivery.path-equivalence",
+    "delivery.retry-preserves-obligation",
+    "delivery.single-accepted-start",
+    "workflow.delivery.accepted-start-correspondence",
+    "workflow.delivery.intent-correspondence"
+  ],
+  "modelFamilyVersion": "umpire2/model-family-v1",
+  "modelFamilyHash": "sha256:c94f0b80391517ac22e019927b3e2a3dfb5b9005c0964bbf0be9c99baacb6fc1",
+  "backendRequirements": [
+    "fizz",
+    "ivy",
+    "p",
+    "tla"
+  ],
+  "minimumBounds": {
+    "DeliveryTask": 1,
+    "WorkObligation": 1,
+    "WorkflowTask": 1
+  },
+  "failurePolicy": [
+    "ambiguous-persistence",
+    "lost-authorization-response",
+    "workflow-task-invalidation"
+  ],
+  "interfaces": [
+    {
+      "name": "durable-intent",
+      "provider": {
+        "module": "history-outbox",
+        "owner": "history"
+      },
+      "consumers": [
+        {
+          "module": "matching-delivery",
+          "owner": "matching"
+        },
+        {
+          "module": "workflow-delivery-intent",
+          "owner": "workflow"
+        }
+      ],
+      "identities": [
+        "DeliveryTask",
+        "WorkObligation"
+      ],
+      "obligations": [
+        "atomic-intent"
+      ]
+    },
+    {
+      "name": "start-authorization",
+      "provider": {
+        "module": "history-authorization",
+        "owner": "history"
+      },
+      "consumers": [
+        {
+          "module": "matching-delivery",
+          "owner": "matching"
+        },
+        {
+          "module": "workflow-delivery-authorization",
+          "owner": "workflow"
+        }
+      ],
+      "identities": [
+        "DeliveryAttempt",
+        "WorkObligation"
+      ],
+      "obligations": [
+        "single-acceptance"
+      ]
+    }
+  ],
+  "modelVersion": "umpire2/verification-v1",
+  "modelHash": "sha256:32e8815917a10a93d74bc7cc94fca8968ff0d3537e449f51ccb32987cc342b0a",
+  "requestedGuarantee": "finite-exhaustive",
+  "bounds": {
+    "DeliveryAttempt": 2,
+    "DeliveryQueue": 2,
+    "DeliveryTask": 2,
+    "Poller": 2,
+    "WorkObligation": 2,
+    "Workflow": 1,
+    "WorkflowRun": 1,
+    "WorkflowTask": 1
+  },
+  "identityPools": {
+    "DeliveryAttempt": [
+      "DeliveryAttempt#0",
+      "DeliveryAttempt#1"
+    ],
+    "DeliveryQueue": [
+      "DeliveryQueue#0",
+      "DeliveryQueue#1"
+    ],
+    "DeliveryTask": [
+      "DeliveryTask#0",
+      "DeliveryTask#1"
+    ],
+    "Poller": [
+      "Poller#0",
+      "Poller#1"
+    ],
+    "WorkObligation": [
+      "WorkObligation#0",
+      "WorkObligation#1"
+    ],
+    "Workflow": [
+      "Workflow#0"
+    ],
+    "WorkflowRun": [
+      "WorkflowRun#0"
+    ],
+    "WorkflowTask": [
+      "WorkflowTask#0"
+    ]
+  },
+  "actions": [
+    "Workflow.created.start.Standalone",
+    "Workflow.started.cancel.Standalone",
+    "Workflow.started.complete.Standalone",
+    "Workflow.started.fail.Standalone",
+    "Workflow.started.terminate.Standalone",
+    "Workflow.started.timeout.Standalone",
+    "WorkflowRun.created.start.AnyHosting",
+    "WorkflowRun.started.cancel.AnyHosting",
+    "WorkflowRun.started.complete.AnyHosting",
+    "WorkflowRun.started.continue_as_new.AnyHosting",
+    "WorkflowRun.started.fail.AnyHosting",
+    "WorkflowRun.started.terminate.AnyHosting",
+    "WorkflowRun.started.timeout.AnyHosting",
+    "WorkflowTask.added.discard.AnyHosting",
+    "WorkflowTask.added.store.AnyHosting",
+    "WorkflowTask.added.terminate.AnyHosting",
+    "WorkflowTask.created.terminate.AnyHosting",
+    "WorkflowTask.stored.discard.AnyHosting",
+    "WorkflowTask.stored.terminate.AnyHosting",
+    "delivery.acknowledge",
+    "delivery.dispatch",
+    "delivery.expire",
+    "delivery.offer-sync",
+    "delivery.persist.ambiguous",
+    "delivery.reserve",
+    "delivery.retire",
+    "delivery.retry",
+    "delivery.spool",
+    "workflow.delivery.authorize-added",
+    "workflow.delivery.authorize-stored",
+    "workflow.delivery.persist",
+    "workflow.delivery.reject-added",
+    "workflow.delivery.reject-stored",
+    "workflow.delivery.resolve-persisted"
+  ],
+  "environmentActions": [
+    "Workflow.started.cancel.Standalone",
+    "Workflow.started.fail.Standalone",
+    "Workflow.started.terminate.Standalone",
+    "Workflow.started.timeout.Standalone",
+    "WorkflowRun.created.start.AnyHosting",
+    "WorkflowRun.started.cancel.AnyHosting",
+    "WorkflowRun.started.complete.AnyHosting",
+    "WorkflowRun.started.continue_as_new.AnyHosting",
+    "WorkflowRun.started.fail.AnyHosting",
+    "WorkflowRun.started.terminate.AnyHosting",
+    "WorkflowRun.started.timeout.AnyHosting",
+    "WorkflowTask.added.discard.AnyHosting",
+    "WorkflowTask.added.store.AnyHosting",
+    "WorkflowTask.added.terminate.AnyHosting",
+    "WorkflowTask.created.terminate.AnyHosting",
+    "WorkflowTask.stored.discard.AnyHosting",
+    "WorkflowTask.stored.terminate.AnyHosting",
+    "delivery.acknowledge",
+    "delivery.dispatch",
+    "delivery.expire",
+    "delivery.offer-sync",
+    "delivery.persist.ambiguous",
+    "delivery.reserve",
+    "delivery.retire",
+    "delivery.retry",
+    "delivery.spool",
+    "workflow.delivery.authorize-added",
+    "workflow.delivery.authorize-stored",
+    "workflow.delivery.persist",
+    "workflow.delivery.reject-added",
+    "workflow.delivery.reject-stored",
+    "workflow.delivery.resolve-persisted"
+  ],
+  "properties": [
+    "Workflow.started.quiescent-progress",
+    "delivery.ambiguous-commit-resolved",
+    "delivery.coarse-retirement-safety",
+    "delivery.destination-isolation",
+    "delivery.failed-start-is-not-accepted",
+    "delivery.no-phantom-dispatch",
+    "delivery.no-resurrection",
+    "delivery.no-split-commit",
+    "delivery.path-equivalence",
+    "delivery.retry-preserves-obligation",
+    "delivery.single-accepted-start",
+    "workflow.delivery.accepted-start-correspondence",
+    "workflow.delivery.intent-correspondence"
+  ],
+  "sources": [
+    {
+      "path": "common/testing/umpire/lifecycle.go",
+      "symbol": "EntityProgressRule"
+    },
+    {
+      "path": "tests/umpire2/model"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "SignalWorkflowExecution(finish)"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "StartWorkflowExecution"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "needs a workflow cancellation command driver"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "needs a workflow failure command driver"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "needs a workflow termination RPC driver"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "no executable action is declared"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "server-driven timeout has no atomic action"
+    },
+    {
+      "path": "tests/umpire2/protocol/default_relations.go"
+    },
+    {
+      "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+      "symbol": "workflow.delivery.accepted-start-correspondence"
+    },
+    {
+      "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+      "symbol": "workflow.delivery.authorize-added"
+    },
+    {
+      "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+      "symbol": "workflow.delivery.authorize-stored"
+    },
+    {
+      "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+      "symbol": "workflow.delivery.reject-added"
+    },
+    {
+      "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+      "symbol": "workflow.delivery.reject-stored"
+    },
+    {
+      "path": "tests/umpire2/protocol/verification_workflow_delivery.go",
+      "symbol": "workflow.delivery.persist"
+    },
+    {
+      "path": "tests/umpire2/protocol/verification_workflow_delivery.go",
+      "symbol": "workflow.delivery.resolve-persisted"
+    },
+    {
+      "path": "tests/umpire2/rule/workflow_task_starvation.go",
+      "symbol": "WorkflowTaskStarvationRule"
+    }
+  ],
+  "abstractions": [
+    {
+      "name": "workflow.task.create-speculative-direct",
+      "reason": "the speculative target checks the atomic direct-delivery adapter",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_task_speculative.go",
+        "symbol": "workflow.task.create-speculative-direct"
+      }
+    }
+  ],
+  "unsupported": [
+    {
+      "backend": "ivy",
+      "construct": "property Workflow.started.quiescent-progress",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    },
+    {
+      "backend": "ivy",
+      "construct": "property delivery.ambiguous-commit-resolved",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    }
+  ],
+  "tools": [
+    {
+      "name": "apalache",
+      "version": "0.61.0",
+      "url": "https://github.com/apalache-mc/apalache/releases/download/v0.61.0/apalache-0.61.0.zip",
+      "sha256": "f2d761315667f977c7c33792d95167f12e83b8a775909180886bcb67660470c5",
+      "archive": "apalache.zip",
+      "archiveType": "zip",
+      "extractRoot": "apalache",
+      "executable": "apalache/apalache-0.61.0/bin/apalache-mc"
+    },
+    {
+      "name": "fizzbee",
+      "version": "0.5.2",
+      "artifacts": [
+        {
+          "platform": "darwin-arm64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-macos_arm.tar.gz",
+          "sha256": "aab223e0bac8f0c052cf774dc25872f72c138da30f4079b914bb9c8921910904",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        },
+        {
+          "platform": "darwin-x86_64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-macos_x86.tar.gz",
+          "sha256": "6293bd7ab90c79b8607dc9fb2f09407fde0e11ac6596e884bef7f660178597fa",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        },
+        {
+          "platform": "linux-arm64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-linux_arm.tar.gz",
+          "sha256": "00011bbfe9bf4c7bcb03a5bf1f5b7fe7390111ad6f0611c6be71e8692504da4e",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        },
+        {
+          "platform": "linux-x86_64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-linux_x86.tar.gz",
+          "sha256": "f494b7b2afcc7ce24575ed91a389b46bbbbe5976f9e4b5cd717327012f5e0395",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        }
+      ]
+    },
+    {
+      "name": "ivy",
+      "version": "1.8.26",
+      "artifacts": [
+        {
+          "platform": "darwin-arm64",
+          "url": "https://files.pythonhosted.org/packages/c8/38/f829838dc68e5e5aad7babd8273f253e424eb399731b34f432ea66b16647/ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "sha256": "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c",
+          "archive": "ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "archiveType": "wheel",
+          "extractRoot": "ivy",
+          "package": "ms-ivy",
+          "executable": "ivy/bin/ivy_check"
+        },
+        {
+          "platform": "darwin-x86_64",
+          "url": "https://files.pythonhosted.org/packages/c8/38/f829838dc68e5e5aad7babd8273f253e424eb399731b34f432ea66b16647/ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "sha256": "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c",
+          "archive": "ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "archiveType": "wheel",
+          "extractRoot": "ivy",
+          "package": "ms-ivy",
+          "executable": "ivy/bin/ivy_check"
+        },
+        {
+          "platform": "linux-x86_64",
+          "url": "https://files.pythonhosted.org/packages/0a/f7/c8f9264bae27f2c56c2d02630c94a0fa400c66bc6772bf6ff049fdcd8101/ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl",
+          "sha256": "2a71da0bb2ce6314ddb40b6d76c6d734b8102db51c158477c2ef85b45da65dc1",
+          "archive": "ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl",
+          "archiveType": "wheel",
+          "extractRoot": "ivy",
+          "package": "ms-ivy",
+          "executable": "ivy/bin/ivy_check"
+        }
+      ]
+    },
+    {
+      "name": "p",
+      "version": "3.1.0",
+      "url": "https://api.nuget.org/v3-flatcontainer/p/3.1.0/p.3.1.0.nupkg",
+      "sha256": "b2a212e3b1af1bf2fdc9b80899da2901d6625d1a2e478d478e30028872a4bdc1",
+      "archive": "p.nupkg",
+      "archiveType": "nuget",
+      "extractRoot": "p",
+      "package": "P",
+      "executable": "p/p"
+    },
+    {
+      "name": "tla2tools",
+      "version": "1.7.4",
+      "url": "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar",
+      "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88",
+      "archive": "tla2tools.jar",
+      "archiveType": "file",
+      "extractRoot": "tla",
+      "executable": "tla/tla2tools.jar"
+    }
+  ],
+  "refinements": [
+    {
+      "name": "delivery.acknowledge.foundation",
+      "action": "delivery.acknowledge",
+      "lifecycleActions": [
+        "delivery.acknowledge"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.dispatch.foundation",
+      "action": "delivery.dispatch",
+      "lifecycleActions": [
+        "delivery.dispatch"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.expire.foundation",
+      "action": "delivery.expire",
+      "lifecycleActions": [
+        "delivery.expire"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.offer-sync.foundation",
+      "action": "delivery.offer-sync",
+      "lifecycleActions": [
+        "delivery.offer-sync"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.ambiguous.foundation",
+      "action": "delivery.persist.ambiguous",
+      "lifecycleActions": [
+        "delivery.persist.ambiguous"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.reserve.foundation",
+      "action": "delivery.reserve",
+      "lifecycleActions": [
+        "delivery.reserve"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.retire.foundation",
+      "action": "delivery.retire",
+      "lifecycleActions": [
+        "delivery.retire"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.retry.foundation",
+      "action": "delivery.retry",
+      "lifecycleActions": [
+        "delivery.retry"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.spool.foundation",
+      "action": "delivery.spool",
+      "lifecycleActions": [
+        "delivery.spool"
+      ],
+      "source": {}
+    },
+    {
+      "name": "lifecycle.Workflow.created.start.Standalone",
+      "action": "Workflow.created.start.Standalone",
+      "lifecycleActions": [
+        "Workflow.created.start.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartWorkflowExecution"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.cancel.Standalone",
+      "action": "Workflow.started.cancel.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.cancel.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow cancellation command driver"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.fail.Standalone",
+      "action": "Workflow.started.fail.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.fail.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow failure command driver"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.terminate.Standalone",
+      "action": "Workflow.started.terminate.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.terminate.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow termination RPC driver"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.timeout.Standalone",
+      "action": "Workflow.started.timeout.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.timeout.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "server-driven timeout has no atomic action"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.created.start.AnyHosting",
+      "action": "WorkflowRun.created.start.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.created.start.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.cancel.AnyHosting",
+      "action": "WorkflowRun.started.cancel.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.complete.AnyHosting",
+      "action": "WorkflowRun.started.complete.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.complete.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.continue_as_new.AnyHosting",
+      "action": "WorkflowRun.started.continue_as_new.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.continue_as_new.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.fail.AnyHosting",
+      "action": "WorkflowRun.started.fail.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.fail.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.terminate.AnyHosting",
+      "action": "WorkflowRun.started.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.timeout.AnyHosting",
+      "action": "WorkflowRun.started.timeout.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.discard.AnyHosting",
+      "action": "WorkflowTask.added.discard.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.discard.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.store.AnyHosting",
+      "action": "WorkflowTask.added.store.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.store.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.terminate.AnyHosting",
+      "action": "WorkflowTask.added.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.created.terminate.AnyHosting",
+      "action": "WorkflowTask.created.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.created.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.stored.discard.AnyHosting",
+      "action": "WorkflowTask.stored.discard.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.stored.discard.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.stored.terminate.AnyHosting",
+      "action": "WorkflowTask.stored.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.stored.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "regression.Workflow.started.complete.Standalone",
+      "action": "Workflow.started.complete.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.complete.Standalone"
+      ],
+      "regressionActions": [
+        "workflow.complete"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.complete"
+      }
+    },
+    {
+      "name": "workflow.delivery.authorize-added",
+      "action": "workflow.delivery.authorize-added",
+      "lifecycleActions": [
+        "WorkflowTask.added.poll.AnyHosting",
+        "delivery.authorize.accept"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.authorize-added"
+      }
+    },
+    {
+      "name": "workflow.delivery.authorize-stored",
+      "action": "workflow.delivery.authorize-stored",
+      "lifecycleActions": [
+        "WorkflowTask.stored.poll.AnyHosting",
+        "delivery.authorize.accept"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.authorize-stored"
+      }
+    },
+    {
+      "name": "workflow.delivery.persist",
+      "action": "workflow.delivery.persist",
+      "lifecycleActions": [
+        "WorkflowTask.created.add.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_delivery.go",
+        "symbol": "workflow.delivery.persist"
+      }
+    },
+    {
+      "name": "workflow.delivery.reject-added",
+      "action": "workflow.delivery.reject-added",
+      "lifecycleActions": [
+        "delivery.authorize.reject"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.reject-added"
+      }
+    },
+    {
+      "name": "workflow.delivery.reject-stored",
+      "action": "workflow.delivery.reject-stored",
+      "lifecycleActions": [
+        "delivery.authorize.reject"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.reject-stored"
+      }
+    },
+    {
+      "name": "workflow.delivery.resolve-persisted",
+      "action": "workflow.delivery.resolve-persisted",
+      "lifecycleActions": [
+        "delivery.resolve-persisted"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_delivery.go",
+        "symbol": "workflow.delivery.resolve-persisted"
+      }
+    }
+  ]
+}

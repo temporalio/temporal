@@ -5,18 +5,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire2/fact"
-	"go.temporal.io/server/tests/umpire2/model"
-	"go.temporal.io/server/tests/umpire2/protocol"
+	"go.temporal.io/server/tests/umpire2/internal/fact"
+	"go.temporal.io/server/tests/umpire2/internal/model"
+	"go.temporal.io/server/tests/umpire2/internal/protocol"
 )
 
 func newTestExecutionTrace(t *testing.T) *executionTrace {
 	t.Helper()
 	compiled, err := protocol.Default()
 	require.NoError(t, err)
-	relations, err := compiled.NewRelationStore()
+	runtime, err := umpirefw.NewRuntime(compiled.RuntimeDeclaration(nil))
 	require.NoError(t, err)
-	return newExecutionTrace(umpirefw.NewModelState(), relations, compiled.CausalFootprints())
+	return newExecutionTrace(runtime, compiled.CausalFootprints())
 }
 
 func TestExecutionTraceRetainsActionWindowWhenRecorderRejectsFinish(t *testing.T) {

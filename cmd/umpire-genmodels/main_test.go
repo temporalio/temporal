@@ -13,11 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/testing/umpire/verify"
-	"go.temporal.io/server/common/testing/umpire/verify/fizz"
-	"go.temporal.io/server/common/testing/umpire/verify/ivy"
-	pgenerator "go.temporal.io/server/common/testing/umpire/verify/p"
-	"go.temporal.io/server/common/testing/umpire/verify/runner"
-	"go.temporal.io/server/common/testing/umpire/verify/tla"
+	"go.temporal.io/server/common/testing/umpire/verify/toolchain"
 )
 
 func TestGenerateWritesCompleteDeterministicArtifactSet(t *testing.T) {
@@ -81,6 +77,32 @@ UMPIRE_TOOL_SINGLE_EXTRACT_ROOT='single'
 UMPIRE_TOOL_SINGLE_PACKAGE=''
 UMPIRE_TOOL_SINGLE_EXECUTABLE='single/bin'
 `, string(contents))
+}
+
+func TestLocalToolPlatform(t *testing.T) {
+	tests := []struct {
+		goos     string
+		goarch   string
+		platform string
+		err      string
+	}{
+		{goos: "darwin", goarch: "arm64", platform: "darwin-arm64"},
+		{goos: "darwin", goarch: "amd64", platform: "darwin-x86_64"},
+		{goos: "linux", goarch: "arm64", platform: "linux-arm64"},
+		{goos: "linux", goarch: "amd64", platform: "linux-x86_64"},
+		{goos: "windows", goarch: "amd64", err: `unsupported local verification tool platform "windows-amd64"`},
+	}
+	for _, test := range tests {
+		t.Run(test.goos+"-"+test.goarch, func(t *testing.T) {
+			platform, err := localToolPlatform(test.goos, test.goarch)
+			if test.err != "" {
+				require.EqualError(t, err, test.err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.platform, platform)
+		})
+	}
 }
 
 func TestRenderToolEnvironmentRejectsInvalidTools(t *testing.T) {
@@ -415,13 +437,13 @@ func TestRequestedVerificationTargetsSelectsAllOrOne(t *testing.T) {
 func TestGeneratorsCoverEverySourceActionAndProperty(t *testing.T) {
 	model, err := verificationModel(1)
 	require.NoError(t, err)
-	tlaFiles, err := tla.Generate(model)
+	tlaFiles, err := toolchain.GenerateTLA(model)
 	require.NoError(t, err)
-	pFiles, err := pgenerator.Generate(model)
+	pFiles, err := toolchain.GenerateP(model)
 	require.NoError(t, err)
-	ivyFiles, diagnostics, err := ivy.Generate(model)
+	ivyFiles, diagnostics, err := toolchain.GenerateIvy(model)
 	require.NoError(t, err)
-	fizzFiles, fizzDiagnostics, err := fizz.Generate(model)
+	fizzFiles, fizzDiagnostics, err := toolchain.GenerateFizz(model)
 	require.NoError(t, err)
 
 	tlaSource := string(tlaFiles["Umpire.tla"])
@@ -429,23 +451,23 @@ func TestGeneratorsCoverEverySourceActionAndProperty(t *testing.T) {
 	ivySource := string(ivyFiles["Umpire.ivy"])
 	fizzSource := string(fizzFiles["Umpire.fizz"])
 	for _, action := range model.Actions {
-		require.Contains(t, tlaSource, tla.ActionIdentifier(action.Name)+"Enabled", action.Name)
+		require.Contains(t, tlaSource, toolchain.TLAActionIdentifier(action.Name)+"Enabled", action.Name)
 		require.Equal(t, 1, strings.Count(pSource, "UMPIRE_ACTION "+action.Name+" "), action.Name)
-		require.Contains(t, ivySource, "action "+ivy.ActionIdentifier(action.Name)+"(", action.Name)
-		require.Contains(t, fizzSource, "atomic action "+fizz.ActionIdentifier(action.Name)+":", action.Name)
+		require.Contains(t, ivySource, "action "+toolchain.IvyActionIdentifier(action.Name)+"(", action.Name)
+		require.Contains(t, fizzSource, "atomic action "+toolchain.FizzActionIdentifier(action.Name)+":", action.Name)
 	}
 	for _, property := range model.Properties {
-		require.Contains(t, tlaSource, tla.PropertyIdentifier(property.Name)+" ==", property.Name)
+		require.Contains(t, tlaSource, toolchain.TLAPropertyIdentifier(property.Name)+" ==", property.Name)
 		if property.Kind == verify.SafetyProperty {
 			require.Contains(t, pSource, "property "+property.Name+" failed", property.Name)
-			require.Contains(t, ivySource, "["+ivy.PropertyIdentifier(property.Name)+"]", property.Name)
+			require.Contains(t, ivySource, "["+toolchain.IvyPropertyIdentifier(property.Name)+"]", property.Name)
 		} else {
 			require.Contains(t, ivySource, "# unsupported property "+property.Name, property.Name)
 		}
 		if property.Kind == verify.ProgressProperty {
 			require.Contains(t, fizzSource, "# unsupported property "+property.Name, property.Name)
 		} else {
-			require.Contains(t, fizzSource, "always assertion "+fizz.PropertyIdentifier(property.Name)+":", property.Name)
+			require.Contains(t, fizzSource, "always assertion "+toolchain.FizzPropertyIdentifier(property.Name)+":", property.Name)
 		}
 	}
 	require.Len(t, diagnostics, len(model.Properties)-countSafetyProperties(model))
@@ -492,12 +514,12 @@ func TestSeededSafetyBugIsFoundByTLC(t *testing.T) {
 	}
 	directory := writeSeededArtifacts(t)
 	model := seededBugModel()
-	vocabulary, err := tla.TraceVocabulary(model)
+	vocabulary, err := toolchain.TLATraceVocabulary(model)
 	require.NoError(t, err)
-	result, err := runner.Check(context.Background(), runner.Request{
-		Backend: runner.TLC, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "1.7.4",
+	result, err := toolchain.Check(context.Background(), toolchain.Request{
+		Backend: toolchain.TLC, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "1.7.4",
 		ModelDir: filepath.Join(directory, "tla"), ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
-		Model: model, TraceVocabulary: vocabulary, ActionNames: map[string]string{tla.ActionIdentifier("seed.bug"): "seed.bug"},
+		Model: model, TraceVocabulary: vocabulary, ActionNames: map[string]string{toolchain.TLAActionIdentifier("seed.bug"): "seed.bug"},
 	})
 	require.NoError(t, err)
 	requireSeededCounterexample(t, result)
@@ -510,10 +532,10 @@ func TestSeededSafetyBugIsFoundByApalache(t *testing.T) {
 	}
 	directory := writeSeededArtifacts(t)
 	model := seededBugModel()
-	vocabulary, err := tla.TraceVocabulary(model)
+	vocabulary, err := toolchain.TLATraceVocabulary(model)
 	require.NoError(t, err)
-	result, err := runner.Check(context.Background(), runner.Request{
-		Backend: runner.Apalache, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "0.61.0",
+	result, err := toolchain.Check(context.Background(), toolchain.Request{
+		Backend: toolchain.Apalache, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "0.61.0",
 		ModelDir: filepath.Join(directory, "tla"), ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
 		Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: 1},
 	})
@@ -528,10 +550,10 @@ func TestSeededSafetyBugIsFoundByFizzBee(t *testing.T) {
 	}
 	model := seededBugModel()
 	directory := writeSeededArtifacts(t)
-	vocabulary, err := fizz.TraceVocabulary(model)
+	vocabulary, err := toolchain.FizzTraceVocabulary(model)
 	require.NoError(t, err)
-	result, err := runner.Check(context.Background(), runner.Request{
-		Backend: runner.Fizz, ToolPath: tool, ToolVersion: pinnedToolVersion(t, "fizzbee"),
+	result, err := toolchain.Check(context.Background(), toolchain.Request{
+		Backend: toolchain.Fizz, ToolPath: tool, ToolVersion: pinnedToolVersion(t, "fizzbee"),
 		ModelDir: filepath.Join(directory, "fizz"), ArtifactDir: filepath.Join(directory, "results", "fizz"), Timeout: 2 * time.Minute,
 		Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: 1},
 	})
@@ -556,11 +578,11 @@ func TestInterpreterAndTLCReachSameBoundedStateCount(t *testing.T) {
 	require.Empty(t, exploration.Violations)
 
 	directory := t.TempDir()
-	files, err := tla.Generate(model)
+	files, err := toolchain.GenerateTLA(model)
 	require.NoError(t, err)
 	require.NoError(t, writeFiles(directory, files))
-	result, err := runner.Check(context.Background(), runner.Request{
-		Backend: runner.TLC, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "1.7.4",
+	result, err := toolchain.Check(context.Background(), toolchain.Request{
+		Backend: toolchain.TLC, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "1.7.4",
 		ModelDir: directory, ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
 		Model: model,
 	})
@@ -586,14 +608,14 @@ func TestInterpreterAndFizzBeeReachSameTinyWorld(t *testing.T) {
 	require.Empty(t, exploration.Violations)
 
 	directory := t.TempDir()
-	files, diagnostics, err := fizz.Generate(model)
+	files, diagnostics, err := toolchain.GenerateFizz(model)
 	require.NoError(t, err)
 	require.Empty(t, diagnostics)
 	require.NoError(t, writeFiles(directory, files))
-	vocabulary, err := fizz.TraceVocabulary(model)
+	vocabulary, err := toolchain.FizzTraceVocabulary(model)
 	require.NoError(t, err)
-	result, err := runner.Check(context.Background(), runner.Request{
-		Backend: runner.Fizz, ToolPath: tool, ToolVersion: pinnedToolVersion(t, "fizzbee"),
+	result, err := toolchain.Check(context.Background(), toolchain.Request{
+		Backend: toolchain.Fizz, ToolPath: tool, ToolVersion: pinnedToolVersion(t, "fizzbee"),
 		ModelDir: directory, ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
 		Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: 2},
 	})
@@ -619,16 +641,16 @@ func TestFreshIdentityModelRejectsAliasingInCanonicalInterpreter(t *testing.T) {
 func TestSupportingBackendsExposeSemanticMutationCorpus(t *testing.T) {
 	for _, backend := range []struct {
 		name    string
-		backend runner.Backend
+		backend toolchain.Backend
 		toolEnv string
 		toolPin string
 	}{
-		{name: "tlc", backend: runner.TLC, toolEnv: "UMPIRE_TLA_JAR", toolPin: "tla2tools"},
-		{name: "apalache", backend: runner.Apalache, toolEnv: "UMPIRE_APALACHE_TOOL", toolPin: "apalache"},
-		{name: "p", backend: runner.P, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
-		{name: "pex", backend: runner.PEx, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
-		{name: "ivy", backend: runner.Ivy, toolEnv: "UMPIRE_IVY_TOOL", toolPin: "ivy"},
-		{name: "fizz", backend: runner.Fizz, toolEnv: "UMPIRE_FIZZ_TOOL", toolPin: "fizzbee"},
+		{name: "tlc", backend: toolchain.TLC, toolEnv: "UMPIRE_TLA_JAR", toolPin: "tla2tools"},
+		{name: "apalache", backend: toolchain.Apalache, toolEnv: "UMPIRE_APALACHE_TOOL", toolPin: "apalache"},
+		{name: "p", backend: toolchain.P, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
+		{name: "pex", backend: toolchain.PEx, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
+		{name: "ivy", backend: toolchain.Ivy, toolEnv: "UMPIRE_IVY_TOOL", toolPin: "ivy"},
+		{name: "fizz", backend: toolchain.Fizz, toolEnv: "UMPIRE_FIZZ_TOOL", toolPin: "fizzbee"},
 	} {
 		t.Run(backend.name, func(t *testing.T) {
 			tool := os.Getenv(backend.toolEnv)
@@ -644,7 +666,7 @@ func TestSupportingBackendsExposeSemanticMutationCorpus(t *testing.T) {
 					require.Contains(t, violationProperties(exploration.Violations), mutation.property)
 
 					directory, vocabulary := writeSemanticMutationArtifacts(t, mutation.model, backend.backend)
-					result, err := runner.Check(context.Background(), runner.Request{
+					result, err := toolchain.Check(context.Background(), toolchain.Request{
 						Backend: backend.backend, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: pinnedToolVersion(t, backend.toolPin),
 						ModelDir: directory, ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
 						Model: mutation.model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: mutationDepth(mutation), Schedules: 20},
@@ -670,16 +692,16 @@ func TestSupportingBackendsExposeProjectedFoundationMutations(t *testing.T) {
 
 	for _, backend := range []struct {
 		name    string
-		backend runner.Backend
+		backend toolchain.Backend
 		toolEnv string
 		toolPin string
 	}{
-		{name: "tlc", backend: runner.TLC, toolEnv: "UMPIRE_TLA_JAR", toolPin: "tla2tools"},
-		{name: "apalache", backend: runner.Apalache, toolEnv: "UMPIRE_APALACHE_TOOL", toolPin: "apalache"},
-		{name: "p", backend: runner.P, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
-		{name: "pex", backend: runner.PEx, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
-		{name: "ivy", backend: runner.Ivy, toolEnv: "UMPIRE_IVY_TOOL", toolPin: "ivy"},
-		{name: "fizz", backend: runner.Fizz, toolEnv: "UMPIRE_FIZZ_TOOL", toolPin: "fizzbee"},
+		{name: "tlc", backend: toolchain.TLC, toolEnv: "UMPIRE_TLA_JAR", toolPin: "tla2tools"},
+		{name: "apalache", backend: toolchain.Apalache, toolEnv: "UMPIRE_APALACHE_TOOL", toolPin: "apalache"},
+		{name: "p", backend: toolchain.P, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
+		{name: "pex", backend: toolchain.PEx, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
+		{name: "ivy", backend: toolchain.Ivy, toolEnv: "UMPIRE_IVY_TOOL", toolPin: "ivy"},
+		{name: "fizz", backend: toolchain.Fizz, toolEnv: "UMPIRE_FIZZ_TOOL", toolPin: "fizzbee"},
 	} {
 		t.Run(backend.name, func(t *testing.T) {
 			tool := os.Getenv(backend.toolEnv)
@@ -689,7 +711,7 @@ func TestSupportingBackendsExposeProjectedFoundationMutations(t *testing.T) {
 			for _, mutation := range mutations {
 				t.Run(mutation.name, func(t *testing.T) {
 					directory, vocabulary := writeSemanticMutationArtifacts(t, mutation.model, backend.backend)
-					result, err := runner.Check(context.Background(), runner.Request{
+					result, err := toolchain.Check(context.Background(), toolchain.Request{
 						Backend: backend.backend, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: pinnedToolVersion(t, backend.toolPin),
 						ModelDir: directory, ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
 						Model: mutation.model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: mutationDepth(mutation), Schedules: 20},
@@ -707,16 +729,16 @@ func TestEquivalenceGateRejectsWeakenedBackendProperties(t *testing.T) {
 	model := missingGuardMutationModel()
 	for _, backend := range []struct {
 		name    string
-		backend runner.Backend
+		backend toolchain.Backend
 		toolEnv string
 		toolPin string
 	}{
-		{name: "tlc", backend: runner.TLC, toolEnv: "UMPIRE_TLA_JAR", toolPin: "tla2tools"},
-		{name: "apalache", backend: runner.Apalache, toolEnv: "UMPIRE_APALACHE_TOOL", toolPin: "apalache"},
-		{name: "p", backend: runner.P, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
-		{name: "pex", backend: runner.PEx, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
-		{name: "ivy", backend: runner.Ivy, toolEnv: "UMPIRE_IVY_TOOL", toolPin: "ivy"},
-		{name: "fizz", backend: runner.Fizz, toolEnv: "UMPIRE_FIZZ_TOOL", toolPin: "fizzbee"},
+		{name: "tlc", backend: toolchain.TLC, toolEnv: "UMPIRE_TLA_JAR", toolPin: "tla2tools"},
+		{name: "apalache", backend: toolchain.Apalache, toolEnv: "UMPIRE_APALACHE_TOOL", toolPin: "apalache"},
+		{name: "p", backend: toolchain.P, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
+		{name: "pex", backend: toolchain.PEx, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
+		{name: "ivy", backend: toolchain.Ivy, toolEnv: "UMPIRE_IVY_TOOL", toolPin: "ivy"},
+		{name: "fizz", backend: toolchain.Fizz, toolEnv: "UMPIRE_FIZZ_TOOL", toolPin: "fizzbee"},
 	} {
 		t.Run(backend.name, func(t *testing.T) {
 			tool := os.Getenv(backend.toolEnv)
@@ -724,7 +746,7 @@ func TestEquivalenceGateRejectsWeakenedBackendProperties(t *testing.T) {
 				t.Skip(backend.toolEnv + " is not set")
 			}
 			directory, vocabulary := writeWeakenedPropertyArtifacts(t, model, backend.backend, "job-never-closes")
-			result, err := runner.Check(context.Background(), runner.Request{
+			result, err := toolchain.Check(context.Background(), toolchain.Request{
 				Backend: backend.backend, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: pinnedToolVersion(t, backend.toolPin),
 				ModelDir: directory, ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
 				Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: 1, Schedules: 20},
@@ -746,16 +768,16 @@ func TestSupportingBackendsExposeMissingFrameMutation(t *testing.T) {
 
 	for _, backend := range []struct {
 		name    string
-		backend runner.Backend
+		backend toolchain.Backend
 		toolEnv string
 		toolPin string
 	}{
-		{name: "tlc", backend: runner.TLC, toolEnv: "UMPIRE_TLA_JAR", toolPin: "tla2tools"},
-		{name: "apalache", backend: runner.Apalache, toolEnv: "UMPIRE_APALACHE_TOOL", toolPin: "apalache"},
-		{name: "p", backend: runner.P, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
-		{name: "pex", backend: runner.PEx, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
-		{name: "ivy", backend: runner.Ivy, toolEnv: "UMPIRE_IVY_TOOL", toolPin: "ivy"},
-		{name: "fizz", backend: runner.Fizz, toolEnv: "UMPIRE_FIZZ_TOOL", toolPin: "fizzbee"},
+		{name: "tlc", backend: toolchain.TLC, toolEnv: "UMPIRE_TLA_JAR", toolPin: "tla2tools"},
+		{name: "apalache", backend: toolchain.Apalache, toolEnv: "UMPIRE_APALACHE_TOOL", toolPin: "apalache"},
+		{name: "p", backend: toolchain.P, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
+		{name: "pex", backend: toolchain.PEx, toolEnv: "UMPIRE_P_TOOL", toolPin: "p"},
+		{name: "ivy", backend: toolchain.Ivy, toolEnv: "UMPIRE_IVY_TOOL", toolPin: "ivy"},
+		{name: "fizz", backend: toolchain.Fizz, toolEnv: "UMPIRE_FIZZ_TOOL", toolPin: "fizzbee"},
 	} {
 		t.Run(backend.name, func(t *testing.T) {
 			tool := os.Getenv(backend.toolEnv)
@@ -764,10 +786,10 @@ func TestSupportingBackendsExposeMissingFrameMutation(t *testing.T) {
 			}
 			directory, vocabulary := writeMissingFrameMutationArtifacts(t, model, backend.backend)
 			maxDepth := uint64(1)
-			if backend.backend == runner.P {
+			if backend.backend == toolchain.P {
 				maxDepth = 20
 			}
-			result, checkErr := runner.Check(context.Background(), runner.Request{
+			result, checkErr := toolchain.Check(context.Background(), toolchain.Request{
 				Backend: backend.backend, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: pinnedToolVersion(t, backend.toolPin),
 				ModelDir: directory, ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
 				Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: maxDepth, Schedules: 20},
@@ -782,7 +804,7 @@ func TestSupportingBackendsExposeMissingFrameMutation(t *testing.T) {
 
 func TestMissingFrameMutationMatchesEveryGenerator(t *testing.T) {
 	model := missingFrameMutationModel()
-	for _, backend := range []runner.Backend{runner.TLC, runner.Apalache, runner.P, runner.PEx, runner.Ivy, runner.Fizz} {
+	for _, backend := range []toolchain.Backend{toolchain.TLC, toolchain.Apalache, toolchain.P, toolchain.PEx, toolchain.Ivy, toolchain.Fizz} {
 		t.Run(string(backend), func(t *testing.T) {
 			directory, _ := writeMissingFrameMutationArtifacts(t, model, backend)
 			entries, err := os.ReadDir(directory)
@@ -814,32 +836,32 @@ func semanticMutationCorpus() []semanticMutation {
 	}
 }
 
-func writeSemanticMutationArtifacts(t *testing.T, model verify.Model, backend runner.Backend) (string, verify.TraceVocabulary) {
+func writeSemanticMutationArtifacts(t *testing.T, model verify.Model, backend toolchain.Backend) (string, verify.TraceVocabulary) {
 	t.Helper()
 	directory := t.TempDir()
 	var files map[string][]byte
 	var vocabulary verify.TraceVocabulary
 	var err error
 	switch backend {
-	case runner.TLC, runner.Apalache:
-		files, err = tla.Generate(model)
+	case toolchain.TLC, toolchain.Apalache:
+		files, err = toolchain.GenerateTLA(model)
 		require.NoError(t, err)
-		vocabulary, err = tla.TraceVocabulary(model)
-	case runner.P, runner.PEx:
-		files, err = pgenerator.Generate(model)
-	case runner.Ivy:
-		var diagnostics []ivy.Diagnostic
-		files, diagnostics, err = ivy.Generate(model)
+		vocabulary, err = toolchain.TLATraceVocabulary(model)
+	case toolchain.P, toolchain.PEx:
+		files, err = toolchain.GenerateP(model)
+	case toolchain.Ivy:
+		var diagnostics []toolchain.IvyDiagnostic
+		files, diagnostics, err = toolchain.GenerateIvy(model)
 		require.Empty(t, diagnostics)
 		if err == nil {
-			vocabulary, err = ivy.TraceVocabulary(model)
+			vocabulary, err = toolchain.IvyTraceVocabulary(model)
 		}
-	case runner.Fizz:
-		var diagnostics []fizz.Diagnostic
-		files, diagnostics, err = fizz.Generate(model)
+	case toolchain.Fizz:
+		var diagnostics []toolchain.FizzDiagnostic
+		files, diagnostics, err = toolchain.GenerateFizz(model)
 		require.Empty(t, diagnostics)
 		if err == nil {
-			vocabulary, err = fizz.TraceVocabulary(model)
+			vocabulary, err = toolchain.FizzTraceVocabulary(model)
 		}
 	default:
 		require.FailNow(t, "unsupported mutation backend", backend)
@@ -852,7 +874,7 @@ func writeSemanticMutationArtifacts(t *testing.T, model verify.Model, backend ru
 func writeWeakenedPropertyArtifacts(
 	t *testing.T,
 	model verify.Model,
-	backend runner.Backend,
+	backend toolchain.Backend,
 	property string,
 ) (string, verify.TraceVocabulary) {
 	t.Helper()
@@ -861,21 +883,21 @@ func writeWeakenedPropertyArtifacts(
 	var marker string
 	var replacement string
 	switch backend {
-	case runner.TLC, runner.Apalache:
+	case toolchain.TLC, toolchain.Apalache:
 		path = filepath.Join(directory, "Umpire.tla")
-		marker = tla.PropertyIdentifier(property) + " ==\n"
+		marker = toolchain.TLAPropertyIdentifier(property) + " ==\n"
 		replacement = "    TRUE"
-	case runner.P, runner.PEx:
+	case toolchain.P, toolchain.PEx:
 		path = filepath.Join(directory, "Umpire.p")
 		marker = "property " + property + " failed"
 		replacement = "    assert true, " + fmt.Sprintf("%q", marker) + ";"
-	case runner.Ivy:
+	case toolchain.Ivy:
 		path = filepath.Join(directory, "Umpire.ivy")
-		marker = "invariant [" + ivy.PropertyIdentifier(property) + "]"
+		marker = "invariant [" + toolchain.IvyPropertyIdentifier(property) + "]"
 		replacement = marker + " true"
-	case runner.Fizz:
+	case toolchain.Fizz:
 		path = filepath.Join(directory, "Umpire.fizz")
-		marker = "always assertion " + fizz.PropertyIdentifier(property) + ":\n"
+		marker = "always assertion " + toolchain.FizzPropertyIdentifier(property) + ":\n"
 		replacement = "    return True"
 	default:
 		require.FailNow(t, "unsupported weakened-property backend", backend)
@@ -887,26 +909,26 @@ func writeWeakenedPropertyArtifacts(
 	return directory, vocabulary
 }
 
-func writeMissingFrameMutationArtifacts(t *testing.T, model verify.Model, backend runner.Backend) (string, verify.TraceVocabulary) {
+func writeMissingFrameMutationArtifacts(t *testing.T, model verify.Model, backend toolchain.Backend) (string, verify.TraceVocabulary) {
 	t.Helper()
 	directory, vocabulary := writeSemanticMutationArtifacts(t, model, backend)
 	var path string
 	var marker string
 	var replacement string
 	switch backend {
-	case runner.TLC, runner.Apalache:
+	case toolchain.TLC, toolchain.Apalache:
 		path = filepath.Join(directory, "Umpire.tla")
 		marker = "    /\\ UNCHANGED <<exists_job, exists_sentinel, state_sentinel>>"
 		replacement = "    /\\ UNCHANGED <<exists_job, exists_sentinel>>"
-	case runner.P, runner.PEx:
+	case toolchain.P, toolchain.PEx:
 		path = filepath.Join(directory, "Umpire.p")
 		marker = "    state_job[job_0] = job_state_closed;"
 		replacement = marker + "\n    state_sentinel[sentinel_0] = sentinel_state_corrupt;"
-	case runner.Ivy:
+	case toolchain.Ivy:
 		path = filepath.Join(directory, "Umpire.ivy")
 		marker = "    state_job(job) := job_state_closed"
 		replacement = marker + ";\n    state_sentinel(sentinel_0) := sentinel_state_corrupt"
-	case runner.Fizz:
+	case toolchain.Fizz:
 		path = filepath.Join(directory, "Umpire.fizz")
 		marker = "    next_state_sentinel = dict(state_sentinel)"
 		replacement = "    next_state_sentinel = {\"sentinel#0\": \"corrupt\"}"
@@ -920,14 +942,14 @@ func writeMissingFrameMutationArtifacts(t *testing.T, model verify.Model, backen
 	return directory, vocabulary
 }
 
-func weakenGeneratedProperty(t *testing.T, source string, backend runner.Backend, marker, replacement string) string {
+func weakenGeneratedProperty(t *testing.T, source string, backend toolchain.Backend, marker, replacement string) string {
 	t.Helper()
 	markerIndex := strings.Index(source, marker)
 	require.NotEqual(t, -1, markerIndex, marker)
-	if backend == runner.TLC || backend == runner.Apalache || backend == runner.Fizz {
+	if backend == toolchain.TLC || backend == toolchain.Apalache || backend == toolchain.Fizz {
 		bodyStart := markerIndex + len(marker)
 		bodyEnd := strings.Index(source[bodyStart:], "\n\n")
-		if bodyEnd < 0 && backend == runner.Fizz {
+		if bodyEnd < 0 && backend == toolchain.Fizz {
 			return source[:bodyStart] + replacement + "\n"
 		}
 		require.NotEqual(t, -1, bodyEnd, marker)
@@ -1162,24 +1184,24 @@ func violationProperties(violations []verify.PropertyViolation) []string {
 func TestFreshIdentityAliasingMutationIsExposedByTLA(t *testing.T) {
 	model := freshIdentityModel()
 	directory := writeFreshIdentityAliasingArtifacts(t, model)
-	vocabulary, err := tla.TraceVocabulary(model)
+	vocabulary, err := toolchain.TLATraceVocabulary(model)
 	require.NoError(t, err)
 	for _, test := range []struct {
 		name     string
-		backend  runner.Backend
+		backend  toolchain.Backend
 		tool     string
 		toolEnv  string
 		version  string
 		maxDepth uint64
 	}{
-		{name: "tlc", backend: runner.TLC, tool: os.Getenv("UMPIRE_TLA_JAR"), toolEnv: "UMPIRE_TLA_JAR", version: pinnedToolVersion(t, "tla2tools")},
-		{name: "apalache", backend: runner.Apalache, tool: os.Getenv("UMPIRE_APALACHE_TOOL"), toolEnv: "UMPIRE_APALACHE_TOOL", version: pinnedToolVersion(t, "apalache"), maxDepth: 1},
+		{name: "tlc", backend: toolchain.TLC, tool: os.Getenv("UMPIRE_TLA_JAR"), toolEnv: "UMPIRE_TLA_JAR", version: pinnedToolVersion(t, "tla2tools")},
+		{name: "apalache", backend: toolchain.Apalache, tool: os.Getenv("UMPIRE_APALACHE_TOOL"), toolEnv: "UMPIRE_APALACHE_TOOL", version: pinnedToolVersion(t, "apalache"), maxDepth: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if test.tool == "" {
 				t.Skip(test.toolEnv + " is not set")
 			}
-			result, err := runner.Check(context.Background(), runner.Request{
+			result, err := toolchain.Check(context.Background(), toolchain.Request{
 				Backend: test.backend, ToolPath: test.tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: test.version,
 				ModelDir: filepath.Join(directory, "tla"), ArtifactDir: filepath.Join(directory, "results", test.name), Timeout: 2 * time.Minute,
 				Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: test.maxDepth},
@@ -1197,9 +1219,9 @@ func TestFreshIdentityAliasingMutationIsExposedByP(t *testing.T) {
 	}
 	model := freshIdentityModel()
 	directory := writeFreshIdentityAliasingArtifacts(t, model)
-	for _, backend := range []runner.Backend{runner.P, runner.PEx} {
+	for _, backend := range []toolchain.Backend{toolchain.P, toolchain.PEx} {
 		t.Run(string(backend), func(t *testing.T) {
-			result, err := runner.Check(context.Background(), runner.Request{
+			result, err := toolchain.Check(context.Background(), toolchain.Request{
 				Backend: backend, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: pinnedToolVersion(t, "p"),
 				ModelDir: filepath.Join(directory, "p"), ArtifactDir: filepath.Join(directory, "results", string(backend)), Timeout: 2 * time.Minute,
 				Model: model, Bounds: verify.Bounds{MaxDepth: 20, Schedules: 20},
@@ -1217,10 +1239,10 @@ func TestFreshIdentityAliasingMutationIsExposedByIvy(t *testing.T) {
 	}
 	model := freshIdentityModel()
 	directory := writeFreshIdentityAliasingArtifacts(t, model)
-	vocabulary, err := ivy.TraceVocabulary(model)
+	vocabulary, err := toolchain.IvyTraceVocabulary(model)
 	require.NoError(t, err)
-	result, err := runner.Check(context.Background(), runner.Request{
-		Backend: runner.Ivy, ToolPath: tool, ToolVersion: pinnedToolVersion(t, "ivy"),
+	result, err := toolchain.Check(context.Background(), toolchain.Request{
+		Backend: toolchain.Ivy, ToolPath: tool, ToolVersion: pinnedToolVersion(t, "ivy"),
 		ModelDir: filepath.Join(directory, "ivy"), ArtifactDir: filepath.Join(directory, "results", "ivy"), Timeout: 2 * time.Minute,
 		Model: model, TraceVocabulary: vocabulary,
 	})
@@ -1235,10 +1257,10 @@ func TestFreshIdentityAliasingMutationIsExposedByFizzBee(t *testing.T) {
 	}
 	model := freshIdentityModel()
 	directory := writeFreshIdentityAliasingArtifacts(t, model)
-	vocabulary, err := fizz.TraceVocabulary(model)
+	vocabulary, err := toolchain.FizzTraceVocabulary(model)
 	require.NoError(t, err)
-	result, err := runner.Check(context.Background(), runner.Request{
-		Backend: runner.Fizz, ToolPath: tool, ToolVersion: pinnedToolVersion(t, "fizzbee"),
+	result, err := toolchain.Check(context.Background(), toolchain.Request{
+		Backend: toolchain.Fizz, ToolPath: tool, ToolVersion: pinnedToolVersion(t, "fizzbee"),
 		ModelDir: filepath.Join(directory, "fizz"), ArtifactDir: filepath.Join(directory, "results", "fizz"), Timeout: 2 * time.Minute,
 		Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: 1},
 	})
@@ -1251,11 +1273,11 @@ func TestSeededSafetyBugIsFoundByPAndPEx(t *testing.T) {
 	if tool == "" {
 		t.Skip("UMPIRE_P_TOOL is not set")
 	}
-	for _, backend := range []runner.Backend{runner.P, runner.PEx} {
+	for _, backend := range []toolchain.Backend{toolchain.P, toolchain.PEx} {
 		t.Run(string(backend), func(t *testing.T) {
 			directory := writeSeededArtifacts(t)
 			model := seededBugModel()
-			result, err := runner.Check(context.Background(), runner.Request{
+			result, err := toolchain.Check(context.Background(), toolchain.Request{
 				Backend: backend, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "3.1.0",
 				ModelDir: filepath.Join(directory, "p"), ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
 				Model: model, Bounds: verify.Bounds{MaxDepth: 20, Schedules: 20},
@@ -1273,12 +1295,12 @@ func TestSeededSafetyBugIsRejectedByIvy(t *testing.T) {
 	}
 	directory := writeSeededArtifacts(t)
 	model := seededBugModel()
-	vocabulary, err := ivy.TraceVocabulary(model)
+	vocabulary, err := toolchain.IvyTraceVocabulary(model)
 	require.NoError(t, err)
-	result, err := runner.Check(context.Background(), runner.Request{
-		Backend: runner.Ivy, ToolPath: tool, ToolVersion: "1.8.26",
+	result, err := toolchain.Check(context.Background(), toolchain.Request{
+		Backend: toolchain.Ivy, ToolPath: tool, ToolVersion: "1.8.26",
 		ModelDir: filepath.Join(directory, "ivy"), ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
-		Model: model, TraceVocabulary: vocabulary, ActionNames: map[string]string{ivy.ActionIdentifier("seed.bug"): "seed.bug"},
+		Model: model, TraceVocabulary: vocabulary, ActionNames: map[string]string{toolchain.IvyActionIdentifier("seed.bug"): "seed.bug"},
 	})
 	require.NoError(t, err)
 	requireSeededCounterexample(t, result)
@@ -1289,17 +1311,17 @@ func writeSeededArtifacts(t *testing.T) string {
 	directory := t.TempDir()
 	model := seededBugModel()
 	files := map[string][]byte{}
-	tlaFiles, err := tla.Generate(model)
+	tlaFiles, err := toolchain.GenerateTLA(model)
 	require.NoError(t, err)
 	mergeFiles(files, "tla", tlaFiles)
-	pFiles, err := pgenerator.Generate(model)
+	pFiles, err := toolchain.GenerateP(model)
 	require.NoError(t, err)
 	mergeFiles(files, "p", pFiles)
-	ivyFiles, diagnostics, err := ivy.Generate(model)
+	ivyFiles, diagnostics, err := toolchain.GenerateIvy(model)
 	require.NoError(t, err)
 	require.Empty(t, diagnostics)
 	mergeFiles(files, "ivy", ivyFiles)
-	fizzFiles, fizzDiagnostics, err := fizz.Generate(model)
+	fizzFiles, fizzDiagnostics, err := toolchain.GenerateFizz(model)
 	require.NoError(t, err)
 	require.Empty(t, fizzDiagnostics)
 	mergeFiles(files, "fizz", fizzFiles)
@@ -1311,12 +1333,12 @@ func writeFreshIdentityAliasingArtifacts(t *testing.T, model verify.Model) strin
 	t.Helper()
 	directory := t.TempDir()
 	files := map[string][]byte{}
-	tlaFiles, err := tla.Generate(model)
+	tlaFiles, err := toolchain.GenerateTLA(model)
 	require.NoError(t, err)
 	tlaFiles["Umpire.tla"] = replaceRequired(t, tlaFiles["Umpire.tla"], "    /\\ left /= right\n", "")
 	mergeFiles(files, "tla", tlaFiles)
 
-	pFiles, err := pgenerator.Generate(model)
+	pFiles, err := toolchain.GenerateP(model)
 	require.NoError(t, err)
 	pSource := string(pFiles["Umpire.p"])
 	for left := range 2 {
@@ -1328,13 +1350,13 @@ func writeFreshIdentityAliasingArtifacts(t *testing.T, model verify.Model) strin
 	pFiles["Umpire.p"] = []byte(pSource)
 	mergeFiles(files, "p", pFiles)
 
-	ivyFiles, diagnostics, err := ivy.Generate(model)
+	ivyFiles, diagnostics, err := toolchain.GenerateIvy(model)
 	require.NoError(t, err)
 	require.Empty(t, diagnostics)
 	ivyFiles["Umpire.ivy"] = replaceRequired(t, ivyFiles["Umpire.ivy"], "    require left ~= right;\n", "")
 	mergeFiles(files, "ivy", ivyFiles)
 
-	fizzFiles, fizzDiagnostics, err := fizz.Generate(model)
+	fizzFiles, fizzDiagnostics, err := toolchain.GenerateFizz(model)
 	require.NoError(t, err)
 	require.Empty(t, fizzDiagnostics)
 	fizzFiles["Umpire.fizz"] = replaceRequired(t, fizzFiles["Umpire.fizz"], "    require left != right\n", "")
@@ -1359,7 +1381,7 @@ func requireFreshIdentityMutationExposed(t *testing.T, result verify.Result) {
 
 func pinnedToolVersion(t *testing.T, name string) string {
 	t.Helper()
-	for _, tool := range runner.ToolVersions() {
+	for _, tool := range toolchain.ToolVersions() {
 		if tool.Name == name {
 			return tool.Version
 		}

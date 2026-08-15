@@ -10,6 +10,9 @@
 .coverage
 .testoutput
 testdata/
+!/tests/umpire2/testdata/
+!/tests/umpire2/testdata/genmodels/
+!/tests/umpire2/testdata/genmodels/**
 
 *.out
 *.test
@@ -22,9 +25,9 @@ testdata/
 /test.log
 
 # Umpire verification tool output
-/tests/umpire2/genmodels-results/
-/tests/umpire2/genmodels/tla/_apalache-out/
-/tests/umpire2/genmodels/p/PGenerated/
+/tests/umpire2/testdata/results/
+/tests/umpire2/testdata/genmodels/tla/_apalache-out/
+/tests/umpire2/testdata/genmodels/p/PGenerated/
 
 # Executables produced by temporal repo
 /temporal-*

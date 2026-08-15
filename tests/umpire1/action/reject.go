@@ -58,8 +58,7 @@ var StartUnknownEndpoint = umpire.Action{
 // CountEntities reports how many entities of type t the Monitor currently models in the env's
 // namespace — used to assert a rejection produced exactly one (rejected) operation.
 func CountEntities(env *testcore.TestEnv, t umpire.EntityType) int {
-	nsRoot := umpire.NewEntityID(model.NamespaceType, env.NamespaceID().String())
-	return len(env.GetMonitor().ModelState().QueryEntities(t, 0, &nsRoot))
+	return len(env.GetMonitor().Snapshot(env.NamespaceID().String()).EntitiesOfType(t))
 }
 
 // ---- Per-field variant enumeration by descriptor reflection ----

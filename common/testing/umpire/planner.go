@@ -3,8 +3,8 @@ package umpire
 // This file is the generic route-finder: a pure function over a Lifecycle that computes a Plan
 // (route[s] through the model graph) under Constraints, before driving anything. It lives in
 // the framework so any consumer (e.g. the actions-model PlanEdge) can use it without the
-// Temporal model registry, which stays in tests/umpire1/planner (Models/DefaultModels). See
-// UMPIRE.md for the broader architecture.
+// Temporal model registry, which stays behind the compiled tests/umpire2 Protocol. See UMPIRE.md
+// for the broader architecture.
 
 import (
 	"context"

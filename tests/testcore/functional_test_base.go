@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testtelemetry"
-	umpirefw "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
 	testmonitor "go.temporal.io/server/tests/testcore/monitor"
@@ -287,7 +286,9 @@ func (s *FunctionalTestBase) GetMonitor() testmonitor.Monitor {
 // by entityKey and found no violation.
 func (s *FunctionalTestBase) RequireRulePassed(rule interface{ Name() string }, entityKey string) {
 	s.T().Helper()
-	s.GetMonitor().RequireRulePassed(s.T(), rule, entityKey)
+	name := rule.Name()
+	passed := s.GetMonitor().PassedKeys(name)
+	require.Contains(s.T(), passed, entityKey, "rule %s did not pass entity %q; passed keys: %v", name, entityKey, passed)
 }
 
 func (s *FunctionalTestBase) SetupSuite() {
@@ -347,7 +348,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.Require().NotNil(s.monitor)
 
 	additionalInterceptors := make([]grpc.UnaryServerInterceptor, 0, len(params.AdditionalInterceptors)+1)
-	additionalInterceptors = append(additionalInterceptors, umpirefw.NewUnaryServerInterceptor(s.monitor, nil))
+	additionalInterceptors = append(additionalInterceptors, s.monitor.UnaryServerInterceptor(nil))
 	additionalInterceptors = append(additionalInterceptors, params.AdditionalInterceptors...)
 
 	s.testClusterConfig = &TestClusterConfig{

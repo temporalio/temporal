@@ -8,14 +8,13 @@ import (
 	"sync"
 
 	umpirefw "go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire2/protocol"
+	"go.temporal.io/server/tests/umpire2/internal/protocol"
 )
 
 type executionTrace struct {
 	mu         sync.Mutex
 	recorder   *umpirefw.TraceRecorder
-	registry   *umpirefw.ModelState
-	relations  *umpirefw.RelationStore
+	runtime    *umpirefw.Runtime
 	sequence   uint64
 	seen       map[string]struct{}
 	active     map[string]map[string][]string
@@ -24,13 +23,11 @@ type executionTrace struct {
 }
 
 func newExecutionTrace(
-	registry *umpirefw.ModelState,
-	relations *umpirefw.RelationStore,
+	runtime *umpirefw.Runtime,
 	declaredFootprints []protocol.NamedCausalFootprint,
 ) *executionTrace {
 	trace := &executionTrace{
-		registry:   registry,
-		relations:  relations,
+		runtime:    runtime,
 		footprints: make(map[string]umpirefw.CausalFootprint, len(declaredFootprints)),
 	}
 	for _, declared := range declaredFootprints {
@@ -155,31 +152,29 @@ func (t *executionTrace) recordFacts(facts []umpirefw.Fact) error {
 			errs = append(errs, err)
 		}
 	}
-	for _, edge := range t.relations.Snapshot() {
-		if _, scoped := roots[edge.Scope]; !scoped {
-			continue
-		}
-		semanticKey := fmt.Sprintf("relation:%s:%s:%s", edge.Type, edge.Source, edge.Target)
-		if _, seen := t.seen[semanticKey]; seen {
-			continue
-		}
-		t.seen[semanticKey] = struct{}{}
-		if err := t.recorder.Record(umpirefw.TraceEvent{
-			Key:    t.nextKey("relation"),
-			Kind:   umpirefw.TraceRelation,
-			Name:   string(edge.Type),
-			Source: umpirefw.InProcessEvidence,
-			Causes: t.activeCauses(edge.Scope.ID),
-			Fields: map[string]string{
-				"source": edge.Source.String(),
-				"target": edge.Target.String(),
-			},
-		}); err != nil {
-			errs = append(errs, err)
-		}
-	}
 	for root := range roots {
-		for _, entry := range t.registry.QueryAll(0, &root) {
+		view := t.runtime.View(root)
+		for _, edge := range view.Relations() {
+			semanticKey := fmt.Sprintf("relation:%s:%s:%s", edge.Type, edge.Source, edge.Target)
+			if _, seen := t.seen[semanticKey]; seen {
+				continue
+			}
+			t.seen[semanticKey] = struct{}{}
+			if err := t.recorder.Record(umpirefw.TraceEvent{
+				Key:    t.nextKey("relation"),
+				Kind:   umpirefw.TraceRelation,
+				Name:   string(edge.Type),
+				Source: umpirefw.InProcessEvidence,
+				Causes: t.activeCauses(edge.Scope.ID),
+				Fields: map[string]string{
+					"source": edge.Source.String(),
+					"target": edge.Target.String(),
+				},
+			}); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		for _, entry := range view.AllEntities(0) {
 			lifecycled, ok := entry.Entity.(umpirefw.Lifecycled)
 			if !ok {
 				continue

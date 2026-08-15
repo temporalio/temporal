@@ -25,7 +25,7 @@
 //
 // # Observation and injection seams
 //
-// [FactRecorder], [ResponseRecorder], and [RejectionRecorder] expose gRPC observations through
-// [NewUnaryServerInterceptor]. [FaultInjector] provides the corresponding active fault seam.
-// [Instrument] and [RecordFact] emit in-process observations as OTEL spans.
+// [FactRecorder], [ResponseRecorder], and [RejectionRecorder] expose observation contracts.
+// [FaultInjector] provides the corresponding active fault seam. Concrete gRPC and OpenTelemetry
+// adapters live in dedicated subpackages so the model-testing core remains transport-neutral.
 package umpire

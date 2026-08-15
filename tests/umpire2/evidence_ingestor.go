@@ -3,39 +3,29 @@ package umpire2
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	umpirefw "go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire2/protocol"
+	"go.temporal.io/server/tests/umpire2/internal/protocol"
 )
 
 type evidenceIngestor struct {
-	registry   *umpirefw.ModelState
-	rulebook   *umpirefw.RuleRegistry
-	factLog    *umpirefw.FactLog
+	runtime    *umpirefw.Runtime
 	protocol   *protocol.Protocol
-	relations  *umpirefw.RelationStore
 	trace      *executionTrace
 	coverageMu sync.RWMutex
 	coverage   *umpirefw.Coverage
 }
 
 func newEvidenceIngestor(
-	registry *umpirefw.ModelState,
-	rulebook *umpirefw.RuleRegistry,
-	factLog *umpirefw.FactLog,
+	runtime *umpirefw.Runtime,
 	compiled *protocol.Protocol,
-	relations *umpirefw.RelationStore,
 	trace *executionTrace,
 ) *evidenceIngestor {
 	return &evidenceIngestor{
-		registry:  registry,
-		rulebook:  rulebook,
-		factLog:   factLog,
-		protocol:  compiled,
-		relations: relations,
-		trace:     trace,
+		runtime:  runtime,
+		protocol: compiled,
+		trace:    trace,
 	}
 }
 
@@ -43,33 +33,10 @@ func (i *evidenceIngestor) ingest(ctx context.Context, facts []umpirefw.Fact) er
 	if len(facts) == 0 {
 		return nil
 	}
-	i.factLog.AddAll(facts)
-	modelErr := i.registry.RouteFacts(ctx, facts)
-	relationErrors := i.protocol.ApplyRelations(i.relations, facts)
-	for _, relationErr := range relationErrors {
-		i.recordRelationConflict(relationErr)
-	}
-	relationErr := errors.Join(relationErrors...)
+	runtimeErr := i.runtime.Ingest(ctx, facts...)
 	i.recordFactCoverage(facts)
 	traceErr := i.trace.recordFacts(facts)
-	return errors.Join(modelErr, relationErr, traceErr)
-}
-
-func (i *evidenceIngestor) recordRelationConflict(err error) {
-	var relationErr *umpirefw.RelationError
-	if !errors.As(err, &relationErr) || relationErr.Scope.Type == "" || relationErr.Scope.ID == "" {
-		return
-	}
-	key := fmt.Sprintf("%s:%s:%s:%s", relationErr.Type, relationErr.Source, relationErr.Target, relationErr.Reason)
-	i.rulebook.RecordConformance(relationErr.Scope, key, umpirefw.Violation{
-		Rule:    "Conformance",
-		Message: fmt.Sprintf("relation %s rejected: %s", relationErr.Type, relationErr.Reason),
-		Tags: map[string]string{
-			"relation": string(relationErr.Type),
-			"source":   relationErr.Source.String(),
-			"target":   relationErr.Target.String(),
-		},
-	})
+	return errors.Join(runtimeErr, traceErr)
 }
 
 func (i *evidenceIngestor) recordFactCoverage(facts []umpirefw.Fact) {
@@ -86,11 +53,12 @@ func (i *evidenceIngestor) recordFactCoverage(facts []umpirefw.Fact) {
 			roots[path.Root()] = struct{}{}
 		}
 	}
-	for _, edge := range i.relations.Snapshot() {
-		coverage.Record(umpirefw.CoveragePoint{Kind: umpirefw.CoverageRelation, ID: string(edge.Type)})
-	}
 	for root := range roots {
-		for _, entry := range i.registry.QueryAll(0, &root) {
+		view := i.runtime.View(root)
+		for _, edge := range view.Relations() {
+			coverage.Record(umpirefw.CoveragePoint{Kind: umpirefw.CoverageRelation, ID: string(edge.Type)})
+		}
+		for _, entry := range view.AllEntities(0) {
 			lifecycled, ok := entry.Entity.(umpirefw.Lifecycled)
 			if !ok {
 				continue
@@ -118,7 +86,7 @@ func (i *evidenceIngestor) observeExecution(observed umpirefw.ExecutionObservati
 }
 
 func (i *evidenceIngestor) check(ctx context.Context, root umpirefw.EntityID, final bool) []umpirefw.Violation {
-	violations := i.rulebook.Check(ctx, final, &root)
+	violations := i.runtime.Check(ctx, root, final)
 	i.recordRuleCoverage(violations)
 	return violations
 }
@@ -130,7 +98,7 @@ func (i *evidenceIngestor) recordRuleCoverage(violations []umpirefw.Violation) {
 	if coverage == nil {
 		return
 	}
-	for _, stats := range i.rulebook.Stats() {
+	for _, stats := range i.runtime.RuleStats() {
 		coverage.Record(umpirefw.CoveragePoint{Kind: umpirefw.CoverageRuleEvaluated, ID: stats.Name})
 	}
 	for _, violation := range violations {
@@ -139,10 +107,7 @@ func (i *evidenceIngestor) recordRuleCoverage(violations []umpirefw.Violation) {
 }
 
 func (i *evidenceIngestor) purgeScope(root umpirefw.EntityID) {
-	i.registry.PurgeScope(root)
-	i.factLog.PurgeScope(root)
-	i.rulebook.PurgeScope(root)
-	i.relations.PurgeScope(root)
+	i.runtime.Purge(root)
 	i.trace.purgeScope(root.ID)
 }
 

@@ -20,9 +20,6 @@ import (
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/umpire2"
 	ksworker "go.temporal.io/server/tests/umpire2/kitchensink/worker"
-	"go.temporal.io/server/tests/umpire2/ksdriver"
-	"go.temporal.io/server/tests/umpire2/model"
-	"go.temporal.io/server/tests/umpire2/planner"
 )
 
 // UmpireTestSuite is an end-to-end test of both halves of the umpire together:
@@ -36,6 +33,13 @@ type UmpireTestSuite struct {
 
 func TestUmpireTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &UmpireTestSuite{})
+}
+
+func defaultUmpireProtocol(t *testing.T) *umpire2.Protocol {
+	t.Helper()
+	compiled, err := umpire2.DefaultProtocol()
+	require.NoError(t, err)
+	return compiled
 }
 
 // signalThenComplete blocks on a "finish" signal, then returns — so the workflow's
@@ -54,7 +58,7 @@ type workflowDriver struct {
 	run        sdkclient.WorkflowRun
 }
 
-func (d *workflowDriver) Do(ctx context.Context, a planner.Step) error {
+func (d *workflowDriver) Do(ctx context.Context, a umpirefw.Step) error {
 	switch a.Event {
 	case "start":
 		run, err := d.env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
@@ -82,7 +86,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveWorkflowToCompletion() {
 	env.SdkWorker().RegisterWorkflow(signalThenComplete)
 
 	// 1) PLAN: describe the target state; the Driver computes the route. No traffic yet.
-	plan, err := planner.DefaultModels().PlanTo("Workflow", "completed", planner.Shortest, planner.Constraints{})
+	plan, err := defaultUmpireProtocol(t).PlanTo(umpire2.WorkflowType, umpire2.WorkflowCompleted, umpirefw.Shortest, umpirefw.Constraints{})
 	require.NoError(t, err)
 	require.Equal(t, [][]string{{"start", "complete"}}, plan.Routes)
 
@@ -93,10 +97,9 @@ func (s *UmpireTestSuite) TestPlanAndDriveWorkflowToCompletion() {
 	// 3) JUDGE: wait until the Monitor's model reflects the completed workflow, then
 	// assert it finds no violations for this namespace. (The teardown check does this
 	// again authoritatively; asserting here makes the plan->drive->judge loop explicit.)
-	nsRoot := umpirefw.NewEntityID(model.NamespaceType, env.NamespaceID().String())
 	require.Eventually(t, func() bool {
-		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowType, 0, &nsRoot) {
-			if wf, ok := e.Entity.(*model.Workflow); ok && wf.FSM.Current() == "completed" {
+		for _, workflow := range env.GetMonitor().Snapshot(env.NamespaceID().String()).EntitiesOfType(umpire2.WorkflowType) {
+			if workflow.Current == "completed" {
 				return true
 			}
 		}
@@ -118,13 +121,13 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkWorkflow() {
 	env.SdkWorker().RegisterWorkflow(ksworker.KitchenSinkWorkflow)
 
 	// 1) PLAN: describe the target state; the Planner computes the route.
-	plan, err := planner.DefaultModels().PlanTo("Workflow", "completed", planner.Shortest, planner.Constraints{})
+	plan, err := defaultUmpireProtocol(t).PlanTo(umpire2.WorkflowType, umpire2.WorkflowCompleted, umpirefw.Shortest, umpirefw.Constraints{})
 	require.NoError(t, err)
 	require.Equal(t, [][]string{{"start", "complete"}}, plan.Routes)
 
 	// 2) DRIVE: the route compiles to a kitchensink TestInput (a WorkflowInput that
 	// returns a result); RunPlan starts the kitchensink workflow and drives it.
-	require.NoError(t, ksdriver.RunPlan(env.Context(), env.SdkClient(), ksdriver.RunOptions{
+	require.NoError(t, umpire2.RunKitchenSinkPlan(env.Context(), env.SdkClient(), umpire2.KitchenSinkRunOptions{
 		Namespace:      env.NamespaceID().String(),
 		TaskQueue:      env.WorkerTaskQueue(),
 		WorkflowType:   "KitchenSinkWorkflow",
@@ -132,10 +135,9 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkWorkflow() {
 	}, "Workflow", plan))
 
 	// 3) JUDGE: the Monitor observes the completion, then finds no violations.
-	nsRoot := umpirefw.NewEntityID(model.NamespaceType, env.NamespaceID().String())
 	require.Eventually(t, func() bool {
-		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowType, 0, &nsRoot) {
-			if wf, ok := e.Entity.(*model.Workflow); ok && wf.FSM.Current() == model.WorkflowCompleted {
+		for _, workflow := range env.GetMonitor().Snapshot(env.NamespaceID().String()).EntitiesOfType(umpire2.WorkflowType) {
+			if workflow.Current == umpire2.WorkflowCompleted {
 				return true
 			}
 		}
@@ -189,7 +191,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 	env.SdkWorker().RegisterWorkflow(callerWorkflow)
 
 	// PLAN: shortest route to a settled operation (sync path skips "started").
-	plan, err := planner.DefaultModels().PlanTo("NexusOperation", "succeeded", planner.Shortest, planner.Constraints{})
+	plan, err := defaultUmpireProtocol(t).PlanTo(umpire2.NexusOperationType, umpire2.NexusSucceeded, umpirefw.Shortest, umpirefw.Constraints{})
 	require.NoError(t, err)
 	require.Equal(t, [][]string{{"schedule", "succeed"}}, plan.Routes)
 
@@ -203,13 +205,12 @@ func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 
 	// JUDGE: the Monitor built a settled NexusOperation purely from chasm.transition
 	// telemetry, and finds no violations.
-	nsRoot := umpirefw.NewEntityID(model.NamespaceType, nsID)
 	var observedAttempt int
 	require.Eventually(t, func() bool {
-		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &nsRoot) {
-			if op, ok := e.Entity.(*model.NexusOperation); ok && op.FSM.IsTerminal() {
-				observedAttempt = op.Attempt
-				t.Logf("observed CHASM Nexus operation in state %q (attempt %d)", op.FSM.Current(), op.Attempt)
+		for _, operation := range env.GetMonitor().Snapshot(nsID).EntitiesOfType(umpire2.NexusOperationType) {
+			if operation.Terminal {
+				observedAttempt = operation.Attempt
+				t.Logf("observed CHASM Nexus operation in state %q (attempt %d)", operation.Current, operation.Attempt)
 				return true
 			}
 		}
@@ -257,12 +258,12 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkNexusOperation() {
 	env.SdkWorker().RegisterWorkflow(ksworker.KitchenSinkWorkflow)
 
 	// PLAN: shortest route to a settled operation (sync path skips "started").
-	plan, err := planner.DefaultModels().PlanTo("NexusOperation", "succeeded", planner.Shortest, planner.Constraints{})
+	plan, err := defaultUmpireProtocol(t).PlanTo(umpire2.NexusOperationType, umpire2.NexusSucceeded, umpirefw.Shortest, umpirefw.Constraints{})
 	require.NoError(t, err)
 	require.Equal(t, [][]string{{"schedule", "succeed"}}, plan.Routes)
 
 	// DRIVE: the route compiles to a kitchensink workflow that schedules + awaits the op.
-	require.NoError(t, ksdriver.RunPlan(ctx, env.SdkClient(), ksdriver.RunOptions{
+	require.NoError(t, umpire2.RunKitchenSinkPlan(ctx, env.SdkClient(), umpire2.KitchenSinkRunOptions{
 		Namespace:      nsID,
 		TaskQueue:      env.WorkerTaskQueue(),
 		WorkflowType:   "KitchenSinkWorkflow",
@@ -272,11 +273,10 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkNexusOperation() {
 	}, "NexusOperation", plan))
 
 	// JUDGE: the Monitor built a settled NexusOperation from chasm.transition telemetry.
-	nsRoot := umpirefw.NewEntityID(model.NamespaceType, nsID)
 	require.Eventually(t, func() bool {
-		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &nsRoot) {
-			if op, ok := e.Entity.(*model.NexusOperation); ok && op.FSM.IsTerminal() {
-				t.Logf("observed kitchensink-driven Nexus operation in state %q", op.FSM.Current())
+		for _, operation := range env.GetMonitor().Snapshot(nsID).EntitiesOfType(umpire2.NexusOperationType) {
+			if operation.Terminal {
+				t.Logf("observed kitchensink-driven Nexus operation in state %q", operation.Current)
 				return true
 			}
 		}

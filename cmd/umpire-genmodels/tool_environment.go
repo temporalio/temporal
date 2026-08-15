@@ -67,6 +67,17 @@ func toolArtifact(tool verify.ToolVersion, platform string) (verify.ToolArtifact
 	return verify.ToolArtifact{}, fmt.Errorf("tool %q has no artifact for platform %q", tool.Name, platform)
 }
 
+func localToolPlatform(goos string, goarch string) (string, error) {
+	architecture := goarch
+	if architecture == "amd64" {
+		architecture = "x86_64"
+	}
+	if (goos != "darwin" && goos != "linux") || (architecture != "arm64" && architecture != "x86_64") {
+		return "", fmt.Errorf("unsupported local verification tool platform %q", goos+"-"+goarch)
+	}
+	return goos + "-" + architecture, nil
+}
+
 func toolEnvironmentIdentifier(name string) string {
 	return strings.Map(func(value rune) rune {
 		if unicode.IsLetter(value) || unicode.IsDigit(value) {

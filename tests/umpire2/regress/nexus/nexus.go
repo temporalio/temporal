@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/testing/umpire/regress"
-	"go.temporal.io/server/tests/umpire2/regress/rpc"
 )
 
 var (
@@ -24,6 +23,8 @@ var (
 
 type StateValue string
 
+type RPCName string
+
 const (
 	Scheduled         StateValue = "scheduled"
 	CompletionPending StateValue = "completion_pending"
@@ -33,6 +34,8 @@ const (
 	TimedOut          StateValue = "timed_out"
 	CallbackFailed    StateValue = "callback_failed"
 )
+
+const CancelNexusOperation RPCName = "CancelNexusOperation"
 
 type OutcomeValue string
 
@@ -232,11 +235,11 @@ func LinkEndpoint(operation, endpoint string) regress.Instruction {
 	return regress.Outcome(linkEndpointSchema, regress.Symbol(operation), regress.Literal(endpoint))
 }
 
-func Drop(name rpc.Name) regress.Instruction {
+func Drop(name RPCName) regress.Instruction {
 	return regress.Policy(dropSchema, regress.Literal(name))
 }
 
-func FailNext(name rpc.Name) regress.Instruction {
+func FailNext(name RPCName) regress.Instruction {
 	return regress.Policy(failNextSchema, regress.Literal(name))
 }
 

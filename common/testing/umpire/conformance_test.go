@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/log"
 )
 
 // condFact carries an FSM event name for condEntity to fire.
@@ -42,7 +41,7 @@ func TestRuleRegistry_ConformanceSurfacesIllegalTransitions(t *testing.T) {
 	ms.RegisterEntity(func() Entity { return &condEntity{fsm: NewLifecycle(branchSpec())} }, &condFact{})
 
 	rr := NewRuleRegistry()
-	require.NoError(t, rr.InitRules(ms, log.NewNoopLogger(), RuleConfig{}))
+	require.NoError(t, rr.InitRules(ms, RuleConfig{}))
 
 	target := &EntityPath{EntityID: NewEntityID("condEntity", "x")}
 	// A legal edge, then an out-of-branch (illegal) edge.
@@ -66,7 +65,7 @@ func TestRuleRegistry_ConformanceSurfacesIllegalTransitions(t *testing.T) {
 func TestRuleRegistry_RetainsScopedRecordedConformanceViolations(t *testing.T) {
 	ms := NewModelState()
 	rr := NewRuleRegistry()
-	require.NoError(t, rr.InitRules(ms, log.NewNoopLogger(), RuleConfig{}))
+	require.NoError(t, rr.InitRules(ms, RuleConfig{}))
 	left := NewEntityID("Namespace", "left")
 	right := NewEntityID("Namespace", "right")
 	violation := Violation{

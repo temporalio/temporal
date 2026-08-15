@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -70,28 +69,6 @@ func TestIntegerDomainProducesBoundariesAndNormalizes(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestPayloadDomainMutationsAndNormalizationDoNotExposeRawData(t *testing.T) {
-	domain := NewPayloadDomain(8)
-	payload := &commonpb.Payload{
-		Metadata: map[string][]byte{"encoding": []byte("json/plain")},
-		Data:     []byte("secret"),
-	}
-	variants := domain.Variants()
-	require.Len(t, variants, 3)
-	for _, variant := range variants {
-		mutated, ok := variant.Mutate(payload).(*commonpb.Payload)
-		require.True(t, ok)
-		require.NotSame(t, payload, mutated)
-	}
-
-	normalized, err := domain.Normalize(payload)
-	require.NoError(t, err)
-	require.NotContains(t, normalized, "secret")
-	require.Contains(t, normalized, "sha256:")
-	_, err = domain.Normalize(&commonpb.Payload{Data: []byte("123456789")})
-	require.ErrorIs(t, err, ErrDomainValue)
-}
-
 func TestUnsupportedDomainIsExplicit(t *testing.T) {
 	domain := NewUnsupportedDomain("validator registry unavailable")
 	require.Empty(t, domain.Variants())
@@ -126,30 +103,6 @@ func TestValidatorRegistryValidatesRegistrationAndLookup(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupportedDomain)
 	_, err = NewValidatorRegistry(registration, registration)
 	require.ErrorContains(t, err, "duplicate validator")
-}
-
-func TestValidatorDomainClonesMutableValuesBeforeNormalization(t *testing.T) {
-	base := NewPayloadDomain(32)
-	registry, err := NewValidatorRegistry(ValidatorRegistration{
-		Key:    "message.payload",
-		Domain: base,
-		Clone: func(value any) any {
-			return clonePayload(value)
-		},
-		Normalize: func(value any) (string, error) {
-			payload := value.(*commonpb.Payload)
-			payload.Data[0] = 'X'
-			return base.Normalize(payload)
-		},
-	})
-	require.NoError(t, err)
-	domain, err := registry.Domain("message.payload")
-	require.NoError(t, err)
-	payload := &commonpb.Payload{Metadata: map[string][]byte{"encoding": []byte("json/plain")}, Data: []byte("secret")}
-	normalized, err := domain.Normalize(payload)
-	require.NoError(t, err)
-	require.NotContains(t, normalized, "secret")
-	require.Equal(t, []byte("secret"), payload.Data)
 }
 
 func TestValidatorRegistrySupportsConcurrentReads(t *testing.T) {

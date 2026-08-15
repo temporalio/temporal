@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire1/fact"
 	"go.temporal.io/server/tests/umpire1/model"
@@ -22,11 +21,11 @@ func newTestModelState() *umpire.ModelState {
 }
 
 func checkSafetyRule(reg *umpire.ModelState, m umpire.SafetyRule) []umpire.Violation {
-	return umpire.CheckSafetyRule(context.Background(), m, reg, log.NewNoopLogger(), umpire.RuleConfig{})
+	return umpire.CheckSafetyRule(context.Background(), m, reg, umpire.RuleConfig{})
 }
 
 func checkLivenessRule(reg *umpire.ModelState, m umpire.LivenessRule) []umpire.Violation {
-	return umpire.CheckLivenessRule(context.Background(), m, reg, log.NewNoopLogger(), umpire.RuleConfig{})
+	return umpire.CheckLivenessRule(context.Background(), m, reg, umpire.RuleConfig{})
 }
 
 func routeFact(t *testing.T, r *umpire.ModelState, m umpire.Fact) {

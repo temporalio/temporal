@@ -20,13 +20,38 @@ func TestPackageLayout(t *testing.T) {
 	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire"))
 	require.DirExists(t, filepath.Join(repoRoot, "tests", "umpire1"))
 	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire1", "protocolv2"))
-	require.DirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "protocol"))
+	require.DirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "internal", "protocol"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "protocol"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "assurance"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "fact"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "model"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "rule"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "action"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "planner"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "ksdriver"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "regress", "rpc"))
+	require.NoFileExists(t, filepath.Join(repoRoot, "tests", "umpire2", "entity_key.go"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "genmodels"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "genmodels-results"))
+	require.DirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "testdata", "genmodels"))
+	require.DirExists(t, filepath.Join(repoRoot, "common", "testing", "umpire", "verify", "toolchain"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "common", "testing", "umpire", "verify", "runner"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "common", "testing", "umpire", "verify", "tla"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "common", "testing", "umpire", "verify", "p"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "common", "testing", "umpire", "verify", "ivy"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "common", "testing", "umpire", "verify", "fizz"))
 
 	requirePackageNames(t, filepath.Join(repoRoot, "tests", "umpire1"), "umpire1")
-	requirePackageNames(t, filepath.Join(repoRoot, "tests", "umpire2", "protocol"), "protocol", "protocol_test")
+	requirePackageNames(t, filepath.Join(repoRoot, "tests", "umpire2", "internal", "protocol"), "protocol", "protocol_test")
 	requireNoProductionImports(t, filepath.Join(repoRoot, "tests", "umpire2"), "go.temporal.io/server/tests/umpire1")
-	requireNoExactProductionImport(t, filepath.Join(repoRoot, "tests", "umpire2"), "go.temporal.io/server/tests/testcore")
-	requireNoGenericChangedCalls(t, filepath.Join(repoRoot, "tests", "umpire2", "rule"))
+	requireNoRootProductionImports(t, filepath.Join(repoRoot, "tests", "umpire2"), "go.temporal.io/server/tests/testcore")
+	requireNoExactProductionImport(t, filepath.Join(repoRoot, "tests", "umpire2", "internal"), "go.temporal.io/server/tests/testcore")
+	requireNoProductionImports(t, filepath.Join(repoRoot, "common", "testing", "umpire"), "go.temporal.io/server/tests/umpire2")
+	requireNoExactProductionImport(t, filepath.Join(repoRoot, "common", "testing", "umpire"), "go.temporal.io/server/common/log")
+	requireNoExactProductionImport(t, filepath.Join(repoRoot, "common", "testing", "umpire"), "go.temporal.io/api/common/v1")
+	requireNoRootProductionImports(t, filepath.Join(repoRoot, "common", "testing", "umpire"), "google.golang.org/grpc")
+	requireNoRootProductionImports(t, filepath.Join(repoRoot, "common", "testing", "umpire"), "go.opentelemetry.io/otel")
+	requireNoGenericChangedCalls(t, filepath.Join(repoRoot, "tests", "umpire2", "internal", "rule"))
 }
 
 func repositoryRoot(t *testing.T) string {
@@ -106,6 +131,32 @@ func requireNoProductionImports(t *testing.T, directory string, forbidden string
 			importPath,
 		)
 	})
+}
+
+func requireNoRootProductionImports(t *testing.T, directory string, forbidden string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(directory, entry.Name())
+		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		require.NoError(t, err)
+		for _, imported := range parsed.Imports {
+			importPath, err := strconv.Unquote(imported.Path.Value)
+			require.NoError(t, err)
+			require.Falsef(
+				t,
+				importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/"),
+				"%s imports forbidden adapter package %q",
+				path,
+				importPath,
+			)
+		}
+	}
 }
 
 func visitProductionImports(t *testing.T, directory string, visit func(path, importPath string)) {

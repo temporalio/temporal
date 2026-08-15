@@ -7,12 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
 	coreregress "go.temporal.io/server/common/testing/umpire/regress"
-	"go.temporal.io/server/tests/umpire2/action"
-	"go.temporal.io/server/tests/umpire2/protocol"
+	"go.temporal.io/server/tests/umpire2/internal/action"
+	"go.temporal.io/server/tests/umpire2/internal/protocol"
 	"go.temporal.io/server/tests/umpire2/regress/activity"
 	"go.temporal.io/server/tests/umpire2/regress/capability"
 	"go.temporal.io/server/tests/umpire2/regress/nexus"
-	"go.temporal.io/server/tests/umpire2/regress/rpc"
 	"go.temporal.io/server/tests/umpire2/regress/workflow"
 )
 
@@ -51,7 +50,7 @@ func TestRepresentativePlansCompileAgainstDefaultDomain(t *testing.T) {
 		"cancellation retried": coreregress.OnePath(
 			nexus.State("op", nexus.Started),
 			coreregress.During(
-				nexus.FailNext(rpc.CancelNexusOperation),
+				nexus.FailNext(nexus.CancelNexusOperation),
 				nexus.CancelWithRetry("op"),
 			),
 			nexus.CancelRequestFailed("op"),

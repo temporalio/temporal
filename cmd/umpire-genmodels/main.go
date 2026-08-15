@@ -8,27 +8,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
 
 	"go.temporal.io/server/common/testing/umpire/verify"
-	"go.temporal.io/server/common/testing/umpire/verify/fizz"
-	"go.temporal.io/server/common/testing/umpire/verify/ivy"
-	pgenerator "go.temporal.io/server/common/testing/umpire/verify/p"
-	"go.temporal.io/server/common/testing/umpire/verify/runner"
-	"go.temporal.io/server/common/testing/umpire/verify/tla"
-	"go.temporal.io/server/tests/umpire2/assurance"
-	"go.temporal.io/server/tests/umpire2/protocol"
+	"go.temporal.io/server/common/testing/umpire/verify/toolchain"
+	"go.temporal.io/server/tests/umpire2"
 )
 
 const generatorVersion = "umpire-genmodels/v1"
 
 func main() {
 	var (
-		mode         = flag.String("mode", "generate", "generate, check-generated, or verify")
-		output       = flag.String("out", "tests/umpire2/genmodels", "generated model directory")
-		artifacts    = flag.String("artifacts", "tests/umpire2/genmodels-results", "verification result directory")
+		mode         = flag.String("mode", "generate", "generate, check-generated, tool-environment, or verify")
+		output       = flag.String("out", "tests/umpire2/testdata/genmodels", "generated model directory")
+		artifacts    = flag.String("artifacts", "tests/umpire2/testdata/results", "verification result directory")
 		target       = flag.String("target", "all", "verification target name or all")
 		backend      = flag.String("backend", "all", "sany, tlc, apalache, apalache-proof, p, pex, ivy, fizz, or all")
 		profile      = flag.String("profile", "smoke", "smoke or nightly")
@@ -49,6 +45,16 @@ func main() {
 		err = generate(*output, *defaultBound)
 	case "check-generated":
 		err = checkGenerated(*output, *defaultBound)
+	case "tool-environment":
+		var platform string
+		platform, err = localToolPlatform(runtime.GOOS, runtime.GOARCH)
+		if err == nil {
+			var environment []byte
+			environment, err = renderToolEnvironment(toolchain.ToolVersions(), platform)
+			if err == nil {
+				_, err = os.Stdout.Write(environment)
+			}
+		}
 	case "verify":
 		err = checkModels(context.Background(), checkOptions{
 			output: *output, artifacts: *artifacts, target: *target, backend: *backend, profile: *profile,
@@ -101,7 +107,7 @@ func generate(output string, defaultBound int) error {
 		return err
 	}
 	files["manifest.json"] = append(indexJSON, '\n')
-	toolEnvironment, err := renderToolEnvironment(runner.ToolVersions(), "linux-x86_64")
+	toolEnvironment, err := renderToolEnvironment(toolchain.ToolVersions(), "linux-x86_64")
 	if err != nil {
 		return err
 	}
@@ -129,27 +135,27 @@ func generateTarget(
 	projection verify.ProjectedTarget,
 ) (map[string][]byte, targetIndexEntry, error) {
 	target, model := projection.Target, projection.Model
-	tlaFiles, err := tla.Generate(model)
+	tlaFiles, err := toolchain.GenerateTLA(model)
 	if err != nil {
 		return nil, targetIndexEntry{}, err
 	}
-	pFiles, err := pgenerator.Generate(model)
+	pFiles, err := toolchain.GenerateP(model)
 	if err != nil {
 		return nil, targetIndexEntry{}, err
 	}
-	ivyFiles, ivyDiagnostics, err := ivy.Generate(model)
+	ivyFiles, ivyDiagnostics, err := toolchain.GenerateIvy(model)
 	if err != nil {
 		return nil, targetIndexEntry{}, err
 	}
-	fizzFiles, fizzDiagnostics, err := fizz.Generate(model)
+	fizzFiles, fizzDiagnostics, err := toolchain.GenerateFizz(model)
 	if err != nil {
 		return nil, targetIndexEntry{}, err
 	}
-	smokeBounds, err := runner.ProfileBounds("smoke")
+	smokeBounds, err := toolchain.ProfileBounds("smoke")
 	if err != nil {
 		return nil, targetIndexEntry{}, err
 	}
-	fizzConfig, err := fizz.RenderConfig(runner.FizzBounds(smokeBounds))
+	fizzConfig, err := toolchain.RenderFizzConfig(toolchain.FizzBounds(smokeBounds))
 	if err != nil {
 		return nil, targetIndexEntry{}, err
 	}
@@ -177,7 +183,7 @@ func generateTarget(
 		FailurePolicy:       target.FailurePolicy,
 		Interfaces:          projection.Interfaces,
 		Guarantee:           verify.FiniteExhaustive,
-		Tools:               runner.ToolVersions(),
+		Tools:               toolchain.ToolVersions(),
 		Unsupported:         unsupported,
 		Omitted:             target.Omissions,
 	})
@@ -225,23 +231,12 @@ func verificationModel(defaultBound int) (verify.Model, error) {
 	if err != nil {
 		return verify.Model{}, err
 	}
-	projection, err := verify.Project(family, protocol.ProtocolAtomicTarget)
+	projection, err := verify.Project(family, umpire2.ProtocolAtomicTarget)
 	return projection.Model, err
 }
 
 func verificationFamily(defaultBound int) (verify.ModelFamily, error) {
-	compiled, err := protocol.Default()
-	if err != nil {
-		return verify.ModelFamily{}, fmt.Errorf("compile default Umpire protocol: %w", err)
-	}
-	catalog, err := assurance.Default()
-	if err != nil {
-		return verify.ModelFamily{}, fmt.Errorf("compile default Umpire assurance catalog: %w", err)
-	}
-	return compiled.VerificationFamily(protocol.VerificationOptions{
-		DefaultBound:  defaultBound,
-		RuleInventory: catalog.VerificationInventory(),
-	})
+	return umpire2.DefaultVerificationFamily(defaultBound)
 }
 
 func mergeFiles(destination map[string][]byte, directory string, files map[string][]byte) {
@@ -351,7 +346,7 @@ func checkModels(ctx context.Context, options checkOptions) error {
 	if err != nil {
 		return err
 	}
-	toolchain := runner.Toolchain{
+	tools := toolchain.Toolchain{
 		TLAJarPath: options.tlaJar, JavaPath: options.javaTool, PPath: options.pTool,
 		ApalachePath: options.apalacheTool, IvyPath: options.ivyTool, FizzPath: options.fizzTool,
 	}
@@ -360,7 +355,7 @@ func checkModels(ctx context.Context, options checkOptions) error {
 		if err != nil {
 			return err
 		}
-		requests, err := toolchain.Plan(projection.Model, runner.PlanOptions{
+		requests, err := tools.Plan(projection.Model, toolchain.PlanOptions{
 			ModelRoot: options.output, ArtifactRoot: options.artifacts, Target: target.Name,
 			Backends: options.backend, Profile: options.profile, Requirements: target.BackendRequirements,
 			Timeout: options.timeout,
@@ -373,7 +368,7 @@ func checkModels(ctx context.Context, options checkOptions) error {
 			continue
 		}
 		for _, request := range requests {
-			result, err := runner.Check(ctx, request)
+			result, err := toolchain.Check(ctx, request)
 			if err != nil {
 				return err
 			}

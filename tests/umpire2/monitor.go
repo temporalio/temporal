@@ -1,19 +1,21 @@
 package umpire2
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
-	"testing"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire2/assurance"
-	"go.temporal.io/server/tests/umpire2/model"
-	"go.temporal.io/server/tests/umpire2/protocol"
+	"go.temporal.io/server/common/testing/umpire/grpcadapter"
+	"go.temporal.io/server/tests/umpire2/internal/assurance"
+	"go.temporal.io/server/tests/umpire2/internal/model"
+	"go.temporal.io/server/tests/umpire2/internal/protocol"
 	"google.golang.org/grpc"
 )
 
@@ -42,26 +44,14 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 		panic("logger is required")
 	}
 
-	registry := umpirefw.NewModelState()
 	defaultProtocol, err := protocol.Default()
 	if err != nil {
 		return nil, fmt.Errorf("monitor: failed to compile default protocol: %w", err)
 	}
-	defaultProtocol.Register(registry)
-	relations, err := defaultProtocol.NewRelationStore()
-	if err != nil {
-		return nil, fmt.Errorf("monitor: failed to create relation store: %w", err)
-	}
-
 	decoder := model.NewFactDecoder()
-	el := umpirefw.NewFactLog()
-	rb := umpirefw.NewRuleRegistry()
 	catalog, err := assurance.Default()
 	if err != nil {
 		return nil, fmt.Errorf("monitor: failed to compile assurance catalog: %w", err)
-	}
-	if err := catalog.Register(rb); err != nil {
-		return nil, fmt.Errorf("monitor: failed to register assurance catalog: %w", err)
 	}
 	// Illegal-transition conformance is not registered as a rule: it is a built-in
 	// framework check (RuleRegistry.Check → checkConformance) that surfaces, for every
@@ -70,21 +60,29 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	// states because an unobserved intermediate is indistinguishable from a skipped transition;
 	// events outside that reachable path remain illegal.
 
-	if err := rb.InitRules(registry, logger, umpirefw.RuleConfig{Relations: relations}, catalog.Names()...); err != nil {
-		return nil, fmt.Errorf("monitor: failed to initialize rules: %w", err)
+	runtime, err := umpirefw.NewRuntime(defaultProtocol.RuntimeDeclaration(catalog.RuntimeRules()))
+	if err != nil {
+		return nil, fmt.Errorf("monitor: failed to initialize runtime: %w", err)
 	}
 
-	safety, liveness := rb.RuleCount()
+	var safety, liveness int
+	for _, stats := range runtime.RuleStats() {
+		if stats.Kind == "safety" {
+			safety++
+		} else if stats.Kind == "liveness" {
+			liveness++
+		}
+	}
 	logger.Info("monitor initialized",
 		tag.NewInt("safetyRules", safety),
 		tag.NewInt("livenessRules", liveness),
 	)
 
-	trace := newExecutionTrace(registry, relations, defaultProtocol.CausalFootprints())
+	trace := newExecutionTrace(runtime, defaultProtocol.CausalFootprints())
 	return &Monitor{
 		logger:     logger,
 		decoder:    decoder,
-		evidence:   newEvidenceIngestor(registry, rb, el, defaultProtocol, relations, trace),
+		evidence:   newEvidenceIngestor(runtime, defaultProtocol, trace),
 		nsIDByName: map[string]string{},
 	}, nil
 }
@@ -194,13 +192,25 @@ func (u *Monitor) ObserveExecution(_ context.Context, observed umpirefw.Executio
 // at teardown, then PurgeNamespace to drop the collected data.
 func (u *Monitor) CheckNamespace(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
-	return u.evidence.check(ctx, root, true)
+	return u.check(ctx, root, true)
 }
 
 // CheckNamespaceSafety applies the global rulebook without promoting pending liveness obligations.
 func (u *Monitor) CheckNamespaceSafety(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
-	return u.evidence.check(ctx, root, false)
+	return u.check(ctx, root, false)
+}
+
+func (u *Monitor) check(ctx context.Context, root umpirefw.EntityID, final bool) []umpirefw.Violation {
+	violations := u.evidence.check(ctx, root, final)
+	for _, violation := range violations {
+		tags := []tag.Tag{tag.NewStringTag("rule", violation.Rule)}
+		for key, value := range violation.Tags {
+			tags = append(tags, tag.NewStringTag(key, value))
+		}
+		u.logger.Warn("violation: "+violation.Message, tags...)
+	}
+	return violations
 }
 
 // PurgeNamespace removes all entities, facts, and rule state collected for the
@@ -215,19 +225,52 @@ func (u *Monitor) namespaceRoot(namespaceID string) umpirefw.EntityID {
 	return umpirefw.NewEntityID(model.NamespaceType, namespaceID)
 }
 
-// FactLog returns the event log for querying events in tests.
-func (u *Monitor) FactLog() *umpirefw.FactLog {
-	return u.evidence.factLog
+// Snapshot returns a defensive semantic view of one namespace.
+func (u *Monitor) Snapshot(namespaceID string) umpirefw.Snapshot {
+	root := u.namespaceRoot(namespaceID)
+	snapshot := u.evidence.runtime.Snapshot(root)
+	entries := u.evidence.runtime.View(root).AllEntities(0)
+	slices.SortFunc(entries, func(left, right umpirefw.EntityEntry) int {
+		return cmp.Compare(left.Key, right.Key)
+	})
+	entitiesByKey := make(map[string]umpirefw.Entity, len(entries))
+	for _, entry := range entries {
+		entitiesByKey[entry.Key] = entry.Entity
+	}
+	for index := range snapshot.Entities {
+		entity := &snapshot.Entities[index]
+		entry := umpirefw.EntityEntry{Key: entity.Key, Entity: entitiesByKey[entity.Key]}
+		entity.ID = snapshotEntityID(namespaceID, entry)
+		if run, ok := entry.Entity.(*model.WorkflowRun); ok {
+			entity.RootID = run.FirstRunID
+			entity.PredecessorID = run.PreviousRunID
+			entity.Initiator = run.Initiator
+		}
+		if operation, ok := entry.Entity.(*model.NexusOperation); ok {
+			entity.Attempt = operation.Attempt
+		}
+	}
+	return snapshot
 }
 
-// ModelState returns the entity registry for querying entities in tests.
-func (u *Monitor) ModelState() *umpirefw.ModelState {
-	return u.evidence.registry
-}
-
-// Relations returns the protocol's runtime relation state.
-func (u *Monitor) Relations() *umpirefw.RelationStore {
-	return u.evidence.relations
+func snapshotEntityID(namespaceID string, entry umpirefw.EntityEntry) string {
+	switch entity := entry.Entity.(type) {
+	case *model.NexusOperation:
+		if entity.WorkflowID != "" {
+			return entity.WorkflowID
+		}
+	case *model.Workflow:
+		if entity.WorkflowID != "" {
+			return entity.WorkflowID
+		}
+	case *model.WorkflowRun:
+		if entity.RunID != "" {
+			return entity.RunID
+		}
+	}
+	leaf := entry.Key[strings.LastIndex(entry.Key, "@")+1:]
+	id := strings.TrimPrefix(leaf, string(entry.Entity.Type())+":")
+	return strings.TrimPrefix(id, namespaceID+"\x00")
 }
 
 // SetCoverage installs an optional semantic coverage collector.
@@ -242,24 +285,12 @@ func (u *Monitor) SetTraceRecorder(recorder *umpirefw.TraceRecorder) {
 
 // RuleStats returns per-rule evaluation statistics.
 func (u *Monitor) RuleStats() []umpirefw.RuleStats {
-	return u.evidence.rulebook.Stats()
+	return u.evidence.runtime.RuleStats()
 }
 
 // PassedKeys returns entity keys that the named rule evaluated and found healthy.
 func (u *Monitor) PassedKeys(ruleName string) []string {
-	return u.evidence.rulebook.PassedKeys(ruleName)
-}
-
-// RequireRulePassed asserts that the given rule evaluated the entity identified
-// by entityKey and found no violation. Fails the test if the key is not found
-// in the rule's passed keys.
-func (u *Monitor) RequireRulePassed(t testing.TB, rule interface{ Name() string }, entityKey string) {
-	t.Helper()
-	name := rule.Name()
-	passed := u.evidence.rulebook.PassedKeys(name)
-	if !slices.Contains(passed, entityKey) {
-		t.Errorf("rule %s did not pass entity %q; passed keys: %v", name, entityKey, passed)
-	}
+	return u.evidence.runtime.PassedKeys(ruleName)
 }
 
 // Shutdown cleanly shuts down all Monitor components.
@@ -268,8 +299,8 @@ func (u *Monitor) Shutdown(_ context.Context) error {
 	return nil
 }
 
-// NewUnaryServerInterceptor returns a gRPC interceptor that records events via u
+// UnaryServerInterceptor returns a gRPC interceptor that records events via u
 // and optionally injects faults via inj. Either may be nil.
-func NewUnaryServerInterceptor(u *Monitor, inj umpirefw.FaultInjector) grpc.UnaryServerInterceptor {
-	return umpirefw.NewUnaryServerInterceptor(u, inj)
+func (u *Monitor) UnaryServerInterceptor(inj umpirefw.FaultInjector) grpc.UnaryServerInterceptor {
+	return grpcadapter.NewUnaryServerInterceptor(u, inj)
 }

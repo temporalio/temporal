@@ -7,7 +7,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire1/fact"
 	"go.temporal.io/server/tests/umpire1/model"
@@ -115,7 +114,7 @@ func TestWorkflowTaskStarvationRule_ResolvedByPoll(t *testing.T) {
 
 	rb := umpire.NewRuleRegistry()
 	rb.RegisterLiveness(func() umpire.LivenessRule { return &WorkflowTaskStarvation{} })
-	if err := rb.InitRules(reg, log.NewNoopLogger(), umpire.RuleConfig{}); err != nil {
+	if err := rb.InitRules(reg, umpire.RuleConfig{}); err != nil {
 		t.Fatalf("InitRules failed: %v", err)
 	}
 
@@ -141,7 +140,7 @@ func TestWorkflowTaskStarvationRule_UnresolvedAtTeardown(t *testing.T) {
 
 	rb := umpire.NewRuleRegistry()
 	rb.RegisterLiveness(func() umpire.LivenessRule { return &WorkflowTaskStarvation{} })
-	if err := rb.InitRules(reg, log.NewNoopLogger(), umpire.RuleConfig{}); err != nil {
+	if err := rb.InitRules(reg, umpire.RuleConfig{}); err != nil {
 		t.Fatalf("InitRules failed: %v", err)
 	}
 

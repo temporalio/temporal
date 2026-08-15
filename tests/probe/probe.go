@@ -1,8 +1,11 @@
-// Package probe is a prototype of the single "Umpire" API: describe a state to
+// Package probe retains the prototype "Umpire" API: describe a state to
 // reach, drive to it, break the underlying calls, and judge the result with the
 // existing safety/liveness rulebook — with no hand-written faults or assertions.
 // It closes the plan -> drive -> fault -> judge loop through the Planner, Driver,
 // Monitor, and gRPC fault seam. See UMPIRE.md.
+//
+// New behavioral tests should use tests/umpire2/umpiretest; this package remains for the
+// action-only probe characterization cases.
 //
 // Every execution (the baseline and each fault scenario) runs in its own fresh
 // test environment — its own namespace — so scenarios are fully isolated. The
@@ -23,8 +26,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/server/tests/umpire1/model"
-	"go.temporal.io/server/tests/umpire1/planner"
+	"go.temporal.io/server/tests/umpire2"
 )
 
 // defaultMaxFaults bounds how many observed calls become fault scenarios, so a
@@ -101,7 +103,11 @@ func (s *Probe) FaultEachObservedCall() *Probe { s.observe = true; return s }
 // that it is reachable over the model. Unreachable ⇒ the probe fails fast here.
 func (s *Probe) Reach(entity, state string) *Probe {
 	s.entity, s.state = entity, state
-	plan, err := planner.DefaultModels().PlanTo(entity, state, planner.Shortest, planner.Constraints{})
+	protocol, err := umpire2.DefaultProtocol()
+	if err != nil {
+		s.t.Fatalf("probe: compile default protocol: %v", err)
+	}
+	plan, err := protocol.PlanTo(umpire.EntityType(entity), state, umpire.Shortest, umpire.Constraints{})
 	if err != nil {
 		s.t.Fatalf("probe: %s:%s is not reachable under the model: %v", entity, state, err)
 	}
@@ -163,7 +169,11 @@ func (s *Probe) Judge() Report {
 			}))
 		iter++
 	}
-	if lc, ok := planner.DefaultModels().Lifecycle(s.entity); ok {
+	protocol, err := umpire2.DefaultProtocol()
+	if err != nil {
+		s.t.Fatalf("probe: compile default protocol: %v", err)
+	}
+	if lc, ok := protocol.Lifecycle(umpire.EntityType(s.entity)); ok {
 		rep.Coverage = s.cov.Report(s.entity, lc.Edges())
 	}
 	rep.log(s.t)
@@ -289,10 +299,9 @@ func (s *Probe) installSemanticCoverage(env *testcore.TestEnv) {
 // only as a parent placeholder for its operations never has its WorkflowID field
 // populated by a fact). Errors are ignored: a workflow that already closed needs none.
 func (s *Probe) stopExecutions(env *testcore.TestEnv, nsID string) {
-	nsRoot := umpire.NewEntityID(model.NamespaceType, nsID)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowType, 0, &nsRoot) {
+	for _, e := range env.GetMonitor().Snapshot(nsID).EntitiesOfType(umpire2.WorkflowType) {
 		wfID := workflowIDFromKey(e.Key)
 		if wfID == "" {
 			continue
@@ -305,7 +314,7 @@ func (s *Probe) stopExecutions(env *testcore.TestEnv, nsID string) {
 // ("Namespace:<ns>@Workflow:<wfID>"): the leaf segment's ID.
 func workflowIDFromKey(key string) string {
 	leaf := key[strings.LastIndex(key, "@")+1:]
-	return strings.TrimPrefix(leaf, string(model.WorkflowType)+":")
+	return strings.TrimPrefix(leaf, string(umpire2.WorkflowType)+":")
 }
 
 // execSeq makes subtest names unique across sibling probes under the same parent test,
@@ -367,17 +376,11 @@ func (s *Probe) judge(env *testcore.TestEnv, nsID string, sc *Scenario) {
 // into the coverage tracker — so a run accumulates which model transitions the real
 // impl actually exercised.
 func (s *Probe) inspectTarget(env *testcore.TestEnv, nsID string) (string, umpire.Disposition) {
-	nsRoot := umpire.NewEntityID(model.NamespaceType, nsID)
 	term, disp := "", umpire.Unset
-	for _, e := range env.GetMonitor().ModelState().QueryEntities(umpire.EntityType(s.entity), 0, &nsRoot) {
-		lc, ok := e.Entity.(umpire.Lifecycled)
-		if !ok {
-			continue
-		}
-		l := lc.Lifecycle()
-		s.cov.Record(s.entity, l.VisitedEdges())
-		if term == "" && l.IsTerminal() {
-			term, disp = l.Current(), l.CurrentDisposition()
+	for _, entity := range env.GetMonitor().Snapshot(nsID).EntitiesOfType(umpire.EntityType(s.entity)) {
+		s.cov.Record(s.entity, entity.Visited)
+		if term == "" && entity.Terminal {
+			term, disp = entity.Current, entity.Disposition
 		}
 	}
 	return term, disp

@@ -26,6 +26,11 @@ type NexusTestEnv struct {
 	useTemporalFailures bool
 }
 
+// StartNexusServer starts a test-scoped Nexus server for an Umpire regression environment.
+func (env *NexusTestEnv) StartNexusServer(listenAddress string, handler nexus.Handler) {
+	nexustest.NewNexusServer(env.T(), listenAddress, handler)
+}
+
 func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.TestOption) *NexusTestEnv {
 	return &NexusTestEnv{
 		TestEnv:             testcore.NewEnv(t, opts...),

@@ -1,0 +1,13 @@
+[tools]
+dotnet = "8.0.424"
+java = "temurin-21.0.12+8.0.LTS"
+python = "3.10.21"
+
+[tasks."umpire:install-tools"]
+description = "Install the pinned Umpire formal-verification toolchain"
+run = "./develop/umpire/install-tools.sh"
+
+[tasks."umpire:verify-smoke"]
+description = "Install the Umpire toolchain and run smoke verification"
+depends = ["umpire:install-tools"]
+run = ". .bin/umpire-tools/env && make umpire-verify-smoke"

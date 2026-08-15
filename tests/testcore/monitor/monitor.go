@@ -3,11 +3,12 @@ package monitor
 
 import (
 	"context"
-	"testing"
+	"encoding/json"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/umpire"
+	"google.golang.org/grpc"
 )
 
 // Monitor observes a functional cluster and checks the model state collected for each namespace.
@@ -21,9 +22,12 @@ type Monitor interface {
 	CheckNamespaceSafety(context.Context, string) []umpire.Violation
 	CheckNamespace(context.Context, string) []umpire.Violation
 	PurgeNamespace(string)
-	ModelState() *umpire.ModelState
-	FactLog() *umpire.FactLog
-	RequireRulePassed(testing.TB, interface{ Name() string }, string)
+	Snapshot(string) umpire.Snapshot
+	Observed(string, umpire.ObservationQuery) bool
+	ArtifactFacts(string) ([]json.RawMessage, error)
+	ObservationSummary(string) string
+	PassedKeys(string) []string
+	UnaryServerInterceptor(umpire.FaultInjector) grpc.UnaryServerInterceptor
 }
 
 // Factory constructs a Monitor for a functional test cluster.

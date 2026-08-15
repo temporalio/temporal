@@ -37,7 +37,7 @@ jobs:
           python-version: "3.10"
       - name: Install pinned verification tools
         run: |
-          source tests/umpire2/genmodels/tools.env
+          source tests/umpire2/testdata/genmodels/tools.env
           sudo apt-get update
           sudo apt-get install --yes graphviz maven python3-tk
 
@@ -103,8 +103,8 @@ jobs:
         run: |
           go test -tags test_dep \
             ./common/testing/umpire/verify/... \
-            ./tests/umpire2/protocol \
-            ./tests/umpire2/rule \
+            ./tests/umpire2/internal/protocol \
+            ./tests/umpire2/internal/rule \
             ./cmd/umpire-genmodels
       - name: Verify generated protocol
         env:
@@ -119,5 +119,5 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: umpire-model-verification-${{ github.run_id }}
-          path: tests/umpire2/genmodels-results/
+          path: tests/umpire2/testdata/results/
           if-no-files-found: ignore

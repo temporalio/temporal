@@ -1,0 +1,3686 @@
+{
+  "schemaVersion": "umpire-verification-manifest/v1",
+  "generatorVersion": "umpire-genmodels/v1",
+  "target": "protocol-atomic",
+  "targetOwners": [
+    "activity",
+    "callback",
+    "matching",
+    "nexus",
+    "workflow"
+  ],
+  "targetModules": [
+    "activity",
+    "callback",
+    "matching",
+    "nexus",
+    "workflow"
+  ],
+  "modelFamilyVersion": "umpire2/model-family-v1",
+  "modelFamilyHash": "sha256:c94f0b80391517ac22e019927b3e2a3dfb5b9005c0964bbf0be9c99baacb6fc1",
+  "backendRequirements": [
+    "fizz",
+    "ivy",
+    "p",
+    "tla"
+  ],
+  "modelVersion": "umpire2/verification-v1",
+  "modelHash": "sha256:58c42795041272d6e76b2c8b54af002e09d534826819e5004d531e0323bec5d4",
+  "requestedGuarantee": "finite-exhaustive",
+  "bounds": {
+    "Activity": 1,
+    "Callback": 1,
+    "NexusOperation": 1,
+    "TaskQueue": 1,
+    "Workflow": 1,
+    "WorkflowRun": 1,
+    "WorkflowTask": 1
+  },
+  "identityPools": {
+    "Activity": [
+      "Activity#0"
+    ],
+    "Callback": [
+      "Callback#0"
+    ],
+    "NexusOperation": [
+      "NexusOperation#0"
+    ],
+    "TaskQueue": [
+      "TaskQueue#0"
+    ],
+    "Workflow": [
+      "Workflow#0"
+    ],
+    "WorkflowRun": [
+      "WorkflowRun#0"
+    ],
+    "WorkflowTask": [
+      "WorkflowTask#0"
+    ]
+  },
+  "actions": [
+    "Activity.backing_off.cancel.AnyHosting",
+    "Activity.backing_off.schedule.AnyHosting",
+    "Activity.backing_off.timeout.AnyHosting",
+    "Activity.scheduled.cancel.AnyHosting",
+    "Activity.scheduled.fail.AnyHosting",
+    "Activity.scheduled.start.AnyHosting",
+    "Activity.scheduled.timeout.AnyHosting",
+    "Activity.started.attempt_failed.AnyHosting",
+    "Activity.started.cancel.AnyHosting",
+    "Activity.started.complete.AnyHosting",
+    "Activity.started.fail.AnyHosting",
+    "Activity.started.timeout.AnyHosting",
+    "Activity.unspecified.schedule.AnyHosting",
+    "NexusOperation.backing_off.schedule.Embedded",
+    "NexusOperation.backing_off.schedule.Standalone",
+    "NexusOperation.backing_off.terminate.Embedded",
+    "NexusOperation.backing_off.terminate.Standalone",
+    "NexusOperation.backing_off.timeout.Embedded",
+    "NexusOperation.backing_off.timeout.Standalone",
+    "NexusOperation.scheduled.attempt_failed.Embedded",
+    "NexusOperation.scheduled.attempt_failed.Standalone",
+    "NexusOperation.scheduled.cancel.Embedded",
+    "NexusOperation.scheduled.cancel.Standalone",
+    "NexusOperation.scheduled.fail.Embedded",
+    "NexusOperation.scheduled.fail.Standalone",
+    "NexusOperation.scheduled.start.Embedded",
+    "NexusOperation.scheduled.start.Standalone",
+    "NexusOperation.scheduled.succeed.Embedded",
+    "NexusOperation.scheduled.succeed.Standalone",
+    "NexusOperation.scheduled.terminate.Embedded",
+    "NexusOperation.scheduled.terminate.Standalone",
+    "NexusOperation.scheduled.timeout.Embedded",
+    "NexusOperation.scheduled.timeout.Standalone",
+    "NexusOperation.started.cancel.Embedded",
+    "NexusOperation.started.cancel.Standalone",
+    "NexusOperation.started.fail.Embedded",
+    "NexusOperation.started.fail.Standalone",
+    "NexusOperation.started.succeed.Embedded",
+    "NexusOperation.started.succeed.Standalone",
+    "NexusOperation.started.terminate.Embedded",
+    "NexusOperation.started.terminate.Standalone",
+    "NexusOperation.started.timeout.Embedded",
+    "NexusOperation.started.timeout.Standalone",
+    "NexusOperation.unspecified.reject.Embedded",
+    "NexusOperation.unspecified.reject.Standalone",
+    "NexusOperation.unspecified.schedule.Embedded",
+    "NexusOperation.unspecified.schedule.Standalone",
+    "Workflow.created.start.Standalone",
+    "Workflow.started.cancel.Standalone",
+    "Workflow.started.complete.Standalone",
+    "Workflow.started.fail.Standalone",
+    "Workflow.started.terminate.Standalone",
+    "Workflow.started.timeout.Standalone",
+    "WorkflowRun.created.start.AnyHosting",
+    "WorkflowRun.started.cancel.AnyHosting",
+    "WorkflowRun.started.complete.AnyHosting",
+    "WorkflowRun.started.continue_as_new.AnyHosting",
+    "WorkflowRun.started.fail.AnyHosting",
+    "WorkflowRun.started.terminate.AnyHosting",
+    "WorkflowRun.started.timeout.AnyHosting",
+    "WorkflowTask.added.discard.AnyHosting",
+    "WorkflowTask.added.poll.AnyHosting",
+    "WorkflowTask.added.store.AnyHosting",
+    "WorkflowTask.added.terminate.AnyHosting",
+    "WorkflowTask.created.add.AnyHosting",
+    "WorkflowTask.created.terminate.AnyHosting",
+    "WorkflowTask.stored.discard.AnyHosting",
+    "WorkflowTask.stored.poll.AnyHosting",
+    "WorkflowTask.stored.terminate.AnyHosting",
+    "regression.nexus.start_activity"
+  ],
+  "environmentActions": [
+    "Activity.backing_off.cancel.AnyHosting",
+    "Activity.backing_off.schedule.AnyHosting",
+    "Activity.backing_off.timeout.AnyHosting",
+    "Activity.scheduled.cancel.AnyHosting",
+    "Activity.scheduled.fail.AnyHosting",
+    "Activity.scheduled.start.AnyHosting",
+    "Activity.scheduled.timeout.AnyHosting",
+    "Activity.started.attempt_failed.AnyHosting",
+    "Activity.started.cancel.AnyHosting",
+    "Activity.started.complete.AnyHosting",
+    "Activity.started.fail.AnyHosting",
+    "Activity.started.timeout.AnyHosting",
+    "Activity.unspecified.schedule.AnyHosting",
+    "NexusOperation.backing_off.terminate.Embedded",
+    "NexusOperation.scheduled.terminate.Embedded",
+    "NexusOperation.started.terminate.Embedded",
+    "NexusOperation.started.timeout.Embedded",
+    "NexusOperation.started.timeout.Standalone",
+    "NexusOperation.unspecified.reject.Embedded",
+    "NexusOperation.unspecified.reject.Standalone",
+    "Workflow.started.cancel.Standalone",
+    "Workflow.started.fail.Standalone",
+    "Workflow.started.terminate.Standalone",
+    "Workflow.started.timeout.Standalone",
+    "WorkflowRun.created.start.AnyHosting",
+    "WorkflowRun.started.cancel.AnyHosting",
+    "WorkflowRun.started.complete.AnyHosting",
+    "WorkflowRun.started.continue_as_new.AnyHosting",
+    "WorkflowRun.started.fail.AnyHosting",
+    "WorkflowRun.started.terminate.AnyHosting",
+    "WorkflowRun.started.timeout.AnyHosting",
+    "WorkflowTask.added.discard.AnyHosting",
+    "WorkflowTask.added.poll.AnyHosting",
+    "WorkflowTask.added.store.AnyHosting",
+    "WorkflowTask.added.terminate.AnyHosting",
+    "WorkflowTask.created.add.AnyHosting",
+    "WorkflowTask.created.terminate.AnyHosting",
+    "WorkflowTask.stored.discard.AnyHosting",
+    "WorkflowTask.stored.poll.AnyHosting",
+    "WorkflowTask.stored.terminate.AnyHosting"
+  ],
+  "properties": [
+    "Activity.backing_off.quiescent-progress",
+    "Activity.scheduled.quiescent-progress",
+    "Activity.started.quiescent-progress",
+    "NexusActivityForwardLinkConsistency",
+    "NexusActivityReverseLinkConsistency",
+    "NexusActivityTerminalRefinement",
+    "NexusOperation.backing_off.quiescent-progress",
+    "NexusOperation.scheduled.quiescent-progress",
+    "NexusOperation.started.quiescent-progress",
+    "Workflow.started.quiescent-progress"
+  ],
+  "strengthening": [
+    "NexusActivityTerminalRefinement"
+  ],
+  "sources": [
+    {
+      "path": "common/testing/umpire/lifecycle.go",
+      "symbol": "EntityProgressRule"
+    },
+    {
+      "path": "tests/umpire2/model"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "SignalWorkflowExecution(finish)"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "StartNexusOperationExecution"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "StartWorkflowExecution"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "TerminateNexusOperationExecution"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "callback:Complete"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "cmd:ScheduleNexusOperation"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "handler:AsyncAck"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "handler:OpCanceled"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "handler:OpFailed"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "handler:RetryableError"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "handler:SyncOk"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "needs a real schedule-to-close timer"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "needs a workflow cancellation command driver"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "needs a workflow failure command driver"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "needs a workflow termination RPC driver"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "no executable action is declared"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "rejection actions are outside the edge-action planner"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "server-driven timeout has no atomic action"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "terminate is standalone-only"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "timer:ForceTimeout(backing_off)"
+    },
+    {
+      "path": "tests/umpire2/protocol/default.go",
+      "symbol": "timer:ForceTimeout(scheduled)"
+    },
+    {
+      "path": "tests/umpire2/protocol/default_relations.go"
+    },
+    {
+      "path": "tests/umpire2/protocol/regress_domain.go",
+      "symbol": "nexus.start_activity"
+    },
+    {
+      "path": "tests/umpire2/rule/nexus_activity_link_consistency.go",
+      "symbol": "NexusActivityLinkConsistencyRule"
+    }
+  ],
+  "abstractions": [
+    {
+      "name": "Activity.backing_off.cancel.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.backing_off.schedule.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.backing_off.timeout.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.scheduled.cancel.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.scheduled.fail.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.scheduled.start.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.scheduled.timeout.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.started.attempt_failed.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.started.cancel.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.started.complete.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.started.fail.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.started.timeout.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "Activity.unspecified.schedule.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "NexusOperation.backing_off.terminate.Embedded",
+      "reason": "terminate is standalone-only",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.terminate.Embedded",
+      "reason": "terminate is standalone-only",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "NexusOperation.started.terminate.Embedded",
+      "reason": "terminate is standalone-only",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "NexusOperation.started.timeout.Embedded",
+      "reason": "needs a real schedule-to-close timer",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "NexusOperation.started.timeout.Standalone",
+      "reason": "needs a real schedule-to-close timer",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "NexusOperation.unspecified.reject.Embedded",
+      "reason": "rejection actions are outside the edge-action planner",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "NexusOperation.unspecified.reject.Standalone",
+      "reason": "rejection actions are outside the edge-action planner",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "Workflow.started.cancel.Standalone",
+      "reason": "needs a workflow cancellation command driver",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "Workflow.started.fail.Standalone",
+      "reason": "needs a workflow failure command driver",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "Workflow.started.terminate.Standalone",
+      "reason": "needs a workflow termination RPC driver",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "Workflow.started.timeout.Standalone",
+      "reason": "server-driven timeout has no atomic action",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go"
+      }
+    },
+    {
+      "name": "WorkflowRun.created.start.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.cancel.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.complete.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.continue_as_new.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.fail.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.terminate.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.timeout.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask.added.discard.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask.added.poll.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask.added.store.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask.added.terminate.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask.created.add.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask.created.terminate.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask.stored.discard.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask.stored.poll.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask.stored.terminate.AnyHosting",
+      "reason": "no executable action is declared",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "regression.nexus.cancel_with_retry",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.cancel_with_retry"
+      }
+    },
+    {
+      "name": "regression.nexus.complete[nexus.complete.callback_failed]",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.complete"
+      }
+    },
+    {
+      "name": "regression.nexus.complete_from_handler",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.complete_from_handler"
+      }
+    },
+    {
+      "name": "regression.nexus.observe_callback_reference",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.observe_callback_reference"
+      }
+    },
+    {
+      "name": "regression.nexus.observe_late_start_response",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.observe_late_start_response"
+      }
+    },
+    {
+      "name": "regression.nexus.observe_link_endpoint",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.observe_link_endpoint"
+      }
+    },
+    {
+      "name": "regression.nexus.observe_result_digest",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.observe_result_digest"
+      }
+    },
+    {
+      "name": "regression.nexus.respond_start[nexus.respond_start.completion_pending.async]",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start"
+      }
+    },
+    {
+      "name": "regression.nexus.schedule",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule"
+      }
+    },
+    {
+      "name": "regression.nexus.schedule_embedded",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule_embedded"
+      }
+    },
+    {
+      "name": "regression.nexus.schedule_embedded_with_caller",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule_embedded_with_caller"
+      }
+    },
+    {
+      "name": "regression.nexus.start[nexus.start.attach_handler]",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start"
+      }
+    },
+    {
+      "name": "regression.nexus.start[nexus.start.new_handler]",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start"
+      }
+    },
+    {
+      "name": "regression.nexus.timeout",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.timeout"
+      }
+    },
+    {
+      "name": "regression.workflow.observe_nexus_storage_absent",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.observe_nexus_storage_absent"
+      }
+    },
+    {
+      "name": "regression.workflow.observe_run_id",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.observe_run_id"
+      }
+    }
+  ],
+  "omitted": [
+    {
+      "name": "callback.attach-handler",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.attach-handler"
+      }
+    },
+    {
+      "name": "callback.attach-reference",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.attach-reference"
+      }
+    },
+    {
+      "name": "callback.delivery.acknowledge",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.acknowledge"
+      }
+    },
+    {
+      "name": "callback.delivery.deliver",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.deliver"
+      }
+    },
+    {
+      "name": "callback.delivery.enqueue",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.enqueue"
+      }
+    },
+    {
+      "name": "callback.delivery.fail-delivered",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.fail-delivered"
+      }
+    },
+    {
+      "name": "callback.delivery.fail-pending",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.fail-pending"
+      }
+    },
+    {
+      "name": "callback.delivery.retry",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.retry"
+      }
+    },
+    {
+      "name": "callback.handler.close.cancel",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.cancel"
+      }
+    },
+    {
+      "name": "callback.handler.close.complete",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.complete"
+      }
+    },
+    {
+      "name": "callback.handler.close.continue_as_new",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.continue_as_new"
+      }
+    },
+    {
+      "name": "callback.handler.close.fail",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.fail"
+      }
+    },
+    {
+      "name": "callback.handler.close.terminate",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.terminate"
+      }
+    },
+    {
+      "name": "callback.handler.close.timeout",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.timeout"
+      }
+    },
+    {
+      "name": "callback.handler.start",
+      "reason": "checked by the Callback integration targets",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.start"
+      }
+    }
+  ],
+  "unsupported": [
+    {
+      "backend": "ivy",
+      "construct": "property Activity.backing_off.quiescent-progress",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    },
+    {
+      "backend": "ivy",
+      "construct": "property Activity.scheduled.quiescent-progress",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    },
+    {
+      "backend": "ivy",
+      "construct": "property Activity.started.quiescent-progress",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    },
+    {
+      "backend": "ivy",
+      "construct": "property NexusOperation.backing_off.quiescent-progress",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    },
+    {
+      "backend": "ivy",
+      "construct": "property NexusOperation.scheduled.quiescent-progress",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    },
+    {
+      "backend": "ivy",
+      "construct": "property NexusOperation.started.quiescent-progress",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    },
+    {
+      "backend": "ivy",
+      "construct": "property Workflow.started.quiescent-progress",
+      "reason": "Ivy generation supports inductive safety properties only",
+      "source": {}
+    }
+  ],
+  "tools": [
+    {
+      "name": "apalache",
+      "version": "0.61.0",
+      "url": "https://github.com/apalache-mc/apalache/releases/download/v0.61.0/apalache-0.61.0.zip",
+      "sha256": "f2d761315667f977c7c33792d95167f12e83b8a775909180886bcb67660470c5",
+      "archive": "apalache.zip",
+      "archiveType": "zip",
+      "extractRoot": "apalache",
+      "executable": "apalache/apalache-0.61.0/bin/apalache-mc"
+    },
+    {
+      "name": "fizzbee",
+      "version": "0.5.2",
+      "artifacts": [
+        {
+          "platform": "darwin-arm64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-macos_arm.tar.gz",
+          "sha256": "aab223e0bac8f0c052cf774dc25872f72c138da30f4079b914bb9c8921910904",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        },
+        {
+          "platform": "darwin-x86_64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-macos_x86.tar.gz",
+          "sha256": "6293bd7ab90c79b8607dc9fb2f09407fde0e11ac6596e884bef7f660178597fa",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        },
+        {
+          "platform": "linux-arm64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-linux_arm.tar.gz",
+          "sha256": "00011bbfe9bf4c7bcb03a5bf1f5b7fe7390111ad6f0611c6be71e8692504da4e",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        },
+        {
+          "platform": "linux-x86_64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-linux_x86.tar.gz",
+          "sha256": "f494b7b2afcc7ce24575ed91a389b46bbbbe5976f9e4b5cd717327012f5e0395",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        }
+      ]
+    },
+    {
+      "name": "ivy",
+      "version": "1.8.26",
+      "artifacts": [
+        {
+          "platform": "darwin-arm64",
+          "url": "https://files.pythonhosted.org/packages/c8/38/f829838dc68e5e5aad7babd8273f253e424eb399731b34f432ea66b16647/ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "sha256": "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c",
+          "archive": "ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "archiveType": "wheel",
+          "extractRoot": "ivy",
+          "package": "ms-ivy",
+          "executable": "ivy/bin/ivy_check"
+        },
+        {
+          "platform": "darwin-x86_64",
+          "url": "https://files.pythonhosted.org/packages/c8/38/f829838dc68e5e5aad7babd8273f253e424eb399731b34f432ea66b16647/ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "sha256": "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c",
+          "archive": "ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "archiveType": "wheel",
+          "extractRoot": "ivy",
+          "package": "ms-ivy",
+          "executable": "ivy/bin/ivy_check"
+        },
+        {
+          "platform": "linux-x86_64",
+          "url": "https://files.pythonhosted.org/packages/0a/f7/c8f9264bae27f2c56c2d02630c94a0fa400c66bc6772bf6ff049fdcd8101/ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl",
+          "sha256": "2a71da0bb2ce6314ddb40b6d76c6d734b8102db51c158477c2ef85b45da65dc1",
+          "archive": "ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl",
+          "archiveType": "wheel",
+          "extractRoot": "ivy",
+          "package": "ms-ivy",
+          "executable": "ivy/bin/ivy_check"
+        }
+      ]
+    },
+    {
+      "name": "p",
+      "version": "3.1.0",
+      "url": "https://api.nuget.org/v3-flatcontainer/p/3.1.0/p.3.1.0.nupkg",
+      "sha256": "b2a212e3b1af1bf2fdc9b80899da2901d6625d1a2e478d478e30028872a4bdc1",
+      "archive": "p.nupkg",
+      "archiveType": "nuget",
+      "extractRoot": "p",
+      "package": "P",
+      "executable": "p/p"
+    },
+    {
+      "name": "tla2tools",
+      "version": "1.7.4",
+      "url": "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar",
+      "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88",
+      "archive": "tla2tools.jar",
+      "archiveType": "file",
+      "extractRoot": "tla",
+      "executable": "tla/tla2tools.jar"
+    }
+  ],
+  "inventory": [
+    {
+      "kind": "causal-footprint",
+      "name": "cancellation-failure-then-cancellation",
+      "reason": "retained as a live execution refinement rather than transition behavior",
+      "source": {
+        "path": "tests/umpire2/protocol/causal_footprints.go",
+        "symbol": "nexus.cancel_with_retry"
+      }
+    },
+    {
+      "kind": "causal-footprint",
+      "name": "completion-before-start",
+      "reason": "retained as a live execution refinement rather than transition behavior",
+      "source": {
+        "path": "tests/umpire2/protocol/causal_footprints.go",
+        "symbol": "nexus.complete.scheduled"
+      }
+    },
+    {
+      "kind": "causal-footprint",
+      "name": "ordinary-completion",
+      "reason": "retained as a live execution refinement rather than transition behavior",
+      "source": {
+        "path": "tests/umpire2/protocol/causal_footprints.go",
+        "symbol": "nexus.respond_start.scheduled.sync"
+      }
+    },
+    {
+      "kind": "causal-footprint",
+      "name": "shared-handler-attachment",
+      "reason": "retained as a live execution refinement rather than transition behavior",
+      "source": {
+        "path": "tests/umpire2/protocol/causal_footprints.go",
+        "symbol": "nexus.start.attach_handler"
+      }
+    },
+    {
+      "kind": "entity",
+      "name": "Activity",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "entity",
+      "name": "Callback",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "entity",
+      "name": "NexusOperation",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "entity",
+      "name": "TaskQueue",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "entity",
+      "name": "Workflow",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "entity",
+      "name": "WorkflowRun",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "entity",
+      "name": "WorkflowTask",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "ActivityExecutionSnapshot",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusCallbackObservation",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationAttemptFailed",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationCancelRequestFailed",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationCanceled",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationExecutionSnapshot",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationFailed",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationHistorySnapshot",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationRejected",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationScheduled",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationStarted",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationStartedHistory",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationSucceeded",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationTerminal",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusOperationTimedOut",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "NexusStartResponse",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "SpeculativeWorkflowTaskScheduled",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowCallbackAttachment",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowExecutionClosed",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowNexusStorageSnapshot",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowRunClosed",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowRunStarted",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowStarted",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowTaskAdded",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowTaskDiscarded",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowTaskPolled",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowTaskStored",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "fact",
+      "name": "WorkflowTerminated",
+      "reason": "facts are observations outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Activity.backing_off",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Activity.canceled",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Activity.completed",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Activity.failed",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Activity.scheduled",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Activity.started",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Activity.timed_out",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Activity.unspecified",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Callback.unobserved",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.backing_off",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.canceled",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.failed",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.rejected",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.scheduled",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.started",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.succeeded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.terminated",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.timed_out",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "NexusOperation.unspecified",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Workflow.canceled",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Workflow.completed",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Workflow.created",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Workflow.failed",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Workflow.started",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Workflow.terminated",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "Workflow.timed_out",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowRun.canceled",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowRun.completed",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowRun.continued_as_new",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowRun.created",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowRun.failed",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowRun.started",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowRun.terminated",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowRun.timed_out",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowTask.added",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowTask.created",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowTask.discarded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowTask.polled",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowTask.stored",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
+      "name": "WorkflowTask.terminated",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "Activity.backing_off.quiescent-progress",
+      "included": true,
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "Activity.scheduled.quiescent-progress",
+      "included": true,
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "Activity.started.quiescent-progress",
+      "included": true,
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "NexusActivityForwardLinkConsistency",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule/nexus_activity_link_consistency.go",
+        "symbol": "NexusActivityLinkConsistencyRule"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "NexusActivityReverseLinkConsistency",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule/nexus_activity_link_consistency.go",
+        "symbol": "NexusActivityLinkConsistencyRule"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "NexusActivityTerminalRefinement",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start_activity"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "NexusOperation.backing_off.quiescent-progress",
+      "included": true,
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "NexusOperation.scheduled.quiescent-progress",
+      "included": true,
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "NexusOperation.started.quiescent-progress",
+      "included": true,
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "kind": "property",
+      "name": "Workflow.started.quiescent-progress",
+      "included": true,
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.cancel",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.cancel"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.cancel_with_retry",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.cancel_with_retry"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.complete[nexus.complete.callback_failed]",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.complete"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.complete[nexus.complete.scheduled]",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.complete"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.complete[nexus.complete.started]",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.complete"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.complete_from_handler",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.complete_from_handler"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.observe_callback_reference",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.observe_callback_reference"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.observe_late_start_response",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.observe_late_start_response"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.observe_link_endpoint",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.observe_link_endpoint"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.observe_result_digest",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.observe_result_digest"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.respond_start[nexus.respond_start.completion_pending.async]",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.respond_start[nexus.respond_start.scheduled.async]",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.respond_start[nexus.respond_start.scheduled.sync]",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.schedule",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.schedule_default",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule_default"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.schedule_embedded",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule_embedded"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.schedule_embedded_with_caller",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule_embedded_with_caller"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.start[nexus.start.attach_handler]",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.start[nexus.start.new_handler]",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.start_activity",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start_activity"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "nexus.timeout",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.timeout"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "workflow.complete",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.complete"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "workflow.observe_nexus_storage_absent",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.observe_nexus_storage_absent"
+      }
+    },
+    {
+      "kind": "regression-action",
+      "name": "workflow.observe_run_id",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.observe_run_id"
+      }
+    },
+    {
+      "kind": "regression-policy",
+      "name": "nexus.drop",
+      "reason": "fault policy is outside the initial atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.drop"
+      }
+    },
+    {
+      "kind": "regression-policy",
+      "name": "nexus.fail_next",
+      "reason": "fault policy is outside the initial atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.fail_next"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "activity.linked_to_nexus_operation",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "activity.linked_to_nexus_operation"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "activity.state",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "activity.state"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.callback_operation",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.callback_operation"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.callback_reference_consistent",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.callback_reference_consistent"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.cancel_request_failed",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.cancel_request_failed"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.child_of",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.child_of"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.handler_workflow",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.handler_workflow"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.late_start_response_accepted",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.late_start_response_accepted"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.link_endpoint",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.link_endpoint"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.linked_to_activity",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.linked_to_activity"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.result_digest",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.result_digest"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.start_to_close",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start_to_close"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "nexus.state",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.state"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "workflow.callback_handler_run",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.callback_handler_run"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "workflow.nexus_storage_absent",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.nexus_storage_absent"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "workflow.run_id",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.run_id"
+      }
+    },
+    {
+      "kind": "regression-predicate",
+      "name": "workflow.state",
+      "reason": "predicate is inventoried; lifecycle and relation projections are selected explicitly",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.state"
+      }
+    },
+    {
+      "kind": "regression-resource",
+      "name": "fault-injector",
+      "reason": "execution resource is outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "temporal.fault_injector"
+      }
+    },
+    {
+      "kind": "regression-resource",
+      "name": "namespace",
+      "reason": "execution resource is outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "temporal.namespace"
+      }
+    },
+    {
+      "kind": "regression-resource",
+      "name": "nexus-endpoint",
+      "reason": "execution resource is outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "temporal.nexus_endpoint"
+      }
+    },
+    {
+      "kind": "regression-resource",
+      "name": "task-queue",
+      "reason": "execution resource is outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "temporal.task_queue"
+      }
+    },
+    {
+      "kind": "regression-resource",
+      "name": "worker",
+      "reason": "execution resource is outside the atomic verification kernel",
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "temporal.worker"
+      }
+    },
+    {
+      "kind": "relation",
+      "name": "activity-nexus",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    },
+    {
+      "kind": "relation",
+      "name": "callback-handler-run",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    },
+    {
+      "kind": "relation",
+      "name": "callback-operation",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    },
+    {
+      "kind": "relation",
+      "name": "nexus-activity",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    },
+    {
+      "kind": "relation",
+      "name": "workflow-run-successor",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    },
+    {
+      "kind": "relation",
+      "name": "workflow-runs",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "CallbackReferenceConsistencyRule",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "CallbackReferenceConsistencyRule"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "CallbackResponseConsistencyRule",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "CallbackResponseConsistencyRule"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "EntityProgressRule",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "NexusActivityLinkConsistencyRule",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "NexusActivityLinkConsistencyRule"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "NexusOperationClosureRule",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "NexusOperationClosureRule"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "NexusOperationTimeoutSemanticsRule",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "NexusOperationTimeoutSemanticsRule"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "SpeculativeTaskCreationRule",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "SpeculativeTaskCreationRule"
+      }
+    },
+    {
+      "kind": "rule",
+      "name": "WorkflowTaskStarvationRule",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/rule",
+        "symbol": "WorkflowTaskStarvationRule"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.backing_off.cancel.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.backing_off.schedule.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.backing_off.timeout.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.scheduled.cancel.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.scheduled.fail.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.scheduled.start.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.scheduled.timeout.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.started.attempt_failed.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.started.cancel.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.started.complete.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.started.fail.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.started.timeout.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Activity.unspecified.schedule.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.backing_off.schedule.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "cmd:ScheduleNexusOperation"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.backing_off.schedule.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartNexusOperationExecution"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.backing_off.terminate.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.backing_off.terminate.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.backing_off.timeout.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(backing_off)"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.backing_off.timeout.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(backing_off)"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.attempt_failed.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:RetryableError"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.attempt_failed.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:RetryableError"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.cancel.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpCanceled"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.cancel.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpCanceled"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.fail.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpFailed"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.fail.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpFailed"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.start.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:AsyncAck"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.start.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:AsyncAck"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.succeed.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:SyncOk"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.succeed.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:SyncOk"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.terminate.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.terminate.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.timeout.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(scheduled)"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.scheduled.timeout.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(scheduled)"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.cancel.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.cancel.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.fail.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.fail.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.succeed.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.succeed.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.terminate.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.terminate.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.timeout.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a real schedule-to-close timer"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.started.timeout.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a real schedule-to-close timer"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.unspecified.reject.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "rejection actions are outside the edge-action planner"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.unspecified.reject.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "rejection actions are outside the edge-action planner"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.unspecified.schedule.Embedded",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "cmd:ScheduleNexusOperation"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "NexusOperation.unspecified.schedule.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartNexusOperationExecution"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Workflow.created.start.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartWorkflowExecution"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Workflow.started.cancel.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow cancellation command driver"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Workflow.started.complete.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "SignalWorkflowExecution(finish)"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Workflow.started.fail.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow failure command driver"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Workflow.started.terminate.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow termination RPC driver"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "Workflow.started.timeout.Standalone",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "server-driven timeout has no atomic action"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowRun.created.start.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowRun.started.cancel.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowRun.started.complete.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowRun.started.continue_as_new.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowRun.started.fail.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowRun.started.terminate.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowRun.started.timeout.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowTask.added.discard.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowTask.added.poll.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowTask.added.store.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowTask.added.terminate.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowTask.created.add.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowTask.created.terminate.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowTask.stored.discard.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowTask.stored.poll.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "WorkflowTask.stored.terminate.AnyHosting",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "kind": "verification-action",
+      "name": "regression.nexus.start_activity",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start_activity"
+      }
+    }
+  ],
+  "refinements": [
+    {
+      "name": "lifecycle.Activity.backing_off.cancel.AnyHosting",
+      "action": "Activity.backing_off.cancel.AnyHosting",
+      "lifecycleActions": [
+        "Activity.backing_off.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.backing_off.schedule.AnyHosting",
+      "action": "Activity.backing_off.schedule.AnyHosting",
+      "lifecycleActions": [
+        "Activity.backing_off.schedule.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.backing_off.timeout.AnyHosting",
+      "action": "Activity.backing_off.timeout.AnyHosting",
+      "lifecycleActions": [
+        "Activity.backing_off.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.scheduled.cancel.AnyHosting",
+      "action": "Activity.scheduled.cancel.AnyHosting",
+      "lifecycleActions": [
+        "Activity.scheduled.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.scheduled.fail.AnyHosting",
+      "action": "Activity.scheduled.fail.AnyHosting",
+      "lifecycleActions": [
+        "Activity.scheduled.fail.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.scheduled.start.AnyHosting",
+      "action": "Activity.scheduled.start.AnyHosting",
+      "lifecycleActions": [
+        "Activity.scheduled.start.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.scheduled.timeout.AnyHosting",
+      "action": "Activity.scheduled.timeout.AnyHosting",
+      "lifecycleActions": [
+        "Activity.scheduled.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.attempt_failed.AnyHosting",
+      "action": "Activity.started.attempt_failed.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.attempt_failed.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.cancel.AnyHosting",
+      "action": "Activity.started.cancel.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.complete.AnyHosting",
+      "action": "Activity.started.complete.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.complete.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.fail.AnyHosting",
+      "action": "Activity.started.fail.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.fail.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.timeout.AnyHosting",
+      "action": "Activity.started.timeout.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.unspecified.schedule.AnyHosting",
+      "action": "Activity.unspecified.schedule.AnyHosting",
+      "lifecycleActions": [
+        "Activity.unspecified.schedule.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.schedule.Embedded",
+      "action": "NexusOperation.backing_off.schedule.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.schedule.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "cmd:ScheduleNexusOperation"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.schedule.Standalone",
+      "action": "NexusOperation.backing_off.schedule.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.schedule.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartNexusOperationExecution"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.terminate.Embedded",
+      "action": "NexusOperation.backing_off.terminate.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.terminate.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.terminate.Standalone",
+      "action": "NexusOperation.backing_off.terminate.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.terminate.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.timeout.Embedded",
+      "action": "NexusOperation.backing_off.timeout.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.timeout.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(backing_off)"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.timeout.Standalone",
+      "action": "NexusOperation.backing_off.timeout.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.timeout.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(backing_off)"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.attempt_failed.Embedded",
+      "action": "NexusOperation.scheduled.attempt_failed.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.attempt_failed.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:RetryableError"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.attempt_failed.Standalone",
+      "action": "NexusOperation.scheduled.attempt_failed.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.attempt_failed.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:RetryableError"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.cancel.Embedded",
+      "action": "NexusOperation.scheduled.cancel.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.cancel.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpCanceled"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.cancel.Standalone",
+      "action": "NexusOperation.scheduled.cancel.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.cancel.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpCanceled"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.fail.Embedded",
+      "action": "NexusOperation.scheduled.fail.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.fail.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpFailed"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.fail.Standalone",
+      "action": "NexusOperation.scheduled.fail.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.fail.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpFailed"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.start.Embedded",
+      "action": "NexusOperation.scheduled.start.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.start.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:AsyncAck"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.succeed.Embedded",
+      "action": "NexusOperation.scheduled.succeed.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.succeed.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:SyncOk"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.terminate.Embedded",
+      "action": "NexusOperation.scheduled.terminate.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.terminate.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.terminate.Standalone",
+      "action": "NexusOperation.scheduled.terminate.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.terminate.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.timeout.Embedded",
+      "action": "NexusOperation.scheduled.timeout.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.timeout.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(scheduled)"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.timeout.Standalone",
+      "action": "NexusOperation.scheduled.timeout.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.timeout.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(scheduled)"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.cancel.Embedded",
+      "action": "NexusOperation.started.cancel.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.cancel.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.fail.Embedded",
+      "action": "NexusOperation.started.fail.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.fail.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.fail.Standalone",
+      "action": "NexusOperation.started.fail.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.fail.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.succeed.Embedded",
+      "action": "NexusOperation.started.succeed.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.succeed.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.terminate.Embedded",
+      "action": "NexusOperation.started.terminate.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.terminate.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.terminate.Standalone",
+      "action": "NexusOperation.started.terminate.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.terminate.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.timeout.Embedded",
+      "action": "NexusOperation.started.timeout.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.timeout.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a real schedule-to-close timer"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.timeout.Standalone",
+      "action": "NexusOperation.started.timeout.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.timeout.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a real schedule-to-close timer"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.unspecified.reject.Embedded",
+      "action": "NexusOperation.unspecified.reject.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.unspecified.reject.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "rejection actions are outside the edge-action planner"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.unspecified.reject.Standalone",
+      "action": "NexusOperation.unspecified.reject.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.unspecified.reject.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "rejection actions are outside the edge-action planner"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.unspecified.schedule.Embedded",
+      "action": "NexusOperation.unspecified.schedule.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.unspecified.schedule.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "cmd:ScheduleNexusOperation"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.created.start.Standalone",
+      "action": "Workflow.created.start.Standalone",
+      "lifecycleActions": [
+        "Workflow.created.start.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartWorkflowExecution"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.cancel.Standalone",
+      "action": "Workflow.started.cancel.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.cancel.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow cancellation command driver"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.fail.Standalone",
+      "action": "Workflow.started.fail.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.fail.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow failure command driver"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.terminate.Standalone",
+      "action": "Workflow.started.terminate.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.terminate.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow termination RPC driver"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.timeout.Standalone",
+      "action": "Workflow.started.timeout.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.timeout.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "server-driven timeout has no atomic action"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.created.start.AnyHosting",
+      "action": "WorkflowRun.created.start.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.created.start.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.cancel.AnyHosting",
+      "action": "WorkflowRun.started.cancel.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.complete.AnyHosting",
+      "action": "WorkflowRun.started.complete.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.complete.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.continue_as_new.AnyHosting",
+      "action": "WorkflowRun.started.continue_as_new.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.continue_as_new.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.fail.AnyHosting",
+      "action": "WorkflowRun.started.fail.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.fail.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.terminate.AnyHosting",
+      "action": "WorkflowRun.started.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.timeout.AnyHosting",
+      "action": "WorkflowRun.started.timeout.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.discard.AnyHosting",
+      "action": "WorkflowTask.added.discard.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.discard.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.poll.AnyHosting",
+      "action": "WorkflowTask.added.poll.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.poll.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.store.AnyHosting",
+      "action": "WorkflowTask.added.store.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.store.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.terminate.AnyHosting",
+      "action": "WorkflowTask.added.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.created.add.AnyHosting",
+      "action": "WorkflowTask.created.add.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.created.add.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.created.terminate.AnyHosting",
+      "action": "WorkflowTask.created.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.created.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.stored.discard.AnyHosting",
+      "action": "WorkflowTask.stored.discard.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.stored.discard.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.stored.poll.AnyHosting",
+      "action": "WorkflowTask.stored.poll.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.stored.poll.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.stored.terminate.AnyHosting",
+      "action": "WorkflowTask.stored.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.stored.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.scheduled.start.Standalone",
+      "action": "NexusOperation.scheduled.start.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.start.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.respond_start[nexus.respond_start.scheduled.async]"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start.scheduled.async"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.scheduled.succeed.Standalone",
+      "action": "NexusOperation.scheduled.succeed.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.succeed.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.complete[nexus.complete.scheduled]",
+        "nexus.respond_start[nexus.respond_start.scheduled.sync]"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start.scheduled.sync"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.started.cancel.Standalone",
+      "action": "NexusOperation.started.cancel.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.cancel.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.cancel"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.cancel"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.started.succeed.Standalone",
+      "action": "NexusOperation.started.succeed.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.succeed.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.complete[nexus.complete.started]"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.complete.started"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.unspecified.schedule.Standalone",
+      "action": "NexusOperation.unspecified.schedule.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.unspecified.schedule.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.schedule_default"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule_default"
+      }
+    },
+    {
+      "name": "regression.Workflow.started.complete.Standalone",
+      "action": "Workflow.started.complete.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.complete.Standalone"
+      ],
+      "regressionActions": [
+        "workflow.complete"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.complete"
+      }
+    },
+    {
+      "name": "regression.nexus.start_activity",
+      "action": "regression.nexus.start_activity",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.succeed.Embedded"
+      ],
+      "regressionActions": [
+        "nexus.start_activity"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start_activity"
+      }
+    }
+  ]
+}

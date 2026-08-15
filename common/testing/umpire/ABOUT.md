@@ -2,159 +2,257 @@
 
 Umpire is a model-based acceptance testing framework. It describes Temporal behavior in terms of
 what should happen, drives a running system toward that behavior, observes what actually happens,
-and judges the result against shared expectations.
+and judges the result against shared properties.
 
-The central idea is to keep behavioral intent separate from mechanics. A test should say that a
-Workflow reaches an expected outcome, not repeat every RPC, worker setup step, polling loop, and
-assertion needed to get it there.
+The central idea is to keep behavioral intent separate from execution mechanics. A test should say
+that a Workflow reaches an expected outcome, not repeat every RPC, worker setup step, polling loop,
+and assertion needed to get it there.
+
+A **BOUND** is an explicit finite limit on time, actions, routes, schedules, search depth, retained
+evidence, or another execution or search dimension. Reaching a bound is not success unless the
+available evidence still justifies the resulting claim.
 
 ## The one-minute model
 
-Umpire has three cooperating paths:
+Authoring and driving follow this flow:
 
-1. The driving path turns a **SCENARIO** into a **PLAN**, then uses **ACTIONS** and **REALIZERS** to
-   interact with Temporal.
-2. The observation path turns responses, history, telemetry, and in-process signals into **FACTS**
-   about **ENTITIES**. Those facts update **LIFECYCLES**, **RELATIONS**, and the **MODEL STATE**.
-3. The judgment path applies **RULES** to that state and produces a **QUALIFIED CLAIM**.
+```text
+TEST INTENT
+  -> SPARSE REGRESSION PLAN
+  -> COMPILED SUITE
+  -> COMPLETED PATH
+  -> ACTION
+  -> ACTION REALIZER
+  -> Temporal
+```
 
-In short:
+A lifecycle route plan is another, narrower planning artifact: it contains one or more event routes
+to a target state. It does not select a concrete runtime entity. A campaign scenario is assembled
+later from a completed path plus selected matrix values, an exploration route, and faults; it is not
+the universal source form for every Umpire test.
 
-**SCENARIO** → **PLAN** → **ACTION** → **REALIZER** → Temporal
+Observation and judgment are separate flows:
 
-Temporal → observations → **FACT** → **MODEL STATE** → **RULE** → **QUALIFIED CLAIM**
+```text
+RAW OBSERVATION -> FACT -> MODEL STATE
+                       \-> RELATION STATE
 
-Driving and observation are deliberately separate. The code that changes Temporal does not get to
-decide whether Temporal behaved correctly; judgment comes from independently collected evidence.
+MODEL STATE + RELATION STATE -> RULE -> PASS | PENDING OBLIGATION | VIOLATION
+
+PROPERTY RESULT + OBSERVED EVIDENCE + ENVIRONMENT PROFILE -> QUALIFIED CLAIM
+```
+
+The code that changes Temporal does not decide whether Temporal behaved correctly. The Monitor
+updates state from independently collected observations, rules evaluate that state at checkpoints,
+and evidence qualification limits the conclusion to what the environment actually retained.
 
 ## Ubiquitous language
 
-These terms form Umpire's shared conceptual language. Together, they connect authoring, execution,
-regression, exploration, and verification.
+The terms are grouped in the order they become useful. The advanced assurance vocabulary is not
+required to understand an ordinary Umpire test.
 
-- **PROTOCOL** — the compiled behavioral vocabulary shared by the rest of Umpire. It declares the
-  known **ENTITIES**, **FACTS**, **LIFECYCLES**, **RELATIONS**, **ACTIONS**, and explicitly
-  unsupported behavior.
-- **ENTITY** — a thing whose behavior Umpire tracks, such as a Workflow Execution, Activity, Nexus
-  Operation, or Callback. An **ENTITY** has a stable semantic type and a concrete identity learned
-  before or during execution.
-- **FACT** — a normalized observation about an **ENTITY**. Different evidence sources can describe
-  the same behavior as the same **FACT**, so **RULES** do not need to understand RPC or telemetry
-  formats.
-- **LIFECYCLE** — the allowed states of an **ENTITY** and the events that move it between them. An
-  observed event may advance the **LIFECYCLE**, be an allowed no-op, or be illegal.
-- **RELATION** — a typed connection between **ENTITIES**, such as lineage or ownership. It lets
-  Umpire reason across components without guessing identities from timing or names.
-- **MODEL STATE** — Umpire's current understanding of an execution, built only from observed
-  **FACTS**, tracked **ENTITIES**, and their **RELATIONS**.
-- **SCENARIO** — one bounded semantic experiment: the behavior to exercise, its inputs, and its
-  expected outcome. It describes intent rather than environment-specific setup.
-- **ACTION** — a semantic operation with observable preconditions and effects. An **ACTION** says
-  what behavior should be caused, not which RPC or worker implementation causes it.
-- **PLAN** — an inspectable, bounded route through one or more **LIFECYCLES**. It orders the
-  **ACTIONS** needed to reach the **SCENARIO**'s goal before execution begins.
-- **REALIZER** — the environment-specific adapter that turns an **ACTION** into actual Temporal
-  traffic, worker behavior, or controlled faults.
-- **RULE** — a behavioral expectation evaluated against the **MODEL STATE**. A **SAFETY RULE**
-  must hold at each checkpoint; a **LIVENESS RULE** records an obligation that must be resolved by
-  the final bounded check.
-- **VIOLATION** — evidence that a **RULE** did not hold. It identifies the failed behavioral
-  expectation and retains a semantic, non-secret diagnosis.
-- **ENVIRONMENT PROFILE** — the contract for where a **SCENARIO** runs, what it may drive, what it
-  can observe, and which ordering guarantees its evidence supports.
-- **QUALIFIED CLAIM** — the strongest conclusion justified by the available evidence. A claim is
-  established, violated, unsupported, or inconclusive; missing evidence is never treated as
-  success.
-- **COVERAGE** — a comparison between declared behavioral obligations and what execution observed.
-  It shows what was exercised, not whether the behavior is universally correct.
-- **SPARSE REGRESSION** — a durable test written as a few semantic key frames. Umpire fills in the
-  valid intermediate plan and rejects the regression before execution if required behavior cannot
-  be realized.
-- **CAMPAIGN** — a bounded discovery loop that selects **SCENARIOS**, executes them in isolation,
-  minimizes qualified failures, replays the reduced experiment, and proposes stable candidates for
-  human-reviewed **SPARSE REGRESSIONS**.
-- **GENERATED VERIFICATION** — a bounded formal projection of the **PROTOCOL** used to check its
-  abstract state space independently of a running Temporal system.
-- **GUARDED CANARY** — an approved **SCENARIO** executed under explicit isolation, authority,
-  traffic, fault, evidence, and cleanup limits.
+### Authoring
 
-## A conceptual example
+- **TEST INTENT** — the behavior an author wants to exercise and judge, independent of a particular
+  environment or orchestration mechanism.
+- **UMPIRE PROTOCOL** — the validated behavioral contract Umpire understands. It catalogs fact and
+  entity types, subscriptions, lifecycles, action bindings and action gaps, relation schemas and
+  derivation, sparse-regression vocabulary, and expected causal footprints. It is not a wire or RPC
+  protocol. Rules and environment evidence remain separate from it.
+- **PROPERTY** — a named proposition about behavior whose result can be evaluated and
+  evidence-qualified. A property is the requirement; a rule is one way to evaluate it at runtime.
 
-Suppose a test needs to establish that a Workflow completes after its worker returns successfully.
+### Driving
 
-The **SCENARIO** states that goal using vocabulary from the **PROTOCOL**. Umpire follows the
-Workflow's **LIFECYCLE** to produce a **PLAN**. Each **ACTION** in that plan is handed to a
-**REALIZER**, which performs the appropriate client or worker behavior in the selected
-**ENVIRONMENT PROFILE**.
+- **ACTION** — a protocol-defined operation with observable preconditions and effects. It says what
+  behavior should be caused, not which RPC, worker, participant, or fault implementation causes it.
+- **ACTION REALIZER** — the environment-specific adapter that fires proactive operations or installs
+  reactive behavior for an action.
+- **LIFECYCLE ROUTE PLAN** — one or more lifecycle-event routes to a structural target state. It is
+  inspectable before execution and does not identify a concrete runtime entity.
+- **ACTION GAP** — a lifecycle transition Umpire understands but deliberately cannot drive as one
+  atomic action. The Umpire protocol records the reason instead of silently treating the edge as
+  executable. It does not mean the Temporal behavior or its properties are globally unsupported.
 
-At the same time, Umpire observes Temporal. It normalizes relevant responses, history events,
-telemetry, and in-process signals into **FACTS**. Those **FACTS** identify the Workflow **ENTITY**,
-advance its **LIFECYCLE**, and update any **RELATIONS** to other **ENTITIES**. **RULES** then
-inspect the resulting **MODEL STATE**.
+### Observation
 
-If the required evidence is complete, the result can become an established or violated
-**QUALIFIED CLAIM**. If the environment could not observe something the **RULE** requires, the
-claim is unsupported or inconclusive instead of silently passing.
+- **ENTITY** — a thing whose behavior Umpire follows, such as a Workflow, Workflow Run, Activity,
+  Nexus Operation, or Callback. A logical Workflow-ID chain and a RunID-specific Workflow Run are
+  separate entities.
+- **ENTITY PATH** — the containment ancestry used to address an entity in a scope. It is not a
+  cross-entity relation.
+- **RAW OBSERVATION** — a signal received from Temporal, such as a response, history event,
+  telemetry event, or in-process notification.
+- **FACT** — one raw observation translated into Umpire's shared vocabulary and addressed to an
+  entity path or entity type. A fact records what Umpire observed; it does not prove a property by
+  itself. Distinct sources may emit distinct facts about the same transition and remain visible.
+- **MONITOR** — the runtime boundary that accepts facts, updates model and relation state, and
+  evaluates rules without driving Temporal.
+- **LIFECYCLE** — the optional state machine for an entity type. It classifies an observed event as
+  an advance, including a reachable forward jump over unobserved states, a benign re-observation,
+  or an illegal transition.
+- **RELATION** — a typed, validated connection between entities, such as Workflow-to-Run membership,
+  lineage, or ownership. It lets Umpire reason across components without guessing identity from
+  timing or names.
+- **MODEL STATE** — Umpire's current fact-derived state for entity instances in one scope.
+- **RELATION STATE** — the separately validated cross-entity links in that scope. Rules may consult
+  model and relation state together, but relations are not part of model state.
+
+### Judgment
+
+- **RULE** — a runtime evaluator for one or more properties using model state and relation state. A
+  safety rule is checked at each applicable checkpoint; a liveness rule may retain an obligation
+  until the final bounded check.
+- **CHECKPOINT** — a named moment when the Monitor evaluates its safety rulebook, such as after an
+  action, after an observation milestone, or at quiescence.
+- **VIOLATION** — a judgment that an invariant failed, an obligation remained unresolved at the
+  final bounded check, or observed behavior was illegal. It is derived from evidence; it is not the
+  raw evidence itself.
+- **EVIDENCE REQUIREMENT** — the sources, ordering guarantees, and identity lineage needed to
+  establish or violate a property.
+- **OBSERVED EVIDENCE** — the sources and guarantees actually retained for one evaluation, including
+  any loss, ambiguity, conflict, or incomparable ordering.
+- **ENVIRONMENT PROFILE** — the declared execution kind, drive capabilities, evidence sources,
+  clock and ordering guarantees, identity lineage, supported properties, and retention policy. It
+  says what an environment can provide, not what one run successfully retained.
+- **QUALIFIED CLAIM** — the conclusion about a property, limited by the environment profile and
+  observed evidence. Its statuses are:
+  - **ESTABLISHED** — complete evidence supports the property within the declared bounds;
+  - **VIOLATED** — complete evidence contradicts the property;
+  - **UNSUPPORTED** — the declared environment cannot meet the property's evidence requirements;
+  - **INCONCLUSIVE** — the environment could support the property, but evidence was lost, missing,
+    ambiguous, conflicting, or incomparable during this evaluation.
+
+### Advanced assurance
+
+- **SPARSE REGRESSION PLAN** — author-written behavioral source containing selected instructions.
+  It states important outcomes, actions, policies, and order without spelling out every valid step.
+- **MILESTONE** — an author-selected fact, relation, binding, or state observation that must hold at
+  a particular interval in a sparse regression.
+- **COMPILED SUITE** — all validated completed paths produced from one sparse regression plan for a
+  selected environment profile.
+- **COMPLETED PATH** — one fully grounded sequence of actions, resources, policies, milestones, and
+  bindings ready for realization.
+- **SEMANTIC COVERAGE** — a comparison between declared behavior-level obligations and observed
+  facts, transitions, relations, actions, rule evaluations, and violations. It shows what was
+  exercised; it does not prove correctness.
+- **CAMPAIGN SCENARIO** — one selected executable experiment containing a completed path, matrix
+  choices, an optional exploration route, and faults. Expected behavior belongs to a property or
+  selected milestone, not to the scenario value itself.
+- **EXPLORATION CAMPAIGN** — a budgeted batch of isolated campaign scenarios used to discover,
+  minimize, replay, and propose human-reviewed regression candidates.
+- **VERIFICATION TARGET** — one selected formal-model slice with explicit properties, bounds,
+  abstractions, backend requirements, and failure policy.
+- **BOUNDED MODEL VERIFICATION** — generation and checking of finite abstract state spaces from
+  protocol-derived data plus explicit verification modules. A backend that cannot express a
+  feature reports **UNSUPPORTED BACKEND SEMANTICS**; that is distinct from an unsupported live
+  evidence claim.
+- **SAFETY ENVELOPE** — the isolation, authority, traffic, fault, time, retention, stop, and cleanup
+  controls approved for a canary workload.
+- **GUARDED CANARY** — an allowlisted workload run through a context-compliant driver inside a
+  safety envelope. It does not directly execute a campaign scenario and does not necessarily
+  produce an evidence-qualified claim.
+
+Use bare **PLAN**, **SCENARIO**, **COVERAGE**, or **PROTOCOL** only when the surrounding context makes
+the specific kind unambiguous.
+
+## A concrete end-to-end story
+
+Suppose a test intends to establish that Workflow `order-17` has a Run that completes after its
+worker returns successfully.
+
+1. The Umpire protocol models two entities: the logical Workflow `order-17` and the Run identified
+   by its server-minted RunID. The property is that the selected Workflow Run reaches `completed`
+   without a rule violation.
+2. A sparse regression plan names the required completed state. Compilation produces a suite and a
+   completed path. That path includes an action whose realizer starts the Workflow and arranges the
+   successful worker result.
+3. Temporal emits several raw observations. A start response and history or in-process notification
+   become Workflow-started and Workflow-Run-started facts. A later completion observation becomes a
+   Workflow-Run-completed fact.
+4. The Monitor advances the Workflow entity and the Run entity independently. From the Run-started
+   fact, relation derivation adds the `workflow-runs` relation from Workflow `order-17` to the
+   concrete RunID.
+5. At the quiescence checkpoint, rules inspect model state and relation state. The selected Run is
+   `completed`, its Workflow membership is unambiguous, and no safety or liveness violation remains.
+6. The in-process environment profile declares the needed evidence source and identity lineage. If
+   those observations were retained, the property receives an established evidence-qualified
+   claim. A missing source makes it unsupported; lost or ambiguous identity evidence makes it
+   inconclusive; an illegal transition or unresolved obligation makes it violated.
+
+The facts do not prove completion merely because they exist. The rule evaluates the property, and
+the evidence requirement plus observed evidence determine how strong the final claim may be.
 
 ## Understanding an existing Umpire test
 
-Read an existing test from intent toward evidence:
+Read a test from intent toward evidence:
 
-1. Start with its **SCENARIO** or **SPARSE REGRESSION**. What behavioral outcome is it asking for?
-2. Identify the relevant **ENTITIES**, **LIFECYCLES**, and **RELATIONS** in the **PROTOCOL**.
-3. Follow the **PLAN** and **ACTIONS** conceptually. What must Umpire cause, and what should each
-   **ACTION** change?
-4. Find the **FACTS** that make those changes observable and the **RULES** that judge them.
-5. Check the **ENVIRONMENT PROFILE** before interpreting the **QUALIFIED CLAIM**. A black-box run
-   and an in-process run may justify different conclusions from the same behavioral intent.
+1. Identify its test intent and the property it wants to judge.
+2. Determine whether its source is a sparse regression plan, lifecycle route plan, or explicit
+   completed path.
+3. Find the relevant entities, lifecycles, action bindings, and action gaps in the Umpire protocol.
+4. Follow the actions and their realizers conceptually: what must Umpire cause, and what should each
+   action change?
+5. Find the raw observations and facts that make those changes visible, then the rules and
+   checkpoints that judge them.
+6. Read the environment profile, observed evidence, and qualified claim together. A public-API run
+   and an in-process run may justify different conclusions from the same test intent.
 
-This reading order keeps setup details from obscuring the reason the test exists.
+This order keeps setup details from obscuring why the test exists.
 
 ## Authoring an Umpire test
 
 Author from the shared language outward:
 
-1. State the desired behavior as a bounded **SCENARIO** or **SPARSE REGRESSION**.
-2. Reuse the existing **PROTOCOL** vocabulary whenever it already expresses the behavior.
-3. Make every required outcome observable as a **FACT** before relying on it in a **RULE**.
-4. Keep the **ACTION** semantic and put environment mechanics in its **REALIZER**.
-5. Declare explicit bounds, capabilities, and evidence needs through the **PLAN** and
-   **ENVIRONMENT PROFILE**.
-6. Exercise the expected path and meaningful failure modes. Treat unsupported behavior and
-   incomplete evidence as explicit outcomes.
-7. Read the resulting **QUALIFIED CLAIM**, retained evidence, and **COVERAGE** together.
+1. State a bounded test intent and property. Prefer the typed sparse regression vocabulary for an
+   ordinary Temporal behavior test.
+2. Reuse the canonical Umpire protocol whenever it already expresses the entities, states, actions,
+   and relations involved.
+3. Make every required outcome observable as facts or relation state before relying on a rule to
+   judge it.
+4. Keep actions behavioral and place environment mechanics in action realizers.
+5. Select an environment profile whose drive capabilities and evidence requirements match the
+   intent. Do not treat an action gap, incomplete evidence, or unsupported backend semantics as the
+   same condition.
+6. Record phase-specific bounds and omissions. Exercise the expected path and meaningful failure
+   modes.
+7. Interpret the qualified claim, retained evidence, and semantic coverage together.
 
-Extend the **PROTOCOL** only when its current language cannot describe the behavior. A new concept
-is useful when it can be observed, driven where appropriate, and judged without embedding one
-test's mechanics into the shared model.
+Extend the Umpire protocol only when its current language cannot describe the behavior. A useful
+new concept can be observed, driven where appropriate, and judged without embedding one test's
+mechanics into the shared model.
 
 ## Conceptual structure
 
-Umpire is roughly organized into six conceptual responsibilities:
+Umpire has six conceptual responsibilities:
 
-- **LANGUAGE** — the **PROTOCOL** gives every other responsibility the same behavioral vocabulary.
-- **PLANNING** — **SCENARIOS** and **SPARSE REGRESSIONS** become bounded, validated **PLANS**.
-- **DRIVING** — using the selected **ENVIRONMENT PROFILE**, **REALIZERS** perform **ACTIONS**.
-- **OBSERVATION** — raw signals become **FACTS**, which build the **MODEL STATE**.
-- **JUDGMENT** — **RULES** turn evidence into **VIOLATIONS** and **QUALIFIED CLAIMS**.
-- **ASSURANCE** — replay, **COVERAGE**, **CAMPAIGNS**, **GENERATED VERIFICATION**, and
-  **GUARDED CANARIES** broaden the search while preserving explicit bounds and authority.
+- **LANGUAGE** — the Umpire protocol gives every other responsibility the same behavioral
+  vocabulary.
+- **PLANNING** — sparse source and structural targets become bounded, validated artifacts with
+  distinct meanings.
+- **DRIVING** — action realizers use the selected environment's declared authority to perform
+  actions.
+- **OBSERVATION** — raw signals become facts, model state, and relation state.
+- **JUDGMENT** — rules evaluate properties at checkpoints; evidence qualification produces claims.
+- **ASSURANCE** — replay, semantic coverage, exploration campaigns, bounded model verification,
+  and guarded canaries broaden the search while preserving explicit bounds and authority.
 
 These responsibilities share a language but remain separate seams. That separation lets a test
-reuse its behavioral intent across local tests, CI, deployment validation, and approved canaries
+reuse behavioral intent across local tests, CI, deployment validation, and approved canaries
 without pretending those environments offer identical control or evidence.
 
 ## What Umpire does not promise
 
 - A bounded successful run is not exhaustive proof.
-- **COVERAGE** proves that an obligation was exercised, not that its model is correct.
-- Replaying a **SCENARIO** preserves its semantic experiment and evidence; it cannot reproduce an
-  uncontrolled distributed schedule exactly.
-- A **QUALIFIED CLAIM** cannot be stronger than its **ENVIRONMENT PROFILE** and observed evidence.
+- Semantic coverage proves that an obligation was exercised, not that its model is correct.
+- Replaying a campaign scenario preserves its behavioral experiment and evidence; it cannot
+  reproduce an uncontrolled distributed schedule exactly.
+- An evidence-qualified claim cannot be stronger than its environment profile and observed
+  evidence.
 - Production credentials, operator approval, and destructive authority remain outside the generic
   framework.
 - Exact wire compatibility, authorization, performance, schema, metrics, and low-level concurrency
-  contracts still need specialized tests when they sit below the **PROTOCOL** abstraction.
+  contracts still need specialized tests when they sit below the Umpire protocol abstraction.
 
 For detailed architecture and implementation boundaries, see
 [`UMPIRE.md`](../../../UMPIRE.md).

@@ -9,14 +9,11 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 )
 
 // CheckSafetyRule is a test helper that runs a single safety rule and returns violations.
 // It uses sinceGeneration=0 so all entities are visible.
-func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *ModelState, logger log.Logger, config RuleConfig) []Violation {
+func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *ModelState, config RuleConfig) []Violation {
 	st := &ruleState{
 		lastReported: make(map[string]time.Time),
 		reportTTL:    defaultReportTTL,
@@ -26,7 +23,6 @@ func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *ModelState,
 			Context:    ctx,
 			Now:        time.Now(),
 			ModelState: registry,
-			Logger:     logger,
 			Config:     config,
 			state:      st,
 			ruleName:   rule.Name(),
@@ -38,7 +34,7 @@ func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *ModelState,
 
 // CheckLivenessRule is a test helper that runs a single liveness rule and returns violations.
 // It uses sinceGeneration=0 so all entities are visible, then collects pending items.
-func CheckLivenessRule(ctx context.Context, rule LivenessRule, registry *ModelState, logger log.Logger, config RuleConfig) []Violation {
+func CheckLivenessRule(ctx context.Context, rule LivenessRule, registry *ModelState, config RuleConfig) []Violation {
 	st := &ruleState{
 		lastReported: make(map[string]time.Time),
 		pending:      make(map[string]Violation),
@@ -49,7 +45,6 @@ func CheckLivenessRule(ctx context.Context, rule LivenessRule, registry *ModelSt
 			Context:    ctx,
 			Now:        time.Now(),
 			ModelState: registry,
-			Logger:     logger,
 			Config:     config,
 			state:      st,
 			ruleName:   rule.Name(),
@@ -110,7 +105,6 @@ type ruleContext struct {
 	context.Context
 	Now             time.Time
 	ModelState      *ModelState
-	Logger          log.Logger
 	Config          RuleConfig
 	sinceGeneration uint64    // only query entities changed after this generation
 	scope           *EntityID // if set, only query entities rooted at this ancestor (e.g. a namespace)
@@ -120,14 +114,6 @@ type ruleContext struct {
 	violations []Violation
 }
 
-func (c *ruleContext) logViolation(v Violation) {
-	tags := []tag.Tag{tag.NewStringTag("rule", v.Rule)}
-	for k, val := range v.Tags {
-		tags = append(tags, tag.NewStringTag(k, val))
-	}
-	c.Logger.Warn(fmt.Sprintf("violation: %s", v.Message), tags...)
-}
-
 func (c *ruleContext) recordViolation(key string, v Violation) {
 	if lr, reported := c.state.lastReported[key]; reported && c.Now.Sub(lr) < reportInterval {
 		return
@@ -135,7 +121,6 @@ func (c *ruleContext) recordViolation(key string, v Violation) {
 	c.state.lastReported[key] = c.Now
 	v.Rule = c.ruleName
 	c.violations = append(c.violations, v)
-	c.logViolation(v)
 }
 
 // SafetyContext is passed to SafetyRule.CheckSafety.
@@ -252,7 +237,6 @@ type RuleRegistry struct {
 	states   map[string]*ruleState
 
 	ruleModelState *ModelState
-	logger         log.Logger
 	config         RuleConfig
 
 	// conformance dedup: per entity key, how many recorded illegal transitions have
@@ -302,19 +286,15 @@ func validateRuleName(probe any, name string) string {
 }
 
 // InitRules constructs rules. If names is empty, all registered rules are used.
-func (r *RuleRegistry) InitRules(registry *ModelState, logger log.Logger, config RuleConfig, names ...string) error {
+func (r *RuleRegistry) InitRules(registry *ModelState, config RuleConfig, names ...string) error {
 	if registry == nil {
 		return fmt.Errorf("registry is required")
-	}
-	if logger == nil {
-		return fmt.Errorf("logger is required")
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.ruleModelState = registry
-	r.logger = logger
 	r.config = config
 
 	if len(names) == 0 {
@@ -369,7 +349,6 @@ func (r *RuleRegistry) Check(ctx context.Context, final bool, scope *EntityID) [
 			Context:         ctx,
 			Now:             now,
 			ModelState:      r.ruleModelState,
-			Logger:          r.logger,
 			Config:          r.config,
 			sinceGeneration: st.lastGeneration,
 			scope:           scope,

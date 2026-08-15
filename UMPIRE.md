@@ -5,17 +5,67 @@ observations into a typed model, and evaluates that model against shared propert
 semantic behavior instead of duplicating setup, polling, and assertions.
 
 ```text
-scenario -> compile -> plan -> realize against Temporal
-                                  |
-                                  v
-facts <- gRPC, OTEL, history, and in-process observation
-  |
-  v
-model state + relations -> rules, reconciliation, and coverage
+test intent -> sparse regression plan -> compiled suite -> completed path -> actions -> Temporal
+                                                                                |
+raw observations -> facts -> model state + relation state -> rules at checkpoints
+                                                              |
+property result + observed evidence + environment profile -> qualified claim
 ```
 
 The canonical implementation is `tests/umpire2`. It is the default monitor used by `testcore`;
 `tests/umpire1` remains a compatibility implementation.
+
+## Start here
+
+For an ordinary Temporal behavior test, use the typed sparse vocabulary and the local test
+affordance. The preset owns protocol selection, monitor installation, CHASM configuration,
+capabilities, deadlines, serial execution, artifacts, and cleanup:
+
+```go
+umpiretest.RequireRegression(t, regress.OnePath(
+    nexus.State("op", nexus.Started),
+    regress.During(
+        nexus.FailNext(nexus.CancelNexusOperation),
+        nexus.CancelWithRetry("op"),
+    ),
+    nexus.State("op", nexus.Canceled),
+))
+```
+
+Tests that supply an environment or need to inspect a non-conforming outcome use the reusable
+`umpiretest.RunRegression` request/result interface. Structural route planning uses
+`umpiretest.PlanTarget`; runtime judgment uses the distinct `EntitySelector` and `Expectation`
+types so a plan cannot silently select the wrong live entity. Campaigns and canaries stay behind
+their generic bounds and safety envelopes through `umpiretest.NewCampaignExecutor` and
+`umpiretest.NewCanaryDriver`. Explicit action plans run through `umpire2.ActionRunner`, whose result
+retains the supplied plan, grounded bindings, observed states, and semantic drift.
+
+A custom environment uses the same compiler and runner without the test assertion policy:
+
+```go
+result, err := umpiretest.RunRegression(ctx, umpiretest.RegressionRequest{
+    Protocol:    umpiretest.RequireProtocol(t),
+    Plan:        plan,
+    Profile:     profile,
+    Environment: environmentFactory,
+    RunOptions:  regress.RunOptions{MaxParallel: 1},
+})
+```
+
+Framework and custom-environment authors may use `common/testing/umpire`, `regress`, `campaign`,
+and `canary` directly. Those are explicit error-returning escape hatches; ordinary tests should not
+assemble stores, polling, evidence qualification, or local environment configuration themselves.
+
+```go
+runtime, err := umpire.NewRuntime(declaration)
+if err != nil {
+    return err
+}
+if err := runtime.Ingest(ctx, facts...); err != nil {
+    return err
+}
+violations := runtime.Check(ctx, scope, true)
+```
 
 ## Design principles
 
@@ -34,8 +84,8 @@ The canonical implementation is `tests/umpire2`. It is the default monitor used 
 
 ## Canonical protocol
 
-`tests/umpire2/protocol` compiles the Temporal declaration into an immutable `Protocol`. The
-declaration contains:
+`tests/umpire2` exposes the immutable `Protocol`; its declaration compiler and concrete
+implementation live under `tests/umpire2/internal`. The declaration contains:
 
 - normalized fact types and entity factories;
 - each entity's fact subscriptions and executable lifecycle;
@@ -61,10 +111,12 @@ The protocol has several derived views:
 `common/testing/umpire` is the Temporal-independent framework. `tests/umpire2` supplies the
 Temporal facts, entities, relations, and rules.
 
-Every recognized observation becomes a `Fact` addressed by an `EntityPath`. `ModelState` routes
-facts to entity instances, `FactLog` retains the evidence, and `RelationStore` applies typed
-cross-entity links. A `Lifecycle` is an executable transition function: for every observed event it
-classifies the transition as advancing, tolerated, or illegal and records the resulting state.
+Every recognized observation becomes a `Fact` addressed by an `EntityPath`. The generic `Runtime`
+owns fact routing, entity state, relation state, rule scheduling, generations, coverage, and
+purging. Callers receive namespace-scoped defensive snapshots and semantic queries rather than
+mutable stores or concrete Temporal entities. A `Lifecycle` is an executable transition function:
+for every observed event it classifies the transition as advancing, tolerated, or illegal and
+records the resulting state.
 
 The Monitor receives evidence from:
 
@@ -159,7 +211,7 @@ realization and justified evidence, not its sparse IR.
 ## Coverage and exploration
 
 `Coverage` compares a declared catalog with observed facts, transitions, relations, and actions.
-`tests/umpire2/protocol` derives these catalogs from the compiled protocol. `Coverage.Unmet()` is a
+`tests/umpire2.Protocol` derives these catalogs from the compiled protocol. `Coverage.Unmet()` is a
 planning and reporting signal; it does not assert that an observed behavior was correct.
 
 The framework also provides deterministic constrained pairwise generation. The Temporal matrix
@@ -218,24 +270,33 @@ In particular:
 Tests for exact protobufs, authorization, performance, schemas, metrics, and low-level races should
 remain specialized when their contract sits below the protocol abstraction.
 
+## Local formal toolchain
+
+Run `mise run umpire:install-tools` to install the pinned TLA+/Apalache, P, Ivy, and FizzBee tools.
+The task uses Java, .NET, and Python from `mise`, selects the artifact for the host platform,
+verifies every checksum, and writes the runner environment to `.bin/umpire-tools/env`. Run the
+generated smoke suite with `mise run umpire:verify-smoke`.
+
 ## Code map
 
 | Location | Responsibility |
 | --- | --- |
-| `common/testing/umpire` | Generic facts, entities, lifecycles, relations, rules, actions, planning, coverage, matrices, and tracing |
+| `common/testing/umpire` | Generic runtime facade and reusable facts, lifecycles, actions, planning, evidence, coverage, matrices, and tracing |
 | `common/testing/umpire/regress` | Sparse-plan normalization, compilation, execution, and artifacts |
 | `common/testing/umpire/campaign` | Bounded selection, corpus, execution, minimization, replay, and regression candidates |
 | `common/testing/umpire/canary` | Guarded canary authority, budgets, audit, redaction, and cleanup |
-| `common/testing/umpire/verify` | Verification snapshot, interpreter, exporters, runners, and normalized results |
-| `tests/umpire2/protocol` | Canonical Temporal protocol and its derived views |
-| `tests/umpire2/model`, `fact`, `rule` | Temporal observation and runtime evaluation |
-| `tests/umpire2/action` | Temporal realizers, fault policies, and regression harness |
+| `common/testing/umpire/verify` | Verification model, projection, interpreter, and normalized results |
+| `common/testing/umpire/verify/toolchain` | Generation and checking facade over internal formal backends |
+| `tests/umpire2` | Canonical Temporal Monitor, Protocol, planning, coverage, verification, and action facades |
+| `tests/umpire2/internal` | Concrete Temporal facts, models, rules, declarations, realizers, and regression harness |
 | `tests/umpire2/regress` | Typed Temporal authoring vocabulary |
-| `tests/umpire2/genmodels` | Deterministically generated verification artifacts and manifest |
+| `tests/umpire2/umpiretest` | Local presets plus plan, regression, judge, campaign, and canary authoring operations |
+| `tests/umpire2/testdata/genmodels` | Deterministically generated verification artifacts and manifest |
+| `develop/umpire` and `mise.toml` | Checksum-verified local formal-tool installation and smoke task |
 
 The implementation and tests are authoritative for current vocabulary. The generated
-[`manifest.json`](./tests/umpire2/genmodels/manifest.json) inventories semantic targets and their
+[`manifest.json`](./tests/umpire2/testdata/genmodels/manifest.json) inventories semantic targets and their
 hashes; each target manifest, such as
-[`protocol-atomic/manifest.json`](./tests/umpire2/genmodels/protocol-atomic/manifest.json), is
+[`protocol-atomic/manifest.json`](./tests/umpire2/testdata/genmodels/protocol-atomic/manifest.json), is
 authoritative for that target's bounded formal verification scope. Planned work belongs in tracked
 issues rather than status sections in this document.

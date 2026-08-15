@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -20,16 +19,18 @@ import (
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/server/tests/umpire2/action"
-	"go.temporal.io/server/tests/umpire2/model"
-	"go.temporal.io/server/tests/umpire2/planner"
-	umpire2protocol "go.temporal.io/server/tests/umpire2/protocol"
+	"go.temporal.io/server/tests/umpire2"
+	"go.temporal.io/server/tests/umpire2/umpiretest"
 )
 
 // TEMPORAL_OTEL_DEBUG enables the generic chasm.transition telemetry the umpire Monitor
 // consumes. Set once for the whole test binary — never per-test — so concurrent umpire
 // tests can't unset it out from under one another mid-flight.
-func init() { os.Setenv("TEMPORAL_OTEL_DEBUG", "true") }
+func init() {
+	if err := umpiretest.ConfigureProcessInstrumentation(); err != nil {
+		panic(err)
+	}
+}
 
 // newNexusProbeEnv builds a fresh CHASM-Nexus-enabled cluster env — its own namespace.
 // The Monitor is already a span processor on the cluster's own TracerProvider, so
@@ -113,19 +114,11 @@ func (s *UmpireTestSuite) newNexusStandaloneEnv(t *testing.T) *NexusTestEnv {
 func (s *UmpireTestSuite) nexusGenExecPlan(plan []umpire.Action) probe.EnvFunc {
 	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
 		env := s.newNexusStandaloneEnv(t)
-		policy := action.NewResponsePolicy()
-		endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+		runner := umpire2.NewActionRunner(env.TestEnv)
+		endpoint := env.createRandomExternalNexusServer(env.Context(), t, runner.Handler())
 		return env.TestEnv, func(dctx context.Context, iter int) error {
-			rc := action.NewCtx(env.TestEnv, endpoint, policy, iter)
-			defer rc.Cleanup() // unregister any fault actions the plan armed
-			oracle := action.Oracle{Env: env.TestEnv}
-			if err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan); err != nil {
-				return err
-			}
-			if drift := umpire.Reconcile(oracle, rc, plan); len(drift) > 0 {
-				return fmt.Errorf("actions model drift: %v", drift)
-			}
-			return nil
+			_, err := runner.Run(dctx, endpoint, iter, plan)
+			return err
 		}
 	}
 }
@@ -137,7 +130,7 @@ func (s *UmpireTestSuite) TestProbeNexusGeneratedCompletion() {
 	t := s.T()
 	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Execution(s.nexusGenExecPlan(action.StandaloneCompletion())).
+		Execution(s.nexusGenExecPlan(umpire2.StandaloneCompletion())).
 		Timeout(15 * time.Second).
 		Judge()
 
@@ -154,17 +147,12 @@ func (s *UmpireTestSuite) TestProbeNexusRejectedStart() {
 	t := s.T()
 	env := s.newNexusStandaloneEnv(t)
 
-	plan := []umpire.Action{action.StartUnknownEndpoint}
+	plan := []umpire.Action{umpire2.StartUnknownEndpoint}
 	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
 	defer cancel()
-	oracle := action.Oracle{Env: env.TestEnv}
-	rc := action.NewCtx(env.TestEnv, "", action.NewResponsePolicy(), 0)
-	defer rc.Cleanup()
-
-	err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan)
+	_, err := umpire2.NewActionRunner(env.TestEnv).Run(dctx, "", 0, plan)
 	require.NoError(t, err, "a declared rejection is an expected outcome, not a drive failure")
-	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "the modeled rejection (reject edge) must be observed")
-	require.Equal(t, 1, action.CountEntities(env.TestEnv, model.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
+	require.Equal(t, 1, umpire2.CountEntities(env.TestEnv, umpire2.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
 }
 
 // TestProbeNexusReflectedVariant enumerates invalid actions by reflecting the
@@ -175,7 +163,7 @@ func (s *UmpireTestSuite) TestProbeNexusRejectedStart() {
 func (s *UmpireTestSuite) TestProbeNexusReflectedVariant() {
 	t := s.T()
 
-	variants := action.StartFieldVariants()
+	variants := umpire2.StartFieldVariants()
 	require.NotEmpty(t, variants, "reflection should derive per-field variants from the request descriptor")
 	var mutated umpire.Action
 	for _, a := range variants {
@@ -187,20 +175,15 @@ func (s *UmpireTestSuite) TestProbeNexusReflectedVariant() {
 	require.NotEmpty(t, mutated.Name, "the descriptor should yield an operation_id string field")
 
 	env := s.newNexusStandaloneEnv(t)
-	policy := action.NewResponsePolicy()
-	endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+	runner := umpire2.NewActionRunner(env.TestEnv)
+	endpoint := env.createRandomExternalNexusServer(env.Context(), t, runner.Handler())
 
 	plan := []umpire.Action{mutated}
 	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
 	defer cancel()
-	oracle := action.Oracle{Env: env.TestEnv}
-	rc := action.NewCtx(env.TestEnv, endpoint, policy, 0)
-	defer rc.Cleanup()
-
-	err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan)
+	_, err := runner.Run(dctx, endpoint, 0, plan)
 	require.NoError(t, err, "a reflected invalid variant is an expected rejection, not a drive failure")
-	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "the reflected variant's rejection must be observed as the reject edge")
-	require.Equal(t, 1, action.CountEntities(env.TestEnv, model.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
+	require.Equal(t, 1, umpire2.CountEntities(env.TestEnv, umpire2.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
 }
 
 // TestProbeNexusReflectedDurationVariant proves descriptor reflection generalizes past strings to
@@ -212,7 +195,7 @@ func (s *UmpireTestSuite) TestProbeNexusReflectedDurationVariant() {
 	t := s.T()
 
 	var mutated umpire.Action
-	for _, a := range action.StartFieldVariants() {
+	for _, a := range umpire2.StartFieldVariants() {
 		if strings.Contains(a.Name, "schedule_to_start_timeout=negative") {
 			mutated = a
 			break
@@ -221,20 +204,15 @@ func (s *UmpireTestSuite) TestProbeNexusReflectedDurationVariant() {
 	require.NotEmpty(t, mutated.Name, "the descriptor should yield a schedule_to_start_timeout Duration field")
 
 	env := s.newNexusStandaloneEnv(t)
-	policy := action.NewResponsePolicy()
-	endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+	runner := umpire2.NewActionRunner(env.TestEnv)
+	endpoint := env.createRandomExternalNexusServer(env.Context(), t, runner.Handler())
 
 	plan := []umpire.Action{mutated}
 	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
 	defer cancel()
-	oracle := action.Oracle{Env: env.TestEnv}
-	rc := action.NewCtx(env.TestEnv, endpoint, policy, 0)
-	defer rc.Cleanup()
-
-	err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan)
+	_, err := runner.Run(dctx, endpoint, 0, plan)
 	require.NoError(t, err, "a reflected Duration variant is an expected rejection, not a drive failure")
-	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "the Duration variant's rejection must be observed as the reject edge")
-	require.Equal(t, 1, action.CountEntities(env.TestEnv, model.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
+	require.Equal(t, 1, umpire2.CountEntities(env.TestEnv, umpire2.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
 }
 
 // TestProbeNexusFaultAction shows a fault as a first-class plan action (Phase 5): a Hold on the
@@ -244,7 +222,7 @@ func (s *UmpireTestSuite) TestProbeNexusFaultAction() {
 	t := s.T()
 	// Hold the outbound Nexus HTTP invocation (matched by its "…/service/operation" path) for
 	// 500ms, then run the standalone completion path.
-	plan := append([]umpire.Action{action.Hold("service/operation", 500*time.Millisecond)}, action.StandaloneCompletion()...)
+	plan := append([]umpire.Action{umpire2.Hold("service/operation", 500*time.Millisecond)}, umpire2.StandaloneCompletion()...)
 	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
 		Execution(s.nexusGenExecPlan(plan)).
@@ -264,7 +242,7 @@ func (s *UmpireTestSuite) TestProbeNexusResilience() {
 	t := s.T()
 	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Execution(s.nexusGenExecPlan(action.EmbeddedSyncSuccess())).
+		Execution(s.nexusGenExecPlan(umpire2.EmbeddedSyncSuccess())).
 		Timeout(10 * time.Second).
 		MaxFaults(6).
 		FaultEachObservedCall().
@@ -283,7 +261,7 @@ func (s *UmpireTestSuite) TestProbeNexusDegraded() {
 	t := s.T()
 	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Execution(s.nexusGenExecPlan(action.EmbeddedOpFailure())). // generated from the actions model
+		Execution(s.nexusGenExecPlan(umpire2.EmbeddedOpFailure())). // generated from the actions model
 		Timeout(15 * time.Second).
 		Judge() // baseline only; the op-failed handler action produces the outcome
 
@@ -359,16 +337,16 @@ func (s *UmpireTestSuite) TestProbeNexusHTTPFaultSeam() {
 func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	t := s.T()
 	// Gate: every WorkerCommand action must have a kitchensink mapping before any drive runs,
-	// so the exploration can't silently skip a worker-driven edge (see action.kitchensink).
-	require.NoError(t, action.ValidateKitchensinkMappings(), "kitchensink mappings must be exhaustive")
+	// so the exploration can't silently skip a worker-driven edge (see umpire2.kitchensink).
+	require.NoError(t, umpire2.ValidateKitchensinkMappings(), "kitchensink mappings must be exhaustive")
 	// Gate: every request field under invalid-input testing must be enumerated or consciously
-	// deferred, so the negative-space drive can't silently skip a field (see action.mutation_gate).
-	require.NoError(t, action.ValidateMutationCoverage(), "mutation coverage must be exhaustive")
+	// deferred, so the negative-space drive can't silently skip a field (see umpire2.mutation_gate).
+	require.NoError(t, umpire2.ValidateMutationCoverage(), "mutation coverage must be exhaustive")
 	cov := probe.NewCoverage()
-	compiled, err := umpire2protocol.Default()
+	compiled, err := umpire2.DefaultProtocol()
 	require.NoError(t, err)
-	semanticCoverage, err := compiled.NewCoverage(true, umpire2protocol.CoverageCatalogOptions{
-		EntityTypes: []umpire.EntityType{model.NexusOperationType},
+	semanticCoverage, err := compiled.NewCoverage(true, umpire2.CoverageCatalogOptions{
+		EntityTypes: []umpire.EntityType{umpire2.NexusOperationType},
 		Kinds:       []umpire.CoverageKind{umpire.CoverageTransition},
 	})
 	require.NoError(t, err)
@@ -398,8 +376,8 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	// The list of drives is computed from the model — one plan
 	// per settling edge, assembled by PlanEdge and driven in its own env. This covers every
 	// edge across both hostings (embedded handler/completion outcomes, standalone terminates)
-	// except the two server-timer edges below, which have no atomic action.
-	for _, plan := range action.AutoCoverPlans() {
+	// except the two server-timer edges below, which have no atomic umpire2.
+	for _, plan := range umpire2.AutoCoverPlans() {
 		exploreEnv(s.nexusGenExecPlan(plan), 15*time.Second)
 	}
 	// The two server-driven edges auto-cover skips, driven bespoke:
@@ -413,9 +391,9 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	explore(asyncStart, timeoutCaller, 10*time.Second)
 	//   unspecified --reject--> rejected: a synchronous rejection (invalid input) — the Monitor
 	//   models the RPC error as the operation reaching the rejected terminal.
-	exploreEnv(s.nexusGenExecPlan([]umpire.Action{action.StartUnknownEndpoint}), 15*time.Second)
+	exploreEnv(s.nexusGenExecPlan([]umpire.Action{umpire2.StartUnknownEndpoint}), 15*time.Second)
 
-	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
+	lc, ok := defaultUmpireProtocol(t).Lifecycle(umpire2.NexusOperationType)
 	require.True(t, ok)
 	rep := cov.Report("NexusOperation", lc.Edges())
 	t.Logf("[exploration] NexusOperation transition coverage: %d/%d edges exercised", rep.Covered, rep.Total)
@@ -448,30 +426,26 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 func (s *UmpireTestSuite) TestProbeWorkflowGenerated() {
 	t := s.T()
 	env := testcore.NewEnv(t) // a plain env: the Monitor observes classic workflow facts
-	plan := action.WorkflowRunPlan()
+	plan := umpire2.WorkflowRunPlan()
 	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
 	defer cancel()
-	rc := action.NewCtx(env, "", action.NewResponsePolicy(), 0)
-	defer rc.Cleanup()
-	oracle := action.Oracle{Env: env}
-
-	require.NoError(t, umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan),
+	result, err := umpire2.NewActionRunner(env).Run(dctx, "", 0, plan)
+	require.NoError(t, err,
 		"the generic runtime should drive the WorkflowRun entity created→started→completed")
-	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "the run lifecycle should ground clean")
 
-	runID, ok := rc.Binding("run")
+	runID, ok := result.Binding("run")
 	require.True(t, ok, "the run should be bound")
-	state, ok := oracle.Current(model.WorkflowRunType, runID)
+	state, ok := result.Current(umpire2.WorkflowRunType, runID)
 	require.True(t, ok, "the run should be modelled")
-	require.Equal(t, model.WorkflowRunCompleted, state, "the run should reach completed")
+	require.Equal(t, umpire2.WorkflowRunCompleted, state, "the run should reach completed")
 
 	// The run was observed at start with its lineage: a first run is its own chain root with no
 	// predecessor (the foundation the continue-as-new / reset graph builds on).
 	run := workflowRun(env, runID)
 	require.NotNil(t, run, "the run entity should be modelled")
-	require.Equal(t, runID, run.FirstRunID, "a first run is its own chain root")
-	require.Empty(t, run.PreviousRunID, "a first run has no predecessor")
-	t.Logf("[workflow] drove run %s to %s (first=%s prev=%q)", runID, state, run.FirstRunID, run.PreviousRunID)
+	require.Equal(t, runID, run.RootID, "a first run is its own chain root")
+	require.Empty(t, run.PredecessorID, "a first run has no predecessor")
+	t.Logf("[workflow] drove run %s to %s (first=%s prev=%q)", runID, state, run.RootID, run.PredecessorID)
 }
 
 // continueAsNewOnceWorkflow continues-as-new once (first run), then completes (successor run) — so
@@ -499,33 +473,29 @@ func (s *UmpireTestSuite) TestProbeWorkflowContinueAsNew() {
 	require.NoError(t, err)
 	require.NoError(t, run.Get(env.Context(), nil), "the continue-as-new chain should complete")
 
-	nsRoot := umpire.NewEntityID(model.NamespaceType, env.NamespaceID().String())
-	var first, succ *model.WorkflowRun
+	var first, succ *umpire.EntitySnapshot
 	require.Eventually(t, func() bool {
 		first, succ = nil, nil
-		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowRunType, 0, &nsRoot) {
-			r, ok := e.Entity.(*model.WorkflowRun)
-			if !ok {
-				continue
-			}
-			if r.PreviousRunID == "" {
-				first = r
+		for _, entity := range env.GetMonitor().Snapshot(env.NamespaceID().String()).EntitiesOfType(umpire2.WorkflowRunType) {
+			entity := entity
+			if entity.PredecessorID == "" {
+				first = &entity
 			} else {
-				succ = r
+				succ = &entity
 			}
 		}
 		// Wait until both runs are modelled and the predecessor has reached its continue-as-new
 		// terminal (its close fact may arrive just after the successor's start).
-		return first != nil && succ != nil && first.FSM.Current() == model.WorkflowRunContinuedAsNew
+		return first != nil && succ != nil && first.Current == umpire2.WorkflowRunContinuedAsNew
 	}, 15*time.Second, 200*time.Millisecond, "both runs modelled, predecessor continued-as-new")
 
-	require.Equal(t, first.RunID, succ.PreviousRunID, "the successor's predecessor is the first run")
-	require.Equal(t, first.RunID, succ.FirstRunID, "both runs share the chain root")
-	require.Equal(t, first.RunID, first.FirstRunID, "the first run is its own chain root")
+	require.Equal(t, first.ID, succ.PredecessorID, "the successor's predecessor is the first run")
+	require.Equal(t, first.ID, succ.RootID, "both runs share the chain root")
+	require.Equal(t, first.ID, first.RootID, "the first run is its own chain root")
 	require.Equal(t, "continued_as_new", succ.Initiator, "the edge is typed continued_as_new")
-	require.Equal(t, model.WorkflowRunContinuedAsNew, first.FSM.Current(), "the predecessor reached the continued_as_new terminal")
-	require.Equal(t, model.WorkflowRunCompleted, succ.FSM.Current(), "the successor completed")
-	t.Logf("[can] first=%s (%s) --%s--> succ=%s (%s)", first.RunID, first.FSM.Current(), succ.Initiator, succ.RunID, succ.FSM.Current())
+	require.Equal(t, umpire2.WorkflowRunContinuedAsNew, first.Current, "the predecessor reached the continued_as_new terminal")
+	require.Equal(t, umpire2.WorkflowRunCompleted, succ.Current, "the successor completed")
+	t.Logf("[can] first=%s (%s) --%s--> succ=%s (%s)", first.ID, first.Current, succ.Initiator, succ.ID, succ.Current)
 }
 
 // TestProbeWorkflowContinueAsNewGenerated is the multi-run action-model proof: the generic runtime
@@ -536,28 +506,24 @@ func (s *UmpireTestSuite) TestProbeWorkflowContinueAsNew() {
 func (s *UmpireTestSuite) TestProbeWorkflowContinueAsNewGenerated() {
 	t := s.T()
 	env := testcore.NewEnv(t)
-	plan := action.WorkflowContinueAsNewPlan()
+	plan := umpire2.WorkflowContinueAsNewPlan()
 	dctx, cancel := context.WithTimeout(env.Context(), 20*time.Second)
 	defer cancel()
-	rc := action.NewCtx(env, "", action.NewResponsePolicy(), 0)
-	defer rc.Cleanup()
-	oracle := action.Oracle{Env: env}
-
-	require.NoError(t, umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan),
+	result, err := umpire2.NewActionRunner(env).Run(dctx, "", 0, plan)
+	require.NoError(t, err,
 		"the generic runtime should drive the continue-as-new run graph")
-	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "both runs should ground clean")
 
-	runA, okA := rc.Binding("run")
-	runB, okB := rc.Binding("run2")
+	runA, okA := result.Binding("run")
+	runB, okB := result.Binding("run2")
 	require.True(t, okA, "the predecessor should be bound (by the realizer)")
 	require.True(t, okB, "the successor should be bound (by observation)")
 	require.NotEqual(t, runA, runB, "predecessor and successor are distinct runs")
 
 	a, b := workflowRun(env, runA), workflowRun(env, runB)
-	require.Equal(t, model.WorkflowRunContinuedAsNew, a.FSM.Current(), "predecessor continued-as-new")
-	require.Equal(t, model.WorkflowRunCompleted, b.FSM.Current(), "successor completed")
-	require.Equal(t, runA, b.PreviousRunID, "the successor is linked to the predecessor")
-	t.Logf("[can-gen] drove %s (%s) --%s--> %s (%s)", runA, a.FSM.Current(), b.Initiator, runB, b.FSM.Current())
+	require.Equal(t, umpire2.WorkflowRunContinuedAsNew, a.Current, "predecessor continued-as-new")
+	require.Equal(t, umpire2.WorkflowRunCompleted, b.Current, "successor completed")
+	require.Equal(t, runA, b.PredecessorID, "the successor is linked to the predecessor")
+	t.Logf("[can-gen] drove %s (%s) --%s--> %s (%s)", runA, a.Current, b.Initiator, runB, b.Current)
 }
 
 // immediateWorkflow completes as soon as it runs — a base run to reset.
@@ -593,17 +559,16 @@ func (s *UmpireTestSuite) TestProbeWorkflowReset() {
 
 	require.Eventually(t, func() bool {
 		r := workflowRun(env, resetRunID)
-		return r != nil && r.PreviousRunID == baseRunID
+		return r != nil && r.PredecessorID == baseRunID
 	}, 15*time.Second, 200*time.Millisecond, "the reset run should be modelled with the base run as predecessor")
 	t.Logf("[reset] base=%s reset=%s", baseRunID, resetRunID)
 }
 
 // workflowRun returns the modelled WorkflowRun with the given RunID, or nil.
-func workflowRun(env *testcore.TestEnv, runID string) *model.WorkflowRun {
-	nsRoot := umpire.NewEntityID(model.NamespaceType, env.NamespaceID().String())
-	for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowRunType, 0, &nsRoot) {
-		if r, ok := e.Entity.(*model.WorkflowRun); ok && r.RunID == runID {
-			return r
+func workflowRun(env *testcore.TestEnv, runID string) *umpire.EntitySnapshot {
+	for _, entity := range env.GetMonitor().Snapshot(env.NamespaceID().String()).EntitiesOfType(umpire2.WorkflowRunType) {
+		if entity.ID == runID {
+			return &entity
 		}
 	}
 	return nil
@@ -618,21 +583,17 @@ func workflowRun(env *testcore.TestEnv, runID string) *model.WorkflowRun {
 func (s *UmpireTestSuite) TestProbeNexusLearnedFootprint() {
 	t := s.T()
 	env := s.newNexusStandaloneEnv(t)
-	policy := action.NewResponsePolicy()
-	endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+	runner := umpire2.NewActionRunner(env.TestEnv)
+	endpoint := env.createRandomExternalNexusServer(env.Context(), t, runner.Handler())
 
-	plan := action.StandaloneCompletion()
+	plan := umpire2.StandaloneCompletion()
 	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
 	defer cancel()
-	rc := action.NewCtx(env.TestEnv, endpoint, policy, 0)
-	defer rc.Cleanup()
-	oracle := action.Oracle{Env: env.TestEnv}
-
-	learned, err := action.LearnFootprint(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan)
+	learned, err := runner.LearnFootprint(dctx, endpoint, 0, plan)
 	require.NoError(t, err, "the observed drive should reach its terminal")
 	require.NotEmpty(t, learned, "the drive should make observable calls")
 
-	targets := action.FaultTargets(plan, learned)
+	targets := umpire2.FaultTargets(plan, learned)
 	require.NotEmpty(t, targets, "the learned footprint should yield internal fault targets")
 	for _, m := range targets {
 		require.NotContains(t, m, "StartNexusOperationExecution", "the client-entry RPC must not be a fault target")
@@ -643,7 +604,7 @@ func (s *UmpireTestSuite) TestProbeNexusLearnedFootprint() {
 	// internal call missing, no undeclared call observed. This is the wire-level analog of the
 	// effect-level Reconcile: a refactor that changes which internal calls the transition makes
 	// trips a drift here that the effect check would miss.
-	drift := action.ReconcileFootprint(plan, learned)
+	drift := umpire2.ReconcileFootprint(plan, learned)
 	require.Empty(t, drift, "declared footprint should ground against the observed calls: %v", drift)
 }
 
@@ -662,31 +623,29 @@ func (s *UmpireTestSuite) TestProbeNexusCoverageGuidedFaults() {
 		plan  []umpire.Action
 	}
 	specs := []spec{
-		{"standalone-completion", action.StandaloneCompletion()},
-		{"standalone-terminate", action.StandaloneTerminate(model.NexusScheduled)},
+		{"standalone-completion", umpire2.StandaloneCompletion()},
+		{"standalone-terminate", umpire2.StandaloneTerminate(umpire2.NexusScheduled)},
 	}
 	learn := func(plan []umpire.Action) []string {
 		env := s.newNexusStandaloneEnv(t)
-		policy := action.NewResponsePolicy()
-		endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+		runner := umpire2.NewActionRunner(env.TestEnv)
+		endpoint := env.createRandomExternalNexusServer(env.Context(), t, runner.Handler())
 		dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
 		defer cancel()
-		rc := action.NewCtx(env.TestEnv, endpoint, policy, 0)
-		defer rc.Cleanup()
-		learned, err := action.LearnFootprint(dctx, rc, action.Oracle{Env: env.TestEnv}, action.Resolver{}, 50*time.Millisecond, plan)
+		learned, err := runner.LearnFootprint(dctx, endpoint, 0, plan)
 		require.NoError(t, err, "the observed drive should reach its terminal")
 		return learned
 	}
 
-	var pfs []action.PlanFootprint
+	var pfs []umpire2.PlanFootprint
 	for _, sp := range specs {
 		learned := learn(sp.plan)
-		pfs = append(pfs, action.PlanFootprint{Plan: sp.plan, Label: sp.label, Learned: learned})
-		t.Logf("[cov-faults] learned %s: %d call(s), %d target(s)", sp.label, len(learned), len(action.FaultTargets(sp.plan, learned)))
+		pfs = append(pfs, umpire2.PlanFootprint{Plan: sp.plan, Label: sp.label, Learned: learned})
+		t.Logf("[cov-faults] learned %s: %d call(s), %d target(s)", sp.label, len(learned), len(umpire2.FaultTargets(sp.plan, learned)))
 	}
 
 	const budget = 3
-	drives, dropped := action.ScheduleFaults(pfs, budget)
+	drives, dropped := umpire2.ScheduleFaults(pfs, budget)
 	require.NotEmpty(t, drives, "the learned footprints should yield fault drives")
 	t.Logf("[cov-faults] scheduled %d fault drive(s), dropped %d by budget %d", len(drives), len(dropped), budget)
 	for _, d := range dropped {
@@ -705,7 +664,7 @@ func (s *UmpireTestSuite) TestProbeNexusCoverageGuidedFaults() {
 		require.Empty(t, report.Baseline.Violations, "%s: an injected fault must not flag a conformance violation", d.Label)
 	}
 
-	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
+	lc, ok := defaultUmpireProtocol(t).Lifecycle(umpire2.NexusOperationType)
 	require.True(t, ok)
 	rep := cov.Report("NexusOperation", lc.Edges())
 	t.Logf("[cov-faults] transition coverage after %d guided fault drives: %d/%d edges", len(drives), rep.Covered, rep.Total)
@@ -731,7 +690,7 @@ func (s *UmpireTestSuite) TestProbeNexusRandomized() {
 	cov := probe.NewCoverage()
 	for i := 0; i < iterations; i++ {
 		seed := int64(baseSeed) + int64(i)
-		plan, label := action.RandomPlan(seed)
+		plan, label := umpire2.RandomPlan(seed)
 		require.NotEmpty(t, plan, "seed %d: generator produced an empty plan", seed)
 		t.Logf("[randomized] seed %d: %s", seed, label)
 
@@ -752,7 +711,7 @@ func (s *UmpireTestSuite) TestProbeNexusRandomized() {
 		t.Logf("[randomized]   seed %d: %d observed call(s), %d fault scenario(s)", seed, len(report.Observed), len(report.Scenarios))
 	}
 
-	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
+	lc, ok := defaultUmpireProtocol(t).Lifecycle(umpire2.NexusOperationType)
 	require.True(t, ok)
 	rep := cov.Report("NexusOperation", lc.Edges())
 	t.Logf("[randomized] NexusOperation transition coverage after %d random drives: %d/%d edges", iterations, rep.Covered, rep.Total)

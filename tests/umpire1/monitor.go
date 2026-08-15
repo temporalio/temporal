@@ -1,16 +1,19 @@
 package umpire1
 
 import (
+	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
-	"testing"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire/grpcadapter"
 	"go.temporal.io/server/tests/umpire1/model"
 	"go.temporal.io/server/tests/umpire1/rule"
 	"google.golang.org/grpc"
@@ -64,7 +67,7 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.EntityProgress{} })
 
-	if err := rb.InitRules(registry, logger, umpirefw.RuleConfig{}); err != nil {
+	if err := rb.InitRules(registry, umpirefw.RuleConfig{}); err != nil {
 		return nil, fmt.Errorf("monitor: failed to initialize rules: %w", err)
 	}
 
@@ -178,13 +181,25 @@ func (u *Monitor) RecordRejection(ctx context.Context, req any, err error) {
 // at teardown, then PurgeNamespace to drop the collected data.
 func (u *Monitor) CheckNamespace(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
-	return u.rulebook.Check(ctx, true, &root)
+	return u.check(ctx, root, true)
 }
 
 // CheckNamespaceSafety applies the global rulebook without promoting pending liveness obligations.
 func (u *Monitor) CheckNamespaceSafety(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
-	return u.rulebook.Check(ctx, false, &root)
+	return u.check(ctx, root, false)
+}
+
+func (u *Monitor) check(ctx context.Context, root umpirefw.EntityID, final bool) []umpirefw.Violation {
+	violations := u.rulebook.Check(ctx, final, &root)
+	for _, violation := range violations {
+		tags := []tag.Tag{tag.NewStringTag("rule", violation.Rule)}
+		for key, value := range violation.Tags {
+			tags = append(tags, tag.NewStringTag(key, value))
+		}
+		u.logger.Warn("violation: "+violation.Message, tags...)
+	}
+	return violations
 }
 
 // PurgeNamespace removes all entities, facts, and rule state collected for the
@@ -198,6 +213,97 @@ func (u *Monitor) PurgeNamespace(namespaceID string) {
 
 func (u *Monitor) namespaceRoot(namespaceID string) umpirefw.EntityID {
 	return umpirefw.NewEntityID(model.NamespaceType, namespaceID)
+}
+
+// Snapshot returns a defensive semantic view of one namespace.
+func (u *Monitor) Snapshot(namespaceID string) umpirefw.Snapshot {
+	root := u.namespaceRoot(namespaceID)
+	entries := u.registry.QueryAll(0, &root)
+	slices.SortFunc(entries, func(left, right umpirefw.EntityEntry) int {
+		return cmp.Compare(left.Key, right.Key)
+	})
+	entities := make([]umpirefw.EntitySnapshot, 0, len(entries))
+	for _, entry := range entries {
+		leaf := entry.Key[strings.LastIndex(entry.Key, "@")+1:]
+		entity := umpirefw.EntitySnapshot{
+			Key:  entry.Key,
+			Type: entry.Entity.Type(),
+			ID:   strings.TrimPrefix(leaf, string(entry.Entity.Type())+":"),
+		}
+		if lifecycled, ok := entry.Entity.(umpirefw.Lifecycled); ok {
+			lifecycle := lifecycled.Lifecycle()
+			entity.Current = lifecycle.Current()
+			entity.Terminal = lifecycle.IsTerminal()
+			entity.Disposition = lifecycle.CurrentDisposition()
+			entity.Visited = lifecycle.VisitedEdges()
+		}
+		switch value := entry.Entity.(type) {
+		case *model.NexusOperation:
+			if value.WorkflowID != "" {
+				entity.ID = value.WorkflowID
+			}
+		case *model.Workflow:
+			if value.WorkflowID != "" {
+				entity.ID = value.WorkflowID
+			}
+		case *model.WorkflowRun:
+			if value.RunID != "" {
+				entity.ID = value.RunID
+			}
+			entity.RootID = value.FirstRunID
+			entity.PredecessorID = value.PreviousRunID
+			entity.Initiator = value.Initiator
+		}
+		entities = append(entities, entity)
+	}
+	facts := u.factLog.QueryByID(root)
+	factSnapshots := make([]umpirefw.FactSnapshot, len(facts))
+	for i, observed := range facts {
+		factSnapshots[i] = umpirefw.FactSnapshot{Name: observed.Name()}
+	}
+	return umpirefw.Snapshot{
+		Generation: u.registry.Generation(),
+		Entities:   entities,
+		Facts:      factSnapshots,
+	}
+}
+
+// Observed reports whether a protocol-level semantic observation occurred in one namespace.
+func (u *Monitor) Observed(string, umpirefw.ObservationQuery) bool {
+	return false
+}
+
+// ArtifactFacts returns normalized JSON evidence for the facts observed in one namespace.
+func (u *Monitor) ArtifactFacts(namespaceID string) ([]json.RawMessage, error) {
+	root := u.namespaceRoot(namespaceID)
+	facts := u.factLog.QueryByID(root)
+	result := make([]json.RawMessage, 0, len(facts))
+	for _, observed := range facts {
+		payload, err := json.Marshal(observed)
+		if err != nil {
+			return nil, fmt.Errorf("encode observed fact %s: %w", observed.Name(), err)
+		}
+		encoded, err := json.Marshal(struct {
+			Name    string               `json:"name"`
+			Target  *umpirefw.EntityPath `json:"target,omitempty"`
+			Payload json.RawMessage      `json:"payload"`
+		}{
+			Name:    observed.Name(),
+			Target:  observed.TargetEntity(),
+			Payload: payload,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("encode observed fact artifact %s: %w", observed.Name(), err)
+		}
+		result = append(result, encoded)
+	}
+	return result, nil
+}
+
+// ObservationSummary returns a compact diagnostic of the namespace evidence.
+func (u *Monitor) ObservationSummary(namespaceID string) string {
+	snapshot := u.Snapshot(namespaceID)
+	return fmt.Sprintf("facts=%v entities=%v", snapshot.FactNames(), snapshot.Entities)
 }
 
 // FactLog returns the event log for querying events in tests.
@@ -220,26 +326,14 @@ func (u *Monitor) PassedKeys(ruleName string) []string {
 	return u.rulebook.PassedKeys(ruleName)
 }
 
-// RequireRulePassed asserts that the given rule evaluated the entity identified
-// by entityKey and found no violation. Fails the test if the key is not found
-// in the rule's passed keys.
-func (u *Monitor) RequireRulePassed(t testing.TB, rule interface{ Name() string }, entityKey string) {
-	t.Helper()
-	name := rule.Name()
-	passed := u.rulebook.PassedKeys(name)
-	if !slices.Contains(passed, entityKey) {
-		t.Errorf("rule %s did not pass entity %q; passed keys: %v", name, entityKey, passed)
-	}
-}
-
 // Shutdown cleanly shuts down all Monitor components.
 func (u *Monitor) Shutdown(_ context.Context) error {
 	u.logger.Info("monitor closed")
 	return nil
 }
 
-// NewUnaryServerInterceptor returns a gRPC interceptor that records events via u
+// UnaryServerInterceptor returns a gRPC interceptor that records events via u
 // and optionally injects faults via inj. Either may be nil.
-func NewUnaryServerInterceptor(u *Monitor, inj umpirefw.FaultInjector) grpc.UnaryServerInterceptor {
-	return umpirefw.NewUnaryServerInterceptor(u, inj)
+func (u *Monitor) UnaryServerInterceptor(inj umpirefw.FaultInjector) grpc.UnaryServerInterceptor {
+	return grpcadapter.NewUnaryServerInterceptor(u, inj)
 }

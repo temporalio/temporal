@@ -2,8 +2,6 @@ package umpire
 
 import (
 	"context"
-
-	"google.golang.org/grpc"
 )
 
 // FactRecorder records gRPC request facts.
@@ -29,33 +27,4 @@ type ResponseRecorder interface {
 // entity and no telemetry) as a fact. See UMPIRE.md.
 type RejectionRecorder interface {
 	RecordRejection(ctx context.Context, req any, err error)
-}
-
-// NewUnaryServerInterceptor returns a gRPC interceptor that records events via rec
-// and optionally injects faults via inj. Either may be nil.
-func NewUnaryServerInterceptor(rec FactRecorder, inj FaultInjector) grpc.UnaryServerInterceptor {
-	return func(
-		ctx context.Context,
-		req any,
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (any, error) {
-		if rec != nil {
-			rec.RecordFact(ctx, req)
-		}
-		if inj != nil {
-			if err := inj.Inject(ctx, req, req); err != nil {
-				return nil, err
-			}
-		}
-		resp, err := handler(ctx, req)
-		if err == nil {
-			if rr, ok := rec.(ResponseRecorder); ok {
-				rr.RecordResponse(ctx, req, resp)
-			}
-		} else if rr, ok := rec.(RejectionRecorder); ok {
-			rr.RecordRejection(ctx, req, err)
-		}
-		return resp, err
-	}
 }
