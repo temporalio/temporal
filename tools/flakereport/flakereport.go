@@ -186,6 +186,15 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []github.Run, te
 func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerReports []TestReport,
 	suiteReports []SuiteReport,
 	allFailures []TestFailure, allTestRuns []TestRun, runs []github.Run, successfulRuns int) *ReportSummary {
+	filteredFlakyReports := make([]TestReport, 0, len(flakyReports))
+	for _, report := range flakyReports {
+		// Tests that fail on every observed run are very likely false reporting.
+		if report.TotalRuns > 0 && report.FailureCount == report.TotalRuns {
+			continue
+		}
+		filteredFlakyReports = append(filteredFlakyReports, report)
+	}
+	flakyReports = filteredFlakyReports
 
 	// Calculate overall failure rate
 	overallFailureRate := 0.0
