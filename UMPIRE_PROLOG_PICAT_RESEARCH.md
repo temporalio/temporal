@@ -3,7 +3,8 @@
 Date: 2026-08-15
 
 Status: Research and design analysis. This document does not propose replacing Umpire's Go core or
-embedding a logic-language runtime.
+embedding a logic-language runtime. The consolidated frontend recommendation, including quoted
+Starlark expressions and the Go comparison, is in [`UMPIRE_STARLARK.md`](UMPIRE_STARLARK.md).
 
 ## Executive finding
 
@@ -183,10 +184,10 @@ test("both callers use one handler", best_path(
         start(left, handler),
         start(right, handler),
     ),
-    where(
-        left != right,
-        faults <= 1,
-    ),
+    where(lambda: (
+        left != right and
+        faults <= 1
+    )),
     reaches(left, Nexus.succeeded),
     reaches(right, Nexus.succeeded),
 ))
@@ -370,7 +371,9 @@ A declarative guidance IR could contain:
 
 Guidance must remain declarative, inspectable, and backend-independent. A Starlark lambda that runs
 during search would make results depend on an opaque evaluator callback, frustrate serialization and
-source mapping, and prevent other planning backends from sharing the same semantics.
+source mapping, and prevent other planning backends from sharing the same semantics. A quoted lambda
+whose retained AST is compiled once into the guidance or constraint IR is acceptable because the
+planner never invokes it as Starlark code.
 
 ### Proofs, residual goals, and conflicts
 
@@ -610,4 +613,3 @@ faults, authority, evidence, or test intent that the author did not declare.
 - [Picat official User's Guide](https://picat-lang.org/download/picat_guide_html/picat_guide.html)
 - [Constraint Solving and Planning with Picat, official book PDF](https://www.picat-lang.org/picatbook2015/constraint_solving_and_planning_with_picat.pdf)
 - [Tabling for Planning, official Picat tutorial](https://picat-lang.org/download/ecai14.pdf)
-

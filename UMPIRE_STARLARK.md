@@ -380,20 +380,20 @@ The compilation boundary should be:
 ```text
 *.umpire.star
     -> parser + restricted evaluator + quoted-expression compiler
-    -> checked Umpire DSL values
-
-typed Go DSL -------------------------------+
-                                              |
-                                              v
-    -> validated descriptor.Package + typed Constraint / Scenario IR
-       -> runtime Protocol projection
-       -> sparse-regression Domain / Plan projection
-          -> native Go constraint propagation + tabled completion
-             -> completed cases, proofs, residual goals, or typed failure
-       -> verify.ModelFamily projection
-          -> existing Validate / Project / hash pipeline
-          -> existing FizzBee / Ivy / P / TLA+ generators
-       -> generated typed Go binding interfaces and scenario catalog
+    -> checked Umpire DSL values ------------------------+
+                                                         |
+typed Go DSL --------------------------------------------+
+                                                         |
+                                                         v
+validated descriptor.Package + typed Constraint / Scenario IR
+    -> runtime Protocol projection
+    -> sparse-regression Domain / Plan projection
+       -> native Go constraint propagation + tabled completion
+          -> completed cases, proofs, residual goals, or typed failure
+    -> verify.ModelFamily projection
+       -> existing Validate / Project / hash pipeline
+       -> existing FizzBee / Ivy / P / TLA+ generators
+    -> generated typed Go binding interfaces and scenario catalog
 ```
 
 The authoring syntax can remain ordinary Starlark without looking like a Bazel
@@ -576,7 +576,7 @@ Completion policy must be explicit and independent from search order:
 
 | Authoring form | Contract |
 | --- | --- |
-| `one_case(...)` / current `one_path(...)` | Return one deterministic canonical satisfying completion, preferably the least-cost one under a versioned default objective. |
+| `one_case(...)` / current `one_path(...)` | Return the first satisfying completion under a documented, versioned total ordering; use `best_case` when cost optimality is intended. |
 | `all_cases(...)` / current `all_paths(...)` | Return every semantically distinct completion inside explicit finite bounds, or return a typed incomplete-enumeration result. |
 | `cover(all_combinations(x, y), ...)` | Return at least one canonical completion for every requested assignment tuple; report an unsatisfiable tuple rather than silently omitting it. |
 | `best_case(..., by = objective)` | Return one optimum under an explicit objective and deterministic tie breaker. |
@@ -757,45 +757,63 @@ be made deterministic and CI-fatal.
 ## Recommended spike
 
 Use one small end-to-end slice—preferably the Workflow lifecycle, its action
-bindings/gaps, and representative sparse scenarios—and require semantic
-equivalence rather than judging the prototype by syntax alone:
+bindings/gaps, and representative sparse scenarios—but test the planner and the
+frontend as separate hypotheses:
 
-1. Build a restricted loader, immutable DSL values, and minimal descriptor IR
-   for that slice.
-2. Re-author the lifecycle, action catalog, and two scenarios—a happy path and
-   an ambiguous/failure path—in `.umpire.star`, referring to existing Go
-   factories and realizers through explicit binding keys.
-3. Compare the projected runtime catalog, sparse plans, and verification model
-   with their current Go-authored forms. Compare semantics separately from
-   provenance because source paths will intentionally change.
-4. Run the existing live scenario runner, interpreter, and all four formal
-   generators/checkers unchanged.
-5. Generate a typed Go binding interface and scenario catalog; do not generate
-   or edit a realizer implementation.
-6. Add negative fixtures for unknown state, wrong relation endpoint, duplicate
-   declaration, invalid freshness, missing refinement, forbidden import, and an
-   execution-step overrun. Every error should identify the Starlark file and
-   source span.
-7. Measure authoring lines, repeated tokens, review readability, generation
-   time, diagnostics quality, and counterexample-to-source traceability.
+1. Specify current `OnePath`/`AllPaths` semantics, including path equivalence,
+   canonical ordering, freshness, observations, faults, and what bound
+   exhaustion means.
+2. Extract a typed constraint/planner boundary in Go without changing completed
+   suites. Keep the current search as the first implementation and compare its
+   answers semantically where provenance differs.
+3. Add proof/residual artifacts, tabled canonical subproblems, finite-domain
+   propagation, and explicit `one`, `all`, and targeted `cover` completion
+   modes. Do not expose new syntax before the IR can serialize, validate, bound,
+   and explain them.
+4. Design the strongest plausible typed Go DSL over that boundary.
+5. Build a restricted Starlark loader, immutable DSL values, and quoted-lambda
+   expression compiler for the same boundary. Retain the parsed source AST,
+   compile a documented pure subset, and never keep runtime callbacks.
+6. Author the same lifecycle and cases in both frontends: a happy path, a
+   partial plan with synthesized actions, symbolic identity disequality,
+   duration arithmetic, partial order, an explicit RPC fault choice, an
+   observed binding, and an unsatisfiable combination.
+7. Compare the projected runtime catalog, completed cases, verification model,
+   interpreter results, and all four formal generators/checkers. Use Picat only
+   as an optional differential oracle for small bounded completion fixtures.
+8. Measure authoring lines and repeated tokens, review readability, source
+   diagnostics, IDE/navigation quality, generation time, search states/table
+   memory, proof usefulness, and counterexample-to-source traceability.
 
-Adopt the frontend only if the spike achieves all of the following:
+Adopt the Starlark frontend only if the spike achieves all of the following:
 
-- semantic parity at every affected projection and stable hashes after the new
-  source provenance is accepted;
-- no backend changes for the initial subset;
-- materially smaller and clearer declarations;
-- source-located semantic errors of comparable usefulness to Go compiler errors;
-- reproducible generation and drift checking;
-- typed Go bindings that require no generated-file edits.
+- semantic parity with the Go frontend at every affected projection;
+- no planner or backend behavior conditioned on which frontend authored the IR;
+- materially clearer declarations and symbolic expressions than the best Go
+  DSL, not merely fewer braces;
+- a small expression subset that covers real invariants, guards, and plan
+  constraints without arbitrary callbacks;
+- source-located errors of comparable usefulness to Go compiler/DSL errors;
+- reproducible generation and drift checking; and
+- typed Go binding interfaces that require no generated-file edits.
 
 ## Decision
 
-Proceed with a narrow prototype. Starlark is likely the right amount of language
-for Umpire's authoring problem: familiar, embeddable, deterministic, and capable
-of abstraction without introducing general-purpose Python. Keep the success
-criterion focused on a single-source workflow from readable model to formal
-verification, replayable scenarios, and typed Go adapters. If the prototype only
-reduces braces while weakening diagnostics, retain Go and invest instead in Go
-builders; if it achieves that workflow, the "syntactic sugar" will have paid for
-itself in accessibility and model reuse.
+Proceed with the typed constraint planner independently of the frontend choice.
+That is the substantive capability: partial plans become constraint queries and
+Umpire produces bounded executable witnesses, exhaustive semantic completions,
+or targeted coverage sets with proofs and typed failure.
+
+Keep Go as the implementation and semantic authority. First make the Go DSL as
+deep and typed as practical. Then run a narrow Starlark prototype over the same
+IR. Starlark's strongest case is not shorter constructors; it is readable flat
+model declarations, nested immutable plan data, and quoted native expressions
+that compile into shared invariants, guards, and constraints.
+
+If the primary authors are Go engineers and the head-to-head comparison shows
+only cosmetic improvement, retain Go. If quoted expressions, portable model
+packages, or non-Go accessibility produce a clear measured win, adopt Starlark
+as an optional or model-by-model source frontend with generated typed Go
+boundaries. Do not embed Prolog or Picat, make Starlark executable model logic,
+or allow either frontend to infer faults, authority, capabilities, or evidence
+that the author did not declare.
