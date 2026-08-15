@@ -146,7 +146,6 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.maybeGCLocked()
 
 	// use == so we just signal once when we cross this threshold
-	// TODO(pri): is this safe? maybe we need to improve this
 	if tr.loadedTasks == tr.backlogMgr.config.GetTasksReloadAt() {
 		tr.SignalTaskLoading()
 	}
@@ -488,8 +487,10 @@ func (tr *priTaskReader) setReadLevelAfterGap(newReadLevel int64) {
 		// The levels that getTaskBatch based this call on are stale: signalNewTasks advanced
 		// readLevel past the range we scanned while the read was in flight, and may have loaded
 		// tasks in it. Applying the read level (or ack level) update here would move it backwards.
-		// The caller decides whether to read again based on isReadBatchDone, which came from the
-		// same stale snapshot, so signal ourselves rather than trusting it.
+		//
+		// Technically we don't have to do another read here: if signalNewTasks did advance read
+		// level, it advanced it to the max. But that couples the logic more than desired, so just
+		// defensively signal another read here.
 		tr.SignalTaskLoading()
 		return
 	}
