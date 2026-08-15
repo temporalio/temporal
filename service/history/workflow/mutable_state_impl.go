@@ -203,6 +203,9 @@ type (
 		visibilityUpdated     bool
 		executionStateUpdated bool
 		workflowTaskUpdated   bool
+		// persistenceOnlyStateUpdated tracks updates that require persistence but do not make the
+		// replicated state dirty.
+		persistenceOnlyStateUpdated bool
 		// chasmRequestIDsAdded is set when a CHASM request ID is attached in the current transaction
 		// (via AttachChasmRequestID). It gates the lazy request-ID sweep at transaction close so only
 		// transactions that added an ID pay for the scan.
@@ -361,6 +364,7 @@ func NewMutableState(
 		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(namespaceName),
 		visibilityUpdated:            false,
 		executionStateUpdated:        false,
+		persistenceOnlyStateUpdated:  false,
 		workflowTaskUpdated:          false,
 		updateInfoUpdated:            make(map[string]struct{}),
 		timerInfosUserDataUpdated:    make(map[string]struct{}),
@@ -7497,13 +7501,19 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	if state == ms.executionState.State && status == ms.executionState.Status {
 		return false, nil
 	}
+	previousState := ms.executionState.State
+	if err := setStateStatus(ms.executionState, state, status); err != nil {
+		return false, err
+	}
 	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE &&
-		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		previousState != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		// Suppress and Revive workflows are cluster local operations.
 		ms.executionStateUpdated = true
 		ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
+	} else {
+		ms.persistenceOnlyStateUpdated = true
 	}
-	return true, setStateStatus(ms.executionState, state, status)
+	return true, nil
 }
 
 // IsDirty is used for sanity check that mutable state is "clean" after mutable state lock is released.
@@ -7512,6 +7522,7 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 func (ms *MutableStateImpl) IsDirty() bool {
 	return ms.hBuilder.IsDirty() ||
 		len(ms.InsertTasks) > 0 ||
+		ms.persistenceOnlyStateUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
 		ms.chasmTree.IsDirty()
 }
@@ -7899,7 +7910,7 @@ func (ms *MutableStateImpl) closeTransaction(
 }
 
 func (ms *MutableStateImpl) closeTransactionShouldSkipPersistence(isStateDirty bool, chasmNodesMutation chasm.NodesMutation) bool {
-	return !ms.IsWorkflow() && !isStateDirty && chasmNodesMutation.IsEmpty()
+	return !ms.IsWorkflow() && !isStateDirty && !ms.persistenceOnlyStateUpdated && chasmNodesMutation.IsEmpty()
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
@@ -8476,6 +8487,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 
 	ms.visibilityUpdated = false
 	ms.executionStateUpdated = false
+	ms.persistenceOnlyStateUpdated = false
 	ms.workflowTaskUpdated = false
 	ms.chasmRequestIDsAdded = false
 	ms.isResetStateUpdated = false
@@ -9959,7 +9971,11 @@ func (ms *MutableStateImpl) IsSubStateMachineDeleted() bool {
 }
 
 func (ms *MutableStateImpl) SetSuccessorRunID(runID string) {
+	if ms.executionInfo.SuccessorRunId == runID {
+		return
+	}
 	ms.executionInfo.SuccessorRunId = runID
+	ms.persistenceOnlyStateUpdated = true
 }
 
 // ActivityMatchWorkflowRules checks if the activity matches any of the workflow rules

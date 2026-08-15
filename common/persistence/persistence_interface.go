@@ -377,6 +377,9 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
+		// ExpectedCurrentRunID is normalized by executionManagerImpl for the persistence stores.
+		ExpectedCurrentRunID string
+
 		// workflow to be resetted
 		ResetWorkflowSnapshot        InternalWorkflowSnapshot
 		ResetWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`

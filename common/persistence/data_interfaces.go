@@ -256,6 +256,10 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
+		// ExpectedCurrentRunID is the current-record CAS condition for update-current mode.
+		// Empty preserves the legacy inference from the current mutation or reset snapshot.
+		ExpectedCurrentRunID string
+
 		// workflow to be resetted
 		ResetWorkflowSnapshot WorkflowSnapshot
 		ResetWorkflowEvents   []*WorkflowEvents

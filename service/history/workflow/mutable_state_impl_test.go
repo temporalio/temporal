@@ -5343,6 +5343,191 @@ func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmNoopSkipsPersist
 	s.Equal(dbRecordVersion, mutableState.dbRecordVersion)
 }
 
+func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmClusterLocalStatePersistsWithoutAdvancingTransition() {
+	testCases := []struct {
+		name          string
+		currentState  enumsspb.WorkflowExecutionState
+		currentStatus enumspb.WorkflowExecutionStatus
+		targetState   enumsspb.WorkflowExecutionState
+		targetStatus  enumspb.WorkflowExecutionStatus
+	}{
+		{
+			name:          "suppress running execution",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			targetState:   enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			targetStatus:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		{
+			name:          "revive zombie execution",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			targetState:   enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			targetStatus:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		{
+			name:          "update zombie status",
+			currentState:  enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			currentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			targetState:   enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			targetStatus:  enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			mutableState := s.newCleanStandaloneMutableState(tc.currentState, tc.currentStatus)
+			versionedTransition := common.CloneProto(mutableState.CurrentVersionedTransition())
+			executionStateVersionedTransition := common.CloneProto(
+				mutableState.GetExecutionState().LastUpdateVersionedTransition,
+			)
+			lastRunningClock := mutableState.GetExecutionInfo().LastRunningClock
+
+			changed, err := mutableState.UpdateWorkflowStateStatus(tc.targetState, tc.targetStatus)
+			s.Require().NoError(err)
+			s.True(changed)
+			s.True(mutableState.persistenceOnlyStateUpdated)
+			s.False(mutableState.isStateDirty())
+			s.True(mutableState.IsDirty())
+
+			mutation, eventsSeq, err := mutableState.CloseTransactionAsMutation(
+				context.Background(),
+				historyi.TransactionPolicyPassive,
+			)
+			s.Require().NoError(err)
+			s.Require().NotNil(mutation)
+			s.Empty(eventsSeq)
+			s.Equal(tc.targetState, mutation.ExecutionState.State)
+			s.Equal(tc.targetStatus, mutation.ExecutionState.Status)
+			protorequire.ProtoEqual(s.T(), versionedTransition, mutableState.CurrentVersionedTransition())
+			protorequire.ProtoEqual(
+				s.T(),
+				executionStateVersionedTransition,
+				mutation.ExecutionState.LastUpdateVersionedTransition,
+			)
+			s.Equal(lastRunningClock, mutation.ExecutionInfo.LastRunningClock)
+			s.Empty(mutation.Tasks[tasks.CategoryReplication])
+			s.False(mutableState.IsDirty())
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_InvalidTransitionDoesNotDirtyState() {
+	mutableState := s.newCleanStandaloneMutableState(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+
+	changed, err := mutableState.UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+	)
+	s.Require().Error(err)
+	s.False(changed)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, mutableState.executionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, mutableState.executionState.Status)
+	s.False(mutableState.persistenceOnlyStateUpdated)
+	s.False(mutableState.IsDirty())
+
+	mutation, eventsSeq, err := mutableState.CloseTransactionAsMutation(
+		context.Background(),
+		historyi.TransactionPolicyPassive,
+	)
+	s.Require().NoError(err)
+	s.Nil(mutation)
+	s.Empty(eventsSeq)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmClusterLocalStateNoopStillSkipsPersistence() {
+	mutableState := s.newCleanStandaloneMutableState(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+	versionedTransition := common.CloneProto(mutableState.CurrentVersionedTransition())
+
+	changed, err := mutableState.UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+	s.Require().NoError(err)
+	s.False(changed)
+	s.False(mutableState.persistenceOnlyStateUpdated)
+	s.False(mutableState.IsDirty())
+
+	mutation, eventsSeq, err := mutableState.CloseTransactionAsMutation(
+		context.Background(),
+		historyi.TransactionPolicyPassive,
+	)
+	s.Require().NoError(err)
+	s.Nil(mutation)
+	s.Empty(eventsSeq)
+	protorequire.ProtoEqual(s.T(), versionedTransition, mutableState.CurrentVersionedTransition())
+}
+
+func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmSuccessorRunIDPersistsWithoutAdvancingTransition() {
+	mutableState := s.newCleanStandaloneMutableState(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+	versionedTransition := common.CloneProto(mutableState.CurrentVersionedTransition())
+
+	mutableState.SetSuccessorRunID("")
+	s.False(mutableState.persistenceOnlyStateUpdated)
+	mutableState.SetSuccessorRunID("successor-run-id")
+	s.True(mutableState.persistenceOnlyStateUpdated)
+	s.False(mutableState.isStateDirty())
+	s.True(mutableState.IsDirty())
+
+	mutation, eventsSeq, err := mutableState.CloseTransactionAsMutation(
+		context.Background(),
+		historyi.TransactionPolicyPassive,
+	)
+	s.Require().NoError(err)
+	s.Require().NotNil(mutation)
+	s.Empty(eventsSeq)
+	s.Equal("successor-run-id", mutation.ExecutionInfo.SuccessorRunId)
+	protorequire.ProtoEqual(s.T(), versionedTransition, mutableState.CurrentVersionedTransition())
+	s.Empty(mutation.Tasks[tasks.CategoryReplication])
+	s.False(mutableState.IsDirty())
+}
+
+func (s *mutableStateSuite) newCleanStandaloneMutableState(
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+) *MutableStateImpl {
+	dbState := s.buildWorkflowMutableState()
+	dbState.ExecutionState.State = state
+	dbState.ExecutionState.Status = status
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		s.namespaceEntry,
+		dbState,
+		123,
+	)
+	s.Require().NoError(err)
+
+	// Clear unrelated tasks generated from the workflow-shaped test fixture before switching
+	// to a standalone CHASM archetype.
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.Require().NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.Require().NoError(err)
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.Require().NoError(err)
+
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
+	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+	mutableState.chasmTree = mockChasmTree
+
+	return mutableState
+}
+
 func (s *mutableStateSuite) TestCloseTransactionAsMutation_WorkflowChasmNoopDoesNotSkipPersistence() {
 	dbState := s.buildWorkflowMutableState()
 

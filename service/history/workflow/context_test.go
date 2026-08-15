@@ -85,6 +85,37 @@ func (s *contextSuite) SetupTest() {
 	)
 }
 
+func (s *contextSuite) TestConflictResolveRejectsSkippedGuaranteedCurrentMutation() {
+	controller := gomock.NewController(s.T())
+	resetMutableState := historyi.NewMockMutableState(controller)
+	currentMutableState := historyi.NewMockMutableState(controller)
+	currentContext := historyi.NewMockWorkflowContext(controller)
+	currentPolicy := historyi.TransactionPolicyPassive
+
+	resetMutableState.EXPECT().CloseTransactionAsSnapshot(gomock.Any(), historyi.TransactionPolicyPassive).
+		Return(&persistence.WorkflowSnapshot{}, nil, nil)
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: tests.RunID})
+	currentMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true)
+	currentMutableState.EXPECT().CloseTransactionAsMutation(gomock.Any(), historyi.TransactionPolicyPassive).
+		Return(nil, nil, nil)
+	currentContext.EXPECT().Clear()
+
+	err := s.workflowContext.ConflictResolveWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		persistence.ConflictResolveWorkflowModeUpdateCurrent,
+		resetMutableState,
+		nil,
+		nil,
+		currentContext,
+		currentMutableState,
+		historyi.TransactionPolicyPassive,
+		nil,
+		&currentPolicy,
+	)
+	s.ErrorContains(err, "current workflow mutation skipped while updating current workflow")
+}
+
 func (s *contextSuite) TestMergeReplicationTasks_NoNewRun() {
 	currentWorkflowMutation := &persistence.WorkflowMutation{
 		ExecutionState: &persistencespb.WorkflowExecutionState{

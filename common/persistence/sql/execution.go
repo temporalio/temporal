@@ -530,13 +530,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 			Data:             executionStateBlob.Data,
 			DataEncoding:     executionStateBlob.EncodingType.String(),
 		}
-		var prevRunID primitives.UUID
-		if currentWorkflow != nil {
-			prevRunID = primitives.MustParseUUID(currentWorkflow.ExecutionState.RunId)
-		} else {
-			// reset workflow is current
-			prevRunID = primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId)
-		}
+		prevRunID := primitives.MustParseUUID(request.ExpectedCurrentRunID)
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, prevRunID, m.serializer); err != nil {
 			return err
 		}

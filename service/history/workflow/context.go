@@ -594,6 +594,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 	var currentWorkflow *persistence.WorkflowMutation
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
+	var expectedCurrentRunID string
 	if currentContext != nil && currentMutableState != nil && currentTransactionPolicy != nil {
 
 		defer func() {
@@ -602,12 +603,18 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 			}
 		}()
 
+		expectedCurrentRunID = currentMutableState.GetExecutionState().GetRunId()
+		currentWasGuaranteed := conflictResolveMode == persistence.ConflictResolveWorkflowModeUpdateCurrent &&
+			currentMutableState.IsCurrentWorkflowGuaranteed()
 		currentWorkflow, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
 			ctx,
 			*currentTransactionPolicy,
 		)
 		if err != nil {
 			return err
+		}
+		if currentWorkflow == nil && currentWasGuaranteed {
+			return serviceerror.NewInternal("current workflow mutation skipped while updating current workflow")
 		}
 	}
 
@@ -648,6 +655,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		MutableStateFailoverVersion(newMutableState),
 		newWorkflow,
 		newWorkflowEventsSeq,
+		expectedCurrentRunID,
 		MutableStateFailoverVersion(currentMutableState),
 		currentWorkflow,
 		currentWorkflowEventsSeq,

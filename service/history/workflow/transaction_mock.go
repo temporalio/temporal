@@ -43,9 +43,9 @@ func (m *MockTransaction) EXPECT() *MockTransactionMockRecorder {
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
-func (m *MockTransaction) ConflictResolveWorkflowExecution(ctx context.Context, conflictResolveMode persistence.ConflictResolveWorkflowMode, archetypeID chasm.ArchetypeID, resetWorkflowFailoverVersion int64, resetWorkflowSnapshot *persistence.WorkflowSnapshot, resetWorkflowEventsSeq []*persistence.WorkflowEvents, newWorkflowFailoverVersion *int64, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents, currentWorkflowFailoverVersion *int64, currentWorkflowMutation *persistence.WorkflowMutation, currentWorkflowEventsSeq []*persistence.WorkflowEvents, isWorkflow bool) (int64, int64, int64, error) {
+func (m *MockTransaction) ConflictResolveWorkflowExecution(ctx context.Context, conflictResolveMode persistence.ConflictResolveWorkflowMode, archetypeID chasm.ArchetypeID, resetWorkflowFailoverVersion int64, resetWorkflowSnapshot *persistence.WorkflowSnapshot, resetWorkflowEventsSeq []*persistence.WorkflowEvents, newWorkflowFailoverVersion *int64, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents, expectedCurrentRunID string, currentWorkflowFailoverVersion *int64, currentWorkflowMutation *persistence.WorkflowMutation, currentWorkflowEventsSeq []*persistence.WorkflowEvents, isWorkflow bool) (int64, int64, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", ctx, conflictResolveMode, archetypeID, resetWorkflowFailoverVersion, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, isWorkflow)
+	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", ctx, conflictResolveMode, archetypeID, resetWorkflowFailoverVersion, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, expectedCurrentRunID, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, isWorkflow)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(int64)
 	ret2, _ := ret[2].(int64)
@@ -54,9 +54,9 @@ func (m *MockTransaction) ConflictResolveWorkflowExecution(ctx context.Context, 
 }
 
 // ConflictResolveWorkflowExecution indicates an expected call of ConflictResolveWorkflowExecution.
-func (mr *MockTransactionMockRecorder) ConflictResolveWorkflowExecution(ctx, conflictResolveMode, archetypeID, resetWorkflowFailoverVersion, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, isWorkflow any) *gomock.Call {
+func (mr *MockTransactionMockRecorder) ConflictResolveWorkflowExecution(ctx, conflictResolveMode, archetypeID, resetWorkflowFailoverVersion, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, expectedCurrentRunID, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, isWorkflow any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).ConflictResolveWorkflowExecution), ctx, conflictResolveMode, archetypeID, resetWorkflowFailoverVersion, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, isWorkflow)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).ConflictResolveWorkflowExecution), ctx, conflictResolveMode, archetypeID, resetWorkflowFailoverVersion, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowFailoverVersion, newWorkflowSnapshot, newWorkflowEventsSeq, expectedCurrentRunID, currentWorkflowFailoverVersion, currentWorkflowMutation, currentWorkflowEventsSeq, isWorkflow)
 }
 
 // CreateWorkflowExecution mocks base method.

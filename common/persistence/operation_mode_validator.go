@@ -180,9 +180,8 @@ func ValidateConflictResolveWorkflowModeState(
 		//  reset workflow cannot be created / running / zombie,
 		//  new workflow cannot be zombie
 
-		// TODO remove case 1 & 2 support once 2DC is deprecated
-		// it is ok that currentWorkflowMutation is null, only for 2 DC case
-		// NDC should always require current workflow for CAS
+		// currentWorkflowMutation can be nil when the current workflow has no persistence changes.
+		// The current-record CAS condition can be carried independently on the persistence request.
 		// Note: current workflow mutation can be in zombie state, for the update
 
 		// case 1 & 2

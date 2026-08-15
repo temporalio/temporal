@@ -30,6 +30,7 @@ type (
 			newWorkflowFailoverVersion *int64,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+			expectedCurrentRunID string,
 			currentWorkflowFailoverVersion *int64,
 			currentWorkflowMutation *persistence.WorkflowMutation,
 			currentWorkflowEventsSeq []*persistence.WorkflowEvents,

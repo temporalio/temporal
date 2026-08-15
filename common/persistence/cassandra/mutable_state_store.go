@@ -788,12 +788,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			executionStateBlob = newWorkflow.ExecutionStateBlob
 		}
 
-		if currentWorkflow != nil {
-			currentRunID = currentWorkflow.ExecutionState.RunId
-		} else {
-			// reset workflow is current
-			currentRunID = resetWorkflow.ExecutionState.RunId
-		}
+		currentRunID = request.ExpectedCurrentRunID
 
 		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 			executionState.RunId,

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -234,5 +235,169 @@ func TestExecutionManager_TrimHistoryBranchSkipped_EmptyBranchToken(t *testing.T
 	}
 	if _, ok := err.(*p.ConditionFailedError); !ok {
 		t.Fatalf("expected ConditionFailedError, got %T", err)
+	}
+}
+
+func TestExecutionManager_ConflictResolveExpectedCurrentRunID(t *testing.T) {
+	tests := []struct {
+		name                 string
+		expectedCurrentRunID string
+		currentMutationRunID string
+		wantRunID            string
+	}{
+		{
+			name:                 "explicit without current mutation",
+			expectedCurrentRunID: "current-run-id",
+			wantRunID:            "current-run-id",
+		},
+		{
+			name:                 "explicit matching current mutation",
+			expectedCurrentRunID: "current-run-id",
+			currentMutationRunID: "current-run-id",
+			wantRunID:            "current-run-id",
+		},
+		{
+			name:                 "legacy current mutation fallback",
+			currentMutationRunID: "current-run-id",
+			wantRunID:            "current-run-id",
+		},
+		{
+			name:      "legacy reset workflow fallback",
+			wantRunID: "reset-run-id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := mockp.NewMockExecutionStore(ctrl)
+			store.EXPECT().GetName().AnyTimes().Return("mock-store")
+			store.EXPECT().ConflictResolveWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *p.InternalConflictResolveWorkflowExecutionRequest) error {
+					require.Equal(t, tt.wantRunID, request.ExpectedCurrentRunID)
+					return nil
+				},
+			)
+
+			em := newTestExecutionManager(store)
+			request := newTestConflictResolveRequest(p.ConflictResolveWorkflowModeUpdateCurrent)
+			request.ExpectedCurrentRunID = tt.expectedCurrentRunID
+			if tt.currentMutationRunID != "" {
+				mutation := newTestConflictResolveMutation(tt.currentMutationRunID)
+				request.CurrentWorkflowMutation = &mutation
+			}
+
+			_, err := em.ConflictResolveWorkflowExecution(context.Background(), request)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestExecutionManager_ConflictResolveRejectsInvalidExpectedCurrentRunID(t *testing.T) {
+	tests := []struct {
+		name    string
+		request *p.ConflictResolveWorkflowExecutionRequest
+	}{
+		{
+			name: "does not match current mutation",
+			request: func() *p.ConflictResolveWorkflowExecutionRequest {
+				request := newTestConflictResolveRequest(p.ConflictResolveWorkflowModeUpdateCurrent)
+				request.ExpectedCurrentRunID = "other-run-id"
+				mutation := newTestConflictResolveMutation("current-run-id")
+				request.CurrentWorkflowMutation = &mutation
+				return request
+			}(),
+		},
+		{
+			name: "set while bypassing current",
+			request: func() *p.ConflictResolveWorkflowExecutionRequest {
+				request := newTestConflictResolveRequest(p.ConflictResolveWorkflowModeBypassCurrent)
+				request.ExpectedCurrentRunID = "current-run-id"
+				return request
+			}(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := mockp.NewMockExecutionStore(ctrl)
+			store.EXPECT().GetName().AnyTimes().Return("mock-store")
+
+			em := newTestExecutionManager(store)
+			_, err := em.ConflictResolveWorkflowExecution(context.Background(), tt.request)
+			var internalErr *serviceerror.Internal
+			require.ErrorAs(t, err, &internalErr)
+		})
+	}
+}
+
+func TestExecutionManager_ConflictResolveBypassCurrentForwardsEmptyExpectedRunID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := mockp.NewMockExecutionStore(ctrl)
+	store.EXPECT().GetName().AnyTimes().Return("mock-store")
+	store.EXPECT().ConflictResolveWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *p.InternalConflictResolveWorkflowExecutionRequest) error {
+			require.Empty(t, request.ExpectedCurrentRunID)
+			return nil
+		},
+	)
+
+	em := newTestExecutionManager(store)
+	_, err := em.ConflictResolveWorkflowExecution(
+		context.Background(),
+		newTestConflictResolveRequest(p.ConflictResolveWorkflowModeBypassCurrent),
+	)
+	require.NoError(t, err)
+}
+
+func newTestExecutionManager(store p.ExecutionStore) p.ExecutionManager {
+	return p.NewExecutionManager(
+		store,
+		serialization.NewSerializer(),
+		nil,
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+}
+
+func newTestConflictResolveRequest(mode p.ConflictResolveWorkflowMode) *p.ConflictResolveWorkflowExecutionRequest {
+	return &p.ConflictResolveWorkflowExecutionRequest{
+		ShardID:               1,
+		RangeID:               1,
+		Mode:                  mode,
+		ArchetypeID:           chasm.WorkflowArchetypeID,
+		ResetWorkflowSnapshot: newTestConflictResolveSnapshot("reset-run-id"),
+	}
+}
+
+func newTestConflictResolveSnapshot(runID string) p.WorkflowSnapshot {
+	return p.WorkflowSnapshot{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:    "namespace-id",
+			WorkflowId:     "workflow-id",
+			ExecutionStats: &persistencespb.ExecutionStats{},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  runID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+	}
+}
+
+func newTestConflictResolveMutation(runID string) p.WorkflowMutation {
+	return p.WorkflowMutation{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:    "namespace-id",
+			WorkflowId:     "workflow-id",
+			ExecutionStats: &persistencespb.ExecutionStats{},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  runID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
 	}
 }

@@ -1624,6 +1624,260 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 	s.AssertMSEqualWithDB(archetypeID, currentSnapshot, currentMutation)
 }
 
+func (s *ExecutionMutableStateSuite) TestConflictResolvePromoteAfterCurrentChangedTwiceCHASM() {
+	archetypeID := rand.Uint32()
+	run1VT2 := s.CreateCHASMExecution(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		archetypeID,
+	)
+
+	// Run2 VT1 suppresses Run1 and becomes current.
+	run1ZombieMutation, run1ZombieEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		run1VT2.ExecutionState.RunId,
+		run1VT2.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		run1VT2.DBRecordVersion+1,
+		nil,
+	)
+	s.Empty(run1ZombieEvents)
+	run2ID := uuid.NewString()
+	run2VT1, run2VT1Events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		run2ID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		nil,
+	)
+	s.Empty(run2VT1Events)
+	_, err := s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: archetypeID,
+
+		UpdateWorkflowMutation: *run1ZombieMutation,
+		NewWorkflowSnapshot:    run2VT1,
+	})
+	s.Require().NoError(err)
+	s.assertCurrentRunID(archetypeID, run2ID)
+
+	// Run1 VT3 completes and takes current back from Run2.
+	run1VT3, run1VT3Events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		run1VT2.ExecutionState.RunId,
+		run1ZombieMutation.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		run1ZombieMutation.DBRecordVersion+1,
+		nil,
+	)
+	s.Empty(run1VT3Events)
+	run2ZombieMutation, run2ZombieEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		run2ID,
+		run2VT1.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		run2VT1.DBRecordVersion+1,
+		nil,
+	)
+	s.Empty(run2ZombieEvents)
+	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
+
+		ArchetypeID: archetypeID,
+
+		ResetWorkflowSnapshot:   *run1VT3,
+		CurrentWorkflowMutation: run2ZombieMutation,
+	})
+	s.Require().NoError(err)
+	s.assertCurrentRunID(archetypeID, run1VT2.ExecutionState.RunId)
+
+	// Run2 VT2 is newer, but the clean completed Run1 produces no current mutation.
+	run2VT2, run2VT2Events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		run2ID,
+		run2ZombieMutation.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		run2ZombieMutation.DBRecordVersion+1,
+		nil,
+	)
+	s.Empty(run2VT2Events)
+	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
+
+		ArchetypeID:          archetypeID,
+		ExpectedCurrentRunID: run1VT2.ExecutionState.RunId,
+
+		ResetWorkflowSnapshot: *run2VT2,
+	})
+	s.Require().NoError(err)
+	s.assertCurrentRunID(archetypeID, run2ID)
+	s.AssertMSEqualWithDB(archetypeID, run1VT3)
+	s.AssertMSEqualWithDB(archetypeID, run2VT2)
+}
+
+func (s *ExecutionMutableStateSuite) TestConflictResolvePromoteInitiallyZombieAfterCurrentCompletedCHASM() {
+	archetypeID := rand.Uint32()
+	run1VT3 := s.CreateCHASMExecution(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		rand.Int63(),
+		archetypeID,
+	)
+
+	// Run2 VT1 arrives after Run1 completed and is created as a zombie.
+	run2ID := uuid.NewString()
+	run2VT1, run2VT1Events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		run2ID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		nil,
+	)
+	s.Empty(run2VT1Events)
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
+
+		ArchetypeID: archetypeID,
+
+		NewWorkflowSnapshot: *run2VT1,
+	})
+	s.Require().NoError(err)
+	s.assertCurrentRunID(archetypeID, run1VT3.ExecutionState.RunId)
+
+	// Run2 VT2 is newer, but the clean completed Run1 produces no current mutation.
+	run2VT2, run2VT2Events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		run2ID,
+		run2VT1.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		run2VT1.DBRecordVersion+1,
+		nil,
+	)
+	s.Empty(run2VT2Events)
+	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
+
+		ArchetypeID:          archetypeID,
+		ExpectedCurrentRunID: run1VT3.ExecutionState.RunId,
+
+		ResetWorkflowSnapshot: *run2VT2,
+	})
+	s.Require().NoError(err)
+	s.assertCurrentRunID(archetypeID, run2ID)
+	s.AssertMSEqualWithDB(archetypeID, run1VT3)
+	s.AssertMSEqualWithDB(archetypeID, run2VT2)
+}
+
+func (s *ExecutionMutableStateSuite) TestConflictResolvePromoteCHASMStaleExpectedCurrentRunID() {
+	archetypeID := rand.Uint32()
+	run1 := s.CreateCHASMExecution(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		rand.Int63(),
+		archetypeID,
+	)
+
+	run2ID := uuid.NewString()
+	run2VT1, run2VT1Events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		run2ID,
+		common.FirstEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+		nil,
+	)
+	s.Empty(run2VT1Events)
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
+
+		ArchetypeID: archetypeID,
+
+		NewWorkflowSnapshot: *run2VT1,
+	})
+	s.Require().NoError(err)
+
+	run2VT2, run2VT2Events := RandomSnapshot(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		run2ID,
+		run2VT1.NextEventID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		run2VT1.DBRecordVersion+1,
+		nil,
+	)
+	s.Empty(run2VT2Events)
+	_, err = s.ExecutionManager.ConflictResolveWorkflowExecution(s.Ctx, &p.ConflictResolveWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.ConflictResolveWorkflowModeUpdateCurrent,
+
+		ArchetypeID:          archetypeID,
+		ExpectedCurrentRunID: run2ID,
+
+		ResetWorkflowSnapshot: *run2VT2,
+	})
+	var conditionFailed *p.CurrentWorkflowConditionFailedError
+	s.Require().ErrorAs(err, &conditionFailed)
+	s.Equal(run1.ExecutionState.RunId, conditionFailed.RunID)
+	s.assertCurrentRunID(archetypeID, run1.ExecutionState.RunId)
+	s.AssertMSEqualWithDB(archetypeID, run1)
+	s.AssertMSEqualWithDB(archetypeID, run2VT1)
+}
+
 func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent() {
 	branchToken, baseSnapshot, baseEvents := s.CreateWorkflow(
 		rand.Int63(),
@@ -2722,6 +2976,21 @@ func (s *ExecutionMutableStateSuite) AssertHEEqualWithDB(branchToken []byte, eve
 
 func (s *ExecutionMutableStateSuite) AssertHEPrefixWithDB(branchToken []byte, events ...[]*p.WorkflowEvents) {
 	s.assertHEWithDB(branchToken, events, true)
+}
+
+func (s *ExecutionMutableStateSuite) assertCurrentRunID(
+	archetypeID chasm.ArchetypeID,
+	expectedRunID string,
+) {
+	s.T().Helper()
+	currentExecution, err := s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		ArchetypeID: archetypeID,
+	})
+	s.Require().NoError(err)
+	s.Equal(expectedRunID, currentExecution.RunID)
 }
 
 func (s *ExecutionMutableStateSuite) assertHEWithDB(

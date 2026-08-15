@@ -372,6 +372,10 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	); err != nil {
 		return nil, err
 	}
+	expectedCurrentRunID, err := resolveConflictResolveExpectedCurrentRunID(request)
+	if err != nil {
+		return nil, err
+	}
 
 	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&resetSnapshot)
 	if err != nil {
@@ -400,6 +404,8 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		Mode: request.Mode,
 
 		ArchetypeID: archetypeID,
+
+		ExpectedCurrentRunID: expectedCurrentRunID,
 
 		ResetWorkflowSnapshot:        *serializedResetWorkflowSnapshot,
 		ResetWorkflowEventsNewEvents: resetWorkflowEvents,
@@ -455,6 +461,38 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		return nil, err
 	default:
 		return nil, err
+	}
+}
+
+func resolveConflictResolveExpectedCurrentRunID(
+	request *ConflictResolveWorkflowExecutionRequest,
+) (string, error) {
+	switch request.Mode {
+	case ConflictResolveWorkflowModeUpdateCurrent:
+		if request.ExpectedCurrentRunID != "" {
+			if request.CurrentWorkflowMutation != nil &&
+				request.ExpectedCurrentRunID != request.CurrentWorkflowMutation.ExecutionState.GetRunId() {
+				return "", serviceerror.NewInternalf(
+					"conflict resolve expected current run ID %s does not match current workflow mutation run ID %s",
+					request.ExpectedCurrentRunID,
+					request.CurrentWorkflowMutation.ExecutionState.GetRunId(),
+				)
+			}
+			return request.ExpectedCurrentRunID, nil
+		}
+		if request.CurrentWorkflowMutation != nil {
+			return request.CurrentWorkflowMutation.ExecutionState.GetRunId(), nil
+		}
+		return request.ResetWorkflowSnapshot.ExecutionState.GetRunId(), nil
+
+	case ConflictResolveWorkflowModeBypassCurrent:
+		if request.ExpectedCurrentRunID != "" {
+			return "", serviceerror.NewInternal("conflict resolve expected current run ID cannot be set when bypassing current workflow")
+		}
+		return "", nil
+
+	default:
+		return "", serviceerror.NewInternalf("unknown mode: %v", request.Mode)
 	}
 }
 

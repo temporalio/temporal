@@ -279,7 +279,13 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_CompletionMetric
 			HistoryStatistics: &persistence.HistoryStatistics{},
 		},
 	}
-	s.mockShard.EXPECT().ConflictResolveWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).AnyTimes()
+	expectedCurrentRunID := "expected-current-run-id"
+	s.mockShard.EXPECT().ConflictResolveWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
+			s.Equal(expectedCurrentRunID, request.ExpectedCurrentRunID)
+			return resp, nil
+		},
+	).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
@@ -323,9 +329,10 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_CompletionMetric
 					},
 				},
 				tc.events,
-				nil,  // newWorkflowFailoverVersion
-				nil,  // newWorkflowSnapshot
-				nil,  // newWorkflowEventsSeq
+				nil, // newWorkflowFailoverVersion
+				nil, // newWorkflowSnapshot
+				nil, // newWorkflowEventsSeq
+				expectedCurrentRunID,
 				nil,  // currentWorkflowFailoverVersion
 				nil,  // currentWorkflowMutation
 				nil,  // currentWorkflowEventsSeq
@@ -373,6 +380,7 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 		new(int64(0)),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
+		"current-run-id",
 		new(int64(0)),
 		&persistence.WorkflowMutation{},
 		[]*persistence.WorkflowEvents{},
@@ -454,6 +462,7 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyChasmExecu
 		new(int64(0)),
 		newWorkflowSnapshot,
 		[]*persistence.WorkflowEvents{},
+		"current-run-id",
 		new(int64(0)),
 		currentWorkflowMutation,
 		[]*persistence.WorkflowEvents{},

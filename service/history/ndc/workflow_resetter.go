@@ -488,6 +488,7 @@ func (r *workflowResetterImpl) persistToDB(
 		&resetRunVersion,
 		resetWorkflowSnapshot,
 		resetWorkflowEventsSeq,
+		currentRunID,
 		&currentRunVerson,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
