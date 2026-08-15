@@ -8,7 +8,6 @@ import (
 	"os"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -978,32 +977,23 @@ type otelLoggerErrorHandler struct {
 }
 
 type otelLoggerErrorHandlerRegistration struct {
-	tracingReady *atomic.Bool
-	logger       atomic.Pointer[otelLoggerErrorHandlerState]
-}
-
-type otelLoggerErrorHandlerState struct {
 	logger log.Logger
 }
 
 func (h *otelLoggerErrorHandler) Handle(err error) {
-	state := h.currentState()
-	if state != nil {
-		state.logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
+	logger := h.currentLogger()
+	if logger != nil {
+		logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
 	}
 }
 
-func (h *otelLoggerErrorHandler) currentState() *otelLoggerErrorHandlerState {
+func (h *otelLoggerErrorHandler) currentLogger() log.Logger {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	for i := len(h.registrations) - 1; i >= 0; i-- {
-		registration := h.registrations[i]
-		state := registration.logger.Load()
-		if state != nil && registration.tracingReady.Load() { // ignore errors during startup and shutdown
-			return state
-		}
+	if len(h.registrations) == 0 {
+		return nil
 	}
-	return nil
+	return h.registrations[len(h.registrations)-1].logger
 }
 
 func (h *otelLoggerErrorHandler) add(registration *otelLoggerErrorHandlerRegistration) {
@@ -1015,35 +1005,14 @@ func (h *otelLoggerErrorHandler) add(registration *otelLoggerErrorHandlerRegistr
 func (h *otelLoggerErrorHandler) remove(registration *otelLoggerErrorHandlerRegistration) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for i, candidate := range h.registrations {
-		if candidate == registration {
-			h.registrations = slices.Delete(h.registrations, i, i+1)
-			return
-		}
+	registration.logger = nil
+	if i := slices.Index(h.registrations, registration); i >= 0 {
+		h.registrations = slices.Delete(h.registrations, i, i+1)
 	}
 }
 
+// OTEL exposes one process-global error handler, but multiple Temporal servers can share a process.
 var globalOTELLoggerErrorHandler otelLoggerErrorHandler
-
-func installOTELLoggerErrorHandler(lifecycle fx.Lifecycle, logger log.Logger, tracingReady *atomic.Bool) {
-	registration := &otelLoggerErrorHandlerRegistration{
-		tracingReady: tracingReady,
-	}
-	registration.logger.Store(&otelLoggerErrorHandlerState{logger: logger})
-	lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error {
-			globalOTELLoggerErrorHandler.add(registration)
-			otel.SetErrorHandler(&globalOTELLoggerErrorHandler)
-			return nil
-		},
-		OnStop: func(context.Context) error {
-			registration.tracingReady.Store(false)
-			registration.logger.Store(nil)
-			globalOTELLoggerErrorHandler.remove(registration)
-			return nil
-		},
-	})
-}
 
 // TraceExportModule holds process-global telemetry fx state defining the set of
 // OTEL trace/span exporters used by tracing instrumentation. The following
@@ -1075,18 +1044,26 @@ var TraceExportModule = fx.Options(
 		maps.Copy(exportersByType, exportersByTypeFromEnv) // env overrides config
 		maps.Copy(exportersByType, customExportersByType)  // custom overrides all
 		exporters := expmaps.Values(exportersByType)
-		tracingReady := &atomic.Bool{}
+		registration := &otelLoggerErrorHandlerRegistration{logger: inputs.Logger}
+		startExporters := startAll(exporters)
+		shutdownExporters := shutdownAll(exporters)
 
 		// Configure exporters' lifecycle hooks.
 		inputs.Lifecycyle.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
-				err = startAll(exporters)(ctx)
-				tracingReady.Store(true)
-				return err
+				if err := startExporters(ctx); err != nil {
+					return err
+				}
+				// Ignore errors during startup and shutdown by registering only while the exporters are running.
+				globalOTELLoggerErrorHandler.add(registration)
+				otel.SetErrorHandler(&globalOTELLoggerErrorHandler)
+				return nil
 			},
-			OnStop: shutdownAll(exporters),
+			OnStop: func(ctx context.Context) error {
+				globalOTELLoggerErrorHandler.remove(registration)
+				return shutdownExporters(ctx)
+			},
 		})
-		installOTELLoggerErrorHandler(inputs.Lifecycyle, inputs.Logger, tracingReady)
 		return exporters, nil
 	}),
 )
