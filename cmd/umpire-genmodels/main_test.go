@@ -221,10 +221,31 @@ func TestSeededSafetyBugIsFoundByTLC(t *testing.T) {
 		t.Skip("UMPIRE_TLA_JAR is not set")
 	}
 	directory := writeSeededArtifacts(t)
+	model := seededBugModel()
+	vocabulary, err := tla.TraceVocabulary(model)
+	require.NoError(t, err)
 	result, err := runner.Check(context.Background(), runner.Request{
 		Backend: runner.TLC, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "1.7.4",
 		ModelDir: filepath.Join(directory, "tla"), ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
-		ActionNames: map[string]string{tla.ActionIdentifier("seed.bug"): "seed.bug"},
+		Model: model, TraceVocabulary: vocabulary, ActionNames: map[string]string{tla.ActionIdentifier("seed.bug"): "seed.bug"},
+	})
+	require.NoError(t, err)
+	requireSeededCounterexample(t, result)
+}
+
+func TestSeededSafetyBugIsFoundByApalache(t *testing.T) {
+	tool := os.Getenv("UMPIRE_APALACHE_TOOL")
+	if tool == "" {
+		t.Skip("UMPIRE_APALACHE_TOOL is not set")
+	}
+	directory := writeSeededArtifacts(t)
+	model := seededBugModel()
+	vocabulary, err := tla.TraceVocabulary(model)
+	require.NoError(t, err)
+	result, err := runner.Check(context.Background(), runner.Request{
+		Backend: runner.Apalache, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "0.61.0",
+		ModelDir: filepath.Join(directory, "tla"), ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
+		Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: 1},
 	})
 	require.NoError(t, err)
 	requireSeededCounterexample(t, result)
@@ -267,10 +288,11 @@ func TestSeededSafetyBugIsFoundByPAndPEx(t *testing.T) {
 	for _, backend := range []runner.Backend{runner.P, runner.PEx} {
 		t.Run(string(backend), func(t *testing.T) {
 			directory := writeSeededArtifacts(t)
+			model := seededBugModel()
 			result, err := runner.Check(context.Background(), runner.Request{
 				Backend: backend, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "3.1.0",
 				ModelDir: filepath.Join(directory, "p"), ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
-				Bounds: verify.Bounds{MaxDepth: 20, Schedules: 20},
+				Model: model, Bounds: verify.Bounds{MaxDepth: 20, Schedules: 20},
 			})
 			require.NoError(t, err)
 			requireSeededCounterexample(t, result)
@@ -284,10 +306,13 @@ func TestSeededSafetyBugIsRejectedByIvy(t *testing.T) {
 		t.Skip("UMPIRE_IVY_TOOL is not set")
 	}
 	directory := writeSeededArtifacts(t)
+	model := seededBugModel()
+	vocabulary, err := ivy.TraceVocabulary(model)
+	require.NoError(t, err)
 	result, err := runner.Check(context.Background(), runner.Request{
 		Backend: runner.Ivy, ToolPath: tool, ToolVersion: "1.8.26",
 		ModelDir: filepath.Join(directory, "ivy"), ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
-		ActionNames: map[string]string{ivy.ActionIdentifier("seed.bug"): "seed.bug"},
+		Model: model, TraceVocabulary: vocabulary, ActionNames: map[string]string{ivy.ActionIdentifier("seed.bug"): "seed.bug"},
 	})
 	require.NoError(t, err)
 	requireSeededCounterexample(t, result)

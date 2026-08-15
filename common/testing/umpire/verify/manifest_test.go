@@ -65,6 +65,47 @@ func TestManifestRecordsAssuranceBoundaryDeterministically(t *testing.T) {
 }
 
 func TestResultRejectsSuccessWhenExplorationHitLimit(t *testing.T) {
-	err := ValidateResult(Result{Status: FiniteExhaustive, Termination: StateLimit})
+	for _, termination := range []TerminationReason{
+		Timeout,
+		DepthLimit,
+		StateLimit,
+		StepLimit,
+		MemoryLimit,
+		ScheduleLimit,
+		ToolLimit,
+		Interrupted,
+		EvidenceFailure,
+	} {
+		t.Run(string(termination), func(t *testing.T) {
+			err := ValidateResult(Result{Status: FiniteExhaustive, Termination: termination})
+			require.ErrorContains(t, err, "cannot claim")
+		})
+	}
+}
+
+func TestResultRejectsSuccessWithUnsupportedSemantics(t *testing.T) {
+	err := ValidateResult(Result{
+		Status: InvariantProved, Termination: Completed,
+		Unsupported: []Unsupported{{Backend: "ivy", Construct: "property delivery.progress", Reason: "not inductive"}},
+	})
 	require.ErrorContains(t, err, "cannot claim")
+}
+
+func TestResultRejectsCounterexampleWithoutNativeTrace(t *testing.T) {
+	err := ValidateResult(Result{
+		Status: Counterexample, Termination: Completed, FailedProperty: "safe",
+	})
+	require.ErrorContains(t, err, "native trace")
+}
+
+func TestResultRejectsCounterexampleWithIncompleteTermination(t *testing.T) {
+	err := ValidateResult(Result{
+		Status: Counterexample, Termination: ToolError, FailedProperty: "safe", NativeTrace: "trace",
+	})
+	require.ErrorContains(t, err, "completed")
+}
+
+func TestResultRejectsEvidenceFailureWithoutDiagnostic(t *testing.T) {
+	err := ValidateResult(Result{Status: Inconclusive, Termination: EvidenceFailure})
+	require.ErrorContains(t, err, "diagnostic")
 }

@@ -29,25 +29,29 @@ const (
 	P             Backend = "p"
 	PEx           Backend = "pex"
 	Ivy           Backend = "ivy"
+
+	maxNativeTraceBytes = 4 << 20
 )
 
 type Request struct {
-	Backend       Backend
-	Target        string
-	Profile       string
-	ToolPath      string
-	JavaPath      string
-	ToolVersion   string
-	ModelDir      string
-	ArtifactDir   string
-	Config        string
-	Timeout       time.Duration
-	Bounds        verify.Bounds
-	ActionNames   map[string]string
-	PropertyNames map[string]string
-	Fairness      []string
-	Abstractions  []verify.Abstraction
-	Unsupported   []verify.Unsupported
+	Backend         Backend
+	Model           verify.Model
+	TraceVocabulary verify.TraceVocabulary
+	Target          string
+	Profile         string
+	ToolPath        string
+	JavaPath        string
+	ToolVersion     string
+	ModelDir        string
+	ArtifactDir     string
+	Config          string
+	Timeout         time.Duration
+	Bounds          verify.Bounds
+	ActionNames     map[string]string
+	PropertyNames   map[string]string
+	Fairness        []string
+	Abstractions    []verify.Abstraction
+	Unsupported     []verify.Unsupported
 }
 
 type command struct {
@@ -58,10 +62,12 @@ type command struct {
 }
 
 type execution struct {
-	output string
-	stdout string
-	stderr string
-	err    error
+	output         string
+	stdout         string
+	stderr         string
+	nativeTrace    string
+	nativeTraceErr error
+	err            error
 }
 
 type executor interface {
@@ -181,30 +187,52 @@ func execute(ctx context.Context, executor executor, request Request) (execution
 		if config == "" {
 			config = "Umpire-smoke.cfg"
 		}
-		var args []string
+		nativeOutput := ""
+		temporaryOutput := false
 		if request.ArtifactDir != "" {
-			nativeOutput := filepath.Join(request.ArtifactDir, "apalache-native")
+			nativeOutput = filepath.Join(request.ArtifactDir, "apalache-native")
 			if err := os.RemoveAll(nativeOutput); err != nil {
 				return execution{}, nil, err
 			}
 			if err := os.MkdirAll(nativeOutput, 0o755); err != nil {
 				return execution{}, nil, err
 			}
-			args = append(args, "--out-dir="+nativeOutput)
+		} else {
+			var err error
+			nativeOutput, err = os.MkdirTemp("", "umpire-apalache-run-")
+			if err != nil {
+				return execution{}, nil, err
+			}
+			temporaryOutput = true
 		}
+		args := []string{"--out-dir=" + nativeOutput}
 		args = append(args, "check", "--config="+config, "--inv=Safety,QuiescentSafety", "--no-deadlock", "--output-traces=true")
 		if request.Bounds.MaxDepth != 0 {
 			args = append(args, "--length="+strconv.FormatUint(request.Bounds.MaxDepth, 10))
 		}
 		args = append(args, "Umpire.tla")
 		environment := javaEnvironment(request.JavaPath)
-		return executor.run(ctx, command{path: request.ToolPath, args: args, dir: request.ModelDir, env: environment}), [][]string{replayCommand(environment, request.ToolPath, args)}, nil
+		actual := executor.run(ctx, command{path: request.ToolPath, args: args, dir: request.ModelDir, env: environment})
+		evidence, evidenceErr := collectApalacheTraceEvidence(nativeOutput)
+		if temporaryOutput {
+			if cleanupErr := os.RemoveAll(nativeOutput); cleanupErr != nil {
+				return execution{}, nil, errors.Join(evidenceErr, cleanupErr)
+			}
+		}
+		if errors.Is(evidenceErr, errNativeTraceTooLarge) {
+			actual.nativeTraceErr = fmt.Errorf("native-trace-too-large: %w", evidenceErr)
+		} else if evidenceErr != nil {
+			return execution{}, nil, evidenceErr
+		} else {
+			actual.nativeTrace = evidence
+		}
+		return actual, [][]string{replayCommand(environment, request.ToolPath, args)}, nil
 	case ApalacheProof:
 		return executeApalacheProof(ctx, executor, request)
 	case P, PEx:
 		return executeP(ctx, executor, request)
 	case Ivy:
-		args := []string{filepath.Join(request.ModelDir, "Umpire.ivy")}
+		args := []string{"trace=true", filepath.Join(request.ModelDir, "Umpire.ivy")}
 		return executor.run(ctx, command{path: request.ToolPath, args: args, dir: request.ModelDir}), [][]string{append([]string{request.ToolPath}, args...)}, nil
 	default:
 		return execution{}, nil, fmt.Errorf("unknown verification backend %q", request.Backend)
@@ -235,28 +263,55 @@ func executeApalacheProof(ctx context.Context, executor executor, request Reques
 	var combined execution
 	var replay [][]string
 	for _, proof := range obligations {
-		args := []string{}
+		nativeOutput := ""
+		temporaryOutput := false
 		if request.ArtifactDir != "" {
-			nativeOutput := filepath.Join(request.ArtifactDir, "apalache-proof-native", proof.name)
+			nativeOutput = filepath.Join(request.ArtifactDir, "apalache-proof-native", proof.name)
 			if err := os.RemoveAll(nativeOutput); err != nil {
 				return execution{}, nil, err
 			}
 			if err := os.MkdirAll(nativeOutput, 0o755); err != nil {
 				return execution{}, nil, err
 			}
-			args = append(args, "--out-dir="+nativeOutput)
+		} else {
+			var err error
+			nativeOutput, err = os.MkdirTemp("", "umpire-apalache-proof-"+proof.name+"-")
+			if err != nil {
+				return execution{}, nil, err
+			}
+			temporaryOutput = true
 		}
+		args := []string{"--out-dir=" + nativeOutput}
 		args = append(args, "check", "--config="+config)
 		args = append(args, proof.args...)
 		args = append(args, "--no-deadlock", "--output-traces=true", "Umpire.tla")
 		marker := "UMPIRE_PROOF_OBLIGATION " + proof.name + "\n"
 		actual := executor.run(ctx, command{path: request.ToolPath, args: args, dir: request.ModelDir, env: environment})
+		var collectionErr error
+		if actual.err != nil {
+			evidence, err := collectApalacheTraceEvidence(nativeOutput)
+			if errors.Is(err, errNativeTraceTooLarge) {
+				actual.nativeTraceErr = fmt.Errorf("native-trace-too-large: %w", err)
+			} else if err != nil {
+				collectionErr = err
+			} else {
+				actual.nativeTrace = evidence
+			}
+		}
+		if temporaryOutput {
+			collectionErr = errors.Join(collectionErr, os.RemoveAll(nativeOutput))
+		}
+		if collectionErr != nil {
+			return execution{}, nil, collectionErr
+		}
 		combined.output += marker + actual.output
 		combined.stdout += marker + actual.stdout
 		combined.stderr += actual.stderr
 		replay = append(replay, replayCommand(environment, request.ToolPath, args))
 		if actual.err != nil {
 			combined.err = actual.err
+			combined.nativeTrace = actual.nativeTrace
+			combined.nativeTraceErr = actual.nativeTraceErr
 			break
 		}
 	}
@@ -318,10 +373,11 @@ func executeP(ctx context.Context, executor executor, request Request) (_ execut
 	checkArgs = append(checkArgs, "--outdir", nativeOutput)
 	checked := executor.run(ctx, command{path: request.ToolPath, args: checkArgs, dir: workDirectory, env: environment})
 	evidence, evidenceErr := collectPTraceEvidence(nativeOutput)
-	if evidenceErr != nil {
+	if errors.Is(evidenceErr, errNativeTraceTooLarge) {
+		checked.nativeTraceErr = fmt.Errorf("native-trace-too-large: %w", evidenceErr)
+	} else if evidenceErr != nil {
 		return execution{}, nil, evidenceErr
-	}
-	if evidence != "" {
+	} else if evidence != "" {
 		checked.stdout += "\n" + evidence
 		checked.output += "\n" + evidence
 	}
@@ -375,16 +431,55 @@ func collectPTraceEvidence(directory string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if info.Size() > 4<<20 {
-			continue
+		header := fmt.Sprintf("--- %s ---\n", filepath.Base(path))
+		if info.Size() > maxNativeTraceBytes || int64(result.Len()+len(header)+1)+info.Size() > maxNativeTraceBytes {
+			return "", fmt.Errorf("%w: P checker trace exceeds 4 MiB", errNativeTraceTooLarge)
 		}
 		contents, err := os.ReadFile(path)
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(&result, "--- %s ---\n%s\n", filepath.Base(path), contents)
+		result.WriteString(header)
+		result.Write(contents)
+		result.WriteByte('\n')
 	}
 	return result.String(), nil
+}
+
+var errNativeTraceTooLarge = errors.New("native trace is too large")
+
+func collectApalacheTraceEvidence(directory string) (string, error) {
+	var paths []string
+	err := filepath.WalkDir(directory, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && entry.Name() == "example.itf.json" {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(paths) == 0 {
+		return "", nil
+	}
+	if len(paths) != 1 {
+		return "", fmt.Errorf("expected at most one Apalache example.itf.json, found %d", len(paths))
+	}
+	info, err := os.Stat(paths[0])
+	if err != nil {
+		return "", err
+	}
+	if info.Size() > maxNativeTraceBytes {
+		return "", fmt.Errorf("%w: Apalache ITF trace exceeds 4 MiB", errNativeTraceTooLarge)
+	}
+	contents, err := os.ReadFile(paths[0])
+	if err != nil {
+		return "", err
+	}
+	return string(contents), nil
 }
 
 func javaEnvironment(javaPath string) []string {
@@ -434,22 +529,29 @@ func findPAssembly(directory, mode string) (string, error) {
 }
 
 var (
-	stateCountsPattern = regexp.MustCompile(`(?m)(\d+) states generated, (\d+) distinct states found`)
-	propertyPattern    = regexp.MustCompile(`(?i)(?:property|invariant)[ :\[]+([A-Za-z0-9_.-]+)`)
-	pPropertyPattern   = regexp.MustCompile(`(?i)property\s+([A-Za-z0-9_.-]+)\s+failed`)
-	actionPattern      = regexp.MustCompile(`(?m)UMPIRE_ACTION\s+(\S+)([^\r\n]*)`)
-	bindingPattern     = regexp.MustCompile(`(\S+)=([^ ]+)`)
-	tlaActionPattern   = regexp.MustCompile(`(?m)^State \d+: <([A-Za-z0-9_]+)(?:\(([^)]*)\))?`)
-	tlaBindingPattern  = regexp.MustCompile(`([A-Za-z0-9_]+)\s*=\s*"([^"]*)"`)
-	invariantViolation = regexp.MustCompile(`(?i)invariant\s+[A-Za-z0-9_.-]+\s+is violated`)
-	timeoutPattern     = regexp.MustCompile(`(?i)(timed out|timeout (?:after|reached|exceeded)|time limit)`)
-	ivySuccessPattern  = regexp.MustCompile(`(?m)^OK\s*$`)
-	ivyActionPattern   = regexp.MustCompile(`^\s*\(internal\)\s+([A-Za-z0-9_]+)\s*$`)
-	ivyFailurePattern  = regexp.MustCompile(`line \d+:\s+([A-Za-z0-9_]+)\s+\.\.\.\s+FAIL`)
+	stateCountsPattern       = regexp.MustCompile(`(?m)(\d+) states generated, (\d+) distinct states found`)
+	propertyPattern          = regexp.MustCompile(`(?i)(?:property|invariant)[ :\[]+([A-Za-z0-9_.-]+)`)
+	pPropertyPattern         = regexp.MustCompile(`(?i)property\s+([A-Za-z0-9_.-]+)\s+failed`)
+	actionPattern            = regexp.MustCompile(`(?m)UMPIRE_ACTION\s+(\S+)([^\r\n]*)`)
+	bindingPattern           = regexp.MustCompile(`(\S+)=([^ ]+)`)
+	tlaActionPattern         = regexp.MustCompile(`(?m)^State \d+: <([A-Za-z0-9_]+)(?:\(([^)]*)\))?`)
+	tlaBindingPattern        = regexp.MustCompile(`([A-Za-z0-9_]+)\s*=\s*"([^"]*)"`)
+	invariantViolation       = regexp.MustCompile(`(?i)invariant\s+[A-Za-z0-9_.-]+\s+is violated`)
+	timeoutPattern           = regexp.MustCompile(`(?i)(timed out|timeout (?:after|reached|exceeded)|time limit)`)
+	apalacheTimeout          = regexp.MustCompile(`(?i)(?:=>|reports?)\s*timeout\b`)
+	depthLimitPattern        = regexp.MustCompile(`(?im)^Result:\s+(?:partially\s+)?correct up to step\s+[\d,]+\b`)
+	stateLimitPattern        = regexp.MustCompile(`(?i)(?:state limit (?:reached|exceeded)|maximum (?:number of )?states (?:reached|exceeded))`)
+	stepLimitPattern         = regexp.MustCompile(`(?i)(?:max(?:imum)? scheduling steps|maximum number of steps|scheduling steps bound of [\d,]+ reached)`)
+	scheduleLimit            = regexp.MustCompile(`(?im)^Finished [\d,]+ search tasks \([1-9][\d,]* pending\)\s*$`)
+	ivySuccessPattern        = regexp.MustCompile(`(?m)^OK\s*$`)
+	ivyActionPattern         = regexp.MustCompile(`^\s*\(internal\)\s+([A-Za-z0-9_]+)\s*$`)
+	ivyFailurePattern        = regexp.MustCompile(`line \d+:\s+([A-Za-z0-9_]+)\s+\.\.\.\s+FAIL`)
+	apalacheInvariantFailure = regexp.MustCompile(`(?i)state\s+\d+:\s+(?:state|action|trace)\s+invariant\s+\d+\s+\[([A-Za-z0-9_.-]+)\]\s+violated`)
 )
 
 func classify(request Request, execution execution) verify.Result {
 	output := execution.output
+	unsupported := unsupportedForBackend(request.Backend, request.Unsupported)
 	result := verify.Result{
 		Backend:      string(request.Backend),
 		Target:       request.Target,
@@ -458,7 +560,7 @@ func classify(request Request, execution execution) verify.Result {
 		Termination:  verify.Completed,
 		Fairness:     slices.Clone(request.Fairness),
 		Abstractions: slices.Clone(request.Abstractions),
-		Unsupported:  slices.Clone(request.Unsupported),
+		Unsupported:  unsupported,
 	}
 	if errors.Is(execution.err, context.DeadlineExceeded) || errors.Is(execution.err, context.Canceled) {
 		result.Status = verify.Inconclusive
@@ -470,35 +572,113 @@ func classify(request Request, execution execution) verify.Result {
 		return result
 	}
 	lower := strings.ToLower(output)
+	limit := reportedLimit(request.Backend, output)
 	switch {
-	case strings.Contains(lower, "max scheduling steps") || strings.Contains(lower, "maximum number of steps"):
+	case limit != "":
 		result.Status = verify.Inconclusive
-		result.Termination = verify.StepLimit
-	case timeoutPattern.MatchString(output):
-		result.Status = verify.Inconclusive
-		result.Termination = verify.Timeout
-	case strings.Contains(lower, "memory limit") || strings.Contains(lower, "out of memory"):
-		result.Status = verify.Inconclusive
-		result.Termination = verify.MemoryLimit
+		result.Termination = limit
+		if limit == verify.ToolLimit && strings.Contains(lower, "toomanychoicesexception") {
+			result.Diagnostic = "PEx reached its native per-statement choice limit"
+		}
 	case request.Backend == PEx && strings.Contains(lower, "cycle detected: infinite loop"):
 		result.Status = verify.Inconclusive
 		result.Termination = verify.ToolError
 		result.Diagnostic = "PEx reported an implicit cycle outside the generated Umpire properties"
-	case request.Backend == PEx && strings.Contains(lower, "toomanychoicesexception"):
-		result.Status = verify.Inconclusive
-		result.Termination = verify.StepLimit
-		result.Diagnostic = "PEx reached its native per-statement choice limit"
 	case isCounterexample(lower):
 		result.Status = verify.Counterexample
-		result.FailedProperty = failedProperty(request, output)
-		if result.FailedProperty == "" {
-			result.FailedProperty = "unknown"
+		result.NativeTrace = output
+		semanticBackend := request.Backend == P || request.Backend == PEx || request.Backend == TLC || request.Backend == Apalache || request.Backend == ApalacheProof || request.Backend == Ivy
+		if semanticBackend && request.Model.Version == "" {
+			result.Status = verify.Inconclusive
+			result.Termination = verify.EvidenceFailure
+			result.Diagnostic = "native-trace-malformed: canonical model is unavailable"
+			break
 		}
-		result.Trace = normalizeActions(request, output)
+		nativeProperty := nativeFailedProperty(request, output)
+		properties := failedPropertyCandidates(request, nativeProperty)
+		if len(properties) == 0 {
+			result.Status = verify.Inconclusive
+			result.Termination = verify.EvidenceFailure
+			result.Diagnostic = "property-unmapped: counterexample has no recognized failed property"
+			break
+		}
+		if semanticBackend {
+			var evidence verify.TraceEvidence
+			var evidenceErr error
+			switch request.Backend {
+			case P, PEx:
+				if execution.nativeTraceErr != nil {
+					evidenceErr = execution.nativeTraceErr
+					break
+				}
+				if len(output) > maxNativeTraceBytes {
+					evidenceErr = errors.New("native-trace-too-large: P counterexample trace exceeds 4 MiB")
+					break
+				}
+				parsed := normalizeActions(request, output)
+				if len(parsed) == 0 {
+					evidenceErr = errors.New("native-trace-missing: P counterexample has no Umpire action records")
+					break
+				}
+				evidence.Steps = make([]verify.ObservedTraceStep, len(parsed))
+				for index, step := range parsed {
+					evidence.Steps[index] = verify.ObservedTraceStep{Action: step.Action, Bindings: step.Bindings}
+				}
+			case TLC:
+				if len(output) > maxNativeTraceBytes {
+					evidenceErr = errors.New("native-trace-too-large: TLC textual trace exceeds 4 MiB")
+					break
+				}
+				evidence, evidenceErr = decodeTLCTrace(request, output)
+			case Apalache, ApalacheProof:
+				result.NativeTrace = execution.nativeTrace
+				if execution.nativeTraceErr != nil {
+					evidenceErr = execution.nativeTraceErr
+					break
+				}
+				if execution.nativeTrace == "" {
+					evidenceErr = errors.New("native-trace-missing: Apalache counterexample has no ITF trace")
+					break
+				}
+				if len(execution.nativeTrace) > maxNativeTraceBytes {
+					evidenceErr = errors.New("native-trace-too-large: Apalache ITF trace exceeds 4 MiB")
+					break
+				}
+				evidence, evidenceErr = decodeITFTrace(request, execution.nativeTrace)
+			case Ivy:
+				if len(output) > maxNativeTraceBytes {
+					evidenceErr = errors.New("native-trace-too-large: Ivy textual trace exceeds 4 MiB")
+					break
+				}
+				evidence, evidenceErr = decodeIvyTrace(request, output)
+			default:
+			}
+			if evidenceErr != nil {
+				result.Status = verify.Inconclusive
+				result.Termination = verify.EvidenceFailure
+				result.Diagnostic = evidenceErr.Error()
+				break
+			}
+			property, normalized, normalizationErr := normalizeEvidence(request.Model, properties, evidence)
+			if normalizationErr != nil {
+				result.Status = verify.Inconclusive
+				result.Termination = verify.EvidenceFailure
+				result.Diagnostic = normalizationErr.Error()
+				break
+			}
+			result.FailedProperty = property
+			result.Trace = normalized
+		} else {
+			result.FailedProperty = properties[0]
+			result.Trace = normalizeActions(request, output)
+		}
 	case execution.err != nil:
 		result.Status = verify.Inconclusive
 		result.Termination = verify.ToolError
 		result.Diagnostic = execution.err.Error()
+	case len(unsupported) > 0:
+		result.Status = verify.UnsupportedStatus
+		result.Diagnostic = fmt.Sprintf("%s: %s", unsupported[0].Construct, unsupported[0].Reason)
 	case request.Backend == SANY && strings.Contains(output, "Semantic processing of module"):
 		result.Status = verify.Generated
 	case request.Backend == TLC && strings.Contains(output, "Model checking completed. No error has been found"):
@@ -523,6 +703,28 @@ func classify(request Request, execution execution) verify.Result {
 	return result
 }
 
+func reportedLimit(backend Backend, output string) verify.TerminationReason {
+	lower := strings.ToLower(output)
+	switch {
+	case timeoutPattern.MatchString(output) || (backend == Apalache || backend == ApalacheProof) && apalacheTimeout.MatchString(output):
+		return verify.Timeout
+	case strings.Contains(lower, "memory limit") || strings.Contains(lower, "out of memory"):
+		return verify.MemoryLimit
+	case backend == PEx && depthLimitPattern.MatchString(output):
+		return verify.DepthLimit
+	case stateLimitPattern.MatchString(output):
+		return verify.StateLimit
+	case stepLimitPattern.MatchString(output):
+		return verify.StepLimit
+	case backend == PEx && scheduleLimit.MatchString(output):
+		return verify.ScheduleLimit
+	case backend == PEx && strings.Contains(lower, "toomanychoicesexception"):
+		return verify.ToolLimit
+	default:
+		return ""
+	}
+}
+
 func isCounterexample(lower string) bool {
 	return strings.Contains(lower, "assertion failed") ||
 		strings.Contains(lower, "invariant is violated") ||
@@ -532,11 +734,17 @@ func isCounterexample(lower string) bool {
 		strings.Contains(lower, "found 1 bug") ||
 		strings.Contains(lower, "property violated") ||
 		strings.Contains(lower, "error: failed checks:") ||
+		apalacheInvariantFailure.MatchString(lower) ||
 		invariantViolation.MatchString(lower)
 }
 
-func failedProperty(request Request, output string) string {
+func nativeFailedProperty(request Request, output string) string {
 	name := ""
+	if request.Backend == Apalache || request.Backend == ApalacheProof {
+		if matches := apalacheInvariantFailure.FindStringSubmatch(output); len(matches) == 2 {
+			name = matches[1]
+		}
+	}
 	if request.Backend == P || request.Backend == PEx {
 		if matches := pPropertyPattern.FindStringSubmatch(output); len(matches) == 2 {
 			name = matches[1]
@@ -553,10 +761,39 @@ func failedProperty(request Request, output string) string {
 			name = strings.Trim(matches[1], "]")
 		}
 	}
-	if source := request.PropertyNames[name]; source != "" {
-		return source
-	}
 	return name
+}
+
+func failedPropertyCandidates(request Request, name string) []string {
+	if name == "" {
+		return nil
+	}
+	if properties := request.TraceVocabulary.Properties[name]; len(properties) != 0 {
+		return slices.Clone(properties)
+	}
+	if source := request.PropertyNames[name]; source != "" {
+		return []string{source}
+	}
+	for _, property := range request.Model.Properties {
+		if property.Name == name {
+			return []string{name}
+		}
+	}
+	for _, relation := range request.Model.Relations {
+		properties := []string{"relation " + relation.Name + " endpoints"}
+		if relation.SourceCardinality == verify.One {
+			properties = append(properties, "relation "+relation.Name+" source cardinality")
+		}
+		if relation.TargetCardinality == verify.One {
+			properties = append(properties, "relation "+relation.Name+" target cardinality")
+		}
+		for _, property := range properties {
+			if property == name {
+				return []string{name}
+			}
+		}
+	}
+	return nil
 }
 
 func normalizeActions(request Request, output string) []verify.TraceStep {

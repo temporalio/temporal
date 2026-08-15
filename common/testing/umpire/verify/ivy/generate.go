@@ -31,6 +31,64 @@ func Generate(model verify.Model) (map[string][]byte, []Diagnostic, error) {
 	return map[string][]byte{"Umpire.ivy": []byte(source)}, diagnostics, nil
 }
 
+func TraceVocabulary(model verify.Model) (verify.TraceVocabulary, error) {
+	if err := verify.Validate(model); err != nil {
+		return verify.TraceVocabulary{}, fmt.Errorf("generate Ivy trace vocabulary: %w", err)
+	}
+	model, err := canonicalModel(model)
+	if err != nil {
+		return verify.TraceVocabulary{}, fmt.Errorf("generate Ivy trace vocabulary: %w", err)
+	}
+	g := generator{model: model}
+	if err := g.validateIdentifiers(); err != nil {
+		return verify.TraceVocabulary{}, err
+	}
+	vocabulary := verify.TraceVocabulary{
+		Actions:      make(map[string]string, len(model.Actions)),
+		Bindings:     make(map[string]map[string]string, len(model.Actions)),
+		Properties:   make(map[string][]string, len(model.Properties)+len(model.Relations)*3),
+		EntityExists: make(map[string]string, len(model.Entities)),
+		EntityStates: make(map[string]string, len(model.Entities)),
+		Relations:    make(map[string]string, len(model.Relations)),
+		Identities:   map[string]string{},
+		States:       map[string]string{},
+	}
+	for _, entity := range model.Entities {
+		vocabulary.EntityExists[existsName(entity.Name)] = entity.Name
+		vocabulary.EntityStates[stateName(entity.Name)] = entity.Name
+		for _, id := range entity.IDs {
+			vocabulary.Identities[entityID(id)] = id
+		}
+		for _, state := range entity.States {
+			vocabulary.States[stateID(entity.Name, state.Name)] = state.Name
+		}
+	}
+	for _, relation := range model.Relations {
+		name := identifier(relation.Name)
+		vocabulary.Relations[relationName(relation.Name)] = relation.Name
+		vocabulary.Properties["relation_"+name+"_endpoints"] = []string{"relation " + relation.Name + " endpoints"}
+		if relation.SourceCardinality == verify.One {
+			vocabulary.Properties["cardinality_"+name+"_source"] = []string{"relation " + relation.Name + " source cardinality"}
+		}
+		if relation.TargetCardinality == verify.One {
+			vocabulary.Properties["cardinality_"+name+"_target"] = []string{"relation " + relation.Name + " target cardinality"}
+		}
+	}
+	for _, action := range model.Actions {
+		actionName := identifier(action.Name)
+		vocabulary.Actions[actionName] = action.Name
+		bindings := make(map[string]string, len(action.Parameters))
+		for _, parameter := range action.Parameters {
+			bindings[identifier(parameter.Name)] = parameter.Name
+		}
+		vocabulary.Bindings[actionName] = bindings
+	}
+	for _, property := range model.Properties {
+		vocabulary.Properties[identifier(property.Name)] = []string{property.Name}
+	}
+	return vocabulary, nil
+}
+
 type generator struct {
 	model verify.Model
 }
@@ -243,6 +301,11 @@ func (g generator) validateIdentifiers() error {
 		if err := check(entity.Name, identifier(entity.Name)); err != nil {
 			return err
 		}
+		for _, id := range entity.IDs {
+			if err := check(entity.Name+" identity "+id, entityID(id)); err != nil {
+				return err
+			}
+		}
 		for _, state := range entity.States {
 			if err := check(entity.Name+"."+state.Name, stateID(entity.Name, state.Name)); err != nil {
 				return err
@@ -257,6 +320,17 @@ func (g generator) validateIdentifiers() error {
 	for _, action := range g.model.Actions {
 		if err := check(action.Name, identifier(action.Name)); err != nil {
 			return err
+		}
+		parameters := map[string]string{}
+		for _, parameter := range action.Parameters {
+			generated := identifier(parameter.Name)
+			if previous, duplicate := parameters[generated]; duplicate {
+				return fmt.Errorf(
+					"generate Ivy: action %q parameters %q and %q normalize to parameter identifier %q",
+					action.Name, previous, parameter.Name, generated,
+				)
+			}
+			parameters[generated] = parameter.Name
 		}
 	}
 	for _, property := range g.model.Properties {

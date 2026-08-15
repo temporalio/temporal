@@ -69,6 +69,50 @@ func TestGeneratePreservesNondeterministicBranches(t *testing.T) {
 	require.Contains(t, string(files["Umpire.ivy"]), "if * {")
 }
 
+func TestTraceVocabularyMapsGeneratedNamesToCanonicalModel(t *testing.T) {
+	vocabulary, err := TraceVocabulary(testModel())
+	require.NoError(t, err)
+
+	require.Equal(t, "create", vocabulary.Actions["create"])
+	require.Equal(t, []string{"owned-operations-exist"}, vocabulary.Properties["owned_operations_exist"])
+	require.Equal(t, []string{"relation owns target cardinality"}, vocabulary.Properties["cardinality_owns_target"])
+	require.Equal(t, "operation", vocabulary.EntityExists["exists_operation"])
+	require.Equal(t, "operation", vocabulary.EntityStates["state_operation"])
+	require.Equal(t, "owns", vocabulary.Relations["relation_owns"])
+	require.Equal(t, "operation#0", vocabulary.Identities["operation_0"])
+	require.Equal(t, "scheduled", vocabulary.States["operation_state_scheduled"])
+	require.Equal(t, map[string]string{
+		"operation": "operation",
+		"workflow":  "workflow",
+	}, vocabulary.Bindings["create"])
+}
+
+func TestGenerateAndTraceVocabularyRejectIdentityCollisions(t *testing.T) {
+	model := testModel()
+	model.Entities[1].IDs = []string{"operation-0", "operation_0"}
+
+	_, _, generateErr := Generate(model)
+	require.ErrorContains(t, generateErr, "normalize to identifier")
+	_, vocabularyErr := TraceVocabulary(model)
+	require.ErrorContains(t, vocabularyErr, "normalize to identifier")
+}
+
+func TestGenerateAndTraceVocabularyRejectParameterIdentifierCollisions(t *testing.T) {
+	model := testModel()
+	model.Actions = append(model.Actions, verify.Action{
+		Name: "collide",
+		Parameters: []verify.Parameter{
+			{Name: "workflow-ref", Type: "workflow", Binding: verify.InputBinding},
+			{Name: "workflow_ref", Type: "workflow", Binding: verify.InputBinding},
+		},
+	})
+
+	_, _, generateErr := Generate(model)
+	require.ErrorContains(t, generateErr, "normalize to parameter identifier")
+	_, vocabularyErr := TraceVocabulary(model)
+	require.ErrorContains(t, vocabularyErr, "normalize to parameter identifier")
+}
+
 func testModel() verify.Model {
 	return verify.Model{
 		Version: "test/v1",

@@ -32,6 +32,76 @@ func Generate(model verify.Model) (map[string][]byte, error) {
 	}, nil
 }
 
+func TraceVocabulary(model verify.Model) (verify.TraceVocabulary, error) {
+	if err := verify.Validate(model); err != nil {
+		return verify.TraceVocabulary{}, fmt.Errorf("generate TLA+ trace vocabulary: %w", err)
+	}
+	model, err := canonicalModel(model)
+	if err != nil {
+		return verify.TraceVocabulary{}, fmt.Errorf("generate TLA+ trace vocabulary: %w", err)
+	}
+	g := generator{model: model}
+	if err := g.validateIdentifiers(); err != nil {
+		return verify.TraceVocabulary{}, err
+	}
+	vocabulary := verify.TraceVocabulary{
+		Actions:      make(map[string]string, len(model.Actions)),
+		Bindings:     make(map[string]map[string]string, len(model.Actions)),
+		Properties:   make(map[string][]string, len(model.Properties)+len(model.Relations)),
+		EntityExists: make(map[string]string, len(model.Entities)),
+		EntityStates: make(map[string]string, len(model.Entities)),
+		Relations:    make(map[string]string, len(model.Relations)),
+		Identities:   map[string]string{},
+		States:       map[string]string{},
+	}
+	var inductiveProperties []string
+	var declaredSafetyProperties []string
+	var quiescentProperties []string
+	for _, entity := range model.Entities {
+		vocabulary.EntityExists[existsVariable(entity.Name)] = entity.Name
+		vocabulary.EntityStates[stateVariable(entity.Name)] = entity.Name
+	}
+	for _, relation := range model.Relations {
+		vocabulary.Relations[relationVariable(relation.Name)] = relation.Name
+		properties := []string{"relation " + relation.Name + " endpoints"}
+		if relation.SourceCardinality == verify.One {
+			properties = append(properties, "relation "+relation.Name+" source cardinality")
+		}
+		if relation.TargetCardinality == verify.One {
+			properties = append(properties, "relation "+relation.Name+" target cardinality")
+		}
+		vocabulary.Properties[cardinalityIdentifier(relation.Name)] = properties
+		inductiveProperties = append(inductiveProperties, properties...)
+	}
+	for _, action := range model.Actions {
+		actionName := actionIdentifier(action.Name)
+		vocabulary.Actions[actionName] = action.Name
+		bindings := make(map[string]string, len(action.Parameters))
+		for _, parameter := range action.Parameters {
+			bindings[identifier(parameter.Name)] = parameter.Name
+		}
+		vocabulary.Bindings[actionName] = bindings
+	}
+	for _, property := range model.Properties {
+		vocabulary.Properties[propertyIdentifier(property.Name)] = []string{property.Name}
+		switch property.Kind {
+		case verify.SafetyProperty:
+			inductiveProperties = append(inductiveProperties, property.Name)
+			if !property.Strengthening {
+				declaredSafetyProperties = append(declaredSafetyProperties, property.Name)
+			}
+		case verify.QuiescentProperty:
+			quiescentProperties = append(quiescentProperties, property.Name)
+		default:
+		}
+	}
+	vocabulary.Properties["InductiveInvariant"] = slices.Clone(inductiveProperties)
+	vocabulary.Properties["DeclaredSafety"] = slices.Clone(declaredSafetyProperties)
+	vocabulary.Properties["Safety"] = slices.Clone(inductiveProperties)
+	vocabulary.Properties["QuiescentSafety"] = slices.Clone(quiescentProperties)
+	return vocabulary, nil
+}
+
 type generator struct {
 	model verify.Model
 }
@@ -124,6 +194,17 @@ func (g generator) validateIdentifiers() error {
 	for _, action := range g.model.Actions {
 		if err := check("action", action.Name, actionIdentifier(action.Name)); err != nil {
 			return err
+		}
+		parameters := map[string]string{}
+		for _, parameter := range action.Parameters {
+			generated := identifier(parameter.Name)
+			if previous, duplicate := parameters[generated]; duplicate {
+				return fmt.Errorf(
+					"generate TLA+: action %q parameters %q and %q normalize to parameter identifier %q",
+					action.Name, previous, parameter.Name, generated,
+				)
+			}
+			parameters[generated] = parameter.Name
 		}
 	}
 	for _, property := range g.model.Properties {

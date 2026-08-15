@@ -189,17 +189,17 @@ documents.
   - Add refinements for regression semantics still marked as outside the initial bounded slice, or
     classify them as permanent exclusions.
 
-- [ ] Enforce unsupported semantics consistently.
+- [x] Enforce unsupported semantics consistently.
   - Preserve progress and fairness semantics in each backend or emit an explicit unsupported result.
   - Return `unsupported` when a backend cannot provide the requested guarantee.
   - Prevent smoke and nightly runs from reporting success for an unsupported semantic subset.
 
-- [ ] Complete normalized counterexample evidence.
+- [x] Complete normalized counterexample evidence.
   - Recover action bindings from every backend trace.
   - Populate state and relation deltas for every normalized step.
   - Validate normalized traces by replaying them through the Go interpreter when supported.
 
-- [ ] Complete limit classification.
+- [x] Complete limit classification.
   - Detect depth, state, step, memory, schedule, timeout, interruption, and tool limits.
   - Ensure every reached limit produces `inconclusive`, never a success status.
 
@@ -212,6 +212,138 @@ documents.
 - [ ] Make tool pins a single source of truth.
   - Derive CI installation and reported runner versions from the manifest's versions and checksums.
   - Fail verification when workflow, runner, and manifest tool metadata drift.
+
+### Normalized counterexample evidence design
+
+#### Scope and assurance policy
+
+Normalize counterexamples from TLC, Apalache, P, PEx, and Ivy. A failed Apalache proof obligation
+uses the same Apalache evidence path; SANY and successful proof obligations do not produce a trace.
+Normalization is fail-closed: Umpire reports an authoritative `counterexample` only when it maps the
+failed property, reconstructs every action and binding, derives every state and relation delta, and
+replays the complete path through the canonical Go interpreter. Missing, malformed, ambiguous, or
+unreplayable evidence becomes `inconclusive` with termination `evidence-failure`. The native trace,
+stdout, stderr, and replay command remain available so the failed conversion can be diagnosed.
+
+#### Semantic normalizer
+
+Add a deep verification module with this conceptual interface:
+
+```go
+type TraceEvidence struct {
+    Initial *ModelState
+    Steps   []ObservedTraceStep
+}
+
+type ObservedTraceStep struct {
+    Action   string
+    Bindings Bindings
+    After    *ModelState
+    Deltas   []StateDelta
+}
+
+func NormalizeCounterexample(model Model, property string, evidence TraceEvidence) ([]TraceStep, error)
+```
+
+Each observation may provide an action and bindings, a resulting state, or both. The normalizer
+starts from `Interpreter.InitialState`, verifies an observed initial state when present, enumerates
+enabled canonical transitions, and filters them against the evidence. Exactly one transition must
+survive at every step. An action and complete bindings make this constant-sized in the common case;
+a state-only observation may require bounded enumeration of enabled actions and identities. Multiple
+branches or bindings that reach indistinguishable observed states remain ambiguous and fail rather
+than being guessed. A nil binding map means that bindings were not observed; a non-nil empty map is
+complete evidence for an action with no parameters. Likewise, a non-nil empty delta slice is native
+evidence for a no-op action and must be validated.
+
+After the final step, evaluate the mapped property against the unique canonical state, including
+quiescence when required, and require the reported property to be violated. This also permits a
+zero-action counterexample when the canonical initial state itself violates the property. The
+reverse property vocabulary covers declared model properties and generated structural relation
+invariants so backend-specific invariant names never leak into the normalized result.
+
+The matched before and after states produce deterministic `StateDelta`s:
+
+- entity creation records `Entity`, `ID`, an empty `FromState`, and the created `ToState`;
+- entity state changes record both `FromState` and `ToState`;
+- relation additions and removals record `Relation`, `Source`, `Target`, and `Added`;
+- a valid no-op action has an empty delta list.
+
+Sort entity deltas by entity and identity and relation deltas by relation, source, and target. The
+normalizer also accepts already populated deltas and rejects them if they disagree with replay,
+making the same module usable by future backends with native delta output.
+
+#### Runner data flow and native evidence
+
+`runner.Request` carries the projected canonical `Model` plus a deterministic reverse vocabulary
+for backend identifiers. `Toolchain.Plan` is the authoritative constructor for both. Thin backend
+decoders translate native evidence into `TraceEvidence`; they do not apply protocol semantics.
+
+- **P and PEx:** parse the existing `UMPIRE_ACTION` records and their complete bindings. The Go
+  interpreter supplies and validates resulting states. A branched transition without native branch
+  evidence is ambiguous unless all branches converge to the same state.
+- **TLC:** request its pinned JSON trace dump and combine the decoded states with the existing native
+  action labels and bindings. Preserve the JSON file in `tlc-native`.
+  Compatibility note: pinned `tla2tools` 1.7.4 predates `-dumpTrace json`, so the current decoder
+  consumes the complete native textual trace. Keep JSON as the upgrade target when the pin moves to
+  a release that supports it.
+- **Apalache and Apalache proof:** read the pinned tool's emitted ITF JSON. Decode generated entity
+  sets, state functions, and relation sets through the reverse vocabulary, then infer the unique
+  canonical transition between adjacent states. Keep each obligation's native trace separately.
+- **Ivy:** decode the textual symbolic trace's action and state valuations through the reverse
+  vocabulary. Because Ivy checks inductiveness, a counterexample that does not begin at the
+  canonical initial state or cannot form a reachable canonical path is `inconclusive`, not a
+  reachable Umpire counterexample.
+
+Add `NativeTrace string` to `Result` for the exact counterexample payload used by the decoder. Native
+artifact directories remain the primary lossless evidence when configured; `NativeTrace` keeps a
+direct `runner.Check` result self-contained. Bound native payload reads to 4 MiB. Never execute the
+recorded native replay command during normalization.
+
+#### Classification and errors
+
+Keep interruption and resource limits ahead of counterexample handling. When a recognized failure
+marker is present, map the property and decode and normalize the trace before returning
+`counterexample`. On failure, return `inconclusive` with `evidence-failure` and a diagnostic beginning
+with one stable category:
+
+- `native-trace-missing`;
+- `native-trace-malformed`;
+- `native-trace-too-large`;
+- `property-unmapped`;
+- `property-not-violated`;
+- `initial-state-mismatch`;
+- `transition-unreplayable`;
+- `transition-ambiguous`; or
+- `delta-mismatch`.
+
+Include the backend and step number after the category when applicable. Do not replace a missing
+property with `unknown`. A nonzero tool exit remains acceptable for a fully normalized
+counterexample. Decoder or replay failures are result data, not `runner.Check` errors, so artifact
+writing still runs. Filesystem failures while collecting or writing evidence remain ordinary Go
+errors because Umpire cannot promise that the evidence was retained.
+
+#### Testing and operational trade-offs
+
+Use strict red-green cycles at the public seams:
+
+- `verify` tests cover creation, state change, relation add/remove, no-op transitions, supplied-delta
+  validation, state-only inference, invalid initial state, missing bindings, divergent branches,
+  ambiguous transitions, and an unreplayable later step;
+- generator tests cover deterministic reverse vocabularies, escaped identifiers, and collisions;
+- runner fixture tests cover valid and malformed TLC JSON, Apalache ITF, P/PEx action records, and
+  Ivy symbolic traces, plus property mapping and every stable failure category;
+- classification tests prove partial evidence can never remain `counterexample` and prove raw native
+  evidence survives failure;
+- environment-gated seeded-tool tests require complete bindings, deltas, and successful Go replay
+  whenever the pinned binaries are available.
+
+Normalization runs only on counterexamples. With native action and bindings its time is linear in
+trace length; state-only evidence adds the bounded action-and-identity enumeration already used by
+the interpreter. Memory is linear in the trace and capped native payload. A 10x increase in trace
+length therefore causes approximately 10x normalization work, while a 10x identity bound can grow
+state-only inference combinatorially; explicit bindings avoid that cost, and ambiguous or excessive
+evidence fails closed. The change adds parser and vocabulary complexity but no third-party library,
+does not alter generated transition semantics, and does not affect clean verification runs.
 
 ## Umpire model boundaries
 

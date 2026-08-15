@@ -114,6 +114,59 @@ func TestGenerateIsDeterministicAcrossDeclarationOrder(t *testing.T) {
 	require.Equal(t, leftFiles, rightFiles)
 }
 
+func TestTraceVocabularyMapsGeneratedNamesToCanonicalModel(t *testing.T) {
+	vocabulary, err := TraceVocabulary(testModel())
+	require.NoError(t, err)
+
+	require.Equal(t, "schedule", vocabulary.Actions["Schedule"])
+	require.Equal(t, []string{"NexusOperation.scheduled.quiescent-progress"}, vocabulary.Properties["NexusOperation_scheduled_quiescent_progress"])
+	require.Equal(t, []string{
+		"relation nexus-child-of endpoints",
+		"relation nexus-child-of source cardinality",
+	}, vocabulary.Properties["Cardinality_nexus_child_of"])
+	require.Equal(t, "NexusOperation", vocabulary.EntityExists["exists_NexusOperation"])
+	require.Equal(t, "NexusOperation", vocabulary.EntityStates["state_NexusOperation"])
+	require.Equal(t, "nexus-child-of", vocabulary.Relations["relation_nexus_child_of"])
+	require.Equal(t, map[string]string{
+		"operation": "operation",
+		"caller":    "caller",
+	}, vocabulary.Bindings["Schedule"])
+	require.Equal(t, []string{
+		"relation nexus-child-of endpoints",
+		"relation nexus-child-of source cardinality",
+	}, vocabulary.Properties["Safety"])
+	require.Equal(t, []string{"NexusOperation.scheduled.quiescent-progress"}, vocabulary.Properties["QuiescentSafety"])
+}
+
+func TestTraceVocabularyDoesNotDuplicateAggregateSafetyProperties(t *testing.T) {
+	model := testModel()
+	model.Properties[0].Kind = verify.SafetyProperty
+
+	vocabulary, err := TraceVocabulary(model)
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"relation nexus-child-of endpoints",
+		"relation nexus-child-of source cardinality",
+		"NexusOperation.scheduled.quiescent-progress",
+	}, vocabulary.Properties["Safety"])
+}
+
+func TestGenerateAndTraceVocabularyRejectParameterIdentifierCollisions(t *testing.T) {
+	model := testModel()
+	model.Actions = append(model.Actions, verify.Action{
+		Name: "collide",
+		Parameters: []verify.Parameter{
+			{Name: "workflow-ref", Type: "Workflow", Binding: verify.InputBinding},
+			{Name: "workflow_ref", Type: "Workflow", Binding: verify.InputBinding},
+		},
+	})
+
+	_, generateErr := Generate(model)
+	require.ErrorContains(t, generateErr, "normalize to parameter identifier")
+	_, vocabularyErr := TraceVocabulary(model)
+	require.ErrorContains(t, vocabularyErr, "normalize to parameter identifier")
+}
+
 func testModel() verify.Model {
 	return verify.Model{
 		Version: "test/v1",

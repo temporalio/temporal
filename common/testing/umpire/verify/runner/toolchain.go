@@ -68,7 +68,10 @@ func (t Toolchain) Plan(model verify.Model, options PlanOptions) ([]Request, err
 	if err != nil {
 		return nil, err
 	}
-	metadata := planMetadataFor(model)
+	metadata, err := planMetadataFor(model)
+	if err != nil {
+		return nil, err
+	}
 	requests := make([]Request, 0, len(backends))
 	for _, backend := range backends {
 		request, err := t.planRequest(backend, options, bounds, metadata)
@@ -81,6 +84,9 @@ func (t Toolchain) Plan(model verify.Model, options PlanOptions) ([]Request, err
 }
 
 type planMetadata struct {
+	model         verify.Model
+	tlaVocabulary verify.TraceVocabulary
+	ivyVocabulary verify.TraceVocabulary
 	actionNames   map[string]string
 	propertyNames map[string]string
 	fairness      []string
@@ -88,8 +94,9 @@ type planMetadata struct {
 	unsupported   []verify.Unsupported
 }
 
-func planMetadataFor(model verify.Model) planMetadata {
+func planMetadataFor(model verify.Model) (planMetadata, error) {
 	result := planMetadata{
+		model:         model,
 		actionNames:   make(map[string]string, len(model.Actions)),
 		propertyNames: make(map[string]string, len(model.Properties)),
 		abstractions:  slices.Clone(model.Abstractions),
@@ -116,7 +123,18 @@ func planMetadataFor(model verify.Model) planMetadata {
 		result.fairness = append(result.fairness, assumption)
 	}
 	slices.Sort(result.fairness)
-	return result
+	if model.Version != "" {
+		var err error
+		result.tlaVocabulary, err = tla.TraceVocabulary(model)
+		if err != nil {
+			return planMetadata{}, err
+		}
+		result.ivyVocabulary, err = ivy.TraceVocabulary(model)
+		if err != nil {
+			return planMetadata{}, err
+		}
+	}
+	return result, nil
 }
 
 func (t Toolchain) planRequest(
@@ -126,10 +144,17 @@ func (t Toolchain) planRequest(
 	metadata planMetadata,
 ) (Request, error) {
 	request := Request{
-		Backend: backend, Target: options.Target, Profile: options.Profile,
+		Backend: backend, Model: metadata.model, Target: options.Target, Profile: options.Profile,
 		ArtifactDir: filepath.Join(options.ArtifactRoot, options.Target, options.Profile), Timeout: options.Timeout, Bounds: bounds,
 		JavaPath: t.JavaPath, ActionNames: cloneNames(metadata.actionNames), PropertyNames: cloneNames(metadata.propertyNames),
-		Fairness: slices.Clone(metadata.fairness), Abstractions: slices.Clone(metadata.abstractions), Unsupported: slices.Clone(metadata.unsupported),
+		Fairness: slices.Clone(metadata.fairness), Abstractions: slices.Clone(metadata.abstractions), Unsupported: unsupportedForBackend(backend, metadata.unsupported),
+	}
+	switch backendFamily(backend) {
+	case "tla":
+		request.TraceVocabulary = metadata.tlaVocabulary
+	case "ivy":
+		request.TraceVocabulary = metadata.ivyVocabulary
+	default:
 	}
 	switch backend {
 	case SANY, TLC:
@@ -210,16 +235,7 @@ func targetBackends(backends []Backend, requirements []string) ([]Backend, error
 	}
 	result := make([]Backend, 0, len(backends))
 	for _, backend := range backends {
-		family := string(backend)
-		switch backend {
-		case SANY, TLC, Apalache, ApalacheProof:
-			family = "tla"
-		case P, PEx:
-			family = "p"
-		case Ivy:
-			family = "ivy"
-		default:
-		}
+		family := backendFamily(backend)
 		_, exact := allowed[string(backend)]
 		_, familyAllowed := allowed[family]
 		if exact || familyAllowed {
@@ -230,6 +246,28 @@ func targetBackends(backends []Backend, requirements []string) ([]Backend, error
 		return nil, errors.New("none of the requested backends satisfy target requirements")
 	}
 	return result, nil
+}
+
+func backendFamily(backend Backend) string {
+	switch backend {
+	case SANY, TLC, Apalache, ApalacheProof:
+		return "tla"
+	case P, PEx:
+		return "p"
+	default:
+		return string(backend)
+	}
+}
+
+func unsupportedForBackend(backend Backend, unsupported []verify.Unsupported) []verify.Unsupported {
+	var result []verify.Unsupported
+	family := backendFamily(backend)
+	for _, item := range unsupported {
+		if item.Backend == string(backend) || item.Backend == family {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func profileBounds(profile string) (verify.Bounds, error) {

@@ -20,15 +20,18 @@ const (
 type TerminationReason string
 
 const (
-	Completed    TerminationReason = "completed"
-	Timeout      TerminationReason = "timeout"
-	DepthLimit   TerminationReason = "depth-limit"
-	StateLimit   TerminationReason = "state-limit"
-	StepLimit    TerminationReason = "step-limit"
-	MemoryLimit  TerminationReason = "memory-limit"
-	ToolError    TerminationReason = "tool-error"
-	Interrupted  TerminationReason = "interrupted"
-	ParseFailure TerminationReason = "parse-failure"
+	Completed       TerminationReason = "completed"
+	Timeout         TerminationReason = "timeout"
+	DepthLimit      TerminationReason = "depth-limit"
+	StateLimit      TerminationReason = "state-limit"
+	StepLimit       TerminationReason = "step-limit"
+	MemoryLimit     TerminationReason = "memory-limit"
+	ScheduleLimit   TerminationReason = "schedule-limit"
+	ToolLimit       TerminationReason = "tool-limit"
+	ToolError       TerminationReason = "tool-error"
+	Interrupted     TerminationReason = "interrupted"
+	ParseFailure    TerminationReason = "parse-failure"
+	EvidenceFailure TerminationReason = "evidence-failure"
 )
 
 type Bounds struct {
@@ -75,6 +78,7 @@ type Result struct {
 	ReplayCommands  [][]string        `json:"replayCommands,omitempty"`
 	StandardOutput  string            `json:"standardOutput,omitempty"`
 	StandardError   string            `json:"standardError,omitempty"`
+	NativeTrace     string            `json:"nativeTrace,omitempty"`
 	Diagnostic      string            `json:"diagnostic,omitempty"`
 }
 
@@ -83,14 +87,26 @@ func ValidateResult(result Result) error {
 		return errors.New("verification result status is empty")
 	}
 	if result.Status == Generated || result.Status == BoundedNoCounterexample || result.Status == FiniteExhaustive || result.Status == InvariantProved {
+		if len(result.Unsupported) > 0 {
+			return fmt.Errorf("status %q cannot claim success with unsupported semantics", result.Status)
+		}
 		switch result.Termination {
-		case Timeout, DepthLimit, StateLimit, StepLimit, MemoryLimit, ToolError, Interrupted, ParseFailure:
+		case Timeout, DepthLimit, StateLimit, StepLimit, MemoryLimit, ScheduleLimit, ToolLimit, ToolError, Interrupted, ParseFailure, EvidenceFailure:
 			return fmt.Errorf("status %q cannot claim success after %q", result.Status, result.Termination)
 		default:
 		}
 	}
 	if result.Status == Counterexample && result.FailedProperty == "" {
 		return errors.New("counterexample has no failed property")
+	}
+	if result.Status == Counterexample && result.Termination != Completed {
+		return fmt.Errorf("counterexample termination is %q, expected %q", result.Termination, Completed)
+	}
+	if result.Status == Counterexample && result.NativeTrace == "" {
+		return errors.New("counterexample has no native trace")
+	}
+	if result.Termination == EvidenceFailure && result.Diagnostic == "" {
+		return errors.New("evidence failure has no diagnostic")
 	}
 	return nil
 }

@@ -41,7 +41,7 @@ func TestToolchainPlanUsesPinnedVersionsAndBackendDirectories(t *testing.T) {
 	}, requests)
 }
 
-func TestToolchainPlanNormalizesModelSemantics(t *testing.T) {
+func TestToolchainPlanScopesUnsupportedSemanticsToBackend(t *testing.T) {
 	model := verify.Model{
 		Actions: []verify.Action{{Name: "delivery.schedule"}},
 		Properties: []verify.Property{{
@@ -50,8 +50,9 @@ func TestToolchainPlanNormalizesModelSemantics(t *testing.T) {
 		}},
 		Abstractions: []verify.Abstraction{{Name: "environment", Reason: "unrealized"}},
 	}
-	requests, err := testToolchain().Plan(model, PlanOptions{Backends: "ivy", Profile: "smoke"})
+	requests, err := testToolchain().Plan(model, PlanOptions{Backends: "tlc,ivy", Profile: "smoke"})
 	require.NoError(t, err)
+	require.Len(t, requests, 2)
 	require.Equal(t, map[string]string{
 		tla.ActionIdentifier("delivery.schedule"): "delivery.schedule",
 		ivy.ActionIdentifier("delivery.schedule"): "delivery.schedule",
@@ -62,10 +63,35 @@ func TestToolchainPlanNormalizesModelSemantics(t *testing.T) {
 	}, requests[0].PropertyNames)
 	require.Equal(t, []string{"weak-schedule"}, requests[0].Fairness)
 	require.Equal(t, model.Abstractions, requests[0].Abstractions)
+	require.Empty(t, requests[0].Unsupported)
 	require.Equal(t, []verify.Unsupported{{
 		Backend: "ivy", Construct: "property delivery.progress",
 		Reason: "Ivy generation supports inductive safety properties only", Source: verify.Provenance{Path: "delivery.go"},
-	}}, requests[0].Unsupported)
+	}}, requests[1].Unsupported)
+}
+
+func TestToolchainPlanCarriesCounterexampleModelAndVocabulary(t *testing.T) {
+	model := verify.Model{
+		Version: "trace-plan-test/v1",
+		Entities: []verify.EntityType{{
+			Name: "job", IDs: []string{"job#0"}, InitiallyExists: []string{"job#0"}, Initial: "ready",
+			States: []verify.State{{Name: "ready"}, {Name: "done"}},
+		}},
+		Actions: []verify.Action{{
+			Name: "complete", Parameters: []verify.Parameter{{Name: "job", Type: "job", Binding: verify.InputBinding}},
+			Effects: []verify.Effect{{Kind: verify.SetStateEffect, Entity: "job", Ref: "job", State: "done"}},
+		}},
+		Properties: []verify.Property{{Name: "safe", Kind: verify.SafetyProperty, Expr: verify.Expr{Op: verify.TrueExpr}}},
+	}
+
+	requests, err := testToolchain().Plan(model, PlanOptions{Backends: "tlc,p,ivy", Profile: "smoke"})
+	require.NoError(t, err)
+	require.Equal(t, model, requests[0].Model)
+	require.Equal(t, model, requests[1].Model)
+	require.Equal(t, model, requests[2].Model)
+	require.Equal(t, "job", requests[0].TraceVocabulary.EntityExists["exists_job"])
+	require.Empty(t, requests[1].TraceVocabulary.EntityExists)
+	require.Equal(t, "job#0", requests[2].TraceVocabulary.Identities["job_0"])
 }
 
 func TestToolchainPlanAppliesNightlyDepthCaps(t *testing.T) {
