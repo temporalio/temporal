@@ -2128,4 +2128,3 @@ always assertion Property_workflow_delivery_accepted_start_correspondence:
 
 always assertion Property_workflow_delivery_intent_correspondence:
     return ((not ("WorkflowTask#0" in exists_WorkflowTask) or ((not ((state_WorkflowTask["WorkflowTask#0"] == "added" or state_WorkflowTask["WorkflowTask#0"] == "stored" or state_WorkflowTask["WorkflowTask#0"] == "polled")) or (((("WorkObligation#0" in exists_WorkObligation and (("WorkflowTask#0", "WorkObligation#0") in relation_workflow_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and (("WorkflowTask#0", "WorkObligation#1") in relation_workflow_task_obligation))) and (("DeliveryTask#0" in exists_DeliveryTask and (("WorkflowTask#0", "DeliveryTask#0") in relation_workflow_task_delivery_task)) or ("DeliveryTask#1" in exists_DeliveryTask and (("WorkflowTask#0", "DeliveryTask#1") in relation_workflow_task_delivery_task)))))))))
-

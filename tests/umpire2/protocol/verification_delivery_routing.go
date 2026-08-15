@@ -77,6 +77,9 @@ func deliveryRoutingVerification() verificationFamilyFragment {
 				verify.StateIs(deliveryTaskEntity, "task", "sync-offered"),
 				verify.StateIs(deliveryTaskEntity, "task", "backlogged"),
 			}},
+			deliveryForAll(deliveryRouteEntity, "existingRoute", verify.Not(verify.Expr{
+				Op: verify.RelationHasExpr, Relation: deliveryTaskRouteRelation, Source: "task", Target: "existingRoute",
+			})),
 			verify.StateIs(deliveryOwnerGenerationEntity, "generation", "current"),
 			verify.Expr{Op: verify.RelationHasExpr, Relation: deliveryPartitionRouteRelation, Source: "partition", Target: "route"},
 			verify.Expr{Op: verify.RelationHasExpr, Relation: deliveryPartitionOwnerRelation, Source: "partition", Target: "generation"},
@@ -98,6 +101,9 @@ func deliveryRoutingVerification() verificationFamilyFragment {
 			{Name: "poller", Type: pollerEntity, Binding: verify.InputBinding},
 			{Name: "route", Type: deliveryRouteEntity, Binding: verify.InputBinding},
 		},
+		Guard: deliveryForAll(deliveryRouteEntity, "registeredRoute", verify.Not(verify.Expr{
+			Op: verify.RelationHasExpr, Relation: deliveryPollerRouteRelation, Source: "poller", Target: "registeredRoute",
+		})),
 		Effects:    []verify.Effect{{Kind: verify.AddRelationEffect, Relation: deliveryPollerRouteRelation, Source: "poller", Target: "route"}},
 		Unrealized: true,
 		Source:     deliveryRoutingSource("routing.register-poller"),
@@ -215,7 +221,7 @@ func deliveryRoutingVerification() verificationFamilyFragment {
 			deliveryTaskEntity: 2, deliveryAttemptEntity: 2, pollerEntity: 2,
 			deliveryRouteEntity: 2, deliveryPartitionEntity: 2, deliveryOwnerGenerationEntity: 2, historyShardEntity: 2, historyOwnerGenerationEntity: 2,
 		},
-		BackendRequirements: []string{"fizz", "ivy", "p", "tla"},
+		BackendRequirements: []string{"apalache", "fizz", "ivy", "p", "sany"},
 		FailurePolicy:       []string{"owner-handoff", "route-crossing", "incompatible-poller"},
 		Omissions: []verify.Abstraction{{
 			Name: "workflow.task.create-speculative-direct", Reason: "checked by the speculative Workflow Task target",
@@ -234,6 +240,7 @@ func deliveryRoutingVerification() verificationFamilyFragment {
 		deliveryTaskEntity: 1, deliveryAttemptEntity: 1, pollerEntity: 2,
 		deliveryRouteEntity: 1, deliveryPartitionEntity: 1, deliveryOwnerGenerationEntity: 2, historyShardEntity: 1, historyOwnerGenerationEntity: 2,
 	}
+	ownershipTarget.BackendRequirements = []string{"fizz", "ivy", "tla"}
 	ownershipTarget.FailurePolicy = []string{"history-owner-handoff", "matching-owner-handoff", "cross-owner-forwarding"}
 	refinements := make([]verify.Refinement, len(actions))
 	for index, action := range actions {

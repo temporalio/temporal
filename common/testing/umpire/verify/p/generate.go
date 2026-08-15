@@ -39,6 +39,8 @@ const project = `<Project>
 </Project>
 `
 
+const helperChunkSize = 16
+
 type generator struct {
 	model verify.Model
 }
@@ -52,7 +54,8 @@ type candidate struct {
 func (g generator) source() string {
 	var out bytes.Buffer
 	out.WriteString("// Generated from the Umpire verification snapshot. Do not edit.\n\n")
-	out.WriteString("event eStep;\n\n")
+	out.WriteString("event eStep;\n")
+	out.WriteString("type tSelection = (chosen: int, remaining: set[int]);\n\n")
 	for _, entity := range g.model.Entities {
 		values := make([]string, len(entity.IDs))
 		for index, value := range entity.IDs {
@@ -95,6 +98,11 @@ func (g generator) source() string {
 	out.WriteString("      CheckSafety();\n      send this, eStep;\n    }\n    on eStep do Step;\n  }\n\n")
 	candidates := g.candidates()
 	g.writeStep(&out, candidates)
+	for index, chunk := range candidateChunks(candidates) {
+		g.writeEnabledChunk(&out, index, chunk)
+		g.writeSelectChunk(&out, index, chunk)
+		g.writeApplyChunk(&out, index, chunk)
+	}
 	for _, current := range candidates {
 		g.writeApply(&out, current)
 	}
@@ -132,19 +140,55 @@ func (g generator) candidates() []candidate {
 }
 
 func (g generator) writeStep(out *bytes.Buffer, candidates []candidate) {
-	out.WriteString("  fun Step() {\n    var enabled: set[int];\n")
+	out.WriteString("  fun Step() {\n    var enabled: set[int];\n    var selection: tSelection;\n")
+	chunks := candidateChunks(candidates)
+	for index := range chunks {
+		fmt.Fprintf(out, "    enabled = EnabledChunk_%d(enabled);\n", index)
+	}
+	out.WriteString("    if (sizeof(enabled) == 0) {\n      CheckQuiescent();\n      raise halt;\n    }\n")
+	for index := range chunks {
+		fmt.Fprintf(out, "    selection = SelectChunk_%d(enabled);\n", index)
+		fmt.Fprintf(out, "    if (selection.chosen >= 0) { ApplyChunk_%d(selection.chosen); return; }\n", index)
+		out.WriteString("    enabled = selection.remaining;\n")
+	}
+	out.WriteString("  }\n\n")
+}
+
+func (g generator) writeEnabledChunk(out *bytes.Buffer, index int, candidates []candidate) {
+	fmt.Fprintf(out, "  fun EnabledChunk_%d(enabled: set[int]): set[int] {\n", index)
 	for _, current := range candidates {
 		fmt.Fprintf(out, "    if (%s) { enabled += (%d); }\n", g.enabled(current), current.code)
 	}
-	out.WriteString("    if (sizeof(enabled) == 0) {\n      CheckQuiescent();\n      raise halt;\n    }\n")
+	out.WriteString("    return enabled;\n  }\n\n")
+}
+
+func (g generator) writeSelectChunk(out *bytes.Buffer, index int, candidates []candidate) {
+	fmt.Fprintf(out, "  fun SelectChunk_%d(enabled: set[int]): tSelection {\n", index)
 	for _, current := range candidates {
 		fmt.Fprintf(out, "    if (%d in enabled) {\n", current.code)
-		fmt.Fprintf(out, "      if (sizeof(enabled) == 1) { %s(); return; }\n", applyName(current))
-		fmt.Fprintf(out, "      if ($) { %s(); return; }\n", applyName(current))
+		fmt.Fprintf(out, "      if (sizeof(enabled) == 1) { return (chosen = %d, remaining = enabled); }\n", current.code)
+		fmt.Fprintf(out, "      if ($) { return (chosen = %d, remaining = enabled); }\n", current.code)
 		fmt.Fprintf(out, "      enabled -= (%d);\n", current.code)
 		out.WriteString("    }\n")
 	}
-	out.WriteString("  }\n\n")
+	out.WriteString("    return (chosen = -1, remaining = enabled);\n  }\n\n")
+}
+
+func (g generator) writeApplyChunk(out *bytes.Buffer, index int, candidates []candidate) {
+	fmt.Fprintf(out, "  fun ApplyChunk_%d(selected: int) {\n", index)
+	for _, current := range candidates {
+		fmt.Fprintf(out, "    if (selected == %d) { %s(); return; }\n", current.code, applyName(current))
+	}
+	out.WriteString("    assert false, \"selected candidate is outside its generated chunk\";\n  }\n\n")
+}
+
+func candidateChunks(candidates []candidate) [][]candidate {
+	result := make([][]candidate, 0, (len(candidates)+helperChunkSize-1)/helperChunkSize)
+	for start := 0; start < len(candidates); start += helperChunkSize {
+		end := min(start+helperChunkSize, len(candidates))
+		result = append(result, candidates[start:end])
+	}
+	return result
 }
 
 func (g generator) enabled(current candidate) string {
@@ -222,53 +266,86 @@ func (g generator) writeEffects(out *bytes.Buffer, effects []verify.Effect, bind
 
 func (g generator) writeSafety(out *bytes.Buffer) {
 	out.WriteString("  fun CheckSafety() {\n")
-	for _, relation := range g.model.Relations {
-		sources := g.entity(relation.Source).IDs
-		targets := g.entity(relation.Target).IDs
-		for _, source := range sources {
-			for _, target := range targets {
-				fmt.Fprintf(out, "    assert !(%s) || (%s in %s && %s in %s), %s;\n",
-					g.relationContains(relation.Name, source, target),
-					entityID(source), existsName(relation.Source), entityID(target), existsName(relation.Target),
-					strconv.Quote("relation "+relation.Name+" has an absent endpoint"),
-				)
-			}
-		}
-		if relation.SourceCardinality == verify.One {
-			for _, source := range sources {
-				for left := range targets {
-					for right := left + 1; right < len(targets); right++ {
-						fmt.Fprintf(out, "    assert !(%s && %s), %s;\n", g.relationContains(relation.Name, source, targets[left]), g.relationContains(relation.Name, source, targets[right]), strconv.Quote("relation "+relation.Name+" exceeds source cardinality"))
-					}
-				}
-			}
-		}
-		if relation.TargetCardinality == verify.One {
-			for _, target := range targets {
-				for left := range sources {
-					for right := left + 1; right < len(sources); right++ {
-						fmt.Fprintf(out, "    assert !(%s && %s), %s;\n", g.relationContains(relation.Name, sources[left], target), g.relationContains(relation.Name, sources[right], target), strconv.Quote("relation "+relation.Name+" exceeds target cardinality"))
-					}
-				}
-			}
-		}
+	for index := range g.model.Relations {
+		fmt.Fprintf(out, "    CheckRelation_%d();\n", index)
 	}
+	propertyIndex := 0
 	for _, property := range g.model.Properties {
 		if property.Kind == verify.SafetyProperty {
-			fmt.Fprintf(out, "    assert %s, %s;\n", g.expr(property.Expr, map[string]string{}), strconv.Quote("property "+property.Name+" failed"))
+			fmt.Fprintf(out, "    CheckProperty_%d();\n", propertyIndex)
+			propertyIndex++
 		}
 	}
 	out.WriteString("  }\n\n")
+	for index, relation := range g.model.Relations {
+		fmt.Fprintf(out, "  fun CheckRelation_%d() {\n", index)
+		g.writeRelationSafety(out, relation)
+		out.WriteString("  }\n\n")
+	}
+	propertyIndex = 0
+	for _, property := range g.model.Properties {
+		if property.Kind != verify.SafetyProperty {
+			continue
+		}
+		fmt.Fprintf(out, "  fun CheckProperty_%d() {\n", propertyIndex)
+		fmt.Fprintf(out, "    assert %s, %s;\n", g.expr(property.Expr, map[string]string{}), strconv.Quote("property "+property.Name+" failed"))
+		out.WriteString("  }\n\n")
+		propertyIndex++
+	}
+}
+
+func (g generator) writeRelationSafety(out *bytes.Buffer, relation verify.Relation) {
+	sources := g.entity(relation.Source).IDs
+	targets := g.entity(relation.Target).IDs
+	for _, source := range sources {
+		for _, target := range targets {
+			fmt.Fprintf(out, "    assert !(%s) || (%s in %s && %s in %s), %s;\n",
+				g.relationContains(relation.Name, source, target),
+				entityID(source), existsName(relation.Source), entityID(target), existsName(relation.Target),
+				strconv.Quote("relation "+relation.Name+" has an absent endpoint"),
+			)
+		}
+	}
+	if relation.SourceCardinality == verify.One {
+		for _, source := range sources {
+			for left := range targets {
+				for right := left + 1; right < len(targets); right++ {
+					fmt.Fprintf(out, "    assert !(%s && %s), %s;\n", g.relationContains(relation.Name, source, targets[left]), g.relationContains(relation.Name, source, targets[right]), strconv.Quote("relation "+relation.Name+" exceeds source cardinality"))
+				}
+			}
+		}
+	}
+	if relation.TargetCardinality == verify.One {
+		for _, target := range targets {
+			for left := range sources {
+				for right := left + 1; right < len(sources); right++ {
+					fmt.Fprintf(out, "    assert !(%s && %s), %s;\n", g.relationContains(relation.Name, sources[left], target), g.relationContains(relation.Name, sources[right], target), strconv.Quote("relation "+relation.Name+" exceeds target cardinality"))
+				}
+			}
+		}
+	}
 }
 
 func (g generator) writeQuiescent(out *bytes.Buffer) {
 	out.WriteString("  fun CheckQuiescent() {\n")
+	propertyIndex := 0
 	for _, property := range g.model.Properties {
 		if property.Kind == verify.QuiescentProperty {
-			fmt.Fprintf(out, "    assert %s, %s;\n", g.expr(property.Expr, map[string]string{}), strconv.Quote("quiescent property "+property.Name+" failed"))
+			fmt.Fprintf(out, "    CheckQuiescentProperty_%d();\n", propertyIndex)
+			propertyIndex++
 		}
 	}
 	out.WriteString("  }\n\n")
+	propertyIndex = 0
+	for _, property := range g.model.Properties {
+		if property.Kind != verify.QuiescentProperty {
+			continue
+		}
+		fmt.Fprintf(out, "  fun CheckQuiescentProperty_%d() {\n", propertyIndex)
+		fmt.Fprintf(out, "    assert %s, %s;\n", g.expr(property.Expr, map[string]string{}), strconv.Quote("quiescent property "+property.Name+" failed"))
+		out.WriteString("  }\n\n")
+		propertyIndex++
+	}
 }
 
 func (g generator) expr(expression verify.Expr, bindings map[string]string) string {

@@ -1,6 +1,7 @@
 // Generated from the Umpire verification snapshot. Do not edit.
 
 event eStep;
+type tSelection = (chosen: int, remaining: set[int]);
 
 enum Callback { Callback_0, Callback_1 }
 enum Callback_state { Callback_state_unobserved }
@@ -46,6 +47,26 @@ machine UmpireWorld {
 
   fun Step() {
     var enabled: set[int];
+    var selection: tSelection;
+    enabled = EnabledChunk_0(enabled);
+    enabled = EnabledChunk_1(enabled);
+    enabled = EnabledChunk_2(enabled);
+    if (sizeof(enabled) == 0) {
+      CheckQuiescent();
+      raise halt;
+    }
+    selection = SelectChunk_0(enabled);
+    if (selection.chosen >= 0) { ApplyChunk_0(selection.chosen); return; }
+    enabled = selection.remaining;
+    selection = SelectChunk_1(enabled);
+    if (selection.chosen >= 0) { ApplyChunk_1(selection.chosen); return; }
+    enabled = selection.remaining;
+    selection = SelectChunk_2(enabled);
+    if (selection.chosen >= 0) { ApplyChunk_2(selection.chosen); return; }
+    enabled = selection.remaining;
+  }
+
+  fun EnabledChunk_0(enabled: set[int]): set[int] {
     if (!(Callback_0 in exists_Callback) && WorkflowRun_0 in exists_WorkflowRun && state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_started) { enabled += (0); }
     if (!(Callback_0 in exists_Callback) && WorkflowRun_1 in exists_WorkflowRun && state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_started) { enabled += (1); }
     if (!(Callback_1 in exists_Callback) && WorkflowRun_0 in exists_WorkflowRun && state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_started) { enabled += (2); }
@@ -56,12 +77,120 @@ machine UmpireWorld {
     if (CallbackDelivery_1 in exists_CallbackDelivery && !(CallbackResponse_1 in exists_CallbackResponse) && state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_delivered) { enabled += (7); }
     if (CallbackDelivery_0 in exists_CallbackDelivery && state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_pending) { enabled += (8); }
     if (CallbackDelivery_1 in exists_CallbackDelivery && state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_pending) { enabled += (9); }
-    if (Callback_0 in exists_Callback && !(CallbackDelivery_0 in exists_CallbackDelivery)) { enabled += (10); }
-    if (Callback_0 in exists_Callback && !(CallbackDelivery_1 in exists_CallbackDelivery)) { enabled += (11); }
-    if (Callback_1 in exists_Callback && !(CallbackDelivery_0 in exists_CallbackDelivery)) { enabled += (12); }
-    if (Callback_1 in exists_Callback && !(CallbackDelivery_1 in exists_CallbackDelivery)) { enabled += (13); }
+    if (Callback_0 in exists_Callback && !(CallbackDelivery_0 in exists_CallbackDelivery) && ((!(WorkflowRun_0 in exists_WorkflowRun) || ((!((source = Callback_0, target = WorkflowRun_0) in relation_callback_handler_run) || (!((state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_continued_as_new)))))) && (!(WorkflowRun_1 in exists_WorkflowRun) || ((!((source = Callback_0, target = WorkflowRun_1) in relation_callback_handler_run) || (!((state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_continued_as_new)))))))) { enabled += (10); }
+    if (Callback_0 in exists_Callback && !(CallbackDelivery_1 in exists_CallbackDelivery) && ((!(WorkflowRun_0 in exists_WorkflowRun) || ((!((source = Callback_0, target = WorkflowRun_0) in relation_callback_handler_run) || (!((state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_continued_as_new)))))) && (!(WorkflowRun_1 in exists_WorkflowRun) || ((!((source = Callback_0, target = WorkflowRun_1) in relation_callback_handler_run) || (!((state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_continued_as_new)))))))) { enabled += (11); }
+    if (Callback_1 in exists_Callback && !(CallbackDelivery_0 in exists_CallbackDelivery) && ((!(WorkflowRun_0 in exists_WorkflowRun) || ((!((source = Callback_1, target = WorkflowRun_0) in relation_callback_handler_run) || (!((state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_continued_as_new)))))) && (!(WorkflowRun_1 in exists_WorkflowRun) || ((!((source = Callback_1, target = WorkflowRun_1) in relation_callback_handler_run) || (!((state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_continued_as_new)))))))) { enabled += (12); }
+    if (Callback_1 in exists_Callback && !(CallbackDelivery_1 in exists_CallbackDelivery) && ((!(WorkflowRun_0 in exists_WorkflowRun) || ((!((source = Callback_1, target = WorkflowRun_0) in relation_callback_handler_run) || (!((state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_continued_as_new)))))) && (!(WorkflowRun_1 in exists_WorkflowRun) || ((!((source = Callback_1, target = WorkflowRun_1) in relation_callback_handler_run) || (!((state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_continued_as_new)))))))) { enabled += (13); }
     if (CallbackDelivery_0 in exists_CallbackDelivery && state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_delivered) { enabled += (14); }
     if (CallbackDelivery_1 in exists_CallbackDelivery && state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_delivered) { enabled += (15); }
+    return enabled;
+  }
+
+  fun SelectChunk_0(enabled: set[int]): tSelection {
+    if (0 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 0, remaining = enabled); }
+      if ($) { return (chosen = 0, remaining = enabled); }
+      enabled -= (0);
+    }
+    if (1 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 1, remaining = enabled); }
+      if ($) { return (chosen = 1, remaining = enabled); }
+      enabled -= (1);
+    }
+    if (2 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 2, remaining = enabled); }
+      if ($) { return (chosen = 2, remaining = enabled); }
+      enabled -= (2);
+    }
+    if (3 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 3, remaining = enabled); }
+      if ($) { return (chosen = 3, remaining = enabled); }
+      enabled -= (3);
+    }
+    if (4 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 4, remaining = enabled); }
+      if ($) { return (chosen = 4, remaining = enabled); }
+      enabled -= (4);
+    }
+    if (5 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 5, remaining = enabled); }
+      if ($) { return (chosen = 5, remaining = enabled); }
+      enabled -= (5);
+    }
+    if (6 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 6, remaining = enabled); }
+      if ($) { return (chosen = 6, remaining = enabled); }
+      enabled -= (6);
+    }
+    if (7 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 7, remaining = enabled); }
+      if ($) { return (chosen = 7, remaining = enabled); }
+      enabled -= (7);
+    }
+    if (8 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 8, remaining = enabled); }
+      if ($) { return (chosen = 8, remaining = enabled); }
+      enabled -= (8);
+    }
+    if (9 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 9, remaining = enabled); }
+      if ($) { return (chosen = 9, remaining = enabled); }
+      enabled -= (9);
+    }
+    if (10 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 10, remaining = enabled); }
+      if ($) { return (chosen = 10, remaining = enabled); }
+      enabled -= (10);
+    }
+    if (11 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 11, remaining = enabled); }
+      if ($) { return (chosen = 11, remaining = enabled); }
+      enabled -= (11);
+    }
+    if (12 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 12, remaining = enabled); }
+      if ($) { return (chosen = 12, remaining = enabled); }
+      enabled -= (12);
+    }
+    if (13 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 13, remaining = enabled); }
+      if ($) { return (chosen = 13, remaining = enabled); }
+      enabled -= (13);
+    }
+    if (14 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 14, remaining = enabled); }
+      if ($) { return (chosen = 14, remaining = enabled); }
+      enabled -= (14);
+    }
+    if (15 in enabled) {
+      if (sizeof(enabled) == 1) { return (chosen = 15, remaining = enabled); }
+      if ($) { return (chosen = 15, remaining = enabled); }
+      enabled -= (15);
+    }
+    return (chosen = -1, remaining = enabled);
+  }
+
+  fun ApplyChunk_0(selected: int) {
+    if (selected == 0) { Apply_callback_attach_handler_Callback_0_WorkflowRun_0(); return; }
+    if (selected == 1) { Apply_callback_attach_handler_Callback_0_WorkflowRun_1(); return; }
+    if (selected == 2) { Apply_callback_attach_handler_Callback_1_WorkflowRun_0(); return; }
+    if (selected == 3) { Apply_callback_attach_handler_Callback_1_WorkflowRun_1(); return; }
+    if (selected == 4) { Apply_callback_delivery_acknowledge_CallbackDelivery_0_CallbackResponse_0(); return; }
+    if (selected == 5) { Apply_callback_delivery_acknowledge_CallbackDelivery_0_CallbackResponse_1(); return; }
+    if (selected == 6) { Apply_callback_delivery_acknowledge_CallbackDelivery_1_CallbackResponse_0(); return; }
+    if (selected == 7) { Apply_callback_delivery_acknowledge_CallbackDelivery_1_CallbackResponse_1(); return; }
+    if (selected == 8) { Apply_callback_delivery_deliver_CallbackDelivery_0(); return; }
+    if (selected == 9) { Apply_callback_delivery_deliver_CallbackDelivery_1(); return; }
+    if (selected == 10) { Apply_callback_delivery_enqueue_Callback_0_CallbackDelivery_0(); return; }
+    if (selected == 11) { Apply_callback_delivery_enqueue_Callback_0_CallbackDelivery_1(); return; }
+    if (selected == 12) { Apply_callback_delivery_enqueue_Callback_1_CallbackDelivery_0(); return; }
+    if (selected == 13) { Apply_callback_delivery_enqueue_Callback_1_CallbackDelivery_1(); return; }
+    if (selected == 14) { Apply_callback_delivery_fail_delivered_CallbackDelivery_0(); return; }
+    if (selected == 15) { Apply_callback_delivery_fail_delivered_CallbackDelivery_1(); return; }
+    assert false, "selected candidate is outside its generated chunk";
+  }
+
+  fun EnabledChunk_1(enabled: set[int]): set[int] {
     if (CallbackDelivery_0 in exists_CallbackDelivery && state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_pending) { enabled += (16); }
     if (CallbackDelivery_1 in exists_CallbackDelivery && state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_pending) { enabled += (17); }
     if (CallbackDelivery_0 in exists_CallbackDelivery && state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_failed) { enabled += (18); }
@@ -78,182 +207,137 @@ machine UmpireWorld {
     if (WorkflowRun_1 in exists_WorkflowRun && (state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_started && ((!(Callback_0 in exists_Callback) || ((!((source = Callback_0, target = WorkflowRun_1) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged))))))))) && (!(Callback_1 in exists_Callback) || ((!((source = Callback_1, target = WorkflowRun_1) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged)))))))))))) { enabled += (29); }
     if (WorkflowRun_0 in exists_WorkflowRun && (state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_started && ((!(Callback_0 in exists_Callback) || ((!((source = Callback_0, target = WorkflowRun_0) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged))))))))) && (!(Callback_1 in exists_Callback) || ((!((source = Callback_1, target = WorkflowRun_0) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged)))))))))))) { enabled += (30); }
     if (WorkflowRun_1 in exists_WorkflowRun && (state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_started && ((!(Callback_0 in exists_Callback) || ((!((source = Callback_0, target = WorkflowRun_1) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged))))))))) && (!(Callback_1 in exists_Callback) || ((!((source = Callback_1, target = WorkflowRun_1) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged)))))))))))) { enabled += (31); }
-    if (!(WorkflowRun_0 in exists_WorkflowRun) && state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_created) { enabled += (32); }
-    if (!(WorkflowRun_1 in exists_WorkflowRun) && state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_created) { enabled += (33); }
-    if (sizeof(enabled) == 0) {
-      CheckQuiescent();
-      raise halt;
-    }
-    if (0 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_attach_handler_Callback_0_WorkflowRun_0(); return; }
-      if ($) { Apply_callback_attach_handler_Callback_0_WorkflowRun_0(); return; }
-      enabled -= (0);
-    }
-    if (1 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_attach_handler_Callback_0_WorkflowRun_1(); return; }
-      if ($) { Apply_callback_attach_handler_Callback_0_WorkflowRun_1(); return; }
-      enabled -= (1);
-    }
-    if (2 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_attach_handler_Callback_1_WorkflowRun_0(); return; }
-      if ($) { Apply_callback_attach_handler_Callback_1_WorkflowRun_0(); return; }
-      enabled -= (2);
-    }
-    if (3 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_attach_handler_Callback_1_WorkflowRun_1(); return; }
-      if ($) { Apply_callback_attach_handler_Callback_1_WorkflowRun_1(); return; }
-      enabled -= (3);
-    }
-    if (4 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_acknowledge_CallbackDelivery_0_CallbackResponse_0(); return; }
-      if ($) { Apply_callback_delivery_acknowledge_CallbackDelivery_0_CallbackResponse_0(); return; }
-      enabled -= (4);
-    }
-    if (5 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_acknowledge_CallbackDelivery_0_CallbackResponse_1(); return; }
-      if ($) { Apply_callback_delivery_acknowledge_CallbackDelivery_0_CallbackResponse_1(); return; }
-      enabled -= (5);
-    }
-    if (6 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_acknowledge_CallbackDelivery_1_CallbackResponse_0(); return; }
-      if ($) { Apply_callback_delivery_acknowledge_CallbackDelivery_1_CallbackResponse_0(); return; }
-      enabled -= (6);
-    }
-    if (7 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_acknowledge_CallbackDelivery_1_CallbackResponse_1(); return; }
-      if ($) { Apply_callback_delivery_acknowledge_CallbackDelivery_1_CallbackResponse_1(); return; }
-      enabled -= (7);
-    }
-    if (8 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_deliver_CallbackDelivery_0(); return; }
-      if ($) { Apply_callback_delivery_deliver_CallbackDelivery_0(); return; }
-      enabled -= (8);
-    }
-    if (9 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_deliver_CallbackDelivery_1(); return; }
-      if ($) { Apply_callback_delivery_deliver_CallbackDelivery_1(); return; }
-      enabled -= (9);
-    }
-    if (10 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_enqueue_Callback_0_CallbackDelivery_0(); return; }
-      if ($) { Apply_callback_delivery_enqueue_Callback_0_CallbackDelivery_0(); return; }
-      enabled -= (10);
-    }
-    if (11 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_enqueue_Callback_0_CallbackDelivery_1(); return; }
-      if ($) { Apply_callback_delivery_enqueue_Callback_0_CallbackDelivery_1(); return; }
-      enabled -= (11);
-    }
-    if (12 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_enqueue_Callback_1_CallbackDelivery_0(); return; }
-      if ($) { Apply_callback_delivery_enqueue_Callback_1_CallbackDelivery_0(); return; }
-      enabled -= (12);
-    }
-    if (13 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_enqueue_Callback_1_CallbackDelivery_1(); return; }
-      if ($) { Apply_callback_delivery_enqueue_Callback_1_CallbackDelivery_1(); return; }
-      enabled -= (13);
-    }
-    if (14 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_fail_delivered_CallbackDelivery_0(); return; }
-      if ($) { Apply_callback_delivery_fail_delivered_CallbackDelivery_0(); return; }
-      enabled -= (14);
-    }
-    if (15 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_fail_delivered_CallbackDelivery_1(); return; }
-      if ($) { Apply_callback_delivery_fail_delivered_CallbackDelivery_1(); return; }
-      enabled -= (15);
-    }
+    return enabled;
+  }
+
+  fun SelectChunk_1(enabled: set[int]): tSelection {
     if (16 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_fail_pending_CallbackDelivery_0(); return; }
-      if ($) { Apply_callback_delivery_fail_pending_CallbackDelivery_0(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 16, remaining = enabled); }
+      if ($) { return (chosen = 16, remaining = enabled); }
       enabled -= (16);
     }
     if (17 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_fail_pending_CallbackDelivery_1(); return; }
-      if ($) { Apply_callback_delivery_fail_pending_CallbackDelivery_1(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 17, remaining = enabled); }
+      if ($) { return (chosen = 17, remaining = enabled); }
       enabled -= (17);
     }
     if (18 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_retry_CallbackDelivery_0(); return; }
-      if ($) { Apply_callback_delivery_retry_CallbackDelivery_0(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 18, remaining = enabled); }
+      if ($) { return (chosen = 18, remaining = enabled); }
       enabled -= (18);
     }
     if (19 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_delivery_retry_CallbackDelivery_1(); return; }
-      if ($) { Apply_callback_delivery_retry_CallbackDelivery_1(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 19, remaining = enabled); }
+      if ($) { return (chosen = 19, remaining = enabled); }
       enabled -= (19);
     }
     if (20 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_cancel_WorkflowRun_0(); return; }
-      if ($) { Apply_callback_handler_close_cancel_WorkflowRun_0(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 20, remaining = enabled); }
+      if ($) { return (chosen = 20, remaining = enabled); }
       enabled -= (20);
     }
     if (21 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_cancel_WorkflowRun_1(); return; }
-      if ($) { Apply_callback_handler_close_cancel_WorkflowRun_1(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 21, remaining = enabled); }
+      if ($) { return (chosen = 21, remaining = enabled); }
       enabled -= (21);
     }
     if (22 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_complete_WorkflowRun_0(); return; }
-      if ($) { Apply_callback_handler_close_complete_WorkflowRun_0(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 22, remaining = enabled); }
+      if ($) { return (chosen = 22, remaining = enabled); }
       enabled -= (22);
     }
     if (23 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_complete_WorkflowRun_1(); return; }
-      if ($) { Apply_callback_handler_close_complete_WorkflowRun_1(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 23, remaining = enabled); }
+      if ($) { return (chosen = 23, remaining = enabled); }
       enabled -= (23);
     }
     if (24 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_continue_as_new_WorkflowRun_0(); return; }
-      if ($) { Apply_callback_handler_close_continue_as_new_WorkflowRun_0(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 24, remaining = enabled); }
+      if ($) { return (chosen = 24, remaining = enabled); }
       enabled -= (24);
     }
     if (25 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_continue_as_new_WorkflowRun_1(); return; }
-      if ($) { Apply_callback_handler_close_continue_as_new_WorkflowRun_1(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 25, remaining = enabled); }
+      if ($) { return (chosen = 25, remaining = enabled); }
       enabled -= (25);
     }
     if (26 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_fail_WorkflowRun_0(); return; }
-      if ($) { Apply_callback_handler_close_fail_WorkflowRun_0(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 26, remaining = enabled); }
+      if ($) { return (chosen = 26, remaining = enabled); }
       enabled -= (26);
     }
     if (27 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_fail_WorkflowRun_1(); return; }
-      if ($) { Apply_callback_handler_close_fail_WorkflowRun_1(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 27, remaining = enabled); }
+      if ($) { return (chosen = 27, remaining = enabled); }
       enabled -= (27);
     }
     if (28 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_terminate_WorkflowRun_0(); return; }
-      if ($) { Apply_callback_handler_close_terminate_WorkflowRun_0(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 28, remaining = enabled); }
+      if ($) { return (chosen = 28, remaining = enabled); }
       enabled -= (28);
     }
     if (29 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_terminate_WorkflowRun_1(); return; }
-      if ($) { Apply_callback_handler_close_terminate_WorkflowRun_1(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 29, remaining = enabled); }
+      if ($) { return (chosen = 29, remaining = enabled); }
       enabled -= (29);
     }
     if (30 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_timeout_WorkflowRun_0(); return; }
-      if ($) { Apply_callback_handler_close_timeout_WorkflowRun_0(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 30, remaining = enabled); }
+      if ($) { return (chosen = 30, remaining = enabled); }
       enabled -= (30);
     }
     if (31 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_close_timeout_WorkflowRun_1(); return; }
-      if ($) { Apply_callback_handler_close_timeout_WorkflowRun_1(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 31, remaining = enabled); }
+      if ($) { return (chosen = 31, remaining = enabled); }
       enabled -= (31);
     }
+    return (chosen = -1, remaining = enabled);
+  }
+
+  fun ApplyChunk_1(selected: int) {
+    if (selected == 16) { Apply_callback_delivery_fail_pending_CallbackDelivery_0(); return; }
+    if (selected == 17) { Apply_callback_delivery_fail_pending_CallbackDelivery_1(); return; }
+    if (selected == 18) { Apply_callback_delivery_retry_CallbackDelivery_0(); return; }
+    if (selected == 19) { Apply_callback_delivery_retry_CallbackDelivery_1(); return; }
+    if (selected == 20) { Apply_callback_handler_close_cancel_WorkflowRun_0(); return; }
+    if (selected == 21) { Apply_callback_handler_close_cancel_WorkflowRun_1(); return; }
+    if (selected == 22) { Apply_callback_handler_close_complete_WorkflowRun_0(); return; }
+    if (selected == 23) { Apply_callback_handler_close_complete_WorkflowRun_1(); return; }
+    if (selected == 24) { Apply_callback_handler_close_continue_as_new_WorkflowRun_0(); return; }
+    if (selected == 25) { Apply_callback_handler_close_continue_as_new_WorkflowRun_1(); return; }
+    if (selected == 26) { Apply_callback_handler_close_fail_WorkflowRun_0(); return; }
+    if (selected == 27) { Apply_callback_handler_close_fail_WorkflowRun_1(); return; }
+    if (selected == 28) { Apply_callback_handler_close_terminate_WorkflowRun_0(); return; }
+    if (selected == 29) { Apply_callback_handler_close_terminate_WorkflowRun_1(); return; }
+    if (selected == 30) { Apply_callback_handler_close_timeout_WorkflowRun_0(); return; }
+    if (selected == 31) { Apply_callback_handler_close_timeout_WorkflowRun_1(); return; }
+    assert false, "selected candidate is outside its generated chunk";
+  }
+
+  fun EnabledChunk_2(enabled: set[int]): set[int] {
+    if (!(WorkflowRun_0 in exists_WorkflowRun) && state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_created) { enabled += (32); }
+    if (!(WorkflowRun_1 in exists_WorkflowRun) && state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_created) { enabled += (33); }
+    return enabled;
+  }
+
+  fun SelectChunk_2(enabled: set[int]): tSelection {
     if (32 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_start_WorkflowRun_0(); return; }
-      if ($) { Apply_callback_handler_start_WorkflowRun_0(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 32, remaining = enabled); }
+      if ($) { return (chosen = 32, remaining = enabled); }
       enabled -= (32);
     }
     if (33 in enabled) {
-      if (sizeof(enabled) == 1) { Apply_callback_handler_start_WorkflowRun_1(); return; }
-      if ($) { Apply_callback_handler_start_WorkflowRun_1(); return; }
+      if (sizeof(enabled) == 1) { return (chosen = 33, remaining = enabled); }
+      if ($) { return (chosen = 33, remaining = enabled); }
       enabled -= (33);
     }
+    return (chosen = -1, remaining = enabled);
+  }
+
+  fun ApplyChunk_2(selected: int) {
+    if (selected == 32) { Apply_callback_handler_start_WorkflowRun_0(); return; }
+    if (selected == 33) { Apply_callback_handler_start_WorkflowRun_1(); return; }
+    assert false, "selected candidate is outside its generated chunk";
   }
 
   fun Apply_callback_attach_handler_Callback_0_WorkflowRun_0() {
@@ -559,12 +643,23 @@ machine UmpireWorld {
   }
 
   fun CheckSafety() {
+    CheckRelation_0();
+    CheckRelation_1();
+    CheckRelation_2();
+    CheckProperty_0();
+    CheckProperty_1();
+  }
+
+  fun CheckRelation_0() {
     assert !((source = Callback_0, target = CallbackDelivery_0) in relation_callback_delivery) || (Callback_0 in exists_Callback && CallbackDelivery_0 in exists_CallbackDelivery), "relation callback-delivery has an absent endpoint";
     assert !((source = Callback_0, target = CallbackDelivery_1) in relation_callback_delivery) || (Callback_0 in exists_Callback && CallbackDelivery_1 in exists_CallbackDelivery), "relation callback-delivery has an absent endpoint";
     assert !((source = Callback_1, target = CallbackDelivery_0) in relation_callback_delivery) || (Callback_1 in exists_Callback && CallbackDelivery_0 in exists_CallbackDelivery), "relation callback-delivery has an absent endpoint";
     assert !((source = Callback_1, target = CallbackDelivery_1) in relation_callback_delivery) || (Callback_1 in exists_Callback && CallbackDelivery_1 in exists_CallbackDelivery), "relation callback-delivery has an absent endpoint";
     assert !((source = Callback_0, target = CallbackDelivery_0) in relation_callback_delivery && (source = Callback_1, target = CallbackDelivery_0) in relation_callback_delivery), "relation callback-delivery exceeds target cardinality";
     assert !((source = Callback_0, target = CallbackDelivery_1) in relation_callback_delivery && (source = Callback_1, target = CallbackDelivery_1) in relation_callback_delivery), "relation callback-delivery exceeds target cardinality";
+  }
+
+  fun CheckRelation_1() {
     assert !((source = CallbackDelivery_0, target = CallbackResponse_0) in relation_callback_delivery_response) || (CallbackDelivery_0 in exists_CallbackDelivery && CallbackResponse_0 in exists_CallbackResponse), "relation callback-delivery-response has an absent endpoint";
     assert !((source = CallbackDelivery_0, target = CallbackResponse_1) in relation_callback_delivery_response) || (CallbackDelivery_0 in exists_CallbackDelivery && CallbackResponse_1 in exists_CallbackResponse), "relation callback-delivery-response has an absent endpoint";
     assert !((source = CallbackDelivery_1, target = CallbackResponse_0) in relation_callback_delivery_response) || (CallbackDelivery_1 in exists_CallbackDelivery && CallbackResponse_0 in exists_CallbackResponse), "relation callback-delivery-response has an absent endpoint";
@@ -573,14 +668,23 @@ machine UmpireWorld {
     assert !((source = CallbackDelivery_1, target = CallbackResponse_0) in relation_callback_delivery_response && (source = CallbackDelivery_1, target = CallbackResponse_1) in relation_callback_delivery_response), "relation callback-delivery-response exceeds source cardinality";
     assert !((source = CallbackDelivery_0, target = CallbackResponse_0) in relation_callback_delivery_response && (source = CallbackDelivery_1, target = CallbackResponse_0) in relation_callback_delivery_response), "relation callback-delivery-response exceeds target cardinality";
     assert !((source = CallbackDelivery_0, target = CallbackResponse_1) in relation_callback_delivery_response && (source = CallbackDelivery_1, target = CallbackResponse_1) in relation_callback_delivery_response), "relation callback-delivery-response exceeds target cardinality";
+  }
+
+  fun CheckRelation_2() {
     assert !((source = Callback_0, target = WorkflowRun_0) in relation_callback_handler_run) || (Callback_0 in exists_Callback && WorkflowRun_0 in exists_WorkflowRun), "relation callback-handler-run has an absent endpoint";
     assert !((source = Callback_0, target = WorkflowRun_1) in relation_callback_handler_run) || (Callback_0 in exists_Callback && WorkflowRun_1 in exists_WorkflowRun), "relation callback-handler-run has an absent endpoint";
     assert !((source = Callback_1, target = WorkflowRun_0) in relation_callback_handler_run) || (Callback_1 in exists_Callback && WorkflowRun_0 in exists_WorkflowRun), "relation callback-handler-run has an absent endpoint";
     assert !((source = Callback_1, target = WorkflowRun_1) in relation_callback_handler_run) || (Callback_1 in exists_Callback && WorkflowRun_1 in exists_WorkflowRun), "relation callback-handler-run has an absent endpoint";
     assert !((source = Callback_0, target = WorkflowRun_0) in relation_callback_handler_run && (source = Callback_0, target = WorkflowRun_1) in relation_callback_handler_run), "relation callback-handler-run exceeds source cardinality";
     assert !((source = Callback_1, target = WorkflowRun_0) in relation_callback_handler_run && (source = Callback_1, target = WorkflowRun_1) in relation_callback_handler_run), "relation callback-handler-run exceeds source cardinality";
+  }
+
+  fun CheckProperty_0() {
     assert ((!(WorkflowRun_0 in exists_WorkflowRun) || ((!((state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_0] == WorkflowRun_state_continued_as_new)) || (((!(Callback_0 in exists_Callback) || ((!((source = Callback_0, target = WorkflowRun_0) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged))))))))) && (!(Callback_1 in exists_Callback) || ((!((source = Callback_1, target = WorkflowRun_0) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged)))))))))))))) && (!(WorkflowRun_1 in exists_WorkflowRun) || ((!((state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_completed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_failed || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_canceled || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_terminated || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_timed_out || state_WorkflowRun[WorkflowRun_1] == WorkflowRun_state_continued_as_new)) || (((!(Callback_0 in exists_Callback) || ((!((source = Callback_0, target = WorkflowRun_1) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_0, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged))))))))) && (!(Callback_1 in exists_Callback) || ((!((source = Callback_1, target = WorkflowRun_1) in relation_callback_handler_run) || (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_0) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged)))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!((source = Callback_1, target = CallbackDelivery_1) in relation_callback_delivery) || (state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged))))))))))))))), "property CallbackHandlerLifetime failed";
-    assert (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!(state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged) || (((CallbackResponse_0 in exists_CallbackResponse && (((source = CallbackDelivery_0, target = CallbackResponse_0) in relation_callback_delivery_response && state_CallbackResponse[CallbackResponse_0] == CallbackResponse_state_accepted))) || (CallbackResponse_1 in exists_CallbackResponse && (((source = CallbackDelivery_0, target = CallbackResponse_1) in relation_callback_delivery_response && state_CallbackResponse[CallbackResponse_1] == CallbackResponse_state_accepted)))))))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!(state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged) || (((CallbackResponse_0 in exists_CallbackResponse && (((source = CallbackDelivery_1, target = CallbackResponse_0) in relation_callback_delivery_response && state_CallbackResponse[CallbackResponse_0] == CallbackResponse_state_accepted))) || (CallbackResponse_1 in exists_CallbackResponse && (((source = CallbackDelivery_1, target = CallbackResponse_1) in relation_callback_delivery_response && state_CallbackResponse[CallbackResponse_1] == CallbackResponse_state_accepted))))))))) && ((!(CallbackDelivery_0 in exists_CallbackDelivery) || (((!(CallbackResponse_0 in exists_CallbackResponse) || ((!((source = CallbackDelivery_0, target = CallbackResponse_0) in relation_callback_delivery_response) || (state_CallbackResponse[CallbackResponse_0] == CallbackResponse_state_accepted)))) && (!(CallbackResponse_1 in exists_CallbackResponse) || ((!((source = CallbackDelivery_0, target = CallbackResponse_1) in relation_callback_delivery_response) || (state_CallbackResponse[CallbackResponse_1] == CallbackResponse_state_accepted))))))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || (((!(CallbackResponse_0 in exists_CallbackResponse) || ((!((source = CallbackDelivery_1, target = CallbackResponse_0) in relation_callback_delivery_response) || (state_CallbackResponse[CallbackResponse_0] == CallbackResponse_state_accepted)))) && (!(CallbackResponse_1 in exists_CallbackResponse) || ((!((source = CallbackDelivery_1, target = CallbackResponse_1) in relation_callback_delivery_response) || (state_CallbackResponse[CallbackResponse_1] == CallbackResponse_state_accepted))))))))), "property CallbackResponseConsistency failed";
+  }
+
+  fun CheckProperty_1() {
+    assert (((!(CallbackDelivery_0 in exists_CallbackDelivery) || ((!(state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged) || (((CallbackResponse_0 in exists_CallbackResponse && (((source = CallbackDelivery_0, target = CallbackResponse_0) in relation_callback_delivery_response && state_CallbackResponse[CallbackResponse_0] == CallbackResponse_state_accepted))) || (CallbackResponse_1 in exists_CallbackResponse && (((source = CallbackDelivery_0, target = CallbackResponse_1) in relation_callback_delivery_response && state_CallbackResponse[CallbackResponse_1] == CallbackResponse_state_accepted)))))))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || ((!(state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged) || (((CallbackResponse_0 in exists_CallbackResponse && (((source = CallbackDelivery_1, target = CallbackResponse_0) in relation_callback_delivery_response && state_CallbackResponse[CallbackResponse_0] == CallbackResponse_state_accepted))) || (CallbackResponse_1 in exists_CallbackResponse && (((source = CallbackDelivery_1, target = CallbackResponse_1) in relation_callback_delivery_response && state_CallbackResponse[CallbackResponse_1] == CallbackResponse_state_accepted))))))))) && ((!(CallbackDelivery_0 in exists_CallbackDelivery) || (((!(CallbackResponse_0 in exists_CallbackResponse) || ((!((source = CallbackDelivery_0, target = CallbackResponse_0) in relation_callback_delivery_response) || ((state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged && state_CallbackResponse[CallbackResponse_0] == CallbackResponse_state_accepted))))) && (!(CallbackResponse_1 in exists_CallbackResponse) || ((!((source = CallbackDelivery_0, target = CallbackResponse_1) in relation_callback_delivery_response) || ((state_CallbackDelivery[CallbackDelivery_0] == CallbackDelivery_state_acknowledged && state_CallbackResponse[CallbackResponse_1] == CallbackResponse_state_accepted)))))))) && (!(CallbackDelivery_1 in exists_CallbackDelivery) || (((!(CallbackResponse_0 in exists_CallbackResponse) || ((!((source = CallbackDelivery_1, target = CallbackResponse_0) in relation_callback_delivery_response) || ((state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged && state_CallbackResponse[CallbackResponse_0] == CallbackResponse_state_accepted))))) && (!(CallbackResponse_1 in exists_CallbackResponse) || ((!((source = CallbackDelivery_1, target = CallbackResponse_1) in relation_callback_delivery_response) || ((state_CallbackDelivery[CallbackDelivery_1] == CallbackDelivery_state_acknowledged && state_CallbackResponse[CallbackResponse_1] == CallbackResponse_state_accepted)))))))))), "property CallbackResponseConsistency failed";
   }
 
   fun CheckQuiescent() {

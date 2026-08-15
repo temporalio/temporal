@@ -457,7 +457,7 @@ Callback_attach_handler(callback, handlerRun) ==
     /\ Callback_attach_handlerEnabled(callback, handlerRun)
     /\ exists_Callback' = exists_Callback \union {callback}
     /\ state_Callback' = [state_Callback EXCEPT ![callback] = "unobserved"]
-    /\ relation_callback_handler_run' = relation_callback_handler_run \union {<<callback, handlerRun>>}
+    /\ relation_callback_handler_run' = (relation_callback_handler_run) \union {<<callback, handlerRun>>}
     /\ UNCHANGED <<exists_CallbackDelivery, state_CallbackDelivery, exists_CallbackResponse, state_CallbackResponse, exists_NexusOperation, state_NexusOperation, exists_WorkflowRun, state_WorkflowRun, relation_callback_delivery, relation_callback_delivery_response, relation_callback_operation, relation_nexus_operation_handler_run>>
 
 Callback_attach_referenceEnabled(callback, operation, handlerRun) ==
@@ -467,15 +467,15 @@ Callback_attach_referenceEnabled(callback, operation, handlerRun) ==
     /\ operation \in exists_NexusOperation
     /\ handlerRun \in WorkflowRunIDs
     /\ handlerRun \in exists_WorkflowRun
-    /\ state_WorkflowRun[handlerRun] = "started"
+    /\ (state_WorkflowRun[handlerRun] = "started" /\ (\A existingHandlerRun \in WorkflowRunIDs: existingHandlerRun \in exists_WorkflowRun => (~(<<operation, existingHandlerRun>> \in relation_nexus_operation_handler_run))))
 
 Callback_attach_reference(callback, operation, handlerRun) ==
     /\ Callback_attach_referenceEnabled(callback, operation, handlerRun)
     /\ exists_Callback' = exists_Callback \union {callback}
     /\ state_Callback' = [state_Callback EXCEPT ![callback] = "unobserved"]
-    /\ relation_callback_handler_run' = relation_callback_handler_run \union {<<callback, handlerRun>>}
-    /\ relation_callback_operation' = relation_callback_operation \union {<<callback, operation>>}
-    /\ relation_nexus_operation_handler_run' = relation_nexus_operation_handler_run \union {<<operation, handlerRun>>}
+    /\ relation_callback_handler_run' = (relation_callback_handler_run) \union {<<callback, handlerRun>>}
+    /\ relation_callback_operation' = (relation_callback_operation) \union {<<callback, operation>>}
+    /\ relation_nexus_operation_handler_run' = (relation_nexus_operation_handler_run) \union {<<operation, handlerRun>>}
     /\ UNCHANGED <<exists_CallbackDelivery, state_CallbackDelivery, exists_CallbackResponse, state_CallbackResponse, exists_NexusOperation, state_NexusOperation, exists_WorkflowRun, state_WorkflowRun, relation_callback_delivery, relation_callback_delivery_response>>
 
 Callback_delivery_acknowledgeEnabled(delivery, response) ==
@@ -490,7 +490,7 @@ Callback_delivery_acknowledge(delivery, response) ==
     /\ state_CallbackDelivery' = [state_CallbackDelivery EXCEPT ![delivery] = "acknowledged"]
     /\ exists_CallbackResponse' = exists_CallbackResponse \union {response}
     /\ state_CallbackResponse' = [state_CallbackResponse EXCEPT ![response] = "accepted"]
-    /\ relation_callback_delivery_response' = relation_callback_delivery_response \union {<<delivery, response>>}
+    /\ relation_callback_delivery_response' = (relation_callback_delivery_response) \union {<<delivery, response>>}
     /\ UNCHANGED <<exists_Callback, state_Callback, exists_CallbackDelivery, exists_NexusOperation, state_NexusOperation, exists_WorkflowRun, state_WorkflowRun, relation_callback_delivery, relation_callback_handler_run, relation_callback_operation, relation_nexus_operation_handler_run>>
 
 Callback_delivery_deliverEnabled(delivery) ==
@@ -508,12 +508,13 @@ Callback_delivery_enqueueEnabled(callback, delivery) ==
     /\ callback \in exists_Callback
     /\ delivery \in CallbackDeliveryIDs
     /\ delivery \notin exists_CallbackDelivery
+    /\ (\A handlerRun \in WorkflowRunIDs: handlerRun \in exists_WorkflowRun => ((<<callback, handlerRun>> \in relation_callback_handler_run => ~((state_WorkflowRun[handlerRun] = "completed" \/ state_WorkflowRun[handlerRun] = "failed" \/ state_WorkflowRun[handlerRun] = "canceled" \/ state_WorkflowRun[handlerRun] = "terminated" \/ state_WorkflowRun[handlerRun] = "timed_out" \/ state_WorkflowRun[handlerRun] = "continued_as_new")))))
 
 Callback_delivery_enqueue(callback, delivery) ==
     /\ Callback_delivery_enqueueEnabled(callback, delivery)
     /\ exists_CallbackDelivery' = exists_CallbackDelivery \union {delivery}
     /\ state_CallbackDelivery' = [state_CallbackDelivery EXCEPT ![delivery] = "pending"]
-    /\ relation_callback_delivery' = relation_callback_delivery \union {<<callback, delivery>>}
+    /\ relation_callback_delivery' = (relation_callback_delivery) \union {<<callback, delivery>>}
     /\ UNCHANGED <<exists_Callback, state_Callback, exists_CallbackResponse, state_CallbackResponse, exists_NexusOperation, state_NexusOperation, exists_WorkflowRun, state_WorkflowRun, relation_callback_delivery_response, relation_callback_handler_run, relation_callback_operation, relation_nexus_operation_handler_run>>
 
 Callback_delivery_fail_deliveredEnabled(delivery) ==
@@ -549,7 +550,7 @@ Callback_delivery_retry(delivery) ==
 Callback_handler_close_cancelEnabled(entity) ==
     /\ entity \in WorkflowRunIDs
     /\ entity \in exists_WorkflowRun
-    /\ (state_WorkflowRun[entity] = "started" /\ \A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => \A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))
+    /\ (state_WorkflowRun[entity] = "started" /\ (\A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => (\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))))
 
 Callback_handler_close_cancel(entity) ==
     /\ Callback_handler_close_cancelEnabled(entity)
@@ -559,7 +560,7 @@ Callback_handler_close_cancel(entity) ==
 Callback_handler_close_completeEnabled(entity) ==
     /\ entity \in WorkflowRunIDs
     /\ entity \in exists_WorkflowRun
-    /\ (state_WorkflowRun[entity] = "started" /\ \A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => \A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))
+    /\ (state_WorkflowRun[entity] = "started" /\ (\A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => (\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))))
 
 Callback_handler_close_complete(entity) ==
     /\ Callback_handler_close_completeEnabled(entity)
@@ -569,7 +570,7 @@ Callback_handler_close_complete(entity) ==
 Callback_handler_close_continue_as_newEnabled(entity) ==
     /\ entity \in WorkflowRunIDs
     /\ entity \in exists_WorkflowRun
-    /\ (state_WorkflowRun[entity] = "started" /\ \A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => \A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))
+    /\ (state_WorkflowRun[entity] = "started" /\ (\A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => (\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))))
 
 Callback_handler_close_continue_as_new(entity) ==
     /\ Callback_handler_close_continue_as_newEnabled(entity)
@@ -579,7 +580,7 @@ Callback_handler_close_continue_as_new(entity) ==
 Callback_handler_close_failEnabled(entity) ==
     /\ entity \in WorkflowRunIDs
     /\ entity \in exists_WorkflowRun
-    /\ (state_WorkflowRun[entity] = "started" /\ \A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => \A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))
+    /\ (state_WorkflowRun[entity] = "started" /\ (\A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => (\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))))
 
 Callback_handler_close_fail(entity) ==
     /\ Callback_handler_close_failEnabled(entity)
@@ -589,7 +590,7 @@ Callback_handler_close_fail(entity) ==
 Callback_handler_close_terminateEnabled(entity) ==
     /\ entity \in WorkflowRunIDs
     /\ entity \in exists_WorkflowRun
-    /\ (state_WorkflowRun[entity] = "started" /\ \A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => \A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))
+    /\ (state_WorkflowRun[entity] = "started" /\ (\A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => (\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))))
 
 Callback_handler_close_terminate(entity) ==
     /\ Callback_handler_close_terminateEnabled(entity)
@@ -599,7 +600,7 @@ Callback_handler_close_terminate(entity) ==
 Callback_handler_close_timeoutEnabled(entity) ==
     /\ entity \in WorkflowRunIDs
     /\ entity \in exists_WorkflowRun
-    /\ (state_WorkflowRun[entity] = "started" /\ \A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => \A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))
+    /\ (state_WorkflowRun[entity] = "started" /\ (\A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, entity>> \in relation_callback_handler_run => (\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))))
 
 Callback_handler_close_timeout(entity) ==
     /\ Callback_handler_close_timeoutEnabled(entity)
@@ -720,13 +721,13 @@ CanStep ==
     \/ \E entity \in WorkflowRunIDs: Callback_handler_startEnabled(entity)
 
 CallbackHandlerLifetime ==
-    \A handlerRun \in WorkflowRunIDs: handlerRun \in exists_WorkflowRun => (((state_WorkflowRun[handlerRun] = "completed" \/ state_WorkflowRun[handlerRun] = "failed" \/ state_WorkflowRun[handlerRun] = "canceled" \/ state_WorkflowRun[handlerRun] = "terminated" \/ state_WorkflowRun[handlerRun] = "timed_out" \/ state_WorkflowRun[handlerRun] = "continued_as_new") => \A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, handlerRun>> \in relation_callback_handler_run => \A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged"))))))
+    (\A handlerRun \in WorkflowRunIDs: handlerRun \in exists_WorkflowRun => (((state_WorkflowRun[handlerRun] = "completed" \/ state_WorkflowRun[handlerRun] = "failed" \/ state_WorkflowRun[handlerRun] = "canceled" \/ state_WorkflowRun[handlerRun] = "terminated" \/ state_WorkflowRun[handlerRun] = "timed_out" \/ state_WorkflowRun[handlerRun] = "continued_as_new") => (\A callback \in CallbackIDs: callback \in exists_Callback => ((<<callback, handlerRun>> \in relation_callback_handler_run => (\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((<<callback, delivery>> \in relation_callback_delivery => state_CallbackDelivery[delivery] = "acknowledged")))))))))
 
 CallbackReferenceConsistency ==
-    \A callback \in CallbackIDs: callback \in exists_Callback => (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => (\A handlerRun \in WorkflowRunIDs: handlerRun \in exists_WorkflowRun => (((<<callback, operation>> \in relation_callback_operation /\ <<callback, handlerRun>> \in relation_callback_handler_run) => <<operation, handlerRun>> \in relation_nexus_operation_handler_run))))
+    (\A callback \in CallbackIDs: callback \in exists_Callback => ((\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((\A handlerRun \in WorkflowRunIDs: handlerRun \in exists_WorkflowRun => (((<<callback, operation>> \in relation_callback_operation /\ <<callback, handlerRun>> \in relation_callback_handler_run) => <<operation, handlerRun>> \in relation_nexus_operation_handler_run)))))))
 
 CallbackResponseConsistency ==
-    (\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((state_CallbackDelivery[delivery] = "acknowledged" => \E response \in CallbackResponseIDs: response \in exists_CallbackResponse /\ ((<<delivery, response>> \in relation_callback_delivery_response /\ state_CallbackResponse[response] = "accepted")))) /\ \A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => (\A response \in CallbackResponseIDs: response \in exists_CallbackResponse => ((<<delivery, response>> \in relation_callback_delivery_response => state_CallbackResponse[response] = "accepted"))))
+    ((\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((state_CallbackDelivery[delivery] = "acknowledged" => (\E response \in CallbackResponseIDs: response \in exists_CallbackResponse /\ ((<<delivery, response>> \in relation_callback_delivery_response /\ state_CallbackResponse[response] = "accepted")))))) /\ (\A delivery \in CallbackDeliveryIDs: delivery \in exists_CallbackDelivery => ((\A response \in CallbackResponseIDs: response \in exists_CallbackResponse => ((<<delivery, response>> \in relation_callback_delivery_response => (state_CallbackDelivery[delivery] = "acknowledged" /\ state_CallbackResponse[response] = "accepted")))))))
 
 InductiveInvariant ==
     /\ TypeOK

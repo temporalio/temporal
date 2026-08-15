@@ -47,6 +47,20 @@ func TestNormalizeCounterexampleRejectsReplayThatDoesNotViolateProperty(t *testi
 	require.ErrorContains(t, err, "property-not-violated")
 }
 
+func TestFindCounterexampleTraceReturnsShortestCanonicalWitness(t *testing.T) {
+	trace, err := FindCounterexampleTrace(counterexampleModel(), "job-remains-ready", 1)
+	require.NoError(t, err)
+	require.Equal(t, []TraceStep{{
+		Action: "complete", Bindings: Bindings{"job": "job#0"},
+		Deltas: []StateDelta{{Entity: "job", ID: "job#0", FromState: "ready", ToState: "done"}},
+	}}, trace)
+}
+
+func TestFindCounterexampleTraceRejectsUnviolatedProperty(t *testing.T) {
+	_, err := FindCounterexampleTrace(counterexampleModel(), "missing", 1)
+	require.ErrorContains(t, err, "property-not-violated")
+}
+
 func TestNormalizeCounterexampleRejectsDifferentNativeInitialState(t *testing.T) {
 	_, err := NormalizeCounterexample(counterexampleModel(), "job-remains-ready", TraceEvidence{
 		Initial: &ModelState{

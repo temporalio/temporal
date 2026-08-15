@@ -31,6 +31,8 @@ func TestTLAStateDecodersMapRelationTuples(t *testing.T) {
   "#meta": {"format": "ITF"},
   "vars": ["exists_source", "exists_target", "relation_link"],
   "states": [{
+	"sourceIDs": {"#set": ["source#0"]},
+	"targetIDs": {"#set": ["target#0"]},
     "exists_source": {"#set": ["source#0"]},
     "exists_target": {"#set": ["target#0"]},
     "relation_link": {"#set": [{"#tup": ["source#0", "target#0"]}]}
@@ -67,6 +69,15 @@ func TestTLCActionDecoderMapsNativeBindings(t *testing.T) {
 	require.Equal(t, verify.Bindings{"operation": "operation#0"}, bindings)
 }
 
+func TestTLCActionDecoderLeavesOmittedBindingsForStateInference(t *testing.T) {
+	action, bindings, err := decodeTLCAction(Request{
+		TraceVocabulary: verify.TraceVocabulary{Actions: map[string]string{"Action_schedule": "schedule"}},
+	}, `Action_schedule line 10, col 1 to line 20, col 1 of module Umpire`)
+	require.NoError(t, err)
+	require.Equal(t, "schedule", action)
+	require.Nil(t, bindings)
+}
+
 func TestITFStateDecoderRejectsUnlistedStateVariables(t *testing.T) {
 	request := runnerRelationDecoderRequest()
 	_, err := decodeITFTrace(request, `{
@@ -98,6 +109,25 @@ func TestIvyTraceDecoderMapsRelationValuations(t *testing.T) {
 ]`)
 	require.NoError(t, err)
 	require.Equal(t, []verify.RelationTuple{{Source: "source#0", Target: "target#0"}}, evidence.Initial.Relations["link"])
+}
+
+func TestIvyTraceDecoderReadsSmallModelActionBindings(t *testing.T) {
+	request := runnerIvyCounterexampleRequest()
+	evidence, err := decodeIvyTrace(request, `searching for a small model... done
+[
+    exists_nexusoperation(0) = false
+]
+call schedule
+{
+    [
+        fml:op = 0
+    ]
+}`)
+
+	require.NoError(t, err)
+	require.Equal(t, []verify.ObservedTraceStep{{
+		Action: "schedule", Bindings: verify.Bindings{"op": "NexusOperation#0"},
+	}}, evidence.Steps)
 }
 
 func TestClassifyRejectsMalformedNativeStateEvidence(t *testing.T) {

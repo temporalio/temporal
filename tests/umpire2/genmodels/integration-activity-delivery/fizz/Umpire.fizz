@@ -1254,4 +1254,3 @@ always assertion Property_delivery_retry_preserves_obligation:
 
 always assertion Property_delivery_single_accepted_start:
     return ((not ("WorkObligation#0" in exists_WorkObligation) or ((not (state_WorkObligation["WorkObligation#0"] == "accepted") or ((("DeliveryAttempt#0" in exists_DeliveryAttempt and (("WorkObligation#0", "DeliveryAttempt#0") in relation_delivery_accepted_start)) or ("DeliveryAttempt#1" in exists_DeliveryAttempt and (("WorkObligation#0", "DeliveryAttempt#1") in relation_delivery_accepted_start))))))) and (not ("WorkObligation#1" in exists_WorkObligation) or ((not (state_WorkObligation["WorkObligation#1"] == "accepted") or ((("DeliveryAttempt#0" in exists_DeliveryAttempt and (("WorkObligation#1", "DeliveryAttempt#0") in relation_delivery_accepted_start)) or ("DeliveryAttempt#1" in exists_DeliveryAttempt and (("WorkObligation#1", "DeliveryAttempt#1") in relation_delivery_accepted_start))))))))
-

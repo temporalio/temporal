@@ -243,7 +243,7 @@ Delivery_authorize_accept(obligation, task, attempt) ==
     /\ state_DeliveryAttempt' = [state_DeliveryAttempt EXCEPT ![attempt] = "accepted"]
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "authorized"]
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "accepted"]
-    /\ relation_delivery_accepted_start' = relation_delivery_accepted_start \union {<<obligation, attempt>>}
+    /\ relation_delivery_accepted_start' = (relation_delivery_accepted_start) \union {<<obligation, attempt>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryRouteClass, state_DeliveryRouteClass, exists_DeliveryTask, exists_HistoryOwnerGeneration, state_HistoryOwnerGeneration, exists_HistoryShard, state_HistoryShard, exists_MatchingOwnerGeneration, state_MatchingOwnerGeneration, exists_MatchingQueuePartition, state_MatchingQueuePartition, exists_Poller, state_Poller, exists_WorkObligation, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_partition_owner, relation_delivery_partition_route, relation_delivery_poller_route, relation_delivery_task_history_owner_generation, relation_delivery_task_history_shard, relation_delivery_task_obligation, relation_delivery_task_owner_generation, relation_delivery_task_queue, relation_delivery_task_route, relation_history_shard_owner>>
 
 Delivery_authorize_rejectEnabled(obligation, task, attempt) ==
@@ -290,7 +290,7 @@ Delivery_expire(obligation, task) ==
 Delivery_offer_syncEnabled(task) ==
     /\ task \in DeliveryTaskIDs
     /\ task \in exists_DeliveryTask
-    /\ (state_DeliveryTask[task] = "pending" /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid")))
+    /\ (state_DeliveryTask[task] = "pending" /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid"))))
 
 Delivery_offer_sync(task) ==
     /\ Delivery_offer_syncEnabled(task)
@@ -311,8 +311,8 @@ Delivery_persist_ambiguous(obligation, task, queue) ==
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "pending"]
     /\ exists_WorkObligation' = exists_WorkObligation \union {obligation}
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "unresolved"]
-    /\ relation_delivery_task_obligation' = relation_delivery_task_obligation \union {<<task, obligation>>}
-    /\ relation_delivery_task_queue' = relation_delivery_task_queue \union {<<task, queue>>}
+    /\ relation_delivery_task_obligation' = (relation_delivery_task_obligation) \union {<<task, obligation>>}
+    /\ relation_delivery_task_queue' = (relation_delivery_task_queue) \union {<<task, queue>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryRouteClass, state_DeliveryRouteClass, exists_HistoryOwnerGeneration, state_HistoryOwnerGeneration, exists_HistoryShard, state_HistoryShard, exists_MatchingOwnerGeneration, state_MatchingOwnerGeneration, exists_MatchingQueuePartition, state_MatchingQueuePartition, exists_Poller, state_Poller, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_partition_owner, relation_delivery_partition_route, relation_delivery_poller_route, relation_delivery_task_history_owner_generation, relation_delivery_task_history_shard, relation_delivery_task_owner_generation, relation_delivery_task_route, relation_history_shard_owner>>
 
 Delivery_persist_successEnabled(obligation, task, queue) ==
@@ -329,8 +329,8 @@ Delivery_persist_success(obligation, task, queue) ==
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "pending"]
     /\ exists_WorkObligation' = exists_WorkObligation \union {obligation}
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "valid"]
-    /\ relation_delivery_task_obligation' = relation_delivery_task_obligation \union {<<task, obligation>>}
-    /\ relation_delivery_task_queue' = relation_delivery_task_queue \union {<<task, queue>>}
+    /\ relation_delivery_task_obligation' = (relation_delivery_task_obligation) \union {<<task, obligation>>}
+    /\ relation_delivery_task_queue' = (relation_delivery_task_queue) \union {<<task, queue>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryRouteClass, state_DeliveryRouteClass, exists_HistoryOwnerGeneration, state_HistoryOwnerGeneration, exists_HistoryShard, state_HistoryShard, exists_MatchingOwnerGeneration, state_MatchingOwnerGeneration, exists_MatchingQueuePartition, state_MatchingQueuePartition, exists_Poller, state_Poller, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_partition_owner, relation_delivery_partition_route, relation_delivery_poller_route, relation_delivery_task_history_owner_generation, relation_delivery_task_history_shard, relation_delivery_task_owner_generation, relation_delivery_task_route, relation_history_shard_owner>>
 
 Delivery_resolve_persistedEnabled(obligation, task) ==
@@ -371,7 +371,7 @@ Delivery_retry(task, attempt) ==
 Delivery_spoolEnabled(task) ==
     /\ task \in DeliveryTaskIDs
     /\ task \in exists_DeliveryTask
-    /\ ((state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered") /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid")))
+    /\ ((state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered") /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid"))))
 
 Delivery_spool(task) ==
     /\ Delivery_spoolEnabled(task)
@@ -394,8 +394,8 @@ Routing_bootstrap(route, partition, generation) ==
     /\ state_MatchingOwnerGeneration' = [state_MatchingOwnerGeneration EXCEPT ![generation] = "current"]
     /\ exists_MatchingQueuePartition' = exists_MatchingQueuePartition \union {partition}
     /\ state_MatchingQueuePartition' = [state_MatchingQueuePartition EXCEPT ![partition] = "owned"]
-    /\ relation_delivery_partition_owner' = relation_delivery_partition_owner \union {<<partition, generation>>}
-    /\ relation_delivery_partition_route' = relation_delivery_partition_route \union {<<partition, route>>}
+    /\ relation_delivery_partition_owner' = (relation_delivery_partition_owner) \union {<<partition, generation>>}
+    /\ relation_delivery_partition_route' = (relation_delivery_partition_route) \union {<<partition, route>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryTask, state_DeliveryTask, exists_HistoryOwnerGeneration, state_HistoryOwnerGeneration, exists_HistoryShard, state_HistoryShard, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_poller_route, relation_delivery_task_history_owner_generation, relation_delivery_task_history_shard, relation_delivery_task_obligation, relation_delivery_task_owner_generation, relation_delivery_task_queue, relation_delivery_task_route, relation_history_shard_owner>>
 
 Routing_bootstrap_history_ownerEnabled(shard, historyGeneration) ==
@@ -410,7 +410,7 @@ Routing_bootstrap_history_owner(shard, historyGeneration) ==
     /\ state_HistoryOwnerGeneration' = [state_HistoryOwnerGeneration EXCEPT ![historyGeneration] = "current"]
     /\ exists_HistoryShard' = exists_HistoryShard \union {shard}
     /\ state_HistoryShard' = [state_HistoryShard EXCEPT ![shard] = "owned"]
-    /\ relation_history_shard_owner' = relation_history_shard_owner \union {<<shard, historyGeneration>>}
+    /\ relation_history_shard_owner' = (relation_history_shard_owner) \union {<<shard, historyGeneration>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryRouteClass, state_DeliveryRouteClass, exists_DeliveryTask, state_DeliveryTask, exists_MatchingOwnerGeneration, state_MatchingOwnerGeneration, exists_MatchingQueuePartition, state_MatchingQueuePartition, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_partition_owner, relation_delivery_partition_route, relation_delivery_poller_route, relation_delivery_task_history_owner_generation, relation_delivery_task_history_shard, relation_delivery_task_obligation, relation_delivery_task_owner_generation, relation_delivery_task_queue, relation_delivery_task_route>>
 
 Routing_forward_to_matchingEnabled(task, route, partition, generation, shard, historyGeneration) ==
@@ -426,14 +426,14 @@ Routing_forward_to_matchingEnabled(task, route, partition, generation, shard, hi
     /\ shard \in exists_HistoryShard
     /\ historyGeneration \in HistoryOwnerGenerationIDs
     /\ historyGeneration \in exists_HistoryOwnerGeneration
-    /\ ((state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered" \/ state_DeliveryTask[task] = "backlogged") /\ state_MatchingOwnerGeneration[generation] = "current" /\ <<partition, route>> \in relation_delivery_partition_route /\ <<partition, generation>> \in relation_delivery_partition_owner /\ state_HistoryOwnerGeneration[historyGeneration] = "current" /\ <<shard, historyGeneration>> \in relation_history_shard_owner)
+    /\ ((state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered" \/ state_DeliveryTask[task] = "backlogged") /\ (\A existingRoute \in DeliveryRouteClassIDs: existingRoute \in exists_DeliveryRouteClass => (~(<<task, existingRoute>> \in relation_delivery_task_route))) /\ state_MatchingOwnerGeneration[generation] = "current" /\ <<partition, route>> \in relation_delivery_partition_route /\ <<partition, generation>> \in relation_delivery_partition_owner /\ state_HistoryOwnerGeneration[historyGeneration] = "current" /\ <<shard, historyGeneration>> \in relation_history_shard_owner)
 
 Routing_forward_to_matching(task, route, partition, generation, shard, historyGeneration) ==
     /\ Routing_forward_to_matchingEnabled(task, route, partition, generation, shard, historyGeneration)
-    /\ relation_delivery_task_history_owner_generation' = relation_delivery_task_history_owner_generation \union {<<task, historyGeneration>>}
-    /\ relation_delivery_task_history_shard' = relation_delivery_task_history_shard \union {<<task, shard>>}
-    /\ relation_delivery_task_owner_generation' = relation_delivery_task_owner_generation \union {<<task, generation>>}
-    /\ relation_delivery_task_route' = relation_delivery_task_route \union {<<task, route>>}
+    /\ relation_delivery_task_history_owner_generation' = (relation_delivery_task_history_owner_generation) \union {<<task, historyGeneration>>}
+    /\ relation_delivery_task_history_shard' = (relation_delivery_task_history_shard) \union {<<task, shard>>}
+    /\ relation_delivery_task_owner_generation' = (relation_delivery_task_owner_generation) \union {<<task, generation>>}
+    /\ relation_delivery_task_route' = (relation_delivery_task_route) \union {<<task, route>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryRouteClass, state_DeliveryRouteClass, exists_DeliveryTask, state_DeliveryTask, exists_HistoryOwnerGeneration, state_HistoryOwnerGeneration, exists_HistoryShard, state_HistoryShard, exists_MatchingOwnerGeneration, state_MatchingOwnerGeneration, exists_MatchingQueuePartition, state_MatchingQueuePartition, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_partition_owner, relation_delivery_partition_route, relation_delivery_poller_route, relation_delivery_task_obligation, relation_delivery_task_queue, relation_history_shard_owner>>
 
 Routing_handoffEnabled(partition, oldGeneration, newGeneration) ==
@@ -443,13 +443,13 @@ Routing_handoffEnabled(partition, oldGeneration, newGeneration) ==
     /\ oldGeneration \in exists_MatchingOwnerGeneration
     /\ newGeneration \in MatchingOwnerGenerationIDs
     /\ newGeneration \notin exists_MatchingOwnerGeneration
-    /\ (state_MatchingOwnerGeneration[oldGeneration] = "current" /\ <<partition, oldGeneration>> \in relation_delivery_partition_owner /\ \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, oldGeneration>> \in relation_delivery_task_owner_generation => (state_DeliveryTask[task] = "acknowledged" \/ state_DeliveryTask[task] = "retired"))))
+    /\ (state_MatchingOwnerGeneration[oldGeneration] = "current" /\ <<partition, oldGeneration>> \in relation_delivery_partition_owner /\ (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, oldGeneration>> \in relation_delivery_task_owner_generation => (state_DeliveryTask[task] = "acknowledged" \/ state_DeliveryTask[task] = "retired")))))
 
 Routing_handoff(partition, oldGeneration, newGeneration) ==
     /\ Routing_handoffEnabled(partition, oldGeneration, newGeneration)
     /\ exists_MatchingOwnerGeneration' = exists_MatchingOwnerGeneration \union {newGeneration}
     /\ state_MatchingOwnerGeneration' = [state_MatchingOwnerGeneration EXCEPT ![oldGeneration] = "stale", ![newGeneration] = "current"]
-    /\ relation_delivery_partition_owner' = (relation_delivery_partition_owner) \ {<<partition, oldGeneration>>} \union {<<partition, newGeneration>>}
+    /\ relation_delivery_partition_owner' = ((relation_delivery_partition_owner) \ {<<partition, oldGeneration>>}) \union {<<partition, newGeneration>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryRouteClass, state_DeliveryRouteClass, exists_DeliveryTask, state_DeliveryTask, exists_HistoryOwnerGeneration, state_HistoryOwnerGeneration, exists_HistoryShard, state_HistoryShard, exists_MatchingQueuePartition, state_MatchingQueuePartition, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_partition_route, relation_delivery_poller_route, relation_delivery_task_history_owner_generation, relation_delivery_task_history_shard, relation_delivery_task_obligation, relation_delivery_task_owner_generation, relation_delivery_task_queue, relation_delivery_task_route, relation_history_shard_owner>>
 
 Routing_handoff_history_ownerEnabled(shard, oldHistoryGeneration, newHistoryGeneration) ==
@@ -459,13 +459,13 @@ Routing_handoff_history_ownerEnabled(shard, oldHistoryGeneration, newHistoryGene
     /\ oldHistoryGeneration \in exists_HistoryOwnerGeneration
     /\ newHistoryGeneration \in HistoryOwnerGenerationIDs
     /\ newHistoryGeneration \notin exists_HistoryOwnerGeneration
-    /\ (state_HistoryOwnerGeneration[oldHistoryGeneration] = "current" /\ <<shard, oldHistoryGeneration>> \in relation_history_shard_owner /\ \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, oldHistoryGeneration>> \in relation_delivery_task_history_owner_generation => (state_DeliveryTask[task] = "acknowledged" \/ state_DeliveryTask[task] = "retired"))))
+    /\ (state_HistoryOwnerGeneration[oldHistoryGeneration] = "current" /\ <<shard, oldHistoryGeneration>> \in relation_history_shard_owner /\ (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, oldHistoryGeneration>> \in relation_delivery_task_history_owner_generation => (state_DeliveryTask[task] = "acknowledged" \/ state_DeliveryTask[task] = "retired")))))
 
 Routing_handoff_history_owner(shard, oldHistoryGeneration, newHistoryGeneration) ==
     /\ Routing_handoff_history_ownerEnabled(shard, oldHistoryGeneration, newHistoryGeneration)
     /\ exists_HistoryOwnerGeneration' = exists_HistoryOwnerGeneration \union {newHistoryGeneration}
     /\ state_HistoryOwnerGeneration' = [state_HistoryOwnerGeneration EXCEPT ![oldHistoryGeneration] = "stale", ![newHistoryGeneration] = "current"]
-    /\ relation_history_shard_owner' = (relation_history_shard_owner) \ {<<shard, oldHistoryGeneration>>} \union {<<shard, newHistoryGeneration>>}
+    /\ relation_history_shard_owner' = ((relation_history_shard_owner) \ {<<shard, oldHistoryGeneration>>}) \union {<<shard, newHistoryGeneration>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryRouteClass, state_DeliveryRouteClass, exists_DeliveryTask, state_DeliveryTask, exists_HistoryShard, state_HistoryShard, exists_MatchingOwnerGeneration, state_MatchingOwnerGeneration, exists_MatchingQueuePartition, state_MatchingQueuePartition, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_partition_owner, relation_delivery_partition_route, relation_delivery_poller_route, relation_delivery_task_history_owner_generation, relation_delivery_task_history_shard, relation_delivery_task_obligation, relation_delivery_task_owner_generation, relation_delivery_task_queue, relation_delivery_task_route>>
 
 Routing_register_pollerEnabled(poller, route) ==
@@ -473,10 +473,11 @@ Routing_register_pollerEnabled(poller, route) ==
     /\ poller \in exists_Poller
     /\ route \in DeliveryRouteClassIDs
     /\ route \in exists_DeliveryRouteClass
+    /\ (\A registeredRoute \in DeliveryRouteClassIDs: registeredRoute \in exists_DeliveryRouteClass => (~(<<poller, registeredRoute>> \in relation_delivery_poller_route)))
 
 Routing_register_poller(poller, route) ==
     /\ Routing_register_pollerEnabled(poller, route)
-    /\ relation_delivery_poller_route' = relation_delivery_poller_route \union {<<poller, route>>}
+    /\ relation_delivery_poller_route' = (relation_delivery_poller_route) \union {<<poller, route>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryRouteClass, state_DeliveryRouteClass, exists_DeliveryTask, state_DeliveryTask, exists_HistoryOwnerGeneration, state_HistoryOwnerGeneration, exists_HistoryShard, state_HistoryShard, exists_MatchingOwnerGeneration, state_MatchingOwnerGeneration, exists_MatchingQueuePartition, state_MatchingQueuePartition, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_partition_owner, relation_delivery_partition_route, relation_delivery_task_history_owner_generation, relation_delivery_task_history_shard, relation_delivery_task_obligation, relation_delivery_task_owner_generation, relation_delivery_task_queue, relation_delivery_task_route, relation_history_shard_owner>>
 
 Routing_reserve_compatibleEnabled(task, attempt, poller, route, partition, generation) ==
@@ -499,8 +500,8 @@ Routing_reserve_compatible(task, attempt, poller, route, partition, generation) 
     /\ exists_DeliveryAttempt' = exists_DeliveryAttempt \union {attempt}
     /\ state_DeliveryAttempt' = [state_DeliveryAttempt EXCEPT ![attempt] = "reserved"]
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "reserved"]
-    /\ relation_delivery_attempt_poller' = relation_delivery_attempt_poller \union {<<attempt, poller>>}
-    /\ relation_delivery_attempt_task' = relation_delivery_attempt_task \union {<<attempt, task>>}
+    /\ relation_delivery_attempt_poller' = (relation_delivery_attempt_poller) \union {<<attempt, poller>>}
+    /\ relation_delivery_attempt_task' = (relation_delivery_attempt_task) \union {<<attempt, task>>}
     /\ UNCHANGED <<exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryRouteClass, state_DeliveryRouteClass, exists_DeliveryTask, exists_HistoryOwnerGeneration, state_HistoryOwnerGeneration, exists_HistoryShard, state_HistoryShard, exists_MatchingOwnerGeneration, state_MatchingOwnerGeneration, exists_MatchingQueuePartition, state_MatchingQueuePartition, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_delivery_accepted_start, relation_delivery_partition_owner, relation_delivery_partition_route, relation_delivery_poller_route, relation_delivery_task_history_owner_generation, relation_delivery_task_history_shard, relation_delivery_task_obligation, relation_delivery_task_owner_generation, relation_delivery_task_queue, relation_delivery_task_route, relation_history_shard_owner>>
 
 Next ==
@@ -546,37 +547,37 @@ CanStep ==
     \/ \E task \in DeliveryTaskIDs, attempt \in DeliveryAttemptIDs, poller \in PollerIDs, route \in DeliveryRouteClassIDs, partition \in MatchingQueuePartitionIDs, generation \in MatchingOwnerGenerationIDs: Routing_reserve_compatibleEnabled(task, attempt, poller, route, partition, generation)
 
 delivery_ambiguous_commit_resolved ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(state_WorkObligation[obligation] = "unresolved"))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(state_WorkObligation[obligation] = "unresolved")))
 
 delivery_coarse_retirement_safety ==
-    \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((state_DeliveryTask[task] = "retired" => \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ (state_WorkObligation[obligation] = "accepted" \/ state_WorkObligation[obligation] = "terminal")))))
+    (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((state_DeliveryTask[task] = "retired" => (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ (state_WorkObligation[obligation] = "accepted" \/ state_WorkObligation[obligation] = "terminal")))))))
 
 delivery_destination_isolation ==
-    \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => (\E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue))
+    (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((\E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue))))
 
 delivery_failed_start_is_not_accepted ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => ((state_DeliveryAttempt[attempt] = "rejected" => \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(<<obligation, attempt>> \in relation_delivery_accepted_start))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => ((state_DeliveryAttempt[attempt] = "rejected" => (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(<<obligation, attempt>> \in relation_delivery_accepted_start))))))
 
 delivery_no_phantom_dispatch ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (((state_DeliveryAttempt[attempt] = "dispatched" \/ state_DeliveryAttempt[attempt] = "failed" \/ state_DeliveryAttempt[attempt] = "completed") => \E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "accepted"))))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (((state_DeliveryAttempt[attempt] = "dispatched" \/ state_DeliveryAttempt[attempt] = "failed" \/ state_DeliveryAttempt[attempt] = "completed") => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "accepted")))))))))
 
 delivery_no_resurrection ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "terminal" => \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, obligation>> \in relation_delivery_task_obligation => state_DeliveryTask[task] = "retired"))))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "terminal" => (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, obligation>> \in relation_delivery_task_obligation => state_DeliveryTask[task] = "retired"))))))
 
 delivery_no_split_commit ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (((state_WorkObligation[obligation] = "valid" \/ state_WorkObligation[obligation] = "accepted") => \E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ (<<task, obligation>> \in relation_delivery_task_obligation)))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (((state_WorkObligation[obligation] = "valid" \/ state_WorkObligation[obligation] = "accepted") => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ (<<task, obligation>> \in relation_delivery_task_obligation)))))
 
 delivery_owner_generation_fencing ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (((state_DeliveryAttempt[attempt] = "reserved" \/ state_DeliveryAttempt[attempt] = "accepted" \/ state_DeliveryAttempt[attempt] = "dispatched") => \E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ \E generation \in MatchingOwnerGenerationIDs: generation \in exists_MatchingOwnerGeneration /\ ((<<task, generation>> \in relation_delivery_task_owner_generation /\ state_MatchingOwnerGeneration[generation] = "current")) /\ \E historyGeneration \in HistoryOwnerGenerationIDs: historyGeneration \in exists_HistoryOwnerGeneration /\ ((<<task, historyGeneration>> \in relation_delivery_task_history_owner_generation /\ state_HistoryOwnerGeneration[historyGeneration] = "current"))))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (((state_DeliveryAttempt[attempt] = "reserved" \/ state_DeliveryAttempt[attempt] = "accepted" \/ state_DeliveryAttempt[attempt] = "dispatched") => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ (\E generation \in MatchingOwnerGenerationIDs: generation \in exists_MatchingOwnerGeneration /\ ((<<task, generation>> \in relation_delivery_task_owner_generation /\ state_MatchingOwnerGeneration[generation] = "current"))) /\ (\E historyGeneration \in HistoryOwnerGenerationIDs: historyGeneration \in exists_HistoryOwnerGeneration /\ ((<<task, historyGeneration>> \in relation_delivery_task_history_owner_generation /\ state_HistoryOwnerGeneration[historyGeneration] = "current")))))))))
 
 delivery_path_equivalence ==
-    \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation) /\ \E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue)))
+    (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => (((\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation)) /\ (\E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue)))))
 
 delivery_retry_preserves_obligation ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => ((\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation)))))))
 
 delivery_single_accepted_start ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "accepted" => \E attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt /\ (<<obligation, attempt>> \in relation_delivery_accepted_start)))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "accepted" => (\E attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt /\ (<<obligation, attempt>> \in relation_delivery_accepted_start)))))
 
 InductiveInvariant ==
     /\ TypeOK

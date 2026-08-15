@@ -33,7 +33,12 @@ func callbackVerification(canonical verify.Model) verificationFamilyFragment {
 			{Name: "operation", Type: operation, Binding: verify.InputBinding},
 			{Name: "handlerRun", Type: workflowRun, Binding: verify.InputBinding},
 		},
-		Guard: verify.StateIs(workflowRun, "handlerRun", model.WorkflowRunStarted),
+		Guard: verify.And(
+			verify.StateIs(workflowRun, "handlerRun", model.WorkflowRunStarted),
+			deliveryForAll(workflowRun, "existingHandlerRun", verify.Not(verify.Expr{
+				Op: verify.RelationHasExpr, Relation: nexusHandlerRunRelation, Source: "operation", Target: "existingHandlerRun",
+			})),
+		),
 		Effects: []verify.Effect{
 			{Kind: verify.CreateEffect, Entity: callback, Ref: "callback", State: "unobserved"},
 			{Kind: verify.AddRelationEffect, Relation: string(CallbackOperationRelation), Source: "callback", Target: "operation"},
@@ -63,6 +68,10 @@ func callbackVerification(canonical verify.Model) verificationFamilyFragment {
 			{Name: "callback", Type: callback, Binding: verify.InputBinding},
 			{Name: "delivery", Type: callbackDeliveryEntity, Binding: verify.FreshBinding},
 		},
+		Guard: deliveryForAll(workflowRun, "handlerRun", deliveryImplies(
+			verify.Expr{Op: verify.RelationHasExpr, Relation: string(CallbackHandlerRunRelation), Source: "callback", Target: "handlerRun"},
+			verify.Not(workflowRunTerminal("handlerRun")),
+		)),
 		Effects: []verify.Effect{
 			{Kind: verify.CreateEffect, Entity: callbackDeliveryEntity, Ref: "delivery", State: "pending"},
 			{Kind: verify.AddRelationEffect, Relation: callbackDeliveryRelation, Source: "callback", Target: "delivery"},
@@ -165,7 +174,7 @@ func callbackVerification(canonical verify.Model) verificationFamilyFragment {
 		Name: callbackNexusTarget, Owners: slices.Clone(nexusComposition.Owners),
 		Modules: slices.Clone(nexusComposition.Modules), Compositions: []string{nexusComposition.Name},
 		Bounds: nexusBounds, MinimumBounds: cloneBounds(nexusBounds),
-		BackendRequirements: []string{"fizz", "ivy", "p", "tla"},
+		BackendRequirements: []string{"fizz", "ivy", "tla"},
 		FailurePolicy:       []string{"callback-retry", "conflicting-response", "wrong-reference"},
 		Abstractions:        []string{"regression.nexus.start_activity"},
 	}
@@ -173,7 +182,7 @@ func callbackVerification(canonical verify.Model) verificationFamilyFragment {
 		Name: callbackWorkflowTarget, Owners: slices.Clone(workflowComposition.Owners),
 		Modules: slices.Clone(workflowComposition.Modules), Compositions: []string{workflowComposition.Name},
 		Bounds: cloneBounds(commonBounds), MinimumBounds: cloneBounds(commonBounds),
-		BackendRequirements: []string{"fizz", "ivy", "p", "tla"},
+		BackendRequirements: []string{"fizz", "ivy", "tla"},
 		FailurePolicy:       []string{"callback-retry", "handler-close-race"},
 		Omissions: []verify.Abstraction{{
 			Name: attach.Name, Reason: "the Nexus integration target checks operation-reference attachment", Source: attach.Source,
@@ -253,7 +262,10 @@ func callbackResponseProperty() verify.Property {
 			)),
 			deliveryForAll(callbackDeliveryEntity, "delivery", deliveryForAll(callbackResponseEntity, "response", deliveryImplies(
 				verify.Expr{Op: verify.RelationHasExpr, Relation: deliveryResponseRelation, Source: "delivery", Target: "response"},
-				verify.StateIs(callbackResponseEntity, "response", "accepted"),
+				verify.And(
+					verify.StateIs(callbackDeliveryEntity, "delivery", "acknowledged"),
+					verify.StateIs(callbackResponseEntity, "response", "accepted"),
+				),
 			))),
 		),
 		Source: verify.Provenance{Path: "tests/umpire2/rule/callback_response_consistency.go", Symbol: "CallbackResponseConsistencyRule"},

@@ -382,7 +382,7 @@ func (g generator) writeTransition(out *bytes.Buffer, effects []verify.Effect, i
 			tuple := fmt.Sprintf("{<<%s, %s>>}", identifier(effect.Source), identifier(effect.Target))
 			switch effect.Kind {
 			case verify.AddRelationEffect:
-				expression = expression + " \\union " + tuple
+				expression = "(" + expression + ") \\union " + tuple
 				changed = true
 			case verify.RemoveRelationEffect:
 				expression = "(" + expression + ") \\ " + tuple
@@ -512,10 +512,10 @@ func (g generator) expr(expr verify.Expr) string {
 		return "<<" + identifier(expr.Source) + ", " + identifier(expr.Target) + ">> \\in " + relationVariable(expr.Relation)
 	case verify.ForAllExpr:
 		name := identifier(expr.Var)
-		return fmt.Sprintf("\\A %s \\in %s: %s \\in %s => (%s)", name, entityConstant(expr.Entity), name, existsVariable(expr.Entity), g.expr(expr.Args[0]))
+		return fmt.Sprintf("(\\A %s \\in %s: %s \\in %s => (%s))", name, entityConstant(expr.Entity), name, existsVariable(expr.Entity), g.expr(expr.Args[0]))
 	case verify.ExistsExpr:
 		name := identifier(expr.Var)
-		return fmt.Sprintf("\\E %s \\in %s: %s \\in %s /\\ (%s)", name, entityConstant(expr.Entity), name, existsVariable(expr.Entity), g.expr(expr.Args[0]))
+		return fmt.Sprintf("(\\E %s \\in %s: %s \\in %s /\\ (%s))", name, entityConstant(expr.Entity), name, existsVariable(expr.Entity), g.expr(expr.Args[0]))
 	default:
 		return "FALSE"
 	}

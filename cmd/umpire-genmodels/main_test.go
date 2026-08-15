@@ -289,13 +289,13 @@ func TestGenerateWritesTargetScopedArtifacts(t *testing.T) {
 		Name:                "foundation-ownership-fencing",
 		ModelHash:           index.Targets[4].ModelHash,
 		Owners:              []verify.CapabilityOwner{"history", "matching"},
-		BackendRequirements: []string{"fizz", "ivy", "p", "tla"},
+		BackendRequirements: []string{"fizz", "ivy", "tla"},
 	}, index.Targets[4])
 	require.Equal(t, targetIndexEntry{
 		Name:                "foundation-routing-isolation",
 		ModelHash:           index.Targets[5].ModelHash,
 		Owners:              []verify.CapabilityOwner{"history", "matching"},
-		BackendRequirements: []string{"fizz", "ivy", "p", "tla"},
+		BackendRequirements: []string{"apalache", "fizz", "ivy", "p", "sany"},
 	}, index.Targets[5])
 	require.Equal(t, targetIndexEntry{
 		Name:                "integration-activity-delivery",
@@ -307,13 +307,13 @@ func TestGenerateWritesTargetScopedArtifacts(t *testing.T) {
 		Name:                "integration-callback-nexus",
 		ModelHash:           index.Targets[7].ModelHash,
 		Owners:              []verify.CapabilityOwner{"callback", "nexus", "workflow"},
-		BackendRequirements: []string{"fizz", "ivy", "p", "tla"},
+		BackendRequirements: []string{"fizz", "ivy", "tla"},
 	}, index.Targets[7])
 	require.Equal(t, targetIndexEntry{
 		Name:                "integration-callback-workflow",
 		ModelHash:           index.Targets[8].ModelHash,
 		Owners:              []verify.CapabilityOwner{"callback", "workflow"},
-		BackendRequirements: []string{"fizz", "ivy", "p", "tla"},
+		BackendRequirements: []string{"fizz", "ivy", "tla"},
 	}, index.Targets[8])
 	require.Equal(t, targetIndexEntry{
 		Name:                "integration-nexus-activity",
@@ -562,6 +562,7 @@ func TestInterpreterAndTLCReachSameBoundedStateCount(t *testing.T) {
 	result, err := runner.Check(context.Background(), runner.Request{
 		Backend: runner.TLC, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: "1.7.4",
 		ModelDir: directory, ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
+		Model: model,
 	})
 	require.NoError(t, err)
 	require.Equal(t, verify.FiniteExhaustive, result.Status, result.StandardOutput+result.StandardError)
@@ -762,14 +763,18 @@ func TestSupportingBackendsExposeMissingFrameMutation(t *testing.T) {
 				t.Skip(backend.toolEnv + " is not set")
 			}
 			directory, vocabulary := writeMissingFrameMutationArtifacts(t, model, backend.backend)
+			maxDepth := uint64(1)
+			if backend.backend == runner.P {
+				maxDepth = 20
+			}
 			result, checkErr := runner.Check(context.Background(), runner.Request{
 				Backend: backend.backend, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: pinnedToolVersion(t, backend.toolPin),
 				ModelDir: directory, ArtifactDir: filepath.Join(directory, "results"), Timeout: 2 * time.Minute,
-				Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: 1, Schedules: 20},
+				Model: model, TraceVocabulary: vocabulary, Bounds: verify.Bounds{MaxDepth: maxDepth, Schedules: 20},
 			})
 			require.NoError(t, checkErr)
-			require.Equal(t, verify.Inconclusive, result.Status, result.StandardOutput+result.StandardError)
-			require.Equal(t, verify.EvidenceFailure, result.Termination)
+			require.Equal(t, verify.Inconclusive, result.Status, result.StandardOutput+result.StandardError+result.Diagnostic)
+			require.Equal(t, verify.EvidenceFailure, result.Termination, result.StandardOutput+result.StandardError+result.Diagnostic)
 			require.NotEmpty(t, result.NativeTrace)
 		})
 	}
@@ -922,6 +927,9 @@ func weakenGeneratedProperty(t *testing.T, source string, backend runner.Backend
 	if backend == runner.TLC || backend == runner.Apalache || backend == runner.Fizz {
 		bodyStart := markerIndex + len(marker)
 		bodyEnd := strings.Index(source[bodyStart:], "\n\n")
+		if bodyEnd < 0 && backend == runner.Fizz {
+			return source[:bodyStart] + replacement + "\n"
+		}
 		require.NotEqual(t, -1, bodyEnd, marker)
 		return source[:bodyStart] + replacement + source[bodyStart+bodyEnd:]
 	}
@@ -1194,7 +1202,7 @@ func TestFreshIdentityAliasingMutationIsExposedByP(t *testing.T) {
 			result, err := runner.Check(context.Background(), runner.Request{
 				Backend: backend, ToolPath: tool, JavaPath: os.Getenv("UMPIRE_JAVA_TOOL"), ToolVersion: pinnedToolVersion(t, "p"),
 				ModelDir: filepath.Join(directory, "p"), ArtifactDir: filepath.Join(directory, "results", string(backend)), Timeout: 2 * time.Minute,
-				Model: model, Bounds: verify.Bounds{MaxDepth: 10, Schedules: 20},
+				Model: model, Bounds: verify.Bounds{MaxDepth: 20, Schedules: 20},
 			})
 			require.NoError(t, err)
 			requireFreshIdentityMutationExposed(t, result)
@@ -1345,7 +1353,7 @@ func requireFreshIdentityMutationExposed(t *testing.T, result verify.Result) {
 	t.Helper()
 	require.Equal(t, verify.Inconclusive, result.Status, result.StandardOutput+result.StandardError)
 	require.Equal(t, verify.EvidenceFailure, result.Termination)
-	require.Contains(t, result.Diagnostic, "transition-unreplayable")
+	require.Contains(t, result.Diagnostic, "transition-unreplayable", result.StandardOutput+result.StandardError)
 	require.NotEmpty(t, result.NativeTrace)
 }
 
@@ -1362,9 +1370,9 @@ func pinnedToolVersion(t *testing.T, name string) string {
 
 func requireSeededCounterexample(t *testing.T, result verify.Result) {
 	t.Helper()
-	require.Equal(t, verify.Counterexample, result.Status, result.StandardOutput+result.StandardError)
+	require.Equal(t, verify.Counterexample, result.Status, result.StandardOutput+result.StandardError+result.Diagnostic)
 	require.Contains(t, result.FailedProperty, "reciprocal")
-	require.NotEmpty(t, result.Trace, result.StandardOutput+result.StandardError)
+	require.NotEmpty(t, result.Trace, result.StandardOutput+result.StandardError+result.Diagnostic)
 	require.Equal(t, "seed.bug", result.Trace[len(result.Trace)-1].Action)
 }
 

@@ -74,6 +74,30 @@ func TestToolchainPlanScopesUnsupportedSemanticsToBackend(t *testing.T) {
 	}
 }
 
+func TestToolchainPlanSkipsKnownUnsupportedBackendsOnlyForAll(t *testing.T) {
+	model := verify.Model{Properties: []verify.Property{{
+		Name: "delivery.quiescent", Kind: verify.QuiescentProperty, Expr: verify.Expr{Op: verify.TrueExpr},
+	}}}
+	requests, err := testToolchain().Plan(model, PlanOptions{Backends: "all", Profile: "smoke"})
+	require.NoError(t, err)
+	require.NotContains(t, requestBackends(requests), Ivy)
+
+	requests, err = testToolchain().Plan(model, PlanOptions{Backends: "ivy", Profile: "smoke"})
+	require.NoError(t, err)
+	require.Equal(t, []verify.Unsupported{{
+		Backend: "ivy", Construct: "property delivery.quiescent",
+		Reason: "Ivy generation supports inductive safety properties only",
+	}}, requests[0].Unsupported)
+
+	progress := verify.Model{Properties: []verify.Property{{
+		Name: "delivery.progress", Kind: verify.ProgressProperty, Expr: verify.Expr{Op: verify.TrueExpr},
+		Fairness: []string{"weak-delivery"},
+	}}}
+	requests, err = testToolchain().Plan(progress, PlanOptions{Backends: "all", Profile: "smoke"})
+	require.NoError(t, err)
+	require.Empty(t, requests)
+}
+
 func TestToolchainPlanCarriesCounterexampleModelAndVocabulary(t *testing.T) {
 	model := verify.Model{
 		Version: "trace-plan-test/v1",
@@ -166,6 +190,19 @@ func TestToolVersionsContainCompleteArtifacts(t *testing.T) {
 			require.NotEmpty(t, artifact.Executable, tool.Name+" "+artifact.Platform)
 		}
 	}
+}
+
+func TestToolVersionsIncludeIvyArtifactsForCIAndLocalDevelopment(t *testing.T) {
+	var platforms []string
+	for _, tool := range ToolVersions() {
+		if tool.Name != "ivy" {
+			continue
+		}
+		for _, artifact := range tool.Artifacts {
+			platforms = append(platforms, artifact.Platform)
+		}
+	}
+	require.ElementsMatch(t, []string{"darwin-arm64", "darwin-x86_64", "linux-x86_64"}, platforms)
 }
 
 func testToolchain() Toolchain {

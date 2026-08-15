@@ -143,7 +143,7 @@ func (g generator) source() (string, []Diagnostic) {
 		}
 		fmt.Fprintf(&out, "    return %s\n\n", expression)
 	}
-	return out.String(), diagnostics
+	return strings.TrimRight(out.String(), "\n") + "\n", diagnostics
 }
 
 func (g generator) writeInit(out *bytes.Buffer) {

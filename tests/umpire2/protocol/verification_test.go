@@ -623,12 +623,14 @@ func TestVerificationFamilyDeclaresCallbackTargets(t *testing.T) {
 
 	nexus, err := verify.Project(family, callbackNexusTarget)
 	require.NoError(t, err)
+	require.Equal(t, []string{"fizz", "ivy", "tla"}, nexus.Target.BackendRequirements)
 	requireAction(t, nexus.Model, "callback.attach-reference")
 	requireProperty(t, nexus.Model, "CallbackReferenceConsistency")
 	requireProperty(t, nexus.Model, "CallbackResponseConsistency")
 
 	workflow, err := verify.Project(family, callbackWorkflowTarget)
 	require.NoError(t, err)
+	require.Equal(t, []string{"fizz", "ivy", "tla"}, workflow.Target.BackendRequirements)
 	requireAction(t, workflow.Model, "callback.attach-handler")
 	requireAction(t, workflow.Model, "callback.delivery.retry")
 	requireProperty(t, workflow.Model, "CallbackHandlerLifetime")
@@ -651,6 +653,20 @@ func TestCallbackReferenceIdentityMutationIsDetected(t *testing.T) {
 	requireFoundationPropertyFails(t, model, state, "CallbackReferenceConsistency")
 }
 
+func TestCallbackReferenceRejectsOperationReattachment(t *testing.T) {
+	model := callbackTargetModel(t, callbackNexusTarget)
+	interpreter, err := verify.NewInterpreter(model)
+	require.NoError(t, err)
+	_, err = interpreter.Replay([]verify.TraceStep{
+		{Action: "callback.handler.start", Bindings: verify.Bindings{"entity": "WorkflowRun#0"}},
+		{Action: "callback.handler.start", Bindings: verify.Bindings{"entity": "WorkflowRun#1"}},
+		{Action: "NexusOperation.unspecified.schedule.Standalone", Bindings: verify.Bindings{"op": "NexusOperation#0"}},
+		{Action: "callback.attach-reference", Bindings: verify.Bindings{"callback": "Callback#0", "operation": "NexusOperation#0", "handlerRun": "WorkflowRun#0"}},
+		{Action: "callback.attach-reference", Bindings: verify.Bindings{"callback": "Callback#1", "operation": "NexusOperation#0", "handlerRun": "WorkflowRun#1"}},
+	})
+	require.ErrorContains(t, err, `action "callback.attach-reference" is not enabled`)
+}
+
 func TestCallbackDeliveryRetryPreservesIdentity(t *testing.T) {
 	model := callbackTargetModel(t, callbackWorkflowTarget)
 	state := replayFoundationTrace(t, model, []verify.TraceStep{
@@ -670,6 +686,24 @@ func TestCallbackDeliveryRetryPreservesIdentity(t *testing.T) {
 	require.True(t, holds)
 }
 
+func TestCallbackResponseRequiresAcknowledgedDelivery(t *testing.T) {
+	model := callbackTargetModel(t, callbackWorkflowTarget)
+	for actionIndex := range model.Actions {
+		if model.Actions[actionIndex].Name == "callback.delivery.acknowledge" {
+			model.Actions[actionIndex].Effects = model.Actions[actionIndex].Effects[1:]
+			break
+		}
+	}
+	state := replayFoundationTrace(t, model, []verify.TraceStep{
+		{Action: "callback.handler.start", Bindings: verify.Bindings{"entity": "WorkflowRun#0"}},
+		{Action: "callback.attach-handler", Bindings: verify.Bindings{"callback": "Callback#0", "handlerRun": "WorkflowRun#0"}},
+		{Action: "callback.delivery.enqueue", Bindings: verify.Bindings{"callback": "Callback#0", "delivery": "CallbackDelivery#0"}},
+		{Action: "callback.delivery.deliver", Bindings: verify.Bindings{"delivery": "CallbackDelivery#0"}},
+		{Action: "callback.delivery.acknowledge", Bindings: verify.Bindings{"delivery": "CallbackDelivery#0", "response": "CallbackResponse#0"}},
+	})
+	requireFoundationPropertyFails(t, model, state, "CallbackResponseConsistency")
+}
+
 func TestCallbackHandlerLifetimeMutationIsDetected(t *testing.T) {
 	model := callbackTargetModel(t, callbackWorkflowTarget)
 	interpreter, err := verify.NewInterpreter(model)
@@ -685,6 +719,19 @@ func TestCallbackHandlerLifetimeMutationIsDetected(t *testing.T) {
 	}
 	state := replayFoundationTrace(t, model, callbackCloseWithPendingDeliveryTrace())
 	requireFoundationPropertyFails(t, model, state, "CallbackHandlerLifetime")
+}
+
+func TestCallbackDeliveryRejectsEnqueueAfterHandlerCloses(t *testing.T) {
+	model := callbackTargetModel(t, callbackWorkflowTarget)
+	interpreter, err := verify.NewInterpreter(model)
+	require.NoError(t, err)
+	_, err = interpreter.Replay([]verify.TraceStep{
+		{Action: "callback.handler.start", Bindings: verify.Bindings{"entity": "WorkflowRun#0"}},
+		{Action: "callback.attach-handler", Bindings: verify.Bindings{"callback": "Callback#0", "handlerRun": "WorkflowRun#0"}},
+		{Action: "callback.handler.close.complete", Bindings: verify.Bindings{"entity": "WorkflowRun#0"}},
+		{Action: "callback.delivery.enqueue", Bindings: verify.Bindings{"callback": "Callback#0", "delivery": "CallbackDelivery#0"}},
+	})
+	require.ErrorContains(t, err, `action "callback.delivery.enqueue" is not enabled`)
 }
 
 func TestVerificationFamilyDeclaresRoutingTarget(t *testing.T) {
@@ -703,6 +750,7 @@ func TestVerificationFamilyDeclaresRoutingTarget(t *testing.T) {
 	require.NoError(t, err)
 	ownership, err := verify.Project(family, ownershipFencingTarget)
 	require.NoError(t, err)
+	require.Equal(t, []string{"fizz", "ivy", "tla"}, ownership.Target.BackendRequirements)
 	requireProperty(t, ownership.Model, "delivery.owner-generation-fencing")
 	require.Equal(t, 2, ownership.Target.MinimumBounds[deliveryOwnerGenerationEntity])
 	require.Equal(t, 2, ownership.Target.MinimumBounds[historyOwnerGenerationEntity])
@@ -712,6 +760,7 @@ func TestVerificationFamilyDeclaresRoutingTarget(t *testing.T) {
 	}
 	routing, err := verify.Project(family, deliveryRoutingTarget)
 	require.NoError(t, err)
+	require.Equal(t, []string{"apalache", "fizz", "ivy", "p", "sany"}, routing.Target.BackendRequirements)
 	ownershipHash, err := verify.HashModel(ownership.Model)
 	require.NoError(t, err)
 	routingHash, err := verify.HashModel(routing.Model)
@@ -729,6 +778,34 @@ func TestDeliveryRoutingRejectsIncompatiblePollerMutation(t *testing.T) {
 	removeActionGuardRelation(t, &model, "routing.reserve-compatible", deliveryPollerRouteRelation)
 	state := replayFoundationTrace(t, model, deliveryWrongRouteTrace())
 	requireFoundationPropertyFails(t, model, state, "delivery.routing-isolation")
+}
+
+func TestDeliveryRoutingRejectsPollerReregistration(t *testing.T) {
+	model := deliveryRoutingModel(t)
+	interpreter, err := verify.NewInterpreter(model)
+	require.NoError(t, err)
+	_, err = interpreter.Replay([]verify.TraceStep{
+		{Action: "routing.bootstrap", Bindings: verify.Bindings{"route": "DeliveryRouteClass#0", "partition": "MatchingQueuePartition#0", "generation": "MatchingOwnerGeneration#0"}},
+		{Action: "routing.bootstrap", Bindings: verify.Bindings{"route": "DeliveryRouteClass#1", "partition": "MatchingQueuePartition#1", "generation": "MatchingOwnerGeneration#1"}},
+		{Action: "routing.register-poller", Bindings: verify.Bindings{"poller": "Poller#0", "route": "DeliveryRouteClass#0"}},
+		{Action: "routing.register-poller", Bindings: verify.Bindings{"poller": "Poller#0", "route": "DeliveryRouteClass#1"}},
+	})
+	require.ErrorContains(t, err, `action "routing.register-poller" is not enabled`)
+}
+
+func TestDeliveryRoutingRejectsTaskRerouting(t *testing.T) {
+	model := deliveryRoutingModel(t)
+	interpreter, err := verify.NewInterpreter(model)
+	require.NoError(t, err)
+	_, err = interpreter.Replay([]verify.TraceStep{
+		{Action: "routing.bootstrap-history-owner", Bindings: verify.Bindings{"shard": "HistoryShard#0", "historyGeneration": "HistoryOwnerGeneration#0"}},
+		{Action: "routing.bootstrap", Bindings: verify.Bindings{"route": "DeliveryRouteClass#0", "partition": "MatchingQueuePartition#0", "generation": "MatchingOwnerGeneration#0"}},
+		{Action: "routing.bootstrap", Bindings: verify.Bindings{"route": "DeliveryRouteClass#1", "partition": "MatchingQueuePartition#1", "generation": "MatchingOwnerGeneration#1"}},
+		foundationPersistTrace()[0],
+		{Action: "routing.forward-to-matching", Bindings: verify.Bindings{"task": "DeliveryTask#0", "route": "DeliveryRouteClass#0", "partition": "MatchingQueuePartition#0", "generation": "MatchingOwnerGeneration#0", "shard": "HistoryShard#0", "historyGeneration": "HistoryOwnerGeneration#0"}},
+		{Action: "routing.forward-to-matching", Bindings: verify.Bindings{"task": "DeliveryTask#0", "route": "DeliveryRouteClass#1", "partition": "MatchingQueuePartition#1", "generation": "MatchingOwnerGeneration#1", "shard": "HistoryShard#0", "historyGeneration": "HistoryOwnerGeneration#0"}},
+	})
+	require.ErrorContains(t, err, `action "routing.forward-to-matching" is not enabled`)
 }
 
 func TestDeliveryRoutingRejectsStaleOwnerMutation(t *testing.T) {

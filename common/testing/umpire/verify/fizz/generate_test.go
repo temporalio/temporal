@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -88,6 +89,7 @@ func TestGenerateEmitsCardinalitySafetyCanStepAndQuiescence(t *testing.T) {
 	require.Contains(t, source, "always assertion Property_reciprocal_link:")
 	require.Contains(t, source, "always assertion Property_scheduled_quiescent_progress:")
 	require.Contains(t, source, "return ((")
+	require.Equal(t, strings.TrimRight(source, "\n")+"\n", source)
 }
 
 func TestGenerateRequiresFreshBindingsToBeDistinct(t *testing.T) {

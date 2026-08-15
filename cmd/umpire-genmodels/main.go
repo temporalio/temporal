@@ -368,6 +368,10 @@ func checkModels(ctx context.Context, options checkOptions) error {
 		if err != nil {
 			return fmt.Errorf("verification target %q: %w", target.Name, err)
 		}
+		if len(requests) == 0 {
+			fmt.Printf("%s: skipped (no backend supports all model semantics)\n", target.Name)
+			continue
+		}
 		for _, request := range requests {
 			result, err := runner.Check(ctx, request)
 			if err != nil {

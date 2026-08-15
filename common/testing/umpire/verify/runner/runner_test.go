@@ -48,6 +48,16 @@ func (e *recordingExecutor) run(_ context.Context, specification command) execut
 	return result
 }
 
+func TestExecuteTLCUsesAvailableWorkers(t *testing.T) {
+	executor := &recordingExecutor{results: []execution{{output: "Model checking completed. No error has been found"}}}
+
+	_, _, err := execute(context.Background(), executor, Request{
+		Backend: TLC, ToolPath: "/tools/tla2tools.jar", ModelDir: t.TempDir(),
+	})
+	require.NoError(t, err)
+	require.Contains(t, executor.commands[0].args, "auto")
+}
+
 func TestExecuteApalacheCollectsNativeITFTrace(t *testing.T) {
 	artifactDirectory := t.TempDir()
 	nativeTrace := `{"#meta":{"format":"ITF"},"states":[]}`
@@ -261,6 +271,16 @@ func TestCollectApalacheTraceEvidenceReadsCanonicalITFFile(t *testing.T) {
 	require.JSONEq(t, `{"#meta":{"format":"ITF"}}`, evidence)
 }
 
+func TestCollectApalacheTraceEvidenceReadsPinnedViolationFile(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "violation.itf.json"), []byte(`{"unprocessed":true}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "violation1.itf.json"), []byte(`{"#meta":{"format":"ITF"}}`), 0o600))
+
+	evidence, err := collectApalacheTraceEvidence(directory)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"#meta":{"format":"ITF"}}`, evidence)
+}
+
 func TestCollectApalacheTraceEvidenceRejectsOversizedITFFile(t *testing.T) {
 	directory := t.TempDir()
 	require.NoError(t, os.WriteFile(
@@ -355,7 +375,7 @@ func runnerFizzCounterexampleTrace() string {
 
 func TestClassifyCounterexampleNormalizesPActions(t *testing.T) {
 	result := classify(Request{Backend: P, ToolVersion: "3.1.0", Model: runnerCounterexampleModel()}, execution{
-		output: "UMPIRE_ACTION schedule op=NexusOperation#0\nError: Assertion Failed: property terminal-link",
+		output: "UMPIRE_ACTION schedule op=NexusOperation#0\nError: Assertion Failed: property terminal-link\nExceeded the max-steps bound of '2' in 100.00% of the fair schedules.",
 		err:    errors.New("exit status 1"),
 	})
 	require.Equal(t, verify.Counterexample, result.Status)
@@ -464,6 +484,22 @@ func TestNormalizeActionsReadsPCheckerBugTrace(t *testing.T) {
 			"target": "target#0",
 		},
 	}}, trace)
+}
+
+func TestPTracePayloadSelectsOneCheckerArtifact(t *testing.T) {
+	payload := pTracePayload(`--- Umpire_0_0.txt ---
+UMPIRE_ACTION seed.bug source=source#0 target=target#0
+--- 0.log ---
+UMPIRE_ACTION seed.bug source=source#0 target=target#0
+`)
+
+	require.Equal(t, []verify.TraceStep{{
+		Action: "seed.bug",
+		Bindings: verify.Bindings{
+			"source": "source#0",
+			"target": "target#0",
+		},
+	}}, normalizeActions(Request{Backend: PEx}, payload))
 }
 
 func TestClassifyPExImplicitCycleAsInconclusive(t *testing.T) {
@@ -606,16 +642,37 @@ func TestClassifyApalacheReadsPinnedInvariantFailureMarker(t *testing.T) {
 	require.Equal(t, "terminal-link", result.FailedProperty)
 }
 
+func TestClassifyApalacheResolvesNumberedInvariantByReplay(t *testing.T) {
+	result := classify(Request{
+		Backend: Apalache,
+		Model:   runnerCounterexampleModel(),
+		TraceVocabulary: verify.TraceVocabulary{
+			Properties:   map[string][]string{"Safety": {"terminal-link"}},
+			EntityExists: map[string]string{"exists_NexusOperation": "NexusOperation"},
+			EntityStates: map[string]string{"state_NexusOperation": "NexusOperation"},
+		},
+	}, execution{
+		output:      "State 1: state invariant 3 violated.\nFound 1 error(s)\nThe outcome is: Error",
+		nativeTrace: runnerITFCounterexample(),
+		err:         errors.New("exit status 1"),
+	})
+
+	require.Equal(t, verify.Counterexample, result.Status, result.Diagnostic)
+	require.Equal(t, "terminal-link", result.FailedProperty)
+}
+
 func runnerITFCounterexample() string {
 	return `{
   "#meta": {"format": "ITF"},
   "vars": ["exists_NexusOperation", "state_NexusOperation"],
   "states": [
     {
+	  "#meta": {"index": 0},
       "exists_NexusOperation": {"#set": []},
       "state_NexusOperation": {"#map": [["NexusOperation#0", "unscheduled"]]}
     },
     {
+	  "#meta": {"index": 1},
       "exists_NexusOperation": {"#set": ["NexusOperation#0"]},
       "state_NexusOperation": {"#map": [["NexusOperation#0", "scheduled"]]}
     }
@@ -658,6 +715,34 @@ func TestClassifyIvyCounterexampleReplaysTextualTrace(t *testing.T) {
 		}},
 	}}, result.Trace)
 	require.Equal(t, output, result.NativeTrace)
+}
+
+func TestClassifyIvyCounterexampleWithoutFailureSummary(t *testing.T) {
+	output := strings.ReplaceAll(runnerIvyCounterexampleOutput(), "error: failed checks: 1\n", "")
+	result := classify(runnerIvyCounterexampleRequest(), execution{output: output})
+
+	require.Equal(t, verify.Counterexample, result.Status, result.Diagnostic)
+	require.Equal(t, "terminal-link", result.FailedProperty)
+}
+
+func TestClassifyIvyReconstructsReachableCanonicalWitness(t *testing.T) {
+	request := runnerIvyCounterexampleRequest()
+	request.Bounds.MaxDepth = 1
+	result := classify(request, execution{
+		output: `Umpire.ivy: line 20: terminal_link ... FAIL
+searching for a small model... done
+call schedule
+{
+    [
+        fml:op = 1
+    ]
+}`,
+		err: errors.New("exit status 1"),
+	})
+
+	require.Equal(t, verify.Counterexample, result.Status, result.Diagnostic)
+	require.Equal(t, "terminal-link", result.FailedProperty)
+	require.Equal(t, verify.Bindings{"op": "NexusOperation#0"}, result.Trace[0].Bindings)
 }
 
 func runnerIvyCounterexampleOutput() string {
@@ -732,6 +817,7 @@ func TestClassifyReportedLimitsAsInconclusive(t *testing.T) {
 		{name: "depth", backend: PEx, execution: execution{output: "Result: correct up to step 100\nFound 0 bugs"}, termination: verify.DepthLimit},
 		{name: "state", backend: TLC, execution: execution{output: "State limit reached\nModel checking completed. No error has been found"}, termination: verify.StateLimit},
 		{name: "step", backend: P, execution: execution{output: "Scheduling steps bound of 100 reached.\nFound 0 bugs"}, termination: verify.StepLimit},
+		{name: "native P step", backend: P, execution: execution{output: "Exceeded the max-steps bound of '100' in 100.00% of the fair schedules.\nFound 0 bugs"}, termination: verify.StepLimit},
 		{name: "memory", backend: PEx, execution: execution{output: "Max memory limit reached: 1024 MB\nFound 0 bugs"}, termination: verify.MemoryLimit},
 		{name: "schedule", backend: PEx, execution: execution{output: "Found 0 bugs\nFinished 100 search tasks (2 pending)"}, termination: verify.ScheduleLimit},
 		{name: "timeout output", backend: Apalache, execution: execution{output: "State 3: invariant => TIMEOUT. Assuming it holds true.\nThe outcome is: NoError"}, termination: verify.Timeout},
@@ -745,6 +831,22 @@ func TestClassifyReportedLimitsAsInconclusive(t *testing.T) {
 			require.Equal(t, verify.Inconclusive, result.Status)
 			require.Equal(t, test.termination, result.Termination)
 		})
+	}
+}
+
+func TestClassifyIncompleteBackendTransitionAsEvidenceFailure(t *testing.T) {
+	for _, test := range []struct {
+		backend Backend
+		output  string
+	}{
+		{backend: TLC, output: "Error: Successor state is not completely specified by the next-state action."},
+		{backend: Apalache, output: "Assignment error: No assignments found for: state_sentinel"},
+	} {
+		result := classify(Request{Backend: test.backend}, execution{output: test.output, err: errors.New("exit status 1")})
+		require.Equal(t, verify.Inconclusive, result.Status)
+		require.Equal(t, verify.EvidenceFailure, result.Termination)
+		require.Equal(t, test.output, result.NativeTrace)
+		require.Contains(t, result.Diagnostic, "state unconstrained")
 	}
 }
 

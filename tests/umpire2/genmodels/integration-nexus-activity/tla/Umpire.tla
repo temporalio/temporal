@@ -536,8 +536,8 @@ Regression_nexus_start_activity(activity, operation) ==
     /\ exists_Activity' = exists_Activity \union {activity}
     /\ state_Activity' = [state_Activity EXCEPT ![activity] = "completed"]
     /\ state_NexusOperation' = [state_NexusOperation EXCEPT ![operation] = "succeeded"]
-    /\ relation_activity_nexus' = relation_activity_nexus \union {<<activity, operation>>}
-    /\ relation_nexus_activity' = relation_nexus_activity \union {<<operation, activity>>}
+    /\ relation_activity_nexus' = (relation_activity_nexus) \union {<<activity, operation>>}
+    /\ relation_nexus_activity' = (relation_nexus_activity) \union {<<operation, activity>>}
     /\ UNCHANGED <<exists_NexusOperation>>
 
 Next ==
@@ -641,31 +641,31 @@ CanStep ==
     \/ \E activity \in ActivityIDs, operation \in NexusOperationIDs: Regression_nexus_start_activityEnabled(activity, operation)
 
 Activity_backing_off_quiescent_progress ==
-    \A entity \in ActivityIDs: entity \in exists_Activity => (~(state_Activity[entity] = "backing_off"))
+    (\A entity \in ActivityIDs: entity \in exists_Activity => (~(state_Activity[entity] = "backing_off")))
 
 Activity_scheduled_quiescent_progress ==
-    \A entity \in ActivityIDs: entity \in exists_Activity => (~(state_Activity[entity] = "scheduled"))
+    (\A entity \in ActivityIDs: entity \in exists_Activity => (~(state_Activity[entity] = "scheduled")))
 
 Activity_started_quiescent_progress ==
-    \A entity \in ActivityIDs: entity \in exists_Activity => (~(state_Activity[entity] = "started"))
+    (\A entity \in ActivityIDs: entity \in exists_Activity => (~(state_Activity[entity] = "started")))
 
 NexusActivityForwardLinkConsistency ==
-    \A source \in NexusOperationIDs: source \in exists_NexusOperation => (\A target \in ActivityIDs: target \in exists_Activity => ((<<source, target>> \in relation_nexus_activity => <<target, source>> \in relation_activity_nexus)))
+    (\A source \in NexusOperationIDs: source \in exists_NexusOperation => ((\A target \in ActivityIDs: target \in exists_Activity => ((<<source, target>> \in relation_nexus_activity => <<target, source>> \in relation_activity_nexus)))))
 
 NexusActivityReverseLinkConsistency ==
-    \A source \in ActivityIDs: source \in exists_Activity => (\A target \in NexusOperationIDs: target \in exists_NexusOperation => ((<<source, target>> \in relation_activity_nexus => <<target, source>> \in relation_nexus_activity)))
+    (\A source \in ActivityIDs: source \in exists_Activity => ((\A target \in NexusOperationIDs: target \in exists_NexusOperation => ((<<source, target>> \in relation_activity_nexus => <<target, source>> \in relation_nexus_activity)))))
 
 NexusActivityTerminalRefinement ==
-    \A operation \in NexusOperationIDs: operation \in exists_NexusOperation => (\A activity \in ActivityIDs: activity \in exists_Activity => ((<<operation, activity>> \in relation_nexus_activity => (state_NexusOperation[operation] = "succeeded" /\ state_Activity[activity] = "completed"))))
+    (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((\A activity \in ActivityIDs: activity \in exists_Activity => ((<<operation, activity>> \in relation_nexus_activity => (state_NexusOperation[operation] = "succeeded" /\ state_Activity[activity] = "completed"))))))
 
 NexusOperation_backing_off_quiescent_progress ==
-    \A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "backing_off"))
+    (\A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "backing_off")))
 
 NexusOperation_scheduled_quiescent_progress ==
-    \A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "scheduled"))
+    (\A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "scheduled")))
 
 NexusOperation_started_quiescent_progress ==
-    \A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "started"))
+    (\A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "started")))
 
 InductiveInvariant ==
     /\ TypeOK

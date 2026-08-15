@@ -21,10 +21,14 @@ func TestGeneratedSourceCompilesWithP(t *testing.T) {
 	for name, contents := range files {
 		require.NoError(t, os.WriteFile(filepath.Join(directory, name), contents, 0o600))
 	}
-	command := exec.Command(tool, "compile", "--pproj", filepath.Join(directory, "Umpire.pproj"), "--mode", "bugfinding")
-	command.Dir = directory
-	output, err := command.CombinedOutput()
-	require.NoError(t, err, string(output))
+	for _, mode := range []string{"bugfinding", "pex"} {
+		t.Run(mode, func(t *testing.T) {
+			command := exec.Command(tool, "compile", "--pproj", filepath.Join(directory, "Umpire.pproj"), "--mode", mode)
+			command.Dir = directory
+			output, err := command.CombinedOutput()
+			require.NoError(t, err, string(output))
+		})
+	}
 }
 
 func TestGeneratePreservesAtomicKernel(t *testing.T) {
@@ -43,12 +47,19 @@ func TestGeneratePreservesAtomicKernel(t *testing.T) {
 	require.Contains(t, source, "checkerStep = checkerStep + 1;")
 	require.NotContains(t, source, "raise eStep;")
 	require.NotContains(t, source, "choose(enabled)")
+	require.Contains(t, source, "type tSelection = (chosen: int, remaining: set[int]);")
+	require.Contains(t, source, "fun EnabledChunk_0(enabled: set[int]): set[int]")
+	require.Contains(t, source, "fun SelectChunk_0(enabled: set[int]): tSelection")
+	require.Contains(t, source, "fun ApplyChunk_0(selected: int)")
 	require.Contains(t, source, "test tcUmpire [main=UmpireWorld]")
 	require.Contains(t, string(files["Umpire.pproj"]), "<Target>PChecker,PEx</Target>")
 }
 
 func TestGenerateExpandsBranchesAndQuiescentProperties(t *testing.T) {
 	model := testModel()
+	model.Properties = append(model.Properties, verify.Property{
+		Name: "operation-safety", Kind: verify.SafetyProperty, Expr: verify.Expr{Op: verify.TrueExpr},
+	})
 	model.Actions[0].Branches = []verify.Branch{
 		{Name: "success", Effects: []verify.Effect{{Kind: verify.SetStateEffect, Entity: "operation", Ref: "operation", State: "done"}}},
 		{Name: "failure", Effects: []verify.Effect{{Kind: verify.SetStateEffect, Entity: "operation", Ref: "operation", State: "failed"}}},
@@ -58,7 +69,10 @@ func TestGenerateExpandsBranchesAndQuiescentProperties(t *testing.T) {
 
 	source := string(files["Umpire.p"])
 	require.Contains(t, source, "if ($) {")
+	require.Contains(t, source, "fun CheckRelation_0()")
+	require.Contains(t, source, "fun CheckProperty_0()")
 	require.Contains(t, source, "fun CheckQuiescent()")
+	require.Contains(t, source, "fun CheckQuiescentProperty_0()")
 	require.Contains(t, source, "operation_0 in exists_operation")
 }
 

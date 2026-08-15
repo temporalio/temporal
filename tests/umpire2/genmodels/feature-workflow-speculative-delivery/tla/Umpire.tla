@@ -294,7 +294,7 @@ Delivery_authorize_accept(obligation, task, attempt) ==
     /\ state_DeliveryAttempt' = [state_DeliveryAttempt EXCEPT ![attempt] = "accepted"]
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "authorized"]
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "accepted"]
-    /\ relation_delivery_accepted_start' = relation_delivery_accepted_start \union {<<obligation, attempt>>}
+    /\ relation_delivery_accepted_start' = (relation_delivery_accepted_start) \union {<<obligation, attempt>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryTask, exists_Poller, state_Poller, exists_WorkObligation, exists_WorkflowRun, state_WorkflowRun, exists_WorkflowTask, state_WorkflowTask, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_task_obligation, relation_delivery_task_queue, relation_workflow_task_delivery_task, relation_workflow_task_normal_run, relation_workflow_task_obligation, relation_workflow_task_speculative_run>>
 
 Delivery_authorize_rejectEnabled(obligation, task, attempt) ==
@@ -328,7 +328,7 @@ Delivery_dispatch(task, attempt) ==
 Delivery_offer_syncEnabled(task) ==
     /\ task \in DeliveryTaskIDs
     /\ task \in exists_DeliveryTask
-    /\ (state_DeliveryTask[task] = "pending" /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid")))
+    /\ (state_DeliveryTask[task] = "pending" /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid"))))
 
 Delivery_offer_sync(task) ==
     /\ Delivery_offer_syncEnabled(task)
@@ -349,8 +349,8 @@ Delivery_persist_ambiguous(obligation, task, queue) ==
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "pending"]
     /\ exists_WorkObligation' = exists_WorkObligation \union {obligation}
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "unresolved"]
-    /\ relation_delivery_task_obligation' = relation_delivery_task_obligation \union {<<task, obligation>>}
-    /\ relation_delivery_task_queue' = relation_delivery_task_queue \union {<<task, queue>>}
+    /\ relation_delivery_task_obligation' = (relation_delivery_task_obligation) \union {<<task, obligation>>}
+    /\ relation_delivery_task_queue' = (relation_delivery_task_queue) \union {<<task, queue>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_Poller, state_Poller, exists_WorkflowRun, state_WorkflowRun, exists_WorkflowTask, state_WorkflowTask, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_workflow_task_delivery_task, relation_workflow_task_normal_run, relation_workflow_task_obligation, relation_workflow_task_speculative_run>>
 
 Delivery_reserveEnabled(task, attempt, poller) ==
@@ -367,8 +367,8 @@ Delivery_reserve(task, attempt, poller) ==
     /\ exists_DeliveryAttempt' = exists_DeliveryAttempt \union {attempt}
     /\ state_DeliveryAttempt' = [state_DeliveryAttempt EXCEPT ![attempt] = "reserved"]
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "reserved"]
-    /\ relation_delivery_attempt_poller' = relation_delivery_attempt_poller \union {<<attempt, poller>>}
-    /\ relation_delivery_attempt_task' = relation_delivery_attempt_task \union {<<attempt, task>>}
+    /\ relation_delivery_attempt_poller' = (relation_delivery_attempt_poller) \union {<<attempt, poller>>}
+    /\ relation_delivery_attempt_task' = (relation_delivery_attempt_task) \union {<<attempt, task>>}
     /\ UNCHANGED <<exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryTask, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, exists_WorkflowRun, state_WorkflowRun, exists_WorkflowTask, state_WorkflowTask, relation_delivery_accepted_start, relation_delivery_task_obligation, relation_delivery_task_queue, relation_workflow_task_delivery_task, relation_workflow_task_normal_run, relation_workflow_task_obligation, relation_workflow_task_speculative_run>>
 
 Delivery_retireEnabled(task) ==
@@ -411,7 +411,7 @@ Workflow_delivery_authorize_added(entity, obligation, task, attempt) ==
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "authorized"]
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "accepted"]
     /\ state_WorkflowTask' = [state_WorkflowTask EXCEPT ![entity] = "polled"]
-    /\ relation_delivery_accepted_start' = relation_delivery_accepted_start \union {<<obligation, attempt>>}
+    /\ relation_delivery_accepted_start' = (relation_delivery_accepted_start) \union {<<obligation, attempt>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryTask, exists_Poller, state_Poller, exists_WorkObligation, exists_WorkflowRun, state_WorkflowRun, exists_WorkflowTask, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_task_obligation, relation_delivery_task_queue, relation_workflow_task_delivery_task, relation_workflow_task_normal_run, relation_workflow_task_obligation, relation_workflow_task_speculative_run>>
 
 Workflow_delivery_authorize_storedEnabled(entity, obligation, task, attempt) ==
@@ -431,7 +431,7 @@ Workflow_delivery_authorize_stored(entity, obligation, task, attempt) ==
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "authorized"]
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "accepted"]
     /\ state_WorkflowTask' = [state_WorkflowTask EXCEPT ![entity] = "polled"]
-    /\ relation_delivery_accepted_start' = relation_delivery_accepted_start \union {<<obligation, attempt>>}
+    /\ relation_delivery_accepted_start' = (relation_delivery_accepted_start) \union {<<obligation, attempt>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryTask, exists_Poller, state_Poller, exists_WorkObligation, exists_WorkflowRun, state_WorkflowRun, exists_WorkflowTask, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_task_obligation, relation_delivery_task_queue, relation_workflow_task_delivery_task, relation_workflow_task_normal_run, relation_workflow_task_obligation, relation_workflow_task_speculative_run>>
 
 Workflow_delivery_reject_addedEnabled(entity, obligation, task, attempt) ==
@@ -523,11 +523,11 @@ Workflow_task_create_normal(run, entity, obligation, task, queue) ==
     /\ state_WorkflowRun' = [state_WorkflowRun EXCEPT ![run] = "started"]
     /\ exists_WorkflowTask' = exists_WorkflowTask \union {entity}
     /\ state_WorkflowTask' = [state_WorkflowTask EXCEPT ![entity] = "added"]
-    /\ relation_delivery_task_obligation' = relation_delivery_task_obligation \union {<<task, obligation>>}
-    /\ relation_delivery_task_queue' = relation_delivery_task_queue \union {<<task, queue>>}
-    /\ relation_workflow_task_delivery_task' = relation_workflow_task_delivery_task \union {<<entity, task>>}
-    /\ relation_workflow_task_normal_run' = relation_workflow_task_normal_run \union {<<entity, run>>}
-    /\ relation_workflow_task_obligation' = relation_workflow_task_obligation \union {<<entity, obligation>>}
+    /\ relation_delivery_task_obligation' = (relation_delivery_task_obligation) \union {<<task, obligation>>}
+    /\ relation_delivery_task_queue' = (relation_delivery_task_queue) \union {<<task, queue>>}
+    /\ relation_workflow_task_delivery_task' = (relation_workflow_task_delivery_task) \union {<<entity, task>>}
+    /\ relation_workflow_task_normal_run' = (relation_workflow_task_normal_run) \union {<<entity, run>>}
+    /\ relation_workflow_task_obligation' = (relation_workflow_task_obligation) \union {<<entity, obligation>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_Poller, state_Poller, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_workflow_task_speculative_run>>
 
 Workflow_task_create_speculative_directEnabled(run, entity, obligation, task, queue) ==
@@ -541,7 +541,7 @@ Workflow_task_create_speculative_directEnabled(run, entity, obligation, task, qu
     /\ task \notin exists_DeliveryTask
     /\ queue \in DeliveryQueueIDs
     /\ queue \in exists_DeliveryQueue
-    /\ (state_WorkflowRun[run] = "started" /\ state_WorkflowTask[entity] = "created" /\ ~(\E normalTask \in WorkflowTaskIDs: normalTask \in exists_WorkflowTask /\ ((<<normalTask, run>> \in relation_workflow_task_normal_run /\ (state_WorkflowTask[normalTask] = "added" \/ state_WorkflowTask[normalTask] = "stored")))))
+    /\ (state_WorkflowRun[run] = "started" /\ state_WorkflowTask[entity] = "created" /\ ~((\E normalTask \in WorkflowTaskIDs: normalTask \in exists_WorkflowTask /\ ((<<normalTask, run>> \in relation_workflow_task_normal_run /\ (state_WorkflowTask[normalTask] = "added" \/ state_WorkflowTask[normalTask] = "stored"))))))
 
 Workflow_task_create_speculative_direct(run, entity, obligation, task, queue) ==
     /\ Workflow_task_create_speculative_directEnabled(run, entity, obligation, task, queue)
@@ -551,11 +551,11 @@ Workflow_task_create_speculative_direct(run, entity, obligation, task, queue) ==
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "valid"]
     /\ exists_WorkflowTask' = exists_WorkflowTask \union {entity}
     /\ state_WorkflowTask' = [state_WorkflowTask EXCEPT ![entity] = "added"]
-    /\ relation_delivery_task_obligation' = relation_delivery_task_obligation \union {<<task, obligation>>}
-    /\ relation_delivery_task_queue' = relation_delivery_task_queue \union {<<task, queue>>}
-    /\ relation_workflow_task_delivery_task' = relation_workflow_task_delivery_task \union {<<entity, task>>}
-    /\ relation_workflow_task_obligation' = relation_workflow_task_obligation \union {<<entity, obligation>>}
-    /\ relation_workflow_task_speculative_run' = relation_workflow_task_speculative_run \union {<<entity, run>>}
+    /\ relation_delivery_task_obligation' = (relation_delivery_task_obligation) \union {<<task, obligation>>}
+    /\ relation_delivery_task_queue' = (relation_delivery_task_queue) \union {<<task, queue>>}
+    /\ relation_workflow_task_delivery_task' = (relation_workflow_task_delivery_task) \union {<<entity, task>>}
+    /\ relation_workflow_task_obligation' = (relation_workflow_task_obligation) \union {<<entity, obligation>>}
+    /\ relation_workflow_task_speculative_run' = (relation_workflow_task_speculative_run) \union {<<entity, run>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_Poller, state_Poller, exists_WorkflowRun, state_WorkflowRun, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_workflow_task_normal_run>>
 
 Workflow_task_resolve_normalEnabled(obligation, task) ==
@@ -575,7 +575,7 @@ Workflow_task_speculative_fallbackEnabled(entity, task) ==
     /\ entity \in exists_WorkflowTask
     /\ task \in DeliveryTaskIDs
     /\ task \in exists_DeliveryTask
-    /\ (state_WorkflowTask[entity] = "added" /\ <<entity, task>> \in relation_workflow_task_delivery_task /\ state_DeliveryTask[task] = "sync-offered" /\ ((state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered") /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid"))))
+    /\ (state_WorkflowTask[entity] = "added" /\ <<entity, task>> \in relation_workflow_task_delivery_task /\ state_DeliveryTask[task] = "sync-offered" /\ ((state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered") /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid")))))
 
 Workflow_task_speculative_fallback(entity, task) ==
     /\ Workflow_task_speculative_fallbackEnabled(entity, task)
@@ -648,43 +648,43 @@ CanStep ==
     \/ \E entity \in WorkflowTaskIDs, task \in DeliveryTaskIDs: Workflow_task_speculative_fallbackEnabled(entity, task)
 
 SpeculativeTaskCreation ==
-    \A run \in WorkflowRunIDs: run \in exists_WorkflowRun => (~(\E normalTask \in WorkflowTaskIDs: normalTask \in exists_WorkflowTask /\ ((<<normalTask, run>> \in relation_workflow_task_normal_run /\ (state_WorkflowTask[normalTask] = "added" \/ state_WorkflowTask[normalTask] = "stored") /\ \E speculativeTask \in WorkflowTaskIDs: speculativeTask \in exists_WorkflowTask /\ ((<<speculativeTask, run>> \in relation_workflow_task_speculative_run /\ (state_WorkflowTask[speculativeTask] = "added" \/ state_WorkflowTask[speculativeTask] = "stored")))))))
+    (\A run \in WorkflowRunIDs: run \in exists_WorkflowRun => (~((\E normalTask \in WorkflowTaskIDs: normalTask \in exists_WorkflowTask /\ ((<<normalTask, run>> \in relation_workflow_task_normal_run /\ (state_WorkflowTask[normalTask] = "added" \/ state_WorkflowTask[normalTask] = "stored") /\ (\E speculativeTask \in WorkflowTaskIDs: speculativeTask \in exists_WorkflowTask /\ ((<<speculativeTask, run>> \in relation_workflow_task_speculative_run /\ (state_WorkflowTask[speculativeTask] = "added" \/ state_WorkflowTask[speculativeTask] = "stored"))))))))))
 
 WorkflowTaskStarvation ==
-    \A workflowTask \in WorkflowTaskIDs: workflowTask \in exists_WorkflowTask => (\A run \in WorkflowRunIDs: run \in exists_WorkflowRun => (((<<workflowTask, run>> \in relation_workflow_task_normal_run /\ state_WorkflowRun[run] = "started") => ~((state_WorkflowTask[workflowTask] = "added" \/ state_WorkflowTask[workflowTask] = "stored")))))
+    (\A workflowTask \in WorkflowTaskIDs: workflowTask \in exists_WorkflowTask => ((\A run \in WorkflowRunIDs: run \in exists_WorkflowRun => (((<<workflowTask, run>> \in relation_workflow_task_normal_run /\ state_WorkflowRun[run] = "started") => ~((state_WorkflowTask[workflowTask] = "added" \/ state_WorkflowTask[workflowTask] = "stored")))))))
 
 delivery_ambiguous_commit_resolved ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(state_WorkObligation[obligation] = "unresolved"))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(state_WorkObligation[obligation] = "unresolved")))
 
 delivery_coarse_retirement_safety ==
-    \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((state_DeliveryTask[task] = "retired" => \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ (state_WorkObligation[obligation] = "accepted" \/ state_WorkObligation[obligation] = "terminal")))))
+    (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((state_DeliveryTask[task] = "retired" => (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ (state_WorkObligation[obligation] = "accepted" \/ state_WorkObligation[obligation] = "terminal")))))))
 
 delivery_destination_isolation ==
-    \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => (\E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue))
+    (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((\E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue))))
 
 delivery_failed_start_is_not_accepted ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => ((state_DeliveryAttempt[attempt] = "rejected" => \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(<<obligation, attempt>> \in relation_delivery_accepted_start))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => ((state_DeliveryAttempt[attempt] = "rejected" => (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(<<obligation, attempt>> \in relation_delivery_accepted_start))))))
 
 delivery_no_phantom_dispatch ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (((state_DeliveryAttempt[attempt] = "dispatched" \/ state_DeliveryAttempt[attempt] = "failed" \/ state_DeliveryAttempt[attempt] = "completed") => \E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "accepted"))))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (((state_DeliveryAttempt[attempt] = "dispatched" \/ state_DeliveryAttempt[attempt] = "failed" \/ state_DeliveryAttempt[attempt] = "completed") => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "accepted")))))))))
 
 delivery_no_resurrection ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "terminal" => \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, obligation>> \in relation_delivery_task_obligation => state_DeliveryTask[task] = "retired"))))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "terminal" => (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, obligation>> \in relation_delivery_task_obligation => state_DeliveryTask[task] = "retired"))))))
 
 delivery_no_split_commit ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (((state_WorkObligation[obligation] = "valid" \/ state_WorkObligation[obligation] = "accepted") => \E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ (<<task, obligation>> \in relation_delivery_task_obligation)))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (((state_WorkObligation[obligation] = "valid" \/ state_WorkObligation[obligation] = "accepted") => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ (<<task, obligation>> \in relation_delivery_task_obligation)))))
 
 delivery_path_equivalence ==
-    \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation) /\ \E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue)))
+    (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => (((\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation)) /\ (\E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue)))))
 
 delivery_retry_preserves_obligation ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => ((\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation)))))))
 
 delivery_single_accepted_start ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "accepted" => \E attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt /\ (<<obligation, attempt>> \in relation_delivery_accepted_start)))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "accepted" => (\E attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt /\ (<<obligation, attempt>> \in relation_delivery_accepted_start)))))
 
 workflow_delivery_accepted_start_correspondence ==
-    \A workflowTask \in WorkflowTaskIDs: workflowTask \in exists_WorkflowTask => ((state_WorkflowTask[workflowTask] = "polled" => \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<workflowTask, obligation>> \in relation_workflow_task_obligation /\ state_WorkObligation[obligation] = "accepted" /\ \E attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt /\ (<<obligation, attempt>> \in relation_delivery_accepted_start)))))
+    (\A workflowTask \in WorkflowTaskIDs: workflowTask \in exists_WorkflowTask => ((state_WorkflowTask[workflowTask] = "polled" => (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<workflowTask, obligation>> \in relation_workflow_task_obligation /\ state_WorkObligation[obligation] = "accepted" /\ (\E attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt /\ (<<obligation, attempt>> \in relation_delivery_accepted_start))))))))
 
 InductiveInvariant ==
     /\ TypeOK

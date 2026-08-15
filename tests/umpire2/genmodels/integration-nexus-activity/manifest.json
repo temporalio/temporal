@@ -19,7 +19,7 @@
     "NexusActivityTerminalRefinement"
   ],
   "modelFamilyVersion": "umpire2/model-family-v1",
-  "modelFamilyHash": "sha256:fa7cd9e7d236691e5c28e1c974957573b1b8eab1df46b8f05a9bb9da3fc50b67",
+  "modelFamilyHash": "sha256:c94f0b80391517ac22e019927b3e2a3dfb5b9005c0964bbf0be9c99baacb6fc1",
   "backendRequirements": [
     "fizz",
     "ivy",
@@ -312,6 +312,26 @@
       "name": "ivy",
       "version": "1.8.26",
       "artifacts": [
+        {
+          "platform": "darwin-arm64",
+          "url": "https://files.pythonhosted.org/packages/c8/38/f829838dc68e5e5aad7babd8273f253e424eb399731b34f432ea66b16647/ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "sha256": "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c",
+          "archive": "ms_ivy.whl",
+          "archiveType": "wheel",
+          "extractRoot": "ivy",
+          "package": "ms-ivy",
+          "executable": "ivy/bin/ivy_check"
+        },
+        {
+          "platform": "darwin-x86_64",
+          "url": "https://files.pythonhosted.org/packages/c8/38/f829838dc68e5e5aad7babd8273f253e424eb399731b34f432ea66b16647/ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl",
+          "sha256": "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c",
+          "archive": "ms_ivy.whl",
+          "archiveType": "wheel",
+          "extractRoot": "ivy",
+          "package": "ms-ivy",
+          "executable": "ivy/bin/ivy_check"
+        },
         {
           "platform": "linux-x86_64",
           "url": "https://files.pythonhosted.org/packages/0a/f7/c8f9264bae27f2c56c2d02630c94a0fa400c66bc6772bf6ff049fdcd8101/ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl",

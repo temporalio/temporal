@@ -67,7 +67,7 @@ func TestGenerateLowersAtomicActionAndFramesUnchangedState(t *testing.T) {
 	require.Contains(t, module, `/\ state_Workflow[caller] = "started"`)
 	require.Contains(t, module, `/\ exists_NexusOperation' = exists_NexusOperation \union {operation}`)
 	require.Contains(t, module, `/\ state_NexusOperation' = [state_NexusOperation EXCEPT ![operation] = "scheduled"]`)
-	require.Contains(t, module, `/\ relation_nexus_child_of' = relation_nexus_child_of \union {<<operation, caller>>}`)
+	require.Contains(t, module, `/\ relation_nexus_child_of' = (relation_nexus_child_of) \union {<<operation, caller>>}`)
 	require.Contains(t, module, `/\ UNCHANGED <<exists_Workflow, state_Workflow>>`)
 }
 
@@ -88,6 +88,38 @@ func TestGenerateRequiresSameTypeFreshParametersToBeDistinct(t *testing.T) {
 	files, err := Generate(model)
 	require.NoError(t, err)
 	require.Contains(t, string(files["Umpire.tla"]), `/\ left /= right`)
+}
+
+func TestGenerateParenthesizesMixedRelationUpdates(t *testing.T) {
+	model := testModel()
+	model.Actions[0].Effects = append([]verify.Effect{{
+		Kind:     verify.RemoveRelationEffect,
+		Relation: "nexus-child-of",
+		Source:   "operation",
+		Target:   "caller",
+	}}, model.Actions[0].Effects...)
+
+	files, err := Generate(model)
+	require.NoError(t, err)
+	require.Contains(t, string(files["Umpire.tla"]),
+		`relation_nexus_child_of' = ((relation_nexus_child_of) \ {<<operation, caller>>}) \union {<<operation, caller>>}`)
+}
+
+func TestGenerateScopesSiblingQuantifiers(t *testing.T) {
+	model := testModel()
+	quantifier := verify.Expr{
+		Op: verify.ForAllExpr, Entity: "NexusOperation", Var: "operation",
+		Args: []verify.Expr{{Op: verify.TrueExpr}},
+	}
+	model.Properties = []verify.Property{{
+		Name: "sibling-quantifiers", Kind: verify.SafetyProperty,
+		Expr: verify.And(quantifier, quantifier),
+	}}
+
+	files, err := Generate(model)
+	require.NoError(t, err)
+	require.Contains(t, string(files["Umpire.tla"]),
+		`((\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => (TRUE)) /\ (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => (TRUE)))`)
 }
 
 func TestGenerateEmitsTypeCardinalityAndQuiescentChecks(t *testing.T) {

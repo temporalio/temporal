@@ -1188,6 +1188,24 @@
             ]
           },
           {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-route",
+                    "source": "task",
+                    "target": "existingRoute"
+                  }
+                ]
+              }
+            ],
+            "entity": "DeliveryRouteClass",
+            "var": "existingRoute"
+          },
+          {
             "op": "state-is",
             "entity": "MatchingOwnerGeneration",
             "ref": "generation",
@@ -1471,7 +1489,24 @@
           "binding": "input"
         }
       ],
-      "guard": {},
+      "guard": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "relation-has",
+                "relation": "delivery-poller-route",
+                "source": "poller",
+                "target": "registeredRoute"
+              }
+            ]
+          }
+        ],
+        "entity": "DeliveryRouteClass",
+        "var": "registeredRoute"
+      },
       "effects": [
         {
           "kind": "add-relation",

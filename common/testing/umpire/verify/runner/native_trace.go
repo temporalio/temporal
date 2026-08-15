@@ -20,6 +20,7 @@ var (
 	tlcStringPattern       = regexp.MustCompile(`"(?:\\.|[^"])*"`)
 	ivyTraceActionPattern  = regexp.MustCompile(`^\s*>\s*([A-Za-z0-9_]+)(?:\(([^)]*)\))?\s*$`)
 	ivyTraceCallPattern    = regexp.MustCompile(`^\s*call\s+([A-Za-z0-9_]+)\s*$`)
+	ivyFormalBinding       = regexp.MustCompile(`^\s*fml:([A-Za-z0-9_]+)\s*=\s*([^\s]+)\s*$`)
 	ivyTraceEquation       = regexp.MustCompile(`^\s*([A-Za-z0-9_]+)\(([^)]*)\)\s*=\s*([^\s]+)\s*$`)
 	ivyTraceScalar         = regexp.MustCompile(`^\s*([A-Za-z0-9_]+)\s*=\s*([^\s]+)\s*$`)
 	fizzChoicePattern      = regexp.MustCompile(`^Any:([^=]+)=(.*)$`)
@@ -169,7 +170,10 @@ func decodeTLCAction(request Request, label string) (string, verify.Bindings, er
 	if action == "" {
 		return "", nil, fmt.Errorf("unmapped action %q", nativeAction)
 	}
-	bindings := verify.Bindings{}
+	var bindings verify.Bindings
+	if match[2] != "" {
+		bindings = verify.Bindings{}
+	}
 	for _, binding := range tlaBindingPattern.FindAllStringSubmatch(match[2], -1) {
 		name := request.TraceVocabulary.Bindings[nativeAction][binding[1]]
 		if name == "" {
@@ -381,17 +385,30 @@ func decodeITFState(request Request, values map[string]json.RawMessage) (verify.
 		decoded.seenRelations[relation] = true
 	}
 	for name := range values {
-		if !knownStateVariable(request.TraceVocabulary, name) {
+		if name != "#meta" && !knownStateVariable(request.TraceVocabulary, name) && !knownITFConstant(request.TraceVocabulary, name) {
 			return verify.ModelState{}, fmt.Errorf("unmapped state variable %q", name)
 		}
 	}
 	return decoded.modelState(request.Model)
 }
 
+func knownITFConstant(vocabulary verify.TraceVocabulary, name string) bool {
+	for native := range vocabulary.EntityExists {
+		if strings.TrimPrefix(native, "exists_")+"IDs" == name {
+			return true
+		}
+	}
+	return false
+}
+
 func decodeIvyTrace(request Request, payload string) (verify.TraceEvidence, error) {
 	marker := strings.Index(payload, "Trace follows...")
 	if marker < 0 {
-		return verify.TraceEvidence{}, fmt.Errorf("native-trace-missing: Ivy output has no textual counterexample trace")
+		marker = strings.Index(payload, "searching for a small model... done")
+		if marker < 0 {
+			return verify.TraceEvidence{}, fmt.Errorf("native-trace-missing: Ivy output has no textual counterexample trace")
+		}
+		return decodeIvySmallModelTrace(request, payload[marker:])
 	}
 	lines := strings.Split(payload[marker+len("Trace follows..."):], "\n")
 	values := newIvyValues(request.TraceVocabulary.Identities)
@@ -462,6 +479,40 @@ func decodeIvyTrace(request Request, payload string) (verify.TraceEvidence, erro
 		evidence.Steps[index].After = &states[index+1]
 	}
 	return evidence, nil
+}
+
+func decodeIvySmallModelTrace(request Request, payload string) (verify.TraceEvidence, error) {
+	values := newIvyValues(request.TraceVocabulary.Identities)
+	bindings := map[string]string{}
+	nativeAction := ""
+	for _, line := range strings.Split(payload, "\n") {
+		if match := ivyTraceCallPattern.FindStringSubmatch(line); len(match) != 0 {
+			if nativeAction != "" {
+				return verify.TraceEvidence{}, fmt.Errorf("native-trace-malformed: Ivy counterexample contains multiple calls")
+			}
+			nativeAction = match[1]
+			continue
+		}
+		if match := ivyFormalBinding.FindStringSubmatch(line); len(match) != 0 {
+			if existing, duplicate := bindings[match[1]]; duplicate && existing != match[2] {
+				return verify.TraceEvidence{}, fmt.Errorf("native-trace-malformed: Ivy action repeats binding %q", match[1])
+			}
+			bindings[match[1]] = match[2]
+		}
+	}
+	if nativeAction == "" {
+		return verify.TraceEvidence{}, fmt.Errorf("native-trace-missing: Ivy counterexample has no action call")
+	}
+	arguments := make([]string, 0, len(bindings))
+	for native, value := range bindings {
+		arguments = append(arguments, native+"="+value)
+	}
+	slices.Sort(arguments)
+	action, err := decodeIvyAction(request, values, nativeAction, strings.Join(arguments, ","))
+	if err != nil {
+		return verify.TraceEvidence{}, fmt.Errorf("native-trace-malformed: Ivy step 0: %w", err)
+	}
+	return verify.TraceEvidence{Steps: []verify.ObservedTraceStep{action}}, nil
 }
 
 type ivyValues struct {
@@ -618,21 +669,60 @@ func decodeIvyAction(request Request, values ivyValues, nativeAction, rawArgumen
 			}
 		}
 	}
+	if len(arguments) != 0 && strings.Contains(arguments[0], "=") {
+		ordered := make([]string, len(action.Parameters))
+		for _, argument := range arguments {
+			name, value, named := strings.Cut(argument, "=")
+			if !named {
+				return verify.ObservedTraceStep{}, fmt.Errorf("action %q mixes named and positional bindings", nativeAction)
+			}
+			name = strings.TrimSpace(name)
+			canonicalName := request.TraceVocabulary.Bindings[nativeAction][name]
+			if canonicalName == "" {
+				canonicalName = name
+			}
+			parameterIndex := slices.IndexFunc(action.Parameters, func(parameter verify.Parameter) bool {
+				return parameter.Name == canonicalName
+			})
+			if parameterIndex < 0 {
+				return verify.ObservedTraceStep{}, fmt.Errorf("action %q has unmapped binding %q", nativeAction, name)
+			}
+			if ordered[parameterIndex] != "" {
+				return verify.ObservedTraceStep{}, fmt.Errorf("action %q repeats binding %q", nativeAction, canonicalName)
+			}
+			ordered[parameterIndex] = strings.TrimSpace(value)
+		}
+		arguments = ordered
+	}
 	if len(arguments) != len(action.Parameters) {
 		return verify.ObservedTraceStep{}, fmt.Errorf("action %q has %d bindings, expected %d", nativeAction, len(arguments), len(action.Parameters))
 	}
 	bindings := make(verify.Bindings, len(arguments))
 	for index, argument := range arguments {
-		if _, value, named := strings.Cut(argument, "="); named {
-			argument = strings.TrimSpace(value)
-		}
 		argument = strings.TrimSpace(argument)
 		if argument == "" {
 			return verify.ObservedTraceStep{}, fmt.Errorf("action %q is missing binding %q", nativeAction, action.Parameters[index].Name)
 		}
-		bindings[action.Parameters[index].Name] = values.canonicalIdentity(argument)
+		bindings[action.Parameters[index].Name] = canonicalIvyIdentity(request, values, action.Parameters[index].Type, argument)
 	}
 	return verify.ObservedTraceStep{Action: actionName, Bindings: bindings}, nil
+}
+
+func canonicalIvyIdentity(request Request, values ivyValues, entityName, value string) string {
+	canonical := values.canonicalIdentity(value)
+	if canonical != value {
+		return canonical
+	}
+	index, err := strconv.Atoi(value)
+	if err != nil {
+		return value
+	}
+	for _, entity := range request.Model.Entities {
+		if entity.Name == entityName && index >= 0 && index < len(entity.IDs) {
+			return entity.IDs[index]
+		}
+	}
+	return value
 }
 
 func (values ivyValues) canonicalIdentity(value string) string {

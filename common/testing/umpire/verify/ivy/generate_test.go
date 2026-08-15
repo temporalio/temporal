@@ -15,7 +15,16 @@ func TestGeneratedSourceChecksWithIvy(t *testing.T) {
 	if tool == "" {
 		t.Skip("UMPIRE_IVY_TOOL is not set")
 	}
-	files, diagnostics, err := Generate(testModel())
+	model := testModel()
+	model.Properties = append(model.Properties, verify.Property{
+		Name: "existential-syntax",
+		Kind: verify.SafetyProperty,
+		Expr: verify.Expr{Op: verify.ImpliesExpr, Args: []verify.Expr{
+			{Op: verify.ExistsExpr, Entity: "operation", Var: "candidate", Args: []verify.Expr{{Op: verify.EntityExistsExpr, Entity: "operation", Ref: "candidate"}}},
+			{Op: verify.TrueExpr},
+		}},
+	})
+	files, diagnostics, err := Generate(model)
 	require.NoError(t, err)
 	require.Empty(t, diagnostics)
 	path := filepath.Join(t.TempDir(), "Umpire.ivy")
@@ -55,6 +64,21 @@ func TestGenerateReportsUnsupportedPropertyKinds(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []Diagnostic{{Construct: "property quiescent-progress", Reason: "Ivy generation supports inductive safety properties only"}}, diagnostics)
 	require.Contains(t, string(files["Umpire.ivy"]), "# unsupported property quiescent-progress")
+}
+
+func TestGenerateReportsUnsupportedProgressProperties(t *testing.T) {
+	model := testModel()
+	model.Properties = append(model.Properties, verify.Property{
+		Name:     "eventual-progress",
+		Kind:     verify.ProgressProperty,
+		Expr:     verify.Expr{Op: verify.TrueExpr},
+		Fairness: []string{"weak-create"},
+	})
+
+	files, diagnostics, err := Generate(model)
+	require.NoError(t, err)
+	require.Equal(t, []Diagnostic{{Construct: "property eventual-progress", Reason: "Ivy generation supports inductive safety properties only"}}, diagnostics)
+	require.Contains(t, string(files["Umpire.ivy"]), "# unsupported property eventual-progress")
 }
 
 func TestGeneratePreservesNondeterministicBranches(t *testing.T) {

@@ -7,7 +7,6 @@ on:
       - "common/testing/umpire/**"
       - "tests/umpire2/**"
       - "Makefile"
-      - "UMPIRE_GAP.md"
   schedule:
     - cron: "31 8 * * *"
 permissions:

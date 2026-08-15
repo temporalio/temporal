@@ -135,7 +135,7 @@ Backlog_ackEnabled(position, task) ==
     /\ position \in exists_BacklogPosition
     /\ task \in DeliveryTaskIDs
     /\ task \in exists_DeliveryTask
-    /\ (state_BacklogPosition[position] = "read" /\ <<position, task>> \in relation_backlog_position_task /\ (state_DeliveryTask[task] = "acknowledged" \/ state_DeliveryTask[task] = "retired") /\ \A previous \in BacklogPositionIDs: previous \in exists_BacklogPosition => ((<<previous, position>> \in relation_backlog_position_precedes => (state_BacklogPosition[previous] = "acked" \/ state_BacklogPosition[previous] = "gc"))))
+    /\ (state_BacklogPosition[position] = "read" /\ <<position, task>> \in relation_backlog_position_task /\ (state_DeliveryTask[task] = "acknowledged" \/ state_DeliveryTask[task] = "retired") /\ (\A previous \in BacklogPositionIDs: previous \in exists_BacklogPosition => ((<<previous, position>> \in relation_backlog_position_precedes => (state_BacklogPosition[previous] = "acked" \/ state_BacklogPosition[previous] = "gc")))))
 
 Backlog_ack(position, task) ==
     /\ Backlog_ackEnabled(position, task)
@@ -155,8 +155,8 @@ Backlog_append_after(position, previous, task) ==
     /\ Backlog_append_afterEnabled(position, previous, task)
     /\ exists_BacklogPosition' = exists_BacklogPosition \union {position}
     /\ state_BacklogPosition' = [state_BacklogPosition EXCEPT ![position] = "unread"]
-    /\ relation_backlog_position_precedes' = relation_backlog_position_precedes \union {<<previous, position>>}
-    /\ relation_backlog_position_task' = relation_backlog_position_task \union {<<position, task>>}
+    /\ relation_backlog_position_precedes' = (relation_backlog_position_precedes) \union {<<previous, position>>}
+    /\ relation_backlog_position_task' = (relation_backlog_position_task) \union {<<position, task>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryTask, state_DeliveryTask, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_task_obligation, relation_delivery_task_queue>>
 
 Backlog_append_firstEnabled(position, task) ==
@@ -170,7 +170,7 @@ Backlog_append_first(position, task) ==
     /\ Backlog_append_firstEnabled(position, task)
     /\ exists_BacklogPosition' = exists_BacklogPosition \union {position}
     /\ state_BacklogPosition' = [state_BacklogPosition EXCEPT ![position] = "unread"]
-    /\ relation_backlog_position_task' = relation_backlog_position_task \union {<<position, task>>}
+    /\ relation_backlog_position_task' = (relation_backlog_position_task) \union {<<position, task>>}
     /\ UNCHANGED <<exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryTask, state_DeliveryTask, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_backlog_position_precedes, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_task_obligation, relation_delivery_task_queue>>
 
 Backlog_gcEnabled(position, task) ==
@@ -222,7 +222,7 @@ Delivery_authorize_accept(obligation, task, attempt) ==
     /\ state_DeliveryAttempt' = [state_DeliveryAttempt EXCEPT ![attempt] = "accepted"]
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "authorized"]
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "accepted"]
-    /\ relation_delivery_accepted_start' = relation_delivery_accepted_start \union {<<obligation, attempt>>}
+    /\ relation_delivery_accepted_start' = (relation_delivery_accepted_start) \union {<<obligation, attempt>>}
     /\ UNCHANGED <<exists_BacklogPosition, state_BacklogPosition, exists_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryTask, exists_Poller, state_Poller, exists_WorkObligation, relation_backlog_position_precedes, relation_backlog_position_task, relation_delivery_attempt_poller, relation_delivery_attempt_task, relation_delivery_task_obligation, relation_delivery_task_queue>>
 
 Delivery_authorize_rejectEnabled(obligation, task, attempt) ==
@@ -269,7 +269,7 @@ Delivery_expire(obligation, task) ==
 Delivery_offer_syncEnabled(task) ==
     /\ task \in DeliveryTaskIDs
     /\ task \in exists_DeliveryTask
-    /\ (state_DeliveryTask[task] = "pending" /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid")))
+    /\ (state_DeliveryTask[task] = "pending" /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid"))))
 
 Delivery_offer_sync(task) ==
     /\ Delivery_offer_syncEnabled(task)
@@ -290,8 +290,8 @@ Delivery_persist_ambiguous(obligation, task, queue) ==
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "pending"]
     /\ exists_WorkObligation' = exists_WorkObligation \union {obligation}
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "unresolved"]
-    /\ relation_delivery_task_obligation' = relation_delivery_task_obligation \union {<<task, obligation>>}
-    /\ relation_delivery_task_queue' = relation_delivery_task_queue \union {<<task, queue>>}
+    /\ relation_delivery_task_obligation' = (relation_delivery_task_obligation) \union {<<task, obligation>>}
+    /\ relation_delivery_task_queue' = (relation_delivery_task_queue) \union {<<task, queue>>}
     /\ UNCHANGED <<exists_BacklogPosition, state_BacklogPosition, exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_Poller, state_Poller, relation_backlog_position_precedes, relation_backlog_position_task, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task>>
 
 Delivery_persist_successEnabled(obligation, task, queue) ==
@@ -308,8 +308,8 @@ Delivery_persist_success(obligation, task, queue) ==
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "pending"]
     /\ exists_WorkObligation' = exists_WorkObligation \union {obligation}
     /\ state_WorkObligation' = [state_WorkObligation EXCEPT ![obligation] = "valid"]
-    /\ relation_delivery_task_obligation' = relation_delivery_task_obligation \union {<<task, obligation>>}
-    /\ relation_delivery_task_queue' = relation_delivery_task_queue \union {<<task, queue>>}
+    /\ relation_delivery_task_obligation' = (relation_delivery_task_obligation) \union {<<task, obligation>>}
+    /\ relation_delivery_task_queue' = (relation_delivery_task_queue) \union {<<task, queue>>}
     /\ UNCHANGED <<exists_BacklogPosition, state_BacklogPosition, exists_DeliveryAttempt, state_DeliveryAttempt, exists_DeliveryQueue, state_DeliveryQueue, exists_Poller, state_Poller, relation_backlog_position_precedes, relation_backlog_position_task, relation_delivery_accepted_start, relation_delivery_attempt_poller, relation_delivery_attempt_task>>
 
 Delivery_reserveEnabled(task, attempt, poller) ==
@@ -326,8 +326,8 @@ Delivery_reserve(task, attempt, poller) ==
     /\ exists_DeliveryAttempt' = exists_DeliveryAttempt \union {attempt}
     /\ state_DeliveryAttempt' = [state_DeliveryAttempt EXCEPT ![attempt] = "reserved"]
     /\ state_DeliveryTask' = [state_DeliveryTask EXCEPT ![task] = "reserved"]
-    /\ relation_delivery_attempt_poller' = relation_delivery_attempt_poller \union {<<attempt, poller>>}
-    /\ relation_delivery_attempt_task' = relation_delivery_attempt_task \union {<<attempt, task>>}
+    /\ relation_delivery_attempt_poller' = (relation_delivery_attempt_poller) \union {<<attempt, poller>>}
+    /\ relation_delivery_attempt_task' = (relation_delivery_attempt_task) \union {<<attempt, task>>}
     /\ UNCHANGED <<exists_BacklogPosition, state_BacklogPosition, exists_DeliveryQueue, state_DeliveryQueue, exists_DeliveryTask, exists_Poller, state_Poller, exists_WorkObligation, state_WorkObligation, relation_backlog_position_precedes, relation_backlog_position_task, relation_delivery_accepted_start, relation_delivery_task_obligation, relation_delivery_task_queue>>
 
 Delivery_resolve_persistedEnabled(obligation, task) ==
@@ -368,7 +368,7 @@ Delivery_retry(task, attempt) ==
 Delivery_spoolEnabled(task) ==
     /\ task \in DeliveryTaskIDs
     /\ task \in exists_DeliveryTask
-    /\ ((state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered") /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid")))
+    /\ ((state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered") /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid"))))
 
 Delivery_spool(task) ==
     /\ Delivery_spoolEnabled(task)
@@ -416,46 +416,46 @@ CanStep ==
     \/ \E task \in DeliveryTaskIDs: Delivery_spoolEnabled(task)
 
 backlog_ack_after_dispatch ==
-    \A position \in BacklogPositionIDs: position \in exists_BacklogPosition => (((state_BacklogPosition[position] = "acked" \/ state_BacklogPosition[position] = "gc") => \E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<position, task>> \in relation_backlog_position_task /\ (state_DeliveryTask[task] = "acknowledged" \/ state_DeliveryTask[task] = "retired")))))
+    (\A position \in BacklogPositionIDs: position \in exists_BacklogPosition => (((state_BacklogPosition[position] = "acked" \/ state_BacklogPosition[position] = "gc") => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<position, task>> \in relation_backlog_position_task /\ (state_DeliveryTask[task] = "acknowledged" \/ state_DeliveryTask[task] = "retired")))))))
 
 backlog_ack_prefix ==
-    \A previous \in BacklogPositionIDs: previous \in exists_BacklogPosition => (\A position \in BacklogPositionIDs: position \in exists_BacklogPosition => (((<<previous, position>> \in relation_backlog_position_precedes /\ (state_BacklogPosition[position] = "acked" \/ state_BacklogPosition[position] = "gc")) => (state_BacklogPosition[previous] = "acked" \/ state_BacklogPosition[previous] = "gc"))))
+    (\A previous \in BacklogPositionIDs: previous \in exists_BacklogPosition => ((\A position \in BacklogPositionIDs: position \in exists_BacklogPosition => (((<<previous, position>> \in relation_backlog_position_precedes /\ (state_BacklogPosition[position] = "acked" \/ state_BacklogPosition[position] = "gc")) => (state_BacklogPosition[previous] = "acked" \/ state_BacklogPosition[previous] = "gc"))))))
 
 backlog_gc_after_retirement ==
-    \A position \in BacklogPositionIDs: position \in exists_BacklogPosition => ((state_BacklogPosition[position] = "gc" => \E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<position, task>> \in relation_backlog_position_task /\ state_DeliveryTask[task] = "retired"))))
+    (\A position \in BacklogPositionIDs: position \in exists_BacklogPosition => ((state_BacklogPosition[position] = "gc" => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<position, task>> \in relation_backlog_position_task /\ state_DeliveryTask[task] = "retired"))))))
 
 backlog_reader_progress ==
-    \A position \in BacklogPositionIDs: position \in exists_BacklogPosition => (~((state_BacklogPosition[position] = "unread" \/ state_BacklogPosition[position] = "read")))
+    (\A position \in BacklogPositionIDs: position \in exists_BacklogPosition => (~((state_BacklogPosition[position] = "unread" \/ state_BacklogPosition[position] = "read"))))
 
 delivery_ambiguous_commit_resolved ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(state_WorkObligation[obligation] = "unresolved"))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(state_WorkObligation[obligation] = "unresolved")))
 
 delivery_coarse_retirement_safety ==
-    \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((state_DeliveryTask[task] = "retired" => \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ (state_WorkObligation[obligation] = "accepted" \/ state_WorkObligation[obligation] = "terminal")))))
+    (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((state_DeliveryTask[task] = "retired" => (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ (state_WorkObligation[obligation] = "accepted" \/ state_WorkObligation[obligation] = "terminal")))))))
 
 delivery_destination_isolation ==
-    \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => (\E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue))
+    (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((\E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue))))
 
 delivery_failed_start_is_not_accepted ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => ((state_DeliveryAttempt[attempt] = "rejected" => \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(<<obligation, attempt>> \in relation_delivery_accepted_start))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => ((state_DeliveryAttempt[attempt] = "rejected" => (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (~(<<obligation, attempt>> \in relation_delivery_accepted_start))))))
 
 delivery_no_phantom_dispatch ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (((state_DeliveryAttempt[attempt] = "dispatched" \/ state_DeliveryAttempt[attempt] = "failed" \/ state_DeliveryAttempt[attempt] = "completed") => \E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "accepted"))))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (((state_DeliveryAttempt[attempt] = "dispatched" \/ state_DeliveryAttempt[attempt] = "failed" \/ state_DeliveryAttempt[attempt] = "completed") => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "accepted")))))))))
 
 delivery_no_resurrection ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "terminal" => \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, obligation>> \in relation_delivery_task_obligation => state_DeliveryTask[task] = "retired"))))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "terminal" => (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((<<task, obligation>> \in relation_delivery_task_obligation => state_DeliveryTask[task] = "retired"))))))
 
 delivery_no_split_commit ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (((state_WorkObligation[obligation] = "valid" \/ state_WorkObligation[obligation] = "accepted") => \E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ (<<task, obligation>> \in relation_delivery_task_obligation)))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => (((state_WorkObligation[obligation] = "valid" \/ state_WorkObligation[obligation] = "accepted") => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ (<<task, obligation>> \in relation_delivery_task_obligation)))))
 
 delivery_path_equivalence ==
-    \A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => ((\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation) /\ \E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue)))
+    (\A task \in DeliveryTaskIDs: task \in exists_DeliveryTask => (((\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation)) /\ (\E queue \in DeliveryQueueIDs: queue \in exists_DeliveryQueue /\ (<<task, queue>> \in relation_delivery_task_queue)))))
 
 delivery_retry_preserves_obligation ==
-    \A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => (\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation))))
+    (\A attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt => ((\E task \in DeliveryTaskIDs: task \in exists_DeliveryTask /\ ((<<attempt, task>> \in relation_delivery_attempt_task /\ (\E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ (<<task, obligation>> \in relation_delivery_task_obligation)))))))
 
 delivery_single_accepted_start ==
-    \A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "accepted" => \E attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt /\ (<<obligation, attempt>> \in relation_delivery_accepted_start)))
+    (\A obligation \in WorkObligationIDs: obligation \in exists_WorkObligation => ((state_WorkObligation[obligation] = "accepted" => (\E attempt \in DeliveryAttemptIDs: attempt \in exists_DeliveryAttempt /\ (<<obligation, attempt>> \in relation_delivery_accepted_start)))))
 
 InductiveInvariant ==
     /\ TypeOK

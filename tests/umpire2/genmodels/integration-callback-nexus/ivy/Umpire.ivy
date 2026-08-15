@@ -282,7 +282,7 @@ action callback_attach_reference(callback:callback,operation:nexusoperation,hand
     require ~exists_callback(callback);
     require exists_nexusoperation(operation);
     require exists_workflowrun(handlerrun);
-    require state_workflowrun(handlerrun) = workflowrun_state_started;
+    require (state_workflowrun(handlerrun) = workflowrun_state_started & (forall Q_existinghandlerrun:workflowrun. exists_workflowrun(Q_existinghandlerrun) -> (~(relation_nexus_operation_handler_run(operation,Q_existinghandlerrun)))));
     exists_callback(callback) := true;
     state_callback(callback) := callback_state_unobserved;
     relation_callback_operation(callback,operation) := true;
@@ -309,6 +309,7 @@ action callback_delivery_deliver(delivery:callbackdelivery) = {
 action callback_delivery_enqueue(callback:callback,delivery:callbackdelivery) = {
     require exists_callback(callback);
     require ~exists_callbackdelivery(delivery);
+    require (forall Q_handlerrun:workflowrun. exists_workflowrun(Q_handlerrun) -> ((relation_callback_handler_run(callback,Q_handlerrun) -> ~((state_workflowrun(Q_handlerrun) = workflowrun_state_completed | state_workflowrun(Q_handlerrun) = workflowrun_state_failed | state_workflowrun(Q_handlerrun) = workflowrun_state_canceled | state_workflowrun(Q_handlerrun) = workflowrun_state_terminated | state_workflowrun(Q_handlerrun) = workflowrun_state_timed_out | state_workflowrun(Q_handlerrun) = workflowrun_state_continued_as_new)))));
     exists_callbackdelivery(delivery) := true;
     state_callbackdelivery(delivery) := callbackdelivery_state_pending;
     relation_callback_delivery(callback,delivery) := true
@@ -388,7 +389,7 @@ invariant [relation_nexus_operation_handler_run_endpoints] forall S:nexusoperati
 invariant [cardinality_nexus_operation_handler_run_source] forall S:nexusoperation,T1:workflowrun,T2:workflowrun. relation_nexus_operation_handler_run(S,T1) & relation_nexus_operation_handler_run(S,T2) -> T1 = T2
 invariant [callbackhandlerlifetime] (forall Q_handlerrun:workflowrun. exists_workflowrun(Q_handlerrun) -> (((state_workflowrun(Q_handlerrun) = workflowrun_state_completed | state_workflowrun(Q_handlerrun) = workflowrun_state_failed | state_workflowrun(Q_handlerrun) = workflowrun_state_canceled | state_workflowrun(Q_handlerrun) = workflowrun_state_terminated | state_workflowrun(Q_handlerrun) = workflowrun_state_timed_out | state_workflowrun(Q_handlerrun) = workflowrun_state_continued_as_new) -> (forall Q_callback:callback. exists_callback(Q_callback) -> ((relation_callback_handler_run(Q_callback,Q_handlerrun) -> (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((relation_callback_delivery(Q_callback,Q_delivery) -> state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged)))))))))
 invariant [callbackreferenceconsistency] (forall Q_callback:callback. exists_callback(Q_callback) -> ((forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((forall Q_handlerrun:workflowrun. exists_workflowrun(Q_handlerrun) -> (((relation_callback_operation(Q_callback,Q_operation) & relation_callback_handler_run(Q_callback,Q_handlerrun)) -> relation_nexus_operation_handler_run(Q_operation,Q_handlerrun))))))))
-invariant [callbackresponseconsistency] ((forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged -> (exists Q_response:callbackresponse. exists_callbackresponse(Q_response) & ((relation_callback_delivery_response(Q_delivery,Q_response) & state_callbackresponse(Q_response) = callbackresponse_state_accepted)))))) & (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((forall Q_response:callbackresponse. exists_callbackresponse(Q_response) -> ((relation_callback_delivery_response(Q_delivery,Q_response) -> state_callbackresponse(Q_response) = callbackresponse_state_accepted))))))
+invariant [callbackresponseconsistency] ((forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged -> ~(forall Q_response:callbackresponse. ~(exists_callbackresponse(Q_response) & ((relation_callback_delivery_response(Q_delivery,Q_response) & state_callbackresponse(Q_response) = callbackresponse_state_accepted))))))) & (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((forall Q_response:callbackresponse. exists_callbackresponse(Q_response) -> ((relation_callback_delivery_response(Q_delivery,Q_response) -> (state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged & state_callbackresponse(Q_response) = callbackresponse_state_accepted)))))))
 
 export nexusoperation_backing_off_schedule_embedded
 export nexusoperation_backing_off_schedule_standalone

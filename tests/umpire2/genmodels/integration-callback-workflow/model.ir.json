@@ -272,7 +272,70 @@
           "binding": "fresh"
         }
       ],
-      "guard": {},
+      "guard": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "relation-has",
+                "relation": "callback-handler-run",
+                "source": "callback",
+                "target": "handlerRun"
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "or",
+                    "args": [
+                      {
+                        "op": "state-is",
+                        "entity": "WorkflowRun",
+                        "ref": "handlerRun",
+                        "state": "completed"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "WorkflowRun",
+                        "ref": "handlerRun",
+                        "state": "failed"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "WorkflowRun",
+                        "ref": "handlerRun",
+                        "state": "canceled"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "WorkflowRun",
+                        "ref": "handlerRun",
+                        "state": "terminated"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "WorkflowRun",
+                        "ref": "handlerRun",
+                        "state": "timed_out"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "WorkflowRun",
+                        "ref": "handlerRun",
+                        "state": "continued_as_new"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "entity": "WorkflowRun",
+        "var": "handlerRun"
+      },
       "effects": [
         {
           "kind": "create",
@@ -1041,10 +1104,21 @@
                         "target": "response"
                       },
                       {
-                        "op": "state-is",
-                        "entity": "CallbackResponse",
-                        "ref": "response",
-                        "state": "accepted"
+                        "op": "and",
+                        "args": [
+                          {
+                            "op": "state-is",
+                            "entity": "CallbackDelivery",
+                            "ref": "delivery",
+                            "state": "acknowledged"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "CallbackResponse",
+                            "ref": "response",
+                            "state": "accepted"
+                          }
+                        ]
                       }
                     ]
                   }

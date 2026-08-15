@@ -277,7 +277,7 @@ func (g generator) expr(expression verify.Expr, bindings map[string]string) stri
 		if expression.Op == verify.ForAllExpr {
 			return "(forall " + name + ":" + identifier(expression.Entity) + ". " + exists + " -> (" + body + "))"
 		}
-		return "(exists " + name + ":" + identifier(expression.Entity) + ". " + exists + " & (" + body + "))"
+		return "~(forall " + name + ":" + identifier(expression.Entity) + ". ~(" + exists + " & (" + body + ")))"
 	default:
 		return "false"
 	}

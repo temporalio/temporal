@@ -62,6 +62,56 @@ func NormalizeCounterexample(model Model, property string, evidence TraceEvidenc
 	return nil, fmt.Errorf("property-not-violated: canonical replay does not violate %q", property)
 }
 
+// FindCounterexampleTrace returns a shortest canonical witness for a violated property.
+func FindCounterexampleTrace(model Model, property string, maxDepth uint64) ([]TraceStep, error) {
+	interpreter, err := NewInterpreter(model)
+	if err != nil {
+		return nil, err
+	}
+	exploration, err := interpreter.Explore(maxDepth)
+	if err != nil {
+		return nil, err
+	}
+	violationState := -1
+	for _, violation := range exploration.Violations {
+		if violation.Property == property {
+			violationState = violation.State
+			break
+		}
+	}
+	if violationState < 0 {
+		return nil, fmt.Errorf("property-not-violated: canonical exploration does not violate %q within depth %d", property, maxDepth)
+	}
+	parents := map[int]Transition{}
+	for _, transition := range exploration.Transitions {
+		if transition.To == 0 || exploration.States[transition.To].Depth != exploration.States[transition.From].Depth+1 {
+			continue
+		}
+		if _, found := parents[transition.To]; !found {
+			parents[transition.To] = transition
+		}
+	}
+	var reversed []Transition
+	for state := violationState; state != 0; {
+		transition, found := parents[state]
+		if !found {
+			return nil, fmt.Errorf("transition-unreplayable: canonical exploration has no path to state %d", state)
+		}
+		reversed = append(reversed, transition)
+		state = transition.From
+	}
+	slices.Reverse(reversed)
+	initial := exploration.States[0].State
+	evidence := TraceEvidence{Initial: &initial, Steps: make([]ObservedTraceStep, 0, len(reversed))}
+	for _, transition := range reversed {
+		after := exploration.States[transition.To].State
+		evidence.Steps = append(evidence.Steps, ObservedTraceStep{
+			Action: transition.Action.Name, Bindings: transition.Action.Bindings, After: &after,
+		})
+	}
+	return NormalizeCounterexample(model, property, evidence)
+}
+
 type matchedTransition struct {
 	action   string
 	bindings Bindings

@@ -23,6 +23,8 @@ var pinnedToolVersions = []verify.ToolVersion{
 		{Platform: "linux-x86_64", URL: "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-linux_x86.tar.gz", SHA256: "f494b7b2afcc7ce24575ed91a389b46bbbbe5976f9e4b5cd717327012f5e0395", Archive: "fizzbee.tar.gz", ArchiveType: "tar.gz", ExtractRoot: "fizz", Executable: "fizz/fizz"},
 	}},
 	{Name: "ivy", Version: "1.8.26", Artifacts: []verify.ToolArtifact{
+		{Platform: "darwin-arm64", URL: "https://files.pythonhosted.org/packages/c8/38/f829838dc68e5e5aad7babd8273f253e424eb399731b34f432ea66b16647/ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl", SHA256: "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c", Archive: "ms_ivy.whl", ArchiveType: "wheel", ExtractRoot: "ivy", Package: "ms-ivy", Executable: "ivy/bin/ivy_check"},
+		{Platform: "darwin-x86_64", URL: "https://files.pythonhosted.org/packages/c8/38/f829838dc68e5e5aad7babd8273f253e424eb399731b34f432ea66b16647/ms_ivy-1.8.26-cp310-cp310-macosx_10_9_universal2.whl", SHA256: "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c", Archive: "ms_ivy.whl", ArchiveType: "wheel", ExtractRoot: "ivy", Package: "ms-ivy", Executable: "ivy/bin/ivy_check"},
 		{Platform: "linux-x86_64", URL: "https://files.pythonhosted.org/packages/0a/f7/c8f9264bae27f2c56c2d02630c94a0fa400c66bc6772bf6ff049fdcd8101/ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl", SHA256: "2a71da0bb2ce6314ddb40b6d76c6d734b8102db51c158477c2ef85b45da65dc1", Archive: "ms_ivy.whl", ArchiveType: "wheel", ExtractRoot: "ivy", Package: "ms-ivy", Executable: "ivy/bin/ivy_check"},
 	}},
 	{Name: "p", Version: "3.1.0", URL: "https://api.nuget.org/v3-flatcontainer/p/3.1.0/p.3.1.0.nupkg", SHA256: "b2a212e3b1af1bf2fdc9b80899da2901d6625d1a2e478d478e30028872a4bdc1", Archive: "p.nupkg", ArchiveType: "nuget", ExtractRoot: "p", Package: "P", Executable: "p/p"},
@@ -78,6 +80,12 @@ func (t Toolchain) Plan(model verify.Model, options PlanOptions) ([]Request, err
 	metadata, err := planMetadataFor(model)
 	if err != nil {
 		return nil, err
+	}
+	if options.Backends == "all" {
+		backends = compatibleBackends(backends, metadata.unsupported)
+		if len(backends) == 0 {
+			return []Request{}, nil
+		}
 	}
 	requests := make([]Request, 0, len(backends))
 	for _, backend := range backends {
@@ -135,8 +143,6 @@ func planMetadataFor(model verify.Model) (planMetadata, error) {
 					Reason: "backend generation does not support temporal progress properties", Source: property.Source,
 				})
 			}
-		default:
-			continue
 		}
 	}
 	for assumption := range fairness {
@@ -285,6 +291,16 @@ func targetBackends(backends []Backend, requirements []string) ([]Backend, error
 		return nil, errors.New("none of the requested backends satisfy target requirements")
 	}
 	return result, nil
+}
+
+func compatibleBackends(backends []Backend, unsupported []verify.Unsupported) []Backend {
+	result := make([]Backend, 0, len(backends))
+	for _, backend := range backends {
+		if len(unsupportedForBackend(backend, unsupported)) == 0 {
+			result = append(result, backend)
+		}
+	}
+	return result
 }
 
 func backendFamily(backend Backend) string {

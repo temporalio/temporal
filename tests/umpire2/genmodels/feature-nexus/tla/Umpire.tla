@@ -331,7 +331,7 @@ Nexus_operation_schedule_Embedded(op, workflow) ==
     /\ Nexus_operation_schedule_EmbeddedEnabled(op, workflow)
     /\ exists_NexusOperation' = exists_NexusOperation \union {op}
     /\ state_NexusOperation' = [state_NexusOperation EXCEPT ![op] = "scheduled"]
-    /\ relation_nexus_operation_workflow' = relation_nexus_operation_workflow \union {<<op, workflow>>}
+    /\ relation_nexus_operation_workflow' = (relation_nexus_operation_workflow) \union {<<op, workflow>>}
     /\ UNCHANGED <<exists_NexusTimeoutEvidence, state_NexusTimeoutEvidence, exists_Workflow, state_Workflow, relation_nexus_timeout_evidence>>
 
 Nexus_operation_schedule_StandaloneEnabled(op, workflow) ==
@@ -345,7 +345,7 @@ Nexus_operation_schedule_Standalone(op, workflow) ==
     /\ Nexus_operation_schedule_StandaloneEnabled(op, workflow)
     /\ exists_NexusOperation' = exists_NexusOperation \union {op}
     /\ state_NexusOperation' = [state_NexusOperation EXCEPT ![op] = "scheduled"]
-    /\ relation_nexus_operation_workflow' = relation_nexus_operation_workflow \union {<<op, workflow>>}
+    /\ relation_nexus_operation_workflow' = (relation_nexus_operation_workflow) \union {<<op, workflow>>}
     /\ UNCHANGED <<exists_NexusTimeoutEvidence, state_NexusTimeoutEvidence, exists_Workflow, state_Workflow, relation_nexus_timeout_evidence>>
 
 Nexus_timeout_backing_off_EmbeddedEnabled(op, timeoutEvidence) ==
@@ -360,7 +360,7 @@ Nexus_timeout_backing_off_Embedded(op, timeoutEvidence) ==
     /\ state_NexusOperation' = [state_NexusOperation EXCEPT ![op] = "timed_out"]
     /\ exists_NexusTimeoutEvidence' = exists_NexusTimeoutEvidence \union {timeoutEvidence}
     /\ state_NexusTimeoutEvidence' = [state_NexusTimeoutEvidence EXCEPT ![timeoutEvidence] = "valid"]
-    /\ relation_nexus_timeout_evidence' = relation_nexus_timeout_evidence \union {<<op, timeoutEvidence>>}
+    /\ relation_nexus_timeout_evidence' = (relation_nexus_timeout_evidence) \union {<<op, timeoutEvidence>>}
     /\ UNCHANGED <<exists_NexusOperation, exists_Workflow, state_Workflow, relation_nexus_operation_workflow>>
 
 Nexus_timeout_backing_off_StandaloneEnabled(op, timeoutEvidence) ==
@@ -375,7 +375,7 @@ Nexus_timeout_backing_off_Standalone(op, timeoutEvidence) ==
     /\ state_NexusOperation' = [state_NexusOperation EXCEPT ![op] = "timed_out"]
     /\ exists_NexusTimeoutEvidence' = exists_NexusTimeoutEvidence \union {timeoutEvidence}
     /\ state_NexusTimeoutEvidence' = [state_NexusTimeoutEvidence EXCEPT ![timeoutEvidence] = "valid"]
-    /\ relation_nexus_timeout_evidence' = relation_nexus_timeout_evidence \union {<<op, timeoutEvidence>>}
+    /\ relation_nexus_timeout_evidence' = (relation_nexus_timeout_evidence) \union {<<op, timeoutEvidence>>}
     /\ UNCHANGED <<exists_NexusOperation, exists_Workflow, state_Workflow, relation_nexus_operation_workflow>>
 
 Nexus_timeout_scheduled_EmbeddedEnabled(op, timeoutEvidence) ==
@@ -390,7 +390,7 @@ Nexus_timeout_scheduled_Embedded(op, timeoutEvidence) ==
     /\ state_NexusOperation' = [state_NexusOperation EXCEPT ![op] = "timed_out"]
     /\ exists_NexusTimeoutEvidence' = exists_NexusTimeoutEvidence \union {timeoutEvidence}
     /\ state_NexusTimeoutEvidence' = [state_NexusTimeoutEvidence EXCEPT ![timeoutEvidence] = "valid"]
-    /\ relation_nexus_timeout_evidence' = relation_nexus_timeout_evidence \union {<<op, timeoutEvidence>>}
+    /\ relation_nexus_timeout_evidence' = (relation_nexus_timeout_evidence) \union {<<op, timeoutEvidence>>}
     /\ UNCHANGED <<exists_NexusOperation, exists_Workflow, state_Workflow, relation_nexus_operation_workflow>>
 
 Nexus_timeout_scheduled_StandaloneEnabled(op, timeoutEvidence) ==
@@ -405,7 +405,7 @@ Nexus_timeout_scheduled_Standalone(op, timeoutEvidence) ==
     /\ state_NexusOperation' = [state_NexusOperation EXCEPT ![op] = "timed_out"]
     /\ exists_NexusTimeoutEvidence' = exists_NexusTimeoutEvidence \union {timeoutEvidence}
     /\ state_NexusTimeoutEvidence' = [state_NexusTimeoutEvidence EXCEPT ![timeoutEvidence] = "valid"]
-    /\ relation_nexus_timeout_evidence' = relation_nexus_timeout_evidence \union {<<op, timeoutEvidence>>}
+    /\ relation_nexus_timeout_evidence' = (relation_nexus_timeout_evidence) \union {<<op, timeoutEvidence>>}
     /\ UNCHANGED <<exists_NexusOperation, exists_Workflow, state_Workflow, relation_nexus_operation_workflow>>
 
 Nexus_timeout_started_EmbeddedEnabled(entity, timeoutEvidence) ==
@@ -420,7 +420,7 @@ Nexus_timeout_started_Embedded(entity, timeoutEvidence) ==
     /\ state_NexusOperation' = [state_NexusOperation EXCEPT ![entity] = "timed_out"]
     /\ exists_NexusTimeoutEvidence' = exists_NexusTimeoutEvidence \union {timeoutEvidence}
     /\ state_NexusTimeoutEvidence' = [state_NexusTimeoutEvidence EXCEPT ![timeoutEvidence] = "valid"]
-    /\ relation_nexus_timeout_evidence' = relation_nexus_timeout_evidence \union {<<entity, timeoutEvidence>>}
+    /\ relation_nexus_timeout_evidence' = (relation_nexus_timeout_evidence) \union {<<entity, timeoutEvidence>>}
     /\ UNCHANGED <<exists_NexusOperation, exists_Workflow, state_Workflow, relation_nexus_operation_workflow>>
 
 Nexus_timeout_started_StandaloneEnabled(entity, timeoutEvidence) ==
@@ -435,13 +435,13 @@ Nexus_timeout_started_Standalone(entity, timeoutEvidence) ==
     /\ state_NexusOperation' = [state_NexusOperation EXCEPT ![entity] = "timed_out"]
     /\ exists_NexusTimeoutEvidence' = exists_NexusTimeoutEvidence \union {timeoutEvidence}
     /\ state_NexusTimeoutEvidence' = [state_NexusTimeoutEvidence EXCEPT ![timeoutEvidence] = "valid"]
-    /\ relation_nexus_timeout_evidence' = relation_nexus_timeout_evidence \union {<<entity, timeoutEvidence>>}
+    /\ relation_nexus_timeout_evidence' = (relation_nexus_timeout_evidence) \union {<<entity, timeoutEvidence>>}
     /\ UNCHANGED <<exists_NexusOperation, exists_Workflow, state_Workflow, relation_nexus_operation_workflow>>
 
 Nexus_workflow_close_cancelEnabled(entity) ==
     /\ entity \in WorkflowIDs
     /\ entity \in exists_Workflow
-    /\ (state_Workflow[entity] = "started" /\ \A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, entity>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected"))))
+    /\ (state_Workflow[entity] = "started" /\ (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, entity>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected")))))
 
 Nexus_workflow_close_cancel(entity) ==
     /\ Nexus_workflow_close_cancelEnabled(entity)
@@ -451,7 +451,7 @@ Nexus_workflow_close_cancel(entity) ==
 Nexus_workflow_close_completeEnabled(wf) ==
     /\ wf \in WorkflowIDs
     /\ wf \in exists_Workflow
-    /\ (state_Workflow[wf] = "started" /\ \A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, wf>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected"))))
+    /\ (state_Workflow[wf] = "started" /\ (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, wf>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected")))))
 
 Nexus_workflow_close_complete(wf) ==
     /\ Nexus_workflow_close_completeEnabled(wf)
@@ -461,7 +461,7 @@ Nexus_workflow_close_complete(wf) ==
 Nexus_workflow_close_failEnabled(entity) ==
     /\ entity \in WorkflowIDs
     /\ entity \in exists_Workflow
-    /\ (state_Workflow[entity] = "started" /\ \A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, entity>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected"))))
+    /\ (state_Workflow[entity] = "started" /\ (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, entity>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected")))))
 
 Nexus_workflow_close_fail(entity) ==
     /\ Nexus_workflow_close_failEnabled(entity)
@@ -471,7 +471,7 @@ Nexus_workflow_close_fail(entity) ==
 Nexus_workflow_close_terminateEnabled(entity) ==
     /\ entity \in WorkflowIDs
     /\ entity \in exists_Workflow
-    /\ (state_Workflow[entity] = "started" /\ \A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, entity>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected"))))
+    /\ (state_Workflow[entity] = "started" /\ (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, entity>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected")))))
 
 Nexus_workflow_close_terminate(entity) ==
     /\ Nexus_workflow_close_terminateEnabled(entity)
@@ -481,7 +481,7 @@ Nexus_workflow_close_terminate(entity) ==
 Nexus_workflow_close_timeoutEnabled(entity) ==
     /\ entity \in WorkflowIDs
     /\ entity \in exists_Workflow
-    /\ (state_Workflow[entity] = "started" /\ \A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, entity>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected"))))
+    /\ (state_Workflow[entity] = "started" /\ (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((<<operation, entity>> \in relation_nexus_operation_workflow => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected")))))
 
 Nexus_workflow_close_timeout(entity) ==
     /\ Nexus_workflow_close_timeoutEnabled(entity)
@@ -584,19 +584,19 @@ CanStep ==
     \/ \E wf \in WorkflowIDs: Nexus_workflow_startEnabled(wf)
 
 NexusOperation_backing_off_quiescent_progress ==
-    \A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "backing_off"))
+    (\A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "backing_off")))
 
 NexusOperation_scheduled_quiescent_progress ==
-    \A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "scheduled"))
+    (\A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "scheduled")))
 
 NexusOperation_started_quiescent_progress ==
-    \A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "started"))
+    (\A entity \in NexusOperationIDs: entity \in exists_NexusOperation => (~(state_NexusOperation[entity] = "started")))
 
 NexusOperationClosure ==
-    \A operation \in NexusOperationIDs: operation \in exists_NexusOperation => (\A workflow \in WorkflowIDs: workflow \in exists_Workflow => (((<<operation, workflow>> \in relation_nexus_operation_workflow /\ (state_Workflow[workflow] = "completed" \/ state_Workflow[workflow] = "failed" \/ state_Workflow[workflow] = "canceled" \/ state_Workflow[workflow] = "terminated" \/ state_Workflow[workflow] = "timed_out")) => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected"))))
+    (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((\A workflow \in WorkflowIDs: workflow \in exists_Workflow => (((<<operation, workflow>> \in relation_nexus_operation_workflow /\ (state_Workflow[workflow] = "completed" \/ state_Workflow[workflow] = "failed" \/ state_Workflow[workflow] = "canceled" \/ state_Workflow[workflow] = "terminated" \/ state_Workflow[workflow] = "timed_out")) => (state_NexusOperation[operation] = "succeeded" \/ state_NexusOperation[operation] = "failed" \/ state_NexusOperation[operation] = "canceled" \/ state_NexusOperation[operation] = "timed_out" \/ state_NexusOperation[operation] = "terminated" \/ state_NexusOperation[operation] = "rejected"))))))
 
 NexusOperationTimeoutSemantics ==
-    \A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((state_NexusOperation[operation] = "timed_out" => \E timeoutEvidence \in NexusTimeoutEvidenceIDs: timeoutEvidence \in exists_NexusTimeoutEvidence /\ ((<<operation, timeoutEvidence>> \in relation_nexus_timeout_evidence /\ state_NexusTimeoutEvidence[timeoutEvidence] = "valid"))))
+    (\A operation \in NexusOperationIDs: operation \in exists_NexusOperation => ((state_NexusOperation[operation] = "timed_out" => (\E timeoutEvidence \in NexusTimeoutEvidenceIDs: timeoutEvidence \in exists_NexusTimeoutEvidence /\ ((<<operation, timeoutEvidence>> \in relation_nexus_timeout_evidence /\ state_NexusTimeoutEvidence[timeoutEvidence] = "valid"))))))
 
 InductiveInvariant ==
     /\ TypeOK
