@@ -1,0 +1,935 @@
+# Generated from the Umpire verification snapshot. Do not edit.
+
+IDs_Activity = ["Activity#0", "Activity#1"]
+IDs_NexusOperation = ["NexusOperation#0", "NexusOperation#1"]
+
+action Init:
+    exists_Activity = set([])
+    state_Activity = {"Activity#0": "unspecified", "Activity#1": "unspecified"}
+    exists_NexusOperation = set([])
+    state_NexusOperation = {"NexusOperation#0": "unspecified", "NexusOperation#1": "unspecified"}
+    relation_activity_nexus = set()
+    relation_nexus_activity = set()
+
+atomic action Action_Activity_backing_off_cancel_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "backing_off"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "canceled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_backing_off_schedule_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "backing_off"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "scheduled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_backing_off_timeout_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "backing_off"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "timed_out"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_scheduled_cancel_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "canceled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_scheduled_fail_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "failed"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_scheduled_start_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "started"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_scheduled_timeout_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "timed_out"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_started_attempt_failed_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "backing_off"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_started_cancel_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "canceled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_started_complete_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "completed"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_started_fail_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "failed"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_started_timeout_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity in exists_Activity
+    require state_Activity[entity] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_Activity[entity] = "timed_out"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_Activity_unspecified_schedule_AnyHosting:
+    entity = oneof IDs_Activity
+    require entity not in exists_Activity
+    require state_Activity[entity] == "unspecified"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_exists_Activity.add(entity)
+    next_state_Activity[entity] = "scheduled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_backing_off_schedule_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_backing_off_schedule_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_backing_off_terminate_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "backing_off"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[entity] = "terminated"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_backing_off_terminate_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "terminated"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_backing_off_timeout_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "timed_out"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_backing_off_timeout_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "timed_out"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_attempt_failed_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "backing_off"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_attempt_failed_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "backing_off"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_cancel_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "canceled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_cancel_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "canceled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_fail_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "failed"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_fail_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "failed"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_start_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "started"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_start_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "started"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_succeed_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_succeed_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_terminate_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[entity] = "terminated"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_terminate_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "terminated"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_timeout_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "timed_out"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_scheduled_timeout_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "timed_out"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_cancel_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "canceled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_cancel_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "canceled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_fail_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "failed"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_fail_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "failed"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_succeed_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_succeed_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_terminate_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[entity] = "terminated"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_terminate_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[op] = "terminated"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_timeout_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[entity] = "timed_out"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_started_timeout_Standalone:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "started"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_state_NexusOperation[entity] = "timed_out"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_unspecified_reject_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity not in exists_NexusOperation
+    require state_NexusOperation[entity] == "unspecified"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_exists_NexusOperation.add(entity)
+    next_state_NexusOperation[entity] = "rejected"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_unspecified_reject_Standalone:
+    entity = oneof IDs_NexusOperation
+    require entity not in exists_NexusOperation
+    require state_NexusOperation[entity] == "unspecified"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_exists_NexusOperation.add(entity)
+    next_state_NexusOperation[entity] = "rejected"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_unspecified_schedule_Embedded:
+    op = oneof IDs_NexusOperation
+    require op not in exists_NexusOperation
+    require state_NexusOperation[op] == "unspecified"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_exists_NexusOperation.add(op)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_NexusOperation_unspecified_schedule_Standalone:
+    op = oneof IDs_NexusOperation
+    require op not in exists_NexusOperation
+    require state_NexusOperation[op] == "unspecified"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_exists_NexusOperation.add(op)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+atomic action Action_regression_nexus_start_activity:
+    activity = oneof IDs_Activity
+    operation = oneof IDs_NexusOperation
+    require activity not in exists_Activity
+    require operation in exists_NexusOperation
+    require state_NexusOperation[operation] == "scheduled"
+    next_exists_Activity = set(exists_Activity)
+    next_state_Activity = dict(state_Activity)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_relation_activity_nexus = set(relation_activity_nexus)
+    next_relation_nexus_activity = set(relation_nexus_activity)
+    next_exists_Activity.add(activity)
+    next_state_Activity[activity] = "completed"
+    next_state_NexusOperation[operation] = "succeeded"
+    next_relation_nexus_activity.add((operation, activity))
+    next_relation_activity_nexus.add((activity, operation))
+    exists_Activity = next_exists_Activity
+    state_Activity = next_state_Activity
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    relation_activity_nexus = next_relation_activity_nexus
+    relation_nexus_activity = next_relation_nexus_activity
+
+# CanStep = (("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" not in exists_Activity and state_Activity["Activity#0"] == "unspecified") or ("Activity#1" not in exists_Activity and state_Activity["Activity#1"] == "unspecified") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("Activity#0" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#0" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled"))
+
+always assertion Relation_activity_nexus_endpoints:
+    return ((("Activity#0", "NexusOperation#0") not in relation_activity_nexus or ("Activity#0" in exists_Activity and "NexusOperation#0" in exists_NexusOperation)) and (("Activity#0", "NexusOperation#1") not in relation_activity_nexus or ("Activity#0" in exists_Activity and "NexusOperation#1" in exists_NexusOperation)) and (("Activity#1", "NexusOperation#0") not in relation_activity_nexus or ("Activity#1" in exists_Activity and "NexusOperation#0" in exists_NexusOperation)) and (("Activity#1", "NexusOperation#1") not in relation_activity_nexus or ("Activity#1" in exists_Activity and "NexusOperation#1" in exists_NexusOperation)))
+
+always assertion Cardinality_activity_nexus_source:
+    return (not (("Activity#0", "NexusOperation#0") in relation_activity_nexus and ("Activity#0", "NexusOperation#1") in relation_activity_nexus) and not (("Activity#1", "NexusOperation#0") in relation_activity_nexus and ("Activity#1", "NexusOperation#1") in relation_activity_nexus))
+
+always assertion Cardinality_activity_nexus_target:
+    return (not (("Activity#0", "NexusOperation#0") in relation_activity_nexus and ("Activity#1", "NexusOperation#0") in relation_activity_nexus) and not (("Activity#0", "NexusOperation#1") in relation_activity_nexus and ("Activity#1", "NexusOperation#1") in relation_activity_nexus))
+
+always assertion Relation_nexus_activity_endpoints:
+    return ((("NexusOperation#0", "Activity#0") not in relation_nexus_activity or ("NexusOperation#0" in exists_NexusOperation and "Activity#0" in exists_Activity)) and (("NexusOperation#0", "Activity#1") not in relation_nexus_activity or ("NexusOperation#0" in exists_NexusOperation and "Activity#1" in exists_Activity)) and (("NexusOperation#1", "Activity#0") not in relation_nexus_activity or ("NexusOperation#1" in exists_NexusOperation and "Activity#0" in exists_Activity)) and (("NexusOperation#1", "Activity#1") not in relation_nexus_activity or ("NexusOperation#1" in exists_NexusOperation and "Activity#1" in exists_Activity)))
+
+always assertion Cardinality_nexus_activity_source:
+    return (not (("NexusOperation#0", "Activity#0") in relation_nexus_activity and ("NexusOperation#0", "Activity#1") in relation_nexus_activity) and not (("NexusOperation#1", "Activity#0") in relation_nexus_activity and ("NexusOperation#1", "Activity#1") in relation_nexus_activity))
+
+always assertion Cardinality_nexus_activity_target:
+    return (not (("NexusOperation#0", "Activity#0") in relation_nexus_activity and ("NexusOperation#1", "Activity#0") in relation_nexus_activity) and not (("NexusOperation#0", "Activity#1") in relation_nexus_activity and ("NexusOperation#1", "Activity#1") in relation_nexus_activity))
+
+always assertion Property_Activity_backing_off_quiescent_progress:
+    return (("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" not in exists_Activity and state_Activity["Activity#0"] == "unspecified") or ("Activity#1" not in exists_Activity and state_Activity["Activity#1"] == "unspecified") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("Activity#0" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#0" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled")) or (((not ("Activity#0" in exists_Activity) or (not (state_Activity["Activity#0"] == "backing_off"))) and (not ("Activity#1" in exists_Activity) or (not (state_Activity["Activity#1"] == "backing_off")))))
+
+always assertion Property_Activity_scheduled_quiescent_progress:
+    return (("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" not in exists_Activity and state_Activity["Activity#0"] == "unspecified") or ("Activity#1" not in exists_Activity and state_Activity["Activity#1"] == "unspecified") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("Activity#0" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#0" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled")) or (((not ("Activity#0" in exists_Activity) or (not (state_Activity["Activity#0"] == "scheduled"))) and (not ("Activity#1" in exists_Activity) or (not (state_Activity["Activity#1"] == "scheduled")))))
+
+always assertion Property_Activity_started_quiescent_progress:
+    return (("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" not in exists_Activity and state_Activity["Activity#0"] == "unspecified") or ("Activity#1" not in exists_Activity and state_Activity["Activity#1"] == "unspecified") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("Activity#0" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#0" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled")) or (((not ("Activity#0" in exists_Activity) or (not (state_Activity["Activity#0"] == "started"))) and (not ("Activity#1" in exists_Activity) or (not (state_Activity["Activity#1"] == "started")))))
+
+always assertion Property_NexusActivityForwardLinkConsistency:
+    return ((not ("NexusOperation#0" in exists_NexusOperation) or (((not ("Activity#0" in exists_Activity) or ((not (("NexusOperation#0", "Activity#0") in relation_nexus_activity) or (("Activity#0", "NexusOperation#0") in relation_activity_nexus)))) and (not ("Activity#1" in exists_Activity) or ((not (("NexusOperation#0", "Activity#1") in relation_nexus_activity) or (("Activity#1", "NexusOperation#0") in relation_activity_nexus))))))) and (not ("NexusOperation#1" in exists_NexusOperation) or (((not ("Activity#0" in exists_Activity) or ((not (("NexusOperation#1", "Activity#0") in relation_nexus_activity) or (("Activity#0", "NexusOperation#1") in relation_activity_nexus)))) and (not ("Activity#1" in exists_Activity) or ((not (("NexusOperation#1", "Activity#1") in relation_nexus_activity) or (("Activity#1", "NexusOperation#1") in relation_activity_nexus))))))))
+
+always assertion Property_NexusActivityReverseLinkConsistency:
+    return ((not ("Activity#0" in exists_Activity) or (((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("Activity#0", "NexusOperation#0") in relation_activity_nexus) or (("NexusOperation#0", "Activity#0") in relation_nexus_activity)))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("Activity#0", "NexusOperation#1") in relation_activity_nexus) or (("NexusOperation#1", "Activity#0") in relation_nexus_activity))))))) and (not ("Activity#1" in exists_Activity) or (((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("Activity#1", "NexusOperation#0") in relation_activity_nexus) or (("NexusOperation#0", "Activity#1") in relation_nexus_activity)))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("Activity#1", "NexusOperation#1") in relation_activity_nexus) or (("NexusOperation#1", "Activity#1") in relation_nexus_activity))))))))
+
+always assertion Property_NexusActivityTerminalRefinement:
+    return ((not ("NexusOperation#0" in exists_NexusOperation) or (((not ("Activity#0" in exists_Activity) or ((not (("NexusOperation#0", "Activity#0") in relation_nexus_activity) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" and state_Activity["Activity#0"] == "completed"))))) and (not ("Activity#1" in exists_Activity) or ((not (("NexusOperation#0", "Activity#1") in relation_nexus_activity) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" and state_Activity["Activity#1"] == "completed")))))))) and (not ("NexusOperation#1" in exists_NexusOperation) or (((not ("Activity#0" in exists_Activity) or ((not (("NexusOperation#1", "Activity#0") in relation_nexus_activity) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" and state_Activity["Activity#0"] == "completed"))))) and (not ("Activity#1" in exists_Activity) or ((not (("NexusOperation#1", "Activity#1") in relation_nexus_activity) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" and state_Activity["Activity#1"] == "completed")))))))))
+
+always assertion Property_NexusOperation_backing_off_quiescent_progress:
+    return (("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" not in exists_Activity and state_Activity["Activity#0"] == "unspecified") or ("Activity#1" not in exists_Activity and state_Activity["Activity#1"] == "unspecified") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("Activity#0" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#0" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled")) or (((not ("NexusOperation#0" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#0"] == "backing_off"))) and (not ("NexusOperation#1" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#1"] == "backing_off")))))
+
+always assertion Property_NexusOperation_scheduled_quiescent_progress:
+    return (("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" not in exists_Activity and state_Activity["Activity#0"] == "unspecified") or ("Activity#1" not in exists_Activity and state_Activity["Activity#1"] == "unspecified") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("Activity#0" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#0" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled")) or (((not ("NexusOperation#0" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#0"] == "scheduled"))) and (not ("NexusOperation#1" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#1"] == "scheduled")))))
+
+always assertion Property_NexusOperation_started_quiescent_progress:
+    return (("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "backing_off") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "backing_off") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "scheduled") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "scheduled") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" in exists_Activity and state_Activity["Activity#0"] == "started") or ("Activity#1" in exists_Activity and state_Activity["Activity#1"] == "started") or ("Activity#0" not in exists_Activity and state_Activity["Activity#0"] == "unspecified") or ("Activity#1" not in exists_Activity and state_Activity["Activity#1"] == "unspecified") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("Activity#0" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#0" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("Activity#1" not in exists_Activity and "NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled")) or (((not ("NexusOperation#0" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#0"] == "started"))) and (not ("NexusOperation#1" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#1"] == "started")))))
+

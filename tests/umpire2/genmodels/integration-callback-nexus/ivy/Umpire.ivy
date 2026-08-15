@@ -1,0 +1,441 @@
+#lang ivy1.7
+
+# Generated from the Umpire verification snapshot. Do not edit.
+
+type callback
+type callback_state = {callback_state_unobserved}
+individual callback_0:callback
+individual callback_1:callback
+relation exists_callback(X:callback)
+function state_callback(X:callback):callback_state
+
+type callbackdelivery
+type callbackdelivery_state = {callbackdelivery_state_acknowledged,callbackdelivery_state_delivered,callbackdelivery_state_failed,callbackdelivery_state_pending}
+individual callbackdelivery_0:callbackdelivery
+individual callbackdelivery_1:callbackdelivery
+relation exists_callbackdelivery(X:callbackdelivery)
+function state_callbackdelivery(X:callbackdelivery):callbackdelivery_state
+
+type callbackresponse
+type callbackresponse_state = {callbackresponse_state_accepted,callbackresponse_state_conflicting,callbackresponse_state_unobserved}
+individual callbackresponse_0:callbackresponse
+individual callbackresponse_1:callbackresponse
+relation exists_callbackresponse(X:callbackresponse)
+function state_callbackresponse(X:callbackresponse):callbackresponse_state
+
+type nexusoperation
+type nexusoperation_state = {nexusoperation_state_backing_off,nexusoperation_state_canceled,nexusoperation_state_failed,nexusoperation_state_rejected,nexusoperation_state_scheduled,nexusoperation_state_started,nexusoperation_state_succeeded,nexusoperation_state_terminated,nexusoperation_state_timed_out,nexusoperation_state_unspecified}
+individual nexusoperation_0:nexusoperation
+individual nexusoperation_1:nexusoperation
+relation exists_nexusoperation(X:nexusoperation)
+function state_nexusoperation(X:nexusoperation):nexusoperation_state
+
+type workflowrun
+type workflowrun_state = {workflowrun_state_canceled,workflowrun_state_completed,workflowrun_state_continued_as_new,workflowrun_state_created,workflowrun_state_failed,workflowrun_state_started,workflowrun_state_terminated,workflowrun_state_timed_out}
+individual workflowrun_0:workflowrun
+individual workflowrun_1:workflowrun
+relation exists_workflowrun(X:workflowrun)
+function state_workflowrun(X:workflowrun):workflowrun_state
+
+relation relation_callback_delivery(X:callback, Y:callbackdelivery)
+relation relation_callback_delivery_response(X:callbackdelivery, Y:callbackresponse)
+relation relation_callback_handler_run(X:callback, Y:workflowrun)
+relation relation_callback_operation(X:callback, Y:nexusoperation)
+relation relation_nexus_operation_handler_run(X:nexusoperation, Y:workflowrun)
+
+after init {
+    exists_callback(X) := false;
+    state_callback(X) := callback_state_unobserved;
+    exists_callbackdelivery(X) := false;
+    state_callbackdelivery(X) := callbackdelivery_state_pending;
+    exists_callbackresponse(X) := false;
+    state_callbackresponse(X) := callbackresponse_state_unobserved;
+    exists_nexusoperation(X) := false;
+    state_nexusoperation(X) := nexusoperation_state_unspecified;
+    exists_workflowrun(X) := false;
+    state_workflowrun(X) := workflowrun_state_created;
+    relation_callback_delivery(X,Y) := false;
+    relation_callback_delivery_response(X,Y) := false;
+    relation_callback_handler_run(X,Y) := false;
+    relation_callback_operation(X,Y) := false;
+    relation_nexus_operation_handler_run(X,Y) := false
+}
+
+action nexusoperation_backing_off_schedule_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action nexusoperation_backing_off_schedule_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action nexusoperation_backing_off_terminate_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_backing_off;
+    state_nexusoperation(entity) := nexusoperation_state_terminated
+}
+
+action nexusoperation_backing_off_terminate_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_terminated
+}
+
+action nexusoperation_backing_off_timeout_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_backing_off_timeout_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_scheduled_attempt_failed_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_backing_off
+}
+
+action nexusoperation_scheduled_attempt_failed_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_backing_off
+}
+
+action nexusoperation_scheduled_cancel_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_scheduled_cancel_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_scheduled_fail_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_scheduled_fail_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_scheduled_start_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_started
+}
+
+action nexusoperation_scheduled_start_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_started
+}
+
+action nexusoperation_scheduled_succeed_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_scheduled_succeed_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_scheduled_terminate_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_scheduled;
+    state_nexusoperation(entity) := nexusoperation_state_terminated
+}
+
+action nexusoperation_scheduled_terminate_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_terminated
+}
+
+action nexusoperation_scheduled_timeout_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_scheduled_timeout_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_started_cancel_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_started_cancel_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_started_fail_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_started_fail_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_started_succeed_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_started_succeed_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_started_terminate_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_started;
+    state_nexusoperation(entity) := nexusoperation_state_terminated
+}
+
+action nexusoperation_started_terminate_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_terminated
+}
+
+action nexusoperation_started_timeout_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_started;
+    state_nexusoperation(entity) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_started_timeout_standalone(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_started;
+    state_nexusoperation(entity) := nexusoperation_state_timed_out
+}
+
+action nexusoperation_unspecified_reject_embedded(entity:nexusoperation) = {
+    require ~exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_unspecified;
+    exists_nexusoperation(entity) := true;
+    state_nexusoperation(entity) := nexusoperation_state_rejected
+}
+
+action nexusoperation_unspecified_reject_standalone(entity:nexusoperation) = {
+    require ~exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_unspecified;
+    exists_nexusoperation(entity) := true;
+    state_nexusoperation(entity) := nexusoperation_state_rejected
+}
+
+action nexusoperation_unspecified_schedule_embedded(op:nexusoperation) = {
+    require ~exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_unspecified;
+    exists_nexusoperation(op) := true;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action nexusoperation_unspecified_schedule_standalone(op:nexusoperation) = {
+    require ~exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_unspecified;
+    exists_nexusoperation(op) := true;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action callback_attach_handler(callback:callback,handlerrun:workflowrun) = {
+    require ~exists_callback(callback);
+    require exists_workflowrun(handlerrun);
+    require state_workflowrun(handlerrun) = workflowrun_state_started;
+    exists_callback(callback) := true;
+    state_callback(callback) := callback_state_unobserved;
+    relation_callback_handler_run(callback,handlerrun) := true
+}
+
+action callback_attach_reference(callback:callback,operation:nexusoperation,handlerrun:workflowrun) = {
+    require ~exists_callback(callback);
+    require exists_nexusoperation(operation);
+    require exists_workflowrun(handlerrun);
+    require state_workflowrun(handlerrun) = workflowrun_state_started;
+    exists_callback(callback) := true;
+    state_callback(callback) := callback_state_unobserved;
+    relation_callback_operation(callback,operation) := true;
+    relation_callback_handler_run(callback,handlerrun) := true;
+    relation_nexus_operation_handler_run(operation,handlerrun) := true
+}
+
+action callback_delivery_acknowledge(delivery:callbackdelivery,response:callbackresponse) = {
+    require exists_callbackdelivery(delivery);
+    require ~exists_callbackresponse(response);
+    require state_callbackdelivery(delivery) = callbackdelivery_state_delivered;
+    state_callbackdelivery(delivery) := callbackdelivery_state_acknowledged;
+    exists_callbackresponse(response) := true;
+    state_callbackresponse(response) := callbackresponse_state_accepted;
+    relation_callback_delivery_response(delivery,response) := true
+}
+
+action callback_delivery_deliver(delivery:callbackdelivery) = {
+    require exists_callbackdelivery(delivery);
+    require state_callbackdelivery(delivery) = callbackdelivery_state_pending;
+    state_callbackdelivery(delivery) := callbackdelivery_state_delivered
+}
+
+action callback_delivery_enqueue(callback:callback,delivery:callbackdelivery) = {
+    require exists_callback(callback);
+    require ~exists_callbackdelivery(delivery);
+    exists_callbackdelivery(delivery) := true;
+    state_callbackdelivery(delivery) := callbackdelivery_state_pending;
+    relation_callback_delivery(callback,delivery) := true
+}
+
+action callback_delivery_fail_delivered(delivery:callbackdelivery) = {
+    require exists_callbackdelivery(delivery);
+    require state_callbackdelivery(delivery) = callbackdelivery_state_delivered;
+    state_callbackdelivery(delivery) := callbackdelivery_state_failed
+}
+
+action callback_delivery_fail_pending(delivery:callbackdelivery) = {
+    require exists_callbackdelivery(delivery);
+    require state_callbackdelivery(delivery) = callbackdelivery_state_pending;
+    state_callbackdelivery(delivery) := callbackdelivery_state_failed
+}
+
+action callback_delivery_retry(delivery:callbackdelivery) = {
+    require exists_callbackdelivery(delivery);
+    require state_callbackdelivery(delivery) = callbackdelivery_state_failed;
+    state_callbackdelivery(delivery) := callbackdelivery_state_pending
+}
+
+action callback_handler_close_cancel(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require (state_workflowrun(entity) = workflowrun_state_started & (forall Q_callback:callback. exists_callback(Q_callback) -> ((relation_callback_handler_run(Q_callback,entity) -> (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((relation_callback_delivery(Q_callback,Q_delivery) -> state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged)))))));
+    state_workflowrun(entity) := workflowrun_state_canceled
+}
+
+action callback_handler_close_complete(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require (state_workflowrun(entity) = workflowrun_state_started & (forall Q_callback:callback. exists_callback(Q_callback) -> ((relation_callback_handler_run(Q_callback,entity) -> (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((relation_callback_delivery(Q_callback,Q_delivery) -> state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged)))))));
+    state_workflowrun(entity) := workflowrun_state_completed
+}
+
+action callback_handler_close_continue_as_new(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require (state_workflowrun(entity) = workflowrun_state_started & (forall Q_callback:callback. exists_callback(Q_callback) -> ((relation_callback_handler_run(Q_callback,entity) -> (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((relation_callback_delivery(Q_callback,Q_delivery) -> state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged)))))));
+    state_workflowrun(entity) := workflowrun_state_continued_as_new
+}
+
+action callback_handler_close_fail(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require (state_workflowrun(entity) = workflowrun_state_started & (forall Q_callback:callback. exists_callback(Q_callback) -> ((relation_callback_handler_run(Q_callback,entity) -> (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((relation_callback_delivery(Q_callback,Q_delivery) -> state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged)))))));
+    state_workflowrun(entity) := workflowrun_state_failed
+}
+
+action callback_handler_close_terminate(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require (state_workflowrun(entity) = workflowrun_state_started & (forall Q_callback:callback. exists_callback(Q_callback) -> ((relation_callback_handler_run(Q_callback,entity) -> (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((relation_callback_delivery(Q_callback,Q_delivery) -> state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged)))))));
+    state_workflowrun(entity) := workflowrun_state_terminated
+}
+
+action callback_handler_close_timeout(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require (state_workflowrun(entity) = workflowrun_state_started & (forall Q_callback:callback. exists_callback(Q_callback) -> ((relation_callback_handler_run(Q_callback,entity) -> (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((relation_callback_delivery(Q_callback,Q_delivery) -> state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged)))))));
+    state_workflowrun(entity) := workflowrun_state_timed_out
+}
+
+action callback_handler_start(entity:workflowrun) = {
+    require ~exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_created;
+    exists_workflowrun(entity) := true;
+    state_workflowrun(entity) := workflowrun_state_started
+}
+
+invariant [relation_callback_delivery_endpoints] forall S:callback,T:callbackdelivery. relation_callback_delivery(S,T) -> exists_callback(S) & exists_callbackdelivery(T)
+invariant [cardinality_callback_delivery_target] forall S1:callback,S2:callback,T:callbackdelivery. relation_callback_delivery(S1,T) & relation_callback_delivery(S2,T) -> S1 = S2
+invariant [relation_callback_delivery_response_endpoints] forall S:callbackdelivery,T:callbackresponse. relation_callback_delivery_response(S,T) -> exists_callbackdelivery(S) & exists_callbackresponse(T)
+invariant [cardinality_callback_delivery_response_source] forall S:callbackdelivery,T1:callbackresponse,T2:callbackresponse. relation_callback_delivery_response(S,T1) & relation_callback_delivery_response(S,T2) -> T1 = T2
+invariant [cardinality_callback_delivery_response_target] forall S1:callbackdelivery,S2:callbackdelivery,T:callbackresponse. relation_callback_delivery_response(S1,T) & relation_callback_delivery_response(S2,T) -> S1 = S2
+invariant [relation_callback_handler_run_endpoints] forall S:callback,T:workflowrun. relation_callback_handler_run(S,T) -> exists_callback(S) & exists_workflowrun(T)
+invariant [cardinality_callback_handler_run_source] forall S:callback,T1:workflowrun,T2:workflowrun. relation_callback_handler_run(S,T1) & relation_callback_handler_run(S,T2) -> T1 = T2
+invariant [relation_callback_operation_endpoints] forall S:callback,T:nexusoperation. relation_callback_operation(S,T) -> exists_callback(S) & exists_nexusoperation(T)
+invariant [cardinality_callback_operation_source] forall S:callback,T1:nexusoperation,T2:nexusoperation. relation_callback_operation(S,T1) & relation_callback_operation(S,T2) -> T1 = T2
+invariant [relation_nexus_operation_handler_run_endpoints] forall S:nexusoperation,T:workflowrun. relation_nexus_operation_handler_run(S,T) -> exists_nexusoperation(S) & exists_workflowrun(T)
+invariant [cardinality_nexus_operation_handler_run_source] forall S:nexusoperation,T1:workflowrun,T2:workflowrun. relation_nexus_operation_handler_run(S,T1) & relation_nexus_operation_handler_run(S,T2) -> T1 = T2
+invariant [callbackhandlerlifetime] (forall Q_handlerrun:workflowrun. exists_workflowrun(Q_handlerrun) -> (((state_workflowrun(Q_handlerrun) = workflowrun_state_completed | state_workflowrun(Q_handlerrun) = workflowrun_state_failed | state_workflowrun(Q_handlerrun) = workflowrun_state_canceled | state_workflowrun(Q_handlerrun) = workflowrun_state_terminated | state_workflowrun(Q_handlerrun) = workflowrun_state_timed_out | state_workflowrun(Q_handlerrun) = workflowrun_state_continued_as_new) -> (forall Q_callback:callback. exists_callback(Q_callback) -> ((relation_callback_handler_run(Q_callback,Q_handlerrun) -> (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((relation_callback_delivery(Q_callback,Q_delivery) -> state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged)))))))))
+invariant [callbackreferenceconsistency] (forall Q_callback:callback. exists_callback(Q_callback) -> ((forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((forall Q_handlerrun:workflowrun. exists_workflowrun(Q_handlerrun) -> (((relation_callback_operation(Q_callback,Q_operation) & relation_callback_handler_run(Q_callback,Q_handlerrun)) -> relation_nexus_operation_handler_run(Q_operation,Q_handlerrun))))))))
+invariant [callbackresponseconsistency] ((forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((state_callbackdelivery(Q_delivery) = callbackdelivery_state_acknowledged -> (exists Q_response:callbackresponse. exists_callbackresponse(Q_response) & ((relation_callback_delivery_response(Q_delivery,Q_response) & state_callbackresponse(Q_response) = callbackresponse_state_accepted)))))) & (forall Q_delivery:callbackdelivery. exists_callbackdelivery(Q_delivery) -> ((forall Q_response:callbackresponse. exists_callbackresponse(Q_response) -> ((relation_callback_delivery_response(Q_delivery,Q_response) -> state_callbackresponse(Q_response) = callbackresponse_state_accepted))))))
+
+export nexusoperation_backing_off_schedule_embedded
+export nexusoperation_backing_off_schedule_standalone
+export nexusoperation_backing_off_terminate_embedded
+export nexusoperation_backing_off_terminate_standalone
+export nexusoperation_backing_off_timeout_embedded
+export nexusoperation_backing_off_timeout_standalone
+export nexusoperation_scheduled_attempt_failed_embedded
+export nexusoperation_scheduled_attempt_failed_standalone
+export nexusoperation_scheduled_cancel_embedded
+export nexusoperation_scheduled_cancel_standalone
+export nexusoperation_scheduled_fail_embedded
+export nexusoperation_scheduled_fail_standalone
+export nexusoperation_scheduled_start_embedded
+export nexusoperation_scheduled_start_standalone
+export nexusoperation_scheduled_succeed_embedded
+export nexusoperation_scheduled_succeed_standalone
+export nexusoperation_scheduled_terminate_embedded
+export nexusoperation_scheduled_terminate_standalone
+export nexusoperation_scheduled_timeout_embedded
+export nexusoperation_scheduled_timeout_standalone
+export nexusoperation_started_cancel_embedded
+export nexusoperation_started_cancel_standalone
+export nexusoperation_started_fail_embedded
+export nexusoperation_started_fail_standalone
+export nexusoperation_started_succeed_embedded
+export nexusoperation_started_succeed_standalone
+export nexusoperation_started_terminate_embedded
+export nexusoperation_started_terminate_standalone
+export nexusoperation_started_timeout_embedded
+export nexusoperation_started_timeout_standalone
+export nexusoperation_unspecified_reject_embedded
+export nexusoperation_unspecified_reject_standalone
+export nexusoperation_unspecified_schedule_embedded
+export nexusoperation_unspecified_schedule_standalone
+export callback_attach_handler
+export callback_attach_reference
+export callback_delivery_acknowledge
+export callback_delivery_deliver
+export callback_delivery_enqueue
+export callback_delivery_fail_delivered
+export callback_delivery_fail_pending
+export callback_delivery_retry
+export callback_handler_close_cancel
+export callback_handler_close_complete
+export callback_handler_close_continue_as_new
+export callback_handler_close_fail
+export callback_handler_close_terminate
+export callback_handler_close_timeout
+export callback_handler_start

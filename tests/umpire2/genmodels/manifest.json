@@ -2,16 +2,161 @@
   "schemaVersion": "umpire-verification-target-index/v1",
   "generatorVersion": "umpire-genmodels/v1",
   "modelFamilyVersion": "umpire2/model-family-v1",
-  "modelFamilyHash": "sha256:a6a3bfdb77da5af1137598507762cacbfe00a0c22c6d4023a69cf3f5e95e255f",
+  "modelFamilyHash": "sha256:fa7cd9e7d236691e5c28e1c974957573b1b8eab1df46b8f05a9bb9da3fc50b67",
   "targets": [
     {
-      "name": "foundation-delivery-safety",
-      "modelHash": "sha256:b75e71ce3b243370e7d833bb9c87c42f1b536322fe320901a02d960fd193dc42",
+      "name": "feature-nexus",
+      "modelHash": "sha256:b76165da5ba9aa88d32dc6a88b9118ebb3166743d68ce763900fc9265d7726db",
+      "owners": [
+        "nexus",
+        "workflow"
+      ],
+      "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "feature-workflow-speculative-delivery",
+      "modelHash": "sha256:8c3de55f1e8427bf25ce416daac63fa6bdc24f0333e0dcab6421b14d11d533c5",
+      "owners": [
+        "history",
+        "matching",
+        "workflow"
+      ],
+      "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "foundation-backlog-ack",
+      "modelHash": "sha256:aca5dfbdba2a973a462fde87296dd682d7b0583ebc64a9b115c62f438f9b3c9e",
       "owners": [
         "history",
         "matching"
       ],
       "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "foundation-delivery-safety",
+      "modelHash": "sha256:6739ca4e438bc5f7acc98ad48c475d1b05be52f16b8cb5e6e07cd4886d5cdc5e",
+      "owners": [
+        "history",
+        "matching"
+      ],
+      "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "foundation-ownership-fencing",
+      "modelHash": "sha256:ba50db7b6e3dc354ab39ed4981a9b38121e05b3cf61e191ce8c5a54742677d5d",
+      "owners": [
+        "history",
+        "matching"
+      ],
+      "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "foundation-routing-isolation",
+      "modelHash": "sha256:75048595c82138f035886732eea507925b06b541aa0a02d236f9333bf9eae240",
+      "owners": [
+        "history",
+        "matching"
+      ],
+      "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "integration-activity-delivery",
+      "modelHash": "sha256:1ba11a256fc12a10ceb968dafcf2e981507f5d0013fab1fad248ba56f84d0c1e",
+      "owners": [
+        "activity",
+        "history",
+        "matching"
+      ],
+      "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "integration-callback-nexus",
+      "modelHash": "sha256:617168de226ab60381aea3dd4013e3ab073858c5026376dead33daeeddb6e1bc",
+      "owners": [
+        "callback",
+        "nexus",
+        "workflow"
+      ],
+      "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "integration-callback-workflow",
+      "modelHash": "sha256:7f8d4d2b299baa25a50f226ad562aea17d8d7a4b0f3f8cc12d715d82dc5ad260",
+      "owners": [
+        "callback",
+        "workflow"
+      ],
+      "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "integration-nexus-activity",
+      "modelHash": "sha256:5b01a0e2dc1509df19982c5666b97edfbd9bd4549acd531dafd9ed7a623bb481",
+      "owners": [
+        "activity",
+        "nexus"
+      ],
+      "backendRequirements": [
+        "fizz",
+        "ivy",
+        "p",
+        "tla"
+      ]
+    },
+    {
+      "name": "integration-workflow-delivery",
+      "modelHash": "sha256:32e8815917a10a93d74bc7cc94fca8968ff0d3537e449f51ccb32987cc342b0a",
+      "owners": [
+        "history",
+        "matching",
+        "workflow"
+      ],
+      "backendRequirements": [
+        "fizz",
         "ivy",
         "p",
         "tla"
@@ -19,7 +164,7 @@
     },
     {
       "name": "protocol-atomic",
-      "modelHash": "sha256:a42ab55e4e7a508b5e38417f30fede3121f935813454265716548f550dccafdd",
+      "modelHash": "sha256:58c42795041272d6e76b2c8b54af002e09d534826819e5004d531e0323bec5d4",
       "owners": [
         "activity",
         "callback",
@@ -28,6 +173,7 @@
         "workflow"
       ],
       "backendRequirements": [
+        "fizz",
         "ivy",
         "p",
         "tla"

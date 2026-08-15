@@ -305,7 +305,20 @@ func exceedsCardinality(tuples []RelationTuple, source bool) bool {
 }
 
 func stateKey(state ModelState) (string, error) {
-	encoded, err := json.Marshal(state)
+	normalized := cloneState(state)
+	for relation, tuples := range normalized.Relations {
+		if len(tuples) == 0 {
+			normalized.Relations[relation] = nil
+			continue
+		}
+		slices.SortFunc(tuples, func(left, right RelationTuple) int {
+			if result := compareString(left.Source, right.Source); result != 0 {
+				return result
+			}
+			return compareString(left.Target, right.Target)
+		})
+	}
+	encoded, err := json.Marshal(normalized)
 	if err != nil {
 		return "", err
 	}

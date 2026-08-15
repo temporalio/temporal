@@ -62,6 +62,25 @@ func TestGenerateExpandsBranchesAndQuiescentProperties(t *testing.T) {
 	require.Contains(t, source, "operation_0 in exists_operation")
 }
 
+func TestGenerateRequiresSameTypeFreshParametersToBeDistinct(t *testing.T) {
+	model := testModel()
+	model.Actions = append(model.Actions, verify.Action{
+		Name: "create-pair",
+		Parameters: []verify.Parameter{
+			{Name: "left", Type: "operation", Binding: verify.FreshBinding},
+			{Name: "right", Type: "operation", Binding: verify.FreshBinding},
+		},
+		Effects: []verify.Effect{
+			{Kind: verify.CreateEffect, Entity: "operation", Ref: "left", State: "scheduled"},
+			{Kind: verify.CreateEffect, Entity: "operation", Ref: "right", State: "scheduled"},
+		},
+	})
+
+	files, err := Generate(model)
+	require.NoError(t, err)
+	require.Contains(t, string(files["Umpire.p"]), "operation_0 != operation_1")
+}
+
 func TestGenerateIsDeterministic(t *testing.T) {
 	model := testModel()
 	reversed := model

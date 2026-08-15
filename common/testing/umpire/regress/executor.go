@@ -325,15 +325,16 @@ func runPath(ctx context.Context, harness PathHarness, path CompletedPath, recor
 	}
 	if err := harness.CheckSafety(ctx, QuiescenceCheckpoint); err != nil {
 		observeErr := observePathVerdict(ctx, harness, QuiescenceCheckpoint, err)
+		recordErr := recorder.verdict(ctx, pathIndex, QuiescenceCheckpoint, bindings, false, qualifiedVerdictProvider(harness))
 		if observeErr != nil {
-			return bindings, errors.Join(fmt.Errorf("monitor safety at quiescence: %w", err), observeErr)
+			return bindings, errors.Join(fmt.Errorf("monitor safety at quiescence: %w", err), observeErr, recordErr)
 		}
-		return bindings, fmt.Errorf("monitor safety at quiescence: %w", err)
+		return bindings, errors.Join(fmt.Errorf("monitor safety at quiescence: %w", err), recordErr)
 	}
 	if err := observePathVerdict(ctx, harness, QuiescenceCheckpoint, nil); err != nil {
 		return bindings, err
 	}
-	if err := recorder.verdict(ctx, pathIndex, QuiescenceCheckpoint, bindings); err != nil {
+	if err := recorder.verdict(ctx, pathIndex, QuiescenceCheckpoint, bindings, true, qualifiedVerdictProvider(harness)); err != nil {
 		return bindings, fmt.Errorf("write Monitor artifact: %w", err)
 	}
 	if err := harness.ResolveLiveness(ctx); err != nil {
@@ -394,15 +395,16 @@ func executeBoundary(
 	if boundary > 0 || observed {
 		if err := harness.CheckSafety(ctx, checkpoint); err != nil {
 			observeErr := observePathVerdict(ctx, harness, checkpoint, err)
+			recordErr := recorder.verdict(ctx, pathIndex, checkpoint, bindings, false, qualifiedVerdictProvider(harness))
 			if observeErr != nil {
-				return errors.Join(fmt.Errorf("monitor safety at %s: %w", checkpoint, err), observeErr)
+				return errors.Join(fmt.Errorf("monitor safety at %s: %w", checkpoint, err), observeErr, recordErr)
 			}
-			return fmt.Errorf("monitor safety at %s: %w", checkpoint, err)
+			return errors.Join(fmt.Errorf("monitor safety at %s: %w", checkpoint, err), recordErr)
 		}
 		if err := observePathVerdict(ctx, harness, checkpoint, nil); err != nil {
 			return err
 		}
-		if err := recorder.verdict(ctx, pathIndex, checkpoint, bindings); err != nil {
+		if err := recorder.verdict(ctx, pathIndex, checkpoint, bindings, true, qualifiedVerdictProvider(harness)); err != nil {
 			return fmt.Errorf("write Monitor artifact: %w", err)
 		}
 	}
@@ -422,6 +424,11 @@ func executeBoundary(
 	return nil
 }
 
+func qualifiedVerdictProvider(harness PathHarness) QualifiedVerdictProvider {
+	provider, _ := harness.(QualifiedVerdictProvider)
+	return provider
+}
+
 func observePathExecution(ctx context.Context, harness PathHarness, observed umpire.ExecutionObservation) error {
 	provider, ok := harness.(ExecutionObserverProvider)
 	if !ok {
@@ -438,6 +445,7 @@ func observePathVerdict(ctx context.Context, harness PathHarness, checkpoint Che
 	observed := umpire.ExecutionObservation{
 		Kind:       umpire.ExecutionVerdict,
 		Checkpoint: checkpoint.String(),
+		Property:   umpire.MonitorSafetyProperty(checkpoint.String()),
 		Pass:       verdictErr == nil,
 	}
 	if verdictErr != nil {

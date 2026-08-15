@@ -187,29 +187,46 @@ func TestNexusOperationOptionsPreserveStartToCloseTimeoutKind(t *testing.T) {
 }
 
 func TestRegressionHarnessPreflightRejectsUnsupportedRealizations(t *testing.T) {
-	tests := map[string]coreregress.CompletedPath{
-		"action": {
+	tests := map[string]struct {
+		path coreregress.CompletedPath
+		want error
+	}{
+		"action": {path: coreregress.CompletedPath{
 			Steps: []coreregress.CompletedStep{{Action: coreregress.CompletedAction{Realization: "missing.action"}}},
-		},
-		"action mode": {
+		}, want: coreregress.ErrMissingRealization},
+		"action mode": {path: coreregress.CompletedPath{
 			Steps: []coreregress.CompletedStep{{Action: coreregress.CompletedAction{Realization: RegressionObserve}, Mode: coreregress.ProactiveAction}},
-		},
-		"policy": {
+		}, want: coreregress.ErrRealizationModeMismatch},
+		"policy": {path: coreregress.CompletedPath{
 			Steps:    []coreregress.CompletedStep{{Action: coreregress.CompletedAction{Realization: RegressionNexusCancel}}},
 			Policies: []coreregress.CompletedPolicy{{Realization: "missing.policy", Start: 0, End: 1}},
-		},
-		"resource": {
+		}, want: coreregress.ErrMissingRealization},
+		"resource": {path: coreregress.CompletedPath{
 			Resources: []coreregress.CompletedResource{{Name: "missing", Realization: "missing.resource"}},
-		},
+		}, want: coreregress.ErrMissingRealization},
 	}
 	harness := NewRegressionHarness(nil, nil)
-	for name, path := range tests {
+	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := harness.Preflight(coreregress.Suite{Paths: []coreregress.CompletedPath{path}, PathCount: 1})
-			require.Error(t, err)
-			require.ErrorContains(t, err, name)
+			err := harness.Preflight(coreregress.Suite{Paths: []coreregress.CompletedPath{test.path}, PathCount: 1})
+			require.ErrorIs(t, err, test.want)
+			var compileErr *coreregress.CompileError
+			require.ErrorAs(t, err, &compileErr)
 		})
 	}
+}
+
+func TestRegressionPathQualifiesMonitorSafetyByEvidenceProfile(t *testing.T) {
+	path := &regressionPath{modelVersion: "model/v1", environmentProfile: umpirefw.PublicAPIProfile()}
+	claims, err := path.QualifiedVerdicts(context.Background(), coreregress.QuiescenceCheckpoint, false)
+	require.NoError(t, err)
+	require.Equal(t, umpirefw.ClaimUnsupported, claims[0].Status)
+	require.Equal(t, []string{"source:in-process"}, claims[0].Omissions)
+
+	path.environmentProfile = umpirefw.InProcessProfile()
+	claims, err = path.QualifiedVerdicts(context.Background(), coreregress.QuiescenceCheckpoint, false)
+	require.NoError(t, err)
+	require.Equal(t, umpirefw.ClaimEstablished, claims[0].Status)
 }
 
 func TestObserveWorkflowRunIDGroundsServerMintedValue(t *testing.T) {

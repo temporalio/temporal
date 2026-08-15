@@ -49,8 +49,12 @@
       "ids": [
         "Callback#0"
       ],
-      "initial": "",
-      "states": null,
+      "initial": "unobserved",
+      "states": [
+        {
+          "name": "unobserved"
+        }
+      ],
       "source": {
         "path": "tests/umpire2/model"
       }
@@ -2528,7 +2532,7 @@
       },
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -2554,7 +2558,7 @@
       },
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -2580,7 +2584,7 @@
       },
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -2735,7 +2739,7 @@
       },
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -2761,7 +2765,7 @@
       },
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -2787,7 +2791,7 @@
       },
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -2813,7 +2817,7 @@
       },
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     }
   ],
@@ -3099,16 +3103,8 @@
       }
     },
     {
-      "name": "regression.nexus.cancel",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
-      "source": {
-        "path": "tests/umpire2/protocol/regress_domain.go",
-        "symbol": "nexus.cancel"
-      }
-    },
-    {
       "name": "regression.nexus.cancel_with_retry",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.cancel_with_retry"
@@ -3116,23 +3112,7 @@
     },
     {
       "name": "regression.nexus.complete[nexus.complete.callback_failed]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
-      "source": {
-        "path": "tests/umpire2/protocol/regress_domain.go",
-        "symbol": "nexus.complete"
-      }
-    },
-    {
-      "name": "regression.nexus.complete[nexus.complete.scheduled]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
-      "source": {
-        "path": "tests/umpire2/protocol/regress_domain.go",
-        "symbol": "nexus.complete"
-      }
-    },
-    {
-      "name": "regression.nexus.complete[nexus.complete.started]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.complete"
@@ -3140,7 +3120,7 @@
     },
     {
       "name": "regression.nexus.complete_from_handler",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.complete_from_handler"
@@ -3148,7 +3128,7 @@
     },
     {
       "name": "regression.nexus.observe_callback_reference",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.observe_callback_reference"
@@ -3156,7 +3136,7 @@
     },
     {
       "name": "regression.nexus.observe_late_start_response",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.observe_late_start_response"
@@ -3164,7 +3144,7 @@
     },
     {
       "name": "regression.nexus.observe_link_endpoint",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.observe_link_endpoint"
@@ -3172,7 +3152,7 @@
     },
     {
       "name": "regression.nexus.observe_result_digest",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.observe_result_digest"
@@ -3180,23 +3160,7 @@
     },
     {
       "name": "regression.nexus.respond_start[nexus.respond_start.completion_pending.async]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
-      "source": {
-        "path": "tests/umpire2/protocol/regress_domain.go",
-        "symbol": "nexus.respond_start"
-      }
-    },
-    {
-      "name": "regression.nexus.respond_start[nexus.respond_start.scheduled.async]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
-      "source": {
-        "path": "tests/umpire2/protocol/regress_domain.go",
-        "symbol": "nexus.respond_start"
-      }
-    },
-    {
-      "name": "regression.nexus.respond_start[nexus.respond_start.scheduled.sync]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.respond_start"
@@ -3204,23 +3168,15 @@
     },
     {
       "name": "regression.nexus.schedule",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.schedule"
       }
     },
     {
-      "name": "regression.nexus.schedule_default",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
-      "source": {
-        "path": "tests/umpire2/protocol/regress_domain.go",
-        "symbol": "nexus.schedule_default"
-      }
-    },
-    {
       "name": "regression.nexus.schedule_embedded",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.schedule_embedded"
@@ -3228,7 +3184,7 @@
     },
     {
       "name": "regression.nexus.schedule_embedded_with_caller",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.schedule_embedded_with_caller"
@@ -3236,7 +3192,7 @@
     },
     {
       "name": "regression.nexus.start[nexus.start.attach_handler]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.start"
@@ -3244,7 +3200,7 @@
     },
     {
       "name": "regression.nexus.start[nexus.start.new_handler]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.start"
@@ -3252,23 +3208,15 @@
     },
     {
       "name": "regression.nexus.timeout",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.timeout"
       }
     },
     {
-      "name": "regression.workflow.complete",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
-      "source": {
-        "path": "tests/umpire2/protocol/regress_domain.go",
-        "symbol": "workflow.complete"
-      }
-    },
-    {
       "name": "regression.workflow.observe_nexus_storage_absent",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "workflow.observe_nexus_storage_absent"
@@ -3276,7 +3224,7 @@
     },
     {
       "name": "regression.workflow.observe_run_id",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "workflow.observe_run_id"
@@ -3666,6 +3614,14 @@
     },
     {
       "kind": "lifecycle-state",
+      "name": "Callback.unobserved",
+      "included": true,
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "kind": "lifecycle-state",
       "name": "NexusOperation.backing_off",
       "included": true,
       "source": {
@@ -3918,7 +3874,7 @@
       "included": true,
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -3927,7 +3883,7 @@
       "included": true,
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -3936,7 +3892,7 @@
       "included": true,
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -3972,7 +3928,7 @@
       "included": true,
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -3981,7 +3937,7 @@
       "included": true,
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -3990,7 +3946,7 @@
       "included": true,
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
@@ -3999,13 +3955,13 @@
       "included": true,
       "source": {
         "path": "common/testing/umpire/lifecycle.go",
-        "symbol": "MustProgress"
+        "symbol": "EntityProgressRule"
       }
     },
     {
       "kind": "regression-action",
       "name": "nexus.cancel",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "included": true,
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.cancel"
@@ -4014,7 +3970,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.cancel_with_retry",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.cancel_with_retry"
@@ -4023,7 +3979,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.complete[nexus.complete.callback_failed]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.complete"
@@ -4032,7 +3988,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.complete[nexus.complete.scheduled]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "included": true,
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.complete"
@@ -4041,7 +3997,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.complete[nexus.complete.started]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "included": true,
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.complete"
@@ -4050,7 +4006,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.complete_from_handler",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.complete_from_handler"
@@ -4059,7 +4015,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.observe_callback_reference",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.observe_callback_reference"
@@ -4068,7 +4024,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.observe_late_start_response",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.observe_late_start_response"
@@ -4077,7 +4033,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.observe_link_endpoint",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.observe_link_endpoint"
@@ -4086,7 +4042,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.observe_result_digest",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.observe_result_digest"
@@ -4095,7 +4051,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.respond_start[nexus.respond_start.completion_pending.async]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.respond_start"
@@ -4104,7 +4060,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.respond_start[nexus.respond_start.scheduled.async]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "included": true,
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.respond_start"
@@ -4113,7 +4069,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.respond_start[nexus.respond_start.scheduled.sync]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "included": true,
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.respond_start"
@@ -4122,7 +4078,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.schedule",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.schedule"
@@ -4131,7 +4087,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.schedule_default",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "included": true,
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.schedule_default"
@@ -4140,7 +4096,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.schedule_embedded",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.schedule_embedded"
@@ -4149,7 +4105,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.schedule_embedded_with_caller",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.schedule_embedded_with_caller"
@@ -4158,7 +4114,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.start[nexus.start.attach_handler]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.start"
@@ -4167,7 +4123,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.start[nexus.start.new_handler]",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.start"
@@ -4185,7 +4141,7 @@
     {
       "kind": "regression-action",
       "name": "nexus.timeout",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "nexus.timeout"
@@ -4194,7 +4150,7 @@
     {
       "kind": "regression-action",
       "name": "workflow.complete",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "included": true,
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "workflow.complete"
@@ -4203,7 +4159,7 @@
     {
       "kind": "regression-action",
       "name": "workflow.observe_nexus_storage_absent",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "workflow.observe_nexus_storage_absent"
@@ -4212,7 +4168,7 @@
     {
       "kind": "regression-action",
       "name": "workflow.observe_run_id",
-      "reason": "outside the initial bounded Nexus lifecycle/relation slice",
+      "reason": "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action",
       "source": {
         "path": "tests/umpire2/protocol/regress_domain.go",
         "symbol": "workflow.observe_run_id"
@@ -4485,7 +4441,7 @@
     {
       "kind": "rule",
       "name": "CallbackReferenceConsistencyRule",
-      "reason": "imperative runtime rule has not been migrated to the shared property algebra",
+      "included": true,
       "source": {
         "path": "tests/umpire2/rule",
         "symbol": "CallbackReferenceConsistencyRule"
@@ -4494,7 +4450,7 @@
     {
       "kind": "rule",
       "name": "CallbackResponseConsistencyRule",
-      "reason": "imperative runtime rule has not been migrated to the shared property algebra",
+      "included": true,
       "source": {
         "path": "tests/umpire2/rule",
         "symbol": "CallbackResponseConsistencyRule"
@@ -4521,7 +4477,7 @@
     {
       "kind": "rule",
       "name": "NexusOperationClosureRule",
-      "reason": "imperative runtime rule has not been migrated to the shared property algebra",
+      "included": true,
       "source": {
         "path": "tests/umpire2/rule",
         "symbol": "NexusOperationClosureRule"
@@ -4530,7 +4486,7 @@
     {
       "kind": "rule",
       "name": "NexusOperationTimeoutSemanticsRule",
-      "reason": "imperative runtime rule has not been migrated to the shared property algebra",
+      "included": true,
       "source": {
         "path": "tests/umpire2/rule",
         "symbol": "NexusOperationTimeoutSemanticsRule"
@@ -4539,7 +4495,7 @@
     {
       "kind": "rule",
       "name": "SpeculativeTaskCreationRule",
-      "reason": "imperative runtime rule has not been migrated to the shared property algebra",
+      "included": true,
       "source": {
         "path": "tests/umpire2/rule",
         "symbol": "SpeculativeTaskCreationRule"
@@ -4548,7 +4504,7 @@
     {
       "kind": "rule",
       "name": "WorkflowTaskStarvationRule",
-      "reason": "imperative runtime rule has not been migrated to the shared property algebra",
+      "included": true,
       "source": {
         "path": "tests/umpire2/rule",
         "symbol": "WorkflowTaskStarvationRule"
@@ -5473,32 +5429,10 @@
       }
     },
     {
-      "name": "lifecycle.NexusOperation.scheduled.start.Standalone",
-      "action": "NexusOperation.scheduled.start.Standalone",
-      "lifecycleActions": [
-        "NexusOperation.scheduled.start.Standalone"
-      ],
-      "source": {
-        "path": "tests/umpire2/protocol/default.go",
-        "symbol": "handler:AsyncAck"
-      }
-    },
-    {
       "name": "lifecycle.NexusOperation.scheduled.succeed.Embedded",
       "action": "NexusOperation.scheduled.succeed.Embedded",
       "lifecycleActions": [
         "NexusOperation.scheduled.succeed.Embedded"
-      ],
-      "source": {
-        "path": "tests/umpire2/protocol/default.go",
-        "symbol": "handler:SyncOk"
-      }
-    },
-    {
-      "name": "lifecycle.NexusOperation.scheduled.succeed.Standalone",
-      "action": "NexusOperation.scheduled.succeed.Standalone",
-      "lifecycleActions": [
-        "NexusOperation.scheduled.succeed.Standalone"
       ],
       "source": {
         "path": "tests/umpire2/protocol/default.go",
@@ -5561,17 +5495,6 @@
       }
     },
     {
-      "name": "lifecycle.NexusOperation.started.cancel.Standalone",
-      "action": "NexusOperation.started.cancel.Standalone",
-      "lifecycleActions": [
-        "NexusOperation.started.cancel.Standalone"
-      ],
-      "source": {
-        "path": "tests/umpire2/protocol/default.go",
-        "symbol": "callback:Complete"
-      }
-    },
-    {
       "name": "lifecycle.NexusOperation.started.fail.Embedded",
       "action": "NexusOperation.started.fail.Embedded",
       "lifecycleActions": [
@@ -5598,17 +5521,6 @@
       "action": "NexusOperation.started.succeed.Embedded",
       "lifecycleActions": [
         "NexusOperation.started.succeed.Embedded"
-      ],
-      "source": {
-        "path": "tests/umpire2/protocol/default.go",
-        "symbol": "callback:Complete"
-      }
-    },
-    {
-      "name": "lifecycle.NexusOperation.started.succeed.Standalone",
-      "action": "NexusOperation.started.succeed.Standalone",
-      "lifecycleActions": [
-        "NexusOperation.started.succeed.Standalone"
       ],
       "source": {
         "path": "tests/umpire2/protocol/default.go",
@@ -5693,17 +5605,6 @@
       }
     },
     {
-      "name": "lifecycle.NexusOperation.unspecified.schedule.Standalone",
-      "action": "NexusOperation.unspecified.schedule.Standalone",
-      "lifecycleActions": [
-        "NexusOperation.unspecified.schedule.Standalone"
-      ],
-      "source": {
-        "path": "tests/umpire2/protocol/default.go",
-        "symbol": "StartNexusOperationExecution"
-      }
-    },
-    {
       "name": "lifecycle.Workflow.created.start.Standalone",
       "action": "Workflow.created.start.Standalone",
       "lifecycleActions": [
@@ -5723,17 +5624,6 @@
       "source": {
         "path": "tests/umpire2/protocol/default.go",
         "symbol": "needs a workflow cancellation command driver"
-      }
-    },
-    {
-      "name": "lifecycle.Workflow.started.complete.Standalone",
-      "action": "Workflow.started.complete.Standalone",
-      "lifecycleActions": [
-        "Workflow.started.complete.Standalone"
-      ],
-      "source": {
-        "path": "tests/umpire2/protocol/default.go",
-        "symbol": "SignalWorkflowExecution(finish)"
       }
     },
     {
@@ -5943,6 +5833,91 @@
       "source": {
         "path": "tests/umpire2/protocol/default.go",
         "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.scheduled.start.Standalone",
+      "action": "NexusOperation.scheduled.start.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.start.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.respond_start[nexus.respond_start.scheduled.async]"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start.scheduled.async"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.scheduled.succeed.Standalone",
+      "action": "NexusOperation.scheduled.succeed.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.succeed.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.complete[nexus.complete.scheduled]",
+        "nexus.respond_start[nexus.respond_start.scheduled.sync]"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start.scheduled.sync"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.started.cancel.Standalone",
+      "action": "NexusOperation.started.cancel.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.cancel.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.cancel"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.cancel"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.started.succeed.Standalone",
+      "action": "NexusOperation.started.succeed.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.succeed.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.complete[nexus.complete.started]"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.complete.started"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.unspecified.schedule.Standalone",
+      "action": "NexusOperation.unspecified.schedule.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.unspecified.schedule.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.schedule_default"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule_default"
+      }
+    },
+    {
+      "name": "regression.Workflow.started.complete.Standalone",
+      "action": "Workflow.started.complete.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.complete.Standalone"
+      ],
+      "regressionActions": [
+        "workflow.complete"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.complete"
       }
     },
     {

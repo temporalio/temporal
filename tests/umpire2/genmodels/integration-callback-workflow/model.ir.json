@@ -1,0 +1,1223 @@
+{
+  "version": "umpire2/verification-v1",
+  "entities": [
+    {
+      "name": "Callback",
+      "ids": [
+        "Callback#0",
+        "Callback#1"
+      ],
+      "initial": "unobserved",
+      "states": [
+        {
+          "name": "unobserved"
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "CallbackDelivery",
+      "ids": [
+        "CallbackDelivery#0",
+        "CallbackDelivery#1"
+      ],
+      "initial": "pending",
+      "states": [
+        {
+          "name": "acknowledged",
+          "terminal": true
+        },
+        {
+          "name": "delivered"
+        },
+        {
+          "name": "failed"
+        },
+        {
+          "name": "pending"
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "CallbackDelivery"
+      }
+    },
+    {
+      "name": "CallbackResponse",
+      "ids": [
+        "CallbackResponse#0",
+        "CallbackResponse#1"
+      ],
+      "initial": "unobserved",
+      "states": [
+        {
+          "name": "accepted"
+        },
+        {
+          "name": "conflicting"
+        },
+        {
+          "name": "unobserved"
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "CallbackResponse"
+      }
+    },
+    {
+      "name": "WorkflowRun",
+      "ids": [
+        "WorkflowRun#0",
+        "WorkflowRun#1"
+      ],
+      "initial": "created",
+      "states": [
+        {
+          "name": "canceled",
+          "terminal": true
+        },
+        {
+          "name": "completed",
+          "terminal": true,
+          "disposition": "Success"
+        },
+        {
+          "name": "continued_as_new",
+          "terminal": true
+        },
+        {
+          "name": "created"
+        },
+        {
+          "name": "failed",
+          "terminal": true,
+          "disposition": "Failure"
+        },
+        {
+          "name": "started"
+        },
+        {
+          "name": "terminated",
+          "terminal": true
+        },
+        {
+          "name": "timed_out",
+          "terminal": true,
+          "disposition": "Failure"
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "name": "callback-delivery",
+      "source": "Callback",
+      "target": "CallbackDelivery",
+      "sourceCardinality": "many",
+      "targetCardinality": "one",
+      "sourceLocation": {}
+    },
+    {
+      "name": "callback-delivery-response",
+      "source": "CallbackDelivery",
+      "target": "CallbackResponse",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {}
+    },
+    {
+      "name": "callback-handler-run",
+      "source": "Callback",
+      "target": "WorkflowRun",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceLocation": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "name": "callback.attach-handler",
+      "parameters": [
+        {
+          "name": "callback",
+          "type": "Callback",
+          "binding": "fresh"
+        },
+        {
+          "name": "handlerRun",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowRun",
+        "ref": "handlerRun",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "Callback",
+          "ref": "callback",
+          "state": "unobserved"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "callback-handler-run",
+          "source": "callback",
+          "target": "handlerRun"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.attach-handler"
+      }
+    },
+    {
+      "name": "callback.delivery.acknowledge",
+      "parameters": [
+        {
+          "name": "delivery",
+          "type": "CallbackDelivery",
+          "binding": "input"
+        },
+        {
+          "name": "response",
+          "type": "CallbackResponse",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "CallbackDelivery",
+        "ref": "delivery",
+        "state": "delivered"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "CallbackDelivery",
+          "ref": "delivery",
+          "state": "acknowledged"
+        },
+        {
+          "kind": "create",
+          "entity": "CallbackResponse",
+          "ref": "response",
+          "state": "accepted"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "callback-delivery-response",
+          "source": "delivery",
+          "target": "response"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.acknowledge"
+      }
+    },
+    {
+      "name": "callback.delivery.deliver",
+      "parameters": [
+        {
+          "name": "delivery",
+          "type": "CallbackDelivery",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "CallbackDelivery",
+        "ref": "delivery",
+        "state": "pending"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "CallbackDelivery",
+          "ref": "delivery",
+          "state": "delivered"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.deliver"
+      }
+    },
+    {
+      "name": "callback.delivery.enqueue",
+      "parameters": [
+        {
+          "name": "callback",
+          "type": "Callback",
+          "binding": "input"
+        },
+        {
+          "name": "delivery",
+          "type": "CallbackDelivery",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {},
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "CallbackDelivery",
+          "ref": "delivery",
+          "state": "pending"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "callback-delivery",
+          "source": "callback",
+          "target": "delivery"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.enqueue"
+      }
+    },
+    {
+      "name": "callback.delivery.fail-delivered",
+      "parameters": [
+        {
+          "name": "delivery",
+          "type": "CallbackDelivery",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "CallbackDelivery",
+        "ref": "delivery",
+        "state": "delivered"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "CallbackDelivery",
+          "ref": "delivery",
+          "state": "failed"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.fail-delivered"
+      }
+    },
+    {
+      "name": "callback.delivery.fail-pending",
+      "parameters": [
+        {
+          "name": "delivery",
+          "type": "CallbackDelivery",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "CallbackDelivery",
+        "ref": "delivery",
+        "state": "pending"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "CallbackDelivery",
+          "ref": "delivery",
+          "state": "failed"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.fail-pending"
+      }
+    },
+    {
+      "name": "callback.delivery.retry",
+      "parameters": [
+        {
+          "name": "delivery",
+          "type": "CallbackDelivery",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "CallbackDelivery",
+        "ref": "delivery",
+        "state": "failed"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "CallbackDelivery",
+          "ref": "delivery",
+          "state": "pending"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.retry"
+      }
+    },
+    {
+      "name": "callback.handler.close.cancel",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowRun",
+            "ref": "entity",
+            "state": "started"
+          },
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "callback-handler-run",
+                    "source": "callback",
+                    "target": "entity"
+                  },
+                  {
+                    "op": "for-all",
+                    "args": [
+                      {
+                        "op": "implies",
+                        "args": [
+                          {
+                            "op": "relation-has",
+                            "relation": "callback-delivery",
+                            "source": "callback",
+                            "target": "delivery"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "CallbackDelivery",
+                            "ref": "delivery",
+                            "state": "acknowledged"
+                          }
+                        ]
+                      }
+                    ],
+                    "entity": "CallbackDelivery",
+                    "var": "delivery"
+                  }
+                ]
+              }
+            ],
+            "entity": "Callback",
+            "var": "callback"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.cancel"
+      }
+    },
+    {
+      "name": "callback.handler.close.complete",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowRun",
+            "ref": "entity",
+            "state": "started"
+          },
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "callback-handler-run",
+                    "source": "callback",
+                    "target": "entity"
+                  },
+                  {
+                    "op": "for-all",
+                    "args": [
+                      {
+                        "op": "implies",
+                        "args": [
+                          {
+                            "op": "relation-has",
+                            "relation": "callback-delivery",
+                            "source": "callback",
+                            "target": "delivery"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "CallbackDelivery",
+                            "ref": "delivery",
+                            "state": "acknowledged"
+                          }
+                        ]
+                      }
+                    ],
+                    "entity": "CallbackDelivery",
+                    "var": "delivery"
+                  }
+                ]
+              }
+            ],
+            "entity": "Callback",
+            "var": "callback"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "completed"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.complete"
+      }
+    },
+    {
+      "name": "callback.handler.close.continue_as_new",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowRun",
+            "ref": "entity",
+            "state": "started"
+          },
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "callback-handler-run",
+                    "source": "callback",
+                    "target": "entity"
+                  },
+                  {
+                    "op": "for-all",
+                    "args": [
+                      {
+                        "op": "implies",
+                        "args": [
+                          {
+                            "op": "relation-has",
+                            "relation": "callback-delivery",
+                            "source": "callback",
+                            "target": "delivery"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "CallbackDelivery",
+                            "ref": "delivery",
+                            "state": "acknowledged"
+                          }
+                        ]
+                      }
+                    ],
+                    "entity": "CallbackDelivery",
+                    "var": "delivery"
+                  }
+                ]
+              }
+            ],
+            "entity": "Callback",
+            "var": "callback"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "continued_as_new"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.continue_as_new"
+      }
+    },
+    {
+      "name": "callback.handler.close.fail",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowRun",
+            "ref": "entity",
+            "state": "started"
+          },
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "callback-handler-run",
+                    "source": "callback",
+                    "target": "entity"
+                  },
+                  {
+                    "op": "for-all",
+                    "args": [
+                      {
+                        "op": "implies",
+                        "args": [
+                          {
+                            "op": "relation-has",
+                            "relation": "callback-delivery",
+                            "source": "callback",
+                            "target": "delivery"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "CallbackDelivery",
+                            "ref": "delivery",
+                            "state": "acknowledged"
+                          }
+                        ]
+                      }
+                    ],
+                    "entity": "CallbackDelivery",
+                    "var": "delivery"
+                  }
+                ]
+              }
+            ],
+            "entity": "Callback",
+            "var": "callback"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "failed"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.fail"
+      }
+    },
+    {
+      "name": "callback.handler.close.terminate",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowRun",
+            "ref": "entity",
+            "state": "started"
+          },
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "callback-handler-run",
+                    "source": "callback",
+                    "target": "entity"
+                  },
+                  {
+                    "op": "for-all",
+                    "args": [
+                      {
+                        "op": "implies",
+                        "args": [
+                          {
+                            "op": "relation-has",
+                            "relation": "callback-delivery",
+                            "source": "callback",
+                            "target": "delivery"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "CallbackDelivery",
+                            "ref": "delivery",
+                            "state": "acknowledged"
+                          }
+                        ]
+                      }
+                    ],
+                    "entity": "CallbackDelivery",
+                    "var": "delivery"
+                  }
+                ]
+              }
+            ],
+            "entity": "Callback",
+            "var": "callback"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.terminate"
+      }
+    },
+    {
+      "name": "callback.handler.close.timeout",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowRun",
+            "ref": "entity",
+            "state": "started"
+          },
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "callback-handler-run",
+                    "source": "callback",
+                    "target": "entity"
+                  },
+                  {
+                    "op": "for-all",
+                    "args": [
+                      {
+                        "op": "implies",
+                        "args": [
+                          {
+                            "op": "relation-has",
+                            "relation": "callback-delivery",
+                            "source": "callback",
+                            "target": "delivery"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "CallbackDelivery",
+                            "ref": "delivery",
+                            "state": "acknowledged"
+                          }
+                        ]
+                      }
+                    ],
+                    "entity": "CallbackDelivery",
+                    "var": "delivery"
+                  }
+                ]
+              }
+            ],
+            "entity": "Callback",
+            "var": "callback"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.timeout"
+      }
+    },
+    {
+      "name": "callback.handler.start",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowRun",
+        "ref": "entity",
+        "state": "created"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "started"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.start"
+      }
+    }
+  ],
+  "properties": [
+    {
+      "name": "CallbackHandlerLifetime",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "state-is",
+                    "entity": "WorkflowRun",
+                    "ref": "handlerRun",
+                    "state": "completed"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkflowRun",
+                    "ref": "handlerRun",
+                    "state": "failed"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkflowRun",
+                    "ref": "handlerRun",
+                    "state": "canceled"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkflowRun",
+                    "ref": "handlerRun",
+                    "state": "terminated"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkflowRun",
+                    "ref": "handlerRun",
+                    "state": "timed_out"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkflowRun",
+                    "ref": "handlerRun",
+                    "state": "continued_as_new"
+                  }
+                ]
+              },
+              {
+                "op": "for-all",
+                "args": [
+                  {
+                    "op": "implies",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "callback-handler-run",
+                        "source": "callback",
+                        "target": "handlerRun"
+                      },
+                      {
+                        "op": "for-all",
+                        "args": [
+                          {
+                            "op": "implies",
+                            "args": [
+                              {
+                                "op": "relation-has",
+                                "relation": "callback-delivery",
+                                "source": "callback",
+                                "target": "delivery"
+                              },
+                              {
+                                "op": "state-is",
+                                "entity": "CallbackDelivery",
+                                "ref": "delivery",
+                                "state": "acknowledged"
+                              }
+                            ]
+                          }
+                        ],
+                        "entity": "CallbackDelivery",
+                        "var": "delivery"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "Callback",
+                "var": "callback"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkflowRun",
+        "var": "handlerRun"
+      },
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "CallbackHandlerLifetime"
+      }
+    },
+    {
+      "name": "CallbackResponseConsistency",
+      "kind": "safety",
+      "expr": {
+        "op": "and",
+        "args": [
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "state-is",
+                    "entity": "CallbackDelivery",
+                    "ref": "delivery",
+                    "state": "acknowledged"
+                  },
+                  {
+                    "op": "exists",
+                    "args": [
+                      {
+                        "op": "and",
+                        "args": [
+                          {
+                            "op": "relation-has",
+                            "relation": "callback-delivery-response",
+                            "source": "delivery",
+                            "target": "response"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "CallbackResponse",
+                            "ref": "response",
+                            "state": "accepted"
+                          }
+                        ]
+                      }
+                    ],
+                    "entity": "CallbackResponse",
+                    "var": "response"
+                  }
+                ]
+              }
+            ],
+            "entity": "CallbackDelivery",
+            "var": "delivery"
+          },
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "for-all",
+                "args": [
+                  {
+                    "op": "implies",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "callback-delivery-response",
+                        "source": "delivery",
+                        "target": "response"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "CallbackResponse",
+                        "ref": "response",
+                        "state": "accepted"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "CallbackResponse",
+                "var": "response"
+              }
+            ],
+            "entity": "CallbackDelivery",
+            "var": "delivery"
+          }
+        ]
+      },
+      "source": {
+        "path": "tests/umpire2/rule/callback_response_consistency.go",
+        "symbol": "CallbackResponseConsistencyRule"
+      }
+    }
+  ],
+  "refinements": [
+    {
+      "name": "callback.attach-handler",
+      "action": "callback.attach-handler",
+      "lifecycleActions": [
+        "callback.attach-handler"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.attach-handler"
+      }
+    },
+    {
+      "name": "callback.delivery.acknowledge",
+      "action": "callback.delivery.acknowledge",
+      "lifecycleActions": [
+        "callback.delivery.acknowledge"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.acknowledge"
+      }
+    },
+    {
+      "name": "callback.delivery.deliver",
+      "action": "callback.delivery.deliver",
+      "lifecycleActions": [
+        "callback.delivery.deliver"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.deliver"
+      }
+    },
+    {
+      "name": "callback.delivery.enqueue",
+      "action": "callback.delivery.enqueue",
+      "lifecycleActions": [
+        "callback.delivery.enqueue"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.enqueue"
+      }
+    },
+    {
+      "name": "callback.delivery.fail-delivered",
+      "action": "callback.delivery.fail-delivered",
+      "lifecycleActions": [
+        "callback.delivery.fail-delivered"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.fail-delivered"
+      }
+    },
+    {
+      "name": "callback.delivery.fail-pending",
+      "action": "callback.delivery.fail-pending",
+      "lifecycleActions": [
+        "callback.delivery.fail-pending"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.fail-pending"
+      }
+    },
+    {
+      "name": "callback.delivery.retry",
+      "action": "callback.delivery.retry",
+      "lifecycleActions": [
+        "callback.delivery.retry"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.delivery.retry"
+      }
+    },
+    {
+      "name": "callback.handler.close.cancel",
+      "action": "callback.handler.close.cancel",
+      "lifecycleActions": [
+        "WorkflowRun.started.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.cancel"
+      }
+    },
+    {
+      "name": "callback.handler.close.complete",
+      "action": "callback.handler.close.complete",
+      "lifecycleActions": [
+        "WorkflowRun.started.complete.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.complete"
+      }
+    },
+    {
+      "name": "callback.handler.close.continue_as_new",
+      "action": "callback.handler.close.continue_as_new",
+      "lifecycleActions": [
+        "WorkflowRun.started.continue_as_new.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.continue_as_new"
+      }
+    },
+    {
+      "name": "callback.handler.close.fail",
+      "action": "callback.handler.close.fail",
+      "lifecycleActions": [
+        "WorkflowRun.started.fail.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.fail"
+      }
+    },
+    {
+      "name": "callback.handler.close.terminate",
+      "action": "callback.handler.close.terminate",
+      "lifecycleActions": [
+        "WorkflowRun.started.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.terminate"
+      }
+    },
+    {
+      "name": "callback.handler.close.timeout",
+      "action": "callback.handler.close.timeout",
+      "lifecycleActions": [
+        "WorkflowRun.started.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.close.timeout"
+      }
+    },
+    {
+      "name": "callback.handler.start",
+      "action": "callback.handler.start",
+      "lifecycleActions": [
+        "WorkflowRun.created.start.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_callback.go",
+        "symbol": "callback.handler.start"
+      }
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import (
 type ClosureReport struct {
 	RetainedActions    []string `json:"retainedActions,omitempty"`
 	EnvironmentActions []string `json:"environmentActions,omitempty"`
+	RefinedActions     []string `json:"refinedActions,omitempty"`
 	StutteringActions  []string `json:"stutteringActions,omitempty"`
 	OmittedActions     []string `json:"omittedActions,omitempty"`
 }
@@ -27,6 +28,7 @@ func MarshalClosureReport(report ClosureReport) ([]byte, error) {
 	result := report
 	result.RetainedActions = sortedClone(report.RetainedActions)
 	result.EnvironmentActions = sortedClone(report.EnvironmentActions)
+	result.RefinedActions = sortedClone(report.RefinedActions)
 	result.StutteringActions = sortedClone(report.StutteringActions)
 	result.OmittedActions = sortedClone(report.OmittedActions)
 	encoded, err := json.MarshalIndent(result, "", "  ")
@@ -69,8 +71,10 @@ func Project(family ModelFamily, targetName string) (ProjectedTarget, error) {
 	actions := make(map[string]struct{})
 	properties := make(map[string]struct{})
 	environmentActions := make(map[string]struct{})
+	refinedActions := make(map[string]struct{})
 	stutteringActions := make(map[string]struct{})
 	includedModules := make(map[string]struct{}, len(moduleNames))
+	addNames(actions, target.Actions)
 	for _, moduleName := range moduleNames {
 		module, found := modules[moduleName]
 		if !found {
@@ -94,8 +98,21 @@ func Project(family ModelFamily, targetName string) (ProjectedTarget, error) {
 		for _, refinement := range refinementMap.Actions {
 			if refinement.Stutter {
 				stutteringActions[refinement.Concrete] = struct{}{}
+			} else if refinement.Concrete != refinement.Abstract {
+				if _, concreteSelected := actions[refinement.Concrete]; concreteSelected {
+					refinedActions[refinement.Abstract] = struct{}{}
+				}
 			}
 		}
+	}
+	for action := range refinedActions {
+		delete(actions, action)
+	}
+	selectedAbstractions := make(map[string]struct{}, len(target.Abstractions))
+	addNames(selectedAbstractions, target.Abstractions)
+	selectedOmissions := make(map[string]struct{}, len(target.Omissions))
+	for _, omission := range target.Omissions {
+		selectedOmissions[omission.Name] = struct{}{}
 	}
 	addNames(properties, propertyNames)
 	closeModelDependencies(family.Model, entities, relations, actions, properties)
@@ -118,6 +135,9 @@ func Project(family ModelFamily, targetName string) (ProjectedTarget, error) {
 		declared, obligation := interfaceObligation(family.Interfaces, imported)
 		_, providerIncluded := includedModules[declared.Provider]
 		for _, action := range obligation.Actions {
+			if _, refined := refinedActions[action]; refined {
+				continue
+			}
 			actions[action] = struct{}{}
 			if !providerIncluded {
 				environmentActions[action] = struct{}{}
@@ -128,11 +148,25 @@ func Project(family ModelFamily, targetName string) (ProjectedTarget, error) {
 		slices.SortFunc(obligationQueue, compareObligationRef)
 	}
 	closeModelDependencies(family.Model, entities, relations, actions, properties)
+	abstractedActions := make(map[string]struct{})
 	for _, action := range family.Model.Actions {
 		if _, included := actions[action.Name]; included {
 			continue
 		}
+		if _, refined := refinedActions[action.Name]; refined {
+			continue
+		}
 		if actionAffects(action, entities, relations) {
+			if actionCoveredByRetainedRefinement(action, family, actions, refinedActions, entities, relations) {
+				abstractedActions[action.Name] = struct{}{}
+				continue
+			}
+			if _, explicitlyOmitted := selectedAbstractions[action.Name]; explicitlyOmitted {
+				continue
+			}
+			if _, explicitlyOmitted := selectedOmissions[action.Name]; explicitlyOmitted {
+				continue
+			}
 			return ProjectedTarget{}, fmt.Errorf("verification target %q omits action %q which can affect retained state", target.Name, action.Name)
 		}
 	}
@@ -154,6 +188,10 @@ func Project(family ModelFamily, targetName string) (ProjectedTarget, error) {
 			} else {
 				report.RetainedActions = append(report.RetainedActions, action.Name)
 			}
+		} else if _, refined := refinedActions[action.Name]; refined {
+			report.RefinedActions = append(report.RefinedActions, action.Name)
+		} else if _, abstracted := abstractedActions[action.Name]; abstracted {
+			report.RefinedActions = append(report.RefinedActions, action.Name)
 		} else if _, stuttering := stutteringActions[action.Name]; stuttering {
 			report.StutteringActions = append(report.StutteringActions, action.Name)
 		} else {
@@ -170,6 +208,62 @@ func Project(family ModelFamily, targetName string) (ProjectedTarget, error) {
 		Properties:         sortedCompact(propertyNames),
 		Interfaces:         projectedManifestInterfaces(family, selectedModules),
 	}, nil
+}
+
+func actionCoveredByRetainedRefinement(
+	concrete Action,
+	family ModelFamily,
+	retainedActions map[string]struct{},
+	refinedActions map[string]struct{},
+	entities map[string]struct{},
+	relations map[string]struct{},
+) bool {
+	actions := make(map[string]Action, len(family.Model.Actions))
+	for _, action := range family.Model.Actions {
+		actions[action.Name] = action
+	}
+	var abstractEffects []Effect
+	var abstractBranchEffects []Effect
+	for _, refinementMap := range family.RefinementMaps {
+		for _, refinement := range refinementMap.Actions {
+			if refinement.Concrete != concrete.Name || refinement.Abstract == "" {
+				continue
+			}
+			if _, retained := retainedActions[refinement.Abstract]; !retained {
+				if _, replaced := refinedActions[refinement.Abstract]; !replaced {
+					continue
+				}
+			}
+			abstract := actions[refinement.Abstract]
+			parameterNames := make(map[string]string, len(refinement.Parameters))
+			for _, parameter := range refinement.Parameters {
+				parameterNames[parameter.Abstract] = parameter.Concrete
+			}
+			abstractEffects = append(abstractEffects, renameRefinementEffects(abstract.Effects, parameterNames)...)
+			for _, branch := range abstract.Branches {
+				abstractBranchEffects = append(abstractBranchEffects, renameRefinementEffects(branch.Effects, parameterNames)...)
+			}
+		}
+	}
+	for _, effect := range concrete.Effects {
+		if effectAffects(effect, entities, relations) && !slices.Contains(abstractEffects, effect) {
+			return false
+		}
+	}
+	for _, branch := range concrete.Branches {
+		for _, effect := range branch.Effects {
+			if effectAffects(effect, entities, relations) && !slices.Contains(abstractBranchEffects, effect) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func effectAffects(effect Effect, entities, relations map[string]struct{}) bool {
+	_, entityRetained := entities[effect.Entity]
+	_, relationRetained := relations[effect.Relation]
+	return effect.Entity != "" && entityRetained || effect.Relation != "" && relationRetained
 }
 
 func projectedManifestInterfaces(family ModelFamily, moduleNames []string) []ManifestInterface {
@@ -218,6 +312,7 @@ func cloneVerificationTarget(target VerificationTarget) VerificationTarget {
 	result := target
 	result.Owners = slices.Clone(target.Owners)
 	result.Modules = slices.Clone(target.Modules)
+	result.Actions = slices.Clone(target.Actions)
 	result.Compositions = slices.Clone(target.Compositions)
 	result.Properties = slices.Clone(target.Properties)
 	result.RefinementMaps = slices.Clone(target.RefinementMaps)
@@ -226,6 +321,7 @@ func cloneVerificationTarget(target VerificationTarget) VerificationTarget {
 	result.BackendRequirements = slices.Clone(target.BackendRequirements)
 	result.FailurePolicy = slices.Clone(target.FailurePolicy)
 	result.Abstractions = slices.Clone(target.Abstractions)
+	result.Omissions = slices.Clone(target.Omissions)
 	return result
 }
 
@@ -448,18 +544,11 @@ func projectedModel(
 			result.Properties = append(result.Properties, property)
 		}
 	}
-	if len(actions) == len(model.Actions) {
-		result.Abstractions = slices.Clone(model.Abstractions)
-	} else {
-		abstractions := make(map[string]struct{}, len(actions)+len(target.Abstractions))
-		for action := range actions {
-			abstractions[action] = struct{}{}
-		}
-		addNames(abstractions, target.Abstractions)
-		for _, abstraction := range model.Abstractions {
-			if _, included := abstractions[abstraction.Name]; included {
-				result.Abstractions = append(result.Abstractions, abstraction)
-			}
+	abstractions := make(map[string]struct{}, len(target.Abstractions))
+	addNames(abstractions, target.Abstractions)
+	for _, abstraction := range model.Abstractions {
+		if _, included := abstractions[abstraction.Name]; included {
+			result.Abstractions = append(result.Abstractions, abstraction)
 		}
 	}
 	for _, refinement := range model.Refinements {

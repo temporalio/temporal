@@ -85,6 +85,68 @@ func TestCompareTraceRefinementRejectsForbiddenAndInvalidCausality(t *testing.T)
 	require.ErrorContains(t, err, "cause")
 }
 
+func TestEvidenceOrderingRejectsClockSkewAndAcceptsCausality(t *testing.T) {
+	skewed := Trace{Complete: true, Events: []TraceEvent{
+		{Key: "telemetry", Kind: TraceFact, Name: "Started", Source: TelemetryEvidence, ClockDomain: "telemetry", SourceSequence: 20, Fields: map[string]string{"timestamp": "later"}},
+		{Key: "history", Kind: TraceFact, Name: "Completed", Source: HistoryEvidence, ClockDomain: "history", SourceSequence: 1, Fields: map[string]string{"timestamp": "earlier"}},
+	}}
+	spec := TraceRefinement{Required: []TracePattern{{Kind: TraceFact, Name: "Started"}, {Kind: TraceFact, Name: "Completed"}}, AllowExtras: true}
+
+	err := CompareTraceRefinementWithEvidence(spec, skewed, InProcessProfile())
+	require.ErrorContains(t, err, ErrTraceOrder.Error())
+
+	skewed.Events[1].Causes = []string{"telemetry"}
+	require.NoError(t, CompareTraceRefinementWithEvidence(spec, skewed, InProcessProfile()))
+}
+
+func TestEvidenceRefinementRejectsIncompleteOrUndeclaredEvidence(t *testing.T) {
+	spec := TraceRefinement{Required: []TracePattern{{Kind: TraceFact, Name: "Started"}}}
+	trace := Trace{Events: []TraceEvent{{Key: "started", Kind: TraceFact, Name: "Started", Source: HistoryEvidence}}}
+
+	require.ErrorContains(t, CompareTraceRefinementWithEvidence(spec, trace, HistoryProfile()), "incomplete")
+	trace.Complete = true
+	trace.Events[0].Source = TelemetryEvidence
+	require.ErrorContains(t, CompareTraceRefinementWithEvidence(spec, trace, HistoryProfile()), "unavailable")
+}
+
+func TestEvidenceOrderingUsesOnlySequencesInsideOneClockDomain(t *testing.T) {
+	trace := Trace{Complete: true, Events: []TraceEvent{
+		{Key: "one", Kind: TraceFact, Name: "One", Source: HistoryEvidence, ClockDomain: "history", SourceSequence: 4},
+		{Key: "two", Kind: TraceFact, Name: "Two", Source: HistoryEvidence, ClockDomain: "history", SourceSequence: 5},
+	}}
+
+	ordered, err := TraceOrderedBefore(trace, HistoryProfile(), "one", "two")
+	require.NoError(t, err)
+	require.True(t, ordered)
+}
+
+func TestEvidenceOrderingRejectsConflictingCausalAndSequenceEvidence(t *testing.T) {
+	trace := Trace{Complete: true, Events: []TraceEvent{
+		{Key: "one", Kind: TraceFact, Name: "One", Source: HistoryEvidence, ClockDomain: "history", SourceSequence: 5},
+		{Key: "two", Kind: TraceFact, Name: "Two", Source: HistoryEvidence, ClockDomain: "history", SourceSequence: 4, Causes: []string{"one"}},
+	}}
+
+	_, err := TraceOrderedBefore(trace, HistoryProfile(), "one", "two")
+	require.ErrorContains(t, err, "causal references conflict")
+}
+
+func TestEvidenceOrderingRejectsReverseAndDanglingCausalEvidence(t *testing.T) {
+	profile := HistoryProfile()
+	reverse := Trace{Complete: true, Events: []TraceEvent{
+		{Key: "two", Kind: TraceFact, Name: "Two", Source: HistoryEvidence, ClockDomain: "history", SourceSequence: 5},
+		{Key: "one", Kind: TraceFact, Name: "One", Source: HistoryEvidence, ClockDomain: "history", SourceSequence: 4, Causes: []string{"two"}},
+	}}
+
+	_, err := TraceOrderedBefore(reverse, profile, "one", "two")
+	require.ErrorContains(t, err, "causal references conflict")
+
+	dangling := Trace{Complete: true, Events: []TraceEvent{
+		{Key: "one", Kind: TraceFact, Name: "One", Source: HistoryEvidence, Causes: []string{"missing"}},
+	}}
+	_, err = TraceOrderedBefore(dangling, profile, "one", "missing")
+	require.ErrorContains(t, err, "cause")
+}
+
 func TestCompareCausalFootprintSelectsActionWindow(t *testing.T) {
 	actual := Trace{Events: []TraceEvent{
 		{Key: "before", Kind: TraceFact, Name: "Before"},

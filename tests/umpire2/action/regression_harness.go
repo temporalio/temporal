@@ -43,8 +43,10 @@ type RegressionEnvironmentFactory func(context.Context, int) (RegressionEnvironm
 
 // RegressionHarness realizes compiled sparse paths against Temporal functional-test environments.
 type RegressionHarness struct {
-	factory RegressionEnvironmentFactory
-	sink    coreregress.ArtifactSink
+	factory            RegressionEnvironmentFactory
+	sink               coreregress.ArtifactSink
+	environmentProfile umpirefw.EnvironmentProfile
+	modelVersion       string
 }
 
 func NewRegressionHarness(factory RegressionEnvironmentFactory, sink coreregress.ArtifactSink) *RegressionHarness {
@@ -67,35 +69,39 @@ func (h *RegressionHarness) NewPath(ctx context.Context, index int, path corereg
 	policy := NewResponsePolicy()
 	sequence := regressionEndpointSequence.Add(1)
 	return &regressionPath{
-		index:        index,
-		path:         path,
-		environment:  environment,
-		context:      NewCtx(environment, "", policy, index),
-		policy:       policy,
-		cleanup:      cleanup,
-		localFacts:   map[string]bool{},
-		activityRuns: map[string]string{},
-		activityOps:  map[string]string{},
-		taskQueue:    fmt.Sprintf("umpire-regress-%d-%d", index, sequence),
-		handlerID:    fmt.Sprintf("umpire-regress-handler-%d-%d", index, sequence),
+		index:              index,
+		path:               path,
+		environment:        environment,
+		context:            NewCtx(environment, "", policy, index),
+		policy:             policy,
+		cleanup:            cleanup,
+		localFacts:         map[string]bool{},
+		activityRuns:       map[string]string{},
+		activityOps:        map[string]string{},
+		environmentProfile: h.environmentProfile,
+		modelVersion:       h.modelVersion,
+		taskQueue:          fmt.Sprintf("umpire-regress-%d-%d", index, sequence),
+		handlerID:          fmt.Sprintf("umpire-regress-handler-%d-%d", index, sequence),
 	}, nil
 }
 
 type regressionPath struct {
-	index        int
-	path         coreregress.CompletedPath
-	environment  RegressionEnvironment
-	context      *Ctx
-	policy       *ResponsePolicy
-	cleanup      coreregress.Cleanup
-	localFacts   map[string]bool
-	taskQueue    string
-	handlerID    string
-	callerID     string
-	worker       sdkworker.Worker
-	activityRuns map[string]string
-	activityOps  map[string]string
-	mu           sync.RWMutex
+	index              int
+	path               coreregress.CompletedPath
+	environment        RegressionEnvironment
+	context            *Ctx
+	policy             *ResponsePolicy
+	cleanup            coreregress.Cleanup
+	localFacts         map[string]bool
+	taskQueue          string
+	handlerID          string
+	callerID           string
+	worker             sdkworker.Worker
+	activityRuns       map[string]string
+	activityOps        map[string]string
+	mu                 sync.RWMutex
+	environmentProfile umpirefw.EnvironmentProfile
+	modelVersion       string
 }
 
 func (p *regressionPath) ExecutionObserver() umpirefw.ExecutionObserver { return p }

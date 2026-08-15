@@ -74,7 +74,7 @@ func (t *executionTrace) observeExecution(observed umpirefw.ExecutionObservation
 	}
 	name := observed.Action
 	if observed.Kind == umpirefw.ExecutionVerdict {
-		name = observed.Checkpoint
+		name = observed.Property
 		fields["pass"] = strconv.FormatBool(observed.Pass)
 		fields["violations"] = strconv.Itoa(observed.Violations)
 	}
@@ -101,7 +101,7 @@ func (t *executionTrace) observeExecution(observed umpirefw.ExecutionObservation
 	default:
 	}
 	key := t.nextKey(keyKind)
-	if err := t.recorder.Record(umpirefw.TraceEvent{Key: key, Kind: traceKind, Name: name, Causes: causes, Fields: fields}); err != nil {
+	if err := t.recorder.Record(umpirefw.TraceEvent{Key: key, Kind: traceKind, Name: name, Source: umpirefw.InProcessEvidence, Causes: causes, Fields: fields}); err != nil {
 		return err
 	}
 	switch observed.Kind {
@@ -148,6 +148,7 @@ func (t *executionTrace) recordFacts(facts []umpirefw.Fact) error {
 			Key:    t.nextKey("fact"),
 			Kind:   umpirefw.TraceFact,
 			Name:   observed.Name(),
+			Source: umpirefw.InProcessEvidence,
 			Causes: causes,
 			Fields: fields,
 		}); err != nil {
@@ -167,6 +168,7 @@ func (t *executionTrace) recordFacts(facts []umpirefw.Fact) error {
 			Key:    t.nextKey("relation"),
 			Kind:   umpirefw.TraceRelation,
 			Name:   string(edge.Type),
+			Source: umpirefw.InProcessEvidence,
 			Causes: t.activeCauses(edge.Scope.ID),
 			Fields: map[string]string{
 				"source": edge.Source.String(),
@@ -193,6 +195,7 @@ func (t *executionTrace) recordFacts(facts []umpirefw.Fact) error {
 					Key:    t.nextKey("transition"),
 					Kind:   umpirefw.TraceTransition,
 					Name:   name,
+					Source: umpirefw.InProcessEvidence,
 					Causes: t.activeCauses(root.ID),
 					Fields: map[string]string{
 						"entity": entry.Key,

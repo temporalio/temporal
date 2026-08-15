@@ -27,8 +27,9 @@
     "delivery.single-accepted-start"
   ],
   "modelFamilyVersion": "umpire2/model-family-v1",
-  "modelFamilyHash": "sha256:a6a3bfdb77da5af1137598507762cacbfe00a0c22c6d4023a69cf3f5e95e255f",
+  "modelFamilyHash": "sha256:fa7cd9e7d236691e5c28e1c974957573b1b8eab1df46b8f05a9bb9da3fc50b67",
   "backendRequirements": [
+    "fizz",
     "ivy",
     "p",
     "tla"
@@ -88,7 +89,7 @@
     }
   ],
   "modelVersion": "umpire2/verification-v1",
-  "modelHash": "sha256:b75e71ce3b243370e7d833bb9c87c42f1b536322fe320901a02d960fd193dc42",
+  "modelHash": "sha256:6739ca4e438bc5f7acc98ad48c475d1b05be52f16b8cb5e6e07cd4886d5cdc5e",
   "requestedGuarantee": "finite-exhaustive",
   "bounds": {
     "DeliveryAttempt": 2,
@@ -226,6 +227,14 @@
       "name": "delivery.spool",
       "reason": "abstract foundation delivery protocol",
       "source": {}
+    },
+    {
+      "name": "workflow.task.create-speculative-direct",
+      "reason": "the speculative target checks the atomic direct-delivery adapter",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_task_speculative.go",
+        "symbol": "workflow.task.create-speculative-direct"
+      }
     }
   ],
   "unsupported": [
@@ -240,31 +249,91 @@
     {
       "name": "apalache",
       "version": "0.61.0",
-      "sha256": "f2d761315667f977c7c33792d95167f12e83b8a775909180886bcb67660470c5"
+      "url": "https://github.com/apalache-mc/apalache/releases/download/v0.61.0/apalache-0.61.0.zip",
+      "sha256": "f2d761315667f977c7c33792d95167f12e83b8a775909180886bcb67660470c5",
+      "archive": "apalache.zip",
+      "archiveType": "zip",
+      "extractRoot": "apalache",
+      "executable": "apalache/apalache-0.61.0/bin/apalache-mc"
+    },
+    {
+      "name": "fizzbee",
+      "version": "0.5.2",
+      "artifacts": [
+        {
+          "platform": "darwin-arm64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-macos_arm.tar.gz",
+          "sha256": "aab223e0bac8f0c052cf774dc25872f72c138da30f4079b914bb9c8921910904",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        },
+        {
+          "platform": "darwin-x86_64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-macos_x86.tar.gz",
+          "sha256": "6293bd7ab90c79b8607dc9fb2f09407fde0e11ac6596e884bef7f660178597fa",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        },
+        {
+          "platform": "linux-arm64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-linux_arm.tar.gz",
+          "sha256": "00011bbfe9bf4c7bcb03a5bf1f5b7fe7390111ad6f0611c6be71e8692504da4e",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        },
+        {
+          "platform": "linux-x86_64",
+          "url": "https://github.com/fizzbee-io/fizzbee/releases/download/v0.5.2/fizzbee-v0.5.2-linux_x86.tar.gz",
+          "sha256": "f494b7b2afcc7ce24575ed91a389b46bbbbe5976f9e4b5cd717327012f5e0395",
+          "archive": "fizzbee.tar.gz",
+          "archiveType": "tar.gz",
+          "extractRoot": "fizz",
+          "executable": "fizz/fizz"
+        }
+      ]
     },
     {
       "name": "ivy",
       "version": "1.8.26",
       "artifacts": [
         {
-          "platform": "darwin-universal2",
-          "sha256": "d2f8df47e4731f2e23f7b5ab0852662e871217a9506c36310d75d81a9f09219c"
-        },
-        {
           "platform": "linux-x86_64",
-          "sha256": "2a71da0bb2ce6314ddb40b6d76c6d734b8102db51c158477c2ef85b45da65dc1"
+          "url": "https://files.pythonhosted.org/packages/0a/f7/c8f9264bae27f2c56c2d02630c94a0fa400c66bc6772bf6ff049fdcd8101/ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl",
+          "sha256": "2a71da0bb2ce6314ddb40b6d76c6d734b8102db51c158477c2ef85b45da65dc1",
+          "archive": "ms_ivy.whl",
+          "archiveType": "wheel",
+          "extractRoot": "ivy",
+          "package": "ms-ivy",
+          "executable": "ivy/bin/ivy_check"
         }
       ]
     },
     {
       "name": "p",
       "version": "3.1.0",
-      "sha256": "b2a212e3b1af1bf2fdc9b80899da2901d6625d1a2e478d478e30028872a4bdc1"
+      "url": "https://api.nuget.org/v3-flatcontainer/p/3.1.0/p.3.1.0.nupkg",
+      "sha256": "b2a212e3b1af1bf2fdc9b80899da2901d6625d1a2e478d478e30028872a4bdc1",
+      "archive": "p.nupkg",
+      "archiveType": "nuget",
+      "extractRoot": "p",
+      "package": "P",
+      "executable": "p/p"
     },
     {
       "name": "tla2tools",
       "version": "1.7.4",
-      "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+      "url": "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar",
+      "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88",
+      "archive": "tla2tools.jar",
+      "archiveType": "file",
+      "extractRoot": "tla",
+      "executable": "tla/tla2tools.jar"
     }
   ],
   "refinements": [

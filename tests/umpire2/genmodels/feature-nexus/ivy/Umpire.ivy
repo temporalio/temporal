@@ -1,0 +1,362 @@
+#lang ivy1.7
+
+# Generated from the Umpire verification snapshot. Do not edit.
+
+type nexusoperation
+type nexusoperation_state = {nexusoperation_state_backing_off,nexusoperation_state_canceled,nexusoperation_state_failed,nexusoperation_state_rejected,nexusoperation_state_scheduled,nexusoperation_state_started,nexusoperation_state_succeeded,nexusoperation_state_terminated,nexusoperation_state_timed_out,nexusoperation_state_unspecified}
+individual nexusoperation_0:nexusoperation
+individual nexusoperation_1:nexusoperation
+relation exists_nexusoperation(X:nexusoperation)
+function state_nexusoperation(X:nexusoperation):nexusoperation_state
+
+type nexustimeoutevidence
+type nexustimeoutevidence_state = {nexustimeoutevidence_state_invalid,nexustimeoutevidence_state_unobserved,nexustimeoutevidence_state_valid}
+individual nexustimeoutevidence_0:nexustimeoutevidence
+individual nexustimeoutevidence_1:nexustimeoutevidence
+relation exists_nexustimeoutevidence(X:nexustimeoutevidence)
+function state_nexustimeoutevidence(X:nexustimeoutevidence):nexustimeoutevidence_state
+
+type workflow
+type workflow_state = {workflow_state_canceled,workflow_state_completed,workflow_state_created,workflow_state_failed,workflow_state_started,workflow_state_terminated,workflow_state_timed_out}
+individual workflow_0:workflow
+relation exists_workflow(X:workflow)
+function state_workflow(X:workflow):workflow_state
+
+relation relation_nexus_operation_workflow(X:nexusoperation, Y:workflow)
+relation relation_nexus_timeout_evidence(X:nexusoperation, Y:nexustimeoutevidence)
+
+after init {
+    exists_nexusoperation(X) := false;
+    state_nexusoperation(X) := nexusoperation_state_unspecified;
+    exists_nexustimeoutevidence(X) := false;
+    state_nexustimeoutevidence(X) := nexustimeoutevidence_state_unobserved;
+    exists_workflow(X) := false;
+    state_workflow(X) := workflow_state_created;
+    relation_nexus_operation_workflow(X,Y) := false;
+    relation_nexus_timeout_evidence(X,Y) := false
+}
+
+action nexusoperation_backing_off_schedule_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action nexusoperation_backing_off_schedule_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_scheduled
+}
+
+action nexusoperation_backing_off_terminate_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_backing_off;
+    state_nexusoperation(entity) := nexusoperation_state_terminated
+}
+
+action nexusoperation_backing_off_terminate_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_terminated
+}
+
+action nexusoperation_scheduled_attempt_failed_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_backing_off
+}
+
+action nexusoperation_scheduled_attempt_failed_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_backing_off
+}
+
+action nexusoperation_scheduled_cancel_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_scheduled_cancel_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_scheduled_fail_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_scheduled_fail_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_scheduled_start_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_started
+}
+
+action nexusoperation_scheduled_start_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_started
+}
+
+action nexusoperation_scheduled_succeed_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_scheduled_succeed_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_scheduled_terminate_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_scheduled;
+    state_nexusoperation(entity) := nexusoperation_state_terminated
+}
+
+action nexusoperation_scheduled_terminate_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_terminated
+}
+
+action nexusoperation_started_cancel_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_started_cancel_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_canceled
+}
+
+action nexusoperation_started_fail_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_started_fail_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_failed
+}
+
+action nexusoperation_started_succeed_embedded(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_started_succeed_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_succeeded
+}
+
+action nexusoperation_started_terminate_embedded(entity:nexusoperation) = {
+    require exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_started;
+    state_nexusoperation(entity) := nexusoperation_state_terminated
+}
+
+action nexusoperation_started_terminate_standalone(op:nexusoperation) = {
+    require exists_nexusoperation(op);
+    require state_nexusoperation(op) = nexusoperation_state_started;
+    state_nexusoperation(op) := nexusoperation_state_terminated
+}
+
+action nexusoperation_unspecified_reject_embedded(entity:nexusoperation) = {
+    require ~exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_unspecified;
+    exists_nexusoperation(entity) := true;
+    state_nexusoperation(entity) := nexusoperation_state_rejected
+}
+
+action nexusoperation_unspecified_reject_standalone(entity:nexusoperation) = {
+    require ~exists_nexusoperation(entity);
+    require state_nexusoperation(entity) = nexusoperation_state_unspecified;
+    exists_nexusoperation(entity) := true;
+    state_nexusoperation(entity) := nexusoperation_state_rejected
+}
+
+action nexus_operation_schedule_embedded(op:nexusoperation,workflow:workflow) = {
+    require ~exists_nexusoperation(op);
+    require exists_workflow(workflow);
+    require (state_workflow(workflow) = workflow_state_started & state_nexusoperation(op) = nexusoperation_state_unspecified);
+    exists_nexusoperation(op) := true;
+    state_nexusoperation(op) := nexusoperation_state_scheduled;
+    relation_nexus_operation_workflow(op,workflow) := true
+}
+
+action nexus_operation_schedule_standalone(op:nexusoperation,workflow:workflow) = {
+    require ~exists_nexusoperation(op);
+    require exists_workflow(workflow);
+    require (state_workflow(workflow) = workflow_state_started & state_nexusoperation(op) = nexusoperation_state_unspecified);
+    exists_nexusoperation(op) := true;
+    state_nexusoperation(op) := nexusoperation_state_scheduled;
+    relation_nexus_operation_workflow(op,workflow) := true
+}
+
+action nexus_timeout_backing_off_embedded(op:nexusoperation,timeoutevidence:nexustimeoutevidence) = {
+    require exists_nexusoperation(op);
+    require ~exists_nexustimeoutevidence(timeoutevidence);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_timed_out;
+    exists_nexustimeoutevidence(timeoutevidence) := true;
+    state_nexustimeoutevidence(timeoutevidence) := nexustimeoutevidence_state_valid;
+    relation_nexus_timeout_evidence(op,timeoutevidence) := true
+}
+
+action nexus_timeout_backing_off_standalone(op:nexusoperation,timeoutevidence:nexustimeoutevidence) = {
+    require exists_nexusoperation(op);
+    require ~exists_nexustimeoutevidence(timeoutevidence);
+    require state_nexusoperation(op) = nexusoperation_state_backing_off;
+    state_nexusoperation(op) := nexusoperation_state_timed_out;
+    exists_nexustimeoutevidence(timeoutevidence) := true;
+    state_nexustimeoutevidence(timeoutevidence) := nexustimeoutevidence_state_valid;
+    relation_nexus_timeout_evidence(op,timeoutevidence) := true
+}
+
+action nexus_timeout_scheduled_embedded(op:nexusoperation,timeoutevidence:nexustimeoutevidence) = {
+    require exists_nexusoperation(op);
+    require ~exists_nexustimeoutevidence(timeoutevidence);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_timed_out;
+    exists_nexustimeoutevidence(timeoutevidence) := true;
+    state_nexustimeoutevidence(timeoutevidence) := nexustimeoutevidence_state_valid;
+    relation_nexus_timeout_evidence(op,timeoutevidence) := true
+}
+
+action nexus_timeout_scheduled_standalone(op:nexusoperation,timeoutevidence:nexustimeoutevidence) = {
+    require exists_nexusoperation(op);
+    require ~exists_nexustimeoutevidence(timeoutevidence);
+    require state_nexusoperation(op) = nexusoperation_state_scheduled;
+    state_nexusoperation(op) := nexusoperation_state_timed_out;
+    exists_nexustimeoutevidence(timeoutevidence) := true;
+    state_nexustimeoutevidence(timeoutevidence) := nexustimeoutevidence_state_valid;
+    relation_nexus_timeout_evidence(op,timeoutevidence) := true
+}
+
+action nexus_timeout_started_embedded(entity:nexusoperation,timeoutevidence:nexustimeoutevidence) = {
+    require exists_nexusoperation(entity);
+    require ~exists_nexustimeoutevidence(timeoutevidence);
+    require state_nexusoperation(entity) = nexusoperation_state_started;
+    state_nexusoperation(entity) := nexusoperation_state_timed_out;
+    exists_nexustimeoutevidence(timeoutevidence) := true;
+    state_nexustimeoutevidence(timeoutevidence) := nexustimeoutevidence_state_valid;
+    relation_nexus_timeout_evidence(entity,timeoutevidence) := true
+}
+
+action nexus_timeout_started_standalone(entity:nexusoperation,timeoutevidence:nexustimeoutevidence) = {
+    require exists_nexusoperation(entity);
+    require ~exists_nexustimeoutevidence(timeoutevidence);
+    require state_nexusoperation(entity) = nexusoperation_state_started;
+    state_nexusoperation(entity) := nexusoperation_state_timed_out;
+    exists_nexustimeoutevidence(timeoutevidence) := true;
+    state_nexustimeoutevidence(timeoutevidence) := nexustimeoutevidence_state_valid;
+    relation_nexus_timeout_evidence(entity,timeoutevidence) := true
+}
+
+action nexus_workflow_close_cancel(entity:workflow) = {
+    require exists_workflow(entity);
+    require (state_workflow(entity) = workflow_state_started & (forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((relation_nexus_operation_workflow(Q_operation,entity) -> (state_nexusoperation(Q_operation) = nexusoperation_state_succeeded | state_nexusoperation(Q_operation) = nexusoperation_state_failed | state_nexusoperation(Q_operation) = nexusoperation_state_canceled | state_nexusoperation(Q_operation) = nexusoperation_state_timed_out | state_nexusoperation(Q_operation) = nexusoperation_state_terminated | state_nexusoperation(Q_operation) = nexusoperation_state_rejected)))));
+    state_workflow(entity) := workflow_state_canceled
+}
+
+action nexus_workflow_close_complete(wf:workflow) = {
+    require exists_workflow(wf);
+    require (state_workflow(wf) = workflow_state_started & (forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((relation_nexus_operation_workflow(Q_operation,wf) -> (state_nexusoperation(Q_operation) = nexusoperation_state_succeeded | state_nexusoperation(Q_operation) = nexusoperation_state_failed | state_nexusoperation(Q_operation) = nexusoperation_state_canceled | state_nexusoperation(Q_operation) = nexusoperation_state_timed_out | state_nexusoperation(Q_operation) = nexusoperation_state_terminated | state_nexusoperation(Q_operation) = nexusoperation_state_rejected)))));
+    state_workflow(wf) := workflow_state_completed
+}
+
+action nexus_workflow_close_fail(entity:workflow) = {
+    require exists_workflow(entity);
+    require (state_workflow(entity) = workflow_state_started & (forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((relation_nexus_operation_workflow(Q_operation,entity) -> (state_nexusoperation(Q_operation) = nexusoperation_state_succeeded | state_nexusoperation(Q_operation) = nexusoperation_state_failed | state_nexusoperation(Q_operation) = nexusoperation_state_canceled | state_nexusoperation(Q_operation) = nexusoperation_state_timed_out | state_nexusoperation(Q_operation) = nexusoperation_state_terminated | state_nexusoperation(Q_operation) = nexusoperation_state_rejected)))));
+    state_workflow(entity) := workflow_state_failed
+}
+
+action nexus_workflow_close_terminate(entity:workflow) = {
+    require exists_workflow(entity);
+    require (state_workflow(entity) = workflow_state_started & (forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((relation_nexus_operation_workflow(Q_operation,entity) -> (state_nexusoperation(Q_operation) = nexusoperation_state_succeeded | state_nexusoperation(Q_operation) = nexusoperation_state_failed | state_nexusoperation(Q_operation) = nexusoperation_state_canceled | state_nexusoperation(Q_operation) = nexusoperation_state_timed_out | state_nexusoperation(Q_operation) = nexusoperation_state_terminated | state_nexusoperation(Q_operation) = nexusoperation_state_rejected)))));
+    state_workflow(entity) := workflow_state_terminated
+}
+
+action nexus_workflow_close_timeout(entity:workflow) = {
+    require exists_workflow(entity);
+    require (state_workflow(entity) = workflow_state_started & (forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((relation_nexus_operation_workflow(Q_operation,entity) -> (state_nexusoperation(Q_operation) = nexusoperation_state_succeeded | state_nexusoperation(Q_operation) = nexusoperation_state_failed | state_nexusoperation(Q_operation) = nexusoperation_state_canceled | state_nexusoperation(Q_operation) = nexusoperation_state_timed_out | state_nexusoperation(Q_operation) = nexusoperation_state_terminated | state_nexusoperation(Q_operation) = nexusoperation_state_rejected)))));
+    state_workflow(entity) := workflow_state_timed_out
+}
+
+action nexus_workflow_start(wf:workflow) = {
+    require ~exists_workflow(wf);
+    require state_workflow(wf) = workflow_state_created;
+    exists_workflow(wf) := true;
+    state_workflow(wf) := workflow_state_started
+}
+
+invariant [relation_nexus_operation_workflow_endpoints] forall S:nexusoperation,T:workflow. relation_nexus_operation_workflow(S,T) -> exists_nexusoperation(S) & exists_workflow(T)
+invariant [cardinality_nexus_operation_workflow_source] forall S:nexusoperation,T1:workflow,T2:workflow. relation_nexus_operation_workflow(S,T1) & relation_nexus_operation_workflow(S,T2) -> T1 = T2
+invariant [relation_nexus_timeout_evidence_endpoints] forall S:nexusoperation,T:nexustimeoutevidence. relation_nexus_timeout_evidence(S,T) -> exists_nexusoperation(S) & exists_nexustimeoutevidence(T)
+invariant [cardinality_nexus_timeout_evidence_source] forall S:nexusoperation,T1:nexustimeoutevidence,T2:nexustimeoutevidence. relation_nexus_timeout_evidence(S,T1) & relation_nexus_timeout_evidence(S,T2) -> T1 = T2
+invariant [cardinality_nexus_timeout_evidence_target] forall S1:nexusoperation,S2:nexusoperation,T:nexustimeoutevidence. relation_nexus_timeout_evidence(S1,T) & relation_nexus_timeout_evidence(S2,T) -> S1 = S2
+# unsupported property NexusOperation.backing_off.quiescent-progress: Ivy generation supports inductive safety properties only
+# unsupported property NexusOperation.scheduled.quiescent-progress: Ivy generation supports inductive safety properties only
+# unsupported property NexusOperation.started.quiescent-progress: Ivy generation supports inductive safety properties only
+invariant [nexusoperationclosure] (forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((forall Q_workflow:workflow. exists_workflow(Q_workflow) -> (((relation_nexus_operation_workflow(Q_operation,Q_workflow) & (state_workflow(Q_workflow) = workflow_state_completed | state_workflow(Q_workflow) = workflow_state_failed | state_workflow(Q_workflow) = workflow_state_canceled | state_workflow(Q_workflow) = workflow_state_terminated | state_workflow(Q_workflow) = workflow_state_timed_out)) -> (state_nexusoperation(Q_operation) = nexusoperation_state_succeeded | state_nexusoperation(Q_operation) = nexusoperation_state_failed | state_nexusoperation(Q_operation) = nexusoperation_state_canceled | state_nexusoperation(Q_operation) = nexusoperation_state_timed_out | state_nexusoperation(Q_operation) = nexusoperation_state_terminated | state_nexusoperation(Q_operation) = nexusoperation_state_rejected))))))
+invariant [nexusoperationtimeoutsemantics] (forall Q_operation:nexusoperation. exists_nexusoperation(Q_operation) -> ((state_nexusoperation(Q_operation) = nexusoperation_state_timed_out -> (exists Q_timeoutevidence:nexustimeoutevidence. exists_nexustimeoutevidence(Q_timeoutevidence) & ((relation_nexus_timeout_evidence(Q_operation,Q_timeoutevidence) & state_nexustimeoutevidence(Q_timeoutevidence) = nexustimeoutevidence_state_valid))))))
+
+export nexusoperation_backing_off_schedule_embedded
+export nexusoperation_backing_off_schedule_standalone
+export nexusoperation_backing_off_terminate_embedded
+export nexusoperation_backing_off_terminate_standalone
+export nexusoperation_scheduled_attempt_failed_embedded
+export nexusoperation_scheduled_attempt_failed_standalone
+export nexusoperation_scheduled_cancel_embedded
+export nexusoperation_scheduled_cancel_standalone
+export nexusoperation_scheduled_fail_embedded
+export nexusoperation_scheduled_fail_standalone
+export nexusoperation_scheduled_start_embedded
+export nexusoperation_scheduled_start_standalone
+export nexusoperation_scheduled_succeed_embedded
+export nexusoperation_scheduled_succeed_standalone
+export nexusoperation_scheduled_terminate_embedded
+export nexusoperation_scheduled_terminate_standalone
+export nexusoperation_started_cancel_embedded
+export nexusoperation_started_cancel_standalone
+export nexusoperation_started_fail_embedded
+export nexusoperation_started_fail_standalone
+export nexusoperation_started_succeed_embedded
+export nexusoperation_started_succeed_standalone
+export nexusoperation_started_terminate_embedded
+export nexusoperation_started_terminate_standalone
+export nexusoperation_unspecified_reject_embedded
+export nexusoperation_unspecified_reject_standalone
+export nexus_operation_schedule_embedded
+export nexus_operation_schedule_standalone
+export nexus_timeout_backing_off_embedded
+export nexus_timeout_backing_off_standalone
+export nexus_timeout_scheduled_embedded
+export nexus_timeout_scheduled_standalone
+export nexus_timeout_started_embedded
+export nexus_timeout_started_standalone
+export nexus_workflow_close_cancel
+export nexus_workflow_close_complete
+export nexus_workflow_close_fail
+export nexus_workflow_close_terminate
+export nexus_workflow_close_timeout
+export nexus_workflow_start

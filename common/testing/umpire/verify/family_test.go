@@ -426,6 +426,89 @@ func TestValidateModelFamilyRejectsAmbiguousActionRefinement(t *testing.T) {
 	require.ErrorContains(t, err, `refinement map "workflow-delivery" action "schedule" must select exactly one abstract action or stuttering`)
 }
 
+func TestValidateModelFamilyRequiresCompleteContractRefinement(t *testing.T) {
+	family := contractRefinementFamily()
+	family.RefinementMaps[0].Actions = nil
+
+	err := ValidateModelFamily(family)
+	require.ErrorContains(t, err, `refinement map "workflow-delivery" does not classify concrete action "workflow-dispatch"`)
+
+	family = contractRefinementFamily()
+	family.RefinementMaps[0].Actions[0] = ActionRefinement{Concrete: "workflow-dispatch", Stutter: true}
+	err = ValidateModelFamily(family)
+	require.ErrorContains(t, err, `refinement map "workflow-delivery" does not refine imported action "schedule"`)
+}
+
+func TestValidateModelFamilyAcceptsCompleteContractRefinement(t *testing.T) {
+	require.NoError(t, ValidateModelFamily(contractRefinementFamily()))
+}
+
+func TestValidateModelFamilyRequiresSharedPropertyForIncludedRule(t *testing.T) {
+	family := validModelFamily()
+	family.Model.Inventory = []InventoryItem{{Kind: "rule", Name: "deliveryRule", Included: true}}
+
+	err := ValidateModelFamily(family)
+	require.ErrorContains(t, err, `included verification rule "deliveryRule" has no shared property`)
+
+	family.Model.Properties = []Property{{
+		Name: "delivery-safe", Kind: SafetyProperty, Expr: Expr{Op: TrueExpr},
+		Source: Provenance{Symbol: "deliveryRule"},
+	}}
+	family.Modules[1].Properties = []string{"delivery-safe"}
+	require.NoError(t, ValidateModelFamily(family))
+}
+
+func TestValidateModelFamilyRequiresContractIdentityRefinement(t *testing.T) {
+	family := contractRefinementFamily()
+	family.Interfaces[0].Identities = []string{"NexusOperation"}
+	family.RefinementMaps[0].Identities = []IdentityRefinement{{Concrete: "Workflow", Abstract: "NexusOperation"}}
+	require.NoError(t, ValidateModelFamily(family))
+
+	family.RefinementMaps[0].Identities = nil
+	err := ValidateModelFamily(family)
+	require.ErrorContains(t, err, `refinement map "workflow-delivery" does not refine imported identity "NexusOperation"`)
+}
+
+func TestValidateModelFamilyRejectsRefinementOutsideImportedContract(t *testing.T) {
+	family := contractRefinementFamily()
+	family.RefinementMaps[0].Actions[0].Abstract = "finish"
+
+	err := ValidateModelFamily(family)
+	require.ErrorContains(t, err, `refinement map "workflow-delivery" maps to action "finish" outside imported interface "delivery"`)
+}
+
+func TestValidateModelFamilyRejectsIncorrectActionRefinement(t *testing.T) {
+	family := contractRefinementFamily()
+	family.Model.Actions[2].Effects = family.Model.Actions[2].Effects[:1]
+
+	err := ValidateModelFamily(family)
+	require.ErrorContains(t, err, `refinement map "workflow-delivery" concrete action "workflow-dispatch" omits effect 1 of abstract action "schedule"`)
+
+	family = contractRefinementFamily()
+	family.Model.Actions[2].Parameters[1].Binding = FreshBinding
+	err = ValidateModelFamily(family)
+	require.ErrorContains(t, err, `refinement map "workflow-delivery" concrete action "workflow-dispatch" has incompatible parameter "caller"`)
+}
+
+func TestValidateModelFamilyAcceptsRefinementParameterMapping(t *testing.T) {
+	family := contractRefinementFamily()
+	concrete := &family.Model.Actions[2]
+	concrete.Parameters[0].Name = "delivery"
+	concrete.Effects[0].Ref = "delivery"
+	concrete.Effects[1].Source = "delivery"
+	family.RefinementMaps[0].Actions[0].Parameters = []ParameterRefinement{{Concrete: "delivery", Abstract: "operation"}}
+
+	require.NoError(t, ValidateModelFamily(family))
+}
+
+func TestValidateModelFamilyRejectsUnknownRefinementParameterMapping(t *testing.T) {
+	family := contractRefinementFamily()
+	family.RefinementMaps[0].Actions[0].Parameters = []ParameterRefinement{{Concrete: "missing", Abstract: "operation"}}
+
+	err := ValidateModelFamily(family)
+	require.ErrorContains(t, err, `refinement map "workflow-delivery" action "workflow-dispatch" maps unknown concrete parameter "missing"`)
+}
+
 func TestHashModelFamilyIgnoresDeclarationOrder(t *testing.T) {
 	left := validModelFamily()
 	left.Targets = []VerificationTarget{{
@@ -467,4 +550,43 @@ func validModelFamily() ModelFamily {
 			},
 		},
 	}
+}
+
+func contractRefinementFamily() ModelFamily {
+	family := validModelFamily()
+	family.Model.Actions = append(family.Model.Actions,
+		Action{
+			Name:       "finish",
+			Parameters: []Parameter{{Name: "operation", Type: "NexusOperation", Binding: InputBinding}},
+			Guard:      StateIs("NexusOperation", "operation", "scheduled"),
+			Effects:    []Effect{{Kind: SetStateEffect, Entity: "NexusOperation", Ref: "operation", State: "scheduled"}},
+		},
+		Action{
+			Name: "workflow-dispatch",
+			Parameters: []Parameter{
+				{Name: "operation", Type: "NexusOperation", Binding: FreshBinding},
+				{Name: "caller", Type: "Workflow", Binding: InputBinding},
+			},
+			Guard: StateIs("Workflow", "caller", "started"),
+			Effects: []Effect{
+				{Kind: CreateEffect, Entity: "NexusOperation", Ref: "operation", State: "scheduled"},
+				{Kind: AddRelationEffect, Relation: "nexus-child-of", Source: "operation", Target: "caller"},
+			},
+		},
+	)
+	family.Modules[0].Actions = []string{"workflow-dispatch"}
+	family.Modules[0].Imports = []ObligationRef{{Interface: "delivery", Obligation: "accepted"}}
+	family.Modules[1].Actions = []string{"schedule", "finish"}
+	family.Interfaces = []Interface{{
+		Name: "delivery", Provider: "nexus", Consumers: []string{"workflow"},
+		Obligations: []Obligation{{Name: "accepted", Actions: []string{"schedule"}}},
+	}}
+	family.RefinementMaps = []RefinementMap{{
+		Name: "workflow-delivery", Owner: "workflow", Module: "workflow", Interface: "delivery",
+		Actions: []ActionRefinement{{Concrete: "workflow-dispatch", Abstract: "schedule"}},
+	}}
+	family.Targets = []VerificationTarget{{
+		Name: "integration", Owners: []CapabilityOwner{"workflow", "nexus"}, Modules: []string{"workflow", "nexus"}, RefinementMaps: []string{"workflow-delivery"},
+	}}
+	return family
 }

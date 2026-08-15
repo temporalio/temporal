@@ -26,6 +26,7 @@ type verificationFamilyFragment struct {
 	Model        verify.Model
 	Modules      []verify.Module
 	Interfaces   []verify.Interface
+	Refinements  []verify.RefinementMap
 	Compositions []verify.Composition
 	Targets      []verify.VerificationTarget
 }
@@ -145,7 +146,7 @@ func foundationDeliveryVerification() verificationFamilyFragment {
 		{
 			Name:       "durable-intent",
 			Provider:   "history-outbox",
-			Consumers:  []string{"matching-delivery"},
+			Consumers:  []string{"matching-delivery", activityDeliveryIntentModule, workflowDeliveryIntentModule, workflowTaskNormalModule},
 			Identities: []string{workObligationEntity, deliveryTaskEntity},
 			Obligations: []verify.Obligation{{
 				Name:       "atomic-intent",
@@ -156,7 +157,7 @@ func foundationDeliveryVerification() verificationFamilyFragment {
 		{
 			Name:       "start-authorization",
 			Provider:   "history-authorization",
-			Consumers:  []string{"matching-delivery"},
+			Consumers:  []string{"matching-delivery", activityDeliveryAuthorizationModule, workflowDeliveryAuthorizationModule},
 			Identities: []string{workObligationEntity, deliveryAttemptEntity},
 			Obligations: []verify.Obligation{{
 				Name:       "single-acceptance",
@@ -183,9 +184,10 @@ func foundationDeliveryVerification() verificationFamilyFragment {
 		Owners:              []verify.CapabilityOwner{"history", "matching"},
 		Modules:             []string{"history-outbox", "matching-delivery", "history-authorization"},
 		Compositions:        []string{composition.Name},
+		Abstractions:        foundationActionNames(actions),
 		Bounds:              bounds,
 		MinimumBounds:       bounds,
-		BackendRequirements: []string{"ivy", "p", "tla"},
+		BackendRequirements: []string{"fizz", "ivy", "p", "tla"},
 		FailurePolicy: []string{
 			"ambiguous-persistence",
 			"lost-authorization-response",
@@ -199,6 +201,14 @@ func foundationDeliveryVerification() verificationFamilyFragment {
 		Compositions: []verify.Composition{composition},
 		Targets:      []verify.VerificationTarget{target},
 	}
+}
+
+func foundationActionNames(actions []verify.Action) []string {
+	result := make([]string, len(actions))
+	for index, action := range actions {
+		result[index] = action.Name
+	}
+	return result
 }
 
 func foundationDeliveryActions() []verify.Action {
@@ -232,14 +242,17 @@ func foundationDeliveryActions() []verify.Action {
 			Effects:    []verify.Effect{{Kind: verify.SetStateEffect, Entity: workObligationEntity, Ref: "obligation", State: "valid"}},
 			Unrealized: true,
 		},
-		deliveryTaskTransition("delivery.offer-sync", "pending", "sync-offered"),
+		deliveryTaskTransition("delivery.offer-sync", "pending", "sync-offered", deliveryTaskHasValidObligation()),
 		{
 			Name:       "delivery.spool",
 			Parameters: []verify.Parameter{{Name: "task", Type: deliveryTaskEntity, Binding: verify.InputBinding}},
-			Guard: verify.Expr{Op: verify.OrExpr, Args: []verify.Expr{
-				verify.StateIs(deliveryTaskEntity, "task", "pending"),
-				verify.StateIs(deliveryTaskEntity, "task", "sync-offered"),
-			}},
+			Guard: verify.And(
+				verify.Expr{Op: verify.OrExpr, Args: []verify.Expr{
+					verify.StateIs(deliveryTaskEntity, "task", "pending"),
+					verify.StateIs(deliveryTaskEntity, "task", "sync-offered"),
+				}},
+				deliveryTaskHasValidObligation(),
+			),
 			Effects:    []verify.Effect{{Kind: verify.SetStateEffect, Entity: deliveryTaskEntity, Ref: "task", State: "backlogged"}},
 			Unrealized: true,
 		},
@@ -331,11 +344,19 @@ func deliveryAuthorizationAction(accept bool) verify.Action {
 	}
 }
 
-func deliveryTaskTransition(name, from, to string) verify.Action {
+func deliveryTaskHasValidObligation() verify.Expr {
+	return deliveryExists(workObligationEntity, "obligation", verify.And(
+		verify.Expr{Op: verify.RelationHasExpr, Relation: deliveryTaskObligationRelation, Source: "task", Target: "obligation"},
+		verify.StateIs(workObligationEntity, "obligation", "valid"),
+	))
+}
+
+func deliveryTaskTransition(name, from, to string, extraGuards ...verify.Expr) verify.Action {
+	guards := append([]verify.Expr{verify.StateIs(deliveryTaskEntity, "task", from)}, extraGuards...)
 	return verify.Action{
 		Name:       name,
 		Parameters: []verify.Parameter{{Name: "task", Type: deliveryTaskEntity, Binding: verify.InputBinding}},
-		Guard:      verify.StateIs(deliveryTaskEntity, "task", from),
+		Guard:      verify.And(guards...),
 		Effects:    []verify.Effect{{Kind: verify.SetStateEffect, Entity: deliveryTaskEntity, Ref: "task", State: to}},
 		Unrealized: true,
 	}

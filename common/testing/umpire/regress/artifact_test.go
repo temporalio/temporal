@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/common/testing/umpire/regress"
 )
 
@@ -35,6 +36,8 @@ func TestRunWritesIncrementalAndCompletedArtifacts(t *testing.T) {
 	require.Equal(t, regress.Bindings{"job": "job-1"}, completed.Paths[0].Bindings)
 	require.Equal(t, []string{"task.state"}, completed.Paths[0].Observations)
 	require.Empty(t, completed.Paths[0].ActivePolicies)
+	require.NotEmpty(t, completed.Paths[0].Claims)
+	require.Equal(t, umpire.ClaimEstablished, completed.Paths[0].Claims[0].Status)
 	encoded, err := json.Marshal(completed.Paths[0])
 	require.NoError(t, err)
 	var fields map[string]json.RawMessage
@@ -58,6 +61,19 @@ func TestRunCrashArtifactRetainsBegunAction(t *testing.T) {
 	}
 	require.True(t, found)
 	require.Contains(t, harness.artifacts[len(harness.artifacts)-1].Paths[0].Error, "crash")
+}
+
+func TestRunSafetyFailureArtifactRetainsViolatedQualifiedVerdict(t *testing.T) {
+	harness := &artifactHarness{recordingHarness: recordingHarness{safetyErr: errors.New("unsafe")}}
+
+	err := regress.Run(context.Background(), artifactSuite(), harness)
+	require.Error(t, err)
+	require.NotEmpty(t, harness.artifacts)
+
+	path := harness.artifacts[len(harness.artifacts)-1].Paths[0]
+	require.Contains(t, path.Verdicts, "action:fail")
+	require.NotEmpty(t, path.Claims)
+	require.Equal(t, umpire.ClaimViolated, path.Claims[0].Status)
 }
 
 func TestReplayRejectsModelOrProfileDrift(t *testing.T) {
@@ -110,6 +126,31 @@ func TestReplayExecutesMatchingCompletedArtifact(t *testing.T) {
 	require.Contains(t, harness.events, "fire:task.finish")
 }
 
+func TestCompletedBehaviorRunsUnchangedAcrossPortableProfiles(t *testing.T) {
+	profiles := []struct {
+		kind     umpire.EnvironmentKind
+		evidence umpire.EnvironmentProfile
+	}{
+		{kind: umpire.LocalEnvironment, evidence: umpire.InProcessProfile()},
+		{kind: umpire.CIEnvironment, evidence: umpire.HistoryProfile()},
+		{kind: umpire.DeploymentEnvironment, evidence: umpire.PublicAPIProfile()},
+		{kind: umpire.CanaryEnvironment, evidence: umpire.TelemetryProfile()},
+	}
+	for _, configured := range profiles {
+		t.Run(string(configured.kind), func(t *testing.T) {
+			profile, err := umpire.ForEnvironment(configured.kind, configured.evidence)
+			require.NoError(t, err)
+			suite := artifactSuite()
+			suite.Profile.Name = profile.Name
+			suite.Profile.Environment = profile
+			harness := &recordingHarness{}
+
+			require.NoError(t, regress.Run(context.Background(), suite, harness))
+			require.Contains(t, harness.events, "fire:task.finish")
+		})
+	}
+}
+
 func TestJSONFileSinkAtomicallyPersistsArtifact(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "artifact.json")
 	sink, err := regress.NewJSONFileSink(path)
@@ -127,6 +168,14 @@ func TestJSONFileSinkAtomicallyPersistsArtifact(t *testing.T) {
 type artifactHarness struct {
 	recordingHarness
 	artifacts []regress.Artifact
+}
+
+func (*recordingPath) QualifiedVerdicts(_ context.Context, checkpoint regress.Checkpoint, violated bool) ([]umpire.QualifiedClaim, error) {
+	status := umpire.ClaimEstablished
+	if violated {
+		status = umpire.ClaimViolated
+	}
+	return []umpire.QualifiedClaim{{Property: "monitor-safety:" + checkpoint.String(), Environment: "in-process", Status: status}}, nil
 }
 
 func (*recordingPath) ArtifactFacts(context.Context) ([]json.RawMessage, error) {

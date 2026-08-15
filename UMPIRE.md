@@ -140,6 +140,23 @@ Ordering prefers a source EventID, then an internal monotonic counter, then an u
 window. Raw cross-process causality remains dependent on the available observation channel, so a
 footprint must not be treated as an independent correctness oracle.
 
+## Evidence profiles and portable environments
+
+Every live claim is qualified by an `EnvironmentProfile`. The profile separates where behavior
+runs (`local`, `ci`, `deployment`, or `canary`) from the evidence it can retain (public API,
+history, telemetry, or in-process facts). A property declares its required sources and ordering.
+Unavailable sources produce `unsupported`; evidence loss, ambiguous identity, conflicting lineage,
+or incomparable clocks produce `inconclusive`. Neither outcome is a successful property claim.
+
+Trace events retain causal references, source sequences, and clock domains. Cross-domain event
+timestamps never establish causality by themselves. Ordered properties require a causal path or a
+comparable source sequence. Sparse regression artifacts and formal results retain the selected
+profile, observations, omissions, bounds, and qualified claims.
+
+Environment mechanics remain behind capability-owned interfaces. The same completed behavioral
+intent runs through local, CI, deployment, and approved canary profiles; the profile changes its
+realization and justified evidence, not its sparse IR.
+
 ## Coverage and exploration
 
 `Coverage` compares a declared catalog with observed facts, transitions, relations, and actions.
@@ -155,6 +172,33 @@ always included outside the sampling budget.
 
 All bounds must be visible. Exhaustive modes fail when a caller-supplied limit would truncate the
 space; exploratory modes record their seed and budget.
+
+`common/testing/umpire/campaign` composes these pieces into a bounded discovery loop. One request
+contains a completed behavioral template, declared risk, semantic coverage, matrix and lifecycle
+exploration inputs, environment profile, seed, corpus, and hard budgets. The campaign records why
+each scenario was selected or omitted, deduplicates semantic plans without runtime identities,
+executes each scenario in an isolated environment, and retains qualified evidence.
+
+A qualified violation is minimized monotonically across actions, policies, faults, resources, and
+unused bindings. Each accepted reduction must reproduce the same property violation with complete
+cleanup and evidence. The minimized experiment is replayed semantically; schedule drift is reported
+separately from observation or violation drift. Only stable evidence produces a deterministic sparse
+regression candidate for human review.
+
+## Guarded canaries
+
+`common/testing/umpire/canary` enforces an immutable safety envelope before allocating resources.
+The envelope requires campaign, namespace, and tenant isolation; explicit action and fault
+allowlists; traffic, fault, concurrency, duration, evidence, and cleanup budgets; and secret-safe
+retention. Local fault capability never grants canary authority. Destructive actions or faults need
+both envelope approval and a canary-specific drive capability.
+
+Execution stops on invariant failure, observation loss, action failure, cancellation, timeout, or
+budget exhaustion. Concurrent workers reserve hard count and evidence budgets before starting
+actions. Execution and cleanup deadlines are supplied to the driver, whose transport or process
+boundary must honor context cancellation. Cleanup uses an uncancelled deadline context on every
+post-preparation path, and the result retains recovery-safe resource metadata plus a redacted audit
+trail.
 
 ## Assurance boundaries
 
@@ -181,6 +225,8 @@ remain specialized when their contract sits below the protocol abstraction.
 | --- | --- |
 | `common/testing/umpire` | Generic facts, entities, lifecycles, relations, rules, actions, planning, coverage, matrices, and tracing |
 | `common/testing/umpire/regress` | Sparse-plan normalization, compilation, execution, and artifacts |
+| `common/testing/umpire/campaign` | Bounded selection, corpus, execution, minimization, replay, and regression candidates |
+| `common/testing/umpire/canary` | Guarded canary authority, budgets, audit, redaction, and cleanup |
 | `common/testing/umpire/verify` | Verification snapshot, interpreter, exporters, runners, and normalized results |
 | `tests/umpire2/protocol` | Canonical Temporal protocol and its derived views |
 | `tests/umpire2/model`, `fact`, `rule` | Temporal observation and runtime evaluation |

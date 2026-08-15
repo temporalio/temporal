@@ -277,7 +277,7 @@ func TestMonitorRecordsActionCoverageAndCausalWindows(t *testing.T) {
 		Kind: umpirefw.ExecutionActionFinish, Scope: namespaceID, Action: "test.complete", Phase: "reconcile", Outcome: umpirefw.ExecutionOutcomeSucceeded,
 	}))
 	require.NoError(t, u.ObserveExecution(t.Context(), umpirefw.ExecutionObservation{
-		Kind: umpirefw.ExecutionVerdict, Scope: namespaceID, Checkpoint: "action", Pass: true,
+		Kind: umpirefw.ExecutionVerdict, Scope: namespaceID, Checkpoint: "action", Property: umpirefw.MonitorSafetyProperty("action"), Pass: true,
 	}))
 
 	require.Contains(t, coverage.Snapshot(), umpirefw.CoveragePoint{Kind: umpirefw.CoverageAction, ID: "test.complete"})
@@ -301,6 +301,7 @@ func TestMonitorRecordsActionCoverageAndCausalWindows(t *testing.T) {
 	require.ElementsMatch(t, []string{startKeys["test.complete"], startKeys["handler.respond"]}, factEvent.Causes)
 	require.Equal(t, []string{startKeys["test.complete"]}, finishEvent.Causes)
 	require.Equal(t, []string{finishEvent.Key}, verdictEvent.Causes)
+	require.Equal(t, umpirefw.MonitorSafetyProperty("action"), verdictEvent.Name)
 	require.Equal(t, "true", verdictEvent.Fields["pass"])
 
 	u.PurgeNamespace(namespaceID)

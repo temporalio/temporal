@@ -173,6 +173,9 @@ func (g generator) writeAction(out *bytes.Buffer, action verify.Action) {
 		}
 		fmt.Fprintf(out, "    require %s;\n", condition)
 	}
+	for _, pair := range verify.DistinctFreshParameterPairs(action.Parameters) {
+		fmt.Fprintf(out, "    require %s ~= %s;\n", bindings[pair[0].Name], bindings[pair[1].Name])
+	}
 	if action.Guard.Op != "" && action.Guard.Op != verify.TrueExpr {
 		fmt.Fprintf(out, "    require %s;\n", g.expr(action.Guard, bindings))
 	}

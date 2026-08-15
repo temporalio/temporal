@@ -71,6 +71,25 @@ func TestGenerateLowersAtomicActionAndFramesUnchangedState(t *testing.T) {
 	require.Contains(t, module, `/\ UNCHANGED <<exists_Workflow, state_Workflow>>`)
 }
 
+func TestGenerateRequiresSameTypeFreshParametersToBeDistinct(t *testing.T) {
+	model := testModel()
+	model.Actions = append(model.Actions, verify.Action{
+		Name: "create-pair",
+		Parameters: []verify.Parameter{
+			{Name: "left", Type: "NexusOperation", Binding: verify.FreshBinding},
+			{Name: "right", Type: "NexusOperation", Binding: verify.FreshBinding},
+		},
+		Effects: []verify.Effect{
+			{Kind: verify.CreateEffect, Entity: "NexusOperation", Ref: "left", State: "scheduled"},
+			{Kind: verify.CreateEffect, Entity: "NexusOperation", Ref: "right", State: "scheduled"},
+		},
+	})
+
+	files, err := Generate(model)
+	require.NoError(t, err)
+	require.Contains(t, string(files["Umpire.tla"]), `/\ left /= right`)
+}
+
 func TestGenerateEmitsTypeCardinalityAndQuiescentChecks(t *testing.T) {
 	model := testModel()
 	model.Properties = append(model.Properties,

@@ -1,0 +1,1858 @@
+# Generated from the Umpire verification snapshot. Do not edit.
+
+IDs_Callback = ["Callback#0", "Callback#1"]
+IDs_CallbackDelivery = ["CallbackDelivery#0", "CallbackDelivery#1"]
+IDs_CallbackResponse = ["CallbackResponse#0", "CallbackResponse#1"]
+IDs_NexusOperation = ["NexusOperation#0", "NexusOperation#1"]
+IDs_WorkflowRun = ["WorkflowRun#0", "WorkflowRun#1"]
+
+action Init:
+    exists_Callback = set([])
+    state_Callback = {"Callback#0": "unobserved", "Callback#1": "unobserved"}
+    exists_CallbackDelivery = set([])
+    state_CallbackDelivery = {"CallbackDelivery#0": "pending", "CallbackDelivery#1": "pending"}
+    exists_CallbackResponse = set([])
+    state_CallbackResponse = {"CallbackResponse#0": "unobserved", "CallbackResponse#1": "unobserved"}
+    exists_NexusOperation = set([])
+    state_NexusOperation = {"NexusOperation#0": "unspecified", "NexusOperation#1": "unspecified"}
+    exists_WorkflowRun = set([])
+    state_WorkflowRun = {"WorkflowRun#0": "created", "WorkflowRun#1": "created"}
+    relation_callback_delivery = set()
+    relation_callback_delivery_response = set()
+    relation_callback_handler_run = set()
+    relation_callback_operation = set()
+    relation_nexus_operation_handler_run = set()
+
+atomic action Action_NexusOperation_backing_off_schedule_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_backing_off_schedule_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_backing_off_terminate_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "backing_off"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[entity] = "terminated"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_backing_off_terminate_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "terminated"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_backing_off_timeout_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "timed_out"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_backing_off_timeout_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "timed_out"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_attempt_failed_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "backing_off"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_attempt_failed_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "backing_off"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_cancel_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "canceled"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_cancel_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "canceled"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_fail_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "failed"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_fail_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "failed"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_start_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "started"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_start_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "started"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_succeed_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_succeed_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_terminate_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[entity] = "terminated"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_terminate_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "terminated"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_timeout_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "timed_out"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_scheduled_timeout_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "timed_out"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_cancel_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "canceled"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_cancel_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "canceled"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_fail_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "failed"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_fail_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "failed"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_succeed_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_succeed_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_terminate_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[entity] = "terminated"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_terminate_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[op] = "terminated"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_timeout_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[entity] = "timed_out"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_started_timeout_Standalone:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_NexusOperation[entity] = "timed_out"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_unspecified_reject_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity not in exists_NexusOperation
+    require state_NexusOperation[entity] == "unspecified"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_exists_NexusOperation.add(entity)
+    next_state_NexusOperation[entity] = "rejected"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_unspecified_reject_Standalone:
+    entity = oneof IDs_NexusOperation
+    require entity not in exists_NexusOperation
+    require state_NexusOperation[entity] == "unspecified"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_exists_NexusOperation.add(entity)
+    next_state_NexusOperation[entity] = "rejected"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_unspecified_schedule_Embedded:
+    op = oneof IDs_NexusOperation
+    require op not in exists_NexusOperation
+    require state_NexusOperation[op] == "unspecified"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_exists_NexusOperation.add(op)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_NexusOperation_unspecified_schedule_Standalone:
+    op = oneof IDs_NexusOperation
+    require op not in exists_NexusOperation
+    require state_NexusOperation[op] == "unspecified"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_exists_NexusOperation.add(op)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_attach_handler:
+    callback = oneof IDs_Callback
+    handlerRun = oneof IDs_WorkflowRun
+    require callback not in exists_Callback
+    require handlerRun in exists_WorkflowRun
+    require state_WorkflowRun[handlerRun] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_exists_Callback.add(callback)
+    next_state_Callback[callback] = "unobserved"
+    next_relation_callback_handler_run.add((callback, handlerRun))
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_attach_reference:
+    callback = oneof IDs_Callback
+    operation = oneof IDs_NexusOperation
+    handlerRun = oneof IDs_WorkflowRun
+    require callback not in exists_Callback
+    require operation in exists_NexusOperation
+    require handlerRun in exists_WorkflowRun
+    require state_WorkflowRun[handlerRun] == "started"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_exists_Callback.add(callback)
+    next_state_Callback[callback] = "unobserved"
+    next_relation_callback_operation.add((callback, operation))
+    next_relation_callback_handler_run.add((callback, handlerRun))
+    next_relation_nexus_operation_handler_run.add((operation, handlerRun))
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_delivery_acknowledge:
+    delivery = oneof IDs_CallbackDelivery
+    response = oneof IDs_CallbackResponse
+    require delivery in exists_CallbackDelivery
+    require response not in exists_CallbackResponse
+    require state_CallbackDelivery[delivery] == "delivered"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_CallbackDelivery[delivery] = "acknowledged"
+    next_exists_CallbackResponse.add(response)
+    next_state_CallbackResponse[response] = "accepted"
+    next_relation_callback_delivery_response.add((delivery, response))
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_delivery_deliver:
+    delivery = oneof IDs_CallbackDelivery
+    require delivery in exists_CallbackDelivery
+    require state_CallbackDelivery[delivery] == "pending"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_CallbackDelivery[delivery] = "delivered"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_delivery_enqueue:
+    callback = oneof IDs_Callback
+    delivery = oneof IDs_CallbackDelivery
+    require callback in exists_Callback
+    require delivery not in exists_CallbackDelivery
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_exists_CallbackDelivery.add(delivery)
+    next_state_CallbackDelivery[delivery] = "pending"
+    next_relation_callback_delivery.add((callback, delivery))
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_delivery_fail_delivered:
+    delivery = oneof IDs_CallbackDelivery
+    require delivery in exists_CallbackDelivery
+    require state_CallbackDelivery[delivery] == "delivered"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_CallbackDelivery[delivery] = "failed"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_delivery_fail_pending:
+    delivery = oneof IDs_CallbackDelivery
+    require delivery in exists_CallbackDelivery
+    require state_CallbackDelivery[delivery] == "pending"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_CallbackDelivery[delivery] = "failed"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_delivery_retry:
+    delivery = oneof IDs_CallbackDelivery
+    require delivery in exists_CallbackDelivery
+    require state_CallbackDelivery[delivery] == "failed"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_CallbackDelivery[delivery] = "pending"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_handler_close_cancel:
+    entity = oneof IDs_WorkflowRun
+    require entity in exists_WorkflowRun
+    require (state_WorkflowRun[entity] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_WorkflowRun[entity] = "canceled"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_handler_close_complete:
+    entity = oneof IDs_WorkflowRun
+    require entity in exists_WorkflowRun
+    require (state_WorkflowRun[entity] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_WorkflowRun[entity] = "completed"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_handler_close_continue_as_new:
+    entity = oneof IDs_WorkflowRun
+    require entity in exists_WorkflowRun
+    require (state_WorkflowRun[entity] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_WorkflowRun[entity] = "continued_as_new"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_handler_close_fail:
+    entity = oneof IDs_WorkflowRun
+    require entity in exists_WorkflowRun
+    require (state_WorkflowRun[entity] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_WorkflowRun[entity] = "failed"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_handler_close_terminate:
+    entity = oneof IDs_WorkflowRun
+    require entity in exists_WorkflowRun
+    require (state_WorkflowRun[entity] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_WorkflowRun[entity] = "terminated"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_handler_close_timeout:
+    entity = oneof IDs_WorkflowRun
+    require entity in exists_WorkflowRun
+    require (state_WorkflowRun[entity] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", entity) in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_state_WorkflowRun[entity] = "timed_out"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+atomic action Action_callback_handler_start:
+    entity = oneof IDs_WorkflowRun
+    require entity not in exists_WorkflowRun
+    require state_WorkflowRun[entity] == "created"
+    next_exists_Callback = set(exists_Callback)
+    next_state_Callback = dict(state_Callback)
+    next_exists_CallbackDelivery = set(exists_CallbackDelivery)
+    next_state_CallbackDelivery = dict(state_CallbackDelivery)
+    next_exists_CallbackResponse = set(exists_CallbackResponse)
+    next_state_CallbackResponse = dict(state_CallbackResponse)
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_WorkflowRun = set(exists_WorkflowRun)
+    next_state_WorkflowRun = dict(state_WorkflowRun)
+    next_relation_callback_delivery = set(relation_callback_delivery)
+    next_relation_callback_delivery_response = set(relation_callback_delivery_response)
+    next_relation_callback_handler_run = set(relation_callback_handler_run)
+    next_relation_callback_operation = set(relation_callback_operation)
+    next_relation_nexus_operation_handler_run = set(relation_nexus_operation_handler_run)
+    next_exists_WorkflowRun.add(entity)
+    next_state_WorkflowRun[entity] = "started"
+    exists_Callback = next_exists_Callback
+    state_Callback = next_state_Callback
+    exists_CallbackDelivery = next_exists_CallbackDelivery
+    state_CallbackDelivery = next_state_CallbackDelivery
+    exists_CallbackResponse = next_exists_CallbackResponse
+    state_CallbackResponse = next_state_CallbackResponse
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_WorkflowRun = next_exists_WorkflowRun
+    state_WorkflowRun = next_state_WorkflowRun
+    relation_callback_delivery = next_relation_callback_delivery
+    relation_callback_delivery_response = next_relation_callback_delivery_response
+    relation_callback_handler_run = next_relation_callback_handler_run
+    relation_callback_operation = next_relation_callback_operation
+    relation_nexus_operation_handler_run = next_relation_nexus_operation_handler_run
+
+# CanStep = (("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("Callback#0" not in exists_Callback and "WorkflowRun#0" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#0"] == "started") or ("Callback#0" not in exists_Callback and "WorkflowRun#1" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#1"] == "started") or ("Callback#1" not in exists_Callback and "WorkflowRun#0" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#0"] == "started") or ("Callback#1" not in exists_Callback and "WorkflowRun#1" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#1"] == "started") or ("Callback#0" not in exists_Callback and "NexusOperation#0" in exists_NexusOperation and "WorkflowRun#0" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#0"] == "started") or ("Callback#0" not in exists_Callback and "NexusOperation#0" in exists_NexusOperation and "WorkflowRun#1" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#1"] == "started") or ("Callback#0" not in exists_Callback and "NexusOperation#1" in exists_NexusOperation and "WorkflowRun#0" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#0"] == "started") or ("Callback#0" not in exists_Callback and "NexusOperation#1" in exists_NexusOperation and "WorkflowRun#1" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#1"] == "started") or ("Callback#1" not in exists_Callback and "NexusOperation#0" in exists_NexusOperation and "WorkflowRun#0" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#0"] == "started") or ("Callback#1" not in exists_Callback and "NexusOperation#0" in exists_NexusOperation and "WorkflowRun#1" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#1"] == "started") or ("Callback#1" not in exists_Callback and "NexusOperation#1" in exists_NexusOperation and "WorkflowRun#0" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#0"] == "started") or ("Callback#1" not in exists_Callback and "NexusOperation#1" in exists_NexusOperation and "WorkflowRun#1" in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#1"] == "started") or ("CallbackDelivery#0" in exists_CallbackDelivery and "CallbackResponse#0" not in exists_CallbackResponse and state_CallbackDelivery["CallbackDelivery#0"] == "delivered") or ("CallbackDelivery#0" in exists_CallbackDelivery and "CallbackResponse#1" not in exists_CallbackResponse and state_CallbackDelivery["CallbackDelivery#0"] == "delivered") or ("CallbackDelivery#1" in exists_CallbackDelivery and "CallbackResponse#0" not in exists_CallbackResponse and state_CallbackDelivery["CallbackDelivery#1"] == "delivered") or ("CallbackDelivery#1" in exists_CallbackDelivery and "CallbackResponse#1" not in exists_CallbackResponse and state_CallbackDelivery["CallbackDelivery#1"] == "delivered") or ("CallbackDelivery#0" in exists_CallbackDelivery and state_CallbackDelivery["CallbackDelivery#0"] == "pending") or ("CallbackDelivery#1" in exists_CallbackDelivery and state_CallbackDelivery["CallbackDelivery#1"] == "pending") or ("Callback#0" in exists_Callback and "CallbackDelivery#0" not in exists_CallbackDelivery) or ("Callback#0" in exists_Callback and "CallbackDelivery#1" not in exists_CallbackDelivery) or ("Callback#1" in exists_Callback and "CallbackDelivery#0" not in exists_CallbackDelivery) or ("Callback#1" in exists_Callback and "CallbackDelivery#1" not in exists_CallbackDelivery) or ("CallbackDelivery#0" in exists_CallbackDelivery and state_CallbackDelivery["CallbackDelivery#0"] == "delivered") or ("CallbackDelivery#1" in exists_CallbackDelivery and state_CallbackDelivery["CallbackDelivery#1"] == "delivered") or ("CallbackDelivery#0" in exists_CallbackDelivery and state_CallbackDelivery["CallbackDelivery#0"] == "pending") or ("CallbackDelivery#1" in exists_CallbackDelivery and state_CallbackDelivery["CallbackDelivery#1"] == "pending") or ("CallbackDelivery#0" in exists_CallbackDelivery and state_CallbackDelivery["CallbackDelivery#0"] == "failed") or ("CallbackDelivery#1" in exists_CallbackDelivery and state_CallbackDelivery["CallbackDelivery#1"] == "failed") or ("WorkflowRun#0" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#0"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#1" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#1"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#0" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#0"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#1" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#1"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#0" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#0"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#1" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#1"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#0" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#0"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#1" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#1"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#0" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#0"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#1" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#1"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#0" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#0"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#1" in exists_WorkflowRun and (state_WorkflowRun["WorkflowRun#1"] == "started" and ((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))) or ("WorkflowRun#0" not in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#0"] == "created") or ("WorkflowRun#1" not in exists_WorkflowRun and state_WorkflowRun["WorkflowRun#1"] == "created"))
+
+always assertion Relation_callback_delivery_endpoints:
+    return ((("Callback#0", "CallbackDelivery#0") not in relation_callback_delivery or ("Callback#0" in exists_Callback and "CallbackDelivery#0" in exists_CallbackDelivery)) and (("Callback#0", "CallbackDelivery#1") not in relation_callback_delivery or ("Callback#0" in exists_Callback and "CallbackDelivery#1" in exists_CallbackDelivery)) and (("Callback#1", "CallbackDelivery#0") not in relation_callback_delivery or ("Callback#1" in exists_Callback and "CallbackDelivery#0" in exists_CallbackDelivery)) and (("Callback#1", "CallbackDelivery#1") not in relation_callback_delivery or ("Callback#1" in exists_Callback and "CallbackDelivery#1" in exists_CallbackDelivery)))
+
+always assertion Cardinality_callback_delivery_target:
+    return (not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery and ("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) and not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery and ("Callback#1", "CallbackDelivery#1") in relation_callback_delivery))
+
+always assertion Relation_callback_delivery_response_endpoints:
+    return ((("CallbackDelivery#0", "CallbackResponse#0") not in relation_callback_delivery_response or ("CallbackDelivery#0" in exists_CallbackDelivery and "CallbackResponse#0" in exists_CallbackResponse)) and (("CallbackDelivery#0", "CallbackResponse#1") not in relation_callback_delivery_response or ("CallbackDelivery#0" in exists_CallbackDelivery and "CallbackResponse#1" in exists_CallbackResponse)) and (("CallbackDelivery#1", "CallbackResponse#0") not in relation_callback_delivery_response or ("CallbackDelivery#1" in exists_CallbackDelivery and "CallbackResponse#0" in exists_CallbackResponse)) and (("CallbackDelivery#1", "CallbackResponse#1") not in relation_callback_delivery_response or ("CallbackDelivery#1" in exists_CallbackDelivery and "CallbackResponse#1" in exists_CallbackResponse)))
+
+always assertion Cardinality_callback_delivery_response_source:
+    return (not (("CallbackDelivery#0", "CallbackResponse#0") in relation_callback_delivery_response and ("CallbackDelivery#0", "CallbackResponse#1") in relation_callback_delivery_response) and not (("CallbackDelivery#1", "CallbackResponse#0") in relation_callback_delivery_response and ("CallbackDelivery#1", "CallbackResponse#1") in relation_callback_delivery_response))
+
+always assertion Cardinality_callback_delivery_response_target:
+    return (not (("CallbackDelivery#0", "CallbackResponse#0") in relation_callback_delivery_response and ("CallbackDelivery#1", "CallbackResponse#0") in relation_callback_delivery_response) and not (("CallbackDelivery#0", "CallbackResponse#1") in relation_callback_delivery_response and ("CallbackDelivery#1", "CallbackResponse#1") in relation_callback_delivery_response))
+
+always assertion Relation_callback_handler_run_endpoints:
+    return ((("Callback#0", "WorkflowRun#0") not in relation_callback_handler_run or ("Callback#0" in exists_Callback and "WorkflowRun#0" in exists_WorkflowRun)) and (("Callback#0", "WorkflowRun#1") not in relation_callback_handler_run or ("Callback#0" in exists_Callback and "WorkflowRun#1" in exists_WorkflowRun)) and (("Callback#1", "WorkflowRun#0") not in relation_callback_handler_run or ("Callback#1" in exists_Callback and "WorkflowRun#0" in exists_WorkflowRun)) and (("Callback#1", "WorkflowRun#1") not in relation_callback_handler_run or ("Callback#1" in exists_Callback and "WorkflowRun#1" in exists_WorkflowRun)))
+
+always assertion Cardinality_callback_handler_run_source:
+    return (not (("Callback#0", "WorkflowRun#0") in relation_callback_handler_run and ("Callback#0", "WorkflowRun#1") in relation_callback_handler_run) and not (("Callback#1", "WorkflowRun#0") in relation_callback_handler_run and ("Callback#1", "WorkflowRun#1") in relation_callback_handler_run))
+
+always assertion Relation_callback_operation_endpoints:
+    return ((("Callback#0", "NexusOperation#0") not in relation_callback_operation or ("Callback#0" in exists_Callback and "NexusOperation#0" in exists_NexusOperation)) and (("Callback#0", "NexusOperation#1") not in relation_callback_operation or ("Callback#0" in exists_Callback and "NexusOperation#1" in exists_NexusOperation)) and (("Callback#1", "NexusOperation#0") not in relation_callback_operation or ("Callback#1" in exists_Callback and "NexusOperation#0" in exists_NexusOperation)) and (("Callback#1", "NexusOperation#1") not in relation_callback_operation or ("Callback#1" in exists_Callback and "NexusOperation#1" in exists_NexusOperation)))
+
+always assertion Cardinality_callback_operation_source:
+    return (not (("Callback#0", "NexusOperation#0") in relation_callback_operation and ("Callback#0", "NexusOperation#1") in relation_callback_operation) and not (("Callback#1", "NexusOperation#0") in relation_callback_operation and ("Callback#1", "NexusOperation#1") in relation_callback_operation))
+
+always assertion Relation_nexus_operation_handler_run_endpoints:
+    return ((("NexusOperation#0", "WorkflowRun#0") not in relation_nexus_operation_handler_run or ("NexusOperation#0" in exists_NexusOperation and "WorkflowRun#0" in exists_WorkflowRun)) and (("NexusOperation#0", "WorkflowRun#1") not in relation_nexus_operation_handler_run or ("NexusOperation#0" in exists_NexusOperation and "WorkflowRun#1" in exists_WorkflowRun)) and (("NexusOperation#1", "WorkflowRun#0") not in relation_nexus_operation_handler_run or ("NexusOperation#1" in exists_NexusOperation and "WorkflowRun#0" in exists_WorkflowRun)) and (("NexusOperation#1", "WorkflowRun#1") not in relation_nexus_operation_handler_run or ("NexusOperation#1" in exists_NexusOperation and "WorkflowRun#1" in exists_WorkflowRun)))
+
+always assertion Cardinality_nexus_operation_handler_run_source:
+    return (not (("NexusOperation#0", "WorkflowRun#0") in relation_nexus_operation_handler_run and ("NexusOperation#0", "WorkflowRun#1") in relation_nexus_operation_handler_run) and not (("NexusOperation#1", "WorkflowRun#0") in relation_nexus_operation_handler_run and ("NexusOperation#1", "WorkflowRun#1") in relation_nexus_operation_handler_run))
+
+always assertion Property_CallbackHandlerLifetime:
+    return ((not ("WorkflowRun#0" in exists_WorkflowRun) or ((not ((state_WorkflowRun["WorkflowRun#0"] == "completed" or state_WorkflowRun["WorkflowRun#0"] == "failed" or state_WorkflowRun["WorkflowRun#0"] == "canceled" or state_WorkflowRun["WorkflowRun#0"] == "terminated" or state_WorkflowRun["WorkflowRun#0"] == "timed_out" or state_WorkflowRun["WorkflowRun#0"] == "continued_as_new")) or (((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#0") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))))) and (not ("WorkflowRun#1" in exists_WorkflowRun) or ((not ((state_WorkflowRun["WorkflowRun#1"] == "completed" or state_WorkflowRun["WorkflowRun#1"] == "failed" or state_WorkflowRun["WorkflowRun#1"] == "canceled" or state_WorkflowRun["WorkflowRun#1"] == "terminated" or state_WorkflowRun["WorkflowRun#1"] == "timed_out" or state_WorkflowRun["WorkflowRun#1"] == "continued_as_new")) or (((not ("Callback#0" in exists_Callback) or ((not (("Callback#0", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#0", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged"))))))))) and (not ("Callback#1" in exists_Callback) or ((not (("Callback#1", "WorkflowRun#1") in relation_callback_handler_run) or (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#0") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged")))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (("Callback#1", "CallbackDelivery#1") in relation_callback_delivery) or (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged")))))))))))))))
+
+always assertion Property_CallbackReferenceConsistency:
+    return ((not ("Callback#0" in exists_Callback) or (((not ("NexusOperation#0" in exists_NexusOperation) or (((not ("WorkflowRun#0" in exists_WorkflowRun) or ((not ((("Callback#0", "NexusOperation#0") in relation_callback_operation and ("Callback#0", "WorkflowRun#0") in relation_callback_handler_run)) or (("NexusOperation#0", "WorkflowRun#0") in relation_nexus_operation_handler_run)))) and (not ("WorkflowRun#1" in exists_WorkflowRun) or ((not ((("Callback#0", "NexusOperation#0") in relation_callback_operation and ("Callback#0", "WorkflowRun#1") in relation_callback_handler_run)) or (("NexusOperation#0", "WorkflowRun#1") in relation_nexus_operation_handler_run))))))) and (not ("NexusOperation#1" in exists_NexusOperation) or (((not ("WorkflowRun#0" in exists_WorkflowRun) or ((not ((("Callback#0", "NexusOperation#1") in relation_callback_operation and ("Callback#0", "WorkflowRun#0") in relation_callback_handler_run)) or (("NexusOperation#1", "WorkflowRun#0") in relation_nexus_operation_handler_run)))) and (not ("WorkflowRun#1" in exists_WorkflowRun) or ((not ((("Callback#0", "NexusOperation#1") in relation_callback_operation and ("Callback#0", "WorkflowRun#1") in relation_callback_handler_run)) or (("NexusOperation#1", "WorkflowRun#1") in relation_nexus_operation_handler_run)))))))))) and (not ("Callback#1" in exists_Callback) or (((not ("NexusOperation#0" in exists_NexusOperation) or (((not ("WorkflowRun#0" in exists_WorkflowRun) or ((not ((("Callback#1", "NexusOperation#0") in relation_callback_operation and ("Callback#1", "WorkflowRun#0") in relation_callback_handler_run)) or (("NexusOperation#0", "WorkflowRun#0") in relation_nexus_operation_handler_run)))) and (not ("WorkflowRun#1" in exists_WorkflowRun) or ((not ((("Callback#1", "NexusOperation#0") in relation_callback_operation and ("Callback#1", "WorkflowRun#1") in relation_callback_handler_run)) or (("NexusOperation#0", "WorkflowRun#1") in relation_nexus_operation_handler_run))))))) and (not ("NexusOperation#1" in exists_NexusOperation) or (((not ("WorkflowRun#0" in exists_WorkflowRun) or ((not ((("Callback#1", "NexusOperation#1") in relation_callback_operation and ("Callback#1", "WorkflowRun#0") in relation_callback_handler_run)) or (("NexusOperation#1", "WorkflowRun#0") in relation_nexus_operation_handler_run)))) and (not ("WorkflowRun#1" in exists_WorkflowRun) or ((not ((("Callback#1", "NexusOperation#1") in relation_callback_operation and ("Callback#1", "WorkflowRun#1") in relation_callback_handler_run)) or (("NexusOperation#1", "WorkflowRun#1") in relation_nexus_operation_handler_run)))))))))))
+
+always assertion Property_CallbackResponseConsistency:
+    return (((not ("CallbackDelivery#0" in exists_CallbackDelivery) or ((not (state_CallbackDelivery["CallbackDelivery#0"] == "acknowledged") or ((("CallbackResponse#0" in exists_CallbackResponse and ((("CallbackDelivery#0", "CallbackResponse#0") in relation_callback_delivery_response and state_CallbackResponse["CallbackResponse#0"] == "accepted"))) or ("CallbackResponse#1" in exists_CallbackResponse and ((("CallbackDelivery#0", "CallbackResponse#1") in relation_callback_delivery_response and state_CallbackResponse["CallbackResponse#1"] == "accepted")))))))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or ((not (state_CallbackDelivery["CallbackDelivery#1"] == "acknowledged") or ((("CallbackResponse#0" in exists_CallbackResponse and ((("CallbackDelivery#1", "CallbackResponse#0") in relation_callback_delivery_response and state_CallbackResponse["CallbackResponse#0"] == "accepted"))) or ("CallbackResponse#1" in exists_CallbackResponse and ((("CallbackDelivery#1", "CallbackResponse#1") in relation_callback_delivery_response and state_CallbackResponse["CallbackResponse#1"] == "accepted"))))))))) and ((not ("CallbackDelivery#0" in exists_CallbackDelivery) or (((not ("CallbackResponse#0" in exists_CallbackResponse) or ((not (("CallbackDelivery#0", "CallbackResponse#0") in relation_callback_delivery_response) or (state_CallbackResponse["CallbackResponse#0"] == "accepted")))) and (not ("CallbackResponse#1" in exists_CallbackResponse) or ((not (("CallbackDelivery#0", "CallbackResponse#1") in relation_callback_delivery_response) or (state_CallbackResponse["CallbackResponse#1"] == "accepted"))))))) and (not ("CallbackDelivery#1" in exists_CallbackDelivery) or (((not ("CallbackResponse#0" in exists_CallbackResponse) or ((not (("CallbackDelivery#1", "CallbackResponse#0") in relation_callback_delivery_response) or (state_CallbackResponse["CallbackResponse#0"] == "accepted")))) and (not ("CallbackResponse#1" in exists_CallbackResponse) or ((not (("CallbackDelivery#1", "CallbackResponse#1") in relation_callback_delivery_response) or (state_CallbackResponse["CallbackResponse#1"] == "accepted")))))))))
+

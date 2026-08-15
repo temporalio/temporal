@@ -104,7 +104,16 @@ func TestNormalizeCounterexampleDerivesRelationRemovalDelta(t *testing.T) {
 	trace, err := NormalizeCounterexample(model, "link-required", TraceEvidence{
 		Steps: []ObservedTraceStep{
 			{Action: "attach", Bindings: bindings},
-			{Action: "detach", Bindings: bindings},
+			{
+				Action: "detach", Bindings: bindings,
+				After: &ModelState{
+					Entities: map[string]map[string]string{
+						"source": {"source#0": "ready"},
+						"target": {"target#0": "unused"},
+					},
+					Relations: map[string][]RelationTuple{"link": nil},
+				},
+			},
 		},
 	})
 

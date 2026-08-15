@@ -10,19 +10,22 @@ import (
 	"reflect"
 	"slices"
 	"sync"
+
+	"go.temporal.io/server/common/testing/umpire"
 )
 
 // PathArtifact is the incrementally flushed diagnostic state of one path execution.
 type PathArtifact struct {
-	Index          int               `json:"index"`
-	ActionsBegun   []string          `json:"actionsBegun,omitempty"`
-	Bindings       Bindings          `json:"bindings,omitempty"`
-	ActivePolicies []string          `json:"activePolicies,omitempty"`
-	Observations   []string          `json:"observations,omitempty"`
-	Verdicts       []string          `json:"verdicts,omitempty"`
-	Facts          []json.RawMessage `json:"facts,omitempty"`
-	Complete       bool              `json:"complete"`
-	Error          string            `json:"error,omitempty"`
+	Index          int                     `json:"index"`
+	ActionsBegun   []string                `json:"actionsBegun,omitempty"`
+	Bindings       Bindings                `json:"bindings,omitempty"`
+	ActivePolicies []string                `json:"activePolicies,omitempty"`
+	Observations   []string                `json:"observations,omitempty"`
+	Verdicts       []string                `json:"verdicts,omitempty"`
+	Claims         []umpire.QualifiedClaim `json:"claims,omitempty"`
+	Facts          []json.RawMessage       `json:"facts,omitempty"`
+	Complete       bool                    `json:"complete"`
+	Error          string                  `json:"error,omitempty"`
 }
 
 // Artifact records sparse intent, selected completed paths, and incremental execution evidence.
@@ -111,6 +114,11 @@ type ArtifactHarness interface {
 // ArtifactFactProvider exposes the facts observed by one live path for incremental diagnostics.
 type ArtifactFactProvider interface {
 	ArtifactFacts(context.Context) ([]json.RawMessage, error)
+}
+
+// QualifiedVerdictProvider exposes evidence-qualified claims produced at a safety checkpoint.
+type QualifiedVerdictProvider interface {
+	QualifiedVerdicts(context.Context, Checkpoint, bool) ([]umpire.QualifiedClaim, error)
 }
 
 var ErrReplayMismatch = errors.New("completed regression replay does not match model or profile")
@@ -218,13 +226,26 @@ func (r *artifactRecorder) observation(ctx context.Context, path int, name strin
 	return r.flush(ctx)
 }
 
-func (r *artifactRecorder) verdict(ctx context.Context, path int, checkpoint Checkpoint, bindings Bindings) error {
+func (r *artifactRecorder) verdict(ctx context.Context, path int, checkpoint Checkpoint, bindings Bindings, passed bool, provider QualifiedVerdictProvider) error {
 	if r == nil {
 		return nil
 	}
+	var claims []umpire.QualifiedClaim
+	if provider != nil {
+		var err error
+		claims, err = provider.QualifiedVerdicts(ctx, checkpoint, !passed)
+		if err != nil {
+			return err
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.artifact.Paths[path].Verdicts = append(r.artifact.Paths[path].Verdicts, checkpoint.String()+":pass")
+	verdict := ":fail"
+	if passed {
+		verdict = ":pass"
+	}
+	r.artifact.Paths[path].Verdicts = append(r.artifact.Paths[path].Verdicts, checkpoint.String()+verdict)
+	r.artifact.Paths[path].Claims = append(r.artifact.Paths[path].Claims, claims...)
 	r.artifact.Paths[path].Bindings = cloneRuntimeBindings(bindings)
 	return r.flush(ctx)
 }
@@ -280,11 +301,21 @@ func (r *artifactRecorder) snapshot() Artifact {
 		result.Paths[index].ActivePolicies = slices.Clone(path.ActivePolicies)
 		result.Paths[index].Observations = slices.Clone(path.Observations)
 		result.Paths[index].Verdicts = slices.Clone(path.Verdicts)
+		result.Paths[index].Claims = cloneQualifiedClaims(path.Claims)
 		result.Paths[index].Facts = slices.Clone(path.Facts)
 	}
 	result.Completed.Paths = slices.Clone(r.artifact.Completed.Paths)
 	for index := range result.Completed.Paths {
 		result.Completed.Paths[index].Bindings = cloneRuntimeBindings(r.artifact.Completed.Paths[index].Bindings)
+	}
+	return result
+}
+
+func cloneQualifiedClaims(claims []umpire.QualifiedClaim) []umpire.QualifiedClaim {
+	result := slices.Clone(claims)
+	for index := range result {
+		result[index].Observed = slices.Clone(result[index].Observed)
+		result[index].Omissions = slices.Clone(result[index].Omissions)
 	}
 	return result
 }

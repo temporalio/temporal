@@ -33,7 +33,7 @@ func TestDriveEmitsActionWindowsRejectionAndEndpointVerdict(t *testing.T) {
 		{Kind: umpire.ExecutionActionFinish, Action: "handler", Phase: "fire", Outcome: umpire.ExecutionOutcomeSucceeded},
 		{Kind: umpire.ExecutionActionFinish, Action: "reject", Phase: "fire", Outcome: umpire.ExecutionOutcomeRejected, ErrorClass: "error"},
 		{Kind: umpire.ExecutionActionFinish, Action: "complete", Phase: "fire", Outcome: umpire.ExecutionOutcomeSucceeded},
-		{Kind: umpire.ExecutionVerdict, Action: "complete", Checkpoint: "endpoint", Pass: true},
+		{Kind: umpire.ExecutionVerdict, Action: "complete", Property: umpire.ActionEndpointProperty("complete"), Checkpoint: "endpoint", Pass: true},
 	}, rc.observations)
 }
 

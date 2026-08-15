@@ -36,14 +36,14 @@ type Catalog struct {
 func Default() (*Catalog, error) {
 	return compile([]declaration{
 		// Safety rules — checked on every observation.
-		{safety: func() umpire.SafetyRule { return &rule.SpeculativeTaskCreation{} }, reason: unmigratedReason},
-		{safety: func() umpire.SafetyRule { return &rule.NexusOperationClosure{} }, reason: unmigratedReason},
+		{safety: func() umpire.SafetyRule { return &rule.SpeculativeTaskCreation{} }, included: true},
+		{safety: func() umpire.SafetyRule { return &rule.NexusOperationClosure{} }, included: true},
 		{safety: func() umpire.SafetyRule { return &rule.NexusActivityLinkConsistency{} }, included: true},
-		{safety: func() umpire.SafetyRule { return &rule.NexusOperationTimeoutSemantics{} }, reason: unmigratedReason},
-		{safety: func() umpire.SafetyRule { return &rule.CallbackReferenceConsistency{} }, reason: unmigratedReason},
-		{safety: func() umpire.SafetyRule { return &rule.CallbackResponseConsistency{} }, reason: unmigratedReason},
+		{safety: func() umpire.SafetyRule { return &rule.NexusOperationTimeoutSemantics{} }, included: true},
+		{safety: func() umpire.SafetyRule { return &rule.CallbackReferenceConsistency{} }, included: true},
+		{safety: func() umpire.SafetyRule { return &rule.CallbackResponseConsistency{} }, included: true},
 		// Liveness rules — checked at test teardown.
-		{liveness: func() umpire.LivenessRule { return &rule.WorkflowTaskStarvation{} }, reason: unmigratedReason},
+		{liveness: func() umpire.LivenessRule { return &rule.WorkflowTaskStarvation{} }, included: true},
 		{liveness: func() umpire.LivenessRule { return &rule.EntityProgress{} }, included: true},
 	})
 }

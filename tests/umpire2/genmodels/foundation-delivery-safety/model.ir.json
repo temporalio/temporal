@@ -527,10 +527,39 @@
         }
       ],
       "guard": {
-        "op": "state-is",
-        "entity": "DeliveryTask",
-        "ref": "task",
-        "state": "pending"
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "pending"
+          },
+          {
+            "op": "exists",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "valid"
+                  }
+                ]
+              }
+            ],
+            "entity": "WorkObligation",
+            "var": "obligation"
+          }
+        ]
       },
       "effects": [
         {
@@ -844,19 +873,48 @@
         }
       ],
       "guard": {
-        "op": "or",
+        "op": "and",
         "args": [
           {
-            "op": "state-is",
-            "entity": "DeliveryTask",
-            "ref": "task",
-            "state": "pending"
+            "op": "or",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "pending"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "sync-offered"
+              }
+            ]
           },
           {
-            "op": "state-is",
-            "entity": "DeliveryTask",
-            "ref": "task",
-            "state": "sync-offered"
+            "op": "exists",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "valid"
+                  }
+                ]
+              }
+            ],
+            "entity": "WorkObligation",
+            "var": "obligation"
           }
         ]
       },
@@ -1384,6 +1442,14 @@
       "name": "delivery.spool",
       "reason": "abstract foundation delivery protocol",
       "source": {}
+    },
+    {
+      "name": "workflow.task.create-speculative-direct",
+      "reason": "the speculative target checks the atomic direct-delivery adapter",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_task_speculative.go",
+        "symbol": "workflow.task.create-speculative-direct"
+      }
     }
   ],
   "refinements": [

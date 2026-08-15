@@ -1,0 +1,1633 @@
+# Generated from the Umpire verification snapshot. Do not edit.
+
+IDs_DeliveryAttempt = ["DeliveryAttempt#0"]
+IDs_DeliveryQueue = ["DeliveryQueue#0", "DeliveryQueue#1"]
+IDs_DeliveryRouteClass = ["DeliveryRouteClass#0"]
+IDs_DeliveryTask = ["DeliveryTask#0"]
+IDs_HistoryOwnerGeneration = ["HistoryOwnerGeneration#0", "HistoryOwnerGeneration#1"]
+IDs_HistoryShard = ["HistoryShard#0"]
+IDs_MatchingOwnerGeneration = ["MatchingOwnerGeneration#0", "MatchingOwnerGeneration#1"]
+IDs_MatchingQueuePartition = ["MatchingQueuePartition#0"]
+IDs_Poller = ["Poller#0", "Poller#1"]
+IDs_WorkObligation = ["WorkObligation#0"]
+
+action Init:
+    exists_DeliveryAttempt = set([])
+    state_DeliveryAttempt = {"DeliveryAttempt#0": "reserved"}
+    exists_DeliveryQueue = set(["DeliveryQueue#0", "DeliveryQueue#1"])
+    state_DeliveryQueue = {"DeliveryQueue#0": "available", "DeliveryQueue#1": "available"}
+    exists_DeliveryRouteClass = set([])
+    state_DeliveryRouteClass = {"DeliveryRouteClass#0": "inactive"}
+    exists_DeliveryTask = set([])
+    state_DeliveryTask = {"DeliveryTask#0": "pending"}
+    exists_HistoryOwnerGeneration = set([])
+    state_HistoryOwnerGeneration = {"HistoryOwnerGeneration#0": "unused", "HistoryOwnerGeneration#1": "unused"}
+    exists_HistoryShard = set([])
+    state_HistoryShard = {"HistoryShard#0": "unowned"}
+    exists_MatchingOwnerGeneration = set([])
+    state_MatchingOwnerGeneration = {"MatchingOwnerGeneration#0": "unused", "MatchingOwnerGeneration#1": "unused"}
+    exists_MatchingQueuePartition = set([])
+    state_MatchingQueuePartition = {"MatchingQueuePartition#0": "unowned"}
+    exists_Poller = set(["Poller#0", "Poller#1"])
+    state_Poller = {"Poller#0": "available", "Poller#1": "available"}
+    exists_WorkObligation = set([])
+    state_WorkObligation = {"WorkObligation#0": "unresolved"}
+    relation_delivery_accepted_start = set()
+    relation_delivery_attempt_poller = set()
+    relation_delivery_attempt_task = set()
+    relation_delivery_partition_owner = set()
+    relation_delivery_partition_route = set()
+    relation_delivery_poller_route = set()
+    relation_delivery_task_history_owner_generation = set()
+    relation_delivery_task_history_shard = set()
+    relation_delivery_task_obligation = set()
+    relation_delivery_task_owner_generation = set()
+    relation_delivery_task_queue = set()
+    relation_delivery_task_route = set()
+    relation_history_shard_owner = set()
+
+atomic action Action_delivery_acknowledge:
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_DeliveryTask[task] == "dispatched" and state_DeliveryAttempt[attempt] == "dispatched" and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_DeliveryTask[task] = "acknowledged"
+    next_state_DeliveryAttempt[attempt] = "completed"
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_authorize_accept:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require obligation in exists_WorkObligation
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_WorkObligation[obligation] == "valid" and state_DeliveryTask[task] == "reserved" and state_DeliveryAttempt[attempt] == "reserved" and (task, obligation) in relation_delivery_task_obligation and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_DeliveryTask[task] = "authorized"
+    next_state_DeliveryAttempt[attempt] = "accepted"
+    next_state_WorkObligation[obligation] = "accepted"
+    next_relation_delivery_accepted_start.add((obligation, attempt))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_authorize_reject:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require obligation in exists_WorkObligation
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_WorkObligation[obligation] == "valid" and state_DeliveryTask[task] == "reserved" and state_DeliveryAttempt[attempt] == "reserved" and (task, obligation) in relation_delivery_task_obligation and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_DeliveryTask[task] = "backlogged"
+    next_state_DeliveryAttempt[attempt] = "rejected"
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_dispatch:
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_DeliveryTask[task] == "authorized" and state_DeliveryAttempt[attempt] == "accepted" and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_DeliveryTask[task] = "dispatched"
+    next_state_DeliveryAttempt[attempt] = "dispatched"
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_expire:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    require obligation in exists_WorkObligation
+    require task in exists_DeliveryTask
+    require (state_WorkObligation[obligation] == "valid" and (state_DeliveryTask[task] == "pending" or state_DeliveryTask[task] == "sync-offered" or state_DeliveryTask[task] == "backlogged") and (task, obligation) in relation_delivery_task_obligation)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_WorkObligation[obligation] = "terminal"
+    next_state_DeliveryTask[task] = "retired"
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_offer_sync:
+    task = oneof IDs_DeliveryTask
+    require task in exists_DeliveryTask
+    require (state_DeliveryTask[task] == "pending" and (("WorkObligation#0" in exists_WorkObligation and (((task, "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid")))))
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_DeliveryTask[task] = "sync-offered"
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_persist_ambiguous:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    queue = oneof IDs_DeliveryQueue
+    require obligation not in exists_WorkObligation
+    require task not in exists_DeliveryTask
+    require queue in exists_DeliveryQueue
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_exists_WorkObligation.add(obligation)
+    next_state_WorkObligation[obligation] = "unresolved"
+    next_exists_DeliveryTask.add(task)
+    next_state_DeliveryTask[task] = "pending"
+    next_relation_delivery_task_obligation.add((task, obligation))
+    next_relation_delivery_task_queue.add((task, queue))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_persist_success:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    queue = oneof IDs_DeliveryQueue
+    require obligation not in exists_WorkObligation
+    require task not in exists_DeliveryTask
+    require queue in exists_DeliveryQueue
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_exists_WorkObligation.add(obligation)
+    next_state_WorkObligation[obligation] = "valid"
+    next_exists_DeliveryTask.add(task)
+    next_state_DeliveryTask[task] = "pending"
+    next_relation_delivery_task_obligation.add((task, obligation))
+    next_relation_delivery_task_queue.add((task, queue))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_resolve_persisted:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    require obligation in exists_WorkObligation
+    require task in exists_DeliveryTask
+    require (state_WorkObligation[obligation] == "unresolved" and state_DeliveryTask[task] == "pending" and (task, obligation) in relation_delivery_task_obligation)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_WorkObligation[obligation] = "valid"
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_retire:
+    task = oneof IDs_DeliveryTask
+    require task in exists_DeliveryTask
+    require state_DeliveryTask[task] == "acknowledged"
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_DeliveryTask[task] = "retired"
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_retry:
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_DeliveryTask[task] == "dispatched" and state_DeliveryAttempt[attempt] == "dispatched" and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_DeliveryTask[task] = "backlogged"
+    next_state_DeliveryAttempt[attempt] = "failed"
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_delivery_spool:
+    task = oneof IDs_DeliveryTask
+    require task in exists_DeliveryTask
+    require ((state_DeliveryTask[task] == "pending" or state_DeliveryTask[task] == "sync-offered") and (("WorkObligation#0" in exists_WorkObligation and (((task, "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid")))))
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_DeliveryTask[task] = "backlogged"
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_routing_bootstrap:
+    route = oneof IDs_DeliveryRouteClass
+    partition = oneof IDs_MatchingQueuePartition
+    generation = oneof IDs_MatchingOwnerGeneration
+    require route not in exists_DeliveryRouteClass
+    require partition not in exists_MatchingQueuePartition
+    require generation not in exists_MatchingOwnerGeneration
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_exists_DeliveryRouteClass.add(route)
+    next_state_DeliveryRouteClass[route] = "active"
+    next_exists_MatchingQueuePartition.add(partition)
+    next_state_MatchingQueuePartition[partition] = "owned"
+    next_exists_MatchingOwnerGeneration.add(generation)
+    next_state_MatchingOwnerGeneration[generation] = "current"
+    next_relation_delivery_partition_route.add((partition, route))
+    next_relation_delivery_partition_owner.add((partition, generation))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_routing_bootstrap_history_owner:
+    shard = oneof IDs_HistoryShard
+    historyGeneration = oneof IDs_HistoryOwnerGeneration
+    require shard not in exists_HistoryShard
+    require historyGeneration not in exists_HistoryOwnerGeneration
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_exists_HistoryShard.add(shard)
+    next_state_HistoryShard[shard] = "owned"
+    next_exists_HistoryOwnerGeneration.add(historyGeneration)
+    next_state_HistoryOwnerGeneration[historyGeneration] = "current"
+    next_relation_history_shard_owner.add((shard, historyGeneration))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_routing_forward_to_matching:
+    task = oneof IDs_DeliveryTask
+    route = oneof IDs_DeliveryRouteClass
+    partition = oneof IDs_MatchingQueuePartition
+    generation = oneof IDs_MatchingOwnerGeneration
+    shard = oneof IDs_HistoryShard
+    historyGeneration = oneof IDs_HistoryOwnerGeneration
+    require task in exists_DeliveryTask
+    require route in exists_DeliveryRouteClass
+    require partition in exists_MatchingQueuePartition
+    require generation in exists_MatchingOwnerGeneration
+    require shard in exists_HistoryShard
+    require historyGeneration in exists_HistoryOwnerGeneration
+    require ((state_DeliveryTask[task] == "pending" or state_DeliveryTask[task] == "sync-offered" or state_DeliveryTask[task] == "backlogged") and state_MatchingOwnerGeneration[generation] == "current" and (partition, route) in relation_delivery_partition_route and (partition, generation) in relation_delivery_partition_owner and state_HistoryOwnerGeneration[historyGeneration] == "current" and (shard, historyGeneration) in relation_history_shard_owner)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_relation_delivery_task_route.add((task, route))
+    next_relation_delivery_task_owner_generation.add((task, generation))
+    next_relation_delivery_task_history_shard.add((task, shard))
+    next_relation_delivery_task_history_owner_generation.add((task, historyGeneration))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_routing_handoff:
+    partition = oneof IDs_MatchingQueuePartition
+    oldGeneration = oneof IDs_MatchingOwnerGeneration
+    newGeneration = oneof IDs_MatchingOwnerGeneration
+    require partition in exists_MatchingQueuePartition
+    require oldGeneration in exists_MatchingOwnerGeneration
+    require newGeneration not in exists_MatchingOwnerGeneration
+    require (state_MatchingOwnerGeneration[oldGeneration] == "current" and (partition, oldGeneration) in relation_delivery_partition_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", oldGeneration) in relation_delivery_task_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_MatchingOwnerGeneration[oldGeneration] = "stale"
+    next_exists_MatchingOwnerGeneration.add(newGeneration)
+    next_state_MatchingOwnerGeneration[newGeneration] = "current"
+    next_relation_delivery_partition_owner.discard((partition, oldGeneration))
+    next_relation_delivery_partition_owner.add((partition, newGeneration))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_routing_handoff_history_owner:
+    shard = oneof IDs_HistoryShard
+    oldHistoryGeneration = oneof IDs_HistoryOwnerGeneration
+    newHistoryGeneration = oneof IDs_HistoryOwnerGeneration
+    require shard in exists_HistoryShard
+    require oldHistoryGeneration in exists_HistoryOwnerGeneration
+    require newHistoryGeneration not in exists_HistoryOwnerGeneration
+    require (state_HistoryOwnerGeneration[oldHistoryGeneration] == "current" and (shard, oldHistoryGeneration) in relation_history_shard_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", oldHistoryGeneration) in relation_delivery_task_history_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_HistoryOwnerGeneration[oldHistoryGeneration] = "stale"
+    next_exists_HistoryOwnerGeneration.add(newHistoryGeneration)
+    next_state_HistoryOwnerGeneration[newHistoryGeneration] = "current"
+    next_relation_history_shard_owner.discard((shard, oldHistoryGeneration))
+    next_relation_history_shard_owner.add((shard, newHistoryGeneration))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_routing_register_poller:
+    poller = oneof IDs_Poller
+    route = oneof IDs_DeliveryRouteClass
+    require poller in exists_Poller
+    require route in exists_DeliveryRouteClass
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_relation_delivery_poller_route.add((poller, route))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+atomic action Action_routing_reserve_compatible:
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    poller = oneof IDs_Poller
+    route = oneof IDs_DeliveryRouteClass
+    partition = oneof IDs_MatchingQueuePartition
+    generation = oneof IDs_MatchingOwnerGeneration
+    require task in exists_DeliveryTask
+    require attempt not in exists_DeliveryAttempt
+    require poller in exists_Poller
+    require route in exists_DeliveryRouteClass
+    require partition in exists_MatchingQueuePartition
+    require generation in exists_MatchingOwnerGeneration
+    require ((state_DeliveryTask[task] == "sync-offered" or state_DeliveryTask[task] == "backlogged") and (task, route) in relation_delivery_task_route and (poller, route) in relation_delivery_poller_route and (partition, route) in relation_delivery_partition_route and (partition, generation) in relation_delivery_partition_owner and (task, generation) in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration[generation] == "current")
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryRouteClass = set(exists_DeliveryRouteClass)
+    next_state_DeliveryRouteClass = dict(state_DeliveryRouteClass)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_HistoryOwnerGeneration = set(exists_HistoryOwnerGeneration)
+    next_state_HistoryOwnerGeneration = dict(state_HistoryOwnerGeneration)
+    next_exists_HistoryShard = set(exists_HistoryShard)
+    next_state_HistoryShard = dict(state_HistoryShard)
+    next_exists_MatchingOwnerGeneration = set(exists_MatchingOwnerGeneration)
+    next_state_MatchingOwnerGeneration = dict(state_MatchingOwnerGeneration)
+    next_exists_MatchingQueuePartition = set(exists_MatchingQueuePartition)
+    next_state_MatchingQueuePartition = dict(state_MatchingQueuePartition)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_partition_owner = set(relation_delivery_partition_owner)
+    next_relation_delivery_partition_route = set(relation_delivery_partition_route)
+    next_relation_delivery_poller_route = set(relation_delivery_poller_route)
+    next_relation_delivery_task_history_owner_generation = set(relation_delivery_task_history_owner_generation)
+    next_relation_delivery_task_history_shard = set(relation_delivery_task_history_shard)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_owner_generation = set(relation_delivery_task_owner_generation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_relation_delivery_task_route = set(relation_delivery_task_route)
+    next_relation_history_shard_owner = set(relation_history_shard_owner)
+    next_state_DeliveryTask[task] = "reserved"
+    next_exists_DeliveryAttempt.add(attempt)
+    next_state_DeliveryAttempt[attempt] = "reserved"
+    next_relation_delivery_attempt_task.add((attempt, task))
+    next_relation_delivery_attempt_poller.add((attempt, poller))
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryRouteClass = next_exists_DeliveryRouteClass
+    state_DeliveryRouteClass = next_state_DeliveryRouteClass
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_HistoryOwnerGeneration = next_exists_HistoryOwnerGeneration
+    state_HistoryOwnerGeneration = next_state_HistoryOwnerGeneration
+    exists_HistoryShard = next_exists_HistoryShard
+    state_HistoryShard = next_state_HistoryShard
+    exists_MatchingOwnerGeneration = next_exists_MatchingOwnerGeneration
+    state_MatchingOwnerGeneration = next_state_MatchingOwnerGeneration
+    exists_MatchingQueuePartition = next_exists_MatchingQueuePartition
+    state_MatchingQueuePartition = next_state_MatchingQueuePartition
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_partition_owner = next_relation_delivery_partition_owner
+    relation_delivery_partition_route = next_relation_delivery_partition_route
+    relation_delivery_poller_route = next_relation_delivery_poller_route
+    relation_delivery_task_history_owner_generation = next_relation_delivery_task_history_owner_generation
+    relation_delivery_task_history_shard = next_relation_delivery_task_history_shard
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_owner_generation = next_relation_delivery_task_owner_generation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+    relation_delivery_task_route = next_relation_delivery_task_route
+    relation_history_shard_owner = next_relation_history_shard_owner
+
+# CanStep = (("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#0"] == "accepted" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "valid" and (state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "pending" and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid")))))) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "unresolved" and state_DeliveryTask["DeliveryTask#0"] == "pending" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("DeliveryTask#0" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#0"] == "acknowledged") or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered") and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid")))))) or ("DeliveryRouteClass#0" not in exists_DeliveryRouteClass and "MatchingQueuePartition#0" not in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" not in exists_MatchingOwnerGeneration) or ("DeliveryRouteClass#0" not in exists_DeliveryRouteClass and "MatchingQueuePartition#0" not in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" not in exists_MatchingOwnerGeneration) or ("HistoryShard#0" not in exists_HistoryShard and "HistoryOwnerGeneration#0" not in exists_HistoryOwnerGeneration) or ("HistoryShard#0" not in exists_HistoryShard and "HistoryOwnerGeneration#1" not in exists_HistoryOwnerGeneration) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and "HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current" and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and state_HistoryOwnerGeneration["HistoryOwnerGeneration#0"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#0") in relation_history_shard_owner)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and "HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current" and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and state_HistoryOwnerGeneration["HistoryOwnerGeneration#1"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#1") in relation_history_shard_owner)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and "HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current" and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and state_HistoryOwnerGeneration["HistoryOwnerGeneration#0"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#0") in relation_history_shard_owner)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and "HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current" and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and state_HistoryOwnerGeneration["HistoryOwnerGeneration#1"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#1") in relation_history_shard_owner)) or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and "MatchingOwnerGeneration#0" not in exists_MatchingOwnerGeneration and (state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current" and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and "MatchingOwnerGeneration#1" not in exists_MatchingOwnerGeneration and (state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current" and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and "MatchingOwnerGeneration#0" not in exists_MatchingOwnerGeneration and (state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current" and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and "MatchingOwnerGeneration#1" not in exists_MatchingOwnerGeneration and (state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current" and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration and "HistoryOwnerGeneration#0" not in exists_HistoryOwnerGeneration and (state_HistoryOwnerGeneration["HistoryOwnerGeneration#0"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#0") in relation_history_shard_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "HistoryOwnerGeneration#0") in relation_delivery_task_history_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration and "HistoryOwnerGeneration#1" not in exists_HistoryOwnerGeneration and (state_HistoryOwnerGeneration["HistoryOwnerGeneration#0"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#0") in relation_history_shard_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "HistoryOwnerGeneration#0") in relation_delivery_task_history_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration and "HistoryOwnerGeneration#0" not in exists_HistoryOwnerGeneration and (state_HistoryOwnerGeneration["HistoryOwnerGeneration#1"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#1") in relation_history_shard_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "HistoryOwnerGeneration#1") in relation_delivery_task_history_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration and "HistoryOwnerGeneration#1" not in exists_HistoryOwnerGeneration and (state_HistoryOwnerGeneration["HistoryOwnerGeneration#1"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#1") in relation_history_shard_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "HistoryOwnerGeneration#1") in relation_delivery_task_history_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("Poller#0" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass) or ("Poller#1" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "DeliveryRouteClass#0") in relation_delivery_task_route and ("Poller#0", "DeliveryRouteClass#0") in relation_delivery_poller_route and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and ("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "DeliveryRouteClass#0") in relation_delivery_task_route and ("Poller#0", "DeliveryRouteClass#0") in relation_delivery_poller_route and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and ("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "DeliveryRouteClass#0") in relation_delivery_task_route and ("Poller#1", "DeliveryRouteClass#0") in relation_delivery_poller_route and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and ("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "DeliveryRouteClass#0") in relation_delivery_task_route and ("Poller#1", "DeliveryRouteClass#0") in relation_delivery_poller_route and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and ("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current")))
+
+always assertion Relation_delivery_accepted_start_endpoints:
+    return ((("WorkObligation#0", "DeliveryAttempt#0") not in relation_delivery_accepted_start or ("WorkObligation#0" in exists_WorkObligation and "DeliveryAttempt#0" in exists_DeliveryAttempt)))
+
+always assertion Cardinality_delivery_accepted_start_source:
+    return True
+
+always assertion Cardinality_delivery_accepted_start_target:
+    return True
+
+always assertion Relation_delivery_attempt_poller_endpoints:
+    return ((("DeliveryAttempt#0", "Poller#0") not in relation_delivery_attempt_poller or ("DeliveryAttempt#0" in exists_DeliveryAttempt and "Poller#0" in exists_Poller)) and (("DeliveryAttempt#0", "Poller#1") not in relation_delivery_attempt_poller or ("DeliveryAttempt#0" in exists_DeliveryAttempt and "Poller#1" in exists_Poller)))
+
+always assertion Cardinality_delivery_attempt_poller_source:
+    return (not (("DeliveryAttempt#0", "Poller#0") in relation_delivery_attempt_poller and ("DeliveryAttempt#0", "Poller#1") in relation_delivery_attempt_poller))
+
+always assertion Relation_delivery_attempt_task_endpoints:
+    return ((("DeliveryAttempt#0", "DeliveryTask#0") not in relation_delivery_attempt_task or ("DeliveryAttempt#0" in exists_DeliveryAttempt and "DeliveryTask#0" in exists_DeliveryTask)))
+
+always assertion Cardinality_delivery_attempt_task_source:
+    return True
+
+always assertion Relation_delivery_partition_owner_endpoints:
+    return ((("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") not in relation_delivery_partition_owner or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration)) and (("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") not in relation_delivery_partition_owner or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration)))
+
+always assertion Cardinality_delivery_partition_owner_source:
+    return (not (("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner))
+
+always assertion Relation_delivery_partition_route_endpoints:
+    return ((("MatchingQueuePartition#0", "DeliveryRouteClass#0") not in relation_delivery_partition_route or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "DeliveryRouteClass#0" in exists_DeliveryRouteClass)))
+
+always assertion Cardinality_delivery_partition_route_source:
+    return True
+
+always assertion Relation_delivery_poller_route_endpoints:
+    return ((("Poller#0", "DeliveryRouteClass#0") not in relation_delivery_poller_route or ("Poller#0" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass)) and (("Poller#1", "DeliveryRouteClass#0") not in relation_delivery_poller_route or ("Poller#1" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass)))
+
+always assertion Cardinality_delivery_poller_route_source:
+    return True
+
+always assertion Relation_delivery_task_history_owner_generation_endpoints:
+    return ((("DeliveryTask#0", "HistoryOwnerGeneration#0") not in relation_delivery_task_history_owner_generation or ("DeliveryTask#0" in exists_DeliveryTask and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration)) and (("DeliveryTask#0", "HistoryOwnerGeneration#1") not in relation_delivery_task_history_owner_generation or ("DeliveryTask#0" in exists_DeliveryTask and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration)))
+
+always assertion Cardinality_delivery_task_history_owner_generation_source:
+    return (not (("DeliveryTask#0", "HistoryOwnerGeneration#0") in relation_delivery_task_history_owner_generation and ("DeliveryTask#0", "HistoryOwnerGeneration#1") in relation_delivery_task_history_owner_generation))
+
+always assertion Relation_delivery_task_history_shard_endpoints:
+    return ((("DeliveryTask#0", "HistoryShard#0") not in relation_delivery_task_history_shard or ("DeliveryTask#0" in exists_DeliveryTask and "HistoryShard#0" in exists_HistoryShard)))
+
+always assertion Cardinality_delivery_task_history_shard_source:
+    return True
+
+always assertion Relation_delivery_task_obligation_endpoints:
+    return ((("DeliveryTask#0", "WorkObligation#0") not in relation_delivery_task_obligation or ("DeliveryTask#0" in exists_DeliveryTask and "WorkObligation#0" in exists_WorkObligation)))
+
+always assertion Cardinality_delivery_task_obligation_source:
+    return True
+
+always assertion Relation_delivery_task_owner_generation_endpoints:
+    return ((("DeliveryTask#0", "MatchingOwnerGeneration#0") not in relation_delivery_task_owner_generation or ("DeliveryTask#0" in exists_DeliveryTask and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration)) and (("DeliveryTask#0", "MatchingOwnerGeneration#1") not in relation_delivery_task_owner_generation or ("DeliveryTask#0" in exists_DeliveryTask and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration)))
+
+always assertion Cardinality_delivery_task_owner_generation_source:
+    return (not (("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation and ("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation))
+
+always assertion Relation_delivery_task_queue_endpoints:
+    return ((("DeliveryTask#0", "DeliveryQueue#0") not in relation_delivery_task_queue or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue)) and (("DeliveryTask#0", "DeliveryQueue#1") not in relation_delivery_task_queue or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue)))
+
+always assertion Cardinality_delivery_task_queue_source:
+    return (not (("DeliveryTask#0", "DeliveryQueue#0") in relation_delivery_task_queue and ("DeliveryTask#0", "DeliveryQueue#1") in relation_delivery_task_queue))
+
+always assertion Relation_delivery_task_route_endpoints:
+    return ((("DeliveryTask#0", "DeliveryRouteClass#0") not in relation_delivery_task_route or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryRouteClass#0" in exists_DeliveryRouteClass)))
+
+always assertion Cardinality_delivery_task_route_source:
+    return True
+
+always assertion Relation_history_shard_owner_endpoints:
+    return ((("HistoryShard#0", "HistoryOwnerGeneration#0") not in relation_history_shard_owner or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration)) and (("HistoryShard#0", "HistoryOwnerGeneration#1") not in relation_history_shard_owner or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration)))
+
+always assertion Cardinality_history_shard_owner_source:
+    return (not (("HistoryShard#0", "HistoryOwnerGeneration#0") in relation_history_shard_owner and ("HistoryShard#0", "HistoryOwnerGeneration#1") in relation_history_shard_owner))
+
+always assertion Property_delivery_ambiguous_commit_resolved:
+    return (("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#0"] == "accepted" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "valid" and (state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "pending" and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid")))))) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "unresolved" and state_DeliveryTask["DeliveryTask#0"] == "pending" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("DeliveryTask#0" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#0"] == "acknowledged") or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered") and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid")))))) or ("DeliveryRouteClass#0" not in exists_DeliveryRouteClass and "MatchingQueuePartition#0" not in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" not in exists_MatchingOwnerGeneration) or ("DeliveryRouteClass#0" not in exists_DeliveryRouteClass and "MatchingQueuePartition#0" not in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" not in exists_MatchingOwnerGeneration) or ("HistoryShard#0" not in exists_HistoryShard and "HistoryOwnerGeneration#0" not in exists_HistoryOwnerGeneration) or ("HistoryShard#0" not in exists_HistoryShard and "HistoryOwnerGeneration#1" not in exists_HistoryOwnerGeneration) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and "HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current" and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and state_HistoryOwnerGeneration["HistoryOwnerGeneration#0"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#0") in relation_history_shard_owner)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and "HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current" and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and state_HistoryOwnerGeneration["HistoryOwnerGeneration#1"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#1") in relation_history_shard_owner)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and "HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current" and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and state_HistoryOwnerGeneration["HistoryOwnerGeneration#0"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#0") in relation_history_shard_owner)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and "HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current" and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and state_HistoryOwnerGeneration["HistoryOwnerGeneration#1"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#1") in relation_history_shard_owner)) or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and "MatchingOwnerGeneration#0" not in exists_MatchingOwnerGeneration and (state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current" and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and "MatchingOwnerGeneration#1" not in exists_MatchingOwnerGeneration and (state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current" and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and "MatchingOwnerGeneration#0" not in exists_MatchingOwnerGeneration and (state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current" and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and "MatchingOwnerGeneration#1" not in exists_MatchingOwnerGeneration and (state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current" and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration and "HistoryOwnerGeneration#0" not in exists_HistoryOwnerGeneration and (state_HistoryOwnerGeneration["HistoryOwnerGeneration#0"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#0") in relation_history_shard_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "HistoryOwnerGeneration#0") in relation_delivery_task_history_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration and "HistoryOwnerGeneration#1" not in exists_HistoryOwnerGeneration and (state_HistoryOwnerGeneration["HistoryOwnerGeneration#0"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#0") in relation_history_shard_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "HistoryOwnerGeneration#0") in relation_delivery_task_history_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration and "HistoryOwnerGeneration#0" not in exists_HistoryOwnerGeneration and (state_HistoryOwnerGeneration["HistoryOwnerGeneration#1"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#1") in relation_history_shard_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "HistoryOwnerGeneration#1") in relation_delivery_task_history_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("HistoryShard#0" in exists_HistoryShard and "HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration and "HistoryOwnerGeneration#1" not in exists_HistoryOwnerGeneration and (state_HistoryOwnerGeneration["HistoryOwnerGeneration#1"] == "current" and ("HistoryShard#0", "HistoryOwnerGeneration#1") in relation_history_shard_owner and ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "HistoryOwnerGeneration#1") in relation_delivery_task_history_owner_generation) or ((state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))))))) or ("Poller#0" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass) or ("Poller#1" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "DeliveryRouteClass#0") in relation_delivery_task_route and ("Poller#0", "DeliveryRouteClass#0") in relation_delivery_poller_route and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and ("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "DeliveryRouteClass#0") in relation_delivery_task_route and ("Poller#0", "DeliveryRouteClass#0") in relation_delivery_poller_route and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and ("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "DeliveryRouteClass#0") in relation_delivery_task_route and ("Poller#1", "DeliveryRouteClass#0") in relation_delivery_poller_route and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#0") in relation_delivery_partition_owner and ("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and "DeliveryRouteClass#0" in exists_DeliveryRouteClass and "MatchingQueuePartition#0" in exists_MatchingQueuePartition and "MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and ((state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "DeliveryRouteClass#0") in relation_delivery_task_route and ("Poller#1", "DeliveryRouteClass#0") in relation_delivery_poller_route and ("MatchingQueuePartition#0", "DeliveryRouteClass#0") in relation_delivery_partition_route and ("MatchingQueuePartition#0", "MatchingOwnerGeneration#1") in relation_delivery_partition_owner and ("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current"))) or (((not ("WorkObligation#0" in exists_WorkObligation) or (not (state_WorkObligation["WorkObligation#0"] == "unresolved")))))
+
+always assertion Property_delivery_coarse_retirement_safety:
+    return ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (state_DeliveryTask["DeliveryTask#0"] == "retired") or ((("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and (state_WorkObligation["WorkObligation#0"] == "accepted" or state_WorkObligation["WorkObligation#0"] == "terminal"))))))))))
+
+always assertion Property_delivery_destination_isolation:
+    return ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((("DeliveryQueue#0" in exists_DeliveryQueue and (("DeliveryTask#0", "DeliveryQueue#0") in relation_delivery_task_queue)) or ("DeliveryQueue#1" in exists_DeliveryQueue and (("DeliveryTask#0", "DeliveryQueue#1") in relation_delivery_task_queue))))))
+
+always assertion Property_delivery_failed_start_is_not_accepted:
+    return ((not ("DeliveryAttempt#0" in exists_DeliveryAttempt) or ((not (state_DeliveryAttempt["DeliveryAttempt#0"] == "rejected") or (((not ("WorkObligation#0" in exists_WorkObligation) or (not (("WorkObligation#0", "DeliveryAttempt#0") in relation_delivery_accepted_start)))))))))
+
+always assertion Property_delivery_no_phantom_dispatch:
+    return ((not ("DeliveryAttempt#0" in exists_DeliveryAttempt) or ((not ((state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" or state_DeliveryAttempt["DeliveryAttempt#0"] == "failed" or state_DeliveryAttempt["DeliveryAttempt#0"] == "completed")) or ((("DeliveryTask#0" in exists_DeliveryTask and ((("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "accepted")))))))))))))
+
+always assertion Property_delivery_no_resurrection:
+    return ((not ("WorkObligation#0" in exists_WorkObligation) or ((not (state_WorkObligation["WorkObligation#0"] == "terminal") or (((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation) or (state_DeliveryTask["DeliveryTask#0"] == "retired"))))))))))
+
+always assertion Property_delivery_no_split_commit:
+    return ((not ("WorkObligation#0" in exists_WorkObligation) or ((not ((state_WorkObligation["WorkObligation#0"] == "valid" or state_WorkObligation["WorkObligation#0"] == "accepted")) or ((("DeliveryTask#0" in exists_DeliveryTask and (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation))))))))
+
+always assertion Property_delivery_owner_generation_fencing:
+    return ((not ("DeliveryAttempt#0" in exists_DeliveryAttempt) or ((not ((state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" or state_DeliveryAttempt["DeliveryAttempt#0"] == "accepted" or state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched")) or ((("DeliveryTask#0" in exists_DeliveryTask and ((("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task and (("MatchingOwnerGeneration#0" in exists_MatchingOwnerGeneration and ((("DeliveryTask#0", "MatchingOwnerGeneration#0") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#0"] == "current"))) or ("MatchingOwnerGeneration#1" in exists_MatchingOwnerGeneration and ((("DeliveryTask#0", "MatchingOwnerGeneration#1") in relation_delivery_task_owner_generation and state_MatchingOwnerGeneration["MatchingOwnerGeneration#1"] == "current")))) and (("HistoryOwnerGeneration#0" in exists_HistoryOwnerGeneration and ((("DeliveryTask#0", "HistoryOwnerGeneration#0") in relation_delivery_task_history_owner_generation and state_HistoryOwnerGeneration["HistoryOwnerGeneration#0"] == "current"))) or ("HistoryOwnerGeneration#1" in exists_HistoryOwnerGeneration and ((("DeliveryTask#0", "HistoryOwnerGeneration#1") in relation_delivery_task_history_owner_generation and state_HistoryOwnerGeneration["HistoryOwnerGeneration#1"] == "current")))))))))))))
+
+always assertion Property_delivery_path_equivalence:
+    return ((not ("DeliveryTask#0" in exists_DeliveryTask) or (((("WorkObligation#0" in exists_WorkObligation and (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation))) and (("DeliveryQueue#0" in exists_DeliveryQueue and (("DeliveryTask#0", "DeliveryQueue#0") in relation_delivery_task_queue)) or ("DeliveryQueue#1" in exists_DeliveryQueue and (("DeliveryTask#0", "DeliveryQueue#1") in relation_delivery_task_queue)))))))
+
+always assertion Property_delivery_retry_preserves_obligation:
+    return ((not ("DeliveryAttempt#0" in exists_DeliveryAttempt) or ((("DeliveryTask#0" in exists_DeliveryTask and ((("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation))))))))))
+
+always assertion Property_delivery_single_accepted_start:
+    return ((not ("WorkObligation#0" in exists_WorkObligation) or ((not (state_WorkObligation["WorkObligation#0"] == "accepted") or ((("DeliveryAttempt#0" in exists_DeliveryAttempt and (("WorkObligation#0", "DeliveryAttempt#0") in relation_delivery_accepted_start))))))))
+

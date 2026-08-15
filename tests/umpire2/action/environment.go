@@ -10,15 +10,41 @@ import (
 	testmonitor "go.temporal.io/server/tests/testcore/monitor"
 )
 
-// Environment exposes the functional-test capabilities used by action realizers and oracles.
-type Environment interface {
+// ScopedEnvironment identifies the isolated Temporal scope used by one path.
+type ScopedEnvironment interface {
 	Namespace() namespace.Name
 	NamespaceID() namespace.ID
+}
+
+// PublicAPIEnvironment drives behavior through supported clients.
+type PublicAPIEnvironment interface {
 	FrontendClient() workflowservice.WorkflowServiceClient
 	SdkClient() sdkclient.Client
+}
+
+// ParticipantEnvironment supplies environment-appropriate programmable participants.
+type ParticipantEnvironment interface {
 	SdkWorker() sdkworker.Worker
 	WorkerTaskQueue() string
-	InjectHook(testhooks.Hook) func()
+}
+
+// InProcessObservationEnvironment exposes white-box facts when the selected profile permits them.
+type InProcessObservationEnvironment interface {
 	GetMonitor() testmonitor.Monitor
+}
+
+// FaultEnvironment exposes local fault controls; it does not confer deployment or canary authority.
+type FaultEnvironment interface {
+	InjectHook(testhooks.Hook) func()
 	GetFaultInjector() *faultinjection.RPCFaultGenerator
+}
+
+// Environment exposes the functional-test capabilities used by action realizers and oracles.
+// It composes capability-owned drivers used by the local functional-test realization.
+type Environment interface {
+	ScopedEnvironment
+	PublicAPIEnvironment
+	ParticipantEnvironment
+	InProcessObservationEnvironment
+	FaultEnvironment
 }

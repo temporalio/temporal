@@ -5,6 +5,7 @@ event eStep;
 enum Activity { Activity_0 }
 enum Activity_state { Activity_state_backing_off, Activity_state_canceled, Activity_state_completed, Activity_state_failed, Activity_state_scheduled, Activity_state_started, Activity_state_timed_out, Activity_state_unspecified }
 enum Callback { Callback_0 }
+enum Callback_state { Callback_state_unobserved }
 enum NexusOperation { NexusOperation_0 }
 enum NexusOperation_state { NexusOperation_state_backing_off, NexusOperation_state_canceled, NexusOperation_state_failed, NexusOperation_state_rejected, NexusOperation_state_scheduled, NexusOperation_state_started, NexusOperation_state_succeeded, NexusOperation_state_terminated, NexusOperation_state_timed_out, NexusOperation_state_unspecified }
 enum TaskQueue { TaskQueue_0 }
@@ -26,6 +27,7 @@ machine UmpireWorld {
   var exists_Activity: set[Activity];
   var state_Activity: map[Activity, Activity_state];
   var exists_Callback: set[Callback];
+  var state_Callback: map[Callback, Callback_state];
   var exists_NexusOperation: set[NexusOperation];
   var state_NexusOperation: map[NexusOperation, NexusOperation_state];
   var exists_TaskQueue: set[TaskQueue];
@@ -45,6 +47,7 @@ machine UmpireWorld {
   start state Init {
     entry {
       state_Activity[Activity_0] = Activity_state_unspecified;
+      state_Callback[Callback_0] = Callback_state_unobserved;
       state_NexusOperation[NexusOperation_0] = NexusOperation_state_unspecified;
       state_Workflow[Workflow_0] = Workflow_state_created;
       state_WorkflowRun[WorkflowRun_0] = WorkflowRun_state_created;

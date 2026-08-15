@@ -328,6 +328,9 @@ func (g generator) enabledClauses(action verify.Action) []string {
 		}
 		clauses = append(clauses, fmt.Sprintf("%s %s %s", identifier(parameter.Name), membership, existsVariable(parameter.Type)))
 	}
+	for _, pair := range verify.DistinctFreshParameterPairs(action.Parameters) {
+		clauses = append(clauses, fmt.Sprintf("%s /= %s", identifier(pair[0].Name), identifier(pair[1].Name)))
+	}
 	if action.Guard.Op != "" && action.Guard.Op != verify.TrueExpr {
 		clauses = append(clauses, g.expr(action.Guard))
 	}

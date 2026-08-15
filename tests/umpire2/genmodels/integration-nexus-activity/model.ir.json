@@ -1,0 +1,2505 @@
+{
+  "version": "umpire2/verification-v1",
+  "entities": [
+    {
+      "name": "Activity",
+      "ids": [
+        "Activity#0",
+        "Activity#1"
+      ],
+      "initial": "unspecified",
+      "states": [
+        {
+          "name": "backing_off",
+          "mustProgress": true
+        },
+        {
+          "name": "canceled",
+          "terminal": true
+        },
+        {
+          "name": "completed",
+          "terminal": true
+        },
+        {
+          "name": "failed",
+          "terminal": true
+        },
+        {
+          "name": "scheduled",
+          "mustProgress": true
+        },
+        {
+          "name": "started",
+          "mustProgress": true
+        },
+        {
+          "name": "timed_out",
+          "terminal": true
+        },
+        {
+          "name": "unspecified"
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "NexusOperation",
+      "ids": [
+        "NexusOperation#0",
+        "NexusOperation#1"
+      ],
+      "initial": "unspecified",
+      "states": [
+        {
+          "name": "backing_off",
+          "mustProgress": true
+        },
+        {
+          "name": "canceled",
+          "terminal": true
+        },
+        {
+          "name": "failed",
+          "terminal": true,
+          "disposition": "Failure"
+        },
+        {
+          "name": "rejected",
+          "terminal": true,
+          "disposition": "Failure"
+        },
+        {
+          "name": "scheduled",
+          "mustProgress": true
+        },
+        {
+          "name": "started",
+          "mustProgress": true
+        },
+        {
+          "name": "succeeded",
+          "terminal": true,
+          "disposition": "Success"
+        },
+        {
+          "name": "terminated",
+          "terminal": true
+        },
+        {
+          "name": "timed_out",
+          "terminal": true,
+          "disposition": "Failure"
+        },
+        {
+          "name": "unspecified"
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "name": "activity-nexus",
+      "source": "Activity",
+      "target": "NexusOperation",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    },
+    {
+      "name": "nexus-activity",
+      "source": "NexusOperation",
+      "target": "Activity",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "name": "Activity.backing_off.cancel.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "backing_off"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.backing_off.schedule.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "backing_off"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "scheduled"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.backing_off.timeout.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "backing_off"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.scheduled.cancel.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.scheduled.fail.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "failed"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.scheduled.start.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "started"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.scheduled.timeout.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.started.attempt_failed.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "backing_off"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.started.cancel.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.started.complete.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "completed"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.started.fail.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "failed"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.started.timeout.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "Activity.unspecified.schedule.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Activity",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Activity",
+        "ref": "entity",
+        "state": "unspecified"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "Activity",
+          "ref": "entity",
+          "state": "scheduled"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "NexusOperation.backing_off.schedule.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "backing_off"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "scheduled"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "cmd:ScheduleNexusOperation"
+      }
+    },
+    {
+      "name": "NexusOperation.backing_off.schedule.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "backing_off"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "scheduled"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartNexusOperationExecution"
+      }
+    },
+    {
+      "name": "NexusOperation.backing_off.terminate.Embedded",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "entity",
+        "state": "backing_off"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "entity",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "name": "NexusOperation.backing_off.terminate.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "backing_off"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "name": "NexusOperation.backing_off.timeout.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "backing_off"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "Faults"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(backing_off)"
+      }
+    },
+    {
+      "name": "NexusOperation.backing_off.timeout.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "backing_off"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "Faults"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(backing_off)"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.attempt_failed.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "backing_off"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:RetryableError"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.attempt_failed.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "backing_off"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:RetryableError"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.cancel.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpCanceled"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.cancel.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpCanceled"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.fail.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "failed"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpFailed"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.fail.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "failed"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpFailed"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.start.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "started"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:AsyncAck"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.start.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "started"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:AsyncAck"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.succeed.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "succeeded"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:SyncOk"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.succeed.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "succeeded"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:SyncOk"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.terminate.Embedded",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "entity",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "entity",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.terminate.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.timeout.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "Faults"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(scheduled)"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.timeout.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "Faults"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(scheduled)"
+      }
+    },
+    {
+      "name": "NexusOperation.started.cancel.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "NexusOperation.started.cancel.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "NexusOperation.started.fail.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "failed"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "NexusOperation.started.fail.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "failed"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "NexusOperation.started.succeed.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "succeeded"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "NexusOperation.started.succeed.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "succeeded"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "NexusOperation.started.terminate.Embedded",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "entity",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "name": "NexusOperation.started.terminate.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "name": "NexusOperation.started.timeout.Embedded",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "entity",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "Faults"
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a real schedule-to-close timer"
+      }
+    },
+    {
+      "name": "NexusOperation.started.timeout.Standalone",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "entity",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "Faults"
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a real schedule-to-close timer"
+      }
+    },
+    {
+      "name": "NexusOperation.unspecified.reject.Embedded",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "NexusOperation",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "entity",
+        "state": "unspecified"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "NexusOperation",
+          "ref": "entity",
+          "state": "rejected"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "rejection actions are outside the edge-action planner"
+      }
+    },
+    {
+      "name": "NexusOperation.unspecified.reject.Standalone",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "NexusOperation",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "entity",
+        "state": "unspecified"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "NexusOperation",
+          "ref": "entity",
+          "state": "rejected"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "rejection actions are outside the edge-action planner"
+      }
+    },
+    {
+      "name": "NexusOperation.unspecified.schedule.Embedded",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "unspecified"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "scheduled"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "cmd:ScheduleNexusOperation"
+      }
+    },
+    {
+      "name": "NexusOperation.unspecified.schedule.Standalone",
+      "parameters": [
+        {
+          "name": "op",
+          "type": "NexusOperation",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "op",
+        "state": "unspecified"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "NexusOperation",
+          "ref": "op",
+          "state": "scheduled"
+        }
+      ],
+      "hosting": "Standalone",
+      "capabilities": [
+        "RPCDrive"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartNexusOperationExecution"
+      }
+    },
+    {
+      "name": "regression.nexus.start_activity",
+      "parameters": [
+        {
+          "name": "activity",
+          "type": "Activity",
+          "binding": "fresh"
+        },
+        {
+          "name": "operation",
+          "type": "NexusOperation",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "NexusOperation",
+        "ref": "operation",
+        "state": "scheduled"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "Activity",
+          "ref": "activity",
+          "state": "completed"
+        },
+        {
+          "kind": "set-state",
+          "entity": "NexusOperation",
+          "ref": "operation",
+          "state": "succeeded"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "nexus-activity",
+          "source": "operation",
+          "target": "activity"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "activity-nexus",
+          "source": "activity",
+          "target": "operation"
+        }
+      ],
+      "hosting": "Embedded",
+      "capabilities": [
+        "ActivityCallbacks"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start_activity"
+      }
+    }
+  ],
+  "properties": [
+    {
+      "name": "Activity.backing_off.quiescent-progress",
+      "kind": "quiescent",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "Activity",
+                "ref": "entity",
+                "state": "backing_off"
+              }
+            ]
+          }
+        ],
+        "entity": "Activity",
+        "var": "entity"
+      },
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "name": "Activity.scheduled.quiescent-progress",
+      "kind": "quiescent",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "Activity",
+                "ref": "entity",
+                "state": "scheduled"
+              }
+            ]
+          }
+        ],
+        "entity": "Activity",
+        "var": "entity"
+      },
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "name": "Activity.started.quiescent-progress",
+      "kind": "quiescent",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "Activity",
+                "ref": "entity",
+                "state": "started"
+              }
+            ]
+          }
+        ],
+        "entity": "Activity",
+        "var": "entity"
+      },
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "name": "NexusActivityForwardLinkConsistency",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "nexus-activity",
+                    "source": "source",
+                    "target": "target"
+                  },
+                  {
+                    "op": "relation-has",
+                    "relation": "activity-nexus",
+                    "source": "target",
+                    "target": "source"
+                  }
+                ]
+              }
+            ],
+            "entity": "Activity",
+            "var": "target"
+          }
+        ],
+        "entity": "NexusOperation",
+        "var": "source"
+      },
+      "source": {
+        "path": "tests/umpire2/rule/nexus_activity_link_consistency.go",
+        "symbol": "NexusActivityLinkConsistencyRule"
+      }
+    },
+    {
+      "name": "NexusActivityReverseLinkConsistency",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "activity-nexus",
+                    "source": "source",
+                    "target": "target"
+                  },
+                  {
+                    "op": "relation-has",
+                    "relation": "nexus-activity",
+                    "source": "target",
+                    "target": "source"
+                  }
+                ]
+              }
+            ],
+            "entity": "NexusOperation",
+            "var": "target"
+          }
+        ],
+        "entity": "Activity",
+        "var": "source"
+      },
+      "source": {
+        "path": "tests/umpire2/rule/nexus_activity_link_consistency.go",
+        "symbol": "NexusActivityLinkConsistencyRule"
+      }
+    },
+    {
+      "name": "NexusActivityTerminalRefinement",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "nexus-activity",
+                    "source": "operation",
+                    "target": "activity"
+                  },
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "state-is",
+                        "entity": "NexusOperation",
+                        "ref": "operation",
+                        "state": "succeeded"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "Activity",
+                        "ref": "activity",
+                        "state": "completed"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "entity": "Activity",
+            "var": "activity"
+          }
+        ],
+        "entity": "NexusOperation",
+        "var": "operation"
+      },
+      "strengthening": true,
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start_activity"
+      }
+    },
+    {
+      "name": "NexusOperation.backing_off.quiescent-progress",
+      "kind": "quiescent",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "NexusOperation",
+                "ref": "entity",
+                "state": "backing_off"
+              }
+            ]
+          }
+        ],
+        "entity": "NexusOperation",
+        "var": "entity"
+      },
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "name": "NexusOperation.scheduled.quiescent-progress",
+      "kind": "quiescent",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "NexusOperation",
+                "ref": "entity",
+                "state": "scheduled"
+              }
+            ]
+          }
+        ],
+        "entity": "NexusOperation",
+        "var": "entity"
+      },
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "name": "NexusOperation.started.quiescent-progress",
+      "kind": "quiescent",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "NexusOperation",
+                "ref": "entity",
+                "state": "started"
+              }
+            ]
+          }
+        ],
+        "entity": "NexusOperation",
+        "var": "entity"
+      },
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    }
+  ],
+  "refinements": [
+    {
+      "name": "lifecycle.Activity.backing_off.cancel.AnyHosting",
+      "action": "Activity.backing_off.cancel.AnyHosting",
+      "lifecycleActions": [
+        "Activity.backing_off.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.backing_off.schedule.AnyHosting",
+      "action": "Activity.backing_off.schedule.AnyHosting",
+      "lifecycleActions": [
+        "Activity.backing_off.schedule.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.backing_off.timeout.AnyHosting",
+      "action": "Activity.backing_off.timeout.AnyHosting",
+      "lifecycleActions": [
+        "Activity.backing_off.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.scheduled.cancel.AnyHosting",
+      "action": "Activity.scheduled.cancel.AnyHosting",
+      "lifecycleActions": [
+        "Activity.scheduled.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.scheduled.fail.AnyHosting",
+      "action": "Activity.scheduled.fail.AnyHosting",
+      "lifecycleActions": [
+        "Activity.scheduled.fail.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.scheduled.start.AnyHosting",
+      "action": "Activity.scheduled.start.AnyHosting",
+      "lifecycleActions": [
+        "Activity.scheduled.start.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.scheduled.timeout.AnyHosting",
+      "action": "Activity.scheduled.timeout.AnyHosting",
+      "lifecycleActions": [
+        "Activity.scheduled.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.attempt_failed.AnyHosting",
+      "action": "Activity.started.attempt_failed.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.attempt_failed.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.cancel.AnyHosting",
+      "action": "Activity.started.cancel.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.complete.AnyHosting",
+      "action": "Activity.started.complete.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.complete.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.fail.AnyHosting",
+      "action": "Activity.started.fail.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.fail.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.started.timeout.AnyHosting",
+      "action": "Activity.started.timeout.AnyHosting",
+      "lifecycleActions": [
+        "Activity.started.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.Activity.unspecified.schedule.AnyHosting",
+      "action": "Activity.unspecified.schedule.AnyHosting",
+      "lifecycleActions": [
+        "Activity.unspecified.schedule.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.schedule.Embedded",
+      "action": "NexusOperation.backing_off.schedule.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.schedule.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "cmd:ScheduleNexusOperation"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.schedule.Standalone",
+      "action": "NexusOperation.backing_off.schedule.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.schedule.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartNexusOperationExecution"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.terminate.Embedded",
+      "action": "NexusOperation.backing_off.terminate.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.terminate.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.terminate.Standalone",
+      "action": "NexusOperation.backing_off.terminate.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.terminate.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.timeout.Embedded",
+      "action": "NexusOperation.backing_off.timeout.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.timeout.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(backing_off)"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.backing_off.timeout.Standalone",
+      "action": "NexusOperation.backing_off.timeout.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.backing_off.timeout.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(backing_off)"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.attempt_failed.Embedded",
+      "action": "NexusOperation.scheduled.attempt_failed.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.attempt_failed.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:RetryableError"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.attempt_failed.Standalone",
+      "action": "NexusOperation.scheduled.attempt_failed.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.attempt_failed.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:RetryableError"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.cancel.Embedded",
+      "action": "NexusOperation.scheduled.cancel.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.cancel.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpCanceled"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.cancel.Standalone",
+      "action": "NexusOperation.scheduled.cancel.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.cancel.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpCanceled"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.fail.Embedded",
+      "action": "NexusOperation.scheduled.fail.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.fail.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpFailed"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.fail.Standalone",
+      "action": "NexusOperation.scheduled.fail.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.fail.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:OpFailed"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.start.Embedded",
+      "action": "NexusOperation.scheduled.start.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.start.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:AsyncAck"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.succeed.Embedded",
+      "action": "NexusOperation.scheduled.succeed.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.succeed.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "handler:SyncOk"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.terminate.Embedded",
+      "action": "NexusOperation.scheduled.terminate.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.terminate.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.terminate.Standalone",
+      "action": "NexusOperation.scheduled.terminate.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.terminate.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.timeout.Embedded",
+      "action": "NexusOperation.scheduled.timeout.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.timeout.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(scheduled)"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.scheduled.timeout.Standalone",
+      "action": "NexusOperation.scheduled.timeout.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.timeout.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "timer:ForceTimeout(scheduled)"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.cancel.Embedded",
+      "action": "NexusOperation.started.cancel.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.cancel.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.fail.Embedded",
+      "action": "NexusOperation.started.fail.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.fail.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.fail.Standalone",
+      "action": "NexusOperation.started.fail.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.fail.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.succeed.Embedded",
+      "action": "NexusOperation.started.succeed.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.succeed.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "callback:Complete"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.terminate.Embedded",
+      "action": "NexusOperation.started.terminate.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.terminate.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "terminate is standalone-only"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.terminate.Standalone",
+      "action": "NexusOperation.started.terminate.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.terminate.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "TerminateNexusOperationExecution"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.timeout.Embedded",
+      "action": "NexusOperation.started.timeout.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.started.timeout.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a real schedule-to-close timer"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.started.timeout.Standalone",
+      "action": "NexusOperation.started.timeout.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.timeout.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a real schedule-to-close timer"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.unspecified.reject.Embedded",
+      "action": "NexusOperation.unspecified.reject.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.unspecified.reject.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "rejection actions are outside the edge-action planner"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.unspecified.reject.Standalone",
+      "action": "NexusOperation.unspecified.reject.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.unspecified.reject.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "rejection actions are outside the edge-action planner"
+      }
+    },
+    {
+      "name": "lifecycle.NexusOperation.unspecified.schedule.Embedded",
+      "action": "NexusOperation.unspecified.schedule.Embedded",
+      "lifecycleActions": [
+        "NexusOperation.unspecified.schedule.Embedded"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "cmd:ScheduleNexusOperation"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.scheduled.start.Standalone",
+      "action": "NexusOperation.scheduled.start.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.start.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.respond_start[nexus.respond_start.scheduled.async]"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start.scheduled.async"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.scheduled.succeed.Standalone",
+      "action": "NexusOperation.scheduled.succeed.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.succeed.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.complete[nexus.complete.scheduled]",
+        "nexus.respond_start[nexus.respond_start.scheduled.sync]"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.respond_start.scheduled.sync"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.started.cancel.Standalone",
+      "action": "NexusOperation.started.cancel.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.cancel.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.cancel"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.cancel"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.started.succeed.Standalone",
+      "action": "NexusOperation.started.succeed.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.started.succeed.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.complete[nexus.complete.started]"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.complete.started"
+      }
+    },
+    {
+      "name": "regression.NexusOperation.unspecified.schedule.Standalone",
+      "action": "NexusOperation.unspecified.schedule.Standalone",
+      "lifecycleActions": [
+        "NexusOperation.unspecified.schedule.Standalone"
+      ],
+      "regressionActions": [
+        "nexus.schedule_default"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.schedule_default"
+      }
+    },
+    {
+      "name": "regression.nexus.start_activity",
+      "action": "regression.nexus.start_activity",
+      "lifecycleActions": [
+        "NexusOperation.scheduled.succeed.Embedded"
+      ],
+      "regressionActions": [
+        "nexus.start_activity"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "nexus.start_activity"
+      }
+    }
+  ]
+}

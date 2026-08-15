@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	umpirefw "go.temporal.io/server/common/testing/umpire"
 	coreregress "go.temporal.io/server/common/testing/umpire/regress"
 	"go.temporal.io/server/tests/umpire2/action"
 	"go.temporal.io/server/tests/umpire2/protocol"
@@ -18,8 +19,11 @@ import (
 func TestRepresentativePlansCompileAgainstDefaultDomain(t *testing.T) {
 	domain, err := protocol.DefaultRegressionDomain()
 	require.NoError(t, err)
+	realizations := action.RegressionRealizations()
 	profile := coreregress.Profile{
-		Name: "local-chasm",
+		Name:         "local-chasm",
+		Environment:  umpirefw.InProcessProfile(),
+		Realizations: &realizations,
 		Capabilities: []string{
 			capability.CHASM.Name,
 			capability.ActivityCallbacks.Name,
@@ -91,6 +95,43 @@ func TestRepresentativePlansCompileAgainstDefaultDomain(t *testing.T) {
 	}
 }
 
+func TestBehavioralIntentIsPortableAcrossEvidenceProfiles(t *testing.T) {
+	domain, err := protocol.DefaultRegressionDomain()
+	require.NoError(t, err)
+	realizations := action.RegressionRealizations()
+	plan := coreregress.Named("portable-nexus-completion", coreregress.OnePath(
+		nexus.State("operation", nexus.Completed),
+	))
+	profiles := make([]umpirefw.EnvironmentProfile, 0, 4)
+	for _, configured := range []struct {
+		kind     umpirefw.EnvironmentKind
+		evidence umpirefw.EnvironmentProfile
+	}{
+		{kind: umpirefw.LocalEnvironment, evidence: umpirefw.InProcessProfile()},
+		{kind: umpirefw.CIEnvironment, evidence: umpirefw.HistoryProfile()},
+		{kind: umpirefw.DeploymentEnvironment, evidence: umpirefw.PublicAPIProfile()},
+		{kind: umpirefw.CanaryEnvironment, evidence: umpirefw.TelemetryProfile()},
+	} {
+		profile, profileErr := umpirefw.ForEnvironment(configured.kind, configured.evidence)
+		require.NoError(t, profileErr)
+		profiles = append(profiles, profile)
+	}
+	var intent string
+	for _, environment := range profiles {
+		suite, compileErr := coreregress.Compile(plan, domain, coreregress.Profile{
+			Name:         environment.Name,
+			Environment:  environment,
+			Realizations: &realizations,
+		})
+		require.NoError(t, compileErr)
+		if intent == "" {
+			intent = suite.IR.String()
+		}
+		require.Equal(t, intent, suite.IR.String())
+		require.Equal(t, environment, suite.Profile.Environment)
+	}
+}
+
 func TestTypedConstructorsRejectCrossDomainSymbolReuse(t *testing.T) {
 	_, err := coreregress.Normalize(coreregress.OnePath(
 		nexus.State("shared", nexus.Started),
@@ -103,11 +144,12 @@ func TestTypedConstructorsRejectCrossDomainSymbolReuse(t *testing.T) {
 func TestObservedProjectionCompilesAsObservationAction(t *testing.T) {
 	domain, err := protocol.DefaultRegressionDomain()
 	require.NoError(t, err)
+	realizations := action.RegressionRealizations()
 
 	suite, err := coreregress.Compile(coreregress.OnePath(
 		nexus.Start("operation", nexus.HandlerWorkflow("handler")),
 		coreregress.Bind("run", workflow.RunID("handler")),
-	), domain, coreregress.Profile{Name: "local"})
+	), domain, coreregress.Profile{Name: "local", Realizations: &realizations})
 	require.NoError(t, err)
 	require.Equal(t, coreregress.ObservationAction, suite.Paths[0].Steps[len(suite.Paths[0].Steps)-1].Mode)
 }

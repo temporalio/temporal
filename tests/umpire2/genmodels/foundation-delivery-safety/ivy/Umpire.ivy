@@ -111,7 +111,7 @@ action delivery_expire(obligation:workobligation,task:deliverytask) = {
 
 action delivery_offer_sync(task:deliverytask) = {
     require exists_deliverytask(task);
-    require state_deliverytask(task) = deliverytask_state_pending;
+    require (state_deliverytask(task) = deliverytask_state_pending & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(task,Q_obligation) & state_workobligation(Q_obligation) = workobligation_state_valid))));
     state_deliverytask(task) := deliverytask_state_sync_offered
 }
 
@@ -174,7 +174,7 @@ action delivery_retry(task:deliverytask,attempt:deliveryattempt) = {
 
 action delivery_spool(task:deliverytask) = {
     require exists_deliverytask(task);
-    require (state_deliverytask(task) = deliverytask_state_pending | state_deliverytask(task) = deliverytask_state_sync_offered);
+    require ((state_deliverytask(task) = deliverytask_state_pending | state_deliverytask(task) = deliverytask_state_sync_offered) & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(task,Q_obligation) & state_workobligation(Q_obligation) = workobligation_state_valid))));
     state_deliverytask(task) := deliverytask_state_backlogged
 }
 

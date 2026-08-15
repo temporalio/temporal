@@ -1,0 +1,981 @@
+# Generated from the Umpire verification snapshot. Do not edit.
+
+IDs_BacklogPosition = ["BacklogPosition#0", "BacklogPosition#1"]
+IDs_DeliveryAttempt = ["DeliveryAttempt#0", "DeliveryAttempt#1"]
+IDs_DeliveryQueue = ["DeliveryQueue#0", "DeliveryQueue#1"]
+IDs_DeliveryTask = ["DeliveryTask#0", "DeliveryTask#1"]
+IDs_Poller = ["Poller#0", "Poller#1"]
+IDs_WorkObligation = ["WorkObligation#0", "WorkObligation#1"]
+
+action Init:
+    exists_BacklogPosition = set([])
+    state_BacklogPosition = {"BacklogPosition#0": "unused", "BacklogPosition#1": "unused"}
+    exists_DeliveryAttempt = set([])
+    state_DeliveryAttempt = {"DeliveryAttempt#0": "reserved", "DeliveryAttempt#1": "reserved"}
+    exists_DeliveryQueue = set(["DeliveryQueue#0", "DeliveryQueue#1"])
+    state_DeliveryQueue = {"DeliveryQueue#0": "available", "DeliveryQueue#1": "available"}
+    exists_DeliveryTask = set([])
+    state_DeliveryTask = {"DeliveryTask#0": "pending", "DeliveryTask#1": "pending"}
+    exists_Poller = set(["Poller#0", "Poller#1"])
+    state_Poller = {"Poller#0": "available", "Poller#1": "available"}
+    exists_WorkObligation = set([])
+    state_WorkObligation = {"WorkObligation#0": "unresolved", "WorkObligation#1": "unresolved"}
+    relation_backlog_position_precedes = set()
+    relation_backlog_position_task = set()
+    relation_delivery_accepted_start = set()
+    relation_delivery_attempt_poller = set()
+    relation_delivery_attempt_task = set()
+    relation_delivery_task_obligation = set()
+    relation_delivery_task_queue = set()
+
+atomic action Action_backlog_ack:
+    position = oneof IDs_BacklogPosition
+    task = oneof IDs_DeliveryTask
+    require position in exists_BacklogPosition
+    require task in exists_DeliveryTask
+    require (state_BacklogPosition[position] == "read" and (position, task) in relation_backlog_position_task and (state_DeliveryTask[task] == "acknowledged" or state_DeliveryTask[task] == "retired") and ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (("BacklogPosition#0", position) in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (("BacklogPosition#1", position) in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_BacklogPosition[position] = "acked"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_backlog_append_after:
+    position = oneof IDs_BacklogPosition
+    previous = oneof IDs_BacklogPosition
+    task = oneof IDs_DeliveryTask
+    require position not in exists_BacklogPosition
+    require previous in exists_BacklogPosition
+    require task in exists_DeliveryTask
+    require (state_DeliveryTask[task] == "backlogged" and (state_BacklogPosition[previous] == "unread" or state_BacklogPosition[previous] == "read" or state_BacklogPosition[previous] == "acked" or state_BacklogPosition[previous] == "gc"))
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_exists_BacklogPosition.add(position)
+    next_state_BacklogPosition[position] = "unread"
+    next_relation_backlog_position_task.add((position, task))
+    next_relation_backlog_position_precedes.add((previous, position))
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_backlog_append_first:
+    position = oneof IDs_BacklogPosition
+    task = oneof IDs_DeliveryTask
+    require position not in exists_BacklogPosition
+    require task in exists_DeliveryTask
+    require state_DeliveryTask[task] == "backlogged"
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_exists_BacklogPosition.add(position)
+    next_state_BacklogPosition[position] = "unread"
+    next_relation_backlog_position_task.add((position, task))
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_backlog_gc:
+    position = oneof IDs_BacklogPosition
+    task = oneof IDs_DeliveryTask
+    require position in exists_BacklogPosition
+    require task in exists_DeliveryTask
+    require (state_BacklogPosition[position] == "acked" and (position, task) in relation_backlog_position_task and state_DeliveryTask[task] == "retired")
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_BacklogPosition[position] = "gc"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_backlog_read:
+    position = oneof IDs_BacklogPosition
+    require position in exists_BacklogPosition
+    require state_BacklogPosition[position] == "unread"
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_BacklogPosition[position] = "read"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_acknowledge:
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_DeliveryTask[task] == "dispatched" and state_DeliveryAttempt[attempt] == "dispatched" and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_DeliveryTask[task] = "acknowledged"
+    next_state_DeliveryAttempt[attempt] = "completed"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_authorize_accept:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require obligation in exists_WorkObligation
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_WorkObligation[obligation] == "valid" and state_DeliveryTask[task] == "reserved" and state_DeliveryAttempt[attempt] == "reserved" and (task, obligation) in relation_delivery_task_obligation and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_DeliveryTask[task] = "authorized"
+    next_state_DeliveryAttempt[attempt] = "accepted"
+    next_state_WorkObligation[obligation] = "accepted"
+    next_relation_delivery_accepted_start.add((obligation, attempt))
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_authorize_reject:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require obligation in exists_WorkObligation
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_WorkObligation[obligation] == "valid" and state_DeliveryTask[task] == "reserved" and state_DeliveryAttempt[attempt] == "reserved" and (task, obligation) in relation_delivery_task_obligation and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_DeliveryTask[task] = "backlogged"
+    next_state_DeliveryAttempt[attempt] = "rejected"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_dispatch:
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_DeliveryTask[task] == "authorized" and state_DeliveryAttempt[attempt] == "accepted" and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_DeliveryTask[task] = "dispatched"
+    next_state_DeliveryAttempt[attempt] = "dispatched"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_expire:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    require obligation in exists_WorkObligation
+    require task in exists_DeliveryTask
+    require (state_WorkObligation[obligation] == "valid" and (state_DeliveryTask[task] == "pending" or state_DeliveryTask[task] == "sync-offered" or state_DeliveryTask[task] == "backlogged") and (task, obligation) in relation_delivery_task_obligation)
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_WorkObligation[obligation] = "terminal"
+    next_state_DeliveryTask[task] = "retired"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_offer_sync:
+    task = oneof IDs_DeliveryTask
+    require task in exists_DeliveryTask
+    require (state_DeliveryTask[task] == "pending" and (("WorkObligation#0" in exists_WorkObligation and (((task, "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and (((task, "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid")))))
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_DeliveryTask[task] = "sync-offered"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_persist_ambiguous:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    queue = oneof IDs_DeliveryQueue
+    require obligation not in exists_WorkObligation
+    require task not in exists_DeliveryTask
+    require queue in exists_DeliveryQueue
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_exists_WorkObligation.add(obligation)
+    next_state_WorkObligation[obligation] = "unresolved"
+    next_exists_DeliveryTask.add(task)
+    next_state_DeliveryTask[task] = "pending"
+    next_relation_delivery_task_obligation.add((task, obligation))
+    next_relation_delivery_task_queue.add((task, queue))
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_persist_success:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    queue = oneof IDs_DeliveryQueue
+    require obligation not in exists_WorkObligation
+    require task not in exists_DeliveryTask
+    require queue in exists_DeliveryQueue
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_exists_WorkObligation.add(obligation)
+    next_state_WorkObligation[obligation] = "valid"
+    next_exists_DeliveryTask.add(task)
+    next_state_DeliveryTask[task] = "pending"
+    next_relation_delivery_task_obligation.add((task, obligation))
+    next_relation_delivery_task_queue.add((task, queue))
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_reserve:
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    poller = oneof IDs_Poller
+    require task in exists_DeliveryTask
+    require attempt not in exists_DeliveryAttempt
+    require poller in exists_Poller
+    require (state_DeliveryTask[task] == "sync-offered" or state_DeliveryTask[task] == "backlogged")
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_DeliveryTask[task] = "reserved"
+    next_exists_DeliveryAttempt.add(attempt)
+    next_state_DeliveryAttempt[attempt] = "reserved"
+    next_relation_delivery_attempt_task.add((attempt, task))
+    next_relation_delivery_attempt_poller.add((attempt, poller))
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_resolve_persisted:
+    obligation = oneof IDs_WorkObligation
+    task = oneof IDs_DeliveryTask
+    require obligation in exists_WorkObligation
+    require task in exists_DeliveryTask
+    require (state_WorkObligation[obligation] == "unresolved" and state_DeliveryTask[task] == "pending" and (task, obligation) in relation_delivery_task_obligation)
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_WorkObligation[obligation] = "valid"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_retire:
+    task = oneof IDs_DeliveryTask
+    require task in exists_DeliveryTask
+    require state_DeliveryTask[task] == "acknowledged"
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_DeliveryTask[task] = "retired"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_retry:
+    task = oneof IDs_DeliveryTask
+    attempt = oneof IDs_DeliveryAttempt
+    require task in exists_DeliveryTask
+    require attempt in exists_DeliveryAttempt
+    require (state_DeliveryTask[task] == "dispatched" and state_DeliveryAttempt[attempt] == "dispatched" and (attempt, task) in relation_delivery_attempt_task)
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_DeliveryTask[task] = "backlogged"
+    next_state_DeliveryAttempt[attempt] = "failed"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+atomic action Action_delivery_spool:
+    task = oneof IDs_DeliveryTask
+    require task in exists_DeliveryTask
+    require ((state_DeliveryTask[task] == "pending" or state_DeliveryTask[task] == "sync-offered") and (("WorkObligation#0" in exists_WorkObligation and (((task, "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and (((task, "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid")))))
+    next_exists_BacklogPosition = set(exists_BacklogPosition)
+    next_state_BacklogPosition = dict(state_BacklogPosition)
+    next_exists_DeliveryAttempt = set(exists_DeliveryAttempt)
+    next_state_DeliveryAttempt = dict(state_DeliveryAttempt)
+    next_exists_DeliveryQueue = set(exists_DeliveryQueue)
+    next_state_DeliveryQueue = dict(state_DeliveryQueue)
+    next_exists_DeliveryTask = set(exists_DeliveryTask)
+    next_state_DeliveryTask = dict(state_DeliveryTask)
+    next_exists_Poller = set(exists_Poller)
+    next_state_Poller = dict(state_Poller)
+    next_exists_WorkObligation = set(exists_WorkObligation)
+    next_state_WorkObligation = dict(state_WorkObligation)
+    next_relation_backlog_position_precedes = set(relation_backlog_position_precedes)
+    next_relation_backlog_position_task = set(relation_backlog_position_task)
+    next_relation_delivery_accepted_start = set(relation_delivery_accepted_start)
+    next_relation_delivery_attempt_poller = set(relation_delivery_attempt_poller)
+    next_relation_delivery_attempt_task = set(relation_delivery_attempt_task)
+    next_relation_delivery_task_obligation = set(relation_delivery_task_obligation)
+    next_relation_delivery_task_queue = set(relation_delivery_task_queue)
+    next_state_DeliveryTask[task] = "backlogged"
+    exists_BacklogPosition = next_exists_BacklogPosition
+    state_BacklogPosition = next_state_BacklogPosition
+    exists_DeliveryAttempt = next_exists_DeliveryAttempt
+    state_DeliveryAttempt = next_state_DeliveryAttempt
+    exists_DeliveryQueue = next_exists_DeliveryQueue
+    state_DeliveryQueue = next_state_DeliveryQueue
+    exists_DeliveryTask = next_exists_DeliveryTask
+    state_DeliveryTask = next_state_DeliveryTask
+    exists_Poller = next_exists_Poller
+    state_Poller = next_state_Poller
+    exists_WorkObligation = next_exists_WorkObligation
+    state_WorkObligation = next_state_WorkObligation
+    relation_backlog_position_precedes = next_relation_backlog_position_precedes
+    relation_backlog_position_task = next_relation_backlog_position_task
+    relation_delivery_accepted_start = next_relation_delivery_accepted_start
+    relation_delivery_attempt_poller = next_relation_delivery_attempt_poller
+    relation_delivery_attempt_task = next_relation_delivery_attempt_task
+    relation_delivery_task_obligation = next_relation_delivery_task_obligation
+    relation_delivery_task_queue = next_relation_delivery_task_queue
+
+# CanStep = (("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#0"] == "read" and ("BacklogPosition#0", "DeliveryTask#0") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired") and ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (("BacklogPosition#0", "BacklogPosition#0") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (("BacklogPosition#1", "BacklogPosition#0") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))) or ("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#0"] == "read" and ("BacklogPosition#0", "DeliveryTask#1") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#1"] == "acknowledged" or state_DeliveryTask["DeliveryTask#1"] == "retired") and ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (("BacklogPosition#0", "BacklogPosition#0") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (("BacklogPosition#1", "BacklogPosition#0") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))) or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#1"] == "read" and ("BacklogPosition#1", "DeliveryTask#0") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired") and ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (("BacklogPosition#0", "BacklogPosition#1") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (("BacklogPosition#1", "BacklogPosition#1") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))) or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#1"] == "read" and ("BacklogPosition#1", "DeliveryTask#1") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#1"] == "acknowledged" or state_DeliveryTask["DeliveryTask#1"] == "retired") and ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (("BacklogPosition#0", "BacklogPosition#1") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (("BacklogPosition#1", "BacklogPosition#1") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))) or ("BacklogPosition#0" not in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "backlogged" and (state_BacklogPosition["BacklogPosition#0"] == "unread" or state_BacklogPosition["BacklogPosition#0"] == "read" or state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ("BacklogPosition#0" not in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "backlogged" and (state_BacklogPosition["BacklogPosition#0"] == "unread" or state_BacklogPosition["BacklogPosition#0"] == "read" or state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ("BacklogPosition#0" not in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "backlogged" and (state_BacklogPosition["BacklogPosition#1"] == "unread" or state_BacklogPosition["BacklogPosition#1"] == "read" or state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ("BacklogPosition#0" not in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "backlogged" and (state_BacklogPosition["BacklogPosition#1"] == "unread" or state_BacklogPosition["BacklogPosition#1"] == "read" or state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ("BacklogPosition#1" not in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "backlogged" and (state_BacklogPosition["BacklogPosition#0"] == "unread" or state_BacklogPosition["BacklogPosition#0"] == "read" or state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ("BacklogPosition#1" not in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "backlogged" and (state_BacklogPosition["BacklogPosition#0"] == "unread" or state_BacklogPosition["BacklogPosition#0"] == "read" or state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ("BacklogPosition#1" not in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "backlogged" and (state_BacklogPosition["BacklogPosition#1"] == "unread" or state_BacklogPosition["BacklogPosition#1"] == "read" or state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ("BacklogPosition#1" not in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "backlogged" and (state_BacklogPosition["BacklogPosition#1"] == "unread" or state_BacklogPosition["BacklogPosition#1"] == "read" or state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ("BacklogPosition#0" not in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#0"] == "backlogged") or ("BacklogPosition#0" not in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#1"] == "backlogged") or ("BacklogPosition#1" not in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#0"] == "backlogged") or ("BacklogPosition#1" not in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#1"] == "backlogged") or ("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#0"] == "acked" and ("BacklogPosition#0", "DeliveryTask#0") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#0"] == "retired")) or ("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#0"] == "acked" and ("BacklogPosition#0", "DeliveryTask#1") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#1"] == "retired")) or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#1"] == "acked" and ("BacklogPosition#1", "DeliveryTask#0") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#0"] == "retired")) or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#1"] == "acked" and ("BacklogPosition#1", "DeliveryTask#1") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#1"] == "retired")) or ("BacklogPosition#0" in exists_BacklogPosition and state_BacklogPosition["BacklogPosition#0"] == "unread") or ("BacklogPosition#1" in exists_BacklogPosition and state_BacklogPosition["BacklogPosition#1"] == "unread") or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#1"] == "dispatched" and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#1"] == "dispatched" and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#0"] == "accepted" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#1"] == "accepted" and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#0"] == "accepted" and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#1"] == "accepted" and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "valid" and (state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "valid" and (state_DeliveryTask["DeliveryTask#1"] == "pending" or state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged") and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#1"] == "valid" and (state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#1"] == "valid" and (state_DeliveryTask["DeliveryTask#1"] == "pending" or state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged") and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation)) or ("DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "pending" and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid")))))) or ("DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "pending" and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid")))))) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and (state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and (state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and (state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and (state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged")) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and (state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged")) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and (state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged")) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and (state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged")) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and (state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged")) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "unresolved" and state_DeliveryTask["DeliveryTask#0"] == "pending" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "unresolved" and state_DeliveryTask["DeliveryTask#1"] == "pending" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#1"] == "unresolved" and state_DeliveryTask["DeliveryTask#0"] == "pending" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#1"] == "unresolved" and state_DeliveryTask["DeliveryTask#1"] == "pending" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation)) or ("DeliveryTask#0" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#0"] == "acknowledged") or ("DeliveryTask#1" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#1"] == "acknowledged") or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#1"] == "dispatched" and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#1"] == "dispatched" and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered") and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid")))))) or ("DeliveryTask#1" in exists_DeliveryTask and ((state_DeliveryTask["DeliveryTask#1"] == "pending" or state_DeliveryTask["DeliveryTask#1"] == "sync-offered") and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid")))))))
+
+always assertion Relation_backlog_position_precedes_endpoints:
+    return ((("BacklogPosition#0", "BacklogPosition#0") not in relation_backlog_position_precedes or ("BacklogPosition#0" in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition)) and (("BacklogPosition#0", "BacklogPosition#1") not in relation_backlog_position_precedes or ("BacklogPosition#0" in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition)) and (("BacklogPosition#1", "BacklogPosition#0") not in relation_backlog_position_precedes or ("BacklogPosition#1" in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition)) and (("BacklogPosition#1", "BacklogPosition#1") not in relation_backlog_position_precedes or ("BacklogPosition#1" in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition)))
+
+always assertion Cardinality_backlog_position_precedes_source:
+    return (not (("BacklogPosition#0", "BacklogPosition#0") in relation_backlog_position_precedes and ("BacklogPosition#0", "BacklogPosition#1") in relation_backlog_position_precedes) and not (("BacklogPosition#1", "BacklogPosition#0") in relation_backlog_position_precedes and ("BacklogPosition#1", "BacklogPosition#1") in relation_backlog_position_precedes))
+
+always assertion Cardinality_backlog_position_precedes_target:
+    return (not (("BacklogPosition#0", "BacklogPosition#0") in relation_backlog_position_precedes and ("BacklogPosition#1", "BacklogPosition#0") in relation_backlog_position_precedes) and not (("BacklogPosition#0", "BacklogPosition#1") in relation_backlog_position_precedes and ("BacklogPosition#1", "BacklogPosition#1") in relation_backlog_position_precedes))
+
+always assertion Relation_backlog_position_task_endpoints:
+    return ((("BacklogPosition#0", "DeliveryTask#0") not in relation_backlog_position_task or ("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask)) and (("BacklogPosition#0", "DeliveryTask#1") not in relation_backlog_position_task or ("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask)) and (("BacklogPosition#1", "DeliveryTask#0") not in relation_backlog_position_task or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask)) and (("BacklogPosition#1", "DeliveryTask#1") not in relation_backlog_position_task or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask)))
+
+always assertion Cardinality_backlog_position_task_source:
+    return (not (("BacklogPosition#0", "DeliveryTask#0") in relation_backlog_position_task and ("BacklogPosition#0", "DeliveryTask#1") in relation_backlog_position_task) and not (("BacklogPosition#1", "DeliveryTask#0") in relation_backlog_position_task and ("BacklogPosition#1", "DeliveryTask#1") in relation_backlog_position_task))
+
+always assertion Cardinality_backlog_position_task_target:
+    return (not (("BacklogPosition#0", "DeliveryTask#0") in relation_backlog_position_task and ("BacklogPosition#1", "DeliveryTask#0") in relation_backlog_position_task) and not (("BacklogPosition#0", "DeliveryTask#1") in relation_backlog_position_task and ("BacklogPosition#1", "DeliveryTask#1") in relation_backlog_position_task))
+
+always assertion Relation_delivery_accepted_start_endpoints:
+    return ((("WorkObligation#0", "DeliveryAttempt#0") not in relation_delivery_accepted_start or ("WorkObligation#0" in exists_WorkObligation and "DeliveryAttempt#0" in exists_DeliveryAttempt)) and (("WorkObligation#0", "DeliveryAttempt#1") not in relation_delivery_accepted_start or ("WorkObligation#0" in exists_WorkObligation and "DeliveryAttempt#1" in exists_DeliveryAttempt)) and (("WorkObligation#1", "DeliveryAttempt#0") not in relation_delivery_accepted_start or ("WorkObligation#1" in exists_WorkObligation and "DeliveryAttempt#0" in exists_DeliveryAttempt)) and (("WorkObligation#1", "DeliveryAttempt#1") not in relation_delivery_accepted_start or ("WorkObligation#1" in exists_WorkObligation and "DeliveryAttempt#1" in exists_DeliveryAttempt)))
+
+always assertion Cardinality_delivery_accepted_start_source:
+    return (not (("WorkObligation#0", "DeliveryAttempt#0") in relation_delivery_accepted_start and ("WorkObligation#0", "DeliveryAttempt#1") in relation_delivery_accepted_start) and not (("WorkObligation#1", "DeliveryAttempt#0") in relation_delivery_accepted_start and ("WorkObligation#1", "DeliveryAttempt#1") in relation_delivery_accepted_start))
+
+always assertion Cardinality_delivery_accepted_start_target:
+    return (not (("WorkObligation#0", "DeliveryAttempt#0") in relation_delivery_accepted_start and ("WorkObligation#1", "DeliveryAttempt#0") in relation_delivery_accepted_start) and not (("WorkObligation#0", "DeliveryAttempt#1") in relation_delivery_accepted_start and ("WorkObligation#1", "DeliveryAttempt#1") in relation_delivery_accepted_start))
+
+always assertion Relation_delivery_attempt_poller_endpoints:
+    return ((("DeliveryAttempt#0", "Poller#0") not in relation_delivery_attempt_poller or ("DeliveryAttempt#0" in exists_DeliveryAttempt and "Poller#0" in exists_Poller)) and (("DeliveryAttempt#0", "Poller#1") not in relation_delivery_attempt_poller or ("DeliveryAttempt#0" in exists_DeliveryAttempt and "Poller#1" in exists_Poller)) and (("DeliveryAttempt#1", "Poller#0") not in relation_delivery_attempt_poller or ("DeliveryAttempt#1" in exists_DeliveryAttempt and "Poller#0" in exists_Poller)) and (("DeliveryAttempt#1", "Poller#1") not in relation_delivery_attempt_poller or ("DeliveryAttempt#1" in exists_DeliveryAttempt and "Poller#1" in exists_Poller)))
+
+always assertion Cardinality_delivery_attempt_poller_source:
+    return (not (("DeliveryAttempt#0", "Poller#0") in relation_delivery_attempt_poller and ("DeliveryAttempt#0", "Poller#1") in relation_delivery_attempt_poller) and not (("DeliveryAttempt#1", "Poller#0") in relation_delivery_attempt_poller and ("DeliveryAttempt#1", "Poller#1") in relation_delivery_attempt_poller))
+
+always assertion Relation_delivery_attempt_task_endpoints:
+    return ((("DeliveryAttempt#0", "DeliveryTask#0") not in relation_delivery_attempt_task or ("DeliveryAttempt#0" in exists_DeliveryAttempt and "DeliveryTask#0" in exists_DeliveryTask)) and (("DeliveryAttempt#0", "DeliveryTask#1") not in relation_delivery_attempt_task or ("DeliveryAttempt#0" in exists_DeliveryAttempt and "DeliveryTask#1" in exists_DeliveryTask)) and (("DeliveryAttempt#1", "DeliveryTask#0") not in relation_delivery_attempt_task or ("DeliveryAttempt#1" in exists_DeliveryAttempt and "DeliveryTask#0" in exists_DeliveryTask)) and (("DeliveryAttempt#1", "DeliveryTask#1") not in relation_delivery_attempt_task or ("DeliveryAttempt#1" in exists_DeliveryAttempt and "DeliveryTask#1" in exists_DeliveryTask)))
+
+always assertion Cardinality_delivery_attempt_task_source:
+    return (not (("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task) and not (("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task))
+
+always assertion Relation_delivery_task_obligation_endpoints:
+    return ((("DeliveryTask#0", "WorkObligation#0") not in relation_delivery_task_obligation or ("DeliveryTask#0" in exists_DeliveryTask and "WorkObligation#0" in exists_WorkObligation)) and (("DeliveryTask#0", "WorkObligation#1") not in relation_delivery_task_obligation or ("DeliveryTask#0" in exists_DeliveryTask and "WorkObligation#1" in exists_WorkObligation)) and (("DeliveryTask#1", "WorkObligation#0") not in relation_delivery_task_obligation or ("DeliveryTask#1" in exists_DeliveryTask and "WorkObligation#0" in exists_WorkObligation)) and (("DeliveryTask#1", "WorkObligation#1") not in relation_delivery_task_obligation or ("DeliveryTask#1" in exists_DeliveryTask and "WorkObligation#1" in exists_WorkObligation)))
+
+always assertion Cardinality_delivery_task_obligation_source:
+    return (not (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation) and not (("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation))
+
+always assertion Relation_delivery_task_queue_endpoints:
+    return ((("DeliveryTask#0", "DeliveryQueue#0") not in relation_delivery_task_queue or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue)) and (("DeliveryTask#0", "DeliveryQueue#1") not in relation_delivery_task_queue or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue)) and (("DeliveryTask#1", "DeliveryQueue#0") not in relation_delivery_task_queue or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue)) and (("DeliveryTask#1", "DeliveryQueue#1") not in relation_delivery_task_queue or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue)))
+
+always assertion Cardinality_delivery_task_queue_source:
+    return (not (("DeliveryTask#0", "DeliveryQueue#0") in relation_delivery_task_queue and ("DeliveryTask#0", "DeliveryQueue#1") in relation_delivery_task_queue) and not (("DeliveryTask#1", "DeliveryQueue#0") in relation_delivery_task_queue and ("DeliveryTask#1", "DeliveryQueue#1") in relation_delivery_task_queue))
+
+always assertion Property_backlog_ack_after_dispatch:
+    return ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc")) or ((("DeliveryTask#0" in exists_DeliveryTask and ((("BacklogPosition#0", "DeliveryTask#0") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))) or ("DeliveryTask#1" in exists_DeliveryTask and ((("BacklogPosition#0", "DeliveryTask#1") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#1"] == "acknowledged" or state_DeliveryTask["DeliveryTask#1"] == "retired"))))))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")) or ((("DeliveryTask#0" in exists_DeliveryTask and ((("BacklogPosition#1", "DeliveryTask#0") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired")))) or ("DeliveryTask#1" in exists_DeliveryTask and ((("BacklogPosition#1", "DeliveryTask#1") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#1"] == "acknowledged" or state_DeliveryTask["DeliveryTask#1"] == "retired"))))))))))
+
+always assertion Property_backlog_ack_prefix:
+    return ((not ("BacklogPosition#0" in exists_BacklogPosition) or (((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not ((("BacklogPosition#0", "BacklogPosition#0") in relation_backlog_position_precedes and (state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not ((("BacklogPosition#0", "BacklogPosition#1") in relation_backlog_position_precedes and (state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc")))))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or (((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not ((("BacklogPosition#1", "BacklogPosition#0") in relation_backlog_position_precedes and (state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not ((("BacklogPosition#1", "BacklogPosition#1") in relation_backlog_position_precedes and (state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))))
+
+always assertion Property_backlog_gc_after_retirement:
+    return ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (state_BacklogPosition["BacklogPosition#0"] == "gc") or ((("DeliveryTask#0" in exists_DeliveryTask and ((("BacklogPosition#0", "DeliveryTask#0") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#0"] == "retired"))) or ("DeliveryTask#1" in exists_DeliveryTask and ((("BacklogPosition#0", "DeliveryTask#1") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#1"] == "retired")))))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (state_BacklogPosition["BacklogPosition#1"] == "gc") or ((("DeliveryTask#0" in exists_DeliveryTask and ((("BacklogPosition#1", "DeliveryTask#0") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#0"] == "retired"))) or ("DeliveryTask#1" in exists_DeliveryTask and ((("BacklogPosition#1", "DeliveryTask#1") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#1"] == "retired")))))))))
+
+# unsupported property backlog.reader-progress: FizzBee semantic generation does not support temporal progress properties
+
+always assertion Property_delivery_ambiguous_commit_resolved:
+    return (("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#0"] == "read" and ("BacklogPosition#0", "DeliveryTask#0") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired") and ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (("BacklogPosition#0", "BacklogPosition#0") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (("BacklogPosition#1", "BacklogPosition#0") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))) or ("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#0"] == "read" and ("BacklogPosition#0", "DeliveryTask#1") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#1"] == "acknowledged" or state_DeliveryTask["DeliveryTask#1"] == "retired") and ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (("BacklogPosition#0", "BacklogPosition#0") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (("BacklogPosition#1", "BacklogPosition#0") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))) or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#1"] == "read" and ("BacklogPosition#1", "DeliveryTask#0") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#0"] == "acknowledged" or state_DeliveryTask["DeliveryTask#0"] == "retired") and ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (("BacklogPosition#0", "BacklogPosition#1") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (("BacklogPosition#1", "BacklogPosition#1") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))) or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#1"] == "read" and ("BacklogPosition#1", "DeliveryTask#1") in relation_backlog_position_task and (state_DeliveryTask["DeliveryTask#1"] == "acknowledged" or state_DeliveryTask["DeliveryTask#1"] == "retired") and ((not ("BacklogPosition#0" in exists_BacklogPosition) or ((not (("BacklogPosition#0", "BacklogPosition#1") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))))) and (not ("BacklogPosition#1" in exists_BacklogPosition) or ((not (("BacklogPosition#1", "BacklogPosition#1") in relation_backlog_position_precedes) or ((state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc")))))))) or ("BacklogPosition#0" not in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "backlogged" and (state_BacklogPosition["BacklogPosition#0"] == "unread" or state_BacklogPosition["BacklogPosition#0"] == "read" or state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ("BacklogPosition#0" not in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "backlogged" and (state_BacklogPosition["BacklogPosition#0"] == "unread" or state_BacklogPosition["BacklogPosition#0"] == "read" or state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ("BacklogPosition#0" not in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "backlogged" and (state_BacklogPosition["BacklogPosition#1"] == "unread" or state_BacklogPosition["BacklogPosition#1"] == "read" or state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ("BacklogPosition#0" not in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "backlogged" and (state_BacklogPosition["BacklogPosition#1"] == "unread" or state_BacklogPosition["BacklogPosition#1"] == "read" or state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ("BacklogPosition#1" not in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "backlogged" and (state_BacklogPosition["BacklogPosition#0"] == "unread" or state_BacklogPosition["BacklogPosition#0"] == "read" or state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ("BacklogPosition#1" not in exists_BacklogPosition and "BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "backlogged" and (state_BacklogPosition["BacklogPosition#0"] == "unread" or state_BacklogPosition["BacklogPosition#0"] == "read" or state_BacklogPosition["BacklogPosition#0"] == "acked" or state_BacklogPosition["BacklogPosition#0"] == "gc"))) or ("BacklogPosition#1" not in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "backlogged" and (state_BacklogPosition["BacklogPosition#1"] == "unread" or state_BacklogPosition["BacklogPosition#1"] == "read" or state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ("BacklogPosition#1" not in exists_BacklogPosition and "BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "backlogged" and (state_BacklogPosition["BacklogPosition#1"] == "unread" or state_BacklogPosition["BacklogPosition#1"] == "read" or state_BacklogPosition["BacklogPosition#1"] == "acked" or state_BacklogPosition["BacklogPosition#1"] == "gc"))) or ("BacklogPosition#0" not in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#0"] == "backlogged") or ("BacklogPosition#0" not in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#1"] == "backlogged") or ("BacklogPosition#1" not in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#0"] == "backlogged") or ("BacklogPosition#1" not in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#1"] == "backlogged") or ("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#0"] == "acked" and ("BacklogPosition#0", "DeliveryTask#0") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#0"] == "retired")) or ("BacklogPosition#0" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#0"] == "acked" and ("BacklogPosition#0", "DeliveryTask#1") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#1"] == "retired")) or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#0" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#1"] == "acked" and ("BacklogPosition#1", "DeliveryTask#0") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#0"] == "retired")) or ("BacklogPosition#1" in exists_BacklogPosition and "DeliveryTask#1" in exists_DeliveryTask and (state_BacklogPosition["BacklogPosition#1"] == "acked" and ("BacklogPosition#1", "DeliveryTask#1") in relation_backlog_position_task and state_DeliveryTask["DeliveryTask#1"] == "retired")) or ("BacklogPosition#0" in exists_BacklogPosition and state_BacklogPosition["BacklogPosition#0"] == "unread") or ("BacklogPosition#1" in exists_BacklogPosition and state_BacklogPosition["BacklogPosition#1"] == "unread") or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#1"] == "dispatched" and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#1"] == "dispatched" and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#0"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#0"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#0"] == "reserved" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_WorkObligation["WorkObligation#1"] == "valid" and state_DeliveryTask["DeliveryTask#1"] == "reserved" and state_DeliveryAttempt["DeliveryAttempt#1"] == "reserved" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#0"] == "accepted" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#1"] == "accepted" and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#0"] == "accepted" and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "authorized" and state_DeliveryAttempt["DeliveryAttempt#1"] == "accepted" and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "valid" and (state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "valid" and (state_DeliveryTask["DeliveryTask#1"] == "pending" or state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged") and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#1"] == "valid" and (state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged") and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#1"] == "valid" and (state_DeliveryTask["DeliveryTask#1"] == "pending" or state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged") and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation)) or ("DeliveryTask#0" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#0"] == "pending" and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid")))))) or ("DeliveryTask#1" in exists_DeliveryTask and (state_DeliveryTask["DeliveryTask#1"] == "pending" and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid")))))) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#0" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#0" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#0" in exists_DeliveryQueue) or ("WorkObligation#1" not in exists_WorkObligation and "DeliveryTask#1" not in exists_DeliveryTask and "DeliveryQueue#1" in exists_DeliveryQueue) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and (state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and (state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and (state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged")) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and (state_DeliveryTask["DeliveryTask#0"] == "sync-offered" or state_DeliveryTask["DeliveryTask#0"] == "backlogged")) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and (state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged")) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and (state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged")) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" not in exists_DeliveryAttempt and "Poller#0" in exists_Poller and (state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged")) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" not in exists_DeliveryAttempt and "Poller#1" in exists_Poller and (state_DeliveryTask["DeliveryTask#1"] == "sync-offered" or state_DeliveryTask["DeliveryTask#1"] == "backlogged")) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "unresolved" and state_DeliveryTask["DeliveryTask#0"] == "pending" and ("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#0" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#0"] == "unresolved" and state_DeliveryTask["DeliveryTask#1"] == "pending" and ("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#0" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#1"] == "unresolved" and state_DeliveryTask["DeliveryTask#0"] == "pending" and ("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and "DeliveryTask#1" in exists_DeliveryTask and (state_WorkObligation["WorkObligation#1"] == "unresolved" and state_DeliveryTask["DeliveryTask#1"] == "pending" and ("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation)) or ("DeliveryTask#0" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#0"] == "acknowledged") or ("DeliveryTask#1" in exists_DeliveryTask and state_DeliveryTask["DeliveryTask#1"] == "acknowledged") or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#0"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#1"] == "dispatched" and ("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#0" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" and ("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#1" in exists_DeliveryTask and "DeliveryAttempt#1" in exists_DeliveryAttempt and (state_DeliveryTask["DeliveryTask#1"] == "dispatched" and state_DeliveryAttempt["DeliveryAttempt#1"] == "dispatched" and ("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task)) or ("DeliveryTask#0" in exists_DeliveryTask and ((state_DeliveryTask["DeliveryTask#0"] == "pending" or state_DeliveryTask["DeliveryTask#0"] == "sync-offered") and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid")))))) or ("DeliveryTask#1" in exists_DeliveryTask and ((state_DeliveryTask["DeliveryTask#1"] == "pending" or state_DeliveryTask["DeliveryTask#1"] == "sync-offered") and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "valid"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "valid"))))))) or (((not ("WorkObligation#0" in exists_WorkObligation) or (not (state_WorkObligation["WorkObligation#0"] == "unresolved"))) and (not ("WorkObligation#1" in exists_WorkObligation) or (not (state_WorkObligation["WorkObligation#1"] == "unresolved")))))
+
+always assertion Property_delivery_coarse_retirement_safety:
+    return ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (state_DeliveryTask["DeliveryTask#0"] == "retired") or ((("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and (state_WorkObligation["WorkObligation#0"] == "accepted" or state_WorkObligation["WorkObligation#0"] == "terminal")))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and (state_WorkObligation["WorkObligation#1"] == "accepted" or state_WorkObligation["WorkObligation#1"] == "terminal"))))))))) and (not ("DeliveryTask#1" in exists_DeliveryTask) or ((not (state_DeliveryTask["DeliveryTask#1"] == "retired") or ((("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and (state_WorkObligation["WorkObligation#0"] == "accepted" or state_WorkObligation["WorkObligation#0"] == "terminal")))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and (state_WorkObligation["WorkObligation#1"] == "accepted" or state_WorkObligation["WorkObligation#1"] == "terminal"))))))))))
+
+always assertion Property_delivery_destination_isolation:
+    return ((not ("DeliveryTask#0" in exists_DeliveryTask) or ((("DeliveryQueue#0" in exists_DeliveryQueue and (("DeliveryTask#0", "DeliveryQueue#0") in relation_delivery_task_queue)) or ("DeliveryQueue#1" in exists_DeliveryQueue and (("DeliveryTask#0", "DeliveryQueue#1") in relation_delivery_task_queue))))) and (not ("DeliveryTask#1" in exists_DeliveryTask) or ((("DeliveryQueue#0" in exists_DeliveryQueue and (("DeliveryTask#1", "DeliveryQueue#0") in relation_delivery_task_queue)) or ("DeliveryQueue#1" in exists_DeliveryQueue and (("DeliveryTask#1", "DeliveryQueue#1") in relation_delivery_task_queue))))))
+
+always assertion Property_delivery_failed_start_is_not_accepted:
+    return ((not ("DeliveryAttempt#0" in exists_DeliveryAttempt) or ((not (state_DeliveryAttempt["DeliveryAttempt#0"] == "rejected") or (((not ("WorkObligation#0" in exists_WorkObligation) or (not (("WorkObligation#0", "DeliveryAttempt#0") in relation_delivery_accepted_start))) and (not ("WorkObligation#1" in exists_WorkObligation) or (not (("WorkObligation#1", "DeliveryAttempt#0") in relation_delivery_accepted_start)))))))) and (not ("DeliveryAttempt#1" in exists_DeliveryAttempt) or ((not (state_DeliveryAttempt["DeliveryAttempt#1"] == "rejected") or (((not ("WorkObligation#0" in exists_WorkObligation) or (not (("WorkObligation#0", "DeliveryAttempt#1") in relation_delivery_accepted_start))) and (not ("WorkObligation#1" in exists_WorkObligation) or (not (("WorkObligation#1", "DeliveryAttempt#1") in relation_delivery_accepted_start)))))))))
+
+always assertion Property_delivery_no_phantom_dispatch:
+    return ((not ("DeliveryAttempt#0" in exists_DeliveryAttempt) or ((not ((state_DeliveryAttempt["DeliveryAttempt#0"] == "dispatched" or state_DeliveryAttempt["DeliveryAttempt#0"] == "failed" or state_DeliveryAttempt["DeliveryAttempt#0"] == "completed")) or ((("DeliveryTask#0" in exists_DeliveryTask and ((("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "accepted"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "accepted"))))))) or ("DeliveryTask#1" in exists_DeliveryTask and ((("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "accepted"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "accepted")))))))))))) and (not ("DeliveryAttempt#1" in exists_DeliveryAttempt) or ((not ((state_DeliveryAttempt["DeliveryAttempt#1"] == "dispatched" or state_DeliveryAttempt["DeliveryAttempt#1"] == "failed" or state_DeliveryAttempt["DeliveryAttempt#1"] == "completed")) or ((("DeliveryTask#0" in exists_DeliveryTask and ((("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "accepted"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "accepted"))))))) or ("DeliveryTask#1" in exists_DeliveryTask and ((("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#0"] == "accepted"))) or ("WorkObligation#1" in exists_WorkObligation and ((("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation and state_WorkObligation["WorkObligation#1"] == "accepted")))))))))))))
+
+always assertion Property_delivery_no_resurrection:
+    return ((not ("WorkObligation#0" in exists_WorkObligation) or ((not (state_WorkObligation["WorkObligation#0"] == "terminal") or (((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation) or (state_DeliveryTask["DeliveryTask#0"] == "retired")))) and (not ("DeliveryTask#1" in exists_DeliveryTask) or ((not (("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation) or (state_DeliveryTask["DeliveryTask#1"] == "retired"))))))))) and (not ("WorkObligation#1" in exists_WorkObligation) or ((not (state_WorkObligation["WorkObligation#1"] == "terminal") or (((not ("DeliveryTask#0" in exists_DeliveryTask) or ((not (("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation) or (state_DeliveryTask["DeliveryTask#0"] == "retired")))) and (not ("DeliveryTask#1" in exists_DeliveryTask) or ((not (("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation) or (state_DeliveryTask["DeliveryTask#1"] == "retired"))))))))))
+
+always assertion Property_delivery_no_split_commit:
+    return ((not ("WorkObligation#0" in exists_WorkObligation) or ((not ((state_WorkObligation["WorkObligation#0"] == "valid" or state_WorkObligation["WorkObligation#0"] == "accepted")) or ((("DeliveryTask#0" in exists_DeliveryTask and (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("DeliveryTask#1" in exists_DeliveryTask and (("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation))))))) and (not ("WorkObligation#1" in exists_WorkObligation) or ((not ((state_WorkObligation["WorkObligation#1"] == "valid" or state_WorkObligation["WorkObligation#1"] == "accepted")) or ((("DeliveryTask#0" in exists_DeliveryTask and (("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation)) or ("DeliveryTask#1" in exists_DeliveryTask and (("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation))))))))
+
+always assertion Property_delivery_path_equivalence:
+    return ((not ("DeliveryTask#0" in exists_DeliveryTask) or (((("WorkObligation#0" in exists_WorkObligation and (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and (("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation))) and (("DeliveryQueue#0" in exists_DeliveryQueue and (("DeliveryTask#0", "DeliveryQueue#0") in relation_delivery_task_queue)) or ("DeliveryQueue#1" in exists_DeliveryQueue and (("DeliveryTask#0", "DeliveryQueue#1") in relation_delivery_task_queue)))))) and (not ("DeliveryTask#1" in exists_DeliveryTask) or (((("WorkObligation#0" in exists_WorkObligation and (("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and (("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation))) and (("DeliveryQueue#0" in exists_DeliveryQueue and (("DeliveryTask#1", "DeliveryQueue#0") in relation_delivery_task_queue)) or ("DeliveryQueue#1" in exists_DeliveryQueue and (("DeliveryTask#1", "DeliveryQueue#1") in relation_delivery_task_queue)))))))
+
+always assertion Property_delivery_retry_preserves_obligation:
+    return ((not ("DeliveryAttempt#0" in exists_DeliveryAttempt) or ((("DeliveryTask#0" in exists_DeliveryTask and ((("DeliveryAttempt#0", "DeliveryTask#0") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and (("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation)))))) or ("DeliveryTask#1" in exists_DeliveryTask and ((("DeliveryAttempt#0", "DeliveryTask#1") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and (("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and (("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation))))))))) and (not ("DeliveryAttempt#1" in exists_DeliveryAttempt) or ((("DeliveryTask#0" in exists_DeliveryTask and ((("DeliveryAttempt#1", "DeliveryTask#0") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and (("DeliveryTask#0", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and (("DeliveryTask#0", "WorkObligation#1") in relation_delivery_task_obligation)))))) or ("DeliveryTask#1" in exists_DeliveryTask and ((("DeliveryAttempt#1", "DeliveryTask#1") in relation_delivery_attempt_task and (("WorkObligation#0" in exists_WorkObligation and (("DeliveryTask#1", "WorkObligation#0") in relation_delivery_task_obligation)) or ("WorkObligation#1" in exists_WorkObligation and (("DeliveryTask#1", "WorkObligation#1") in relation_delivery_task_obligation))))))))))
+
+always assertion Property_delivery_single_accepted_start:
+    return ((not ("WorkObligation#0" in exists_WorkObligation) or ((not (state_WorkObligation["WorkObligation#0"] == "accepted") or ((("DeliveryAttempt#0" in exists_DeliveryAttempt and (("WorkObligation#0", "DeliveryAttempt#0") in relation_delivery_accepted_start)) or ("DeliveryAttempt#1" in exists_DeliveryAttempt and (("WorkObligation#0", "DeliveryAttempt#1") in relation_delivery_accepted_start))))))) and (not ("WorkObligation#1" in exists_WorkObligation) or ((not (state_WorkObligation["WorkObligation#1"] == "accepted") or ((("DeliveryAttempt#0" in exists_DeliveryAttempt and (("WorkObligation#1", "DeliveryAttempt#0") in relation_delivery_accepted_start)) or ("DeliveryAttempt#1" in exists_DeliveryAttempt and (("WorkObligation#1", "DeliveryAttempt#1") in relation_delivery_accepted_start))))))))
+

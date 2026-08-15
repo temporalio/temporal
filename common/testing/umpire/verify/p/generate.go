@@ -157,16 +157,8 @@ func (g generator) enabled(current candidate) string {
 		}
 		clauses = append(clauses, membership)
 	}
-	for left, leftParameter := range current.action.Parameters {
-		if leftParameter.Binding != verify.FreshBinding {
-			continue
-		}
-		for right := left + 1; right < len(current.action.Parameters); right++ {
-			rightParameter := current.action.Parameters[right]
-			if rightParameter.Binding == verify.FreshBinding && rightParameter.Type == leftParameter.Type {
-				clauses = append(clauses, entityID(current.bindings[leftParameter.Name])+" != "+entityID(current.bindings[rightParameter.Name]))
-			}
-		}
+	for _, pair := range verify.DistinctFreshParameterPairs(current.action.Parameters) {
+		clauses = append(clauses, entityID(current.bindings[pair[0].Name])+" != "+entityID(current.bindings[pair[1].Name]))
 	}
 	if current.action.Guard.Op != "" && current.action.Guard.Op != verify.TrueExpr {
 		clauses = append(clauses, g.expr(current.action.Guard, current.bindings))

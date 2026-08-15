@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/testing/umpire/verify"
+	"go.temporal.io/server/common/testing/umpire/verify/fizz"
 	"go.temporal.io/server/common/testing/umpire/verify/ivy"
 	pgenerator "go.temporal.io/server/common/testing/umpire/verify/p"
 	"go.temporal.io/server/common/testing/umpire/verify/runner"
@@ -29,7 +30,7 @@ func main() {
 		output       = flag.String("out", "tests/umpire2/genmodels", "generated model directory")
 		artifacts    = flag.String("artifacts", "tests/umpire2/genmodels-results", "verification result directory")
 		target       = flag.String("target", "all", "verification target name or all")
-		backend      = flag.String("backend", "all", "sany, tlc, apalache, apalache-proof, p, pex, ivy, or all")
+		backend      = flag.String("backend", "all", "sany, tlc, apalache, apalache-proof, p, pex, ivy, fizz, or all")
 		profile      = flag.String("profile", "smoke", "smoke or nightly")
 		defaultBound = flag.Int("default-bound", 1, "finite identity pool size per entity type")
 		timeout      = flag.Duration("timeout", 10*time.Minute, "per-tool verification timeout")
@@ -38,6 +39,7 @@ func main() {
 		pTool        = flag.String("p-tool", os.Getenv("UMPIRE_P_TOOL"), "P executable")
 		apalacheTool = flag.String("apalache-tool", os.Getenv("UMPIRE_APALACHE_TOOL"), "Apalache executable")
 		ivyTool      = flag.String("ivy-tool", os.Getenv("UMPIRE_IVY_TOOL"), "ivy_check executable")
+		fizzTool     = flag.String("fizz-tool", os.Getenv("UMPIRE_FIZZ_TOOL"), "FizzBee executable")
 	)
 	flag.Parse()
 
@@ -51,7 +53,7 @@ func main() {
 		err = checkModels(context.Background(), checkOptions{
 			output: *output, artifacts: *artifacts, target: *target, backend: *backend, profile: *profile,
 			timeout: *timeout, tlaJar: *tlaJar, javaTool: *javaTool, pTool: *pTool,
-			apalacheTool: *apalacheTool, ivyTool: *ivyTool, defaultBound: *defaultBound,
+			apalacheTool: *apalacheTool, ivyTool: *ivyTool, fizzTool: *fizzTool, defaultBound: *defaultBound,
 		})
 	default:
 		err = fmt.Errorf("unknown mode %q", *mode)
@@ -99,6 +101,11 @@ func generate(output string, defaultBound int) error {
 		return err
 	}
 	files["manifest.json"] = append(indexJSON, '\n')
+	toolEnvironment, err := renderToolEnvironment(runner.ToolVersions(), "linux-x86_64")
+	if err != nil {
+		return err
+	}
+	files["tools.env"] = toolEnvironment
 	return writeFiles(output, files)
 }
 
@@ -134,9 +141,27 @@ func generateTarget(
 	if err != nil {
 		return nil, targetIndexEntry{}, err
 	}
-	unsupported := make([]verify.Unsupported, len(ivyDiagnostics))
-	for index, diagnostic := range ivyDiagnostics {
-		unsupported[index] = verify.Unsupported{Backend: "ivy", Construct: diagnostic.Construct, Reason: diagnostic.Reason}
+	fizzFiles, fizzDiagnostics, err := fizz.Generate(model)
+	if err != nil {
+		return nil, targetIndexEntry{}, err
+	}
+	smokeBounds, err := runner.ProfileBounds("smoke")
+	if err != nil {
+		return nil, targetIndexEntry{}, err
+	}
+	fizzConfig, err := fizz.RenderConfig(runner.FizzBounds(smokeBounds))
+	if err != nil {
+		return nil, targetIndexEntry{}, err
+	}
+	fizzFiles["fizz.yaml"] = fizzConfig
+	unsupported := make([]verify.Unsupported, 0, len(ivyDiagnostics)+len(fizzDiagnostics))
+	for _, diagnostic := range ivyDiagnostics {
+		unsupported = append(unsupported, verify.Unsupported{Backend: "ivy", Construct: diagnostic.Construct, Reason: diagnostic.Reason})
+	}
+	for _, diagnostic := range fizzDiagnostics {
+		unsupported = append(unsupported, verify.Unsupported{
+			Backend: "fizz", Construct: diagnostic.Construct, Reason: diagnostic.Reason, Source: diagnostic.Source,
+		})
 	}
 	manifest, err := verify.NewManifest(model, verify.ManifestOptions{
 		GeneratorVersion:    generatorVersion,
@@ -154,6 +179,7 @@ func generateTarget(
 		Guarantee:           verify.FiniteExhaustive,
 		Tools:               runner.ToolVersions(),
 		Unsupported:         unsupported,
+		Omitted:             target.Omissions,
 	})
 	if err != nil {
 		return nil, targetIndexEntry{}, err
@@ -182,6 +208,7 @@ func generateTarget(
 	mergeFiles(files, "tla", tlaFiles)
 	mergeFiles(files, "p", pFiles)
 	mergeFiles(files, "ivy", ivyFiles)
+	mergeFiles(files, "fizz", fizzFiles)
 	entry := targetIndexEntry{
 		Name:                target.Name,
 		ModelHash:           modelHash,
@@ -311,6 +338,7 @@ type checkOptions struct {
 	pTool        string
 	apalacheTool string
 	ivyTool      string
+	fizzTool     string
 	defaultBound int
 }
 
@@ -325,7 +353,7 @@ func checkModels(ctx context.Context, options checkOptions) error {
 	}
 	toolchain := runner.Toolchain{
 		TLAJarPath: options.tlaJar, JavaPath: options.javaTool, PPath: options.pTool,
-		ApalachePath: options.apalacheTool, IvyPath: options.ivyTool,
+		ApalachePath: options.apalacheTool, IvyPath: options.ivyTool, FizzPath: options.fizzTool,
 	}
 	for _, target := range targets {
 		projection, err := verify.Project(family, target.Name)

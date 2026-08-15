@@ -1,0 +1,427 @@
+#lang ivy1.7
+
+# Generated from the Umpire verification snapshot. Do not edit.
+
+type deliveryattempt
+type deliveryattempt_state = {deliveryattempt_state_accepted,deliveryattempt_state_completed,deliveryattempt_state_dispatched,deliveryattempt_state_failed,deliveryattempt_state_rejected,deliveryattempt_state_reserved}
+individual deliveryattempt_0:deliveryattempt
+individual deliveryattempt_1:deliveryattempt
+relation exists_deliveryattempt(X:deliveryattempt)
+function state_deliveryattempt(X:deliveryattempt):deliveryattempt_state
+
+type deliveryqueue
+type deliveryqueue_state = {deliveryqueue_state_available}
+individual deliveryqueue_0:deliveryqueue
+individual deliveryqueue_1:deliveryqueue
+relation exists_deliveryqueue(X:deliveryqueue)
+function state_deliveryqueue(X:deliveryqueue):deliveryqueue_state
+
+type deliverytask
+type deliverytask_state = {deliverytask_state_acknowledged,deliverytask_state_authorized,deliverytask_state_backlogged,deliverytask_state_dispatched,deliverytask_state_pending,deliverytask_state_reserved,deliverytask_state_retired,deliverytask_state_sync_offered}
+individual deliverytask_0:deliverytask
+individual deliverytask_1:deliverytask
+relation exists_deliverytask(X:deliverytask)
+function state_deliverytask(X:deliverytask):deliverytask_state
+
+type poller
+type poller_state = {poller_state_available}
+individual poller_0:poller
+individual poller_1:poller
+relation exists_poller(X:poller)
+function state_poller(X:poller):poller_state
+
+type workobligation
+type workobligation_state = {workobligation_state_accepted,workobligation_state_terminal,workobligation_state_unresolved,workobligation_state_valid}
+individual workobligation_0:workobligation
+individual workobligation_1:workobligation
+relation exists_workobligation(X:workobligation)
+function state_workobligation(X:workobligation):workobligation_state
+
+type workflowrun
+type workflowrun_state = {workflowrun_state_canceled,workflowrun_state_completed,workflowrun_state_continued_as_new,workflowrun_state_created,workflowrun_state_failed,workflowrun_state_started,workflowrun_state_terminated,workflowrun_state_timed_out}
+individual workflowrun_0:workflowrun
+relation exists_workflowrun(X:workflowrun)
+function state_workflowrun(X:workflowrun):workflowrun_state
+
+type workflowtask
+type workflowtask_state = {workflowtask_state_added,workflowtask_state_created,workflowtask_state_discarded,workflowtask_state_polled,workflowtask_state_stored,workflowtask_state_terminated}
+individual workflowtask_0:workflowtask
+individual workflowtask_1:workflowtask
+relation exists_workflowtask(X:workflowtask)
+function state_workflowtask(X:workflowtask):workflowtask_state
+
+relation relation_delivery_accepted_start(X:workobligation, Y:deliveryattempt)
+relation relation_delivery_attempt_poller(X:deliveryattempt, Y:poller)
+relation relation_delivery_attempt_task(X:deliveryattempt, Y:deliverytask)
+relation relation_delivery_task_obligation(X:deliverytask, Y:workobligation)
+relation relation_delivery_task_queue(X:deliverytask, Y:deliveryqueue)
+relation relation_workflow_task_delivery_task(X:workflowtask, Y:deliverytask)
+relation relation_workflow_task_normal_run(X:workflowtask, Y:workflowrun)
+relation relation_workflow_task_obligation(X:workflowtask, Y:workobligation)
+relation relation_workflow_task_speculative_run(X:workflowtask, Y:workflowrun)
+
+after init {
+    exists_deliveryattempt(X) := false;
+    state_deliveryattempt(X) := deliveryattempt_state_reserved;
+    exists_deliveryqueue(X) := false;
+    state_deliveryqueue(X) := deliveryqueue_state_available;
+    exists_deliveryqueue(deliveryqueue_0) := true;
+    exists_deliveryqueue(deliveryqueue_1) := true;
+    exists_deliverytask(X) := false;
+    state_deliverytask(X) := deliverytask_state_pending;
+    exists_poller(X) := false;
+    state_poller(X) := poller_state_available;
+    exists_poller(poller_0) := true;
+    exists_poller(poller_1) := true;
+    exists_workobligation(X) := false;
+    state_workobligation(X) := workobligation_state_unresolved;
+    exists_workflowrun(X) := false;
+    state_workflowrun(X) := workflowrun_state_created;
+    exists_workflowtask(X) := false;
+    state_workflowtask(X) := workflowtask_state_created;
+    relation_delivery_accepted_start(X,Y) := false;
+    relation_delivery_attempt_poller(X,Y) := false;
+    relation_delivery_attempt_task(X,Y) := false;
+    relation_delivery_task_obligation(X,Y) := false;
+    relation_delivery_task_queue(X,Y) := false;
+    relation_workflow_task_delivery_task(X,Y) := false;
+    relation_workflow_task_normal_run(X,Y) := false;
+    relation_workflow_task_obligation(X,Y) := false;
+    relation_workflow_task_speculative_run(X,Y) := false
+}
+
+action workflowrun_started_cancel_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_canceled
+}
+
+action workflowrun_started_complete_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_completed
+}
+
+action workflowrun_started_continue_as_new_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_continued_as_new
+}
+
+action workflowrun_started_fail_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_failed
+}
+
+action workflowrun_started_terminate_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_terminated
+}
+
+action workflowrun_started_timeout_anyhosting(entity:workflowrun) = {
+    require exists_workflowrun(entity);
+    require state_workflowrun(entity) = workflowrun_state_started;
+    state_workflowrun(entity) := workflowrun_state_timed_out
+}
+
+action workflowtask_added_poll_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_added;
+    state_workflowtask(entity) := workflowtask_state_polled
+}
+
+action workflowtask_added_terminate_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_added;
+    state_workflowtask(entity) := workflowtask_state_terminated
+}
+
+action workflowtask_created_terminate_anyhosting(entity:workflowtask) = {
+    require ~exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_created;
+    exists_workflowtask(entity) := true;
+    state_workflowtask(entity) := workflowtask_state_terminated
+}
+
+action workflowtask_stored_poll_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_stored;
+    state_workflowtask(entity) := workflowtask_state_polled
+}
+
+action workflowtask_stored_terminate_anyhosting(entity:workflowtask) = {
+    require exists_workflowtask(entity);
+    require state_workflowtask(entity) = workflowtask_state_stored;
+    state_workflowtask(entity) := workflowtask_state_terminated
+}
+
+action delivery_acknowledge(task:deliverytask,attempt:deliveryattempt) = {
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_deliverytask(task) = deliverytask_state_dispatched & state_deliveryattempt(attempt) = deliveryattempt_state_dispatched & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_acknowledged;
+    state_deliveryattempt(attempt) := deliveryattempt_state_completed
+}
+
+action delivery_authorize_accept(obligation:workobligation,task:deliverytask,attempt:deliveryattempt) = {
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_workobligation(obligation) = workobligation_state_valid & state_deliverytask(task) = deliverytask_state_reserved & state_deliveryattempt(attempt) = deliveryattempt_state_reserved & relation_delivery_task_obligation(task,obligation) & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_authorized;
+    state_deliveryattempt(attempt) := deliveryattempt_state_accepted;
+    state_workobligation(obligation) := workobligation_state_accepted;
+    relation_delivery_accepted_start(obligation,attempt) := true
+}
+
+action delivery_authorize_reject(obligation:workobligation,task:deliverytask,attempt:deliveryattempt) = {
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_workobligation(obligation) = workobligation_state_valid & state_deliverytask(task) = deliverytask_state_reserved & state_deliveryattempt(attempt) = deliveryattempt_state_reserved & relation_delivery_task_obligation(task,obligation) & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_backlogged;
+    state_deliveryattempt(attempt) := deliveryattempt_state_rejected
+}
+
+action delivery_dispatch(task:deliverytask,attempt:deliveryattempt) = {
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_deliverytask(task) = deliverytask_state_authorized & state_deliveryattempt(attempt) = deliveryattempt_state_accepted & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_dispatched;
+    state_deliveryattempt(attempt) := deliveryattempt_state_dispatched
+}
+
+action delivery_offer_sync(task:deliverytask) = {
+    require exists_deliverytask(task);
+    require (state_deliverytask(task) = deliverytask_state_pending & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(task,Q_obligation) & state_workobligation(Q_obligation) = workobligation_state_valid))));
+    state_deliverytask(task) := deliverytask_state_sync_offered
+}
+
+action delivery_persist_ambiguous(obligation:workobligation,task:deliverytask,queue:deliveryqueue) = {
+    require ~exists_workobligation(obligation);
+    require ~exists_deliverytask(task);
+    require exists_deliveryqueue(queue);
+    exists_workobligation(obligation) := true;
+    state_workobligation(obligation) := workobligation_state_unresolved;
+    exists_deliverytask(task) := true;
+    state_deliverytask(task) := deliverytask_state_pending;
+    relation_delivery_task_obligation(task,obligation) := true;
+    relation_delivery_task_queue(task,queue) := true
+}
+
+action delivery_reserve(task:deliverytask,attempt:deliveryattempt,poller:poller) = {
+    require exists_deliverytask(task);
+    require ~exists_deliveryattempt(attempt);
+    require exists_poller(poller);
+    require (state_deliverytask(task) = deliverytask_state_sync_offered | state_deliverytask(task) = deliverytask_state_backlogged);
+    state_deliverytask(task) := deliverytask_state_reserved;
+    exists_deliveryattempt(attempt) := true;
+    state_deliveryattempt(attempt) := deliveryattempt_state_reserved;
+    relation_delivery_attempt_task(attempt,task) := true;
+    relation_delivery_attempt_poller(attempt,poller) := true
+}
+
+action delivery_retire(task:deliverytask) = {
+    require exists_deliverytask(task);
+    require state_deliverytask(task) = deliverytask_state_acknowledged;
+    state_deliverytask(task) := deliverytask_state_retired
+}
+
+action delivery_retry(task:deliverytask,attempt:deliveryattempt) = {
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_deliverytask(task) = deliverytask_state_dispatched & state_deliveryattempt(attempt) = deliveryattempt_state_dispatched & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_backlogged;
+    state_deliveryattempt(attempt) := deliveryattempt_state_failed
+}
+
+action workflow_delivery_authorize_added(entity:workflowtask,obligation:workobligation,task:deliverytask,attempt:deliveryattempt) = {
+    require exists_workflowtask(entity);
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_workflowtask(entity) = workflowtask_state_added & relation_workflow_task_obligation(entity,obligation) & relation_workflow_task_delivery_task(entity,task) & (state_workobligation(obligation) = workobligation_state_valid & state_deliverytask(task) = deliverytask_state_reserved & state_deliveryattempt(attempt) = deliveryattempt_state_reserved & relation_delivery_task_obligation(task,obligation) & relation_delivery_attempt_task(attempt,task)));
+    state_workflowtask(entity) := workflowtask_state_polled;
+    state_deliverytask(task) := deliverytask_state_authorized;
+    state_deliveryattempt(attempt) := deliveryattempt_state_accepted;
+    state_workobligation(obligation) := workobligation_state_accepted;
+    relation_delivery_accepted_start(obligation,attempt) := true
+}
+
+action workflow_delivery_authorize_stored(entity:workflowtask,obligation:workobligation,task:deliverytask,attempt:deliveryattempt) = {
+    require exists_workflowtask(entity);
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_workflowtask(entity) = workflowtask_state_stored & relation_workflow_task_obligation(entity,obligation) & relation_workflow_task_delivery_task(entity,task) & (state_workobligation(obligation) = workobligation_state_valid & state_deliverytask(task) = deliverytask_state_reserved & state_deliveryattempt(attempt) = deliveryattempt_state_reserved & relation_delivery_task_obligation(task,obligation) & relation_delivery_attempt_task(attempt,task)));
+    state_workflowtask(entity) := workflowtask_state_polled;
+    state_deliverytask(task) := deliverytask_state_authorized;
+    state_deliveryattempt(attempt) := deliveryattempt_state_accepted;
+    state_workobligation(obligation) := workobligation_state_accepted;
+    relation_delivery_accepted_start(obligation,attempt) := true
+}
+
+action workflow_delivery_reject_added(entity:workflowtask,obligation:workobligation,task:deliverytask,attempt:deliveryattempt) = {
+    require exists_workflowtask(entity);
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_workflowtask(entity) = workflowtask_state_added & relation_workflow_task_obligation(entity,obligation) & relation_workflow_task_delivery_task(entity,task) & (state_workobligation(obligation) = workobligation_state_valid & state_deliverytask(task) = deliverytask_state_reserved & state_deliveryattempt(attempt) = deliveryattempt_state_reserved & relation_delivery_task_obligation(task,obligation) & relation_delivery_attempt_task(attempt,task)));
+    state_deliverytask(task) := deliverytask_state_backlogged;
+    state_deliveryattempt(attempt) := deliveryattempt_state_rejected
+}
+
+action workflow_delivery_reject_stored(entity:workflowtask,obligation:workobligation,task:deliverytask,attempt:deliveryattempt) = {
+    require exists_workflowtask(entity);
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_workflowtask(entity) = workflowtask_state_stored & relation_workflow_task_obligation(entity,obligation) & relation_workflow_task_delivery_task(entity,task) & (state_workobligation(obligation) = workobligation_state_valid & state_deliverytask(task) = deliverytask_state_reserved & state_deliveryattempt(attempt) = deliveryattempt_state_reserved & relation_delivery_task_obligation(task,obligation) & relation_delivery_attempt_task(attempt,task)));
+    state_deliverytask(task) := deliverytask_state_backlogged;
+    state_deliveryattempt(attempt) := deliveryattempt_state_rejected
+}
+
+action workflow_task_cancel_speculative_added(entity:workflowtask,obligation:workobligation,task:deliverytask) = {
+    require exists_workflowtask(entity);
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require (state_workflowtask(entity) = workflowtask_state_added & relation_workflow_task_obligation(entity,obligation) & relation_workflow_task_delivery_task(entity,task) & state_deliverytask(task) = deliverytask_state_sync_offered & (state_workobligation(obligation) = workobligation_state_valid & (state_deliverytask(task) = deliverytask_state_pending | state_deliverytask(task) = deliverytask_state_sync_offered | state_deliverytask(task) = deliverytask_state_backlogged) & relation_delivery_task_obligation(task,obligation)));
+    state_workflowtask(entity) := workflowtask_state_discarded;
+    state_workobligation(obligation) := workobligation_state_terminal;
+    state_deliverytask(task) := deliverytask_state_retired
+}
+
+action workflow_task_cancel_speculative_stored(entity:workflowtask,obligation:workobligation,task:deliverytask) = {
+    require exists_workflowtask(entity);
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require (state_workflowtask(entity) = workflowtask_state_stored & relation_workflow_task_obligation(entity,obligation) & relation_workflow_task_delivery_task(entity,task) & state_deliverytask(task) = deliverytask_state_backlogged & (state_workobligation(obligation) = workobligation_state_valid & (state_deliverytask(task) = deliverytask_state_pending | state_deliverytask(task) = deliverytask_state_sync_offered | state_deliverytask(task) = deliverytask_state_backlogged) & relation_delivery_task_obligation(task,obligation)));
+    state_workflowtask(entity) := workflowtask_state_discarded;
+    state_workobligation(obligation) := workobligation_state_terminal;
+    state_deliverytask(task) := deliverytask_state_retired
+}
+
+action workflow_task_create_normal(run:workflowrun,entity:workflowtask,obligation:workobligation,task:deliverytask,queue:deliveryqueue) = {
+    require ~exists_workflowrun(run);
+    require ~exists_workflowtask(entity);
+    require ~exists_workobligation(obligation);
+    require ~exists_deliverytask(task);
+    require exists_deliveryqueue(queue);
+    require (state_workflowrun(run) = workflowrun_state_created & state_workflowtask(entity) = workflowtask_state_created);
+    exists_workflowrun(run) := true;
+    state_workflowrun(run) := workflowrun_state_started;
+    exists_workflowtask(entity) := true;
+    state_workflowtask(entity) := workflowtask_state_added;
+    exists_workobligation(obligation) := true;
+    state_workobligation(obligation) := workobligation_state_valid;
+    exists_deliverytask(task) := true;
+    state_deliverytask(task) := deliverytask_state_pending;
+    relation_delivery_task_obligation(task,obligation) := true;
+    relation_delivery_task_queue(task,queue) := true;
+    relation_workflow_task_obligation(entity,obligation) := true;
+    relation_workflow_task_delivery_task(entity,task) := true;
+    relation_workflow_task_normal_run(entity,run) := true
+}
+
+action workflow_task_create_speculative_direct(run:workflowrun,entity:workflowtask,obligation:workobligation,task:deliverytask,queue:deliveryqueue) = {
+    require exists_workflowrun(run);
+    require ~exists_workflowtask(entity);
+    require ~exists_workobligation(obligation);
+    require ~exists_deliverytask(task);
+    require exists_deliveryqueue(queue);
+    require (state_workflowrun(run) = workflowrun_state_started & state_workflowtask(entity) = workflowtask_state_created & ~((exists Q_normaltask:workflowtask. exists_workflowtask(Q_normaltask) & ((relation_workflow_task_normal_run(Q_normaltask,run) & (state_workflowtask(Q_normaltask) = workflowtask_state_added | state_workflowtask(Q_normaltask) = workflowtask_state_stored))))));
+    exists_workflowtask(entity) := true;
+    state_workflowtask(entity) := workflowtask_state_added;
+    exists_workobligation(obligation) := true;
+    state_workobligation(obligation) := workobligation_state_valid;
+    exists_deliverytask(task) := true;
+    state_deliverytask(task) := deliverytask_state_sync_offered;
+    relation_delivery_task_obligation(task,obligation) := true;
+    relation_delivery_task_queue(task,queue) := true;
+    relation_workflow_task_obligation(entity,obligation) := true;
+    relation_workflow_task_delivery_task(entity,task) := true;
+    relation_workflow_task_speculative_run(entity,run) := true
+}
+
+action workflow_task_resolve_normal(obligation:workobligation,task:deliverytask) = {
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require (state_workobligation(obligation) = workobligation_state_unresolved & state_deliverytask(task) = deliverytask_state_pending & relation_delivery_task_obligation(task,obligation));
+    state_workobligation(obligation) := workobligation_state_valid
+}
+
+action workflow_task_speculative_fallback(entity:workflowtask,task:deliverytask) = {
+    require exists_workflowtask(entity);
+    require exists_deliverytask(task);
+    require (state_workflowtask(entity) = workflowtask_state_added & relation_workflow_task_delivery_task(entity,task) & state_deliverytask(task) = deliverytask_state_sync_offered & ((state_deliverytask(task) = deliverytask_state_pending | state_deliverytask(task) = deliverytask_state_sync_offered) & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(task,Q_obligation) & state_workobligation(Q_obligation) = workobligation_state_valid)))));
+    state_workflowtask(entity) := workflowtask_state_stored;
+    state_deliverytask(task) := deliverytask_state_backlogged
+}
+
+invariant [relation_delivery_accepted_start_endpoints] forall S:workobligation,T:deliveryattempt. relation_delivery_accepted_start(S,T) -> exists_workobligation(S) & exists_deliveryattempt(T)
+invariant [cardinality_delivery_accepted_start_source] forall S:workobligation,T1:deliveryattempt,T2:deliveryattempt. relation_delivery_accepted_start(S,T1) & relation_delivery_accepted_start(S,T2) -> T1 = T2
+invariant [cardinality_delivery_accepted_start_target] forall S1:workobligation,S2:workobligation,T:deliveryattempt. relation_delivery_accepted_start(S1,T) & relation_delivery_accepted_start(S2,T) -> S1 = S2
+invariant [relation_delivery_attempt_poller_endpoints] forall S:deliveryattempt,T:poller. relation_delivery_attempt_poller(S,T) -> exists_deliveryattempt(S) & exists_poller(T)
+invariant [cardinality_delivery_attempt_poller_source] forall S:deliveryattempt,T1:poller,T2:poller. relation_delivery_attempt_poller(S,T1) & relation_delivery_attempt_poller(S,T2) -> T1 = T2
+invariant [relation_delivery_attempt_task_endpoints] forall S:deliveryattempt,T:deliverytask. relation_delivery_attempt_task(S,T) -> exists_deliveryattempt(S) & exists_deliverytask(T)
+invariant [cardinality_delivery_attempt_task_source] forall S:deliveryattempt,T1:deliverytask,T2:deliverytask. relation_delivery_attempt_task(S,T1) & relation_delivery_attempt_task(S,T2) -> T1 = T2
+invariant [relation_delivery_task_obligation_endpoints] forall S:deliverytask,T:workobligation. relation_delivery_task_obligation(S,T) -> exists_deliverytask(S) & exists_workobligation(T)
+invariant [cardinality_delivery_task_obligation_source] forall S:deliverytask,T1:workobligation,T2:workobligation. relation_delivery_task_obligation(S,T1) & relation_delivery_task_obligation(S,T2) -> T1 = T2
+invariant [relation_delivery_task_queue_endpoints] forall S:deliverytask,T:deliveryqueue. relation_delivery_task_queue(S,T) -> exists_deliverytask(S) & exists_deliveryqueue(T)
+invariant [cardinality_delivery_task_queue_source] forall S:deliverytask,T1:deliveryqueue,T2:deliveryqueue. relation_delivery_task_queue(S,T1) & relation_delivery_task_queue(S,T2) -> T1 = T2
+invariant [relation_workflow_task_delivery_task_endpoints] forall S:workflowtask,T:deliverytask. relation_workflow_task_delivery_task(S,T) -> exists_workflowtask(S) & exists_deliverytask(T)
+invariant [cardinality_workflow_task_delivery_task_source] forall S:workflowtask,T1:deliverytask,T2:deliverytask. relation_workflow_task_delivery_task(S,T1) & relation_workflow_task_delivery_task(S,T2) -> T1 = T2
+invariant [cardinality_workflow_task_delivery_task_target] forall S1:workflowtask,S2:workflowtask,T:deliverytask. relation_workflow_task_delivery_task(S1,T) & relation_workflow_task_delivery_task(S2,T) -> S1 = S2
+invariant [relation_workflow_task_normal_run_endpoints] forall S:workflowtask,T:workflowrun. relation_workflow_task_normal_run(S,T) -> exists_workflowtask(S) & exists_workflowrun(T)
+invariant [cardinality_workflow_task_normal_run_source] forall S:workflowtask,T1:workflowrun,T2:workflowrun. relation_workflow_task_normal_run(S,T1) & relation_workflow_task_normal_run(S,T2) -> T1 = T2
+invariant [relation_workflow_task_obligation_endpoints] forall S:workflowtask,T:workobligation. relation_workflow_task_obligation(S,T) -> exists_workflowtask(S) & exists_workobligation(T)
+invariant [cardinality_workflow_task_obligation_source] forall S:workflowtask,T1:workobligation,T2:workobligation. relation_workflow_task_obligation(S,T1) & relation_workflow_task_obligation(S,T2) -> T1 = T2
+invariant [cardinality_workflow_task_obligation_target] forall S1:workflowtask,S2:workflowtask,T:workobligation. relation_workflow_task_obligation(S1,T) & relation_workflow_task_obligation(S2,T) -> S1 = S2
+invariant [relation_workflow_task_speculative_run_endpoints] forall S:workflowtask,T:workflowrun. relation_workflow_task_speculative_run(S,T) -> exists_workflowtask(S) & exists_workflowrun(T)
+invariant [cardinality_workflow_task_speculative_run_source] forall S:workflowtask,T1:workflowrun,T2:workflowrun. relation_workflow_task_speculative_run(S,T1) & relation_workflow_task_speculative_run(S,T2) -> T1 = T2
+invariant [speculativetaskcreation] (forall Q_run:workflowrun. exists_workflowrun(Q_run) -> (~((exists Q_normaltask:workflowtask. exists_workflowtask(Q_normaltask) & ((relation_workflow_task_normal_run(Q_normaltask,Q_run) & (state_workflowtask(Q_normaltask) = workflowtask_state_added | state_workflowtask(Q_normaltask) = workflowtask_state_stored) & (exists Q_speculativetask:workflowtask. exists_workflowtask(Q_speculativetask) & ((relation_workflow_task_speculative_run(Q_speculativetask,Q_run) & (state_workflowtask(Q_speculativetask) = workflowtask_state_added | state_workflowtask(Q_speculativetask) = workflowtask_state_stored))))))))))
+# unsupported property WorkflowTaskStarvation: Ivy generation supports inductive safety properties only
+# unsupported property delivery.ambiguous-commit-resolved: Ivy generation supports inductive safety properties only
+invariant [delivery_coarse_retirement_safety] (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> ((state_deliverytask(Q_task) = deliverytask_state_retired -> (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(Q_task,Q_obligation) & (state_workobligation(Q_obligation) = workobligation_state_accepted | state_workobligation(Q_obligation) = workobligation_state_terminal)))))))
+invariant [delivery_destination_isolation] (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> ((exists Q_queue:deliveryqueue. exists_deliveryqueue(Q_queue) & (relation_delivery_task_queue(Q_task,Q_queue)))))
+invariant [delivery_failed_start_is_not_accepted] (forall Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) -> ((state_deliveryattempt(Q_attempt) = deliveryattempt_state_rejected -> (forall Q_obligation:workobligation. exists_workobligation(Q_obligation) -> (~(relation_delivery_accepted_start(Q_obligation,Q_attempt)))))))
+invariant [delivery_no_phantom_dispatch] (forall Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) -> (((state_deliveryattempt(Q_attempt) = deliveryattempt_state_dispatched | state_deliveryattempt(Q_attempt) = deliveryattempt_state_failed | state_deliveryattempt(Q_attempt) = deliveryattempt_state_completed) -> (exists Q_task:deliverytask. exists_deliverytask(Q_task) & ((relation_delivery_attempt_task(Q_attempt,Q_task) & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(Q_task,Q_obligation) & state_workobligation(Q_obligation) = workobligation_state_accepted)))))))))
+invariant [delivery_no_resurrection] (forall Q_obligation:workobligation. exists_workobligation(Q_obligation) -> ((state_workobligation(Q_obligation) = workobligation_state_terminal -> (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> ((relation_delivery_task_obligation(Q_task,Q_obligation) -> state_deliverytask(Q_task) = deliverytask_state_retired))))))
+invariant [delivery_no_split_commit] (forall Q_obligation:workobligation. exists_workobligation(Q_obligation) -> (((state_workobligation(Q_obligation) = workobligation_state_valid | state_workobligation(Q_obligation) = workobligation_state_accepted) -> (exists Q_task:deliverytask. exists_deliverytask(Q_task) & (relation_delivery_task_obligation(Q_task,Q_obligation))))))
+invariant [delivery_path_equivalence] (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> (((exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & (relation_delivery_task_obligation(Q_task,Q_obligation))) & (exists Q_queue:deliveryqueue. exists_deliveryqueue(Q_queue) & (relation_delivery_task_queue(Q_task,Q_queue))))))
+invariant [delivery_retry_preserves_obligation] (forall Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) -> ((exists Q_task:deliverytask. exists_deliverytask(Q_task) & ((relation_delivery_attempt_task(Q_attempt,Q_task) & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & (relation_delivery_task_obligation(Q_task,Q_obligation))))))))
+invariant [delivery_single_accepted_start] (forall Q_obligation:workobligation. exists_workobligation(Q_obligation) -> ((state_workobligation(Q_obligation) = workobligation_state_accepted -> (exists Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) & (relation_delivery_accepted_start(Q_obligation,Q_attempt))))))
+invariant [workflow_delivery_accepted_start_correspondence] (forall Q_workflowtask:workflowtask. exists_workflowtask(Q_workflowtask) -> ((state_workflowtask(Q_workflowtask) = workflowtask_state_polled -> (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_workflow_task_obligation(Q_workflowtask,Q_obligation) & state_workobligation(Q_obligation) = workobligation_state_accepted & (exists Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) & (relation_delivery_accepted_start(Q_obligation,Q_attempt)))))))))
+
+export workflowrun_started_cancel_anyhosting
+export workflowrun_started_complete_anyhosting
+export workflowrun_started_continue_as_new_anyhosting
+export workflowrun_started_fail_anyhosting
+export workflowrun_started_terminate_anyhosting
+export workflowrun_started_timeout_anyhosting
+export workflowtask_added_poll_anyhosting
+export workflowtask_added_terminate_anyhosting
+export workflowtask_created_terminate_anyhosting
+export workflowtask_stored_poll_anyhosting
+export workflowtask_stored_terminate_anyhosting
+export delivery_acknowledge
+export delivery_authorize_accept
+export delivery_authorize_reject
+export delivery_dispatch
+export delivery_offer_sync
+export delivery_persist_ambiguous
+export delivery_reserve
+export delivery_retire
+export delivery_retry
+export workflow_delivery_authorize_added
+export workflow_delivery_authorize_stored
+export workflow_delivery_reject_added
+export workflow_delivery_reject_stored
+export workflow_task_cancel_speculative_added
+export workflow_task_cancel_speculative_stored
+export workflow_task_create_normal
+export workflow_task_create_speculative_direct
+export workflow_task_resolve_normal
+export workflow_task_speculative_fallback

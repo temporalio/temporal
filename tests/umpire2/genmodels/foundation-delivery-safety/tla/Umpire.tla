@@ -176,7 +176,7 @@ Delivery_expire(obligation, task) ==
 Delivery_offer_syncEnabled(task) ==
     /\ task \in DeliveryTaskIDs
     /\ task \in exists_DeliveryTask
-    /\ state_DeliveryTask[task] = "pending"
+    /\ (state_DeliveryTask[task] = "pending" /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid")))
 
 Delivery_offer_sync(task) ==
     /\ Delivery_offer_syncEnabled(task)
@@ -275,7 +275,7 @@ Delivery_retry(task, attempt) ==
 Delivery_spoolEnabled(task) ==
     /\ task \in DeliveryTaskIDs
     /\ task \in exists_DeliveryTask
-    /\ (state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered")
+    /\ ((state_DeliveryTask[task] = "pending" \/ state_DeliveryTask[task] = "sync-offered") /\ \E obligation \in WorkObligationIDs: obligation \in exists_WorkObligation /\ ((<<task, obligation>> \in relation_delivery_task_obligation /\ state_WorkObligation[obligation] = "valid")))
 
 Delivery_spool(task) ==
     /\ Delivery_spoolEnabled(task)

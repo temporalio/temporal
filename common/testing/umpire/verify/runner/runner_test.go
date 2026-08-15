@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/common/testing/umpire/verify"
 )
 
@@ -17,6 +18,24 @@ type recordingExecutor struct {
 	commands  []command
 	results   []execution
 	beforeRun func(command)
+}
+
+func TestCheckAcceptsQualifiedSANYGenerationEvidence(t *testing.T) {
+	executor := &recordingExecutor{results: []execution{{output: "Semantic processing of module Umpire"}}}
+	result, err := check(context.Background(), executor, Request{
+		Backend:  SANY,
+		ToolPath: "/tools/tla2tools.jar",
+		ModelDir: t.TempDir(),
+		Model: verify.Model{
+			Version:    "model/v1",
+			Properties: []verify.Property{{Name: "safe"}},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, verify.Generated, result.Status)
+	require.Equal(t, umpire.ClaimUnsupported, result.Claims[0].Status)
+	require.Contains(t, result.Claims[0].Omissions, "verification:not-executed")
 }
 
 func (e *recordingExecutor) run(_ context.Context, specification command) execution {
@@ -162,6 +181,36 @@ func TestExecuteIvyRequestsTextualCounterexampleTrace(t *testing.T) {
 	require.Contains(t, executor.commands[0].args, "trace=true")
 }
 
+func TestExecuteFizzUsesIsolatedInputsAndRetainsReplayArtifacts(t *testing.T) {
+	modelDirectory := t.TempDir()
+	artifactDirectory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(modelDirectory, "Umpire.fizz"), []byte("action Init:\n    pass\n"), 0o600))
+	var workDirectory string
+	executor := &recordingExecutor{
+		results: []execution{{output: "PASSED: Model checker completed successfully"}},
+		beforeRun: func(specification command) {
+			workDirectory = specification.dir
+			require.FileExists(t, filepath.Join(workDirectory, "Umpire.fizz"))
+			require.FileExists(t, filepath.Join(workDirectory, "fizz.yaml"))
+			config, err := os.ReadFile(filepath.Join(workDirectory, "fizz.yaml"))
+			require.NoError(t, err)
+			require.Contains(t, string(config), "max_actions: 7")
+		},
+	}
+
+	actual, replay, err := execute(context.Background(), executor, Request{
+		Backend: Fizz, ToolPath: "/tools/fizz", ModelDir: modelDirectory, ArtifactDir: artifactDirectory,
+		Bounds: verify.Bounds{MaxDepth: 7},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "PASSED: Model checker completed successfully", actual.output)
+	require.NoDirExists(t, workDirectory)
+	require.FileExists(t, filepath.Join(artifactDirectory, "fizz-native", "inputs", "Umpire.fizz"))
+	require.FileExists(t, filepath.Join(artifactDirectory, "fizz-native", "inputs", "fizz.yaml"))
+	require.Len(t, replay, 1)
+	require.Contains(t, replay[0], filepath.Join(artifactDirectory, "fizz-native", "inputs", "Umpire.fizz"))
+}
+
 func TestFindPAssemblyFindsPExJar(t *testing.T) {
 	directory := t.TempDir()
 	jar := filepath.Join(directory, "PGenerated", "PEx", "target", "Umpire-jar-with-dependencies.jar")
@@ -209,7 +258,7 @@ func TestCollectApalacheTraceEvidenceReadsCanonicalITFFile(t *testing.T) {
 
 	evidence, err := collectApalacheTraceEvidence(directory)
 	require.NoError(t, err)
-	require.Equal(t, `{"#meta":{"format":"ITF"}}`, evidence)
+	require.JSONEq(t, `{"#meta":{"format":"ITF"}}`, evidence)
 }
 
 func TestCollectApalacheTraceEvidenceRejectsOversizedITFFile(t *testing.T) {
@@ -231,6 +280,77 @@ func TestClassifyTLCFiniteExhaustive(t *testing.T) {
 	require.Equal(t, verify.FiniteExhaustive, result.Status)
 	require.Equal(t, uint64(123), result.GeneratedStates)
 	require.Equal(t, uint64(45), result.DistinctStates)
+}
+
+func TestClassifyFizzBoundedSuccessRequiresUnambiguousMarker(t *testing.T) {
+	result := classify(Request{Backend: Fizz, ToolVersion: "0.5.2", Bounds: verify.Bounds{MaxDepth: 5}}, execution{
+		output: "Valid Nodes: 3 Unique states: 2\nPASSED: Model checker completed successfully",
+	})
+	require.Equal(t, verify.BoundedNoCounterexample, result.Status)
+	require.Equal(t, verify.Completed, result.Termination)
+	require.Equal(t, uint64(2), result.DistinctStates)
+
+	for _, output := range []string{
+		"",
+		"PASSED: Model checker completed successfully\nFAILED: Model checker failed",
+		"PASSED: Model checker completed successfully\nDEADLOCK detected",
+	} {
+		result = classify(Request{Backend: Fizz, ToolVersion: "0.5.2"}, execution{output: output})
+		require.Equal(t, verify.Inconclusive, result.Status)
+		require.Equal(t, verify.ParseFailure, result.Termination)
+	}
+}
+
+func TestClassifyFizzUnknownToolVersionAsInconclusive(t *testing.T) {
+	result := classify(Request{Backend: Fizz, ToolVersion: "future"}, execution{
+		output: "PASSED: Model checker completed successfully",
+	})
+	require.Equal(t, verify.Inconclusive, result.Status)
+	require.Equal(t, verify.ToolError, result.Termination)
+	require.Contains(t, result.Diagnostic, "unsupported FizzBee tool version")
+}
+
+func TestClassifyRejectsOverflowingStateCounts(t *testing.T) {
+	result := classify(Request{Backend: Fizz, ToolVersion: "0.5.2"}, execution{
+		output: "PASSED: Model checker completed successfully\nValid Nodes: 18446744073709551616 Unique states: 1",
+	})
+	require.Equal(t, verify.Inconclusive, result.Status)
+	require.Equal(t, verify.ParseFailure, result.Termination)
+	require.Contains(t, result.Diagnostic, "parse generated state count")
+	require.Zero(t, result.GeneratedStates)
+	require.Zero(t, result.DistinctStates)
+}
+
+func TestClassifyFizzCounterexampleReplaysNativeStates(t *testing.T) {
+	result := classify(Request{
+		Backend: Fizz, ToolVersion: "0.5.2",
+		Model: runnerCounterexampleModel(),
+		TraceVocabulary: verify.TraceVocabulary{
+			Actions:      map[string]string{"Action_schedule": "schedule"},
+			Bindings:     map[string]map[string]string{"Action_schedule": {"op": "op"}},
+			Properties:   map[string][]string{"Property_terminal_link": {"terminal-link"}},
+			EntityExists: map[string]string{"exists_NexusOperation": "NexusOperation"},
+			EntityStates: map[string]string{"state_NexusOperation": "NexusOperation"},
+		},
+	}, execution{
+		output:      "FAILED: Model checker failed. Invariant: Property_terminal_link",
+		nativeTrace: runnerFizzCounterexampleTrace(),
+	})
+
+	require.Equal(t, verify.Counterexample, result.Status, result.Diagnostic)
+	require.Equal(t, "terminal-link", result.FailedProperty)
+	require.Equal(t, []verify.TraceStep{{
+		Action: "schedule", Bindings: verify.Bindings{"op": "NexusOperation#0"},
+		Deltas: []verify.StateDelta{{Entity: "NexusOperation", ID: "NexusOperation#0", ToState: "scheduled"}},
+	}}, result.Trace)
+}
+
+func runnerFizzCounterexampleTrace() string {
+	return `[
+  {"Name":"Init","Node":{"state":{"exists_NexusOperation":[],"state_NexusOperation":{"NexusOperation#0":"unscheduled"}}}},
+  {"Name":"Action_schedule","Node":{"state":{"exists_NexusOperation":[],"state_NexusOperation":{"NexusOperation#0":"unscheduled"}}}},
+  {"Name":"Any:op=\"NexusOperation#0\"","Node":{"state":{"exists_NexusOperation":["NexusOperation#0"],"state_NexusOperation":{"NexusOperation#0":"scheduled"}}}}
+]`
 }
 
 func TestClassifyCounterexampleNormalizesPActions(t *testing.T) {
@@ -701,6 +821,7 @@ func TestClassifyCarriesModelAssumptions(t *testing.T) {
 	request := Request{
 		Backend:      SANY,
 		Target:       "protocol-atomic",
+		Model:        verify.Model{Version: "protocol-atomic/v1"},
 		Profile:      "smoke",
 		Fairness:     []string{"weak-schedule"},
 		Abstractions: []verify.Abstraction{{Name: "environment", Reason: "unrealized"}},
@@ -709,5 +830,43 @@ func TestClassifyCarriesModelAssumptions(t *testing.T) {
 	require.Equal(t, request.Fairness, result.Fairness)
 	require.Equal(t, request.Abstractions, result.Abstractions)
 	require.Equal(t, "protocol-atomic", result.Target)
+	require.Equal(t, "protocol-atomic/v1", result.ModelVersion)
 	require.Equal(t, "smoke", result.Profile)
+}
+
+func TestClassifyQualifiesFormalResultEvidence(t *testing.T) {
+	request := Request{
+		Backend: Fizz,
+		Target:  "protocol-atomic",
+		Profile: "smoke",
+		Model: verify.Model{
+			Version:    "protocol-atomic/v1",
+			Properties: []verify.Property{{Name: "delivery-safe"}},
+		},
+		ToolVersion: "0.5.2",
+	}
+	result := classify(request, execution{output: "PASSED: Model checker completed successfully"})
+
+	require.Equal(t, "formal/fizz/smoke", result.Environment.Name)
+	require.Equal(t, []umpire.EvidenceSource{umpire.FormalModelEvidence}, result.Observations)
+	require.Equal(t, []umpire.QualifiedClaim{{
+		ModelVersion: "protocol-atomic/v1",
+		Target:       "protocol-atomic",
+		Property:     "delivery-safe",
+		Environment:  "formal/fizz/smoke",
+		Status:       umpire.ClaimEstablished,
+		Observed:     []umpire.EvidenceSource{umpire.FormalModelEvidence},
+	}}, result.Claims)
+}
+
+func TestBackendEquivalenceEvidenceMakesNonComparabilityExplicit(t *testing.T) {
+	for _, backend := range []Backend{TLC, Apalache, P, PEx, Ivy, Fizz} {
+		evidence := BackendEquivalenceEvidence(backend)
+		require.True(t, evidence.SemanticMutationComparable)
+		if evidence.StateCountComparable {
+			require.Empty(t, evidence.Reason)
+		} else {
+			require.NotEmpty(t, evidence.Reason)
+		}
+	}
 }

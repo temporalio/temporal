@@ -77,3 +77,23 @@ func TestExecutionTracePurgesActiveScope(t *testing.T) {
 	events := recorder.Snapshot().Events
 	require.Empty(t, events[len(events)-1].Causes)
 }
+
+func TestExecutionTraceRecordsQualifiedFailingVerdict(t *testing.T) {
+	trace := newTestExecutionTrace(t)
+	recorder := umpirefw.NewTraceRecorder(umpirefw.TraceOptions{MaxEvents: 10, MaxBytes: 8192})
+	trace.setRecorder(recorder)
+	property := umpirefw.MonitorSafetyProperty("action")
+
+	require.NoError(t, trace.observeExecution(umpirefw.ExecutionObservation{
+		Kind: umpirefw.ExecutionVerdict, Scope: "namespace", Checkpoint: "action", Property: property,
+		Pass: false, Violations: 1,
+	}))
+
+	retained := recorder.Snapshot()
+	retained.Complete = true
+	require.NoError(t, umpirefw.ValidateTraceEvidence(retained, umpirefw.InProcessProfile()))
+	require.Equal(t, umpirefw.TraceEvent{
+		Key: "verdict:1", Kind: umpirefw.TraceVerdict, Name: property, Source: umpirefw.InProcessEvidence,
+		Fields: map[string]string{"scope": "namespace", "checkpoint": "action", "pass": "false", "violations": "1"},
+	}, retained.Events[0])
+}

@@ -139,6 +139,62 @@ func TestProjectReportsExplicitStutteringAction(t *testing.T) {
 	require.Empty(t, report.OmittedActions)
 }
 
+func TestProjectIncludesOnlyTargetSelectedAbstractions(t *testing.T) {
+	family := validModelFamily()
+	family.Model.Abstractions = []Abstraction{{Name: "schedule", Reason: "omitted by this target"}}
+	family.Targets = []VerificationTarget{
+		{
+			Name:         "feature-workflow",
+			Owners:       []CapabilityOwner{"workflow"},
+			Modules:      []string{"workflow"},
+			Abstractions: []string{"schedule"},
+		},
+		{
+			Name:    "feature-nexus",
+			Owners:  []CapabilityOwner{"nexus"},
+			Modules: []string{"nexus"},
+		},
+	}
+
+	workflow, err := Project(family, "feature-workflow")
+	require.NoError(t, err)
+	require.Equal(t, family.Model.Abstractions, workflow.Model.Abstractions)
+
+	nexus, err := Project(family, "feature-nexus")
+	require.NoError(t, err)
+	require.Empty(t, nexus.Model.Abstractions)
+}
+
+func TestProjectAllowsTargetSpecificOmissionWithoutModelAbstraction(t *testing.T) {
+	family := validModelFamily()
+	family.Model.Actions[0].Effects = append(family.Model.Actions[0].Effects, Effect{
+		Kind: SetStateEffect, Entity: "Workflow", Ref: "caller", State: "started",
+	})
+	family.Targets = []VerificationTarget{{
+		Name: "feature-workflow", Owners: []CapabilityOwner{"workflow"}, Modules: []string{"workflow"},
+		Omissions: []Abstraction{{Name: "schedule", Reason: "checked by the Nexus target"}},
+	}}
+
+	projection, err := Project(family, "feature-workflow")
+	require.NoError(t, err)
+	require.Empty(t, projection.Model.Abstractions)
+	require.Equal(t, []string{"schedule"}, projection.Closure.OmittedActions)
+}
+
+func TestProjectReplacesAbstractActionWithSelectedConcreteRefinement(t *testing.T) {
+	family := contractRefinementFamily()
+
+	projection, err := Project(family, "integration")
+	require.NoError(t, err)
+	var actions []string
+	for _, action := range projection.Model.Actions {
+		actions = append(actions, action.Name)
+	}
+	require.Contains(t, actions, "workflow-dispatch")
+	require.NotContains(t, actions, "schedule")
+	require.Equal(t, []string{"schedule"}, projection.Closure.RefinedActions)
+}
+
 func TestProjectRejectsStutteringActionWhichMutatesRetainedState(t *testing.T) {
 	family := validModelFamily()
 	family.Model.Actions[0].Effects = append(family.Model.Actions[0].Effects, Effect{

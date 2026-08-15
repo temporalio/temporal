@@ -26,12 +26,23 @@ type ExecutionObservation struct {
 	Kind       ExecutionObservationKind
 	Scope      string
 	Action     string
+	Property   string
 	Phase      string
 	Outcome    string
 	ErrorClass string
 	Checkpoint string
 	Pass       bool
 	Violations int
+}
+
+// MonitorSafetyProperty returns the stable property identity for a runtime safety checkpoint.
+func MonitorSafetyProperty(checkpoint string) string {
+	return "monitor-safety:" + checkpoint
+}
+
+// ActionEndpointProperty returns the stable property identity for an action endpoint check.
+func ActionEndpointProperty(action string) string {
+	return "action-endpoint:" + action
 }
 
 // ExecutionObserver receives action-window and verdict observations synchronously.

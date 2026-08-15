@@ -25,7 +25,7 @@ func NormalizeCounterexample(model Model, property string, evidence TraceEvidenc
 	}
 	state := interpreter.InitialState()
 	if evidence.Initial != nil && !equalModelState(state, *evidence.Initial) {
-		return nil, fmt.Errorf("initial-state-mismatch: native initial state differs from the canonical initial state")
+		return nil, fmt.Errorf("initial-state-mismatch: native initial state differs from the canonical initial state: canonical=%v native=%v", state, *evidence.Initial)
 	}
 
 	trace := make([]TraceStep, 0, len(evidence.Steps))

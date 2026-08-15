@@ -26,15 +26,19 @@ const (
 var (
 	ErrTraceEvent = errors.New("invalid trace event")
 	ErrTraceLimit = errors.New("trace limit exceeded")
+	ErrTraceOrder = errors.New("trace order is incomparable")
 )
 
 // TraceEvent is one normalized observation with stable semantic identity and causal references.
 type TraceEvent struct {
-	Key    string            `json:"key"`
-	Kind   TraceKind         `json:"kind"`
-	Name   string            `json:"name"`
-	Causes []string          `json:"causes,omitempty"`
-	Fields map[string]string `json:"fields,omitempty"`
+	Key            string            `json:"key"`
+	Kind           TraceKind         `json:"kind"`
+	Name           string            `json:"name"`
+	Source         EvidenceSource    `json:"source,omitempty"`
+	ClockDomain    string            `json:"clockDomain,omitempty"`
+	SourceSequence uint64            `json:"sourceSequence,omitempty"`
+	Causes         []string          `json:"causes,omitempty"`
+	Fields         map[string]string `json:"fields,omitempty"`
 }
 
 // Trace is a bounded normalized execution artifact.
@@ -240,6 +244,157 @@ func CompareTraceRefinement(spec TraceRefinement, actual Trace) error {
 		return &TraceMismatch{Index: position, Reason: "unexpected extra observation"}
 	}
 	return nil
+}
+
+// CompareTraceRefinementWithEvidence requires complete profile-valid evidence and establishes
+// ordering only through causality or a source sequence. Observation order and wall-clock fields
+// alone never establish causality.
+func CompareTraceRefinementWithEvidence(spec TraceRefinement, actual Trace, profile EnvironmentProfile) error {
+	if err := ValidateTraceEvidence(actual, profile); err != nil {
+		return err
+	}
+	if err := CompareTraceRefinement(TraceRefinement{Forbidden: spec.Forbidden, AllowExtras: true}, actual); err != nil {
+		return err
+	}
+	positions := make([]int, 0, len(spec.Required))
+	used := map[int]struct{}{}
+	for _, required := range spec.Required {
+		found := -1
+		for index, event := range actual.Events {
+			if _, exists := used[index]; !exists && traceMatches(required, event) {
+				found = index
+				break
+			}
+		}
+		if found < 0 {
+			return &TraceMismatch{Reason: "required observation is missing", Pattern: required}
+		}
+		used[found] = struct{}{}
+		positions = append(positions, found)
+	}
+	for index := 1; index < len(positions); index++ {
+		before := actual.Events[positions[index-1]]
+		after := actual.Events[positions[index]]
+		ordered, err := traceOrderedBefore(actual, before.Key, after.Key)
+		if err != nil {
+			return err
+		}
+		if !ordered {
+			return &TraceMismatch{Index: positions[index], Reason: fmt.Sprintf("%v: %q and %q", ErrTraceOrder, before.Key, after.Key), Pattern: spec.Required[index], Event: after}
+		}
+	}
+	if !spec.AllowExtras && len(actual.Events) != len(spec.Required) {
+		return &TraceMismatch{Index: len(positions), Reason: "unexpected extra observation"}
+	}
+	return nil
+}
+
+func validateTraceEvidenceProfile(trace Trace, profile EnvironmentProfile) error {
+	if err := ValidateEnvironmentProfile(profile); err != nil {
+		return err
+	}
+	available := makeSet(profile.ObservationSources)
+	domains := make(map[EvidenceSource]map[string]struct{})
+	for _, domain := range profile.ClockDomains {
+		for _, source := range domain.Sources {
+			if domains[source] == nil {
+				domains[source] = map[string]struct{}{}
+			}
+			domains[source][domain.Name] = struct{}{}
+		}
+	}
+	for index, event := range trace.Events {
+		if event.Name == "" || !validTraceKind(event.Kind) {
+			return &TraceMismatch{Index: index, Reason: "event kind and name are required", Event: event}
+		}
+		if _, exists := available[event.Source]; !exists {
+			return &TraceMismatch{Index: index, Reason: fmt.Sprintf("source %q is unavailable in profile %q", event.Source, profile.Name), Event: event}
+		}
+		if event.ClockDomain != "" {
+			if _, exists := domains[event.Source][event.ClockDomain]; !exists {
+				return &TraceMismatch{Index: index, Reason: fmt.Sprintf("clock domain %q is not declared for source %q", event.ClockDomain, event.Source), Event: event}
+			}
+		}
+		if event.SourceSequence > 0 && (!slices.Contains(profile.OrderingGuarantees, SourceSequenceOrdering) || event.ClockDomain == "") {
+			return &TraceMismatch{Index: index, Reason: "source sequence lacks a declared ordering guarantee and clock domain", Event: event}
+		}
+		if len(event.Causes) > 0 && !slices.Contains(profile.OrderingGuarantees, CausalOrdering) {
+			return &TraceMismatch{Index: index, Reason: "causal reference lacks a declared ordering guarantee", Event: event}
+		}
+	}
+	return nil
+}
+
+// ValidateTraceEvidence checks that retained evidence is complete and valid for its profile.
+func ValidateTraceEvidence(trace Trace, profile EnvironmentProfile) error {
+	if !trace.Complete {
+		return fmt.Errorf("%w: retained trace is incomplete", ErrTraceOrder)
+	}
+	if err := validateTraceEvidenceProfile(trace, profile); err != nil {
+		return err
+	}
+	return CompareTraceRefinement(TraceRefinement{AllowExtras: true}, trace)
+}
+
+// TraceOrderedBefore reports whether complete profile-valid evidence establishes that before
+// causally precedes after.
+func TraceOrderedBefore(trace Trace, profile EnvironmentProfile, before, after string) (bool, error) {
+	if err := ValidateTraceEvidence(trace, profile); err != nil {
+		return false, err
+	}
+	return traceOrderedBefore(trace, before, after)
+}
+
+func traceOrderedBefore(trace Trace, before, after string) (bool, error) {
+	if before == "" || after == "" || before == after {
+		return false, fmt.Errorf("%w: distinct event keys are required", ErrTraceOrder)
+	}
+	events := make(map[string]TraceEvent, len(trace.Events))
+	for _, event := range trace.Events {
+		if _, exists := events[event.Key]; exists {
+			return false, fmt.Errorf("%w: duplicate event key %q", ErrTraceEvent, event.Key)
+		}
+		events[event.Key] = event
+	}
+	left, leftExists := events[before]
+	right, rightExists := events[after]
+	if !leftExists || !rightExists {
+		return false, fmt.Errorf("%w: event key is missing", ErrTraceOrder)
+	}
+	causal := traceCausallyDepends(events, after, before)
+	reverseCausal := traceCausallyDepends(events, before, after)
+	if causal && reverseCausal {
+		return false, fmt.Errorf("%w: causal reference cycle between %q and %q", ErrTraceOrder, before, after)
+	}
+	if left.ClockDomain != "" && left.ClockDomain == right.ClockDomain && left.SourceSequence > 0 && right.SourceSequence > 0 {
+		sequence := left.SourceSequence < right.SourceSequence
+		if causal && !sequence || reverseCausal && sequence {
+			return false, fmt.Errorf("%w: causal references conflict with source sequence", ErrTraceOrder)
+		}
+		return sequence, nil
+	}
+	return causal, nil
+}
+
+func traceCausallyDepends(events map[string]TraceEvent, descendant, ancestor string) bool {
+	visited := map[string]struct{}{}
+	var visit func(string) bool
+	visit = func(key string) bool {
+		if key == ancestor {
+			return true
+		}
+		if _, seen := visited[key]; seen {
+			return false
+		}
+		visited[key] = struct{}{}
+		for _, cause := range events[key].Causes {
+			if visit(cause) {
+				return true
+			}
+		}
+		return false
+	}
+	return visit(descendant)
 }
 
 // CompareCausalFootprint checks one action window's refinement and required action-start causes.

@@ -1,0 +1,2123 @@
+{
+  "version": "umpire2/verification-v1",
+  "entities": [
+    {
+      "name": "BacklogPosition",
+      "ids": [
+        "BacklogPosition#0",
+        "BacklogPosition#1"
+      ],
+      "initial": "unused",
+      "states": [
+        {
+          "name": "acked"
+        },
+        {
+          "name": "gc",
+          "terminal": true
+        },
+        {
+          "name": "read"
+        },
+        {
+          "name": "unread"
+        },
+        {
+          "name": "unused"
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "BacklogPosition"
+      }
+    },
+    {
+      "name": "DeliveryAttempt",
+      "ids": [
+        "DeliveryAttempt#0",
+        "DeliveryAttempt#1"
+      ],
+      "initial": "reserved",
+      "states": [
+        {
+          "name": "accepted",
+          "mustProgress": true
+        },
+        {
+          "name": "completed",
+          "terminal": true
+        },
+        {
+          "name": "dispatched",
+          "mustProgress": true
+        },
+        {
+          "name": "failed",
+          "terminal": true
+        },
+        {
+          "name": "rejected",
+          "terminal": true
+        },
+        {
+          "name": "reserved",
+          "mustProgress": true
+        }
+      ],
+      "source": {}
+    },
+    {
+      "name": "DeliveryQueue",
+      "ids": [
+        "DeliveryQueue#0",
+        "DeliveryQueue#1"
+      ],
+      "initiallyExists": [
+        "DeliveryQueue#0",
+        "DeliveryQueue#1"
+      ],
+      "initial": "available",
+      "states": [
+        {
+          "name": "available"
+        }
+      ],
+      "source": {}
+    },
+    {
+      "name": "DeliveryTask",
+      "ids": [
+        "DeliveryTask#0",
+        "DeliveryTask#1"
+      ],
+      "initial": "pending",
+      "states": [
+        {
+          "name": "acknowledged"
+        },
+        {
+          "name": "authorized",
+          "mustProgress": true
+        },
+        {
+          "name": "backlogged",
+          "mustProgress": true
+        },
+        {
+          "name": "dispatched",
+          "mustProgress": true
+        },
+        {
+          "name": "pending",
+          "mustProgress": true
+        },
+        {
+          "name": "reserved",
+          "mustProgress": true
+        },
+        {
+          "name": "retired",
+          "terminal": true
+        },
+        {
+          "name": "sync-offered",
+          "mustProgress": true
+        }
+      ],
+      "source": {}
+    },
+    {
+      "name": "Poller",
+      "ids": [
+        "Poller#0",
+        "Poller#1"
+      ],
+      "initiallyExists": [
+        "Poller#0",
+        "Poller#1"
+      ],
+      "initial": "available",
+      "states": [
+        {
+          "name": "available"
+        }
+      ],
+      "source": {}
+    },
+    {
+      "name": "WorkObligation",
+      "ids": [
+        "WorkObligation#0",
+        "WorkObligation#1"
+      ],
+      "initial": "unresolved",
+      "states": [
+        {
+          "name": "accepted"
+        },
+        {
+          "name": "terminal",
+          "terminal": true
+        },
+        {
+          "name": "unresolved",
+          "mustProgress": true
+        },
+        {
+          "name": "valid",
+          "mustProgress": true
+        }
+      ],
+      "source": {}
+    }
+  ],
+  "relations": [
+    {
+      "name": "backlog-position-precedes",
+      "source": "BacklogPosition",
+      "target": "BacklogPosition",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {}
+    },
+    {
+      "name": "backlog-position-task",
+      "source": "BacklogPosition",
+      "target": "DeliveryTask",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {}
+    },
+    {
+      "name": "delivery-accepted-start",
+      "source": "WorkObligation",
+      "target": "DeliveryAttempt",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {}
+    },
+    {
+      "name": "delivery-attempt-poller",
+      "source": "DeliveryAttempt",
+      "target": "Poller",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceLocation": {}
+    },
+    {
+      "name": "delivery-attempt-task",
+      "source": "DeliveryAttempt",
+      "target": "DeliveryTask",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceLocation": {}
+    },
+    {
+      "name": "delivery-task-obligation",
+      "source": "DeliveryTask",
+      "target": "WorkObligation",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceLocation": {}
+    },
+    {
+      "name": "delivery-task-queue",
+      "source": "DeliveryTask",
+      "target": "DeliveryQueue",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceLocation": {}
+    }
+  ],
+  "actions": [
+    {
+      "name": "backlog.ack",
+      "parameters": [
+        {
+          "name": "position",
+          "type": "BacklogPosition",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "BacklogPosition",
+            "ref": "position",
+            "state": "read"
+          },
+          {
+            "op": "relation-has",
+            "relation": "backlog-position-task",
+            "source": "position",
+            "target": "task"
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "acknowledged"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "retired"
+              }
+            ]
+          },
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "backlog-position-precedes",
+                    "source": "previous",
+                    "target": "position"
+                  },
+                  {
+                    "op": "or",
+                    "args": [
+                      {
+                        "op": "state-is",
+                        "entity": "BacklogPosition",
+                        "ref": "previous",
+                        "state": "acked"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "BacklogPosition",
+                        "ref": "previous",
+                        "state": "gc"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "entity": "BacklogPosition",
+            "var": "previous"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "BacklogPosition",
+          "ref": "position",
+          "state": "acked"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.ack"
+      }
+    },
+    {
+      "name": "backlog.append-after",
+      "parameters": [
+        {
+          "name": "position",
+          "type": "BacklogPosition",
+          "binding": "fresh"
+        },
+        {
+          "name": "previous",
+          "type": "BacklogPosition",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "backlogged"
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "BacklogPosition",
+                "ref": "previous",
+                "state": "unread"
+              },
+              {
+                "op": "state-is",
+                "entity": "BacklogPosition",
+                "ref": "previous",
+                "state": "read"
+              },
+              {
+                "op": "state-is",
+                "entity": "BacklogPosition",
+                "ref": "previous",
+                "state": "acked"
+              },
+              {
+                "op": "state-is",
+                "entity": "BacklogPosition",
+                "ref": "previous",
+                "state": "gc"
+              }
+            ]
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "BacklogPosition",
+          "ref": "position",
+          "state": "unread"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "backlog-position-task",
+          "source": "position",
+          "target": "task"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "backlog-position-precedes",
+          "source": "previous",
+          "target": "position"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.append-after"
+      }
+    },
+    {
+      "name": "backlog.append-first",
+      "parameters": [
+        {
+          "name": "position",
+          "type": "BacklogPosition",
+          "binding": "fresh"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "DeliveryTask",
+        "ref": "task",
+        "state": "backlogged"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "BacklogPosition",
+          "ref": "position",
+          "state": "unread"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "backlog-position-task",
+          "source": "position",
+          "target": "task"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.append-first"
+      }
+    },
+    {
+      "name": "backlog.gc",
+      "parameters": [
+        {
+          "name": "position",
+          "type": "BacklogPosition",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "BacklogPosition",
+            "ref": "position",
+            "state": "acked"
+          },
+          {
+            "op": "relation-has",
+            "relation": "backlog-position-task",
+            "source": "position",
+            "target": "task"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "retired"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "BacklogPosition",
+          "ref": "position",
+          "state": "gc"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.gc"
+      }
+    },
+    {
+      "name": "backlog.read",
+      "parameters": [
+        {
+          "name": "position",
+          "type": "BacklogPosition",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "BacklogPosition",
+        "ref": "position",
+        "state": "unread"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "BacklogPosition",
+          "ref": "position",
+          "state": "read"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.read"
+      }
+    },
+    {
+      "name": "delivery.acknowledge",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "dispatched"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryAttempt",
+            "ref": "attempt",
+            "state": "dispatched"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-attempt-task",
+            "source": "attempt",
+            "target": "task"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "acknowledged"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "completed"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.authorize.accept",
+      "parameters": [
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkObligation",
+            "ref": "obligation",
+            "state": "valid"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "reserved"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryAttempt",
+            "ref": "attempt",
+            "state": "reserved"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-task-obligation",
+            "source": "task",
+            "target": "obligation"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-attempt-task",
+            "source": "attempt",
+            "target": "task"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "authorized"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "accepted"
+        },
+        {
+          "kind": "set-state",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "accepted"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-accepted-start",
+          "source": "obligation",
+          "target": "attempt"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.authorize.reject",
+      "parameters": [
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkObligation",
+            "ref": "obligation",
+            "state": "valid"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "reserved"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryAttempt",
+            "ref": "attempt",
+            "state": "reserved"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-task-obligation",
+            "source": "task",
+            "target": "obligation"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-attempt-task",
+            "source": "attempt",
+            "target": "task"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "backlogged"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "rejected"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.dispatch",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "authorized"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryAttempt",
+            "ref": "attempt",
+            "state": "accepted"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-attempt-task",
+            "source": "attempt",
+            "target": "task"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "dispatched"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "dispatched"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.expire",
+      "parameters": [
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkObligation",
+            "ref": "obligation",
+            "state": "valid"
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "pending"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "sync-offered"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "backlogged"
+              }
+            ]
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-task-obligation",
+            "source": "task",
+            "target": "obligation"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "terminal"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "retired"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.offer-sync",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "pending"
+          },
+          {
+            "op": "exists",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "valid"
+                  }
+                ]
+              }
+            ],
+            "entity": "WorkObligation",
+            "var": "obligation"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "sync-offered"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.ambiguous",
+      "parameters": [
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "fresh"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "fresh"
+        },
+        {
+          "name": "queue",
+          "type": "DeliveryQueue",
+          "binding": "input"
+        }
+      ],
+      "guard": {},
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "unresolved"
+        },
+        {
+          "kind": "create",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "pending"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-task-obligation",
+          "source": "task",
+          "target": "obligation"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-task-queue",
+          "source": "task",
+          "target": "queue"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.success",
+      "parameters": [
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "fresh"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "fresh"
+        },
+        {
+          "name": "queue",
+          "type": "DeliveryQueue",
+          "binding": "input"
+        }
+      ],
+      "guard": {},
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "valid"
+        },
+        {
+          "kind": "create",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "pending"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-task-obligation",
+          "source": "task",
+          "target": "obligation"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-task-queue",
+          "source": "task",
+          "target": "queue"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.reserve",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "fresh"
+        },
+        {
+          "name": "poller",
+          "type": "Poller",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "or",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "sync-offered"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "backlogged"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "reserved"
+        },
+        {
+          "kind": "create",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "reserved"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-attempt-task",
+          "source": "attempt",
+          "target": "task"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-attempt-poller",
+          "source": "attempt",
+          "target": "poller"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.resolve-persisted",
+      "parameters": [
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkObligation",
+            "ref": "obligation",
+            "state": "unresolved"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "pending"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-task-obligation",
+            "source": "task",
+            "target": "obligation"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "valid"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.retire",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "DeliveryTask",
+        "ref": "task",
+        "state": "acknowledged"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "retired"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.retry",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "dispatched"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryAttempt",
+            "ref": "attempt",
+            "state": "dispatched"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-attempt-task",
+            "source": "attempt",
+            "target": "task"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "backlogged"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "failed"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.spool",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "pending"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "sync-offered"
+              }
+            ]
+          },
+          {
+            "op": "exists",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "valid"
+                  }
+                ]
+              }
+            ],
+            "entity": "WorkObligation",
+            "var": "obligation"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "backlogged"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    }
+  ],
+  "properties": [
+    {
+      "name": "backlog.ack-after-dispatch",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "state-is",
+                    "entity": "BacklogPosition",
+                    "ref": "position",
+                    "state": "acked"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "BacklogPosition",
+                    "ref": "position",
+                    "state": "gc"
+                  }
+                ]
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "backlog-position-task",
+                        "source": "position",
+                        "target": "task"
+                      },
+                      {
+                        "op": "or",
+                        "args": [
+                          {
+                            "op": "state-is",
+                            "entity": "DeliveryTask",
+                            "ref": "task",
+                            "state": "acknowledged"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "DeliveryTask",
+                            "ref": "task",
+                            "state": "retired"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "entity": "DeliveryTask",
+                "var": "task"
+              }
+            ]
+          }
+        ],
+        "entity": "BacklogPosition",
+        "var": "position"
+      },
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.ack-after-dispatch"
+      }
+    },
+    {
+      "name": "backlog.ack-prefix",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "for-all",
+            "args": [
+              {
+                "op": "implies",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "backlog-position-precedes",
+                        "source": "previous",
+                        "target": "position"
+                      },
+                      {
+                        "op": "or",
+                        "args": [
+                          {
+                            "op": "state-is",
+                            "entity": "BacklogPosition",
+                            "ref": "position",
+                            "state": "acked"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "BacklogPosition",
+                            "ref": "position",
+                            "state": "gc"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "or",
+                    "args": [
+                      {
+                        "op": "state-is",
+                        "entity": "BacklogPosition",
+                        "ref": "previous",
+                        "state": "acked"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "BacklogPosition",
+                        "ref": "previous",
+                        "state": "gc"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "entity": "BacklogPosition",
+            "var": "position"
+          }
+        ],
+        "entity": "BacklogPosition",
+        "var": "previous"
+      },
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.ack-prefix"
+      }
+    },
+    {
+      "name": "backlog.gc-after-retirement",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "BacklogPosition",
+                "ref": "position",
+                "state": "gc"
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "backlog-position-task",
+                        "source": "position",
+                        "target": "task"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "DeliveryTask",
+                        "ref": "task",
+                        "state": "retired"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "DeliveryTask",
+                "var": "task"
+              }
+            ]
+          }
+        ],
+        "entity": "BacklogPosition",
+        "var": "position"
+      },
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.gc-after-retirement"
+      }
+    },
+    {
+      "name": "backlog.reader-progress",
+      "kind": "progress",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "state-is",
+                    "entity": "BacklogPosition",
+                    "ref": "position",
+                    "state": "unread"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "BacklogPosition",
+                    "ref": "position",
+                    "state": "read"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "entity": "BacklogPosition",
+        "var": "position"
+      },
+      "fairness": [
+        "compatible-reader-and-dispatch-remain-schedulable"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.reader-progress"
+      }
+    },
+    {
+      "name": "delivery.ambiguous-commit-resolved",
+      "kind": "quiescent",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "unresolved"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkObligation",
+        "var": "obligation"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.coarse-retirement-safety",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "retired"
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-task-obligation",
+                        "source": "task",
+                        "target": "obligation"
+                      },
+                      {
+                        "op": "or",
+                        "args": [
+                          {
+                            "op": "state-is",
+                            "entity": "WorkObligation",
+                            "ref": "obligation",
+                            "state": "accepted"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "WorkObligation",
+                            "ref": "obligation",
+                            "state": "terminal"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "entity": "WorkObligation",
+                "var": "obligation"
+              }
+            ]
+          }
+        ],
+        "entity": "DeliveryTask",
+        "var": "task"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.destination-isolation",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "exists",
+            "args": [
+              {
+                "op": "relation-has",
+                "relation": "delivery-task-queue",
+                "source": "task",
+                "target": "queue"
+              }
+            ],
+            "entity": "DeliveryQueue",
+            "var": "queue"
+          }
+        ],
+        "entity": "DeliveryTask",
+        "var": "task"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.failed-start-is-not-accepted",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryAttempt",
+                "ref": "attempt",
+                "state": "rejected"
+              },
+              {
+                "op": "for-all",
+                "args": [
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-accepted-start",
+                        "source": "obligation",
+                        "target": "attempt"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "WorkObligation",
+                "var": "obligation"
+              }
+            ]
+          }
+        ],
+        "entity": "DeliveryAttempt",
+        "var": "attempt"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.no-phantom-dispatch",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "state-is",
+                    "entity": "DeliveryAttempt",
+                    "ref": "attempt",
+                    "state": "dispatched"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "DeliveryAttempt",
+                    "ref": "attempt",
+                    "state": "failed"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "DeliveryAttempt",
+                    "ref": "attempt",
+                    "state": "completed"
+                  }
+                ]
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-attempt-task",
+                        "source": "attempt",
+                        "target": "task"
+                      },
+                      {
+                        "op": "exists",
+                        "args": [
+                          {
+                            "op": "and",
+                            "args": [
+                              {
+                                "op": "relation-has",
+                                "relation": "delivery-task-obligation",
+                                "source": "task",
+                                "target": "obligation"
+                              },
+                              {
+                                "op": "state-is",
+                                "entity": "WorkObligation",
+                                "ref": "obligation",
+                                "state": "accepted"
+                              }
+                            ]
+                          }
+                        ],
+                        "entity": "WorkObligation",
+                        "var": "obligation"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "DeliveryTask",
+                "var": "task"
+              }
+            ]
+          }
+        ],
+        "entity": "DeliveryAttempt",
+        "var": "attempt"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.no-resurrection",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "terminal"
+              },
+              {
+                "op": "for-all",
+                "args": [
+                  {
+                    "op": "implies",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-task-obligation",
+                        "source": "task",
+                        "target": "obligation"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "DeliveryTask",
+                        "ref": "task",
+                        "state": "retired"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "DeliveryTask",
+                "var": "task"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkObligation",
+        "var": "obligation"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.no-split-commit",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "valid"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "accepted"
+                  }
+                ]
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  }
+                ],
+                "entity": "DeliveryTask",
+                "var": "task"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkObligation",
+        "var": "obligation"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.path-equivalence",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  }
+                ],
+                "entity": "WorkObligation",
+                "var": "obligation"
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-queue",
+                    "source": "task",
+                    "target": "queue"
+                  }
+                ],
+                "entity": "DeliveryQueue",
+                "var": "queue"
+              }
+            ]
+          }
+        ],
+        "entity": "DeliveryTask",
+        "var": "task"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.retry-preserves-obligation",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "exists",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-attempt-task",
+                    "source": "attempt",
+                    "target": "task"
+                  },
+                  {
+                    "op": "exists",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-task-obligation",
+                        "source": "task",
+                        "target": "obligation"
+                      }
+                    ],
+                    "entity": "WorkObligation",
+                    "var": "obligation"
+                  }
+                ]
+              }
+            ],
+            "entity": "DeliveryTask",
+            "var": "task"
+          }
+        ],
+        "entity": "DeliveryAttempt",
+        "var": "attempt"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.single-accepted-start",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "accepted"
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-accepted-start",
+                    "source": "obligation",
+                    "target": "attempt"
+                  }
+                ],
+                "entity": "DeliveryAttempt",
+                "var": "attempt"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkObligation",
+        "var": "obligation"
+      },
+      "source": {}
+    }
+  ],
+  "refinements": [
+    {
+      "name": "backlog.ack",
+      "action": "backlog.ack",
+      "lifecycleActions": [
+        "backlog.ack"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.ack"
+      }
+    },
+    {
+      "name": "backlog.append-after",
+      "action": "backlog.append-after",
+      "lifecycleActions": [
+        "backlog.append-after"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.append-after"
+      }
+    },
+    {
+      "name": "backlog.append-first",
+      "action": "backlog.append-first",
+      "lifecycleActions": [
+        "backlog.append-first"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.append-first"
+      }
+    },
+    {
+      "name": "backlog.gc",
+      "action": "backlog.gc",
+      "lifecycleActions": [
+        "backlog.gc"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.gc"
+      }
+    },
+    {
+      "name": "backlog.read",
+      "action": "backlog.read",
+      "lifecycleActions": [
+        "backlog.read"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_backlog.go",
+        "symbol": "backlog.read"
+      }
+    },
+    {
+      "name": "delivery.acknowledge.foundation",
+      "action": "delivery.acknowledge",
+      "lifecycleActions": [
+        "delivery.acknowledge"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.authorize.accept.foundation",
+      "action": "delivery.authorize.accept",
+      "lifecycleActions": [
+        "delivery.authorize.accept"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.authorize.reject.foundation",
+      "action": "delivery.authorize.reject",
+      "lifecycleActions": [
+        "delivery.authorize.reject"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.dispatch.foundation",
+      "action": "delivery.dispatch",
+      "lifecycleActions": [
+        "delivery.dispatch"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.expire.foundation",
+      "action": "delivery.expire",
+      "lifecycleActions": [
+        "delivery.expire"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.offer-sync.foundation",
+      "action": "delivery.offer-sync",
+      "lifecycleActions": [
+        "delivery.offer-sync"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.ambiguous.foundation",
+      "action": "delivery.persist.ambiguous",
+      "lifecycleActions": [
+        "delivery.persist.ambiguous"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.success.foundation",
+      "action": "delivery.persist.success",
+      "lifecycleActions": [
+        "delivery.persist.success"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.reserve.foundation",
+      "action": "delivery.reserve",
+      "lifecycleActions": [
+        "delivery.reserve"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.resolve-persisted.foundation",
+      "action": "delivery.resolve-persisted",
+      "lifecycleActions": [
+        "delivery.resolve-persisted"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.retire.foundation",
+      "action": "delivery.retire",
+      "lifecycleActions": [
+        "delivery.retire"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.retry.foundation",
+      "action": "delivery.retry",
+      "lifecycleActions": [
+        "delivery.retry"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.spool.foundation",
+      "action": "delivery.spool",
+      "lifecycleActions": [
+        "delivery.spool"
+      ],
+      "source": {}
+    }
+  ]
+}

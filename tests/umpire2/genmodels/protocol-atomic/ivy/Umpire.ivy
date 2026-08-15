@@ -9,8 +9,10 @@ relation exists_activity(X:activity)
 function state_activity(X:activity):activity_state
 
 type callback
+type callback_state = {callback_state_unobserved}
 individual callback_0:callback
 relation exists_callback(X:callback)
+function state_callback(X:callback):callback_state
 
 type nexusoperation
 type nexusoperation_state = {nexusoperation_state_backing_off,nexusoperation_state_canceled,nexusoperation_state_failed,nexusoperation_state_rejected,nexusoperation_state_scheduled,nexusoperation_state_started,nexusoperation_state_succeeded,nexusoperation_state_terminated,nexusoperation_state_timed_out,nexusoperation_state_unspecified}
@@ -51,6 +53,7 @@ after init {
     exists_activity(X) := false;
     state_activity(X) := activity_state_unspecified;
     exists_callback(X) := false;
+    state_callback(X) := callback_state_unobserved;
     exists_nexusoperation(X) := false;
     state_nexusoperation(X) := nexusoperation_state_unspecified;
     exists_taskqueue(X) := false;

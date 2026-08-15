@@ -1,0 +1,2955 @@
+{
+  "version": "umpire2/verification-v1",
+  "entities": [
+    {
+      "name": "DeliveryAttempt",
+      "ids": [
+        "DeliveryAttempt#0",
+        "DeliveryAttempt#1"
+      ],
+      "initial": "reserved",
+      "states": [
+        {
+          "name": "accepted",
+          "mustProgress": true
+        },
+        {
+          "name": "completed",
+          "terminal": true
+        },
+        {
+          "name": "dispatched",
+          "mustProgress": true
+        },
+        {
+          "name": "failed",
+          "terminal": true
+        },
+        {
+          "name": "rejected",
+          "terminal": true
+        },
+        {
+          "name": "reserved",
+          "mustProgress": true
+        }
+      ],
+      "source": {}
+    },
+    {
+      "name": "DeliveryQueue",
+      "ids": [
+        "DeliveryQueue#0",
+        "DeliveryQueue#1"
+      ],
+      "initiallyExists": [
+        "DeliveryQueue#0",
+        "DeliveryQueue#1"
+      ],
+      "initial": "available",
+      "states": [
+        {
+          "name": "available"
+        }
+      ],
+      "source": {}
+    },
+    {
+      "name": "DeliveryTask",
+      "ids": [
+        "DeliveryTask#0",
+        "DeliveryTask#1"
+      ],
+      "initial": "pending",
+      "states": [
+        {
+          "name": "acknowledged"
+        },
+        {
+          "name": "authorized",
+          "mustProgress": true
+        },
+        {
+          "name": "backlogged",
+          "mustProgress": true
+        },
+        {
+          "name": "dispatched",
+          "mustProgress": true
+        },
+        {
+          "name": "pending",
+          "mustProgress": true
+        },
+        {
+          "name": "reserved",
+          "mustProgress": true
+        },
+        {
+          "name": "retired",
+          "terminal": true
+        },
+        {
+          "name": "sync-offered",
+          "mustProgress": true
+        }
+      ],
+      "source": {}
+    },
+    {
+      "name": "Poller",
+      "ids": [
+        "Poller#0",
+        "Poller#1"
+      ],
+      "initiallyExists": [
+        "Poller#0",
+        "Poller#1"
+      ],
+      "initial": "available",
+      "states": [
+        {
+          "name": "available"
+        }
+      ],
+      "source": {}
+    },
+    {
+      "name": "WorkObligation",
+      "ids": [
+        "WorkObligation#0",
+        "WorkObligation#1"
+      ],
+      "initial": "unresolved",
+      "states": [
+        {
+          "name": "accepted"
+        },
+        {
+          "name": "terminal",
+          "terminal": true
+        },
+        {
+          "name": "unresolved",
+          "mustProgress": true
+        },
+        {
+          "name": "valid",
+          "mustProgress": true
+        }
+      ],
+      "source": {}
+    },
+    {
+      "name": "Workflow",
+      "ids": [
+        "Workflow#0"
+      ],
+      "initial": "created",
+      "states": [
+        {
+          "name": "canceled",
+          "terminal": true
+        },
+        {
+          "name": "completed",
+          "terminal": true,
+          "disposition": "Success"
+        },
+        {
+          "name": "created"
+        },
+        {
+          "name": "failed",
+          "terminal": true,
+          "disposition": "Failure"
+        },
+        {
+          "name": "started",
+          "mustProgress": true
+        },
+        {
+          "name": "terminated",
+          "terminal": true
+        },
+        {
+          "name": "timed_out",
+          "terminal": true,
+          "disposition": "Failure"
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowRun",
+      "ids": [
+        "WorkflowRun#0"
+      ],
+      "initial": "created",
+      "states": [
+        {
+          "name": "canceled",
+          "terminal": true
+        },
+        {
+          "name": "completed",
+          "terminal": true,
+          "disposition": "Success"
+        },
+        {
+          "name": "continued_as_new",
+          "terminal": true
+        },
+        {
+          "name": "created"
+        },
+        {
+          "name": "failed",
+          "terminal": true,
+          "disposition": "Failure"
+        },
+        {
+          "name": "started"
+        },
+        {
+          "name": "terminated",
+          "terminal": true
+        },
+        {
+          "name": "timed_out",
+          "terminal": true,
+          "disposition": "Failure"
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    },
+    {
+      "name": "WorkflowTask",
+      "ids": [
+        "WorkflowTask#0"
+      ],
+      "initial": "created",
+      "states": [
+        {
+          "name": "added"
+        },
+        {
+          "name": "created"
+        },
+        {
+          "name": "discarded",
+          "terminal": true
+        },
+        {
+          "name": "polled",
+          "terminal": true
+        },
+        {
+          "name": "stored"
+        },
+        {
+          "name": "terminated",
+          "terminal": true
+        }
+      ],
+      "source": {
+        "path": "tests/umpire2/model"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "name": "delivery-accepted-start",
+      "source": "WorkObligation",
+      "target": "DeliveryAttempt",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {}
+    },
+    {
+      "name": "delivery-attempt-poller",
+      "source": "DeliveryAttempt",
+      "target": "Poller",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceLocation": {}
+    },
+    {
+      "name": "delivery-attempt-task",
+      "source": "DeliveryAttempt",
+      "target": "DeliveryTask",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceLocation": {}
+    },
+    {
+      "name": "delivery-task-obligation",
+      "source": "DeliveryTask",
+      "target": "WorkObligation",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceLocation": {}
+    },
+    {
+      "name": "delivery-task-queue",
+      "source": "DeliveryTask",
+      "target": "DeliveryQueue",
+      "sourceCardinality": "one",
+      "targetCardinality": "many",
+      "sourceLocation": {}
+    },
+    {
+      "name": "workflow-run-successor",
+      "source": "WorkflowRun",
+      "target": "WorkflowRun",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    },
+    {
+      "name": "workflow-runs",
+      "source": "Workflow",
+      "target": "WorkflowRun",
+      "sourceCardinality": "many",
+      "targetCardinality": "one",
+      "sourceLocation": {
+        "path": "tests/umpire2/protocol/default_relations.go"
+      }
+    },
+    {
+      "name": "workflow-task-delivery-task",
+      "source": "WorkflowTask",
+      "target": "DeliveryTask",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {}
+    },
+    {
+      "name": "workflow-task-obligation",
+      "source": "WorkflowTask",
+      "target": "WorkObligation",
+      "sourceCardinality": "one",
+      "targetCardinality": "one",
+      "sourceLocation": {}
+    }
+  ],
+  "actions": [
+    {
+      "name": "Workflow.created.start.Standalone",
+      "parameters": [
+        {
+          "name": "wf",
+          "type": "Workflow",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Workflow",
+        "ref": "wf",
+        "state": "created"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "Workflow",
+          "ref": "wf",
+          "state": "started"
+        }
+      ],
+      "hosting": "Standalone",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartWorkflowExecution"
+      }
+    },
+    {
+      "name": "Workflow.started.cancel.Standalone",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Workflow",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Workflow",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Workflow",
+          "ref": "entity",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "Standalone",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow cancellation command driver"
+      }
+    },
+    {
+      "name": "Workflow.started.complete.Standalone",
+      "parameters": [
+        {
+          "name": "wf",
+          "type": "Workflow",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Workflow",
+        "ref": "wf",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Workflow",
+          "ref": "wf",
+          "state": "completed"
+        }
+      ],
+      "hosting": "Standalone",
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "SignalWorkflowExecution(finish)"
+      }
+    },
+    {
+      "name": "Workflow.started.fail.Standalone",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Workflow",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Workflow",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Workflow",
+          "ref": "entity",
+          "state": "failed"
+        }
+      ],
+      "hosting": "Standalone",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow failure command driver"
+      }
+    },
+    {
+      "name": "Workflow.started.terminate.Standalone",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Workflow",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Workflow",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Workflow",
+          "ref": "entity",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "Standalone",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow termination RPC driver"
+      }
+    },
+    {
+      "name": "Workflow.started.timeout.Standalone",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Workflow",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "Workflow",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "Workflow",
+          "ref": "entity",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "Standalone",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "server-driven timeout has no atomic action"
+      }
+    },
+    {
+      "name": "WorkflowRun.created.start.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowRun",
+        "ref": "entity",
+        "state": "created"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "started"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.cancel.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowRun",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "canceled"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.complete.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowRun",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "completed"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.continue_as_new.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowRun",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "continued_as_new"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.fail.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowRun",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "failed"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.terminate.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowRun",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowRun.started.timeout.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowRun",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowRun",
+        "ref": "entity",
+        "state": "started"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowRun",
+          "ref": "entity",
+          "state": "timed_out"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowTask.added.discard.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowTask",
+        "ref": "entity",
+        "state": "added"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowTask",
+          "ref": "entity",
+          "state": "discarded"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowTask.added.store.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowTask",
+        "ref": "entity",
+        "state": "added"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowTask",
+          "ref": "entity",
+          "state": "stored"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowTask.added.terminate.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowTask",
+        "ref": "entity",
+        "state": "added"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowTask",
+          "ref": "entity",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowTask.created.terminate.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "fresh"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowTask",
+        "ref": "entity",
+        "state": "created"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "WorkflowTask",
+          "ref": "entity",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowTask.stored.discard.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowTask",
+        "ref": "entity",
+        "state": "stored"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowTask",
+          "ref": "entity",
+          "state": "discarded"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "WorkflowTask.stored.terminate.AnyHosting",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowTask",
+        "ref": "entity",
+        "state": "stored"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowTask",
+          "ref": "entity",
+          "state": "terminated"
+        }
+      ],
+      "hosting": "AnyHosting",
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "delivery.acknowledge",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "dispatched"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryAttempt",
+            "ref": "attempt",
+            "state": "dispatched"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-attempt-task",
+            "source": "attempt",
+            "target": "task"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "acknowledged"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "completed"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.dispatch",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "authorized"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryAttempt",
+            "ref": "attempt",
+            "state": "accepted"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-attempt-task",
+            "source": "attempt",
+            "target": "task"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "dispatched"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "dispatched"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.expire",
+      "parameters": [
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkObligation",
+            "ref": "obligation",
+            "state": "valid"
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "pending"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "sync-offered"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "backlogged"
+              }
+            ]
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-task-obligation",
+            "source": "task",
+            "target": "obligation"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "terminal"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "retired"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.offer-sync",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "pending"
+          },
+          {
+            "op": "exists",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "valid"
+                  }
+                ]
+              }
+            ],
+            "entity": "WorkObligation",
+            "var": "obligation"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "sync-offered"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.ambiguous",
+      "parameters": [
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "fresh"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "fresh"
+        },
+        {
+          "name": "queue",
+          "type": "DeliveryQueue",
+          "binding": "input"
+        }
+      ],
+      "guard": {},
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "unresolved"
+        },
+        {
+          "kind": "create",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "pending"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-task-obligation",
+          "source": "task",
+          "target": "obligation"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-task-queue",
+          "source": "task",
+          "target": "queue"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.reserve",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "fresh"
+        },
+        {
+          "name": "poller",
+          "type": "Poller",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "or",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "sync-offered"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "backlogged"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "reserved"
+        },
+        {
+          "kind": "create",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "reserved"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-attempt-task",
+          "source": "attempt",
+          "target": "task"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-attempt-poller",
+          "source": "attempt",
+          "target": "poller"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.retire",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "DeliveryTask",
+        "ref": "task",
+        "state": "acknowledged"
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "retired"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.retry",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "dispatched"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryAttempt",
+            "ref": "attempt",
+            "state": "dispatched"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-attempt-task",
+            "source": "attempt",
+            "target": "task"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "backlogged"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "failed"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "delivery.spool",
+      "parameters": [
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "pending"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "sync-offered"
+              }
+            ]
+          },
+          {
+            "op": "exists",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "valid"
+                  }
+                ]
+              }
+            ],
+            "entity": "WorkObligation",
+            "var": "obligation"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "backlogged"
+        }
+      ],
+      "unrealized": true,
+      "source": {}
+    },
+    {
+      "name": "workflow.delivery.authorize-added",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "input"
+        },
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowTask",
+            "ref": "entity",
+            "state": "added"
+          },
+          {
+            "op": "relation-has",
+            "relation": "workflow-task-obligation",
+            "source": "entity",
+            "target": "obligation"
+          },
+          {
+            "op": "relation-has",
+            "relation": "workflow-task-delivery-task",
+            "source": "entity",
+            "target": "task"
+          },
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "valid"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "reserved"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryAttempt",
+                "ref": "attempt",
+                "state": "reserved"
+              },
+              {
+                "op": "relation-has",
+                "relation": "delivery-task-obligation",
+                "source": "task",
+                "target": "obligation"
+              },
+              {
+                "op": "relation-has",
+                "relation": "delivery-attempt-task",
+                "source": "attempt",
+                "target": "task"
+              }
+            ]
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowTask",
+          "ref": "entity",
+          "state": "polled"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "authorized"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "accepted"
+        },
+        {
+          "kind": "set-state",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "accepted"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-accepted-start",
+          "source": "obligation",
+          "target": "attempt"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.authorize-added"
+      }
+    },
+    {
+      "name": "workflow.delivery.authorize-stored",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "input"
+        },
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowTask",
+            "ref": "entity",
+            "state": "stored"
+          },
+          {
+            "op": "relation-has",
+            "relation": "workflow-task-obligation",
+            "source": "entity",
+            "target": "obligation"
+          },
+          {
+            "op": "relation-has",
+            "relation": "workflow-task-delivery-task",
+            "source": "entity",
+            "target": "task"
+          },
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "valid"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "reserved"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryAttempt",
+                "ref": "attempt",
+                "state": "reserved"
+              },
+              {
+                "op": "relation-has",
+                "relation": "delivery-task-obligation",
+                "source": "task",
+                "target": "obligation"
+              },
+              {
+                "op": "relation-has",
+                "relation": "delivery-attempt-task",
+                "source": "attempt",
+                "target": "task"
+              }
+            ]
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkflowTask",
+          "ref": "entity",
+          "state": "polled"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "authorized"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "accepted"
+        },
+        {
+          "kind": "set-state",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "accepted"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-accepted-start",
+          "source": "obligation",
+          "target": "attempt"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.authorize-stored"
+      }
+    },
+    {
+      "name": "workflow.delivery.persist",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "fresh"
+        },
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "fresh"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "fresh"
+        },
+        {
+          "name": "queue",
+          "type": "DeliveryQueue",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "state-is",
+        "entity": "WorkflowTask",
+        "ref": "entity",
+        "state": "created"
+      },
+      "effects": [
+        {
+          "kind": "create",
+          "entity": "WorkflowTask",
+          "ref": "entity",
+          "state": "added"
+        },
+        {
+          "kind": "create",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "valid"
+        },
+        {
+          "kind": "create",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "pending"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-task-obligation",
+          "source": "task",
+          "target": "obligation"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "delivery-task-queue",
+          "source": "task",
+          "target": "queue"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "workflow-task-obligation",
+          "source": "entity",
+          "target": "obligation"
+        },
+        {
+          "kind": "add-relation",
+          "relation": "workflow-task-delivery-task",
+          "source": "entity",
+          "target": "task"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_delivery.go",
+        "symbol": "workflow.delivery.persist"
+      }
+    },
+    {
+      "name": "workflow.delivery.reject-added",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "input"
+        },
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowTask",
+            "ref": "entity",
+            "state": "added"
+          },
+          {
+            "op": "relation-has",
+            "relation": "workflow-task-obligation",
+            "source": "entity",
+            "target": "obligation"
+          },
+          {
+            "op": "relation-has",
+            "relation": "workflow-task-delivery-task",
+            "source": "entity",
+            "target": "task"
+          },
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "valid"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "reserved"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryAttempt",
+                "ref": "attempt",
+                "state": "reserved"
+              },
+              {
+                "op": "relation-has",
+                "relation": "delivery-task-obligation",
+                "source": "task",
+                "target": "obligation"
+              },
+              {
+                "op": "relation-has",
+                "relation": "delivery-attempt-task",
+                "source": "attempt",
+                "target": "task"
+              }
+            ]
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "backlogged"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "rejected"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.reject-added"
+      }
+    },
+    {
+      "name": "workflow.delivery.reject-stored",
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "WorkflowTask",
+          "binding": "input"
+        },
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        },
+        {
+          "name": "attempt",
+          "type": "DeliveryAttempt",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkflowTask",
+            "ref": "entity",
+            "state": "stored"
+          },
+          {
+            "op": "relation-has",
+            "relation": "workflow-task-obligation",
+            "source": "entity",
+            "target": "obligation"
+          },
+          {
+            "op": "relation-has",
+            "relation": "workflow-task-delivery-task",
+            "source": "entity",
+            "target": "task"
+          },
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "valid"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "reserved"
+              },
+              {
+                "op": "state-is",
+                "entity": "DeliveryAttempt",
+                "ref": "attempt",
+                "state": "reserved"
+              },
+              {
+                "op": "relation-has",
+                "relation": "delivery-task-obligation",
+                "source": "task",
+                "target": "obligation"
+              },
+              {
+                "op": "relation-has",
+                "relation": "delivery-attempt-task",
+                "source": "attempt",
+                "target": "task"
+              }
+            ]
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "DeliveryTask",
+          "ref": "task",
+          "state": "backlogged"
+        },
+        {
+          "kind": "set-state",
+          "entity": "DeliveryAttempt",
+          "ref": "attempt",
+          "state": "rejected"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.reject-stored"
+      }
+    },
+    {
+      "name": "workflow.delivery.resolve-persisted",
+      "parameters": [
+        {
+          "name": "obligation",
+          "type": "WorkObligation",
+          "binding": "input"
+        },
+        {
+          "name": "task",
+          "type": "DeliveryTask",
+          "binding": "input"
+        }
+      ],
+      "guard": {
+        "op": "and",
+        "args": [
+          {
+            "op": "state-is",
+            "entity": "WorkObligation",
+            "ref": "obligation",
+            "state": "unresolved"
+          },
+          {
+            "op": "state-is",
+            "entity": "DeliveryTask",
+            "ref": "task",
+            "state": "pending"
+          },
+          {
+            "op": "relation-has",
+            "relation": "delivery-task-obligation",
+            "source": "task",
+            "target": "obligation"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "set-state",
+          "entity": "WorkObligation",
+          "ref": "obligation",
+          "state": "valid"
+        }
+      ],
+      "unrealized": true,
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_delivery.go",
+        "symbol": "workflow.delivery.resolve-persisted"
+      }
+    }
+  ],
+  "properties": [
+    {
+      "name": "Workflow.started.quiescent-progress",
+      "kind": "quiescent",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "Workflow",
+                "ref": "entity",
+                "state": "started"
+              }
+            ]
+          }
+        ],
+        "entity": "Workflow",
+        "var": "entity"
+      },
+      "source": {
+        "path": "common/testing/umpire/lifecycle.go",
+        "symbol": "EntityProgressRule"
+      }
+    },
+    {
+      "name": "delivery.ambiguous-commit-resolved",
+      "kind": "quiescent",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "unresolved"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkObligation",
+        "var": "obligation"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.coarse-retirement-safety",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryTask",
+                "ref": "task",
+                "state": "retired"
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-task-obligation",
+                        "source": "task",
+                        "target": "obligation"
+                      },
+                      {
+                        "op": "or",
+                        "args": [
+                          {
+                            "op": "state-is",
+                            "entity": "WorkObligation",
+                            "ref": "obligation",
+                            "state": "accepted"
+                          },
+                          {
+                            "op": "state-is",
+                            "entity": "WorkObligation",
+                            "ref": "obligation",
+                            "state": "terminal"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "entity": "WorkObligation",
+                "var": "obligation"
+              }
+            ]
+          }
+        ],
+        "entity": "DeliveryTask",
+        "var": "task"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.destination-isolation",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "exists",
+            "args": [
+              {
+                "op": "relation-has",
+                "relation": "delivery-task-queue",
+                "source": "task",
+                "target": "queue"
+              }
+            ],
+            "entity": "DeliveryQueue",
+            "var": "queue"
+          }
+        ],
+        "entity": "DeliveryTask",
+        "var": "task"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.failed-start-is-not-accepted",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "DeliveryAttempt",
+                "ref": "attempt",
+                "state": "rejected"
+              },
+              {
+                "op": "for-all",
+                "args": [
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-accepted-start",
+                        "source": "obligation",
+                        "target": "attempt"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "WorkObligation",
+                "var": "obligation"
+              }
+            ]
+          }
+        ],
+        "entity": "DeliveryAttempt",
+        "var": "attempt"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.no-phantom-dispatch",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "state-is",
+                    "entity": "DeliveryAttempt",
+                    "ref": "attempt",
+                    "state": "dispatched"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "DeliveryAttempt",
+                    "ref": "attempt",
+                    "state": "failed"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "DeliveryAttempt",
+                    "ref": "attempt",
+                    "state": "completed"
+                  }
+                ]
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-attempt-task",
+                        "source": "attempt",
+                        "target": "task"
+                      },
+                      {
+                        "op": "exists",
+                        "args": [
+                          {
+                            "op": "and",
+                            "args": [
+                              {
+                                "op": "relation-has",
+                                "relation": "delivery-task-obligation",
+                                "source": "task",
+                                "target": "obligation"
+                              },
+                              {
+                                "op": "state-is",
+                                "entity": "WorkObligation",
+                                "ref": "obligation",
+                                "state": "accepted"
+                              }
+                            ]
+                          }
+                        ],
+                        "entity": "WorkObligation",
+                        "var": "obligation"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "DeliveryTask",
+                "var": "task"
+              }
+            ]
+          }
+        ],
+        "entity": "DeliveryAttempt",
+        "var": "attempt"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.no-resurrection",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "terminal"
+              },
+              {
+                "op": "for-all",
+                "args": [
+                  {
+                    "op": "implies",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-task-obligation",
+                        "source": "task",
+                        "target": "obligation"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "DeliveryTask",
+                        "ref": "task",
+                        "state": "retired"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "DeliveryTask",
+                "var": "task"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkObligation",
+        "var": "obligation"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.no-split-commit",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "valid"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkObligation",
+                    "ref": "obligation",
+                    "state": "accepted"
+                  }
+                ]
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  }
+                ],
+                "entity": "DeliveryTask",
+                "var": "task"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkObligation",
+        "var": "obligation"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.path-equivalence",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-obligation",
+                    "source": "task",
+                    "target": "obligation"
+                  }
+                ],
+                "entity": "WorkObligation",
+                "var": "obligation"
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-task-queue",
+                    "source": "task",
+                    "target": "queue"
+                  }
+                ],
+                "entity": "DeliveryQueue",
+                "var": "queue"
+              }
+            ]
+          }
+        ],
+        "entity": "DeliveryTask",
+        "var": "task"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.retry-preserves-obligation",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "exists",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-attempt-task",
+                    "source": "attempt",
+                    "target": "task"
+                  },
+                  {
+                    "op": "exists",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "delivery-task-obligation",
+                        "source": "task",
+                        "target": "obligation"
+                      }
+                    ],
+                    "entity": "WorkObligation",
+                    "var": "obligation"
+                  }
+                ]
+              }
+            ],
+            "entity": "DeliveryTask",
+            "var": "task"
+          }
+        ],
+        "entity": "DeliveryAttempt",
+        "var": "attempt"
+      },
+      "source": {}
+    },
+    {
+      "name": "delivery.single-accepted-start",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkObligation",
+                "ref": "obligation",
+                "state": "accepted"
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "relation-has",
+                    "relation": "delivery-accepted-start",
+                    "source": "obligation",
+                    "target": "attempt"
+                  }
+                ],
+                "entity": "DeliveryAttempt",
+                "var": "attempt"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkObligation",
+        "var": "obligation"
+      },
+      "source": {}
+    },
+    {
+      "name": "workflow.delivery.accepted-start-correspondence",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "state-is",
+                "entity": "WorkflowTask",
+                "ref": "workflowTask",
+                "state": "polled"
+              },
+              {
+                "op": "exists",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "workflow-task-obligation",
+                        "source": "workflowTask",
+                        "target": "obligation"
+                      },
+                      {
+                        "op": "state-is",
+                        "entity": "WorkObligation",
+                        "ref": "obligation",
+                        "state": "accepted"
+                      },
+                      {
+                        "op": "exists",
+                        "args": [
+                          {
+                            "op": "relation-has",
+                            "relation": "delivery-accepted-start",
+                            "source": "obligation",
+                            "target": "attempt"
+                          }
+                        ],
+                        "entity": "DeliveryAttempt",
+                        "var": "attempt"
+                      }
+                    ]
+                  }
+                ],
+                "entity": "WorkObligation",
+                "var": "obligation"
+              }
+            ]
+          }
+        ],
+        "entity": "WorkflowTask",
+        "var": "workflowTask"
+      },
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.accepted-start-correspondence"
+      }
+    },
+    {
+      "name": "workflow.delivery.intent-correspondence",
+      "kind": "safety",
+      "expr": {
+        "op": "for-all",
+        "args": [
+          {
+            "op": "implies",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "state-is",
+                    "entity": "WorkflowTask",
+                    "ref": "workflowTask",
+                    "state": "added"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkflowTask",
+                    "ref": "workflowTask",
+                    "state": "stored"
+                  },
+                  {
+                    "op": "state-is",
+                    "entity": "WorkflowTask",
+                    "ref": "workflowTask",
+                    "state": "polled"
+                  }
+                ]
+              },
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "exists",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "workflow-task-obligation",
+                        "source": "workflowTask",
+                        "target": "obligation"
+                      }
+                    ],
+                    "entity": "WorkObligation",
+                    "var": "obligation"
+                  },
+                  {
+                    "op": "exists",
+                    "args": [
+                      {
+                        "op": "relation-has",
+                        "relation": "workflow-task-delivery-task",
+                        "source": "workflowTask",
+                        "target": "deliveryTask"
+                      }
+                    ],
+                    "entity": "DeliveryTask",
+                    "var": "deliveryTask"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "entity": "WorkflowTask",
+        "var": "workflowTask"
+      },
+      "source": {
+        "path": "tests/umpire2/rule/workflow_task_starvation.go",
+        "symbol": "WorkflowTaskStarvationRule"
+      }
+    }
+  ],
+  "abstractions": [
+    {
+      "name": "workflow.task.create-speculative-direct",
+      "reason": "the speculative target checks the atomic direct-delivery adapter",
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_task_speculative.go",
+        "symbol": "workflow.task.create-speculative-direct"
+      }
+    }
+  ],
+  "refinements": [
+    {
+      "name": "delivery.acknowledge.foundation",
+      "action": "delivery.acknowledge",
+      "lifecycleActions": [
+        "delivery.acknowledge"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.dispatch.foundation",
+      "action": "delivery.dispatch",
+      "lifecycleActions": [
+        "delivery.dispatch"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.expire.foundation",
+      "action": "delivery.expire",
+      "lifecycleActions": [
+        "delivery.expire"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.offer-sync.foundation",
+      "action": "delivery.offer-sync",
+      "lifecycleActions": [
+        "delivery.offer-sync"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.persist.ambiguous.foundation",
+      "action": "delivery.persist.ambiguous",
+      "lifecycleActions": [
+        "delivery.persist.ambiguous"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.reserve.foundation",
+      "action": "delivery.reserve",
+      "lifecycleActions": [
+        "delivery.reserve"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.retire.foundation",
+      "action": "delivery.retire",
+      "lifecycleActions": [
+        "delivery.retire"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.retry.foundation",
+      "action": "delivery.retry",
+      "lifecycleActions": [
+        "delivery.retry"
+      ],
+      "source": {}
+    },
+    {
+      "name": "delivery.spool.foundation",
+      "action": "delivery.spool",
+      "lifecycleActions": [
+        "delivery.spool"
+      ],
+      "source": {}
+    },
+    {
+      "name": "lifecycle.Workflow.created.start.Standalone",
+      "action": "Workflow.created.start.Standalone",
+      "lifecycleActions": [
+        "Workflow.created.start.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "StartWorkflowExecution"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.cancel.Standalone",
+      "action": "Workflow.started.cancel.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.cancel.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow cancellation command driver"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.fail.Standalone",
+      "action": "Workflow.started.fail.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.fail.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow failure command driver"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.terminate.Standalone",
+      "action": "Workflow.started.terminate.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.terminate.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "needs a workflow termination RPC driver"
+      }
+    },
+    {
+      "name": "lifecycle.Workflow.started.timeout.Standalone",
+      "action": "Workflow.started.timeout.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.timeout.Standalone"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "server-driven timeout has no atomic action"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.created.start.AnyHosting",
+      "action": "WorkflowRun.created.start.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.created.start.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.cancel.AnyHosting",
+      "action": "WorkflowRun.started.cancel.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.cancel.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.complete.AnyHosting",
+      "action": "WorkflowRun.started.complete.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.complete.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.continue_as_new.AnyHosting",
+      "action": "WorkflowRun.started.continue_as_new.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.continue_as_new.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.fail.AnyHosting",
+      "action": "WorkflowRun.started.fail.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.fail.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.terminate.AnyHosting",
+      "action": "WorkflowRun.started.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowRun.started.timeout.AnyHosting",
+      "action": "WorkflowRun.started.timeout.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowRun.started.timeout.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.discard.AnyHosting",
+      "action": "WorkflowTask.added.discard.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.discard.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.store.AnyHosting",
+      "action": "WorkflowTask.added.store.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.store.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.added.terminate.AnyHosting",
+      "action": "WorkflowTask.added.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.added.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.created.terminate.AnyHosting",
+      "action": "WorkflowTask.created.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.created.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.stored.discard.AnyHosting",
+      "action": "WorkflowTask.stored.discard.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.stored.discard.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "lifecycle.WorkflowTask.stored.terminate.AnyHosting",
+      "action": "WorkflowTask.stored.terminate.AnyHosting",
+      "lifecycleActions": [
+        "WorkflowTask.stored.terminate.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/default.go",
+        "symbol": "no executable action is declared"
+      }
+    },
+    {
+      "name": "regression.Workflow.started.complete.Standalone",
+      "action": "Workflow.started.complete.Standalone",
+      "lifecycleActions": [
+        "Workflow.started.complete.Standalone"
+      ],
+      "regressionActions": [
+        "workflow.complete"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/regress_domain.go",
+        "symbol": "workflow.complete"
+      }
+    },
+    {
+      "name": "workflow.delivery.authorize-added",
+      "action": "workflow.delivery.authorize-added",
+      "lifecycleActions": [
+        "WorkflowTask.added.poll.AnyHosting",
+        "delivery.authorize.accept"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.authorize-added"
+      }
+    },
+    {
+      "name": "workflow.delivery.authorize-stored",
+      "action": "workflow.delivery.authorize-stored",
+      "lifecycleActions": [
+        "WorkflowTask.stored.poll.AnyHosting",
+        "delivery.authorize.accept"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.authorize-stored"
+      }
+    },
+    {
+      "name": "workflow.delivery.persist",
+      "action": "workflow.delivery.persist",
+      "lifecycleActions": [
+        "WorkflowTask.created.add.AnyHosting"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_delivery.go",
+        "symbol": "workflow.delivery.persist"
+      }
+    },
+    {
+      "name": "workflow.delivery.reject-added",
+      "action": "workflow.delivery.reject-added",
+      "lifecycleActions": [
+        "delivery.authorize.reject"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.reject-added"
+      }
+    },
+    {
+      "name": "workflow.delivery.reject-stored",
+      "action": "workflow.delivery.reject-stored",
+      "lifecycleActions": [
+        "delivery.authorize.reject"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_delivery_authorization.go",
+        "symbol": "workflow.delivery.reject-stored"
+      }
+    },
+    {
+      "name": "workflow.delivery.resolve-persisted",
+      "action": "workflow.delivery.resolve-persisted",
+      "lifecycleActions": [
+        "delivery.resolve-persisted"
+      ],
+      "source": {
+        "path": "tests/umpire2/protocol/verification_workflow_delivery.go",
+        "symbol": "workflow.delivery.resolve-persisted"
+      }
+    }
+  ]
+}

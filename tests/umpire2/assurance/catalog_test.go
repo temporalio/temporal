@@ -37,14 +37,14 @@ func TestDefaultCatalogProjectsRuntimeInventoryAndCoverage(t *testing.T) {
 		included[item.Name] = item.Included
 	}
 	require.Equal(t, map[string]bool{
-		"CallbackReferenceConsistencyRule":   false,
-		"CallbackResponseConsistencyRule":    false,
+		"CallbackReferenceConsistencyRule":   true,
+		"CallbackResponseConsistencyRule":    true,
 		"EntityProgressRule":                 true,
 		"NexusActivityLinkConsistencyRule":   true,
-		"NexusOperationClosureRule":          false,
-		"NexusOperationTimeoutSemanticsRule": false,
-		"SpeculativeTaskCreationRule":        false,
-		"WorkflowTaskStarvationRule":         false,
+		"NexusOperationClosureRule":          true,
+		"NexusOperationTimeoutSemanticsRule": true,
+		"SpeculativeTaskCreationRule":        true,
+		"WorkflowTaskStarvationRule":         true,
 	}, included)
 
 	coverageNames := make([]string, 0)

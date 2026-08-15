@@ -69,6 +69,26 @@ func TestGeneratePreservesNondeterministicBranches(t *testing.T) {
 	require.Contains(t, string(files["Umpire.ivy"]), "if * {")
 }
 
+func TestGenerateRequiresSameTypeFreshParametersToBeDistinct(t *testing.T) {
+	model := testModel()
+	model.Entities[1].IDs = append(model.Entities[1].IDs, "operation#1")
+	model.Actions = append(model.Actions, verify.Action{
+		Name: "create-pair",
+		Parameters: []verify.Parameter{
+			{Name: "left", Type: "operation", Binding: verify.FreshBinding},
+			{Name: "right", Type: "operation", Binding: verify.FreshBinding},
+		},
+		Effects: []verify.Effect{
+			{Kind: verify.CreateEffect, Entity: "operation", Ref: "left", State: "scheduled"},
+			{Kind: verify.CreateEffect, Entity: "operation", Ref: "right", State: "scheduled"},
+		},
+	})
+
+	files, _, err := Generate(model)
+	require.NoError(t, err)
+	require.Contains(t, string(files["Umpire.ivy"]), "require left ~= right;")
+}
+
 func TestTraceVocabularyMapsGeneratedNamesToCanonicalModel(t *testing.T) {
 	vocabulary, err := TraceVocabulary(testModel())
 	require.NoError(t, err)

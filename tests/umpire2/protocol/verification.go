@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/testing/umpire"
 	coreregress "go.temporal.io/server/common/testing/umpire/regress"
 	"go.temporal.io/server/common/testing/umpire/verify"
+	"go.temporal.io/server/tests/umpire2/action"
 	"go.temporal.io/server/tests/umpire2/model"
 	regressactivity "go.temporal.io/server/tests/umpire2/regress/activity"
 	regressnexus "go.temporal.io/server/tests/umpire2/regress/nexus"
@@ -59,6 +60,9 @@ func (p *Protocol) VerificationModel(options VerificationOptions) (verify.Model,
 					result.Properties = append(result.Properties, quiescentProgressProperty(entity.Name, stateName))
 				}
 			}
+		} else if entityType == model.CallbackType {
+			entity.Initial = "unobserved"
+			entity.States = []verify.State{{Name: "unobserved"}}
 		}
 		result.Entities = append(result.Entities, entity)
 	}
@@ -123,25 +127,78 @@ func (p *Protocol) addRegressionVerification(result *verify.Model, lifecycles ma
 	if p.regression == nil {
 		return nil
 	}
-	for _, action := range p.regression.Snapshot().Actions {
-		if action.Schema.Name != "nexus.start_activity" {
+	catalog := p.regression.Snapshot()
+	actionNameCounts := make(map[string]int, len(catalog.Actions))
+	for _, registeredAction := range catalog.Actions {
+		actionNameCounts[registeredAction.Schema.Name]++
+	}
+	mappedRegressionActions := make(map[string][]string)
+	mappedRegressionSources := make(map[string]verify.Provenance)
+	var mappedVerificationActions []string
+	for _, registeredAction := range catalog.Actions {
+		regressionAction := registeredAction.Schema.Name
+		if actionNameCounts[registeredAction.Schema.Name] > 1 {
+			regressionAction += "[" + registeredAction.Realization + "]"
+		}
+		if registeredAction.Schema.Name == "nexus.start_activity" {
+			verificationAction, err := lowerRegressionStartActivity(registeredAction, lifecycles)
+			if err != nil {
+				return err
+			}
+			result.Actions = append(result.Actions, verificationAction)
+			result.Refinements = append(result.Refinements, verify.Refinement{
+				Name:              "regression.nexus.start_activity",
+				Action:            verificationAction.Name,
+				LifecycleActions:  []string{"NexusOperation.scheduled.succeed.Embedded"},
+				RegressionActions: []string{regressionAction},
+				Source:            verificationAction.Source,
+			})
 			continue
 		}
-		verificationAction, err := lowerRegressionStartActivity(action, lifecycles)
-		if err != nil {
-			return err
+		if verificationAction := regressionVerificationAction(registeredAction.Realization); verificationAction != "" {
+			if len(mappedRegressionActions[verificationAction]) == 0 {
+				mappedVerificationActions = append(mappedVerificationActions, verificationAction)
+				mappedRegressionSources[verificationAction] = verify.Provenance{
+					Path: "tests/umpire2/protocol/regress_domain.go", Symbol: registeredAction.Realization,
+				}
+			}
+			mappedRegressionActions[verificationAction] = append(mappedRegressionActions[verificationAction], regressionAction)
 		}
-		result.Actions = append(result.Actions, verificationAction)
+	}
+	for _, verificationAction := range mappedVerificationActions {
 		result.Refinements = append(result.Refinements, verify.Refinement{
-			Name:              "regression.nexus.start_activity",
-			Action:            verificationAction.Name,
-			LifecycleActions:  []string{"NexusOperation.scheduled.succeed.Embedded"},
-			RegressionActions: []string{action.Schema.Name},
-			Source:            verificationAction.Source,
+			Name:              "regression." + verificationAction,
+			Action:            verificationAction,
+			LifecycleActions:  []string{verificationAction},
+			RegressionActions: mappedRegressionActions[verificationAction],
+			Source:            mappedRegressionSources[verificationAction],
 		})
-		return nil
+	}
+	for _, verificationAction := range result.Actions {
+		if verificationAction.Name == "regression.nexus.start_activity" {
+			return nil
+		}
 	}
 	return fmt.Errorf("protocol verification: selected regression action %q is missing", "nexus.start_activity")
+}
+
+func regressionVerificationAction(realization string) string {
+	switch realization {
+	case action.RegressionNexusScheduleDefault:
+		return "NexusOperation.unspecified.schedule.Standalone"
+	case action.RegressionNexusRespondStartScheduledAsync:
+		return "NexusOperation.scheduled.start.Standalone"
+	case action.RegressionNexusRespondStartScheduledSync, action.RegressionNexusCompleteScheduled:
+		return "NexusOperation.scheduled.succeed.Standalone"
+	case action.RegressionNexusCompleteStarted:
+		return "NexusOperation.started.succeed.Standalone"
+	case action.RegressionNexusCancel:
+		return "NexusOperation.started.cancel.Standalone"
+	case action.RegressionWorkflowComplete:
+		return "Workflow.started.complete.Standalone"
+	default:
+		return ""
+	}
 }
 
 func lowerRegressionStartActivity(
@@ -228,14 +285,14 @@ func (p *Protocol) addVerificationInventory(result *verify.Model, ruleInventory 
 			})
 		}
 		for _, action := range catalog.Actions {
-			included := action.Schema.Name == "nexus.start_activity"
+			included := action.Schema.Name == "nexus.start_activity" || regressionVerificationAction(action.Realization) != ""
 			inventoryName := action.Schema.Name
 			if actionNameCounts[action.Schema.Name] > 1 {
 				inventoryName += "[" + action.Realization + "]"
 			}
 			reason := ""
 			if !included {
-				reason = "outside the initial bounded Nexus lifecycle/relation slice"
+				reason = regressionVerificationExclusionReason(action)
 				result.Abstractions = append(result.Abstractions, verify.Abstraction{
 					Name: "regression." + inventoryName, Reason: reason,
 					Source: verify.Provenance{Path: "tests/umpire2/protocol/regress_domain.go", Symbol: action.Schema.Name},
@@ -268,6 +325,13 @@ func (p *Protocol) addVerificationInventory(result *verify.Model, ruleInventory 
 			Source: verify.Provenance{Path: "tests/umpire2/protocol/causal_footprints.go", Symbol: footprint.Footprint.Action},
 		})
 	}
+}
+
+func regressionVerificationExclusionReason(registeredAction coreregress.ActionCapability) string {
+	if registeredAction.Mode == coreregress.ObservationAction {
+		return "permanent exclusion: observational evidence is represented by properties and retained artifacts, not a state-changing formal action"
+	}
+	return "permanent exclusion: the action depends on value-bearing or intermediate live semantics not represented by the canonical finite state/relation algebra"
 }
 
 func addLifecycleRefinements(result *verify.Model) {
@@ -406,7 +470,7 @@ func quiescentProgressProperty(entity, state string) verify.Property {
 				verify.Not(verify.StateIs(entity, "entity", state)),
 			},
 		},
-		Source: verify.Provenance{Path: "common/testing/umpire/lifecycle.go", Symbol: "MustProgress"},
+		Source: verify.Provenance{Path: "common/testing/umpire/lifecycle.go", Symbol: "EntityProgressRule"},
 	}
 }
 

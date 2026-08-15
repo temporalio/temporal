@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/testing/umpire/verify"
+	"go.temporal.io/server/common/testing/umpire/verify/fizz"
 	"go.temporal.io/server/common/testing/umpire/verify/ivy"
 	"go.temporal.io/server/common/testing/umpire/verify/tla"
 )
@@ -50,24 +51,27 @@ func TestToolchainPlanScopesUnsupportedSemanticsToBackend(t *testing.T) {
 		}},
 		Abstractions: []verify.Abstraction{{Name: "environment", Reason: "unrealized"}},
 	}
-	requests, err := testToolchain().Plan(model, PlanOptions{Backends: "tlc,ivy", Profile: "smoke"})
+	requests, err := testToolchain().Plan(model, PlanOptions{Backends: "tlc,p,ivy", Profile: "smoke"})
 	require.NoError(t, err)
-	require.Len(t, requests, 2)
+	require.Len(t, requests, 3)
 	require.Equal(t, map[string]string{
-		tla.ActionIdentifier("delivery.schedule"): "delivery.schedule",
-		ivy.ActionIdentifier("delivery.schedule"): "delivery.schedule",
+		tla.ActionIdentifier("delivery.schedule"):  "delivery.schedule",
+		ivy.ActionIdentifier("delivery.schedule"):  "delivery.schedule",
+		fizz.ActionIdentifier("delivery.schedule"): "delivery.schedule",
 	}, requests[0].ActionNames)
 	require.Equal(t, map[string]string{
-		tla.PropertyIdentifier("delivery.progress"): "delivery.progress",
-		ivy.PropertyIdentifier("delivery.progress"): "delivery.progress",
+		tla.PropertyIdentifier("delivery.progress"):  "delivery.progress",
+		ivy.PropertyIdentifier("delivery.progress"):  "delivery.progress",
+		fizz.PropertyIdentifier("delivery.progress"): "delivery.progress",
 	}, requests[0].PropertyNames)
 	require.Equal(t, []string{"weak-schedule"}, requests[0].Fairness)
 	require.Equal(t, model.Abstractions, requests[0].Abstractions)
-	require.Empty(t, requests[0].Unsupported)
-	require.Equal(t, []verify.Unsupported{{
-		Backend: "ivy", Construct: "property delivery.progress",
-		Reason: "Ivy generation supports inductive safety properties only", Source: verify.Provenance{Path: "delivery.go"},
-	}}, requests[1].Unsupported)
+	for _, index := range []int{0, 1, 2} {
+		require.Equal(t, []verify.Unsupported{{
+			Backend: string(requests[index].Backend), Construct: "property delivery.progress",
+			Reason: "backend generation does not support temporal progress properties", Source: verify.Provenance{Path: "delivery.go"},
+		}}, requests[index].Unsupported)
+	}
 }
 
 func TestToolchainPlanCarriesCounterexampleModelAndVocabulary(t *testing.T) {
@@ -107,6 +111,26 @@ func TestToolchainPlanAppliesNightlyDepthCaps(t *testing.T) {
 	require.Equal(t, "Umpire-nightly.cfg", requests[0].Config)
 }
 
+func TestToolchainPlanSelectsExperimentalFizzOnlyExplicitlyForSmoke(t *testing.T) {
+	all, err := testToolchain().Plan(verify.Model{}, PlanOptions{Backends: "all", Profile: "smoke"})
+	require.NoError(t, err)
+	require.NotContains(t, requestBackends(all), Fizz)
+
+	requests, err := testToolchain().Plan(verify.Model{}, PlanOptions{
+		ModelRoot: "/models", ArtifactRoot: "/artifacts", Target: "delivery",
+		Backends: "fizz", Profile: "smoke", Requirements: []string{"fizz"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []Request{{
+		Backend: Fizz, Target: "delivery", Profile: "smoke", ToolPath: "/tools/fizz", JavaPath: "/tools/java", ToolVersion: "0.5.2",
+		ModelDir: "/models/delivery/fizz", ArtifactDir: "/artifacts/delivery/smoke",
+		Bounds: verify.Bounds{MaxDepth: 5, Schedules: 100}, ActionNames: map[string]string{}, PropertyNames: map[string]string{},
+	}}, requests)
+
+	_, err = testToolchain().Plan(verify.Model{}, PlanOptions{Backends: "fizz", Profile: "nightly"})
+	require.ErrorContains(t, err, "available only in the smoke")
+}
+
 func TestToolchainPlanRejectsInvalidConfiguration(t *testing.T) {
 	_, err := Toolchain{}.Plan(verify.Model{}, PlanOptions{Backends: "tlc", Profile: "smoke"})
 	require.ErrorContains(t, err, "TLA+ verification requires -tla-jar or UMPIRE_TLA_JAR")
@@ -130,10 +154,24 @@ func TestToolVersionsReturnsDefensiveCopies(t *testing.T) {
 	require.NotEqual(t, "changed", second[1].Artifacts[0].SHA256)
 }
 
+func TestToolVersionsContainCompleteArtifacts(t *testing.T) {
+	for _, tool := range ToolVersions() {
+		for _, artifact := range tool.Artifacts {
+			require.NotEmpty(t, artifact.Platform, tool.Name)
+			require.NotEmpty(t, artifact.URL, tool.Name+" "+artifact.Platform)
+			require.NotEmpty(t, artifact.SHA256, tool.Name+" "+artifact.Platform)
+			require.NotEmpty(t, artifact.Archive, tool.Name+" "+artifact.Platform)
+			require.NotEmpty(t, artifact.ArchiveType, tool.Name+" "+artifact.Platform)
+			require.NotEmpty(t, artifact.ExtractRoot, tool.Name+" "+artifact.Platform)
+			require.NotEmpty(t, artifact.Executable, tool.Name+" "+artifact.Platform)
+		}
+	}
+}
+
 func testToolchain() Toolchain {
 	return Toolchain{
 		TLAJarPath: "/tools/tla.jar", JavaPath: "/tools/java", PPath: "/tools/p",
-		ApalachePath: "/tools/apalache", IvyPath: "/tools/ivy",
+		ApalachePath: "/tools/apalache", IvyPath: "/tools/ivy", FizzPath: "/tools/fizz",
 	}
 }
 

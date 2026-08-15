@@ -262,6 +262,7 @@ func Drive(ctx context.Context, rc RealizeContext, oracle StateOracle, resolver 
 					Kind:       ExecutionVerdict,
 					Action:     last.Name,
 					Checkpoint: "endpoint",
+					Property:   ActionEndpointProperty(last.Name),
 					ErrorClass: ExecutionErrorClass(err),
 					Pass:       false,
 					Violations: 1,
@@ -275,6 +276,7 @@ func Drive(ctx context.Context, rc RealizeContext, oracle StateOracle, resolver 
 			Kind:       ExecutionVerdict,
 			Action:     last.Name,
 			Checkpoint: "endpoint",
+			Property:   ActionEndpointProperty(last.Name),
 			Pass:       true,
 		}); err != nil {
 			return fmt.Errorf("observe endpoint verdict %s: %w", last.Name, err)

@@ -40,6 +40,22 @@ func (p *regressionPath) CheckSafety(ctx context.Context, _ coreregress.Checkpoi
 	return violationsError(p.environment.GetMonitor().CheckNamespaceSafety(ctx, p.environment.NamespaceID().String()))
 }
 
+func (p *regressionPath) QualifiedVerdicts(_ context.Context, checkpoint coreregress.Checkpoint, violated bool) ([]umpirefw.QualifiedClaim, error) {
+	profile := p.environmentProfile
+	if profile.Name == "" {
+		profile = umpirefw.InProcessProfile()
+	}
+	claim := umpirefw.QualifyEvidence(
+		p.modelVersion,
+		"live-regression",
+		profile,
+		umpirefw.EvidenceRequirement{Property: umpirefw.MonitorSafetyProperty(checkpoint.String()), Sources: []umpirefw.EvidenceSource{umpirefw.InProcessEvidence}},
+		umpirefw.ObservedEvidence{Sources: []umpirefw.EvidenceSource{umpirefw.InProcessEvidence}},
+		violated,
+	)
+	return []umpirefw.QualifiedClaim{claim}, nil
+}
+
 func (p *regressionPath) ArtifactFacts(_ context.Context) ([]json.RawMessage, error) {
 	root := umpirefw.NewEntityID(model.NamespaceType, p.environment.NamespaceID().String())
 	facts := p.environment.GetMonitor().FactLog().QueryByID(root)

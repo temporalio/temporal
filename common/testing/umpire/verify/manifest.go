@@ -10,14 +10,26 @@ import (
 type ToolVersion struct {
 	Name        string         `json:"name"`
 	Version     string         `json:"version"`
+	URL         string         `json:"url,omitempty"`
 	SHA256      string         `json:"sha256,omitempty"`
+	Archive     string         `json:"archive,omitempty"`
+	ArchiveType string         `json:"archiveType,omitempty"`
+	ExtractRoot string         `json:"extractRoot,omitempty"`
+	Package     string         `json:"package,omitempty"`
+	Executable  string         `json:"executable,omitempty"`
 	Artifacts   []ToolArtifact `json:"artifacts,omitempty"`
 	ImageDigest string         `json:"imageDigest,omitempty"`
 }
 
 type ToolArtifact struct {
-	Platform string `json:"platform"`
-	SHA256   string `json:"sha256"`
+	Platform    string `json:"platform"`
+	URL         string `json:"url,omitempty"`
+	SHA256      string `json:"sha256"`
+	Archive     string `json:"archive,omitempty"`
+	ArchiveType string `json:"archiveType,omitempty"`
+	ExtractRoot string `json:"extractRoot,omitempty"`
+	Package     string `json:"package,omitempty"`
+	Executable  string `json:"executable,omitempty"`
 }
 
 type Unsupported struct {

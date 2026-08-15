@@ -23,6 +23,11 @@ const (
 	ErrorUnboundedCycle                   ErrorCategory = "unbounded cycle"
 	ErrorIncompleteAllPaths               ErrorCategory = "incomplete AllPaths enumeration"
 	ErrorInvalidCompletedSuite            ErrorCategory = "invalid completed suite"
+	ErrorMissingRealization               ErrorCategory = "missing realization"
+	ErrorRealizationModeMismatch          ErrorCategory = "realization mode mismatch"
+	ErrorMissingResource                  ErrorCategory = "missing resource"
+	ErrorResourceDependencyCycle          ErrorCategory = "resource dependency cycle"
+	ErrorInvalidRealizationCatalog        ErrorCategory = "invalid realization catalog"
 )
 
 var (
@@ -37,6 +42,11 @@ var (
 	ErrUnboundedCycle                   = errors.New(string(ErrorUnboundedCycle))
 	ErrIncompleteAllPaths               = errors.New(string(ErrorIncompleteAllPaths))
 	ErrInvalidCompletedSuite            = errors.New(string(ErrorInvalidCompletedSuite))
+	ErrMissingRealization               = errors.New(string(ErrorMissingRealization))
+	ErrRealizationModeMismatch          = errors.New(string(ErrorRealizationModeMismatch))
+	ErrMissingResource                  = errors.New(string(ErrorMissingResource))
+	ErrResourceDependencyCycle          = errors.New(string(ErrorResourceDependencyCycle))
+	ErrInvalidRealizationCatalog        = errors.New(string(ErrorInvalidRealizationCatalog))
 )
 
 // CompileError retains source and causal information for a planning failure.
@@ -82,6 +92,16 @@ func (e *CompileError) Unwrap() error {
 		return ErrIncompleteAllPaths
 	case ErrorInvalidCompletedSuite:
 		return ErrInvalidCompletedSuite
+	case ErrorMissingRealization:
+		return ErrMissingRealization
+	case ErrorRealizationModeMismatch:
+		return ErrRealizationModeMismatch
+	case ErrorMissingResource:
+		return ErrMissingResource
+	case ErrorResourceDependencyCycle:
+		return ErrResourceDependencyCycle
+	case ErrorInvalidRealizationCatalog:
+		return ErrInvalidRealizationCatalog
 	default:
 		return ErrInvalidInstruction
 	}

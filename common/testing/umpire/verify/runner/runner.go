@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/common/testing/umpire/verify"
 )
 
@@ -29,9 +30,33 @@ const (
 	P             Backend = "p"
 	PEx           Backend = "pex"
 	Ivy           Backend = "ivy"
+	Fizz          Backend = "fizz"
 
 	maxNativeTraceBytes = 4 << 20
 )
+
+// EquivalenceEvidence records which backend results can be compared with the canonical interpreter.
+type EquivalenceEvidence struct {
+	StateCountComparable       bool
+	SemanticMutationComparable bool
+	Reason                     string
+}
+
+// BackendEquivalenceEvidence prevents a clean but incomparable run from being treated as equivalence.
+func BackendEquivalenceEvidence(backend Backend) EquivalenceEvidence {
+	switch backend {
+	case TLC, Fizz:
+		return EquivalenceEvidence{StateCountComparable: true, SemanticMutationComparable: true}
+	case Apalache:
+		return EquivalenceEvidence{SemanticMutationComparable: true, Reason: "the pinned symbolic checker does not expose a stable distinct-state count"}
+	case P, PEx:
+		return EquivalenceEvidence{SemanticMutationComparable: true, Reason: "schedule exploration does not expose a canonical distinct-state count"}
+	case Ivy:
+		return EquivalenceEvidence{SemanticMutationComparable: true, Reason: "inductiveness checking is not reachable-state enumeration"}
+	default:
+		return EquivalenceEvidence{Reason: "backend has no declared equivalence evidence"}
+	}
+}
 
 type Request struct {
 	Backend         Backend
@@ -80,6 +105,7 @@ func (osExecutor) run(ctx context.Context, specification command) execution {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	process := exec.CommandContext(ctx, specification.path, specification.args...)
+	configureProcessCancellation(process)
 	process.Dir = specification.dir
 	process.Env = append(os.Environ(), specification.env...)
 	process.Stdout = &stdout
@@ -234,6 +260,8 @@ func execute(ctx context.Context, executor executor, request Request) (execution
 	case Ivy:
 		args := []string{"trace=true", filepath.Join(request.ModelDir, "Umpire.ivy")}
 		return executor.run(ctx, command{path: request.ToolPath, args: args, dir: request.ModelDir}), [][]string{append([]string{request.ToolPath}, args...)}, nil
+	case Fizz:
+		return executeFizz(ctx, executor, request)
 	default:
 		return execution{}, nil, fmt.Errorf("unknown verification backend %q", request.Backend)
 	}
@@ -547,14 +575,17 @@ var (
 	ivyActionPattern         = regexp.MustCompile(`^\s*\(internal\)\s+([A-Za-z0-9_]+)\s*$`)
 	ivyFailurePattern        = regexp.MustCompile(`line \d+:\s+([A-Za-z0-9_]+)\s+\.\.\.\s+FAIL`)
 	apalacheInvariantFailure = regexp.MustCompile(`(?i)state\s+\d+:\s+(?:state|action|trace)\s+invariant\s+\d+\s+\[([A-Za-z0-9_.-]+)\]\s+violated`)
+	fizzFailurePattern       = regexp.MustCompile(`(?m)^FAILED: Model checker failed\. (?:Transition )?Invariant:\s+([A-Za-z0-9_.-]+)\s*$`)
+	fizzStateCountsPattern   = regexp.MustCompile(`(?m)Valid Nodes:\s+(\d+)\s+Unique states:\s+(\d+)`)
 )
 
-func classify(request Request, execution execution) verify.Result {
+func classify(request Request, execution execution) (result verify.Result) {
 	output := execution.output
 	unsupported := unsupportedForBackend(request.Backend, request.Unsupported)
-	result := verify.Result{
+	result = verify.Result{
 		Backend:      string(request.Backend),
 		Target:       request.Target,
+		ModelVersion: request.Model.Version,
 		Profile:      request.Profile,
 		ToolVersion:  request.ToolVersion,
 		Termination:  verify.Completed,
@@ -562,6 +593,7 @@ func classify(request Request, execution execution) verify.Result {
 		Abstractions: slices.Clone(request.Abstractions),
 		Unsupported:  unsupported,
 	}
+	defer qualifyResultEvidence(request, &result)
 	if errors.Is(execution.err, context.DeadlineExceeded) || errors.Is(execution.err, context.Canceled) {
 		result.Status = verify.Inconclusive
 		if errors.Is(execution.err, context.DeadlineExceeded) {
@@ -573,7 +605,19 @@ func classify(request Request, execution execution) verify.Result {
 	}
 	lower := strings.ToLower(output)
 	limit := reportedLimit(request.Backend, output)
+	fizzPassed := request.Backend == Fizz && strings.Contains(output, "PASSED: Model checker completed successfully")
+	fizzFailed := request.Backend == Fizz && fizzFailurePattern.MatchString(output)
+	fizzAnyFailure := request.Backend == Fizz && strings.Contains(output, "FAILED:")
+	fizzDeadlock := request.Backend == Fizz && strings.Contains(output, "DEADLOCK")
 	switch {
+	case request.Backend == Fizz && request.ToolVersion != pinnedToolVersion("fizzbee"):
+		result.Status = verify.Inconclusive
+		result.Termination = verify.ToolError
+		result.Diagnostic = fmt.Sprintf("unsupported FizzBee tool version %q", request.ToolVersion)
+	case request.Backend == Fizz && fizzPassed && (fizzAnyFailure || fizzDeadlock):
+		result.Status = verify.Inconclusive
+		result.Termination = verify.ParseFailure
+		result.Diagnostic = "FizzBee output contains contradictory completion markers"
 	case limit != "":
 		result.Status = verify.Inconclusive
 		result.Termination = limit
@@ -584,10 +628,10 @@ func classify(request Request, execution execution) verify.Result {
 		result.Status = verify.Inconclusive
 		result.Termination = verify.ToolError
 		result.Diagnostic = "PEx reported an implicit cycle outside the generated Umpire properties"
-	case isCounterexample(lower):
+	case isCounterexample(lower) || fizzFailed:
 		result.Status = verify.Counterexample
 		result.NativeTrace = output
-		semanticBackend := request.Backend == P || request.Backend == PEx || request.Backend == TLC || request.Backend == Apalache || request.Backend == ApalacheProof || request.Backend == Ivy
+		semanticBackend := request.Backend == P || request.Backend == PEx || request.Backend == TLC || request.Backend == Apalache || request.Backend == ApalacheProof || request.Backend == Ivy || request.Backend == Fizz
 		if semanticBackend && request.Model.Version == "" {
 			result.Status = verify.Inconclusive
 			result.Termination = verify.EvidenceFailure
@@ -651,6 +695,17 @@ func classify(request Request, execution execution) verify.Result {
 					break
 				}
 				evidence, evidenceErr = decodeIvyTrace(request, output)
+			case Fizz:
+				result.NativeTrace = execution.nativeTrace
+				if execution.nativeTraceErr != nil {
+					evidenceErr = execution.nativeTraceErr
+					break
+				}
+				if execution.nativeTrace == "" {
+					evidenceErr = errors.New("native-trace-missing: FizzBee counterexample has no error graph")
+					break
+				}
+				evidence, evidenceErr = decodeFizzTrace(request, execution.nativeTrace)
 			default:
 			}
 			if evidenceErr != nil {
@@ -691,15 +746,120 @@ func classify(request Request, execution execution) verify.Result {
 		result.Status = verify.BoundedNoCounterexample
 	case request.Backend == Ivy && (ivySuccessPattern.MatchString(output) || strings.Contains(lower, "finished with 0 errors")):
 		result.Status = verify.InvariantProved
+	case request.Backend == Fizz && fizzPassed && !fizzDeadlock:
+		result.Status = verify.BoundedNoCounterexample
 	default:
 		result.Status = verify.Inconclusive
 		result.Termination = verify.ParseFailure
 		result.Diagnostic = "tool output did not contain a recognized completion marker"
 	}
 	if matches := stateCountsPattern.FindStringSubmatch(output); len(matches) == 3 {
-		result.GeneratedStates, _ = strconv.ParseUint(matches[1], 10, 64)
-		result.DistinctStates, _ = strconv.ParseUint(matches[2], 10, 64)
+		if err := setStateCounts(&result, matches[1], matches[2]); err != nil {
+			return invalidStateCounts(result, err)
+		}
+	} else if matches := fizzStateCountsPattern.FindStringSubmatch(output); len(matches) == 3 {
+		if err := setStateCounts(&result, matches[1], matches[2]); err != nil {
+			return invalidStateCounts(result, err)
+		}
 	}
+	return result
+}
+
+func qualifyResultEvidence(request Request, result *verify.Result) {
+	if result == nil || request.Backend == "" {
+		return
+	}
+	environmentName := "formal/" + string(request.Backend)
+	if request.Profile != "" {
+		environmentName += "/" + request.Profile
+	}
+	properties := make([]string, 0, len(request.Model.Properties))
+	for _, property := range request.Model.Properties {
+		properties = append(properties, property.Name)
+	}
+	if result.Status == verify.Counterexample && result.FailedProperty != "" {
+		properties = append(properties, result.FailedProperty)
+	}
+	slices.Sort(properties)
+	properties = slices.Compact(properties)
+	result.Environment = umpire.EnvironmentProfile{
+		Name:                environmentName,
+		DriveCapabilities:   []string{"formal-model-checking"},
+		ObservationSources:  []umpire.EvidenceSource{umpire.FormalModelEvidence},
+		OrderingGuarantees:  []umpire.OrderingGuarantee{umpire.CausalOrdering, umpire.SourceSequenceOrdering},
+		IdentityLineage:     true,
+		SupportedProperties: properties,
+		Retention: umpire.RetentionPolicy{
+			RedactPayloads: true,
+			RedactSecrets:  true,
+		},
+	}
+	result.Observations = []umpire.EvidenceSource{umpire.FormalModelEvidence}
+	result.Omissions = nil
+	for _, unsupported := range result.Unsupported {
+		result.Omissions = append(result.Omissions, unsupported.Construct+": "+unsupported.Reason)
+	}
+	if result.Status == verify.Inconclusive {
+		result.Omissions = append(result.Omissions, "verification:"+string(result.Termination))
+	}
+	if result.Status == verify.Generated {
+		result.Omissions = append(result.Omissions, "verification:not-executed")
+	}
+	for _, property := range properties {
+		claim := umpire.QualifiedClaim{
+			ModelVersion: request.Model.Version,
+			Target:       request.Target,
+			Property:     property,
+			Environment:  environmentName,
+			Observed:     []umpire.EvidenceSource{umpire.FormalModelEvidence},
+		}
+		switch result.Status {
+		case verify.BoundedNoCounterexample, verify.FiniteExhaustive, verify.InvariantProved:
+			claim.Status = umpire.ClaimEstablished
+		case verify.Counterexample:
+			if property == result.FailedProperty {
+				claim.Status = umpire.ClaimViolated
+			} else {
+				claim.Status = umpire.ClaimInconclusive
+				claim.Omissions = []string{"run:terminated-after-counterexample"}
+				claim.Diagnostic = "the failing run did not establish this property"
+			}
+		case verify.UnsupportedStatus, verify.Generated:
+			claim.Status = umpire.ClaimUnsupported
+			claim.Omissions = slices.Clone(result.Omissions)
+			claim.Diagnostic = result.Diagnostic
+		case verify.Inconclusive:
+			claim.Status = umpire.ClaimInconclusive
+			claim.Omissions = slices.Clone(result.Omissions)
+			claim.Diagnostic = result.Diagnostic
+		default:
+			claim.Status = umpire.ClaimInconclusive
+			claim.Omissions = []string{"verification:unclassified"}
+		}
+		result.Claims = append(result.Claims, claim)
+	}
+}
+
+func setStateCounts(result *verify.Result, generated, distinct string) error {
+	generatedStates, err := strconv.ParseUint(generated, 10, 64)
+	if err != nil {
+		return fmt.Errorf("parse generated state count %q: %w", generated, err)
+	}
+	distinctStates, err := strconv.ParseUint(distinct, 10, 64)
+	if err != nil {
+		return fmt.Errorf("parse distinct state count %q: %w", distinct, err)
+	}
+	result.GeneratedStates = generatedStates
+	result.DistinctStates = distinctStates
+	return nil
+}
+
+func invalidStateCounts(result verify.Result, err error) verify.Result {
+	result.Status = verify.Inconclusive
+	result.Termination = verify.ParseFailure
+	result.GeneratedStates = 0
+	result.DistinctStates = 0
+	result.Diagnostic = err.Error()
 	return result
 }
 
@@ -740,6 +900,11 @@ func isCounterexample(lower string) bool {
 
 func nativeFailedProperty(request Request, output string) string {
 	name := ""
+	if request.Backend == Fizz {
+		if matches := fizzFailurePattern.FindStringSubmatch(output); len(matches) == 2 {
+			name = matches[1]
+		}
+	}
 	if request.Backend == Apalache || request.Backend == ApalacheProof {
 		if matches := apalacheInvariantFailure.FindStringSubmatch(output); len(matches) == 2 {
 			name = matches[1]
@@ -892,6 +1057,8 @@ func nativeArtifacts(request Request) []string {
 		path = filepath.Join(request.ArtifactDir, "bugfinding-native")
 	case PEx:
 		path = filepath.Join(request.ArtifactDir, "pex-native")
+	case Fizz:
+		path = filepath.Join(request.ArtifactDir, "fizz-native")
 	default:
 		return nil
 	}

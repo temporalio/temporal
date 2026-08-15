@@ -91,6 +91,21 @@ type Parameter struct {
 	Binding BindingMode `json:"binding"`
 }
 
+func DistinctFreshParameterPairs(parameters []Parameter) [][2]Parameter {
+	var result [][2]Parameter
+	for left := range parameters {
+		if parameters[left].Binding != FreshBinding {
+			continue
+		}
+		for right := left + 1; right < len(parameters); right++ {
+			if parameters[right].Binding == FreshBinding && parameters[right].Type == parameters[left].Type {
+				result = append(result, [2]Parameter{parameters[left], parameters[right]})
+			}
+		}
+	}
+	return result
+}
+
 type Expr struct {
 	Op       ExprOp `json:"op,omitempty"`
 	Args     []Expr `json:"args,omitempty"`

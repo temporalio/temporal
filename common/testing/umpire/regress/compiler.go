@@ -6,15 +6,19 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"go.temporal.io/server/common/testing/umpire"
 )
 
 // Profile declares the environment variant against which a sparse plan is compiled.
 type Profile struct {
-	Name             string          `json:"name"`
-	Capabilities     []string        `json:"capabilities,omitempty"`
-	Limits           CompileLimits   `json:"limits,omitempty"`
-	ObservedFacts    []CompletedAtom `json:"observedFacts,omitempty"`
-	ObservedBindings Bindings        `json:"observedBindings,omitempty"`
+	Name             string                    `json:"name"`
+	Capabilities     []string                  `json:"capabilities,omitempty"`
+	Environment      umpire.EnvironmentProfile `json:"environment,omitempty"`
+	Realizations     *RealizationCatalog       `json:"realizations,omitempty"`
+	Limits           CompileLimits             `json:"limits,omitempty"`
+	ObservedFacts    []CompletedAtom           `json:"observedFacts,omitempty"`
+	ObservedBindings Bindings                  `json:"observedBindings,omitempty"`
 }
 
 // CompileLimits are explicit caller bounds; zero values impose no semantic truncation.
@@ -60,6 +64,7 @@ type CompletedMilestone struct {
 type CompletedResource struct {
 	Name        string `json:"name"`
 	Realization string `json:"realization,omitempty"`
+	Source      int    `json:"source,omitempty"`
 }
 
 // CompletedPolicy is one policy interval over the completed action sequence [Start, End).
@@ -67,6 +72,7 @@ type CompletedPolicy struct {
 	Name        string     `json:"name"`
 	Arguments   []Argument `json:"arguments,omitempty"`
 	Realization string     `json:"realization,omitempty"`
+	Source      int        `json:"source,omitempty"`
 	Start       int        `json:"start"`
 	End         int        `json:"end"`
 }
@@ -102,7 +108,7 @@ type world struct {
 	created    map[string]bool
 	actions    []CompletedAction
 	steps      []CompletedStep
-	resources  map[string]bool
+	resources  map[string]int
 	ranges     map[int]actionRange
 	milestones []CompletedMilestone
 }
@@ -124,6 +130,11 @@ type searchContext struct {
 func Compile(plan Plan, domain *Domain, profile Profile) (Suite, error) {
 	if domain == nil {
 		return Suite{}, invalidInstruction(0, "domain is nil")
+	}
+	if profile.Environment.Name != "" {
+		if err := umpire.ValidateEnvironmentProfile(profile.Environment); err != nil {
+			return Suite{}, &CompileError{Category: ErrorUnavailableEnvironmentCapability, Detail: err.Error()}
+		}
 	}
 	ir, err := Normalize(plan)
 	if err != nil {
@@ -155,8 +166,8 @@ func Compile(plan Plan, domain *Domain, profile Profile) (Suite, error) {
 	if err != nil {
 		return Suite{}, err
 	}
-	for resource := range policyResources {
-		initial.resources[resource] = true
+	for resource, source := range policyResources {
+		initial.resources[resource] = source
 	}
 	var states []world
 	for _, order := range topologicalOrders(len(ir.Nodes), ir.Edges) {
@@ -234,6 +245,11 @@ func validateCompiledSuite(suite Suite) (Suite, error) {
 		return Suite{}, &CompileError{
 			Category: ErrorInvalidCompletedSuite,
 			Detail:   fmt.Sprintf("completed suite is invalid: %v", err),
+		}
+	}
+	if suite.Profile.Realizations != nil {
+		if err := ValidateRealizations(suite, *suite.Profile.Realizations); err != nil {
+			return Suite{}, err
 		}
 	}
 	return suite, nil
@@ -360,7 +376,7 @@ func newWorld() world {
 	return world{
 		facts:     map[string]groundAtom{},
 		created:   map[string]bool{},
-		resources: map[string]bool{},
+		resources: map[string]int{},
 		ranges:    map[int]actionRange{},
 	}
 }
@@ -524,8 +540,8 @@ func (c *searchContext) satisfyNodeRaw(current world, node Node) ([]world, error
 	}
 }
 
-func (c *searchContext) validatePolicies() (map[string]bool, error) {
-	resources := map[string]bool{}
+func (c *searchContext) validatePolicies() (map[string]int, error) {
+	resources := map[string]int{}
 	for _, scope := range c.ir.Scopes {
 		policy, exists := c.domain.policies[scope.Policy.Name]
 		if !exists {
@@ -548,7 +564,7 @@ func (c *searchContext) validatePolicies() (map[string]bool, error) {
 			}
 		}
 		for _, resource := range policy.Resources {
-			resources[resource] = true
+			resources[resource] = scope.Policy.Source
 		}
 	}
 	return resources, nil
@@ -576,6 +592,7 @@ func (c *searchContext) completedPolicies(state world) []CompletedPolicy {
 			Name:        scope.Policy.Name,
 			Arguments:   append([]Argument(nil), scope.Policy.Arguments...),
 			Realization: policy.Realization,
+			Source:      scope.Policy.Source,
 			Start:       start,
 			End:         end,
 		})
@@ -792,7 +809,9 @@ func (c *searchContext) applyAction(current world, action ActionCapability, bind
 		c.applyEffect(&next, effect)
 	}
 	for _, resource := range action.Resources {
-		next.resources[resource] = true
+		if previous, selected := next.resources[resource]; !selected || source < previous {
+			next.resources[resource] = source
+		}
 	}
 	arguments := make([]Argument, len(action.Schema.Parameters))
 	for index, parameter := range action.Schema.Parameters {
@@ -865,35 +884,48 @@ func (c *searchContext) actionAvailable(action ActionCapability) bool {
 	return available
 }
 
-func (c *searchContext) completedResources(selected map[string]bool) ([]CompletedResource, error) {
+func (c *searchContext) completedResources(selected map[string]int) ([]CompletedResource, error) {
 	var result []CompletedResource
 	visiting := map[string]bool{}
 	visited := map[string]bool{}
-	var visit func(string) error
-	visit = func(name string) error {
+	var visit func(string, int, []string) error
+	visit = func(name string, source int, chain []string) error {
 		if visited[name] {
 			return nil
 		}
 		if visiting[name] {
-			return fmt.Errorf("resource dependency cycle at %s", name)
+			return &CompileError{
+				Category:     ErrorResourceDependencyCycle,
+				Source:       source,
+				Actual:       name,
+				MissingChain: append(slices.Clone(chain), name),
+				Detail:       fmt.Sprintf("resource dependency cycle at %s", name),
+			}
 		}
 		resource, exists := c.domain.resources[name]
 		if !exists {
-			return fmt.Errorf("missing resource capability %q", name)
+			return &CompileError{
+				Category:     ErrorMissingResource,
+				Source:       source,
+				Expected:     "resource capability",
+				Actual:       name,
+				MissingChain: append(slices.Clone(chain), name),
+				Detail:       fmt.Sprintf("missing resource capability %q", name),
+			}
 		}
 		visiting[name] = true
 		for _, dependency := range resource.DependsOn {
-			if err := visit(dependency); err != nil {
+			if err := visit(dependency, source, append(slices.Clone(chain), name)); err != nil {
 				return err
 			}
 		}
 		delete(visiting, name)
 		visited[name] = true
-		result = append(result, CompletedResource{Name: name, Realization: resource.Realization})
+		result = append(result, CompletedResource{Name: name, Realization: resource.Realization, Source: source})
 		return nil
 	}
 	for _, name := range sortedKeys(selected) {
-		if err := visit(name); err != nil {
+		if err := visit(name, selected[name], nil); err != nil {
 			return nil, err
 		}
 	}
@@ -947,7 +979,7 @@ func cloneWorld(source world) world {
 		created:    make(map[string]bool, len(source.created)),
 		actions:    append([]CompletedAction(nil), source.actions...),
 		steps:      append([]CompletedStep(nil), source.steps...),
-		resources:  make(map[string]bool, len(source.resources)),
+		resources:  make(map[string]int, len(source.resources)),
 		ranges:     make(map[int]actionRange, len(source.ranges)),
 		milestones: append([]CompletedMilestone(nil), source.milestones...),
 	}

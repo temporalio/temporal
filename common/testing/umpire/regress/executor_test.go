@@ -30,10 +30,10 @@ func TestRunEmitsNeutralActionWindowsAndVerdicts(t *testing.T) {
 		{Kind: umpire.ExecutionActionStart, Action: "proactive", Phase: "install", Outcome: umpire.ExecutionOutcomeStarted},
 		{Kind: umpire.ExecutionActionStart, Action: "reactive", Phase: "install", Outcome: umpire.ExecutionOutcomeStarted},
 		{Kind: umpire.ExecutionActionFinish, Action: "proactive", Phase: "reconcile", Outcome: umpire.ExecutionOutcomeSucceeded},
-		{Kind: umpire.ExecutionVerdict, Checkpoint: "action", Pass: true},
+		{Kind: umpire.ExecutionVerdict, Checkpoint: "action", Property: umpire.MonitorSafetyProperty("action"), Pass: true},
 		{Kind: umpire.ExecutionActionFinish, Action: "reactive", Phase: "reconcile", Outcome: umpire.ExecutionOutcomeSucceeded},
-		{Kind: umpire.ExecutionVerdict, Checkpoint: "action", Pass: true},
-		{Kind: umpire.ExecutionVerdict, Checkpoint: "quiescence", Pass: true},
+		{Kind: umpire.ExecutionVerdict, Checkpoint: "action", Property: umpire.MonitorSafetyProperty("action"), Pass: true},
+		{Kind: umpire.ExecutionVerdict, Checkpoint: "quiescence", Property: umpire.MonitorSafetyProperty("quiescence"), Pass: true},
 	}, observer.observations)
 }
 

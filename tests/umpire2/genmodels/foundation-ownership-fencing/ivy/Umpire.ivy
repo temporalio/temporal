@@ -1,0 +1,364 @@
+#lang ivy1.7
+
+# Generated from the Umpire verification snapshot. Do not edit.
+
+type deliveryattempt
+type deliveryattempt_state = {deliveryattempt_state_accepted,deliveryattempt_state_completed,deliveryattempt_state_dispatched,deliveryattempt_state_failed,deliveryattempt_state_rejected,deliveryattempt_state_reserved}
+individual deliveryattempt_0:deliveryattempt
+relation exists_deliveryattempt(X:deliveryattempt)
+function state_deliveryattempt(X:deliveryattempt):deliveryattempt_state
+
+type deliveryqueue
+type deliveryqueue_state = {deliveryqueue_state_available}
+individual deliveryqueue_0:deliveryqueue
+individual deliveryqueue_1:deliveryqueue
+relation exists_deliveryqueue(X:deliveryqueue)
+function state_deliveryqueue(X:deliveryqueue):deliveryqueue_state
+
+type deliveryrouteclass
+type deliveryrouteclass_state = {deliveryrouteclass_state_active,deliveryrouteclass_state_inactive}
+individual deliveryrouteclass_0:deliveryrouteclass
+relation exists_deliveryrouteclass(X:deliveryrouteclass)
+function state_deliveryrouteclass(X:deliveryrouteclass):deliveryrouteclass_state
+
+type deliverytask
+type deliverytask_state = {deliverytask_state_acknowledged,deliverytask_state_authorized,deliverytask_state_backlogged,deliverytask_state_dispatched,deliverytask_state_pending,deliverytask_state_reserved,deliverytask_state_retired,deliverytask_state_sync_offered}
+individual deliverytask_0:deliverytask
+relation exists_deliverytask(X:deliverytask)
+function state_deliverytask(X:deliverytask):deliverytask_state
+
+type historyownergeneration
+type historyownergeneration_state = {historyownergeneration_state_current,historyownergeneration_state_stale,historyownergeneration_state_unused}
+individual historyownergeneration_0:historyownergeneration
+individual historyownergeneration_1:historyownergeneration
+relation exists_historyownergeneration(X:historyownergeneration)
+function state_historyownergeneration(X:historyownergeneration):historyownergeneration_state
+
+type historyshard
+type historyshard_state = {historyshard_state_owned,historyshard_state_unowned}
+individual historyshard_0:historyshard
+relation exists_historyshard(X:historyshard)
+function state_historyshard(X:historyshard):historyshard_state
+
+type matchingownergeneration
+type matchingownergeneration_state = {matchingownergeneration_state_current,matchingownergeneration_state_stale,matchingownergeneration_state_unused}
+individual matchingownergeneration_0:matchingownergeneration
+individual matchingownergeneration_1:matchingownergeneration
+relation exists_matchingownergeneration(X:matchingownergeneration)
+function state_matchingownergeneration(X:matchingownergeneration):matchingownergeneration_state
+
+type matchingqueuepartition
+type matchingqueuepartition_state = {matchingqueuepartition_state_owned,matchingqueuepartition_state_unowned}
+individual matchingqueuepartition_0:matchingqueuepartition
+relation exists_matchingqueuepartition(X:matchingqueuepartition)
+function state_matchingqueuepartition(X:matchingqueuepartition):matchingqueuepartition_state
+
+type poller
+type poller_state = {poller_state_available}
+individual poller_0:poller
+individual poller_1:poller
+relation exists_poller(X:poller)
+function state_poller(X:poller):poller_state
+
+type workobligation
+type workobligation_state = {workobligation_state_accepted,workobligation_state_terminal,workobligation_state_unresolved,workobligation_state_valid}
+individual workobligation_0:workobligation
+relation exists_workobligation(X:workobligation)
+function state_workobligation(X:workobligation):workobligation_state
+
+relation relation_delivery_accepted_start(X:workobligation, Y:deliveryattempt)
+relation relation_delivery_attempt_poller(X:deliveryattempt, Y:poller)
+relation relation_delivery_attempt_task(X:deliveryattempt, Y:deliverytask)
+relation relation_delivery_partition_owner(X:matchingqueuepartition, Y:matchingownergeneration)
+relation relation_delivery_partition_route(X:matchingqueuepartition, Y:deliveryrouteclass)
+relation relation_delivery_poller_route(X:poller, Y:deliveryrouteclass)
+relation relation_delivery_task_history_owner_generation(X:deliverytask, Y:historyownergeneration)
+relation relation_delivery_task_history_shard(X:deliverytask, Y:historyshard)
+relation relation_delivery_task_obligation(X:deliverytask, Y:workobligation)
+relation relation_delivery_task_owner_generation(X:deliverytask, Y:matchingownergeneration)
+relation relation_delivery_task_queue(X:deliverytask, Y:deliveryqueue)
+relation relation_delivery_task_route(X:deliverytask, Y:deliveryrouteclass)
+relation relation_history_shard_owner(X:historyshard, Y:historyownergeneration)
+
+after init {
+    exists_deliveryattempt(X) := false;
+    state_deliveryattempt(X) := deliveryattempt_state_reserved;
+    exists_deliveryqueue(X) := false;
+    state_deliveryqueue(X) := deliveryqueue_state_available;
+    exists_deliveryqueue(deliveryqueue_0) := true;
+    exists_deliveryqueue(deliveryqueue_1) := true;
+    exists_deliveryrouteclass(X) := false;
+    state_deliveryrouteclass(X) := deliveryrouteclass_state_inactive;
+    exists_deliverytask(X) := false;
+    state_deliverytask(X) := deliverytask_state_pending;
+    exists_historyownergeneration(X) := false;
+    state_historyownergeneration(X) := historyownergeneration_state_unused;
+    exists_historyshard(X) := false;
+    state_historyshard(X) := historyshard_state_unowned;
+    exists_matchingownergeneration(X) := false;
+    state_matchingownergeneration(X) := matchingownergeneration_state_unused;
+    exists_matchingqueuepartition(X) := false;
+    state_matchingqueuepartition(X) := matchingqueuepartition_state_unowned;
+    exists_poller(X) := false;
+    state_poller(X) := poller_state_available;
+    exists_poller(poller_0) := true;
+    exists_poller(poller_1) := true;
+    exists_workobligation(X) := false;
+    state_workobligation(X) := workobligation_state_unresolved;
+    relation_delivery_accepted_start(X,Y) := false;
+    relation_delivery_attempt_poller(X,Y) := false;
+    relation_delivery_attempt_task(X,Y) := false;
+    relation_delivery_partition_owner(X,Y) := false;
+    relation_delivery_partition_route(X,Y) := false;
+    relation_delivery_poller_route(X,Y) := false;
+    relation_delivery_task_history_owner_generation(X,Y) := false;
+    relation_delivery_task_history_shard(X,Y) := false;
+    relation_delivery_task_obligation(X,Y) := false;
+    relation_delivery_task_owner_generation(X,Y) := false;
+    relation_delivery_task_queue(X,Y) := false;
+    relation_delivery_task_route(X,Y) := false;
+    relation_history_shard_owner(X,Y) := false
+}
+
+action delivery_acknowledge(task:deliverytask,attempt:deliveryattempt) = {
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_deliverytask(task) = deliverytask_state_dispatched & state_deliveryattempt(attempt) = deliveryattempt_state_dispatched & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_acknowledged;
+    state_deliveryattempt(attempt) := deliveryattempt_state_completed
+}
+
+action delivery_authorize_accept(obligation:workobligation,task:deliverytask,attempt:deliveryattempt) = {
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_workobligation(obligation) = workobligation_state_valid & state_deliverytask(task) = deliverytask_state_reserved & state_deliveryattempt(attempt) = deliveryattempt_state_reserved & relation_delivery_task_obligation(task,obligation) & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_authorized;
+    state_deliveryattempt(attempt) := deliveryattempt_state_accepted;
+    state_workobligation(obligation) := workobligation_state_accepted;
+    relation_delivery_accepted_start(obligation,attempt) := true
+}
+
+action delivery_authorize_reject(obligation:workobligation,task:deliverytask,attempt:deliveryattempt) = {
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_workobligation(obligation) = workobligation_state_valid & state_deliverytask(task) = deliverytask_state_reserved & state_deliveryattempt(attempt) = deliveryattempt_state_reserved & relation_delivery_task_obligation(task,obligation) & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_backlogged;
+    state_deliveryattempt(attempt) := deliveryattempt_state_rejected
+}
+
+action delivery_dispatch(task:deliverytask,attempt:deliveryattempt) = {
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_deliverytask(task) = deliverytask_state_authorized & state_deliveryattempt(attempt) = deliveryattempt_state_accepted & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_dispatched;
+    state_deliveryattempt(attempt) := deliveryattempt_state_dispatched
+}
+
+action delivery_expire(obligation:workobligation,task:deliverytask) = {
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require (state_workobligation(obligation) = workobligation_state_valid & (state_deliverytask(task) = deliverytask_state_pending | state_deliverytask(task) = deliverytask_state_sync_offered | state_deliverytask(task) = deliverytask_state_backlogged) & relation_delivery_task_obligation(task,obligation));
+    state_workobligation(obligation) := workobligation_state_terminal;
+    state_deliverytask(task) := deliverytask_state_retired
+}
+
+action delivery_offer_sync(task:deliverytask) = {
+    require exists_deliverytask(task);
+    require (state_deliverytask(task) = deliverytask_state_pending & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(task,Q_obligation) & state_workobligation(Q_obligation) = workobligation_state_valid))));
+    state_deliverytask(task) := deliverytask_state_sync_offered
+}
+
+action delivery_persist_ambiguous(obligation:workobligation,task:deliverytask,queue:deliveryqueue) = {
+    require ~exists_workobligation(obligation);
+    require ~exists_deliverytask(task);
+    require exists_deliveryqueue(queue);
+    exists_workobligation(obligation) := true;
+    state_workobligation(obligation) := workobligation_state_unresolved;
+    exists_deliverytask(task) := true;
+    state_deliverytask(task) := deliverytask_state_pending;
+    relation_delivery_task_obligation(task,obligation) := true;
+    relation_delivery_task_queue(task,queue) := true
+}
+
+action delivery_persist_success(obligation:workobligation,task:deliverytask,queue:deliveryqueue) = {
+    require ~exists_workobligation(obligation);
+    require ~exists_deliverytask(task);
+    require exists_deliveryqueue(queue);
+    exists_workobligation(obligation) := true;
+    state_workobligation(obligation) := workobligation_state_valid;
+    exists_deliverytask(task) := true;
+    state_deliverytask(task) := deliverytask_state_pending;
+    relation_delivery_task_obligation(task,obligation) := true;
+    relation_delivery_task_queue(task,queue) := true
+}
+
+action delivery_resolve_persisted(obligation:workobligation,task:deliverytask) = {
+    require exists_workobligation(obligation);
+    require exists_deliverytask(task);
+    require (state_workobligation(obligation) = workobligation_state_unresolved & state_deliverytask(task) = deliverytask_state_pending & relation_delivery_task_obligation(task,obligation));
+    state_workobligation(obligation) := workobligation_state_valid
+}
+
+action delivery_retire(task:deliverytask) = {
+    require exists_deliverytask(task);
+    require state_deliverytask(task) = deliverytask_state_acknowledged;
+    state_deliverytask(task) := deliverytask_state_retired
+}
+
+action delivery_retry(task:deliverytask,attempt:deliveryattempt) = {
+    require exists_deliverytask(task);
+    require exists_deliveryattempt(attempt);
+    require (state_deliverytask(task) = deliverytask_state_dispatched & state_deliveryattempt(attempt) = deliveryattempt_state_dispatched & relation_delivery_attempt_task(attempt,task));
+    state_deliverytask(task) := deliverytask_state_backlogged;
+    state_deliveryattempt(attempt) := deliveryattempt_state_failed
+}
+
+action delivery_spool(task:deliverytask) = {
+    require exists_deliverytask(task);
+    require ((state_deliverytask(task) = deliverytask_state_pending | state_deliverytask(task) = deliverytask_state_sync_offered) & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(task,Q_obligation) & state_workobligation(Q_obligation) = workobligation_state_valid))));
+    state_deliverytask(task) := deliverytask_state_backlogged
+}
+
+action routing_bootstrap(route:deliveryrouteclass,partition:matchingqueuepartition,generation:matchingownergeneration) = {
+    require ~exists_deliveryrouteclass(route);
+    require ~exists_matchingqueuepartition(partition);
+    require ~exists_matchingownergeneration(generation);
+    exists_deliveryrouteclass(route) := true;
+    state_deliveryrouteclass(route) := deliveryrouteclass_state_active;
+    exists_matchingqueuepartition(partition) := true;
+    state_matchingqueuepartition(partition) := matchingqueuepartition_state_owned;
+    exists_matchingownergeneration(generation) := true;
+    state_matchingownergeneration(generation) := matchingownergeneration_state_current;
+    relation_delivery_partition_route(partition,route) := true;
+    relation_delivery_partition_owner(partition,generation) := true
+}
+
+action routing_bootstrap_history_owner(shard:historyshard,historygeneration:historyownergeneration) = {
+    require ~exists_historyshard(shard);
+    require ~exists_historyownergeneration(historygeneration);
+    exists_historyshard(shard) := true;
+    state_historyshard(shard) := historyshard_state_owned;
+    exists_historyownergeneration(historygeneration) := true;
+    state_historyownergeneration(historygeneration) := historyownergeneration_state_current;
+    relation_history_shard_owner(shard,historygeneration) := true
+}
+
+action routing_forward_to_matching(task:deliverytask,route:deliveryrouteclass,partition:matchingqueuepartition,generation:matchingownergeneration,shard:historyshard,historygeneration:historyownergeneration) = {
+    require exists_deliverytask(task);
+    require exists_deliveryrouteclass(route);
+    require exists_matchingqueuepartition(partition);
+    require exists_matchingownergeneration(generation);
+    require exists_historyshard(shard);
+    require exists_historyownergeneration(historygeneration);
+    require ((state_deliverytask(task) = deliverytask_state_pending | state_deliverytask(task) = deliverytask_state_sync_offered | state_deliverytask(task) = deliverytask_state_backlogged) & state_matchingownergeneration(generation) = matchingownergeneration_state_current & relation_delivery_partition_route(partition,route) & relation_delivery_partition_owner(partition,generation) & state_historyownergeneration(historygeneration) = historyownergeneration_state_current & relation_history_shard_owner(shard,historygeneration));
+    relation_delivery_task_route(task,route) := true;
+    relation_delivery_task_owner_generation(task,generation) := true;
+    relation_delivery_task_history_shard(task,shard) := true;
+    relation_delivery_task_history_owner_generation(task,historygeneration) := true
+}
+
+action routing_handoff(partition:matchingqueuepartition,oldgeneration:matchingownergeneration,newgeneration:matchingownergeneration) = {
+    require exists_matchingqueuepartition(partition);
+    require exists_matchingownergeneration(oldgeneration);
+    require ~exists_matchingownergeneration(newgeneration);
+    require (state_matchingownergeneration(oldgeneration) = matchingownergeneration_state_current & relation_delivery_partition_owner(partition,oldgeneration) & (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> ((relation_delivery_task_owner_generation(Q_task,oldgeneration) -> (state_deliverytask(Q_task) = deliverytask_state_acknowledged | state_deliverytask(Q_task) = deliverytask_state_retired)))));
+    state_matchingownergeneration(oldgeneration) := matchingownergeneration_state_stale;
+    exists_matchingownergeneration(newgeneration) := true;
+    state_matchingownergeneration(newgeneration) := matchingownergeneration_state_current;
+    relation_delivery_partition_owner(partition,oldgeneration) := false;
+    relation_delivery_partition_owner(partition,newgeneration) := true
+}
+
+action routing_handoff_history_owner(shard:historyshard,oldhistorygeneration:historyownergeneration,newhistorygeneration:historyownergeneration) = {
+    require exists_historyshard(shard);
+    require exists_historyownergeneration(oldhistorygeneration);
+    require ~exists_historyownergeneration(newhistorygeneration);
+    require (state_historyownergeneration(oldhistorygeneration) = historyownergeneration_state_current & relation_history_shard_owner(shard,oldhistorygeneration) & (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> ((relation_delivery_task_history_owner_generation(Q_task,oldhistorygeneration) -> (state_deliverytask(Q_task) = deliverytask_state_acknowledged | state_deliverytask(Q_task) = deliverytask_state_retired)))));
+    state_historyownergeneration(oldhistorygeneration) := historyownergeneration_state_stale;
+    exists_historyownergeneration(newhistorygeneration) := true;
+    state_historyownergeneration(newhistorygeneration) := historyownergeneration_state_current;
+    relation_history_shard_owner(shard,oldhistorygeneration) := false;
+    relation_history_shard_owner(shard,newhistorygeneration) := true
+}
+
+action routing_register_poller(poller:poller,route:deliveryrouteclass) = {
+    require exists_poller(poller);
+    require exists_deliveryrouteclass(route);
+    relation_delivery_poller_route(poller,route) := true
+}
+
+action routing_reserve_compatible(task:deliverytask,attempt:deliveryattempt,poller:poller,route:deliveryrouteclass,partition:matchingqueuepartition,generation:matchingownergeneration) = {
+    require exists_deliverytask(task);
+    require ~exists_deliveryattempt(attempt);
+    require exists_poller(poller);
+    require exists_deliveryrouteclass(route);
+    require exists_matchingqueuepartition(partition);
+    require exists_matchingownergeneration(generation);
+    require ((state_deliverytask(task) = deliverytask_state_sync_offered | state_deliverytask(task) = deliverytask_state_backlogged) & relation_delivery_task_route(task,route) & relation_delivery_poller_route(poller,route) & relation_delivery_partition_route(partition,route) & relation_delivery_partition_owner(partition,generation) & relation_delivery_task_owner_generation(task,generation) & state_matchingownergeneration(generation) = matchingownergeneration_state_current);
+    state_deliverytask(task) := deliverytask_state_reserved;
+    exists_deliveryattempt(attempt) := true;
+    state_deliveryattempt(attempt) := deliveryattempt_state_reserved;
+    relation_delivery_attempt_task(attempt,task) := true;
+    relation_delivery_attempt_poller(attempt,poller) := true
+}
+
+invariant [relation_delivery_accepted_start_endpoints] forall S:workobligation,T:deliveryattempt. relation_delivery_accepted_start(S,T) -> exists_workobligation(S) & exists_deliveryattempt(T)
+invariant [cardinality_delivery_accepted_start_source] forall S:workobligation,T1:deliveryattempt,T2:deliveryattempt. relation_delivery_accepted_start(S,T1) & relation_delivery_accepted_start(S,T2) -> T1 = T2
+invariant [cardinality_delivery_accepted_start_target] forall S1:workobligation,S2:workobligation,T:deliveryattempt. relation_delivery_accepted_start(S1,T) & relation_delivery_accepted_start(S2,T) -> S1 = S2
+invariant [relation_delivery_attempt_poller_endpoints] forall S:deliveryattempt,T:poller. relation_delivery_attempt_poller(S,T) -> exists_deliveryattempt(S) & exists_poller(T)
+invariant [cardinality_delivery_attempt_poller_source] forall S:deliveryattempt,T1:poller,T2:poller. relation_delivery_attempt_poller(S,T1) & relation_delivery_attempt_poller(S,T2) -> T1 = T2
+invariant [relation_delivery_attempt_task_endpoints] forall S:deliveryattempt,T:deliverytask. relation_delivery_attempt_task(S,T) -> exists_deliveryattempt(S) & exists_deliverytask(T)
+invariant [cardinality_delivery_attempt_task_source] forall S:deliveryattempt,T1:deliverytask,T2:deliverytask. relation_delivery_attempt_task(S,T1) & relation_delivery_attempt_task(S,T2) -> T1 = T2
+invariant [relation_delivery_partition_owner_endpoints] forall S:matchingqueuepartition,T:matchingownergeneration. relation_delivery_partition_owner(S,T) -> exists_matchingqueuepartition(S) & exists_matchingownergeneration(T)
+invariant [cardinality_delivery_partition_owner_source] forall S:matchingqueuepartition,T1:matchingownergeneration,T2:matchingownergeneration. relation_delivery_partition_owner(S,T1) & relation_delivery_partition_owner(S,T2) -> T1 = T2
+invariant [relation_delivery_partition_route_endpoints] forall S:matchingqueuepartition,T:deliveryrouteclass. relation_delivery_partition_route(S,T) -> exists_matchingqueuepartition(S) & exists_deliveryrouteclass(T)
+invariant [cardinality_delivery_partition_route_source] forall S:matchingqueuepartition,T1:deliveryrouteclass,T2:deliveryrouteclass. relation_delivery_partition_route(S,T1) & relation_delivery_partition_route(S,T2) -> T1 = T2
+invariant [relation_delivery_poller_route_endpoints] forall S:poller,T:deliveryrouteclass. relation_delivery_poller_route(S,T) -> exists_poller(S) & exists_deliveryrouteclass(T)
+invariant [cardinality_delivery_poller_route_source] forall S:poller,T1:deliveryrouteclass,T2:deliveryrouteclass. relation_delivery_poller_route(S,T1) & relation_delivery_poller_route(S,T2) -> T1 = T2
+invariant [relation_delivery_task_history_owner_generation_endpoints] forall S:deliverytask,T:historyownergeneration. relation_delivery_task_history_owner_generation(S,T) -> exists_deliverytask(S) & exists_historyownergeneration(T)
+invariant [cardinality_delivery_task_history_owner_generation_source] forall S:deliverytask,T1:historyownergeneration,T2:historyownergeneration. relation_delivery_task_history_owner_generation(S,T1) & relation_delivery_task_history_owner_generation(S,T2) -> T1 = T2
+invariant [relation_delivery_task_history_shard_endpoints] forall S:deliverytask,T:historyshard. relation_delivery_task_history_shard(S,T) -> exists_deliverytask(S) & exists_historyshard(T)
+invariant [cardinality_delivery_task_history_shard_source] forall S:deliverytask,T1:historyshard,T2:historyshard. relation_delivery_task_history_shard(S,T1) & relation_delivery_task_history_shard(S,T2) -> T1 = T2
+invariant [relation_delivery_task_obligation_endpoints] forall S:deliverytask,T:workobligation. relation_delivery_task_obligation(S,T) -> exists_deliverytask(S) & exists_workobligation(T)
+invariant [cardinality_delivery_task_obligation_source] forall S:deliverytask,T1:workobligation,T2:workobligation. relation_delivery_task_obligation(S,T1) & relation_delivery_task_obligation(S,T2) -> T1 = T2
+invariant [relation_delivery_task_owner_generation_endpoints] forall S:deliverytask,T:matchingownergeneration. relation_delivery_task_owner_generation(S,T) -> exists_deliverytask(S) & exists_matchingownergeneration(T)
+invariant [cardinality_delivery_task_owner_generation_source] forall S:deliverytask,T1:matchingownergeneration,T2:matchingownergeneration. relation_delivery_task_owner_generation(S,T1) & relation_delivery_task_owner_generation(S,T2) -> T1 = T2
+invariant [relation_delivery_task_queue_endpoints] forall S:deliverytask,T:deliveryqueue. relation_delivery_task_queue(S,T) -> exists_deliverytask(S) & exists_deliveryqueue(T)
+invariant [cardinality_delivery_task_queue_source] forall S:deliverytask,T1:deliveryqueue,T2:deliveryqueue. relation_delivery_task_queue(S,T1) & relation_delivery_task_queue(S,T2) -> T1 = T2
+invariant [relation_delivery_task_route_endpoints] forall S:deliverytask,T:deliveryrouteclass. relation_delivery_task_route(S,T) -> exists_deliverytask(S) & exists_deliveryrouteclass(T)
+invariant [cardinality_delivery_task_route_source] forall S:deliverytask,T1:deliveryrouteclass,T2:deliveryrouteclass. relation_delivery_task_route(S,T1) & relation_delivery_task_route(S,T2) -> T1 = T2
+invariant [relation_history_shard_owner_endpoints] forall S:historyshard,T:historyownergeneration. relation_history_shard_owner(S,T) -> exists_historyshard(S) & exists_historyownergeneration(T)
+invariant [cardinality_history_shard_owner_source] forall S:historyshard,T1:historyownergeneration,T2:historyownergeneration. relation_history_shard_owner(S,T1) & relation_history_shard_owner(S,T2) -> T1 = T2
+# unsupported property delivery.ambiguous-commit-resolved: Ivy generation supports inductive safety properties only
+invariant [delivery_coarse_retirement_safety] (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> ((state_deliverytask(Q_task) = deliverytask_state_retired -> (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(Q_task,Q_obligation) & (state_workobligation(Q_obligation) = workobligation_state_accepted | state_workobligation(Q_obligation) = workobligation_state_terminal)))))))
+invariant [delivery_destination_isolation] (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> ((exists Q_queue:deliveryqueue. exists_deliveryqueue(Q_queue) & (relation_delivery_task_queue(Q_task,Q_queue)))))
+invariant [delivery_failed_start_is_not_accepted] (forall Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) -> ((state_deliveryattempt(Q_attempt) = deliveryattempt_state_rejected -> (forall Q_obligation:workobligation. exists_workobligation(Q_obligation) -> (~(relation_delivery_accepted_start(Q_obligation,Q_attempt)))))))
+invariant [delivery_no_phantom_dispatch] (forall Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) -> (((state_deliveryattempt(Q_attempt) = deliveryattempt_state_dispatched | state_deliveryattempt(Q_attempt) = deliveryattempt_state_failed | state_deliveryattempt(Q_attempt) = deliveryattempt_state_completed) -> (exists Q_task:deliverytask. exists_deliverytask(Q_task) & ((relation_delivery_attempt_task(Q_attempt,Q_task) & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & ((relation_delivery_task_obligation(Q_task,Q_obligation) & state_workobligation(Q_obligation) = workobligation_state_accepted)))))))))
+invariant [delivery_no_resurrection] (forall Q_obligation:workobligation. exists_workobligation(Q_obligation) -> ((state_workobligation(Q_obligation) = workobligation_state_terminal -> (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> ((relation_delivery_task_obligation(Q_task,Q_obligation) -> state_deliverytask(Q_task) = deliverytask_state_retired))))))
+invariant [delivery_no_split_commit] (forall Q_obligation:workobligation. exists_workobligation(Q_obligation) -> (((state_workobligation(Q_obligation) = workobligation_state_valid | state_workobligation(Q_obligation) = workobligation_state_accepted) -> (exists Q_task:deliverytask. exists_deliverytask(Q_task) & (relation_delivery_task_obligation(Q_task,Q_obligation))))))
+invariant [delivery_owner_generation_fencing] (forall Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) -> (((state_deliveryattempt(Q_attempt) = deliveryattempt_state_reserved | state_deliveryattempt(Q_attempt) = deliveryattempt_state_accepted | state_deliveryattempt(Q_attempt) = deliveryattempt_state_dispatched) -> (exists Q_task:deliverytask. exists_deliverytask(Q_task) & ((relation_delivery_attempt_task(Q_attempt,Q_task) & (exists Q_generation:matchingownergeneration. exists_matchingownergeneration(Q_generation) & ((relation_delivery_task_owner_generation(Q_task,Q_generation) & state_matchingownergeneration(Q_generation) = matchingownergeneration_state_current))) & (exists Q_historygeneration:historyownergeneration. exists_historyownergeneration(Q_historygeneration) & ((relation_delivery_task_history_owner_generation(Q_task,Q_historygeneration) & state_historyownergeneration(Q_historygeneration) = historyownergeneration_state_current)))))))))
+invariant [delivery_path_equivalence] (forall Q_task:deliverytask. exists_deliverytask(Q_task) -> (((exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & (relation_delivery_task_obligation(Q_task,Q_obligation))) & (exists Q_queue:deliveryqueue. exists_deliveryqueue(Q_queue) & (relation_delivery_task_queue(Q_task,Q_queue))))))
+invariant [delivery_retry_preserves_obligation] (forall Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) -> ((exists Q_task:deliverytask. exists_deliverytask(Q_task) & ((relation_delivery_attempt_task(Q_attempt,Q_task) & (exists Q_obligation:workobligation. exists_workobligation(Q_obligation) & (relation_delivery_task_obligation(Q_task,Q_obligation))))))))
+invariant [delivery_single_accepted_start] (forall Q_obligation:workobligation. exists_workobligation(Q_obligation) -> ((state_workobligation(Q_obligation) = workobligation_state_accepted -> (exists Q_attempt:deliveryattempt. exists_deliveryattempt(Q_attempt) & (relation_delivery_accepted_start(Q_obligation,Q_attempt))))))
+
+export delivery_acknowledge
+export delivery_authorize_accept
+export delivery_authorize_reject
+export delivery_dispatch
+export delivery_expire
+export delivery_offer_sync
+export delivery_persist_ambiguous
+export delivery_persist_success
+export delivery_resolve_persisted
+export delivery_retire
+export delivery_retry
+export delivery_spool
+export routing_bootstrap
+export routing_bootstrap_history_owner
+export routing_forward_to_matching
+export routing_handoff
+export routing_handoff_history_owner
+export routing_register_poller
+export routing_reserve_compatible

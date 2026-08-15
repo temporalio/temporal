@@ -1,0 +1,969 @@
+# Generated from the Umpire verification snapshot. Do not edit.
+
+IDs_NexusOperation = ["NexusOperation#0", "NexusOperation#1"]
+IDs_NexusTimeoutEvidence = ["NexusTimeoutEvidence#0", "NexusTimeoutEvidence#1"]
+IDs_Workflow = ["Workflow#0"]
+
+action Init:
+    exists_NexusOperation = set([])
+    state_NexusOperation = {"NexusOperation#0": "unspecified", "NexusOperation#1": "unspecified"}
+    exists_NexusTimeoutEvidence = set([])
+    state_NexusTimeoutEvidence = {"NexusTimeoutEvidence#0": "unobserved", "NexusTimeoutEvidence#1": "unobserved"}
+    exists_Workflow = set([])
+    state_Workflow = {"Workflow#0": "created"}
+    relation_nexus_operation_workflow = set()
+    relation_nexus_timeout_evidence = set()
+
+atomic action Action_NexusOperation_backing_off_schedule_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_backing_off_schedule_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "scheduled"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_backing_off_terminate_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "backing_off"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[entity] = "terminated"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_backing_off_terminate_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "terminated"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_attempt_failed_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "backing_off"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_attempt_failed_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "backing_off"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_cancel_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "canceled"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_cancel_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "canceled"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_fail_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "failed"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_fail_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "failed"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_start_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "started"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_start_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "started"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_succeed_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_succeed_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_terminate_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[entity] = "terminated"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_scheduled_terminate_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "terminated"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_started_cancel_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "canceled"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_started_cancel_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "canceled"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_started_fail_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "failed"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_started_fail_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "failed"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_started_succeed_Embedded:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_started_succeed_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "succeeded"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_started_terminate_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity in exists_NexusOperation
+    require state_NexusOperation[entity] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[entity] = "terminated"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_started_terminate_Standalone:
+    op = oneof IDs_NexusOperation
+    require op in exists_NexusOperation
+    require state_NexusOperation[op] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "terminated"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_unspecified_reject_Embedded:
+    entity = oneof IDs_NexusOperation
+    require entity not in exists_NexusOperation
+    require state_NexusOperation[entity] == "unspecified"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_exists_NexusOperation.add(entity)
+    next_state_NexusOperation[entity] = "rejected"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_NexusOperation_unspecified_reject_Standalone:
+    entity = oneof IDs_NexusOperation
+    require entity not in exists_NexusOperation
+    require state_NexusOperation[entity] == "unspecified"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_exists_NexusOperation.add(entity)
+    next_state_NexusOperation[entity] = "rejected"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_operation_schedule_Embedded:
+    op = oneof IDs_NexusOperation
+    workflow = oneof IDs_Workflow
+    require op not in exists_NexusOperation
+    require workflow in exists_Workflow
+    require (state_Workflow[workflow] == "started" and state_NexusOperation[op] == "unspecified")
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_exists_NexusOperation.add(op)
+    next_state_NexusOperation[op] = "scheduled"
+    next_relation_nexus_operation_workflow.add((op, workflow))
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_operation_schedule_Standalone:
+    op = oneof IDs_NexusOperation
+    workflow = oneof IDs_Workflow
+    require op not in exists_NexusOperation
+    require workflow in exists_Workflow
+    require (state_Workflow[workflow] == "started" and state_NexusOperation[op] == "unspecified")
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_exists_NexusOperation.add(op)
+    next_state_NexusOperation[op] = "scheduled"
+    next_relation_nexus_operation_workflow.add((op, workflow))
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_timeout_backing_off_Embedded:
+    op = oneof IDs_NexusOperation
+    timeoutEvidence = oneof IDs_NexusTimeoutEvidence
+    require op in exists_NexusOperation
+    require timeoutEvidence not in exists_NexusTimeoutEvidence
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "timed_out"
+    next_exists_NexusTimeoutEvidence.add(timeoutEvidence)
+    next_state_NexusTimeoutEvidence[timeoutEvidence] = "valid"
+    next_relation_nexus_timeout_evidence.add((op, timeoutEvidence))
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_timeout_backing_off_Standalone:
+    op = oneof IDs_NexusOperation
+    timeoutEvidence = oneof IDs_NexusTimeoutEvidence
+    require op in exists_NexusOperation
+    require timeoutEvidence not in exists_NexusTimeoutEvidence
+    require state_NexusOperation[op] == "backing_off"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "timed_out"
+    next_exists_NexusTimeoutEvidence.add(timeoutEvidence)
+    next_state_NexusTimeoutEvidence[timeoutEvidence] = "valid"
+    next_relation_nexus_timeout_evidence.add((op, timeoutEvidence))
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_timeout_scheduled_Embedded:
+    op = oneof IDs_NexusOperation
+    timeoutEvidence = oneof IDs_NexusTimeoutEvidence
+    require op in exists_NexusOperation
+    require timeoutEvidence not in exists_NexusTimeoutEvidence
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "timed_out"
+    next_exists_NexusTimeoutEvidence.add(timeoutEvidence)
+    next_state_NexusTimeoutEvidence[timeoutEvidence] = "valid"
+    next_relation_nexus_timeout_evidence.add((op, timeoutEvidence))
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_timeout_scheduled_Standalone:
+    op = oneof IDs_NexusOperation
+    timeoutEvidence = oneof IDs_NexusTimeoutEvidence
+    require op in exists_NexusOperation
+    require timeoutEvidence not in exists_NexusTimeoutEvidence
+    require state_NexusOperation[op] == "scheduled"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[op] = "timed_out"
+    next_exists_NexusTimeoutEvidence.add(timeoutEvidence)
+    next_state_NexusTimeoutEvidence[timeoutEvidence] = "valid"
+    next_relation_nexus_timeout_evidence.add((op, timeoutEvidence))
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_timeout_started_Embedded:
+    entity = oneof IDs_NexusOperation
+    timeoutEvidence = oneof IDs_NexusTimeoutEvidence
+    require entity in exists_NexusOperation
+    require timeoutEvidence not in exists_NexusTimeoutEvidence
+    require state_NexusOperation[entity] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[entity] = "timed_out"
+    next_exists_NexusTimeoutEvidence.add(timeoutEvidence)
+    next_state_NexusTimeoutEvidence[timeoutEvidence] = "valid"
+    next_relation_nexus_timeout_evidence.add((entity, timeoutEvidence))
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_timeout_started_Standalone:
+    entity = oneof IDs_NexusOperation
+    timeoutEvidence = oneof IDs_NexusTimeoutEvidence
+    require entity in exists_NexusOperation
+    require timeoutEvidence not in exists_NexusTimeoutEvidence
+    require state_NexusOperation[entity] == "started"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_NexusOperation[entity] = "timed_out"
+    next_exists_NexusTimeoutEvidence.add(timeoutEvidence)
+    next_state_NexusTimeoutEvidence[timeoutEvidence] = "valid"
+    next_relation_nexus_timeout_evidence.add((entity, timeoutEvidence))
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_workflow_close_cancel:
+    entity = oneof IDs_Workflow
+    require entity in exists_Workflow
+    require (state_Workflow[entity] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", entity) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", entity) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_Workflow[entity] = "canceled"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_workflow_close_complete:
+    wf = oneof IDs_Workflow
+    require wf in exists_Workflow
+    require (state_Workflow[wf] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", wf) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", wf) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_Workflow[wf] = "completed"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_workflow_close_fail:
+    entity = oneof IDs_Workflow
+    require entity in exists_Workflow
+    require (state_Workflow[entity] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", entity) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", entity) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_Workflow[entity] = "failed"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_workflow_close_terminate:
+    entity = oneof IDs_Workflow
+    require entity in exists_Workflow
+    require (state_Workflow[entity] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", entity) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", entity) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_Workflow[entity] = "terminated"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_workflow_close_timeout:
+    entity = oneof IDs_Workflow
+    require entity in exists_Workflow
+    require (state_Workflow[entity] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", entity) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", entity) in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_state_Workflow[entity] = "timed_out"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+atomic action Action_nexus_workflow_start:
+    wf = oneof IDs_Workflow
+    require wf not in exists_Workflow
+    require state_Workflow[wf] == "created"
+    next_exists_NexusOperation = set(exists_NexusOperation)
+    next_state_NexusOperation = dict(state_NexusOperation)
+    next_exists_NexusTimeoutEvidence = set(exists_NexusTimeoutEvidence)
+    next_state_NexusTimeoutEvidence = dict(state_NexusTimeoutEvidence)
+    next_exists_Workflow = set(exists_Workflow)
+    next_state_Workflow = dict(state_Workflow)
+    next_relation_nexus_operation_workflow = set(relation_nexus_operation_workflow)
+    next_relation_nexus_timeout_evidence = set(relation_nexus_timeout_evidence)
+    next_exists_Workflow.add(wf)
+    next_state_Workflow[wf] = "started"
+    exists_NexusOperation = next_exists_NexusOperation
+    state_NexusOperation = next_state_NexusOperation
+    exists_NexusTimeoutEvidence = next_exists_NexusTimeoutEvidence
+    state_NexusTimeoutEvidence = next_state_NexusTimeoutEvidence
+    exists_Workflow = next_exists_Workflow
+    state_Workflow = next_state_Workflow
+    relation_nexus_operation_workflow = next_relation_nexus_operation_workflow
+    relation_nexus_timeout_evidence = next_relation_nexus_timeout_evidence
+
+# CanStep = (("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#0"] == "unspecified")) or ("NexusOperation#1" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#1"] == "unspecified")) or ("NexusOperation#0" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#0"] == "unspecified")) or ("NexusOperation#1" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#1"] == "unspecified")) or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" not in exists_Workflow and state_Workflow["Workflow#0"] == "created"))
+
+always assertion Relation_nexus_operation_workflow_endpoints:
+    return ((("NexusOperation#0", "Workflow#0") not in relation_nexus_operation_workflow or ("NexusOperation#0" in exists_NexusOperation and "Workflow#0" in exists_Workflow)) and (("NexusOperation#1", "Workflow#0") not in relation_nexus_operation_workflow or ("NexusOperation#1" in exists_NexusOperation and "Workflow#0" in exists_Workflow)))
+
+always assertion Cardinality_nexus_operation_workflow_source:
+    return True
+
+always assertion Relation_nexus_timeout_evidence_endpoints:
+    return ((("NexusOperation#0", "NexusTimeoutEvidence#0") not in relation_nexus_timeout_evidence or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" in exists_NexusTimeoutEvidence)) and (("NexusOperation#0", "NexusTimeoutEvidence#1") not in relation_nexus_timeout_evidence or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" in exists_NexusTimeoutEvidence)) and (("NexusOperation#1", "NexusTimeoutEvidence#0") not in relation_nexus_timeout_evidence or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" in exists_NexusTimeoutEvidence)) and (("NexusOperation#1", "NexusTimeoutEvidence#1") not in relation_nexus_timeout_evidence or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" in exists_NexusTimeoutEvidence)))
+
+always assertion Cardinality_nexus_timeout_evidence_source:
+    return (not (("NexusOperation#0", "NexusTimeoutEvidence#0") in relation_nexus_timeout_evidence and ("NexusOperation#0", "NexusTimeoutEvidence#1") in relation_nexus_timeout_evidence) and not (("NexusOperation#1", "NexusTimeoutEvidence#0") in relation_nexus_timeout_evidence and ("NexusOperation#1", "NexusTimeoutEvidence#1") in relation_nexus_timeout_evidence))
+
+always assertion Cardinality_nexus_timeout_evidence_target:
+    return (not (("NexusOperation#0", "NexusTimeoutEvidence#0") in relation_nexus_timeout_evidence and ("NexusOperation#1", "NexusTimeoutEvidence#0") in relation_nexus_timeout_evidence) and not (("NexusOperation#0", "NexusTimeoutEvidence#1") in relation_nexus_timeout_evidence and ("NexusOperation#1", "NexusTimeoutEvidence#1") in relation_nexus_timeout_evidence))
+
+always assertion Property_NexusOperation_backing_off_quiescent_progress:
+    return (("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#0"] == "unspecified")) or ("NexusOperation#1" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#1"] == "unspecified")) or ("NexusOperation#0" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#0"] == "unspecified")) or ("NexusOperation#1" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#1"] == "unspecified")) or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" not in exists_Workflow and state_Workflow["Workflow#0"] == "created")) or (((not ("NexusOperation#0" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#0"] == "backing_off"))) and (not ("NexusOperation#1" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#1"] == "backing_off")))))
+
+always assertion Property_NexusOperation_scheduled_quiescent_progress:
+    return (("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#0"] == "unspecified")) or ("NexusOperation#1" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#1"] == "unspecified")) or ("NexusOperation#0" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#0"] == "unspecified")) or ("NexusOperation#1" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#1"] == "unspecified")) or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" not in exists_Workflow and state_Workflow["Workflow#0"] == "created")) or (((not ("NexusOperation#0" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#0"] == "scheduled"))) and (not ("NexusOperation#1" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#1"] == "scheduled")))))
+
+always assertion Property_NexusOperation_started_quiescent_progress:
+    return (("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and state_NexusOperation["NexusOperation#0"] == "unspecified") or ("NexusOperation#1" not in exists_NexusOperation and state_NexusOperation["NexusOperation#1"] == "unspecified") or ("NexusOperation#0" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#0"] == "unspecified")) or ("NexusOperation#1" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#1"] == "unspecified")) or ("NexusOperation#0" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#0"] == "unspecified")) or ("NexusOperation#1" not in exists_NexusOperation and "Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and state_NexusOperation["NexusOperation#1"] == "unspecified")) or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "backing_off") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "scheduled") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#0" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#0"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#0" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("NexusOperation#1" in exists_NexusOperation and "NexusTimeoutEvidence#1" not in exists_NexusTimeoutEvidence and state_NexusOperation["NexusOperation#1"] == "started") or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" in exists_Workflow and (state_Workflow["Workflow#0"] == "started" and ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected"))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))) or ("Workflow#0" not in exists_Workflow and state_Workflow["Workflow#0"] == "created")) or (((not ("NexusOperation#0" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#0"] == "started"))) and (not ("NexusOperation#1" in exists_NexusOperation) or (not (state_NexusOperation["NexusOperation#1"] == "started")))))
+
+always assertion Property_NexusOperationClosure:
+    return ((not ("NexusOperation#0" in exists_NexusOperation) or (((not ("Workflow#0" in exists_Workflow) or ((not ((("NexusOperation#0", "Workflow#0") in relation_nexus_operation_workflow and (state_Workflow["Workflow#0"] == "completed" or state_Workflow["Workflow#0"] == "failed" or state_Workflow["Workflow#0"] == "canceled" or state_Workflow["Workflow#0"] == "terminated" or state_Workflow["Workflow#0"] == "timed_out"))) or ((state_NexusOperation["NexusOperation#0"] == "succeeded" or state_NexusOperation["NexusOperation#0"] == "failed" or state_NexusOperation["NexusOperation#0"] == "canceled" or state_NexusOperation["NexusOperation#0"] == "timed_out" or state_NexusOperation["NexusOperation#0"] == "terminated" or state_NexusOperation["NexusOperation#0"] == "rejected")))))))) and (not ("NexusOperation#1" in exists_NexusOperation) or (((not ("Workflow#0" in exists_Workflow) or ((not ((("NexusOperation#1", "Workflow#0") in relation_nexus_operation_workflow and (state_Workflow["Workflow#0"] == "completed" or state_Workflow["Workflow#0"] == "failed" or state_Workflow["Workflow#0"] == "canceled" or state_Workflow["Workflow#0"] == "terminated" or state_Workflow["Workflow#0"] == "timed_out"))) or ((state_NexusOperation["NexusOperation#1"] == "succeeded" or state_NexusOperation["NexusOperation#1"] == "failed" or state_NexusOperation["NexusOperation#1"] == "canceled" or state_NexusOperation["NexusOperation#1"] == "timed_out" or state_NexusOperation["NexusOperation#1"] == "terminated" or state_NexusOperation["NexusOperation#1"] == "rejected")))))))))
+
+always assertion Property_NexusOperationTimeoutSemantics:
+    return ((not ("NexusOperation#0" in exists_NexusOperation) or ((not (state_NexusOperation["NexusOperation#0"] == "timed_out") or ((("NexusTimeoutEvidence#0" in exists_NexusTimeoutEvidence and ((("NexusOperation#0", "NexusTimeoutEvidence#0") in relation_nexus_timeout_evidence and state_NexusTimeoutEvidence["NexusTimeoutEvidence#0"] == "valid"))) or ("NexusTimeoutEvidence#1" in exists_NexusTimeoutEvidence and ((("NexusOperation#0", "NexusTimeoutEvidence#1") in relation_nexus_timeout_evidence and state_NexusTimeoutEvidence["NexusTimeoutEvidence#1"] == "valid")))))))) and (not ("NexusOperation#1" in exists_NexusOperation) or ((not (state_NexusOperation["NexusOperation#1"] == "timed_out") or ((("NexusTimeoutEvidence#0" in exists_NexusTimeoutEvidence and ((("NexusOperation#1", "NexusTimeoutEvidence#0") in relation_nexus_timeout_evidence and state_NexusTimeoutEvidence["NexusTimeoutEvidence#0"] == "valid"))) or ("NexusTimeoutEvidence#1" in exists_NexusTimeoutEvidence and ((("NexusOperation#1", "NexusTimeoutEvidence#1") in relation_nexus_timeout_evidence and state_NexusTimeoutEvidence["NexusTimeoutEvidence#1"] == "valid")))))))))
+

@@ -1,0 +1,6 @@
+options:
+  max_actions: 5
+  max_concurrent_actions: 1
+  crash_on_yield: false
+deadlock_detection: false
+liveness: "false"

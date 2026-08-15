@@ -1,5 +1,4 @@
 name: Umpire Model Verification
-
 on:
   pull_request:
     paths:
@@ -11,87 +10,96 @@ on:
       - "UMPIRE_GAP.md"
   schedule:
     - cron: "31 8 * * *"
-
 permissions:
   contents: read
-
 concurrency:
   group: umpire-model-verification-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
-
 jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           check-latest: true
           cache: true
-
       - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: temurin
           java-version: "21"
-
       - uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
         with:
           dotnet-version: "8.0.x"
-
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
-
       - name: Install pinned verification tools
-        env:
-          APALACHE_SHA256: f2d761315667f977c7c33792d95167f12e83b8a775909180886bcb67660470c5
-          IVY_SHA256: 2a71da0bb2ce6314ddb40b6d76c6d734b8102db51c158477c2ef85b45da65dc1
-          P_SHA256: b2a212e3b1af1bf2fdc9b80899da2901d6625d1a2e478d478e30028872a4bdc1
-          TLA_SHA256: 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
         run: |
+          source tests/umpire2/genmodels/tools.env
           sudo apt-get update
           sudo apt-get install --yes graphviz maven python3-tk
 
           tools="$RUNNER_TEMP/umpire-tools"
-          mkdir -p "$tools/apalache" "$tools/downloads" "$tools/p" "$tools/tla"
+          mkdir -p "$tools/downloads" \
+            "$tools/$UMPIRE_TOOL_APALACHE_EXTRACT_ROOT" \
+            "$tools/$UMPIRE_TOOL_FIZZBEE_EXTRACT_ROOT" \
+            "$tools/$UMPIRE_TOOL_IVY_EXTRACT_ROOT" \
+            "$tools/$UMPIRE_TOOL_P_EXTRACT_ROOT" \
+            "$tools/$UMPIRE_TOOL_TLA2TOOLS_EXTRACT_ROOT"
 
+          tla_archive="$tools/downloads/$UMPIRE_TOOL_TLA2TOOLS_ARCHIVE"
           curl --fail --location --silent --show-error \
-            https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar \
-            --output "$tools/tla/tla2tools.jar"
-          echo "$TLA_SHA256  $tools/tla/tla2tools.jar" | sha256sum --check
+            "$UMPIRE_TOOL_TLA2TOOLS_URL" \
+            --output "$tla_archive"
+          echo "$UMPIRE_TOOL_TLA2TOOLS_SHA256  $tla_archive" | sha256sum --check
+          test "$UMPIRE_TOOL_TLA2TOOLS_ARCHIVE_TYPE" = file
+          cp "$tla_archive" "$tools/$UMPIRE_TOOL_TLA2TOOLS_EXECUTABLE"
 
+          apalache_archive="$tools/downloads/$UMPIRE_TOOL_APALACHE_ARCHIVE"
           curl --fail --location --silent --show-error \
-            https://github.com/apalache-mc/apalache/releases/download/v0.61.0/apalache-0.61.0.zip \
-            --output "$tools/downloads/apalache.zip"
-          echo "$APALACHE_SHA256  $tools/downloads/apalache.zip" | sha256sum --check
-          unzip -q "$tools/downloads/apalache.zip" -d "$tools/apalache"
+            "$UMPIRE_TOOL_APALACHE_URL" \
+            --output "$apalache_archive"
+          echo "$UMPIRE_TOOL_APALACHE_SHA256  $apalache_archive" | sha256sum --check
+          test "$UMPIRE_TOOL_APALACHE_ARCHIVE_TYPE" = zip
+          unzip -q "$apalache_archive" -d "$tools/$UMPIRE_TOOL_APALACHE_EXTRACT_ROOT"
 
+          p_package="$tools/downloads/$UMPIRE_TOOL_P_ARCHIVE"
           curl --fail --location --silent --show-error \
-            https://api.nuget.org/v3-flatcontainer/p/3.1.0/p.3.1.0.nupkg \
-            --output "$tools/downloads/p.3.1.0.nupkg"
-          echo "$P_SHA256  $tools/downloads/p.3.1.0.nupkg" | sha256sum --check
-          dotnet tool install P --version 3.1.0 --tool-path "$tools/p" \
+            "$UMPIRE_TOOL_P_URL" \
+            --output "$p_package"
+          echo "$UMPIRE_TOOL_P_SHA256  $p_package" | sha256sum --check
+          test "$UMPIRE_TOOL_P_ARCHIVE_TYPE" = nuget
+          dotnet tool install "$UMPIRE_TOOL_P_PACKAGE" --version "$UMPIRE_TOOL_P_VERSION" --tool-path "$tools/$UMPIRE_TOOL_P_EXTRACT_ROOT" \
             --add-source "$tools/downloads" --ignore-failed-sources
 
+          ivy_wheel="$tools/downloads/$UMPIRE_TOOL_IVY_ARCHIVE"
           curl --fail --location --silent --show-error \
-            https://files.pythonhosted.org/packages/0a/f7/c8f9264bae27f2c56c2d02630c94a0fa400c66bc6772bf6ff049fdcd8101/ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl \
-            --output "$tools/downloads/ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl"
-          echo "$IVY_SHA256  $tools/downloads/ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl" | sha256sum --check
-          python -m venv "$tools/ivy"
-          "$tools/ivy/bin/pip" install "$tools/downloads/ms_ivy-1.8.26-cp310-cp310-manylinux1_x86_64.whl"
+            "$UMPIRE_TOOL_IVY_URL" \
+            --output "$ivy_wheel"
+          echo "$UMPIRE_TOOL_IVY_SHA256  $ivy_wheel" | sha256sum --check
+          test "$UMPIRE_TOOL_IVY_ARCHIVE_TYPE" = wheel
+          python -m venv "$tools/$UMPIRE_TOOL_IVY_EXTRACT_ROOT"
+          "$tools/$UMPIRE_TOOL_IVY_EXTRACT_ROOT/bin/pip" install "$ivy_wheel"
 
-          echo "UMPIRE_APALACHE_TOOL=$tools/apalache/apalache-0.61.0/bin/apalache-mc" >> "$GITHUB_ENV"
-          echo "UMPIRE_IVY_TOOL=$tools/ivy/bin/ivy_check" >> "$GITHUB_ENV"
+          fizz_archive="$tools/downloads/$UMPIRE_TOOL_FIZZBEE_ARCHIVE"
+          curl --fail --location --silent --show-error \
+            "$UMPIRE_TOOL_FIZZBEE_URL" \
+            --output "$fizz_archive"
+          echo "$UMPIRE_TOOL_FIZZBEE_SHA256  $fizz_archive" | sha256sum --check
+          test "$UMPIRE_TOOL_FIZZBEE_ARCHIVE_TYPE" = tar.gz
+          tar -xzf "$fizz_archive" --strip-components=1 -C "$tools/$UMPIRE_TOOL_FIZZBEE_EXTRACT_ROOT"
+
+          echo "UMPIRE_APALACHE_TOOL=$tools/$UMPIRE_TOOL_APALACHE_EXECUTABLE" >> "$GITHUB_ENV"
+          echo "UMPIRE_IVY_TOOL=$tools/$UMPIRE_TOOL_IVY_EXECUTABLE" >> "$GITHUB_ENV"
+          echo "UMPIRE_FIZZ_TOOL=$tools/$UMPIRE_TOOL_FIZZBEE_EXECUTABLE" >> "$GITHUB_ENV"
           echo "UMPIRE_JAVA_TOOL=$JAVA_HOME/bin/java" >> "$GITHUB_ENV"
-          echo "UMPIRE_P_TOOL=$tools/p/p" >> "$GITHUB_ENV"
-          echo "UMPIRE_TLA_JAR=$tools/tla/tla2tools.jar" >> "$GITHUB_ENV"
-
+          echo "UMPIRE_P_TOOL=$tools/$UMPIRE_TOOL_P_EXECUTABLE" >> "$GITHUB_ENV"
+          echo "UMPIRE_TLA_JAR=$tools/$UMPIRE_TOOL_TLA2TOOLS_EXECUTABLE" >> "$GITHUB_ENV"
       - name: Check generated models
         run: make umpire-check-genmodels
-
       - name: Test generators and seeded counterexamples
         run: |
           go test -tags test_dep \
@@ -99,12 +107,14 @@ jobs:
             ./tests/umpire2/protocol \
             ./tests/umpire2/rule \
             ./cmd/umpire-genmodels
-
       - name: Verify generated protocol
         env:
           PROFILE: ${{ github.event_name == 'schedule' && 'nightly' || 'smoke' }}
         run: make "umpire-verify-$PROFILE"
-
+      - name: Verify generated FizzBee target
+        if: github.event_name != 'schedule'
+        run: >-
+          go run -tags test_dep ./cmd/umpire-genmodels -mode verify -target feature-nexus -backend fizz -profile smoke
       - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0

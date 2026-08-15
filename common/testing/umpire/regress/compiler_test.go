@@ -125,6 +125,151 @@ func TestCompileRejectsUnavailableEnvironmentCapability(t *testing.T) {
 	require.Contains(t, err.Error(), "workers")
 }
 
+func TestCompileRejectsMissingSelectedActionRealization(t *testing.T) {
+	domain := regress.NewDomain("realizations/v1")
+	action := regress.ActionSchema("task.run")
+	require.NoError(t, domain.AddAction(regress.ActionCapability{
+		Schema:      action,
+		Realization: "task.run.local",
+	}))
+
+	_, err := regress.Compile(
+		regress.OnePath(regress.Action(action)),
+		domain,
+		regress.Profile{
+			Name:         "local",
+			Realizations: &regress.RealizationCatalog{},
+		},
+	)
+	require.ErrorIs(t, err, regress.ErrMissingRealization)
+	var compileErr *regress.CompileError
+	require.ErrorAs(t, err, &compileErr)
+	require.Equal(t, regress.ErrorMissingRealization, compileErr.Category)
+	require.Equal(t, 1, compileErr.Source)
+	require.Equal(t, "task.run.local", compileErr.Actual)
+	require.Equal(t, []string{"task.run.local"}, compileErr.MissingChain)
+}
+
+func TestCompileRejectsActionRealizationModeMismatch(t *testing.T) {
+	domain := regress.NewDomain("realizations/v1")
+	action := regress.ActionSchema("task.run")
+	require.NoError(t, domain.AddAction(regress.ActionCapability{
+		Schema:      action,
+		Mode:        regress.ReactiveAction,
+		Realization: "task.run.local",
+	}))
+
+	_, err := regress.Compile(
+		regress.OnePath(regress.Action(action)),
+		domain,
+		regress.Profile{
+			Name: "local",
+			Realizations: &regress.RealizationCatalog{Actions: []regress.ActionRealization{{
+				Name: "task.run.local",
+				Mode: regress.ProactiveAction,
+			}}},
+		},
+	)
+	require.ErrorIs(t, err, regress.ErrRealizationModeMismatch)
+	var compileErr *regress.CompileError
+	require.ErrorAs(t, err, &compileErr)
+	require.Equal(t, regress.ErrorRealizationModeMismatch, compileErr.Category)
+	require.Equal(t, "reactive", compileErr.Expected)
+	require.Equal(t, "proactive", compileErr.Actual)
+}
+
+func TestValidateRealizationsRejectsInvalidCatalogEntries(t *testing.T) {
+	tests := []regress.RealizationCatalog{
+		{Actions: []regress.ActionRealization{{Name: "run", Mode: regress.ProactiveAction}, {Name: "run", Mode: regress.ReactiveAction}}},
+		{Policies: []string{"drop", "drop"}},
+		{Resources: []string{""}},
+	}
+	for _, catalog := range tests {
+		err := regress.ValidateRealizations(regress.Suite{}, catalog)
+		require.ErrorIs(t, err, regress.ErrInvalidRealizationCatalog)
+		var compileErr *regress.CompileError
+		require.ErrorAs(t, err, &compileErr)
+		require.Equal(t, regress.ErrorInvalidRealizationCatalog, compileErr.Category)
+	}
+}
+
+func TestCompileRejectsMissingSelectedResource(t *testing.T) {
+	domain := regress.NewDomain("resources/v1")
+	noop := regress.ActionSchema("task.noop")
+	require.NoError(t, domain.AddAction(regress.ActionCapability{Schema: noop}))
+	action := regress.ActionSchema("task.run")
+	require.NoError(t, domain.AddAction(regress.ActionCapability{
+		Schema:    action,
+		Resources: []string{"worker"},
+	}))
+
+	_, err := regress.Compile(
+		regress.OnePath(regress.Action(noop), regress.Action(action)),
+		domain,
+		regress.Profile{Name: "local"},
+	)
+	require.ErrorIs(t, err, regress.ErrMissingResource)
+	var compileErr *regress.CompileError
+	require.ErrorAs(t, err, &compileErr)
+	require.Equal(t, regress.ErrorMissingResource, compileErr.Category)
+	require.Equal(t, 2, compileErr.Source)
+	require.Equal(t, "worker", compileErr.Actual)
+	require.Equal(t, []string{"worker"}, compileErr.MissingChain)
+}
+
+func TestCompileRejectsSelectedResourceDependencyCycle(t *testing.T) {
+	domain := regress.NewDomain("resources/v1")
+	require.NoError(t, domain.AddResource(regress.ResourceCapability{Name: "worker", DependsOn: []string{"namespace"}}))
+	require.NoError(t, domain.AddResource(regress.ResourceCapability{Name: "namespace", DependsOn: []string{"worker"}}))
+	action := regress.ActionSchema("task.run")
+	require.NoError(t, domain.AddAction(regress.ActionCapability{
+		Schema:    action,
+		Resources: []string{"worker"},
+	}))
+
+	_, err := regress.Compile(
+		regress.OnePath(regress.Action(action)),
+		domain,
+		regress.Profile{Name: "local"},
+	)
+	require.ErrorIs(t, err, regress.ErrResourceDependencyCycle)
+	var compileErr *regress.CompileError
+	require.ErrorAs(t, err, &compileErr)
+	require.Equal(t, regress.ErrorResourceDependencyCycle, compileErr.Category)
+	require.Equal(t, 1, compileErr.Source)
+	require.Equal(t, []string{"worker", "namespace", "worker"}, compileErr.MissingChain)
+}
+
+func TestCompileRejectsMissingSelectedResourceRealization(t *testing.T) {
+	domain := regress.NewDomain("resources/v1")
+	require.NoError(t, domain.AddResource(regress.ResourceCapability{Name: "worker", Realization: "worker.local"}))
+	action := regress.ActionSchema("task.run")
+	require.NoError(t, domain.AddAction(regress.ActionCapability{
+		Schema:      action,
+		Resources:   []string{"worker"},
+		Realization: "task.run.local",
+	}))
+
+	_, err := regress.Compile(
+		regress.OnePath(regress.Action(action)),
+		domain,
+		regress.Profile{
+			Name: "local",
+			Realizations: &regress.RealizationCatalog{Actions: []regress.ActionRealization{{
+				Name: "task.run.local",
+				Mode: regress.ProactiveAction,
+			}}},
+		},
+	)
+	require.ErrorIs(t, err, regress.ErrMissingRealization)
+	var compileErr *regress.CompileError
+	require.ErrorAs(t, err, &compileErr)
+	require.Equal(t, regress.ErrorMissingRealization, compileErr.Category)
+	require.Equal(t, 1, compileErr.Source)
+	require.Equal(t, "worker.local", compileErr.Actual)
+	require.Equal(t, []string{"worker", "worker.local"}, compileErr.MissingChain)
+}
+
 func TestCompileAllPathsKeepsMeaningfulAnyOrderRaces(t *testing.T) {
 	domain := regress.NewDomain("race/v1")
 	left := regress.ActionSchema("race.left")
@@ -243,10 +388,11 @@ func TestCompileScopesPoliciesAndTheirResources(t *testing.T) {
 	require.Equal(t, []regress.CompletedPolicy{{
 		Name:      "rpc.drop",
 		Arguments: []regress.Argument{regress.Literal("CancelNexusOperation")},
+		Source:    1,
 		Start:     0,
 		End:       1,
 	}}, suite.Paths[0].Policies)
-	require.Equal(t, []regress.CompletedResource{{Name: "fault-injector"}}, suite.Paths[0].Resources)
+	require.Equal(t, []regress.CompletedResource{{Name: "fault-injector", Source: 1}}, suite.Paths[0].Resources)
 }
 
 func TestCompileRejectsMissingPolicyCapability(t *testing.T) {
@@ -260,6 +406,32 @@ func TestCompileRejectsMissingPolicyCapability(t *testing.T) {
 		regress.Action(cancel),
 	)), domain, regress.Profile{Name: "local"})
 	require.ErrorIs(t, err, regress.ErrMissingModelCapability)
+}
+
+func TestCompileRejectsMissingSelectedPolicyRealization(t *testing.T) {
+	domain := regress.NewDomain("policy/v1")
+	drop := regress.PolicySchema("rpc.drop")
+	cancel := regress.ActionSchema("operation.cancel")
+	require.NoError(t, domain.AddPolicy(regress.PolicyCapability{Schema: drop, Realization: "rpc.drop.local"}))
+	require.NoError(t, domain.AddAction(regress.ActionCapability{Schema: cancel, Realization: "operation.cancel.local"}))
+
+	_, err := regress.Compile(regress.OnePath(regress.During(
+		regress.Policy(drop),
+		regress.Action(cancel),
+	)), domain, regress.Profile{
+		Name: "local",
+		Realizations: &regress.RealizationCatalog{Actions: []regress.ActionRealization{{
+			Name: "operation.cancel.local",
+			Mode: regress.ProactiveAction,
+		}}},
+	})
+	require.ErrorIs(t, err, regress.ErrMissingRealization)
+	var compileErr *regress.CompileError
+	require.ErrorAs(t, err, &compileErr)
+	require.Equal(t, regress.ErrorMissingRealization, compileErr.Category)
+	require.NotZero(t, compileErr.Source)
+	require.Equal(t, "rpc.drop.local", compileErr.Actual)
+	require.Equal(t, []string{"rpc.drop", "rpc.drop.local"}, compileErr.MissingChain)
 }
 
 func TestCompileFlowsProjectedValuesToDependentActions(t *testing.T) {
