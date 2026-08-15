@@ -208,6 +208,52 @@ func (s *NexusOTELSuite) TestOperation() {
 	})
 }
 
+// Verifies asynchronous operation cancellation uses the instrumented production HTTP client.
+func (s *NexusOTELSuite) TestExternalOperationCancellation() {
+	exporter := tracetest.NewInMemoryExporter()
+	env := s.newTestEnv(exporter)
+
+	cancelRequestHeaders := make(chan headerGetter, 1)
+	operationToken := env.Tv().Any().String()
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
+		OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: operationToken}, nil
+		},
+		OnCancelOperation: func(_ context.Context, _, _, _ string, options nexus.CancelOperationOptions) error {
+			cancelRequestHeaders <- options.Header
+			return nil
+		},
+	})
+
+	operationID := env.Tv().Any().String()
+	startResponse, err := env.FrontendClient().StartNexusOperationExecution(s.Context(), &workflowservice.StartNexusOperationExecutionRequest{
+		Namespace:              env.Namespace().String(),
+		OperationId:            operationID,
+		Endpoint:               endpointName,
+		Service:                env.Tv().Service(),
+		Operation:              env.Tv().Operation(),
+		RequestId:              env.Tv().RequestID(),
+		ScheduleToCloseTimeout: durationpb.New(time.Minute),
+	})
+	s.NoError(err)
+
+	_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+		Namespace:   env.Namespace().String(),
+		OperationId: operationID,
+		RunId:       startResponse.RunId,
+		WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+	})
+	s.NoError(err)
+	_, err = env.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+		Namespace:   env.Namespace().String(),
+		OperationId: operationID,
+		RunId:       startResponse.RunId,
+		Reason:      env.Tv().Any().String(),
+	})
+	s.NoError(err)
+	s.requireExportedClientSpan(exporter, cancelRequestHeaders)
+}
+
 // Verifies worker-target Nexus operations connect local frontend client and server spans.
 func (s *NexusOTELSuite) TestWorkerOperation() {
 	exporter := tracetest.NewInMemoryExporter()
@@ -336,19 +382,30 @@ func (s *NexusOTELSuite) requireExportedServerSpan(
 	exporter *tracetest.InMemoryExporter,
 	headers headerGetter,
 	operation string,
+	serviceName string,
 ) {
 	traceID, clientSpanID := s.requireTraceContext(headers)
+	var exportedSpan tracetest.SpanStub
 	s.AwaitTrue(func() bool {
 		for _, span := range exporter.GetSpans() {
 			if span.Name == operation &&
 				span.SpanKind == oteltrace.SpanKindServer &&
 				span.SpanContext.TraceID() == traceID &&
 				span.Parent.SpanID() == clientSpanID {
+				exportedSpan = span
 				return true
 			}
 		}
 		return false
 	}, 10*time.Second, 100*time.Millisecond)
+	s.requireSpanServiceName(exportedSpan, serviceName)
+}
+
+func (s *NexusOTELSuite) requireSpanServiceName(span tracetest.SpanStub, expected string) {
+	s.Require().NotNil(span.Resource)
+	serviceName, ok := span.Resource.Set().Value(semconv.ServiceNameKey)
+	s.Require().True(ok)
+	s.Require().Equal(expected, serviceName.AsString())
 }
 
 func (s *NexusOTELSuite) requireTraceContext(headers headerGetter) (oteltrace.TraceID, oteltrace.SpanID) {
