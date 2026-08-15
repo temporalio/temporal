@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -111,9 +112,9 @@ func NewNexusOperationHTTPHandler(
 
 func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
-		Handler(h.httpHandlerWrapper.Wrap(http.HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue), "DispatchNexusTaskByNamespaceAndTaskQueue"))
+		Handler(h.httpHandlerWrapper.Wrap(http.HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue), strings.TrimPrefix(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, "/")))
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
-		Handler(h.httpHandlerWrapper.Wrap(http.HandlerFunc(h.dispatchNexusTaskByEndpoint), "DispatchNexusTaskByEndpoint"))
+		Handler(h.httpHandlerWrapper.Wrap(http.HandlerFunc(h.dispatchNexusTaskByEndpoint), strings.TrimPrefix(configs.DispatchNexusTaskByEndpointAPIName, "/")))
 }
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {
