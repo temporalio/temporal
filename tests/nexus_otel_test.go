@@ -206,9 +206,20 @@ func (s *NexusOTELSuite) TestOperation() {
 			URLPath:     operationURLPath + "/cancel",
 		},
 	})
+	s.NoError(err)
+	s.Require().Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResponse.GetWaitStage())
+	_, err = callerEnv.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
+		Namespace:   callerEnv.Namespace().String(),
+		OperationId: operationID,
+		RunId:       startResponse.RunId,
+		Reason:      tv.Any().String(),
+	})
+	s.NoError(err)
+	s.requireExportedNexusHTTPSpanPairs(callerExporter, handlerExporter, 2)
 }
 
-func (s *NexusOTELSuite) TestWorkerOperation() {
+// Verifies the namespace and task queue dispatch route is instrumented independently of forwarding.
+func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	exporter := tracetest.NewInMemoryExporter()
 	env := s.newTestEnv(exporter)
 
@@ -218,20 +229,40 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 		requestHeaders <- options.Header
 		return tv.Any().String(), nil
 	})
+	s.NoError(err)
 
-	// Verifies the namespace and task queue dispatch route is instrumented independently of forwarding.
-	s.Run("ByNamespaceAndTaskQueue", func(s *NexusOTELSuite) {
-		tv := env.Tv().Sub("ByNamespaceAndTaskQueue")
-		taskQueue := tv.RequestID()
-		pollerErrCh := env.nexusTaskPoller(s.Context(), s.T(), taskQueue, nexusEchoHandler)
-		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
-			BaseURL: getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), taskQueue),
-			Service: "test-service",
-		})
-		s.NoError(err)
+	requestHeaders := nexus.Header{
+		"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+	}
+	_, err = nexusrpc.StartOperation(s.Context(), nexusClient, op, tv.Any().String(), nexus.StartOperationOptions{
+		Header: requestHeaders,
+	})
+	s.NoError(err)
+	s.NoError(<-pollerErrCh)
+	s.requireExportedServerSpan(exporter, requestHeaders, "DispatchNexusTaskByNamespaceAndTaskQueue", "io.temporal.frontend")
+}
 
-		requestHeaders := nexus.Header{
-			"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+func (s *NexusOTELSuite) requireExportedNexusHTTPSpanPairs(
+	callerExporter *tracetest.InMemoryExporter,
+	handlerExporter *tracetest.InMemoryExporter,
+	expected int,
+) {
+	s.Await(func(s *NexusOTELSuite) {
+		pairs := 0
+		for _, serverSpan := range handlerExporter.GetSpans() {
+			if serverSpan.Name != "DispatchNexusTaskByEndpoint" ||
+				serverSpan.SpanKind != oteltrace.SpanKindServer ||
+				spanServiceName(serverSpan) != "io.temporal.frontend" {
+				continue
+			}
+			for _, clientSpan := range callerExporter.GetSpans() {
+				if clientSpan.SpanKind == oteltrace.SpanKindClient &&
+					spanServiceName(clientSpan) == "io.temporal.history" &&
+					clientSpan.SpanContext.TraceID() == serverSpan.SpanContext.TraceID() &&
+					clientSpan.SpanContext.SpanID() == serverSpan.Parent.SpanID() {
+					pairs++
+				}
+			}
 		}
 		_, err = nexusrpc.StartOperation(s.Context(), client, op, tv.Any().String(), nexus.StartOperationOptions{
 			Header: requestHeaders,
@@ -363,6 +394,17 @@ func (s *NexusOTELSuite) requireSpanServiceName(span tracetest.SpanStub, expecte
 	serviceName, ok := span.Resource.Set().Value(semconv.ServiceNameKey)
 	s.Require().True(ok)
 	s.Require().Equal(expected, serviceName.AsString())
+}
+
+func spanServiceName(span tracetest.SpanStub) string {
+	if span.Resource == nil {
+		return ""
+	}
+	serviceName, ok := span.Resource.Set().Value(semconv.ServiceNameKey)
+	if !ok {
+		return ""
+	}
+	return serviceName.AsString()
 }
 
 func (s *NexusOTELSuite) requireTraceContext(headers headerGetter) (oteltrace.TraceID, oteltrace.SpanID) {
