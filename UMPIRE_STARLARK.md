@@ -613,6 +613,92 @@ its owner, and the package is frozen and validated after evaluation. Avoid an
 implicit current machine or current test: those would make imports, helper
 functions, and source-located diagnostics order-dependent in surprising ways.
 
+## Constraint planner boundary
+
+The deep module is the planner, not either authoring syntax. A minimal canonical
+vocabulary is:
+
+```text
+Term       = Symbol(type, id) | Literal(type, value) | finite expression nodes
+Constraint = Equal | Different | Compare | MemberOf | Predicate | Before
+           | Fresh | Observed | Requires | Objective
+Answer     = substitution + residual constraints + completed actions
+           + cost + proof provenance
+```
+
+The first native Go solver should remain deliberately smaller than Prolog or a
+general CP/SAT/SMT system:
+
+1. propagate equality, disequality, finite membership, type, freshness,
+   capability, relation, and simple duration/integer difference constraints;
+2. search backward from unsatisfied semantic goals through registered action
+   effects and preconditions;
+3. search the enabled frontier of the partial-order DAG instead of materializing
+   every total order first;
+4. table canonical subproblems keyed by world, remaining frontier,
+   substitution/domains, active policies, domain version, and profile;
+5. use answer subsumption only for explicitly lossy modes such as `one_case` or
+   `best_case`; and
+6. retain all inequivalent answers for `all_cases` and refuse to call truncated
+   enumeration complete.
+
+Each completion should explain which action effect satisfied each authored
+goal, which bindings and choices were selected, which actions/resources were
+synthesized, and which source constraint forced the choice. Failure should
+distinguish unsatisfiable, ambiguous, unsupported, conditional/unknown, and
+incomplete because a bound was exhausted. Only fully grounded, validated
+answers cross the existing `CompletedPath` execution boundary.
+
+The solver may later delegate large numeric, cardinality, or scheduling
+fragments through this IR, but a general solver is not required for the first
+useful version. Picat or Prolog generation could be a differential oracle for
+small fixtures; embedding either runtime would add packaging, interop,
+cancellation, marshaling, and a second diagnostic stack without replacing
+Umpire's existing Go execution boundary.
+
+## Go versus Starlark
+
+The logic-planning capability is independent of Starlark. A strong typed Go DSL
+over the same IR can express the same query:
+
+```go
+runA := regress.Some[nexus.RunID]("run-a")
+runB := regress.Some[nexus.RunID]("run-b")
+
+timeoutA := regress.Choose("timeout-a", 2*time.Second, 3*time.Second, 4*time.Second)
+timeoutB := regress.Choose("timeout-b", 0, time.Second, 2*time.Second)
+
+plan := regress.AllCases(
+	regress.Where(
+		regress.Different(runA, runB),
+		regress.Exceeds(timeoutA, timeoutB, time.Second),
+	),
+	nexus.Start(first, runA, timeoutA),
+	nexus.Start(second, runB, timeoutB),
+)
+```
+
+This is illustrative rather than a proposed package API. It compares the best
+plausible Go surface, not today's string-heavy constructors.
+
+| Concern | Go | Starlark |
+| --- | --- | --- |
+| Constraint solving, completion, and coverage | Same native planner | Same native planner |
+| Variable/action typing | Compile time plus semantic validation | Evaluation time plus semantic validation |
+| IDE navigation and refactoring | Strong | Requires custom tooling |
+| Native relational expressions | Needs constructors or Go source analysis | Quoted lambdas preserve familiar operators |
+| Concision and reviewability | Slightly noisier | Potentially cleaner |
+| Non-Go authors and portable descriptor data | Weaker | Stronger |
+| Hermetic bounded evaluation | Requires API discipline | Natural fit |
+| Build, debugging, and maintenance | One toolchain | Additional frontend and parity tests |
+| Projection to runtime/formal backends | Same IR | Same IR |
+
+If the primary authors are Temporal Go engineers, the Go frontend may be
+sufficient. Starlark earns adoption only if quoted expressions, reviewability,
+portable descriptor packages, or non-Go accessibility produce a measured gain
+large enough to pay for weaker tooling and another frontend. The two surfaces
+must never acquire different solver semantics.
+
 ## Go generation
 
 Generating Go is useful at the boundary to the implementation, but generated Go
@@ -651,12 +737,15 @@ existing `--check`-style drift test.
 | Risk | Control |
 | --- | --- |
 | Dynamic type errors and misspelled strings | Custom symbolic DSL values, strict constructor argument checking, full canonical validation, and negative compiler tests with file/line diagnostics. |
-| Two competing sources of truth | Starlark is authoring source; the descriptor package and its validated runtime, regression, and verification projections are explicit boundaries; generated files are derived and never edited. Migrate target-by-target. |
+| Two frontends drift semantically | Both lower to the same versioned constraint/descriptor IR; differential fixtures compare normalized IR and completed cases. Designate a source of truth per migrated model rather than merging declarations from both. |
+| Quoted expressions become arbitrary callbacks | Compile a documented pure expression subset from the retained AST, reject unsupported calls/control flow, and never invoke the lambda during planning or execution. |
 | Hidden macro behavior | Provide a small standard library, require conveniences to lower to inspectable IR, emit normalized IR beside generated artifacts, and keep provenance. |
 | Runaway or malicious evaluation | No I/O/network/time predeclared functions, repository-rooted allowlisted `load`, execution-step and wall-clock limits, cancellation, and bounded output sizes. Starlark hermeticity is only as strong as Umpire's host functions. |
 | Dependency/API churn | The repository does not currently depend on `go.starlark.net`; pin a reviewed version behind a narrow internal wrapper and treat upgrades as compiler changes. |
 | Poor IDE experience | Formatter/linter, generated symbol catalog, source-aware diagnostics, and eventually an editor/LSP layer. Do not claim Go-equivalent tooling in the first version. |
-| State-space explosion hidden by concise syntax | Validate bounds, show expansion counts per macro/target, keep minimum-bound checks, and provide a preflight state/action estimate. At 10x model size, verifier state growth will dominate Starlark evaluation cost. |
+| Search or table explosion hidden by concise syntax | Require finite domains and explicit action/path/table/time bounds, show expansion counts and estimated combinations, and return incomplete rather than unreachable when a limit is exhausted. At 10x model size, planning and verifier state growth dominate frontend evaluation cost. |
+| `all_cases` overpromises completeness | Version the semantic path-equivalence relation, make commuting-action reduction visible, and fail if enumeration is truncated. |
+| Negation treats absent evidence as false | Permit closed-world negation only for relations declared complete; otherwise preserve unknown/inconclusive and reject unsafe ungrounded negation. |
 | Semantic drift among backends | Differential tests against Umpire's interpreter and every supported backend; conveniences must lower before backend selection. |
 | FizzBee-specific facilities are immature | Borrow concepts, not implementation assumptions; channels, source diagnostics, and some failure facilities are explicitly documented as incomplete or work in progress. |
 
