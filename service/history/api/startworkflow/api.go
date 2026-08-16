@@ -400,13 +400,14 @@ func (s *Starter) createAsCurrent(
 	//
 	// Here we basically refresh the LastRunningClock in the prepared workflow snapshot to avoid this issue.
 	mutableState := creationParams.workflowLease.GetMutableState()
-	updateExecutionInfo, err := mutableState.UpdateLastRunningClock()
+	updateExecutionInfo, updatedWorkflowEventBatches, err := mutableState.UpdateLastRunningClock(creationParams.workflowEventBatches)
 	if err != nil {
 		return err
 	}
-	// This assignment is technically not necessary since newExecutionParams.snapshot points to the same mutable state
-	// updated in the UpdateLastRunningClock() method, but it makes the code more explicit and easier to read.
+	// Following assignments are technically not necessary since those pointers point to the same underlying fields that are updated,
+	// but it makes the code more explicit and easier to read.
 	creationParams.workflowSnapshot.ExecutionInfo = updateExecutionInfo
+	creationParams.workflowEventBatches = updatedWorkflowEventBatches
 
 	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
