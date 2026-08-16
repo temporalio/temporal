@@ -2,7 +2,7 @@ package action
 
 import (
 	"github.com/nexus-rpc/sdk-go/nexus"
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/internal/model"
 )
 

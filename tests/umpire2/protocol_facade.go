@@ -1,6 +1,7 @@
 package umpire2
 
 import (
+	"errors"
 	"fmt"
 
 	"go.temporal.io/server/common/testing/umpire"
@@ -62,7 +63,7 @@ func (p *Protocol) PlanTo(
 	options ...umpire.Option,
 ) (*umpire.Plan, error) {
 	if p == nil || p.compiled == nil {
-		return nil, fmt.Errorf("protocol: protocol is nil")
+		return nil, errors.New("protocol: protocol is nil")
 	}
 	return p.compiled.PlanTo(entityType, target, mode, constraints, options...)
 }
@@ -75,7 +76,7 @@ func (p *Protocol) PlanEdge(
 	hosting umpire.Hosting,
 ) ([]umpire.Action, error) {
 	if p == nil || p.compiled == nil {
-		return nil, fmt.Errorf("protocol: protocol is nil")
+		return nil, errors.New("protocol: protocol is nil")
 	}
 	return p.compiled.PlanEdge(entityType, from, event, hosting)
 }
@@ -83,7 +84,7 @@ func (p *Protocol) PlanEdge(
 // NewCoverage creates a semantic coverage collector derived from this protocol.
 func (p *Protocol) NewCoverage(enabled bool, options CoverageCatalogOptions) (*umpire.Coverage, error) {
 	if p == nil || p.compiled == nil {
-		return nil, fmt.Errorf("protocol: protocol is nil")
+		return nil, errors.New("protocol: protocol is nil")
 	}
 	return p.compiled.NewCoverage(enabled, options)
 }
@@ -91,7 +92,7 @@ func (p *Protocol) NewCoverage(enabled bool, options CoverageCatalogOptions) (*u
 // CompileRegression compiles sparse intent against this protocol's typed regression vocabulary.
 func (p *Protocol) CompileRegression(plan coreregress.Plan, profile coreregress.Profile) (coreregress.Suite, error) {
 	if p == nil || p.compiled == nil {
-		return coreregress.Suite{}, fmt.Errorf("protocol regression: protocol is nil")
+		return coreregress.Suite{}, errors.New("protocol regression: protocol is nil")
 	}
 	return p.compiled.CompileRegression(plan, profile)
 }
@@ -101,7 +102,7 @@ func (p *Protocol) planSettlingEdges(
 	hosting umpire.Hosting,
 ) (protocol.SettlingActionPlans, error) {
 	if p == nil || p.compiled == nil {
-		return protocol.SettlingActionPlans{}, fmt.Errorf("protocol: protocol is nil")
+		return protocol.SettlingActionPlans{}, errors.New("protocol: protocol is nil")
 	}
 	return p.compiled.PlanSettlingEdges(entityType, hosting)
 }
@@ -112,7 +113,7 @@ func (p *Protocol) sampleSettlingPlan(
 	seed int64,
 ) (protocol.SettlingActionPlan, error) {
 	if p == nil || p.compiled == nil {
-		return protocol.SettlingActionPlan{}, fmt.Errorf("protocol: protocol is nil")
+		return protocol.SettlingActionPlan{}, errors.New("protocol: protocol is nil")
 	}
 	return p.compiled.SampleSettlingPlan(entityType, hosting, seed)
 }

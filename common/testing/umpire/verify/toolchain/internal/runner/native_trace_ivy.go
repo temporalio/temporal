@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -14,7 +15,7 @@ func decodeIvyTrace(request Request, payload string) (verify.TraceEvidence, erro
 	if marker < 0 {
 		marker = strings.Index(payload, "searching for a small model... done")
 		if marker < 0 {
-			return verify.TraceEvidence{}, fmt.Errorf("native-trace-missing: Ivy output has no textual counterexample trace")
+			return verify.TraceEvidence{}, errors.New("native-trace-missing: Ivy output has no textual counterexample trace")
 		}
 		return decodeIvySmallModelTrace(request, payload[marker:])
 	}
@@ -31,13 +32,13 @@ func decodeIvyTrace(request Request, payload string) (verify.TraceEvidence, erro
 		switch strings.TrimSpace(line) {
 		case "[":
 			if inState {
-				return verify.TraceEvidence{}, fmt.Errorf("native-trace-malformed: Ivy trace has a nested state block")
+				return verify.TraceEvidence{}, errors.New("native-trace-malformed: Ivy trace has a nested state block")
 			}
 			inState = true
 			equations = nil
 		case "]":
 			if !inState {
-				return verify.TraceEvidence{}, fmt.Errorf("native-trace-malformed: Ivy trace closes a state block that was not opened")
+				return verify.TraceEvidence{}, errors.New("native-trace-malformed: Ivy trace closes a state block that was not opened")
 			}
 			for _, equation := range equations {
 				if err := values.apply(request, equation); err != nil {
@@ -74,10 +75,10 @@ func decodeIvyTrace(request Request, payload string) (verify.TraceEvidence, erro
 		}
 	}
 	if inState {
-		return verify.TraceEvidence{}, fmt.Errorf("native-trace-malformed: Ivy trace has an unterminated state block")
+		return verify.TraceEvidence{}, errors.New("native-trace-malformed: Ivy trace has an unterminated state block")
 	}
 	if len(states) == 0 {
-		return verify.TraceEvidence{}, fmt.Errorf("native-trace-missing: Ivy counterexample trace has no states")
+		return verify.TraceEvidence{}, errors.New("native-trace-missing: Ivy counterexample trace has no states")
 	}
 	if len(states) != len(actions)+1 {
 		return verify.TraceEvidence{}, fmt.Errorf("native-trace-malformed: Ivy trace has %d states and %d actions", len(states), len(actions))
@@ -96,7 +97,7 @@ func decodeIvySmallModelTrace(request Request, payload string) (verify.TraceEvid
 	for _, line := range strings.Split(payload, "\n") {
 		if match := ivyTraceCallPattern.FindStringSubmatch(line); len(match) != 0 {
 			if nativeAction != "" {
-				return verify.TraceEvidence{}, fmt.Errorf("native-trace-malformed: Ivy counterexample contains multiple calls")
+				return verify.TraceEvidence{}, errors.New("native-trace-malformed: Ivy counterexample contains multiple calls")
 			}
 			nativeAction = match[1]
 			continue
@@ -109,7 +110,7 @@ func decodeIvySmallModelTrace(request Request, payload string) (verify.TraceEvid
 		}
 	}
 	if nativeAction == "" {
-		return verify.TraceEvidence{}, fmt.Errorf("native-trace-missing: Ivy counterexample has no action call")
+		return verify.TraceEvidence{}, errors.New("native-trace-missing: Ivy counterexample has no action call")
 	}
 	arguments := make([]string, 0, len(bindings))
 	for native, value := range bindings {

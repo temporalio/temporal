@@ -15,11 +15,11 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/umpire2"
-	ksworker "go.temporal.io/server/tests/umpire2/kitchensink/worker"
 )
 
 // UmpireTestSuite is an end-to-end test of both halves of the umpire together:
@@ -97,7 +97,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveWorkflowToCompletion() {
 	// 3) JUDGE: wait until the Monitor's model reflects the completed workflow, then
 	// assert it finds no violations for this namespace. (The teardown check does this
 	// again authoritatively; asserting here makes the plan->drive->judge loop explicit.)
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		for _, workflow := range env.GetMonitor().Snapshot(env.NamespaceID().String()).EntitiesOfType(umpire2.WorkflowType) {
 			if workflow.Current == "completed" {
 				return true
@@ -118,7 +118,6 @@ func (s *UmpireTestSuite) TestPlanAndDriveWorkflowToCompletion() {
 func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkWorkflow() {
 	t := s.T()
 	env := testcore.NewEnv(t, testcore.WithUmpireMonitorFactory(umpire2.NewMonitor))
-	env.SdkWorker().RegisterWorkflow(ksworker.KitchenSinkWorkflow)
 
 	// 1) PLAN: describe the target state; the Planner computes the route.
 	plan, err := defaultUmpireProtocol(t).PlanTo(umpire2.WorkflowType, umpire2.WorkflowCompleted, umpirefw.Shortest, umpirefw.Constraints{})
@@ -127,7 +126,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkWorkflow() {
 
 	// 2) DRIVE: the route compiles to a kitchensink TestInput (a WorkflowInput that
 	// returns a result); RunPlan starts the kitchensink workflow and drives it.
-	require.NoError(t, umpire2.RunKitchenSinkPlan(env.Context(), env.SdkClient(), umpire2.KitchenSinkRunOptions{
+	require.NoError(t, umpire2.RunKitchenSinkPlan(env.Context(), env, umpire2.KitchenSinkRunOptions{
 		Namespace:      env.NamespaceID().String(),
 		TaskQueue:      env.WorkerTaskQueue(),
 		WorkflowType:   "KitchenSinkWorkflow",
@@ -135,7 +134,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkWorkflow() {
 	}, "Workflow", plan))
 
 	// 3) JUDGE: the Monitor observes the completion, then finds no violations.
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		for _, workflow := range env.GetMonitor().Snapshot(env.NamespaceID().String()).EntitiesOfType(umpire2.WorkflowType) {
 			if workflow.Current == umpire2.WorkflowCompleted {
 				return true
@@ -206,7 +205,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 	// JUDGE: the Monitor built a settled NexusOperation purely from chasm.transition
 	// telemetry, and finds no violations.
 	var observedAttempt int
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		for _, operation := range env.GetMonitor().Snapshot(nsID).EntitiesOfType(umpire2.NexusOperationType) {
 			if operation.Terminal {
 				observedAttempt = operation.Attempt
@@ -255,7 +254,6 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkNexusOperation() {
 
 	// The workload is the copied kitchensink interpreter; its ExecuteNexusOperation action
 	// schedules the op (against the kitchensink service on the endpoint above).
-	env.SdkWorker().RegisterWorkflow(ksworker.KitchenSinkWorkflow)
 
 	// PLAN: shortest route to a settled operation (sync path skips "started").
 	plan, err := defaultUmpireProtocol(t).PlanTo(umpire2.NexusOperationType, umpire2.NexusSucceeded, umpirefw.Shortest, umpirefw.Constraints{})
@@ -263,7 +261,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkNexusOperation() {
 	require.Equal(t, [][]string{{"schedule", "succeed"}}, plan.Routes)
 
 	// DRIVE: the route compiles to a kitchensink workflow that schedules + awaits the op.
-	require.NoError(t, umpire2.RunKitchenSinkPlan(ctx, env.SdkClient(), umpire2.KitchenSinkRunOptions{
+	require.NoError(t, umpire2.RunKitchenSinkPlan(ctx, env, umpire2.KitchenSinkRunOptions{
 		Namespace:      nsID,
 		TaskQueue:      env.WorkerTaskQueue(),
 		WorkflowType:   "KitchenSinkWorkflow",
@@ -273,7 +271,7 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkNexusOperation() {
 	}, "NexusOperation", plan))
 
 	// JUDGE: the Monitor built a settled NexusOperation from chasm.transition telemetry.
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		for _, operation := range env.GetMonitor().Snapshot(nsID).EntitiesOfType(umpire2.NexusOperationType) {
 			if operation.Terminal {
 				t.Logf("observed kitchensink-driven Nexus operation in state %q", operation.Current)

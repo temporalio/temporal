@@ -1,7 +1,7 @@
 package model
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -47,7 +47,7 @@ func TestEntityModelDecisionTables(t *testing.T) {
 	for n := range entities {
 		names = append(names, n)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	for _, name := range names {
 		lc := entities[name].Lifecycle()

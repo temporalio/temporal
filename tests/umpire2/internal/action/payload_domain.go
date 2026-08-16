@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 	"google.golang.org/protobuf/proto"
 )
 

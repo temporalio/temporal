@@ -168,7 +168,7 @@ func decodeITFStringSet(raw json.RawMessage) ([]string, error) {
 		return nil, err
 	}
 	if value.Set == nil && !strings.Contains(string(raw), `"#set"`) {
-		return nil, fmt.Errorf("expected an ITF set")
+		return nil, errors.New("expected an ITF set")
 	}
 	return value.Set, nil
 }
@@ -181,7 +181,7 @@ func decodeITFFunction(raw json.RawMessage, vocabulary verify.TraceVocabulary) (
 		return nil, err
 	}
 	if value.Map == nil && !strings.Contains(string(raw), `"#map"`) {
-		return nil, fmt.Errorf("expected an ITF map")
+		return nil, errors.New("expected an ITF map")
 	}
 	result := make(map[string]string, len(value.Map))
 	for _, pair := range value.Map {
@@ -209,7 +209,7 @@ func decodeITFRelation(raw json.RawMessage, identities map[string]string) ([]ver
 		return nil, err
 	}
 	if value.Set == nil && !strings.Contains(string(raw), `"#set"`) {
-		return nil, fmt.Errorf("expected an ITF set")
+		return nil, errors.New("expected an ITF set")
 	}
 	result := make([]verify.RelationTuple, 0, len(value.Set))
 	for _, rawTuple := range value.Set {
@@ -264,7 +264,7 @@ func canonicalValue(value string, vocabulary map[string]string) string {
 func normalizeEvidence(model verify.Model, properties []string, evidence verify.TraceEvidence) (string, []verify.TraceStep, error) {
 	properties = uniqueStrings(properties)
 	if len(properties) == 0 {
-		return "", nil, fmt.Errorf("property-unmapped: counterexample has no recognized failed property")
+		return "", nil, errors.New("property-unmapped: counterexample has no recognized failed property")
 	}
 	type match struct {
 		property string

@@ -67,10 +67,12 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 
 	var safety, liveness int
 	for _, stats := range runtime.RuleStats() {
-		if stats.Kind == "safety" {
+		switch stats.Kind {
+		case "safety":
 			safety++
-		} else if stats.Kind == "liveness" {
+		case "liveness":
 			liveness++
+		default:
 		}
 	}
 	logger.Info("monitor initialized",
@@ -267,6 +269,7 @@ func snapshotEntityID(namespaceID string, entry umpirefw.EntityEntry) string {
 		if entity.RunID != "" {
 			return entity.RunID
 		}
+	default:
 	}
 	leaf := entry.Key[strings.LastIndex(entry.Key, "@")+1:]
 	id := strings.TrimPrefix(leaf, string(entry.Entity.Type())+":")

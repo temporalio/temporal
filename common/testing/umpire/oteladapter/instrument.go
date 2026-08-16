@@ -33,7 +33,7 @@ func Instrument(ctx context.Context, factName string, attrs ...attribute.KeyValu
 func RecordFact(ctx context.Context, factName string, attrs ...attribute.KeyValue) {
 	span := trace.SpanFromContext(ctx)
 	if !span.IsRecording() {
-		ctx, span = Instrument(ctx, factName, attrs...)
+		_, span = Instrument(ctx, factName, attrs...)
 		span.End()
 		return
 	}

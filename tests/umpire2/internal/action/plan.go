@@ -5,7 +5,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/common/testing/testhooks"
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/internal/model"
 )
 
@@ -32,12 +32,12 @@ func actionFor(from, event string, hosting umpire.Hosting) (umpire.Action, bool)
 		return HandlerSyncOk, true
 	case model.NexusFail:
 		if from == model.NexusStarted {
-			return CompleteWith(nexus.NewOperationFailedError("umpire action: injected async failure"), model.NexusFail), true
+			return CompleteWith(nexus.NewOperationFailedErrorf("umpire action: injected async failure"), model.NexusFail), true
 		}
 		return HandlerOpFailed, true
 	case model.NexusCancel:
 		if from == model.NexusStarted {
-			return CompleteWith(nexus.NewOperationCanceledError("umpire action: injected async cancellation"), model.NexusCancel), true
+			return CompleteWith(nexus.NewOperationCanceledErrorf("umpire action: injected async cancellation"), model.NexusCancel), true
 		}
 		return HandlerOpCanceled, true
 	case model.NexusTimeout:
@@ -52,8 +52,9 @@ func actionFor(from, event string, hosting umpire.Hosting) (umpire.Action, bool)
 		}
 	case model.NexusTerminate:
 		return TerminateFrom(from), true
+	default:
+		return umpire.Action{}, false
 	}
-	return umpire.Action{}, false
 }
 
 // actionForFunc is an entity's event→action registry: given the current state, the event, and the

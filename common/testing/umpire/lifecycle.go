@@ -2,9 +2,10 @@ package umpire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"iter"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -296,6 +297,7 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 				dispositions[st] = v
 			case mustProgressTrait:
 				mustProgress[st] = true
+			default:
 			}
 		}
 	}
@@ -328,7 +330,7 @@ func sortedKeys(m map[string]bool) []string {
 	for k := range m {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -536,8 +538,6 @@ func EdgeTrait[T any](l *Lifecycle, from, event string) (T, bool) {
 	return zero, false
 }
 
-// EdgeRequires returns the drive-capabilities the from→event edge needs (nil if the
-// edge declares none), read from its Needs/Requires trait.
 // EdgeHosting returns the hosting an edge is restricted to, or AnyHosting if unrestricted.
 func (l *Lifecycle) EdgeHosting(from, event string) Hosting {
 	if h, ok := EdgeTrait[HostedIn](l, from, event); ok {
@@ -546,6 +546,8 @@ func (l *Lifecycle) EdgeHosting(from, event string) Hosting {
 	return AnyHosting
 }
 
+// EdgeRequires returns the drive-capabilities the from→event edge needs (nil if the
+// edge declares none), read from its Needs/Requires trait.
 func (l *Lifecycle) EdgeRequires(from, event string) []Capability {
 	if r, ok := EdgeTrait[Requires](l, from, event); ok {
 		return r.Capabilities
@@ -581,11 +583,11 @@ func (l *Lifecycle) VisitedEdges() []Edge {
 		p := strings.SplitN(k, "\x00", 3)
 		out = append(out, Edge{From: p[0], Event: p[1], To: p[2]})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].From != out[j].From {
-			return out[i].From < out[j].From
+	slices.SortFunc(out, func(left, right Edge) int {
+		if comparison := strings.Compare(left.From, right.From); comparison != 0 {
+			return comparison
 		}
-		return out[i].Event < out[j].Event
+		return strings.Compare(left.Event, right.Event)
 	})
 	return out
 }
@@ -614,9 +616,6 @@ type Edge struct {
 	To    string
 }
 
-// Edges returns every direct transition edge (from -> event -> to) declared by the
-// spec, in stable order. These are the actual transitions — distinct from
-// Classify's forward-jump interpretation — and are what a planner routes over.
 // Destination returns the state an event leads to. Each event has a single destination in
 // these models (its To is fixed regardless of From), so the lookup is unambiguous.
 func (l *Lifecycle) Destination(event string) (string, bool) {
@@ -628,19 +627,22 @@ func (l *Lifecycle) Destination(event string) (string, bool) {
 	return "", false
 }
 
+// Edges returns every direct transition edge (from -> event -> to) declared by the
+// spec, in stable order. These are the actual transitions — distinct from
+// Classify's forward-jump interpretation — and are what a planner routes over.
 func (l *Lifecycle) Edges() []Edge {
 	froms := make([]string, 0, len(l.edges))
 	for f := range l.edges {
 		froms = append(froms, f)
 	}
-	sort.Strings(froms)
+	slices.Sort(froms)
 	var out []Edge
 	for _, f := range froms {
 		evs := make([]string, 0, len(l.edges[f]))
 		for e := range l.edges[f] {
 			evs = append(evs, e)
 		}
-		sort.Strings(evs)
+		slices.Sort(evs)
 		for _, e := range evs {
 			out = append(out, Edge{From: f, Event: e, To: l.edges[f][e]})
 		}
@@ -676,7 +678,7 @@ func (l *Lifecycle) Cells() []Cell {
 // construction, so it needs no runtime assertion here.
 func (l *Lifecycle) Validate() error {
 	if l.initial == "" {
-		return fmt.Errorf("lifecycle: empty initial state")
+		return errors.New("lifecycle: empty initial state")
 	}
 	reachable := l.Reachable()
 	stateSet := map[string]bool{}

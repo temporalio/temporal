@@ -15,9 +15,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
-	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"google.golang.org/grpc"
 )
 
 // TestWatchdogIntegration boots the umpire binary, sends a test OTEL span to it,
@@ -142,7 +141,7 @@ func TestWatchdogIntegration(t *testing.T) {
 		t.Logf("observed softassert violation: %s", line)
 	case <-time.After(10 * time.Second):
 		dumpLogs(t, &logMu, allLogs)
-		t.Fatalf("did not observe a softassert violation in umpire logs within timeout")
+		t.Fatal("did not observe a softassert violation in umpire logs within timeout")
 	}
 }
 
@@ -156,7 +155,9 @@ func reserveAddr() (string, func(), error) {
 	cleanup := func() { _ = l.Close() }
 	// Close immediately to free the port and reduce, but not eliminate, the TOCTOU race.
 	_ = l.Close()
-	time.Sleep(50 * time.Millisecond)
+	timer := time.NewTimer(50 * time.Millisecond)
+	defer timer.Stop()
+	<-timer.C
 	return addr, cleanup, nil
 }
 
@@ -181,7 +182,6 @@ func sendSpan(ctx context.Context, endpoint string) error {
 		ctx,
 		otlptracegrpc.WithEndpoint(endpoint),
 		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithDialOption(grpc.WithBlock()),
 	)
 	if err != nil {
 		return fmt.Errorf("create exporter: %w", err)
@@ -202,7 +202,9 @@ func sendSpan(ctx context.Context, endpoint string) error {
 	span.End()
 
 	// tiny delay to give exporter a chance to send before shutdown
-	time.Sleep(50 * time.Millisecond)
+	timer := time.NewTimer(50 * time.Millisecond)
+	defer timer.Stop()
+	<-timer.C
 	return nil
 }
 

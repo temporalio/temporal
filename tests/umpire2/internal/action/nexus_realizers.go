@@ -11,7 +11,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testhooks"
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -76,7 +76,7 @@ func (handlerSyncOk) Fire(context.Context, umpire.RealizeContext, umpire.Action)
 type handlerOpFailed struct{}
 
 func (handlerOpFailed) Install(rc umpire.RealizeContext, _ umpire.Action) error {
-	rc.(*Ctx).Handler.setStart(nil, nexus.NewOperationFailedError("umpire action: injected operation failure"))
+	rc.(*Ctx).Handler.setStart(nil, nexus.NewOperationFailedErrorf("umpire action: injected operation failure"))
 	return nil
 }
 func (handlerOpFailed) Fire(context.Context, umpire.RealizeContext, umpire.Action) error { return nil }
@@ -86,7 +86,7 @@ func (handlerOpFailed) Fire(context.Context, umpire.RealizeContext, umpire.Actio
 type handlerOpCanceled struct{}
 
 func (handlerOpCanceled) Install(rc umpire.RealizeContext, _ umpire.Action) error {
-	rc.(*Ctx).Handler.setStart(nil, nexus.NewOperationCanceledError("umpire action: injected cancellation"))
+	rc.(*Ctx).Handler.setStart(nil, nexus.NewOperationCanceledErrorf("umpire action: injected cancellation"))
 	return nil
 }
 func (handlerOpCanceled) Fire(context.Context, umpire.RealizeContext, umpire.Action) error {

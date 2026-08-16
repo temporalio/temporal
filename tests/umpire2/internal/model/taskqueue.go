@@ -46,6 +46,7 @@ func (tq *TaskQueue) OnFact(_ context.Context, _ *umpire.EntityPath, facts iter.
 			if !e.TaskReturned {
 				tq.LastEmptyPollTime = time.Now()
 			}
+		default:
 		}
 	}
 	return nil

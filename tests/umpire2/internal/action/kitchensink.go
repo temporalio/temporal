@@ -6,11 +6,11 @@ import (
 
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
+	ks "go.temporal.io/server/tests/umpire2/internal/kitchensink"
+	ksworker "go.temporal.io/server/tests/umpire2/internal/kitchensink/worker"
 	"go.temporal.io/server/tests/umpire2/internal/model"
-	ks "go.temporal.io/server/tests/umpire2/kitchensink"
-	ksworker "go.temporal.io/server/tests/umpire2/kitchensink/worker"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // The worker layer: WorkerCommand actions are realized by the *real* Omes kitchensink

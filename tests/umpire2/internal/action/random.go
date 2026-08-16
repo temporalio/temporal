@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 )
 
 // RandomPlan builds a reproducible random drive over the NexusOperation model: given a seed it

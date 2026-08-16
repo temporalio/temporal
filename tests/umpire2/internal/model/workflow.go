@@ -136,6 +136,7 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, facts iter
 				}
 			}
 			wf.LastSeenAt = time.Now()
+		default:
 		}
 	}
 	return nil

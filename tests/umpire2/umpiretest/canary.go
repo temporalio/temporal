@@ -145,6 +145,7 @@ func (d *TemporalCanaryDriver) Execute(ctx context.Context, action canary.Action
 		}
 	case runErr != nil:
 		observation.Error = runErr
+	default:
 	}
 	return observation
 }

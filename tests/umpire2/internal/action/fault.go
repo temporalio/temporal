@@ -2,15 +2,15 @@ package action
 
 import (
 	"context"
-	"fmt"
-	"sort"
+	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 )
 
 // Fault actions perturb a call in the plan's footprint rather than causing a transition: Drop
@@ -50,7 +50,7 @@ func armFault(rc umpire.RealizeContext, method string, hold time.Duration) error
 	c := rc.(*Ctx)
 	gen := c.Env.GetFaultInjector()
 	if gen == nil {
-		return fmt.Errorf("fault injector is nil (build with -tags test_dep)")
+		return errors.New("fault injector is nil (build with -tags test_dep)")
 	}
 	nsID := c.Env.NamespaceID().String()
 	nsName := c.Env.Namespace().String()
@@ -88,7 +88,7 @@ func LearnFootprint(dctx context.Context, rc umpire.RealizeContext, oracle umpir
 	c := rc.(*Ctx)
 	gen := c.Env.GetFaultInjector()
 	if gen == nil {
-		return nil, fmt.Errorf("fault injector is nil (build with -tags test_dep)")
+		return nil, errors.New("fault injector is nil (build with -tags test_dep)")
 	}
 	nsID, nsName := c.Env.NamespaceID().String(), c.Env.Namespace().String()
 	var mu sync.Mutex
@@ -111,7 +111,7 @@ func LearnFootprint(dctx context.Context, rc umpire.RealizeContext, oracle umpir
 	for m := range seen {
 		methods = append(methods, m)
 	}
-	sort.Strings(methods)
+	slices.Sort(methods)
 	return methods, nil
 }
 

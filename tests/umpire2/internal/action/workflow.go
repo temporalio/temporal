@@ -2,11 +2,12 @@ package action
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/internal/model"
 )
 
@@ -49,7 +50,7 @@ func (completeWorkflow) Fire(ctx context.Context, rc umpire.RealizeContext, a um
 	c := rc.(*Ctx)
 	wfID, ok := rc.Binding("wf")
 	if !ok {
-		return fmt.Errorf("completeWorkflow: workflow not bound")
+		return errors.New("completeWorkflow: workflow not bound")
 	}
 	return c.Env.SdkClient().SignalWorkflow(ctx, wfID, "", "finish", nil)
 }
@@ -190,7 +191,7 @@ func workflowLifecycle() (*umpire.Lifecycle, bool) {
 func WorkflowPlanEdge(from, event string) ([]umpire.Action, error) {
 	lc, ok := workflowLifecycle()
 	if !ok {
-		return nil, fmt.Errorf("no Workflow lifecycle")
+		return nil, errors.New("no Workflow lifecycle")
 	}
 	return planEdge(lc, workflowActionFor, from, event, umpire.Standalone)
 }

@@ -2,9 +2,10 @@ package action
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 )
 
 // Footprint reconciliation is the wire-level analog of umpire.Reconcile (which grounds an action's
@@ -47,7 +48,7 @@ func ReconcileFootprint(plan []umpire.Action, observed []string) []FootprintDrif
 		}
 		drift = append(drift, FootprintDrift{m, "observed but not declared"})
 	}
-	sort.Slice(drift, func(i, j int) bool { return drift[i].Call < drift[j].Call })
+	slices.SortFunc(drift, func(left, right FootprintDrift) int { return strings.Compare(left.Call, right.Call) })
 	return drift
 }
 

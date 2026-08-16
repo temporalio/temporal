@@ -100,42 +100,48 @@ func (e *ClientActionsExecutor) executeClientActionSet(ctx context.Context, acti
 // Run a specific client action -
 func (e *ClientActionsExecutor) executeClientAction(ctx context.Context, action *ClientAction) error {
 	if action.Variant == nil {
-		return fmt.Errorf("client action variant must be set")
+		return errors.New("client action variant must be set")
 	}
 
-	var err error
-	if sig := action.GetDoSignal(); sig != nil {
-		_, err = e.executeSignalAction(ctx, sig)
+	switch {
+	case action.GetDoSignal() != nil:
+		_, err := e.executeSignalAction(ctx, action.GetDoSignal())
 		return err
-	} else if update := action.GetDoUpdate(); update != nil {
-		_, err = e.executeUpdateAction(ctx, update)
+	case action.GetDoUpdate() != nil:
+		_, err := e.executeUpdateAction(ctx, action.GetDoUpdate())
 		return err
-	} else if query := action.GetDoQuery(); query != nil {
-		if query.GetReportState() != nil {
-			// TODO: Use args
-			_, err = e.Client.QueryWorkflow(ctx, e.WorkflowOptions.ID, "", "report_state", nil)
-		} else if handler := query.GetCustom(); handler != nil {
-			_, err = e.Client.QueryWorkflow(ctx, e.WorkflowOptions.ID, "", handler.Name, handler.Args)
-		} else {
-			return fmt.Errorf("do_query must recognizable variant")
-		}
-		if query.FailureExpected {
-			err = nil
-		}
+	case action.GetDoQuery() != nil:
+		return e.executeQueryAction(ctx, action.GetDoQuery())
+	case action.GetDoDescribe() != nil:
+		_, err := e.Client.DescribeWorkflowExecution(ctx, e.WorkflowOptions.ID, "")
 		return err
-	} else if action.GetDoDescribe() != nil {
-		_, err = e.Client.DescribeWorkflowExecution(ctx, e.WorkflowOptions.ID, "")
-		return err
-	} else if action.GetNestedActions() != nil {
-		err = e.executeClientActionSet(ctx, action.GetNestedActions())
-		return err
-	} else if sano := action.GetDoStandaloneNexusOperation(); sano != nil {
-		return e.executeStandaloneNexusOperation(ctx, sano)
-	} else if sa := action.GetDoStandaloneActivity(); sa != nil {
-		return e.executeStandaloneActivity(ctx, sa)
-	} else {
-		return fmt.Errorf("client action must be set")
+	case action.GetNestedActions() != nil:
+		return e.executeClientActionSet(ctx, action.GetNestedActions())
+	case action.GetDoStandaloneNexusOperation() != nil:
+		return e.executeStandaloneNexusOperation(ctx, action.GetDoStandaloneNexusOperation())
+	case action.GetDoStandaloneActivity() != nil:
+		return e.executeStandaloneActivity(ctx, action.GetDoStandaloneActivity())
+	default:
+		return errors.New("client action must be set")
 	}
+}
+
+func (e *ClientActionsExecutor) executeQueryAction(ctx context.Context, query *DoQuery) error {
+	var err error
+	switch {
+	case query.GetReportState() != nil:
+		// TODO: Use args
+		_, err = e.Client.QueryWorkflow(ctx, e.WorkflowOptions.ID, "", "report_state", nil)
+	case query.GetCustom() != nil:
+		handler := query.GetCustom()
+		_, err = e.Client.QueryWorkflow(ctx, e.WorkflowOptions.ID, "", handler.Name, handler.Args)
+	default:
+		return errors.New("do_query must recognizable variant")
+	}
+	if query.FailureExpected {
+		return nil
+	}
+	return err
 }
 
 func (e *ClientActionsExecutor) executeSignalAction(ctx context.Context, sig *DoSignal) (client.WorkflowRun, error) {
@@ -148,7 +154,7 @@ func (e *ClientActionsExecutor) executeSignalAction(ctx context.Context, sig *Do
 		signalName = handler.Name
 		signalArgs = handler.Args
 	} else {
-		return nil, fmt.Errorf("do_signal must recognizable variant")
+		return nil, errors.New("do_signal must recognizable variant")
 	}
 
 	if sig.WithStart {
@@ -175,7 +181,7 @@ func (e *ClientActionsExecutor) executeUpdateAction(ctx context.Context, upd *Do
 			Args:         []any{handler.Args},
 		}
 	} else {
-		return nil, fmt.Errorf("do_update must recognizable variant")
+		return nil, errors.New("do_update must recognizable variant")
 	}
 
 	var handle client.WorkflowUpdateHandle
@@ -208,13 +214,13 @@ func (e *ClientActionsExecutor) executeStandaloneNexusOperation(_ context.Contex
 	// Nexus operation API (NewNexusClient/ExecuteOperation). Client-driven standalone
 	// Nexus operations are unsupported here; the Nexus operation *lifecycle* is still
 	// exercised via workflow-scheduled operations (the NexusOperation entity/model).
-	return fmt.Errorf("kitchensink: client-side standalone Nexus operations unsupported on this SDK version")
+	return errors.New("kitchensink: client-side standalone Nexus operations unsupported on this SDK version")
 }
 
 func (e *ClientActionsExecutor) executeStandaloneActivity(ctx context.Context, sa *DoStandaloneActivity) error {
 	act := sa.GetActivity()
 	if act == nil {
-		return fmt.Errorf("DoStandaloneActivity.activity is required")
+		return errors.New("doStandaloneActivity.activity is required")
 	}
 
 	actType, args := ActivityNameAndArgs(act)

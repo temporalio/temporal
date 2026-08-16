@@ -2,13 +2,22 @@ package umpire2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
-	ks "go.temporal.io/server/tests/umpire2/kitchensink"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	ks "go.temporal.io/server/tests/umpire2/internal/kitchensink"
+	ksworker "go.temporal.io/server/tests/umpire2/internal/kitchensink/worker"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+// KitchenSinkEnvironment provides the client and worker used by the hidden kitchen-sink adapter.
+type KitchenSinkEnvironment interface {
+	SdkClient() client.Client
+	SdkWorker() sdkworker.Worker
+}
 
 // KitchenSinkRunOptions configures how RunKitchenSinkPlan drives kitchensink workflows against a cluster.
 type KitchenSinkRunOptions struct {
@@ -24,7 +33,9 @@ type KitchenSinkRunOptions struct {
 }
 
 // RunKitchenSinkPlan compiles each route in the plan into a kitchensink workload and drives it.
-func RunKitchenSinkPlan(ctx context.Context, c client.Client, options KitchenSinkRunOptions, entity string, plan *umpirefw.Plan) error {
+func RunKitchenSinkPlan(ctx context.Context, environment KitchenSinkEnvironment, options KitchenSinkRunOptions, entity string, plan *umpirefw.Plan) error {
+	environment.SdkWorker().RegisterWorkflow(ksworker.KitchenSinkWorkflow)
+	c := environment.SdkClient()
 	for i, route := range plan.Routes {
 		testInput, err := compileKitchenSinkRoute(entity, route, options.NexusEndpoint, options.NexusOperation)
 		if err != nil {
@@ -59,7 +70,7 @@ const holdKey = "umpire_hold"
 // compileKitchenSinkRoute turns an abstract model route into a kitchensink workload.
 func compileKitchenSinkRoute(entity string, route []string, nexusEndpoint, nexusOperation string) (*ks.TestInput, error) {
 	if len(route) == 0 {
-		return nil, fmt.Errorf("empty route")
+		return nil, errors.New("empty route")
 	}
 	switch entity {
 	case "Workflow":
@@ -75,7 +86,7 @@ func compileKitchenSinkRoute(entity string, route []string, nexusEndpoint, nexus
 
 func compileKitchenSinkWorkflow(route []string) (*ks.TestInput, error) {
 	if route[0] != "start" {
-		return nil, fmt.Errorf("Workflow route must begin with \"start\", got %v", route)
+		return nil, fmt.Errorf("workflow route must begin with \"start\", got %v", route)
 	}
 	var initial *ks.ActionSet
 	switch final := route[len(route)-1]; final {
@@ -93,10 +104,10 @@ func compileKitchenSinkWorkflow(route []string) (*ks.TestInput, error) {
 
 func compileKitchenSinkNexus(route []string, endpoint, operation string) (*ks.TestInput, error) {
 	if route[0] != "schedule" {
-		return nil, fmt.Errorf("NexusOperation route must begin with \"schedule\", got %v", route)
+		return nil, fmt.Errorf("nexus operation route must begin with \"schedule\", got %v", route)
 	}
 	if endpoint == "" {
-		return nil, fmt.Errorf("NexusOperation routes need an endpoint")
+		return nil, errors.New("nexus operation routes need an endpoint")
 	}
 	if operation == "" {
 		operation = "operation"

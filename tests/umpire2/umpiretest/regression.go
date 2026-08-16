@@ -80,8 +80,8 @@ type capturingArtifactSink struct {
 
 func (s *capturingArtifactSink) WriteArtifact(ctx context.Context, artifact coreregress.Artifact) error {
 	s.mu.Lock()
-	copy := artifact
-	s.latest = &copy
+	artifactCopy := artifact
+	s.latest = &artifactCopy
 	s.mu.Unlock()
 	if s.delegate == nil {
 		return nil
@@ -95,8 +95,8 @@ func (s *capturingArtifactSink) Snapshot() *coreregress.Artifact {
 	if s.latest == nil {
 		return nil
 	}
-	copy := *s.latest
-	return &copy
+	artifactCopy := *s.latest
+	return &artifactCopy
 }
 
 type regressionConfig struct {
@@ -148,7 +148,7 @@ func RequireRegression(t *testing.T, plan coreregress.Plan, options ...Regressio
 		}
 	}
 	if config.timeout <= 0 {
-		t.Fatalf("umpiretest regression: timeout must be positive")
+		t.Fatal("umpiretest regression: timeout must be positive")
 	}
 	protocol, err := CanonicalProtocol()
 	if err != nil {

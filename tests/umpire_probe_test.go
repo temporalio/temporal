@@ -16,7 +16,8 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexustest"
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/umpire2"
@@ -474,7 +475,7 @@ func (s *UmpireTestSuite) TestProbeWorkflowContinueAsNew() {
 	require.NoError(t, run.Get(env.Context(), nil), "the continue-as-new chain should complete")
 
 	var first, succ *umpire.EntitySnapshot
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		first, succ = nil, nil
 		for _, entity := range env.GetMonitor().Snapshot(env.NamespaceID().String()).EntitiesOfType(umpire2.WorkflowRunType) {
 			entity := entity
@@ -557,7 +558,7 @@ func (s *UmpireTestSuite) TestProbeWorkflowReset() {
 	resetRunID := resetResp.GetRunId()
 	require.NotEqual(t, baseRunID, resetRunID, "reset forks a new run")
 
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		r := workflowRun(env, resetRunID)
 		return r != nil && r.PredecessorID == baseRunID
 	}, 15*time.Second, 200*time.Millisecond, "the reset run should be modelled with the base run as predecessor")

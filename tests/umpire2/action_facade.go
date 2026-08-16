@@ -165,7 +165,7 @@ func FaultTargets(plan []umpire.Action, learned []string) []string {
 func ReconcileFootprint(plan []umpire.Action, observed []string) []FootprintDrift {
 	return action.ReconcileFootprint(plan, observed)
 }
-func ScheduleFaults(plans []PlanFootprint, budget int) ([]FaultDrive, []FaultDrive) {
+func ScheduleFaults(plans []PlanFootprint, budget int) (scheduled, skipped []FaultDrive) {
 	return action.ScheduleFaults(plans, budget)
 }
 func ValidateKitchensinkMappings() error { return action.ValidateKitchensinkMappings() }

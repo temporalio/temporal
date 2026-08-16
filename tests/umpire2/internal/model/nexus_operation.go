@@ -163,8 +163,8 @@ func (op *NexusOperation) Type() umpire.EntityType { return NexusOperationType }
 // Lifecycle exposes the operation's state machine to generic lifecycle rules.
 func (op *NexusOperation) Lifecycle() *umpire.Lifecycle { return op.FSM }
 
-// The *At accessors are derived from the lifecycle's per-state entry times, so
-// "state reached ⇔ timestamp set" holds by construction.
+// ScheduledAt returns when the operation reached scheduled. The *At accessors are derived from the
+// lifecycle's per-state entry times, so "state reached ⇔ timestamp set" holds by construction.
 func (op *NexusOperation) ScheduledAt() time.Time { t, _ := op.FSM.EnteredAt(NexusScheduled); return t }
 func (op *NexusOperation) StartedAt() time.Time   { t, _ := op.FSM.EnteredAt(NexusStarted); return t }
 
@@ -275,6 +275,7 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			}
 			op.StartHistoryMalformed = op.StartHistoryMalformed || e.Malformed
 			op.FSM.FireAt(ctx, NexusStart, e.EventTime())
+		default:
 		}
 	}
 	return nil

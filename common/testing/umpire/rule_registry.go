@@ -2,6 +2,7 @@ package umpire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"reflect"
@@ -288,7 +289,7 @@ func validateRuleName(probe any, name string) string {
 // InitRules constructs rules. If names is empty, all registered rules are used.
 func (r *RuleRegistry) InitRules(registry *ModelState, config RuleConfig, names ...string) error {
 	if registry == nil {
-		return fmt.Errorf("registry is required")
+		return errors.New("registry is required")
 	}
 
 	r.mu.Lock()
@@ -376,6 +377,7 @@ func (r *RuleRegistry) Check(ctx context.Context, final bool, scope *EntityID) [
 					}
 				}
 			}
+		default:
 		}
 
 		st.lastGeneration = currentGen
@@ -537,6 +539,7 @@ func (r *RuleRegistry) RuleCount() (safety, liveness int) {
 			safety++
 		case "liveness":
 			liveness++
+		default:
 		}
 	}
 	return

@@ -135,6 +135,7 @@ func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, fac
 			if wt.FSM.Fire(ctx, TaskAdd) {
 				wt.AddedAt = wt.ScheduledAt
 			}
+		default:
 		}
 	}
 	return nil

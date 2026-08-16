@@ -145,9 +145,8 @@ func (p *regressionPath) InstallAction(_ context.Context, step coreregress.Compl
 	case RegressionNexusScheduleDefault, RegressionNexusScheduleEmbedded, RegressionNexusSchedule,
 		RegressionNexusCompleteScheduled, RegressionNexusCompleteStarted, RegressionNexusCompleteCallbackFailed,
 		RegressionNexusCancel, RegressionNexusCancelWithRetry, RegressionNexusTimeout, RegressionNexusStartNewHandler, RegressionNexusStartAttachHandler,
-		RegressionNexusCompleteFromHandler, RegressionWorkflowComplete, RegressionWorkflowObserveRunID:
+		RegressionNexusCompleteFromHandler, RegressionWorkflowComplete, RegressionWorkflowObserveRunID, RegressionObserve:
 		// Proactive realizations perform their work in Fire.
-	case RegressionObserve:
 		// Observation realizations perform their work in Reconcile.
 	case RegressionNexusStartActivity:
 		p.policy.setStartHook(func(ctx context.Context, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {

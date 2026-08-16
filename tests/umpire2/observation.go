@@ -70,6 +70,7 @@ func (u *Monitor) Observed(namespaceID string, query umpirefw.ObservationQuery) 
 		return len(query.Arguments) >= 1 && u.emptyNexusStorageObserved(view, query.Arguments[0])
 	case "nexus.handler_workflow":
 		return len(query.Arguments) == 2 && u.handlerWorkflowObserved(namespaceID, query.Arguments[0], query.Arguments[1])
+	default:
 	}
 	return false
 }

@@ -21,9 +21,12 @@ var jsonPayloadConverter = converter.NewProtoJSONPayloadConverter()
 // (worker launchActivity) and the standalone-activity client path so the two
 // stay in sync. Unrecognized variants fall back to "noop".
 func ActivityNameAndArgs(act *ExecuteActivityAction) (string, []any) {
-	if delay := act.GetDelay(); delay != nil {
+	switch {
+	case act.GetDelay() != nil:
+		delay := act.GetDelay()
 		return "delay", []any{delay.AsDuration()}
-	} else if payload := act.GetPayload(); payload != nil {
+	case act.GetPayload() != nil:
+		payload := act.GetPayload()
 		// Fill with pseudo-random, incompressible bytes so the payload occupies its full
 		// configured size in history/persistence instead of compressing away. The rng is
 		// seeded by size so its deterministic on replay
@@ -31,16 +34,17 @@ func ActivityNameAndArgs(act *ExecuteActivityAction) (string, []any) {
 		r := rand.New(rand.NewSource(int64(payload.BytesToReceive)))
 		_, _ = r.Read(inputData)
 		return "payload", []any{inputData, payload.BytesToReturn}
-	} else if client := act.GetClient(); client != nil {
-		return "client", []any{client}
-	} else if retryable := act.GetRetryableError(); retryable != nil {
-		return "retryable_error", []any{retryable}
-	} else if timeout := act.GetTimeout(); timeout != nil {
-		return "timeout", []any{timeout}
-	} else if heartbeat := act.GetHeartbeat(); heartbeat != nil {
-		return "heartbeat", []any{heartbeat}
+	case act.GetClient() != nil:
+		return "client", []any{act.GetClient()}
+	case act.GetRetryableError() != nil:
+		return "retryable_error", []any{act.GetRetryableError()}
+	case act.GetTimeout() != nil:
+		return "timeout", []any{act.GetTimeout()}
+	case act.GetHeartbeat() != nil:
+		return "heartbeat", []any{act.GetHeartbeat()}
+	default:
+		return "noop", nil
 	}
-	return "noop", nil
 }
 
 // ConvertFromPBRetryPolicy converts a proto RetryPolicy into an SDK RetryPolicy.

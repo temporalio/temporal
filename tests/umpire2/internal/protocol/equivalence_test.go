@@ -44,7 +44,7 @@ func TestDefaultMonitorRulesContainActiveV1Rules(t *testing.T) {
 }
 
 func TestDefaultNexusPlansMatchV1ForEveryEdgeAndHosting(t *testing.T) {
-	protocol, err := protocol.Default()
+	compiledProtocol, err := protocol.Default()
 	require.NoError(t, err)
 	lifecycle, ok := v1planner.DefaultModels().Lifecycle(string(v1model.NexusOperationType))
 	require.True(t, ok)
@@ -53,7 +53,7 @@ func TestDefaultNexusPlansMatchV1ForEveryEdgeAndHosting(t *testing.T) {
 		for _, hosting := range []umpire.Hosting{umpire.Standalone, umpire.Embedded} {
 			t.Run(edge.From+"/"+edge.Event+"/"+hosting.String(), func(t *testing.T) {
 				want, wantErr := v1action.PlanEdge(edge.From, edge.Event, hosting)
-				got, gotErr := protocol.PlanEdge(v2model.NexusOperationType, edge.From, edge.Event, hosting)
+				got, gotErr := compiledProtocol.PlanEdge(v2model.NexusOperationType, edge.From, edge.Event, hosting)
 
 				require.Equal(t, wantErr != nil, gotErr != nil)
 				if wantErr == nil {
@@ -65,7 +65,7 @@ func TestDefaultNexusPlansMatchV1ForEveryEdgeAndHosting(t *testing.T) {
 }
 
 func TestDefaultWorkflowPlansMatchV1ForEveryEdge(t *testing.T) {
-	protocol, err := protocol.Default()
+	compiledProtocol, err := protocol.Default()
 	require.NoError(t, err)
 	lifecycle, ok := v1planner.DefaultModels().Lifecycle(string(v1model.WorkflowType))
 	require.True(t, ok)
@@ -73,7 +73,7 @@ func TestDefaultWorkflowPlansMatchV1ForEveryEdge(t *testing.T) {
 	for _, edge := range lifecycle.Edges() {
 		t.Run(edge.From+"/"+edge.Event, func(t *testing.T) {
 			want, wantErr := v1action.WorkflowPlanEdge(edge.From, edge.Event)
-			got, gotErr := protocol.PlanEdge(v2model.WorkflowType, edge.From, edge.Event, umpire.Standalone)
+			got, gotErr := compiledProtocol.PlanEdge(v2model.WorkflowType, edge.From, edge.Event, umpire.Standalone)
 
 			require.Equal(t, wantErr != nil, gotErr != nil)
 			if wantErr == nil {
@@ -84,14 +84,14 @@ func TestDefaultWorkflowPlansMatchV1ForEveryEdge(t *testing.T) {
 }
 
 func TestDefaultAsyncCompletionPayloadsMatchV1(t *testing.T) {
-	protocol, err := protocol.Default()
+	compiledProtocol, err := protocol.Default()
 	require.NoError(t, err)
 
 	for _, event := range []string{v1model.NexusFail, v1model.NexusCancel} {
 		t.Run(event, func(t *testing.T) {
 			v1Plan, err := v1action.PlanEdge(v1model.NexusStarted, event, umpire.Standalone)
 			require.NoError(t, err)
-			v2Plan, err := protocol.PlanEdge(
+			v2Plan, err := compiledProtocol.PlanEdge(
 				v2model.NexusOperationType,
 				v2model.NexusStarted,
 				event,
@@ -113,12 +113,12 @@ func TestDefaultAsyncCompletionPayloadsMatchV1(t *testing.T) {
 }
 
 func TestDefaultMonitorRegistrationMatchesV1ForTargetedAndBroadcastFacts(t *testing.T) {
-	protocol, err := protocol.Default()
+	compiledProtocol, err := protocol.Default()
 	require.NoError(t, err)
 	v1 := umpire.NewModelState()
 	v1model.RegisterDefaultEntities(v1)
 	v2 := umpire.NewModelState()
-	protocol.Register(v2)
+	compiledProtocol.Register(v2)
 
 	v1Path := &umpire.EntityPath{
 		EntityID: umpire.NewEntityID(v1model.WorkflowTaskType, "queue:workflow:run"),

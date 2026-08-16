@@ -143,6 +143,7 @@ func planMetadataFor(model verify.Model) (planMetadata, error) {
 					Reason: "backend generation does not support temporal progress properties", Source: property.Source,
 				})
 			}
+		default:
 		}
 	}
 	for assumption := range fairness {

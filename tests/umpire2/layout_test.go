@@ -29,6 +29,8 @@ func TestPackageLayout(t *testing.T) {
 	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "action"))
 	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "planner"))
 	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "ksdriver"))
+	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "kitchensink"))
+	require.DirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "internal", "kitchensink"))
 	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "regress", "rpc"))
 	require.NoFileExists(t, filepath.Join(repoRoot, "tests", "umpire2", "entity_key.go"))
 	require.NoDirExists(t, filepath.Join(repoRoot, "tests", "umpire2", "genmodels"))

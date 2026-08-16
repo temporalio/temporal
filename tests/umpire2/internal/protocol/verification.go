@@ -81,14 +81,14 @@ func (p *Protocol) VerificationModel(options VerificationOptions) (verify.Model,
 	covered := make(map[ActionKey]struct{}, len(p.actionOrder))
 	for _, entry := range p.actionOrder {
 		covered[entry.Key] = struct{}{}
-		action, err := p.verificationAction(entry, lifecycles)
+		verificationAction, err := p.verificationAction(entry, lifecycles)
 		if err != nil {
 			return verify.Model{}, err
 		}
-		result.Actions = append(result.Actions, action)
+		result.Actions = append(result.Actions, verificationAction)
 		if entry.Action == nil {
 			result.Abstractions = append(result.Abstractions, verify.Abstraction{
-				Name:   action.Name,
+				Name:   verificationAction.Name,
 				Reason: entry.GapReason,
 				Source: verify.Provenance{Path: "tests/umpire2/protocol/default.go"},
 			})
@@ -100,13 +100,13 @@ func (p *Protocol) VerificationModel(options VerificationOptions) (verify.Model,
 				continue
 			}
 			key := ActionKey{Entity: entityType, From: edge.From, Event: edge.Event, Hosting: lifecycle.EdgeHosting(edge.From, edge.Event)}
-			action, err := p.verificationAction(ActionCatalogEntry{Key: key, GapReason: "no executable action is declared"}, lifecycles)
+			verificationAction, err := p.verificationAction(ActionCatalogEntry{Key: key, GapReason: "no executable action is declared"}, lifecycles)
 			if err != nil {
 				return verify.Model{}, err
 			}
-			result.Actions = append(result.Actions, action)
+			result.Actions = append(result.Actions, verificationAction)
 			result.Abstractions = append(result.Abstractions, verify.Abstraction{
-				Name:   action.Name,
+				Name:   verificationAction.Name,
 				Reason: "no executable action is declared",
 				Source: verify.Provenance{Path: "tests/umpire2/model"},
 			})
@@ -202,7 +202,7 @@ func regressionVerificationAction(realization string) string {
 }
 
 func lowerRegressionStartActivity(
-	action coreregress.ActionCapability,
+	capability coreregress.ActionCapability,
 	lifecycles map[umpire.EntityType]*umpire.Lifecycle,
 ) (verify.Action, error) {
 	expectedVariables := []coreregress.Variable{
@@ -218,19 +218,19 @@ func lowerRegressionStartActivity(
 		coreregress.Atom("nexus.linked_to_activity", coreregress.TemplateVar("operation"), coreregress.TemplateVar("activity")),
 		coreregress.Atom("activity.linked_to_nexus_operation", coreregress.TemplateVar("activity"), coreregress.TemplateVar("operation")),
 	}
-	if action.Mode != coreregress.ReactiveAction ||
-		!reflect.DeepEqual(action.Variables, expectedVariables) ||
-		!reflect.DeepEqual(action.Preconditions, expectedPreconditions) ||
-		!reflect.DeepEqual(action.Effects, expectedEffects) {
-		return verify.Action{}, fmt.Errorf("protocol verification: regression action %q no longer matches its verification refinement", action.Schema.Name)
+	if capability.Mode != coreregress.ReactiveAction ||
+		!reflect.DeepEqual(capability.Variables, expectedVariables) ||
+		!reflect.DeepEqual(capability.Preconditions, expectedPreconditions) ||
+		!reflect.DeepEqual(capability.Effects, expectedEffects) {
+		return verify.Action{}, fmt.Errorf("protocol verification: regression action %q no longer matches its verification refinement", capability.Schema.Name)
 	}
 	nexusLifecycle := lifecycles[model.NexusOperationType]
 	activityLifecycle := lifecycles[model.ActivityType]
 	if nexusLifecycle == nil || activityLifecycle == nil {
-		return verify.Action{}, fmt.Errorf("protocol verification: regression action %q requires Nexus and Activity lifecycles", action.Schema.Name)
+		return verify.Action{}, fmt.Errorf("protocol verification: regression action %q requires Nexus and Activity lifecycles", capability.Schema.Name)
 	}
 	return verify.Action{
-		Name: "regression." + action.Schema.Name,
+		Name: "regression." + capability.Schema.Name,
 		Parameters: []verify.Parameter{
 			{Name: "activity", Type: string(model.ActivityType), Binding: verify.FreshBinding},
 			{Name: "operation", Type: string(model.NexusOperationType), Binding: verify.InputBinding},
@@ -243,8 +243,8 @@ func lowerRegressionStartActivity(
 			{Kind: verify.AddRelationEffect, Relation: string(ActivityNexusRelation), Source: "activity", Target: "operation"},
 		},
 		Hosting:      umpire.Embedded.String(),
-		Capabilities: slices.Clone(action.Requires),
-		Source:       verify.Provenance{Path: "tests/umpire2/protocol/regress_domain.go", Symbol: action.Schema.Name},
+		Capabilities: slices.Clone(capability.Requires),
+		Source:       verify.Provenance{Path: "tests/umpire2/protocol/regress_domain.go", Symbol: capability.Schema.Name},
 	}, nil
 }
 
@@ -258,8 +258,8 @@ func (p *Protocol) addVerificationInventory(result *verify.Model, ruleInventory 
 	for _, relation := range result.Relations {
 		result.Inventory = append(result.Inventory, verify.InventoryItem{Kind: "relation", Name: relation.Name, Included: true, Source: relation.SourceLocation})
 	}
-	for _, action := range result.Actions {
-		result.Inventory = append(result.Inventory, verify.InventoryItem{Kind: "verification-action", Name: action.Name, Included: true, Source: action.Source})
+	for _, verificationAction := range result.Actions {
+		result.Inventory = append(result.Inventory, verify.InventoryItem{Kind: "verification-action", Name: verificationAction.Name, Included: true, Source: verificationAction.Source})
 	}
 	for _, property := range result.Properties {
 		result.Inventory = append(result.Inventory, verify.InventoryItem{Kind: "property", Name: property.Name, Included: true, Source: property.Source})
@@ -274,8 +274,8 @@ func (p *Protocol) addVerificationInventory(result *verify.Model, ruleInventory 
 	if p.regression != nil {
 		catalog := p.regression.Snapshot()
 		actionNameCounts := make(map[string]int, len(catalog.Actions))
-		for _, action := range catalog.Actions {
-			actionNameCounts[action.Schema.Name]++
+		for _, registeredAction := range catalog.Actions {
+			actionNameCounts[registeredAction.Schema.Name]++
 		}
 		for _, predicate := range catalog.Predicates {
 			result.Inventory = append(result.Inventory, verify.InventoryItem{
@@ -284,23 +284,23 @@ func (p *Protocol) addVerificationInventory(result *verify.Model, ruleInventory 
 				Source: verify.Provenance{Path: "tests/umpire2/protocol/regress_domain.go", Symbol: predicate.Schema.Name},
 			})
 		}
-		for _, action := range catalog.Actions {
-			included := action.Schema.Name == "nexus.start_activity" || regressionVerificationAction(action.Realization) != ""
-			inventoryName := action.Schema.Name
-			if actionNameCounts[action.Schema.Name] > 1 {
-				inventoryName += "[" + action.Realization + "]"
+		for _, registeredAction := range catalog.Actions {
+			included := registeredAction.Schema.Name == "nexus.start_activity" || regressionVerificationAction(registeredAction.Realization) != ""
+			inventoryName := registeredAction.Schema.Name
+			if actionNameCounts[registeredAction.Schema.Name] > 1 {
+				inventoryName += "[" + registeredAction.Realization + "]"
 			}
 			reason := ""
 			if !included {
-				reason = regressionVerificationExclusionReason(action)
+				reason = regressionVerificationExclusionReason(registeredAction)
 				result.Abstractions = append(result.Abstractions, verify.Abstraction{
 					Name: "regression." + inventoryName, Reason: reason,
-					Source: verify.Provenance{Path: "tests/umpire2/protocol/regress_domain.go", Symbol: action.Schema.Name},
+					Source: verify.Provenance{Path: "tests/umpire2/protocol/regress_domain.go", Symbol: registeredAction.Schema.Name},
 				})
 			}
 			result.Inventory = append(result.Inventory, verify.InventoryItem{
 				Kind: "regression-action", Name: inventoryName, Included: included, Reason: reason,
-				Source: verify.Provenance{Path: "tests/umpire2/protocol/regress_domain.go", Symbol: action.Schema.Name},
+				Source: verify.Provenance{Path: "tests/umpire2/protocol/regress_domain.go", Symbol: registeredAction.Schema.Name},
 			})
 		}
 		for _, resource := range catalog.Resources {
@@ -339,15 +339,15 @@ func addLifecycleRefinements(result *verify.Model) {
 	for _, refinement := range result.Refinements {
 		mapped[refinement.Action] = struct{}{}
 	}
-	for _, action := range result.Actions {
-		if _, exists := mapped[action.Name]; exists {
+	for _, verificationAction := range result.Actions {
+		if _, exists := mapped[verificationAction.Name]; exists {
 			continue
 		}
 		result.Refinements = append(result.Refinements, verify.Refinement{
-			Name:             "lifecycle." + action.Name,
-			Action:           action.Name,
-			LifecycleActions: []string{action.Name},
-			Source:           action.Source,
+			Name:             "lifecycle." + verificationAction.Name,
+			Action:           verificationAction.Name,
+			LifecycleActions: []string{verificationAction.Name},
+			Source:           verificationAction.Source,
 		})
 	}
 }

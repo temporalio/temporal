@@ -3,7 +3,7 @@ package action
 import (
 	"fmt"
 
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 )
 
 // The coverage-guided fault scheduler turns the earlier pieces — AutoCoverPlans (the plan list),

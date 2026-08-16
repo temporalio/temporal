@@ -24,7 +24,7 @@ func decodeITFTrace(request Request, payload string) (verify.TraceEvidence, erro
 		return verify.TraceEvidence{}, fmt.Errorf("native-trace-malformed: Apalache trace format is %q, expected ITF", document.Meta.Format)
 	}
 	if len(document.States) == 0 {
-		return verify.TraceEvidence{}, fmt.Errorf("native-trace-missing: Apalache ITF trace has no states")
+		return verify.TraceEvidence{}, errors.New("native-trace-missing: Apalache ITF trace has no states")
 	}
 	for _, variable := range document.Vars {
 		if !knownStateVariable(request.TraceVocabulary, variable) {

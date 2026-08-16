@@ -159,33 +159,33 @@ func (o *verificationOwnership) addPrefix(kind verificationDeclarationKind, pref
 	return nil
 }
 
-func (o *verificationOwnership) Assign(model verify.Model) ([]verify.Module, error) {
+func (o *verificationOwnership) Assign(verificationModel verify.Model) ([]verify.Module, error) {
 	modules := make([]verify.Module, len(o.declarations))
 	for index, declaration := range o.declarations {
 		modules[index] = verify.Module{Name: declaration.Name, Owner: declaration.Owner}
 	}
-	for _, entity := range model.Entities {
+	for _, entity := range verificationModel.Entities {
 		module, err := o.owner(verificationEntityKind, entity.Name)
 		if err != nil {
 			return nil, err
 		}
 		modules[module].Entities = append(modules[module].Entities, entity.Name)
 	}
-	for _, relation := range model.Relations {
+	for _, relation := range verificationModel.Relations {
 		module, err := o.owner(verificationRelationKind, relation.Name)
 		if err != nil {
 			return nil, err
 		}
 		modules[module].Relations = append(modules[module].Relations, relation.Name)
 	}
-	for _, action := range model.Actions {
+	for _, action := range verificationModel.Actions {
 		module, err := o.owner(verificationActionKind, action.Name)
 		if err != nil {
 			return nil, err
 		}
 		modules[module].Actions = append(modules[module].Actions, action.Name)
 	}
-	for _, property := range model.Properties {
+	for _, property := range verificationModel.Properties {
 		module, err := o.owner(verificationPropertyKind, property.Name)
 		if err != nil {
 			return nil, err

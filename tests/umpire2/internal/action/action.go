@@ -7,7 +7,7 @@ import (
 	"context"
 	"sync"
 
-	umpire "go.temporal.io/server/common/testing/umpire"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire2/internal/model"
 )
 

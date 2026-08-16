@@ -10,7 +10,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -258,7 +258,7 @@ func advanceEdges(lc *Lifecycle, c Constraints) map[string][]edge {
 		adj[e.From] = append(adj[e.From], edge{event: e.Event, to: e.To})
 	}
 	for s := range adj {
-		sort.Slice(adj[s], func(i, j int) bool { return adj[s][i].event < adj[s][j].event })
+		slices.SortFunc(adj[s], func(left, right edge) int { return strings.Compare(left.event, right.event) })
 	}
 	return adj
 }

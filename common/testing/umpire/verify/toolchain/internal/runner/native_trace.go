@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -25,7 +26,7 @@ var (
 func decodeTLCTrace(request Request, payload string) (verify.TraceEvidence, error) {
 	headers := tlcStateHeaderPattern.FindAllStringSubmatchIndex(payload, -1)
 	if len(headers) == 0 {
-		return verify.TraceEvidence{}, fmt.Errorf("native-trace-missing: TLC output has no state trace")
+		return verify.TraceEvidence{}, errors.New("native-trace-missing: TLC output has no state trace")
 	}
 	states := make([]verify.ModelState, len(headers))
 	labels := make([]string, len(headers))

@@ -58,7 +58,7 @@ func (e *nexusOperationFact) importSelf(attrs attribute.Set) bool {
 	return e.ScheduledEventID != ""
 }
 
-// NexusOperationScheduled: UNSPECIFIED/BACKING_OFF -> SCHEDULED.
+// NexusOperationScheduled records UNSPECIFIED/BACKING_OFF -> SCHEDULED.
 type NexusOperationScheduled struct{ nexusOperationFact }
 
 func (e *NexusOperationScheduled) Name() string { return telemetry.EventNexusOperationScheduled }
@@ -66,7 +66,7 @@ func (e *NexusOperationScheduled) ImportSpanEvent(attrs attribute.Set) bool {
 	return e.importSelf(attrs)
 }
 
-// NexusOperationAttemptFailed: SCHEDULED -> BACKING_OFF (retryable attempt failure).
+// NexusOperationAttemptFailed records SCHEDULED -> BACKING_OFF (retryable attempt failure).
 type NexusOperationAttemptFailed struct{ nexusOperationFact }
 
 func (e *NexusOperationAttemptFailed) Name() string {
@@ -76,7 +76,7 @@ func (e *NexusOperationAttemptFailed) ImportSpanEvent(attrs attribute.Set) bool 
 	return e.importSelf(attrs)
 }
 
-// NexusOperationStarted: SCHEDULED/BACKING_OFF -> STARTED (async handler ack).
+// NexusOperationStarted records SCHEDULED/BACKING_OFF -> STARTED (async handler ack).
 type NexusOperationStarted struct{ nexusOperationFact }
 
 func (e *NexusOperationStarted) Name() string { return telemetry.EventNexusOperationStarted }
@@ -84,7 +84,7 @@ func (e *NexusOperationStarted) ImportSpanEvent(attrs attribute.Set) bool {
 	return e.importSelf(attrs)
 }
 
-// NexusOperationSucceeded: -> SUCCEEDED (terminal; sync completion may skip STARTED).
+// NexusOperationSucceeded records -> SUCCEEDED (terminal; sync completion may skip STARTED).
 type NexusOperationSucceeded struct{ nexusOperationFact }
 
 func (e *NexusOperationSucceeded) Name() string { return telemetry.EventNexusOperationSucceeded }
@@ -92,7 +92,7 @@ func (e *NexusOperationSucceeded) ImportSpanEvent(attrs attribute.Set) bool {
 	return e.importSelf(attrs)
 }
 
-// NexusOperationFailed: -> FAILED (terminal).
+// NexusOperationFailed records -> FAILED (terminal).
 type NexusOperationFailed struct{ nexusOperationFact }
 
 func (e *NexusOperationFailed) Name() string { return telemetry.EventNexusOperationFailed }
@@ -100,7 +100,7 @@ func (e *NexusOperationFailed) ImportSpanEvent(attrs attribute.Set) bool {
 	return e.importSelf(attrs)
 }
 
-// NexusOperationCanceled: -> CANCELED (terminal).
+// NexusOperationCanceled records -> CANCELED (terminal).
 type NexusOperationCanceled struct{ nexusOperationFact }
 
 func (e *NexusOperationCanceled) Name() string { return telemetry.EventNexusOperationCanceled }
@@ -108,7 +108,7 @@ func (e *NexusOperationCanceled) ImportSpanEvent(attrs attribute.Set) bool {
 	return e.importSelf(attrs)
 }
 
-// NexusOperationTimedOut: -> TIMED_OUT (terminal).
+// NexusOperationTimedOut records -> TIMED_OUT (terminal).
 type NexusOperationTimedOut struct{ nexusOperationFact }
 
 func (e *NexusOperationTimedOut) Name() string { return telemetry.EventNexusOperationTimedOut }
