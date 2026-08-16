@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -44,6 +46,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -1896,11 +1899,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			select {
-			case <-canStartCh:
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
@@ -1909,6 +1907,20 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 		},
 	}
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	var faultInjected atomic.Bool
+	env.InjectRPCFault(func(req, resp any, _ error) error {
+		httpRequest, ok := req.(*faultinjection.HTTPFaultRequest)
+		if !ok || resp != nil || httpRequest.Request.Method != http.MethodPost || faultInjected.Swap(true) {
+			return nil
+		}
+		select {
+		case <-canStartCh:
+			return errors.New("injected HTTP fault")
+		case <-httpRequest.Request.Context().Done():
+			return httpRequest.Request.Context().Err()
+		}
+	})
 
 	callerWF := func(ctx workflow.Context) error {
 		opCtx, cancel := workflow.WithCancel(ctx)
