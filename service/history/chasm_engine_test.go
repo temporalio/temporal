@@ -281,6 +281,8 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			// Test the case where current execution is closed after new execution's mutable state
+			// snapshot is prepared in memory.
 			var err error
 			currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
 			if err != nil {
@@ -355,6 +357,8 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			// Test the case where current execution is closed after new execution's mutable state
+			// snapshot is prepared in memory.
 			var err error
 			currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
 			if err != nil {
@@ -1925,6 +1929,8 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 			_ context.Context,
 			request *persistence.GetWorkflowExecutionRequest,
 		) (*persistence.GetWorkflowExecutionResponse, error) {
+			// Test the case where current execution is closed after new execution's mutable state
+			// snapshot is prepared in memory.
 			var err error
 			currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
 			if err != nil {

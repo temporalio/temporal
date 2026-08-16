@@ -1843,7 +1843,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 							_ context.Context,
 							request *persistence.CreateWorkflowExecutionRequest,
 						) (*persistence.CreateWorkflowExecutionResponse, error) {
-							s.Less(currentExecutionLastRunningClock, request.NewWorkflowSnapshot.ExecutionInfo.LastRunningClock)
+							s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
 							return tests.CreateWorkflowExecutionResponse, nil
 						},
 					)
@@ -1882,7 +1882,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 							_ context.Context,
 							request *persistence.CreateWorkflowExecutionRequest,
 						) (*persistence.CreateWorkflowExecutionResponse, error) {
-							s.Less(currentExecutionLastRunningClock, request.NewWorkflowSnapshot.ExecutionInfo.LastRunningClock)
+							s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
 							return tests.CreateWorkflowExecutionResponse, nil
 						},
 					)
@@ -1992,7 +1992,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 									_ context.Context,
 									request *persistence.CreateWorkflowExecutionRequest,
 								) (*persistence.CreateWorkflowExecutionResponse, error) {
-									s.Less(currentExecutionLastRunningClock, request.NewWorkflowSnapshot.ExecutionInfo.LastRunningClock)
+									s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
 									return tests.CreateWorkflowExecutionResponse, nil
 								},
 							)
@@ -2209,7 +2209,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
 			s.Equal(persistence.CreateWorkflowModeUpdateCurrent, request.Mode)
-			s.Less(currentExecutionLastRunningClock, request.NewWorkflowSnapshot.ExecutionInfo.LastRunningClock)
+			s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	)
@@ -3131,6 +3131,20 @@ func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we *commonpb.Wo
 	defer release(nil)
 
 	return weContext.(*workflow.ContextImpl).MutableState
+}
+
+func (s *engine2Suite) assertWorkflowLastRunningClockUpdated(
+	currentExecutionLastRunningClock int64,
+	request *persistence.CreateWorkflowExecutionRequest,
+) {
+	updatedLastRunningClock := request.NewWorkflowSnapshot.ExecutionInfo.LastRunningClock
+	s.Less(currentExecutionLastRunningClock, updatedLastRunningClock)
+	s.NotEmpty(request.NewWorkflowEvents)
+
+	lastBatch := request.NewWorkflowEvents[len(request.NewWorkflowEvents)-1]
+	s.NotEmpty(lastBatch.Events)
+	lastEvent := lastBatch.Events[len(lastBatch.Events)-1]
+	s.Equal(updatedLastRunningClock, lastEvent.GetTaskId())
 }
 
 type createWorkflowExecutionRequestMatcher struct {
