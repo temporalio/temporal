@@ -1,7 +1,9 @@
 package replication
 
 import (
+	"context"
 	"errors"
+	"maps"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -19,6 +21,185 @@ import (
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/tasks"
 )
+
+func replicationLifecycleTaskType(taskType enumsspb.ReplicationTaskType) (string, bool) {
+	switch taskType {
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		return wideevents.ReplTaskSyncWorkflowState, true
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
+		return wideevents.ReplTaskSyncVersionedTransition, true
+	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
+		return wideevents.ReplTaskVerifyVersionedTransition, true
+	default:
+		return "", false
+	}
+}
+
+func stateBasedTaskTypeFromHistoryTask(taskType enumsspb.TaskType) (string, bool) {
+	switch taskType {
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
+		return wideevents.ReplTaskSyncWorkflowState, true
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
+		return wideevents.ReplTaskSyncVersionedTransition, true
+	default:
+		return "", false
+	}
+}
+
+// emitReplicationTaskError emits a context-rich error phase for an executable task. Identity is
+// resolved here so individual error sites cannot accidentally omit source or target context.
+func (e *ExecutableTaskImpl) emitReplicationTaskError(
+	operation string,
+	message string,
+	err error,
+	details map[string]any,
+) {
+	if !e.Config.EmitReplicationLifecycleEvents() {
+		return
+	}
+	if e.replicationTask == nil {
+		return
+	}
+	taskType, ok := replicationLifecycleTaskType(e.replicationTask.GetTaskType())
+	if !ok {
+		return
+	}
+
+	namespaceID, workflowID, runID := e.workflowKeyFromTask()
+	if namespaceID == "" || workflowID == "" {
+		return
+	}
+	shardContext, shardErr := e.ShardController.GetShardByNamespaceWorkflow(
+		namespace.ID(namespaceID),
+		workflowID,
+	)
+	if shardErr != nil || shardContext.GetEventLogger() == nil {
+		return
+	}
+
+	namespaceName := e.NamespaceName()
+	if namespaceName == "" {
+		if name, nsErr := e.NamespaceCache.GetNamespaceName(namespace.ID(namespaceID)); nsErr == nil {
+			namespaceName = name.String()
+		}
+	}
+	if details == nil {
+		details = make(map[string]any, 4)
+	} else {
+		details = maps.Clone(details)
+	}
+	details["attempt"] = e.Attempt()
+	details["priority"] = e.GetPriority().String()
+	details["target_cluster"] = e.ClusterMetadata.GetCurrentClusterName()
+	if _, ok := details["artifact_origin"]; !ok {
+		details["artifact_origin"] = wideevents.ReplArtifactOriginTaskPayload
+	}
+	sourceTaskID := e.replicationTask.GetSourceTaskId()
+	if sourceTaskID == 0 {
+		sourceTaskID = e.TaskID()
+	}
+
+	payload := wideevents.ReplicationLifecyclePayload{
+		TaskType:      taskType,
+		Shard:         shardContext.GetShardID(),
+		Namespace:     namespaceName,
+		NamespaceID:   namespaceID,
+		WorkflowID:    workflowID,
+		RunID:         runID,
+		SourceCluster: e.SourceClusterName(),
+		SourceShard:   e.SourceShardKey().ShardID,
+		SourceTaskID:  sourceTaskID,
+	}
+	if vt := e.replicationTask.GetVersionedTransition(); vt != nil {
+		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
+		payload.TransitionCount = vt.GetTransitionCount()
+	}
+	wideevents.EmitReplicationError(shardContext.GetEventLogger(), payload, operation, message, err, details)
+}
+
+type replicationErrorEmitter interface {
+	emitReplicationTaskError(string, string, error, map[string]any)
+}
+
+func setReplicationTaskOrigin(
+	ctx context.Context,
+	task ExecutableTask,
+	artifactOrigin string,
+) context.Context {
+	taskImpl, ok := task.(*ExecutableTaskImpl)
+	if !ok {
+		return ctx
+	}
+	return wideevents.SetReplicationTaskOrigin(ctx, wideevents.ReplicationTaskOrigin{
+		ClusterName:    taskImpl.sourceClusterName,
+		ShardID:        taskImpl.sourceShardKey.ShardID,
+		TaskID:         taskImpl.taskID,
+		ArtifactOrigin: artifactOrigin,
+	})
+}
+
+func emitExecutableTaskError(
+	task ExecutableTask,
+	operation string,
+	message string,
+	err error,
+	details map[string]any,
+) {
+	if emitter, ok := task.(replicationErrorEmitter); ok {
+		emitter.emitReplicationTaskError(operation, message, err, details)
+	}
+}
+
+func (s *StreamSenderImpl) emitReplicationSenderError(
+	item tasks.Task,
+	replicationTaskType enumsspb.ReplicationTaskType,
+	priority enumsspb.TaskPriority,
+	attempt int64,
+	operation string,
+	message string,
+	err error,
+) {
+	taskType, ok := stateBasedTaskTypeFromHistoryTask(item.GetType())
+	if !ok {
+		return
+	}
+	if convertedTaskType, ok := replicationLifecycleTaskType(replicationTaskType); ok {
+		taskType = convertedTaskType
+	}
+	logger := s.shardContext.GetEventLogger()
+	if logger == nil {
+		return
+	}
+	namespaceID := item.GetNamespaceID()
+	namespaceName := ""
+	if name, nsErr := s.shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(namespaceID)); nsErr == nil {
+		namespaceName = name.String()
+	}
+	details := map[string]any{
+		"attempt":        attempt,
+		"priority":       priority.String(),
+		"target_cluster": s.clientClusterName,
+		"target_shard":   s.clientShardKey.ShardID,
+	}
+	wideevents.EmitReplicationError(
+		logger,
+		wideevents.ReplicationLifecyclePayload{
+			TaskType:      taskType,
+			Shard:         s.serverShardKey.ShardID,
+			Namespace:     namespaceName,
+			NamespaceID:   namespaceID,
+			WorkflowID:    item.GetWorkflowID(),
+			RunID:         item.GetRunID(),
+			SourceCluster: s.shardContext.GetClusterMetadata().GetCurrentClusterName(),
+			SourceShard:   s.serverShardKey.ShardID,
+			SourceTaskID:  item.GetTaskID(),
+		},
+		operation,
+		message,
+		err,
+		details,
+	)
+}
 
 // emitReplicationExecuting emits a best-effort "executing" ReplicationLifecycle event when an
 // executable replication task is picked up to execute on the target cluster. It never affects

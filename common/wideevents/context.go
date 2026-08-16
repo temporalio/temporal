@@ -4,11 +4,12 @@ import "context"
 
 type replicationTaskOriginCtxKey struct{}
 
-// ReplicationTaskOrigin identifies where a replicated artifact came from; diagnostic only. TaskID is
-// unset when the applied artifact was re-fetched rather than being that queue entry's own payload.
+// ReplicationTaskOrigin identifies the source task whose processing produced an event.
 type ReplicationTaskOrigin struct {
-	ShardID int32
-	TaskID  int64
+	ClusterName    string
+	ShardID        int32
+	TaskID         int64
+	ArtifactOrigin string
 }
 
 // SetReplicationTaskOrigin stamps origin onto ctx.

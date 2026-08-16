@@ -308,6 +308,11 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 		tag.TaskID(e.TaskID()),
 		tag.Error(err),
 	)
+	details := map[string]any{}
+	if _, ok := err.(*serviceerrors.SyncState); ok {
+		details["disposition"] = "sync_state"
+	}
+	emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationStandbyVerification, "Standby versioned transition verification failed", err, details)
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
 		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
@@ -334,6 +339,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 					tag.TaskID(e.TaskID()),
 					tag.Error(syncStateErr),
 				)
+				emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationStandbyVerificationSyncState, "Standby verification recovery failed during sync state", syncStateErr, nil)
 				return err
 			}
 			return nil

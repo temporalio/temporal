@@ -1,12 +1,15 @@
 package wideevents
 
 import (
+	"maps"
+
 	"go.opentelemetry.io/otel/log"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/util"
 )
 
 // ReplicationLifecycleEventName is the stable event name for the ReplicationLifecycle wide event,
-// which traces a replication task sent -> executing -> applied.
+// which traces a replication task through sent, executing, applied, skipped, and error phases.
 const ReplicationLifecycleEventName = "replication_lifecycle"
 
 type ReplicationPhase string
@@ -20,6 +23,7 @@ const (
 	// wedging the stream. Such a task never reaches executing/applied, so this is where its trace
 	// ends. See StreamSenderImpl.recordStuckTaskSkipped.
 	ReplicationSkipped ReplicationPhase = "skipped"
+	ReplicationError   ReplicationPhase = "error"
 )
 
 const (
@@ -42,8 +46,57 @@ const (
 	ArtifactKindMutation = "mutation"
 )
 
+// Stable values stored in the details column for replication error events. Details remains
+// extensible, but these values form the small queryable vocabulary shared by all emitters.
+const (
+	ReplOperationTaskExecution                    = "task_execution"
+	ReplOperationTaskConversion                   = "task_conversion"
+	ReplOperationRateLimit                        = "rate_limit"
+	ReplOperationStreamSend                       = "stream_send"
+	ReplOperationPassiveTaskExecution             = "passive_task_execution"
+	ReplOperationPassiveApply                     = "passive_apply"
+	ReplOperationStandbyVerification              = "standby_verification"
+	ReplOperationSyncState                        = "sync_state"
+	ReplOperationSyncStateApply                   = "sync_state_apply"
+	ReplOperationSyncVersionedTransitionSyncState = "sync_versioned_transition_sync_state"
+	ReplOperationSyncWorkflowStateSyncState       = "sync_workflow_state_sync_state"
+	ReplOperationStandbyVerificationSyncState     = "standby_verification_sync_state"
+	ReplOperationHistoryBackfill                  = "history_backfill"
+	ReplOperationHistoryResend                    = "history_resend"
+	ReplOperationHistoryBranchCleanup             = "history_branch_cleanup"
+	ReplOperationNamespaceSync                    = "namespace_sync"
+	ReplOperationDLQWrite                         = "dlq_write"
+	ReplArtifactOriginTaskPayload                 = "task_payload"
+	ReplArtifactOriginSyncStateRefetch            = "sync_state_refetch"
+)
+
+// EmitReplicationError normalizes the common error envelope and emits it into the existing
+// replication_lifecycle event, not a separate event table.
+func EmitReplicationError(
+	logger log.Logger,
+	payload ReplicationLifecyclePayload,
+	operation string,
+	message string,
+	err error,
+	extraDetails map[string]any,
+) {
+	details := make(map[string]any, len(payload.Details)+len(extraDetails)+4)
+	maps.Copy(details, payload.Details)
+	maps.Copy(details, extraDetails)
+	details["operation"] = operation
+	details["message"] = message
+	if err != nil {
+		details["error"] = err.Error()
+		details["error_type"] = util.ErrorType(err)
+	}
+
+	payload.Phase = ReplicationError
+	payload.Details = details
+	Emit(logger, payload)
+}
+
 type ReplicationLifecyclePayload struct {
-	// Phase is sent, executing, applied or skipped.
+	// Phase is sent, executing, applied, skipped or error.
 	Phase ReplicationPhase
 	// TaskType is which replication task this is.
 	TaskType string
