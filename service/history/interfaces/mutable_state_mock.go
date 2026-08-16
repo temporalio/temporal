@@ -3837,6 +3837,21 @@ func (mr *MockMutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKe
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockMutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
 }
 
+// UpdateLastRunningClock mocks base method.
+func (m *MockMutableState) UpdateLastRunningClock() (*persistence.WorkflowExecutionInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLastRunningClock")
+	ret0, _ := ret[0].(*persistence.WorkflowExecutionInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateLastRunningClock indicates an expected call of UpdateLastRunningClock.
+func (mr *MockMutableStateMockRecorder) UpdateLastRunningClock() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastRunningClock", reflect.TypeOf((*MockMutableState)(nil).UpdateLastRunningClock))
+}
+
 // UpdateResetRunID mocks base method.
 func (m *MockMutableState) UpdateResetRunID(runID string) {
 	m.ctrl.T.Helper()

@@ -7853,7 +7853,9 @@ func (ms *MutableStateImpl) closeTransaction(
 			return closeTransactionResult{}, err
 		}
 		ms.closeTransactionHandleUnknownVersionedTransition()
-		ms.closeTransactionUpdateLastRunningClock(transactionPolicy, workflowEventsSeq)
+		if err := ms.closeTransactionUpdateLastRunningClock(transactionPolicy, workflowEventsSeq); err != nil {
+			return closeTransactionResult{}, err
+		}
 	}
 
 	// todo@TimeSkipping, we can move update versioned transition to inside closeTransactionHandleWorkflowTimeSkipping
@@ -8123,9 +8125,9 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 func (ms *MutableStateImpl) closeTransactionUpdateLastRunningClock(
 	transactionPolicy historyi.TransactionPolicy,
 	workflowEventsSeq []*persistence.WorkflowEvents,
-) {
+) error {
 	if transactionPolicy != historyi.TransactionPolicyActive {
-		return
+		return nil
 	}
 
 	// Events can only be generated while mutable state is running,
@@ -8134,17 +8136,30 @@ func (ms *MutableStateImpl) closeTransactionUpdateLastRunningClock(
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
 		lastEvent := lastEvents[len(lastEvents)-1]
 		ms.executionInfo.LastRunningClock = lastEvent.GetTaskId()
-		return
+		return nil
 	}
 
-	if !ms.IsWorkflowExecutionRunning() && !ms.IsCurrentWorkflowGuaranteed() {
-		// If workflow currently is not running and also not running at the beginning of the transaction,
-		// then don't update the lastRunningClock
-		// NOTE: running at the beginning of the transaction == it's a current workflow in DB.
-		return
+	_, err := ms.UpdateLastRunningClock()
+	return err
+}
+
+func (ms *MutableStateImpl) UpdateLastRunningClock() (*persistencespb.WorkflowExecutionInfo, error) {
+	if ms.IsWorkflowExecutionRunning() || ms.IsCurrentWorkflowGuaranteed() {
+		// Only update the lastRunningClock when the workflow is
+		// 1. Running at the end of the transaction or
+		// 2. Running at the beginning of the transaction
+		//
+		// A running execution (before the transaction) is guaranteed to be the current execution.
+		// so we check 2 by calling IsCurrentWorkflowGuaranteed().
+
+		lastRunningClock, err := ms.shard.GenerateTaskID()
+		if err != nil {
+			return nil, err
+		}
+		ms.executionInfo.LastRunningClock = lastRunningClock
 	}
 
-	ms.executionInfo.LastRunningClock = ms.shard.CurrentVectorClock().GetClock()
+	return ms.executionInfo, nil
 }
 
 func (ms *MutableStateImpl) closeTransactionTrackTombstones(

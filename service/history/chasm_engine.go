@@ -1137,7 +1137,21 @@ func (e *ChasmEngine) handleReusePolicy(
 		)
 	}
 
-	err := newExecutionParams.executionContext.CreateWorkflowExecution(
+	// If current execution is closed after the newExecutionParams are prepared,
+	// the LastRunningClock in the prepared execution snapshot will be smaller than
+	// the current execution's LastRunningClock, causing the new execution to be marked
+	// as zombie in standby cluster.
+	//
+	// Here we basically refresh the LastRunningClock in the prepared execution snapshot to avoid this issue.
+	updatedExecutionInfo, err := newExecutionParams.mutableState.UpdateLastRunningClock()
+	if err != nil {
+		return chasm.StartExecutionResult{}, err
+	}
+	// This assignment is technically not necessary since newExecutionParams.snapshot points to the same mutable state
+	// updated in the UpdateLastRunningClock() method, but it makes the code more explicit and easier to read.
+	newExecutionParams.snapshot.ExecutionInfo = updatedExecutionInfo
+
+	if err := newExecutionParams.executionContext.CreateWorkflowExecution(
 		ctx,
 		shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
@@ -1147,8 +1161,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		newExecutionParams.snapshot,
 		newExecutionParams.events,
 		historyi.TransactionPolicyActive,
-	)
-	if err != nil {
+	); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
