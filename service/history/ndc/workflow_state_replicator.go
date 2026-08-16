@@ -419,6 +419,9 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		SourceShard:   origin.ShardID,
 		SourceTaskID:  origin.TaskID,
 	}
+	if origin.ArtifactOrigin != "" {
+		payload.Details = map[string]any{"artifact_origin": origin.ArtifactOrigin}
+	}
 	if ms != nil {
 		info := ms.GetExecutionInfo()
 		state := ms.GetExecutionState()
