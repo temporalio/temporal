@@ -46,16 +46,26 @@ func newGeneratorWithState(ctx chasm.MutableContext, state *schedulerpb.Generato
 // Generate immediately kicks off a new GeneratorTask. Used after updating the
 // schedule specification.
 func (g *Generator) Generate(ctx chasm.MutableContext) {
-	g.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
+	g.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate, false)
+}
+
+// GenerateSkippingFutureActionTimes immediately kicks off a GeneratorTask that
+// re-arms idle handling but leaves FutureActionTimes untouched. Used to
+// avoid oscillating visibility after a completion, where the completion's
+// GeneratorTask runs in advance of the regular interval's GeneratorTask.
+func (g *Generator) GenerateSkippingFutureActionTimes(ctx chasm.MutableContext) {
+	g.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate, true)
 }
 
 // scheduleTask schedules a GeneratorTask at the given time.
-func (g *Generator) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+func (g *Generator) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time, skipFutureActionTimes bool) {
 	g.getOrCreateEventLog(ctx).LogEvent(ctx,
 		fmt.Sprintf("scheduled generatorTask for %s", scheduledTime.Format(time.RFC3339)))
 	ctx.AddTask(g, chasm.TaskAttributes{
 		ScheduledTime: scheduledTime,
-	}, &schedulerpb.GeneratorTask{})
+	}, &schedulerpb.GeneratorTask{
+		SkipFutureActionTimes: skipFutureActionTimes,
+	})
 }
 
 func (g *Generator) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
