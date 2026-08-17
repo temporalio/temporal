@@ -14,6 +14,7 @@ func newTestRegistry(config *Config) *validation.ValidatorRegistry {
 	_ = newDeleteNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	_ = newDescribeNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	_ = newPollNexusOperationExecutionValidator(config).RegisterValidator(registry)
+	_ = newRequestCancelNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	return registry
 }
 
@@ -209,5 +210,61 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 func TestValidatePollNexusOperationExecutionResponse(t *testing.T) {
 	registry := newTestRegistry(testConfig())
 	resp := &workflowservice.PollNexusOperationExecutionResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+
+	for _, tc := range []struct {
+		name    string
+		req     *workflowservice.RequestCancelNexusOperationExecutionRequest
+		wantErr string
+	}{
+		{
+			name: "valid",
+			req: &workflowservice.RequestCancelNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "a7d6f9c2-1234-5678-abcd-ef0123456789",
+				RequestId:   "b8e7f0d1-abcd-ef01-2345-678901234567",
+			},
+		},
+		{
+			name: "valid without optional fields",
+			req: &workflowservice.RequestCancelNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+			},
+		},
+		{
+			name:    "missing operation_id",
+			req:     &workflowservice.RequestCancelNexusOperationExecutionRequest{Namespace: "ns"},
+			wantErr: "operation_id is required",
+		},
+		{
+			name: "invalid request_id",
+			req: &workflowservice.RequestCancelNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RequestId:   "not-a-uuid",
+			},
+			wantErr: "request_id is not a valid UUID",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validation.ValidateAndNormalize(registry, tc.req)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateRequestCancelNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.RequestCancelNexusOperationExecutionResponse{}
 	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
 }

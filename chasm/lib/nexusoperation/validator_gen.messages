@@ -1,3 +1,4 @@
 go.temporal.io/api/workflowservice/v1.DeleteNexusOperationExecutionRequest
 go.temporal.io/api/workflowservice/v1.DescribeNexusOperationExecutionRequest
 go.temporal.io/api/workflowservice/v1.PollNexusOperationExecutionRequest
+go.temporal.io/api/workflowservice/v1.RequestCancelNexusOperationExecutionRequest
