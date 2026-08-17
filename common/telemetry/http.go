@@ -82,6 +82,8 @@ type debugHTTPClientTransport struct {
 	rt http.RoundTripper
 }
 
+var _ http.RoundTripper = (*debugHTTPClientTransport)(nil)
+
 func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	state := &debugHTTPClientRequestState{}
 	req = req.WithContext(context.WithValue(req.Context(), debugHTTPClientRequestStateKey{}, state))
@@ -96,6 +98,8 @@ func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response,
 type debugHTTPClientSpanTransport struct {
 	rt http.RoundTripper
 }
+
+var _ http.RoundTripper = (*debugHTTPClientSpanTransport)(nil)
 
 func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	span := trace.SpanFromContext(req.Context())
