@@ -1396,7 +1396,7 @@ func (c *clientImpl) SyncWorkflowState(
 	var response *historyservice.SyncWorkflowStateResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
-		ctx, cancel := c.createContext(ctx)
+		ctx, cancel := c.createContextWithStateSyncTimeout(ctx)
 		defer cancel()
 		response, err = client.SyncWorkflowState(ctx, request, opts...)
 		return err

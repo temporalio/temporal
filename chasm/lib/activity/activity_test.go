@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -507,19 +506,14 @@ func TestActivityTerminate(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			nsRegistry := namespace.NewMockRegistry(ctrl)
-			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
-					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleNow:            func(chasm.Component) time.Time { return defaultTime },
+					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
 							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 						},
-						namespaceRegistry: nsRegistry,
 					}),
 				},
 			}
@@ -702,11 +696,6 @@ func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			nsRegistry := namespace.NewMockRegistry(ctrl)
-			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 
@@ -714,11 +703,11 @@ func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
 				MockContext: chasm.MockContext{
 					HandleNow:            func(chasm.Component) time.Time { return defaultTime },
 					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
 							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 						},
-						namespaceRegistry: nsRegistry,
 					}),
 				},
 			}
@@ -1139,19 +1128,14 @@ func TestActivityTaskTokenLegacyStampCompatibility(t *testing.T) {
 
 func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	nsRegistry := namespace.NewMockRegistry(ctrl)
-	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return testTime },
+			HandleNow:            func(chasm.Component) time.Time { return testTime },
+			HandleNamespaceEntry: testNamespaceEntry,
 			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 				config: &Config{
 					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 				},
-				namespaceRegistry: nsRegistry,
 			}),
 		},
 	}
@@ -1419,17 +1403,14 @@ func TestUpdateActivityExecutionOptionsRequestID(t *testing.T) {
 
 func newOperatorCommandTestContext(t *testing.T) *chasm.MockMutableContext {
 	t.Helper()
-	ctrl := gomock.NewController(t)
-	nsRegistry := namespace.NewMockRegistry(ctrl)
-	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
 	return &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+			HandleNow:            func(chasm.Component) time.Time { return time.Unix(0, 0) },
+			HandleNamespaceEntry: testNamespaceEntry,
 			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 				config: &Config{
 					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 				},
-				namespaceRegistry: nsRegistry,
 			}),
 		},
 	}

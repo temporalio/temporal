@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -27,7 +26,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/retrypolicy"
@@ -5280,7 +5278,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 			Query:     "GROUP BY ActivityType",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-		s.Contains(err.Error(), "'GROUP BY' clause is only supported for ExecutionStatus")
+		s.Contains(err.Error(), "'GROUP BY' clause is not supported for search attribute")
 	})
 
 	t.Run("InvalidQuery", func(t *testing.T) {
@@ -9861,15 +9859,6 @@ func (env *standaloneActivityEnv) startActivityWithType(ctx context.Context, act
 	})
 }
 
-func (env *standaloneActivityEnv) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
-	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
-	srv := httptest.NewServer(hh)
-	t.Cleanup(func() {
-		srv.Close()
-	})
-	return srv.URL
-}
-
 func (s *standaloneActivityTestSuite) TestCallbacks() {
 	env := s.newTestEnv()
 	t := s.T()
@@ -10004,15 +9993,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		ch := &completionHandler{
-			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-			requestCompleteCh: make(chan error, 1),
-		}
-		defer func() {
-			close(ch.requestCh)
-			close(ch.requestCompleteCh)
-		}()
-		callbackAddress := env.runNexusCompletionHTTPServer(t, ch)
+		ch, callbackAddress := newNexusCompletionHandler(t)
 
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
@@ -10075,15 +10056,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		ch := &completionHandler{
-			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-			requestCompleteCh: make(chan error, 1),
-		}
-		defer func() {
-			close(ch.requestCh)
-			close(ch.requestCompleteCh)
-		}()
-		callbackAddress := env.runNexusCompletionHTTPServer(t, ch)
+		ch, callbackAddress := newNexusCompletionHandler(t)
 
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
@@ -10149,15 +10122,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		ch := &completionHandler{
-			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-			requestCompleteCh: make(chan error, 1),
-		}
-		defer func() {
-			close(ch.requestCh)
-			close(ch.requestCompleteCh)
-		}()
-		callbackAddress := env.runNexusCompletionHTTPServer(t, ch)
+		ch, callbackAddress := newNexusCompletionHandler(t)
 
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
@@ -10224,15 +10189,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		ch := &completionHandler{
-			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-			requestCompleteCh: make(chan error, 1),
-		}
-		defer func() {
-			close(ch.requestCh)
-			close(ch.requestCompleteCh)
-		}()
-		callbackAddress := env.runNexusCompletionHTTPServer(t, ch)
+		ch, callbackAddress := newNexusCompletionHandler(t)
 
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
@@ -10306,15 +10263,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		ch := &completionHandler{
-			requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-			requestCompleteCh: make(chan error, 1),
-		}
-		defer func() {
-			close(ch.requestCh)
-			close(ch.requestCompleteCh)
-		}()
-		callbackAddress := env.runNexusCompletionHTTPServer(t, ch)
+		ch, callbackAddress := newNexusCompletionHandler(t)
 
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
@@ -10409,15 +10358,6 @@ func (s *standaloneActivityTestSuite) TestCallbacksDisabled() {
 		})
 		require.ErrorContains(t, err, "completion callbacks are not enabled for this namespace")
 	})
-}
-
-func (s *standaloneActivityTestSuite) runNexusCompletionHTTPServer(t *testing.T, h *completionHandler) string {
-	hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: h})
-	srv := httptest.NewServer(hh)
-	t.Cleanup(func() {
-		srv.Close()
-	})
-	return srv.URL
 }
 
 func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
