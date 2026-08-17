@@ -224,6 +224,10 @@ func (h *frontendHandler) CountNexusOperationExecutions(
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
+	}
+
 	resp, err := chasm.CountExecutions[*Operation](ctx, &chasm.CountExecutionsRequest{
 		NamespaceName: req.GetNamespace(),
 		Query:         req.GetQuery(),
@@ -240,10 +244,14 @@ func (h *frontendHandler) CountNexusOperationExecutions(
 		})
 	}
 
-	return &workflowservice.CountNexusOperationExecutionsResponse{
+	countResp := &workflowservice.CountNexusOperationExecutionsResponse{
 		Count:  resp.Count,
 		Groups: groups,
-	}, nil
+	}
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, countResp); err != nil {
+		return nil, err
+	}
+	return countResp, nil
 }
 
 func (h *frontendHandler) RequestCancelNexusOperationExecution(

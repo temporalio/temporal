@@ -365,3 +365,53 @@ func (v listNexusOperationExecutionsValidator) RegisterValidator(registry *valid
 	}
 	return v.Response.RegisterValidator(registry)
 }
+
+type countNexusOperationExecutionsRequestFieldValidators struct {
+	Namespace validation.FieldValidator[workflowservice.CountNexusOperationExecutionsRequest, string]
+	Query     validation.FieldValidator[workflowservice.CountNexusOperationExecutionsRequest, string]
+}
+
+func (v countNexusOperationExecutionsRequestFieldValidators) ValidateAndNormalize(req *workflowservice.CountNexusOperationExecutionsRequest) error {
+	if err := v.Namespace(req, "namespace", req.GetNamespace()); err != nil {
+		return err
+	}
+	if err := v.Query(req, "query", req.GetQuery()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v countNexusOperationExecutionsRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.CountNexusOperationExecutionsRequest](registry, v)
+}
+
+type countNexusOperationExecutionsResponseFieldValidators struct {
+	Count  validation.FieldValidator[workflowservice.CountNexusOperationExecutionsResponse, int64]
+	Groups validation.FieldValidator[workflowservice.CountNexusOperationExecutionsResponse, []*workflowservice.CountNexusOperationExecutionsResponse_AggregationGroup]
+}
+
+func (v countNexusOperationExecutionsResponseFieldValidators) ValidateAndNormalize(req *workflowservice.CountNexusOperationExecutionsResponse) error {
+	if err := v.Count(req, "count", req.GetCount()); err != nil {
+		return err
+	}
+	if err := v.Groups(req, "groups", req.GetGroups()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v countNexusOperationExecutionsResponseFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.CountNexusOperationExecutionsResponse](registry, v)
+}
+
+type countNexusOperationExecutionsValidator struct {
+	Request  countNexusOperationExecutionsRequestFieldValidators
+	Response countNexusOperationExecutionsResponseFieldValidators
+}
+
+func (v countNexusOperationExecutionsValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	if err := v.Request.RegisterValidator(registry); err != nil {
+		return err
+	}
+	return v.Response.RegisterValidator(registry)
+}

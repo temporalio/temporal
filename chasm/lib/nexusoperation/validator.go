@@ -20,6 +20,7 @@ var ValidatorModule = validation.Module(
 	newRequestCancelNexusOperationExecutionValidator,
 	newTerminateNexusOperationExecutionValidator,
 	newListNexusOperationExecutionsValidator,
+	newCountNexusOperationExecutionsValidator,
 )
 
 func newDeleteNexusOperationExecutionValidator(config *Config) deleteNexusOperationExecutionValidator {
@@ -51,6 +52,21 @@ func newDescribeNexusOperationExecutionValidator(config *Config) describeNexusOp
 			Info:          validation.NoOp[resp, *nexuspb.NexusOperationExecutionInfo](),
 			Input:         validation.NoOp[resp, *commonpb.Payload](),
 			LongPollToken: validation.NoOp[resp, []byte](),
+		},
+	}
+}
+
+func newCountNexusOperationExecutionsValidator() countNexusOperationExecutionsValidator {
+	type req = workflowservice.CountNexusOperationExecutionsRequest
+	type resp = workflowservice.CountNexusOperationExecutionsResponse
+	return countNexusOperationExecutionsValidator{
+		Request: countNexusOperationExecutionsRequestFieldValidators{
+			Namespace: validation.NoOp[req, string](),
+			Query:     validation.NoOp[req, string](),
+		},
+		Response: countNexusOperationExecutionsResponseFieldValidators{
+			Count:  validation.NoOp[resp, int64](),
+			Groups: validation.NoOp[resp, []*workflowservice.CountNexusOperationExecutionsResponse_AggregationGroup](),
 		},
 	}
 }
