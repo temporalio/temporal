@@ -207,15 +207,20 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		// Debug spans must contain the headers and payloads needed to diagnose an exchange.
 		t.Run("AnnotatesHeadersAndPayloads", func(t *testing.T) {
+			const (
+				requestPayload  = "request body"
+				responsePayload = "response body"
+			)
+
 			traceEnv := newHTTPTraceEnv(t, trace.WithIDGenerator(fixedIDGenerator{}))
 
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				payload, err := io.ReadAll(r.Body)
 				require.NoError(t, err)
-				require.Equal(t, "request body", string(payload))
+				require.Equal(t, requestPayload, string(payload))
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(bytes.NewBufferString("response body")),
+					Body:       io.NopCloser(bytes.NewBufferString(responsePayload)),
 					Header: http.Header{
 						"Response-Header": []string{"response-value"},
 					},
@@ -224,23 +229,23 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			})
 
 			wrapped := traceEnv.newClientTransport(rt)
-			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
+			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString(requestPayload))
 			req.Header.Set("Request-Header", "request-value")
 
 			resp, err := wrapped.RoundTrip(req)
 			require.NoError(t, err)
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
-			require.Equal(t, "response body", string(body))
+			require.Equal(t, responsePayload, string(body))
 			require.NoError(t, resp.Body.Close())
 
 			require.Equal(t, map[string]any{
 				"http.request.headers.request-header":   []string{"request-value"},
 				"http.request.headers.traceparent":      []string{"00-0102030405060708090a0b0c0d0e0f10-0102030405060708-01"},
 				"http.request.method":                   "POST",
-				"http.request.payload":                  "request body",
+				"http.request.payload":                  requestPayload,
 				"http.response.headers.response-header": []string{"response-value"},
-				"http.response.payload":                 "response body",
+				"http.response.payload":                 responsePayload,
 				"http.response.status_code":             int64(http.StatusOK),
 				"network.protocol.version":              "1.1",
 				"server.address":                        "example.com",
@@ -453,37 +458,42 @@ func TestNewHTTPHandler(t *testing.T) {
 
 		// Debug spans must contain the headers and payloads needed to diagnose an exchange.
 		t.Run("AnnotatesHeadersAndPayloads", func(t *testing.T) {
+			const (
+				requestPayload  = "request body"
+				responsePayload = "response body"
+			)
+
 			traceEnv := newHTTPTraceEnv(t)
 			handler := traceEnv.newHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				payload, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Errorf("ReadAll() error = %v", err)
 				}
-				if string(payload) != "request body" {
-					t.Errorf("payload = %q, want %q", string(payload), "request body")
+				if string(payload) != requestPayload {
+					t.Errorf("payload = %q, want %q", string(payload), requestPayload)
 				}
 				w.Header().Set("Response-Header", "response-value")
-				_, err = w.Write([]byte("response body"))
+				_, err = w.Write([]byte(responsePayload))
 				if err != nil {
 					t.Errorf("Write() error = %v", err)
 				}
 			}))
 
-			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
+			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString(requestPayload))
 			req.Header.Set("Request-Header", "request-value")
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
-			require.Equal(t, "response body", rec.Body.String())
+			require.Equal(t, responsePayload, rec.Body.String())
 
 			require.Equal(t, map[string]any{
 				"client.address":                        "192.0.2.1",
-				"http.request.body.size":                int64(len("request body")),
+				"http.request.body.size":                int64(len(requestPayload)),
 				"http.request.headers.request-header":   []string{"request-value"},
 				"http.request.method":                   "POST",
-				"http.request.payload":                  "request body",
-				"http.response.body.size":               int64(len("response body")),
+				"http.request.payload":                  requestPayload,
+				"http.response.body.size":               int64(len(responsePayload)),
 				"http.response.headers.response-header": []string{"response-value"},
-				"http.response.payload":                 "response body",
+				"http.response.payload":                 responsePayload,
 				"http.response.status_code":             int64(http.StatusOK),
 				"network.peer.address":                  "192.0.2.1",
 				"network.peer.port":                     int64(1234),
@@ -540,19 +550,21 @@ func TestNewHTTPHandler(t *testing.T) {
 
 		// io.Copy can use ReaderFrom and bypass the Write hook that tracks standard response size.
 		t.Run("AnnotatesResponseSizeWhenUsingReadFrom", func(t *testing.T) {
+			const responsePayload = "response body"
+
 			traceEnv := newHTTPTraceEnv(t)
 			var handlerErr error
 			handler := traceEnv.newHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				_, handlerErr = io.Copy(w, io.LimitReader(bytes.NewBufferString("response body"), int64(len("response body"))))
+				_, handlerErr = io.Copy(w, io.LimitReader(bytes.NewBufferString(responsePayload), int64(len(responsePayload))))
 			}))
 
 			rec := &readerFromResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
 			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, handlerErr)
-			require.Equal(t, "response body", rec.Body.String())
+			require.Equal(t, responsePayload, rec.Body.String())
 
 			attrs := traceEnv.spanAttrs()
-			require.Equal(t, int64(len("response body")), attrs["http.response.body.size"])
+			require.Equal(t, int64(len(responsePayload)), attrs["http.response.body.size"])
 		})
 	})
 }
