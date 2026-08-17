@@ -34,7 +34,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 	// Also use this test to verify that namespaces are unescaped in the path.
 	taskQueue := testcore.RandomizeStr("task-queue")
 	namespace := "namespace not/found"
-	u := env.dispatchByNsAndTqURL(namespace, taskQueue)
+	u := env.dispatchByNamespaceAndTaskQueueURL(namespace, taskQueue)
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	capture := env.StartNamespaceMetricCaptureFor(namespace)
@@ -65,7 +65,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 		namespace.WriteString("namespace-is-a-very-long-string")
 	}
 
-	u := env.dispatchByNsAndTqURL(namespace.String(), taskQueue)
+	u := env.dispatchByNamespaceAndTaskQueueURL(namespace.String(), taskQueue)
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	capture := env.StartGlobalMetricCapture()
@@ -195,7 +195,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 		if dispatchOnlyByEndpoint {
 			dispatchURL = env.dispatchByEndpointURL(testEndpoint.Id)
 		} else {
-			dispatchURL = env.dispatchByNsAndTqURL(env.Namespace().String(), taskQueue)
+			dispatchURL = env.dispatchByTaskQueueURL(taskQueue)
 		}
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
@@ -237,7 +237,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_PayloadSizeLimit()
 		if dispatchOnlyByEndpoint {
 			dispatchURL = env.dispatchByEndpointURL(testEndpoint.Id)
 		} else {
-			dispatchURL = env.dispatchByNsAndTqURL(env.Namespace().String(), taskQueue)
+			dispatchURL = env.dispatchByTaskQueueURL(taskQueue)
 		}
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})

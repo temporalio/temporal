@@ -103,7 +103,11 @@ func (env *NexusTestEnv) dispatchByEndpointURL(endpoint string) string {
 	return "http://" + env.HttpAPIAddress() + "/" + cnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint)
 }
 
-func (env *NexusTestEnv) dispatchByNsAndTqURL(namespace string, taskQueue string) string {
+func (env *NexusTestEnv) dispatchByTaskQueueURL(taskQueue string) string {
+	return env.dispatchByNamespaceAndTaskQueueURL(env.Namespace().String(), taskQueue)
+}
+
+func (env *NexusTestEnv) dispatchByNamespaceAndTaskQueueURL(namespace string, taskQueue string) string {
 	return "http://" + env.HttpAPIAddress() + "/" + cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.
 		Path(cnexus.NamespaceAndTaskQueue{
 			Namespace: namespace,
