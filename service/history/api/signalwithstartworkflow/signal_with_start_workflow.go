@@ -145,10 +145,11 @@ func startAndSignalWorkflow(
 	return startAndSignalWithoutCurrentWorkflow(
 		ctx,
 		shard,
+		namespaceEntry,
 		vrid,
 		newWorkflowLease,
 		currentWorkflowLease,
-		signalWithStartRequest.RequestId,
+		signalWithStartRequest,
 	)
 }
 
@@ -240,10 +241,11 @@ func startAndSignalWithCurrentWorkflow(
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
+	namespaceEntry *namespace.Namespace,
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
 	currentWorkflowLease api.WorkflowLease,
-	requestID string,
+	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (startOutcome, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
@@ -289,6 +291,7 @@ func startAndSignalWithoutCurrentWorkflow(
 		runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
 		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
+		requestID := signalWithStartRequest.GetRequestId()
 		if _, ok := failedErr.RequestIDs[requestID]; ok {
 			// CurrentWorkflowConditionFailedError carries the persisted WorkflowExecutionState blob,
 			// which may not have first_execution_run_id populated on records written before that
@@ -303,10 +306,89 @@ func startAndSignalWithoutCurrentWorkflow(
 			}
 			return startOutcome{runID: failedErr.RunID, firstExecutionRunID: firstRunID, started: false}, nil
 		}
+		// BrandNew fails when a current_executions row already exists. If mutable state for that
+		// run is gone, the lease load looks like "no current workflow" and we take this path.
+		// StartWorkflow retries with UpdateCurrent for a completed pointer; do the same here
+		// instead of returning the conflict (the history handler would retry it until deadline).
+		if createMode == persistence.CreateWorkflowModeBrandNew {
+			if retryErr := retryBrandNewAsUpdateCurrent(
+				ctx,
+				shardContext,
+				namespaceEntry,
+				newWorkflowLease,
+				newWorkflow,
+				newWorkflowEventsSeq,
+				signalWithStartRequest,
+				failedErr,
+			); retryErr != nil {
+				return startOutcome{}, retryErr
+			}
+			runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
+			return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
+		}
 		return startOutcome{}, err
 	default:
 		return startOutcome{}, err
 	}
+}
+
+func retryBrandNewAsUpdateCurrent(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	namespaceEntry *namespace.Namespace,
+	newWorkflowLease api.WorkflowLease,
+	newWorkflow *persistence.WorkflowSnapshot,
+	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
+	failedErr *persistence.CurrentWorkflowConditionFailedError,
+) error {
+	if failedErr.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return failedErr
+	}
+
+	currentWorkflowStartTime := time.Time{}
+	if shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(namespaceEntry.Name().String()) &&
+		failedErr.StartTime != nil {
+		currentWorkflowStartTime = *failedErr.StartTime
+	}
+
+	workflowKey := definition.NewWorkflowKey(
+		namespaceEntry.ID().String(),
+		signalWithStartRequest.GetWorkflowId(),
+		failedErr.RunID,
+	)
+	if err := api.ResolveWorkflowIDReusePolicy(
+		shardContext,
+		workflowKey,
+		namespaceEntry,
+		failedErr.Status,
+		failedErr.RequestIDs,
+		failedErr.FirstExecutionRunID,
+		signalWithStartRequest.GetWorkflowIdReusePolicy(),
+		currentWorkflowStartTime,
+	); err != nil {
+		return err
+	}
+
+	if err := api.NewWorkflowVersionCheck(
+		shardContext,
+		failedErr.LastWriteVersion,
+		newWorkflowLease.GetMutableState(),
+	); err != nil {
+		return err
+	}
+
+	return newWorkflowLease.GetContext().CreateWorkflowExecution(
+		ctx,
+		shardContext,
+		persistence.CreateWorkflowModeUpdateCurrent,
+		failedErr.RunID,
+		failedErr.LastWriteVersion,
+		newWorkflowLease.GetMutableState(),
+		newWorkflow,
+		newWorkflowEventsSeq,
+		historyi.TransactionPolicyActive,
+	)
 }
 
 func signalWorkflow(

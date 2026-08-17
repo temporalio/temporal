@@ -2264,6 +2264,199 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	s.NotNil(err)
 }
 
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCurrentExecution() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	namespaceID := tests.NamespaceID
+	workflowID := "wId"
+	orphanedRunID := tests.RunID
+	workflowType := "workflowType"
+	taskQueue := "testTaskQueue"
+	identity := "testIdentity"
+	signalName := "my signal name"
+	input := payloads.EncodeString("test input")
+	requestID := uuid.NewString()
+	lastWriteVersion := common.EmptyVersion
+
+	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			Namespace:                namespaceID.String(),
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			Input:                    input,
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                requestID,
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			SignalName:               signalName,
+		},
+	}
+
+	brandNewExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})
+	updateExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeUpdateCurrent &&
+			request.PreviousRunID == orphanedRunID &&
+			request.PreviousLastWriteVersion == lastWriteVersion
+	})
+	conditionFailedErr := &persistence.CurrentWorkflowConditionFailedError{
+		Msg: "random message",
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
+			"old request ID": {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
+			},
+		},
+		RunID:            orphanedRunID,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+		LastWriteVersion: lastWriteVersion,
+		StartTime:        nil,
+	}
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetCurrentExecutionResponse{RunID: orphanedRunID}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("mutable state missing"))
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).Return(
+		nil, conditionFailedErr)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).Return(
+		tests.CreateWorkflowExecutionResponse, nil)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.Require().NoError(err)
+	s.Require().NotNil(resp)
+	s.Require().True(resp.Started)
+	s.Require().NotEmpty(resp.GetRunId())
+	s.Require().NotEqual(orphanedRunID, resp.GetRunId())
+}
+
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCurrentExecution_RejectDuplicate() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	namespaceID := tests.NamespaceID
+	workflowID := "wId"
+	orphanedRunID := tests.RunID
+	workflowType := "workflowType"
+	taskQueue := "testTaskQueue"
+	identity := "testIdentity"
+	signalName := "my signal name"
+	input := payloads.EncodeString("test input")
+	requestID := uuid.NewString()
+
+	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			Namespace:                namespaceID.String(),
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			Input:                    input,
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                requestID,
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+			SignalName:               signalName,
+		},
+	}
+
+	brandNewExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})
+	conditionFailedErr := &persistence.CurrentWorkflowConditionFailedError{
+		Msg: "random message",
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
+			"old request ID": {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
+			},
+		},
+		RunID:            orphanedRunID,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		LastWriteVersion: common.EmptyVersion,
+		StartTime:        nil,
+	}
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetCurrentExecutionResponse{RunID: orphanedRunID}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("mutable state missing"))
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).Return(
+		nil, conditionFailedErr)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.Require().Nil(resp)
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	s.Require().ErrorAs(err, &alreadyStarted)
+}
+
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedRunningCurrentExecution() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	namespaceID := tests.NamespaceID
+	workflowID := "wId"
+	orphanedRunID := tests.RunID
+	workflowType := "workflowType"
+	taskQueue := "testTaskQueue"
+	identity := "testIdentity"
+	signalName := "my signal name"
+	input := payloads.EncodeString("test input")
+	requestID := uuid.NewString()
+
+	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			Namespace:                namespaceID.String(),
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			Input:                    input,
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                requestID,
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			SignalName:               signalName,
+		},
+	}
+
+	brandNewExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})
+	conditionFailedErr := &persistence.CurrentWorkflowConditionFailedError{
+		Msg: "random message",
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
+			"old request ID": {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
+			},
+		},
+		RunID:            orphanedRunID,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastWriteVersion: common.EmptyVersion,
+		StartTime:        nil,
+	}
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetCurrentExecutionResponse{RunID: orphanedRunID}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("mutable state missing"))
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).Return(
+		nil, conditionFailedErr)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.Require().Nil(resp)
+	var conditionFailed *persistence.CurrentWorkflowConditionFailedError
+	s.Require().ErrorAs(err, &conditionFailed)
+}
+
 func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	childWorkflowID := "some random child workflow ID"
 	childRunID := uuid.NewString()

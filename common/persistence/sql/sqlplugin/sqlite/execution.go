@@ -49,14 +49,14 @@ shard_id, namespace_id, business_id as workflow_id, run_id, create_request_id, s
 FROM current_chasm_executions WHERE shard_id = ? AND namespace_id = ? AND business_id = ? AND archetype_id = ?`
 
 	lockCurrentExecutionJoinExecutionsQuery = `SELECT
-ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_time, e.last_write_version, ce.data, ce.data_encoding
+ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_time, COALESCE(e.last_write_version, ce.last_write_version) AS last_write_version, ce.data, ce.data_encoding
 FROM current_executions ce
-INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
+LEFT JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
 WHERE ce.shard_id = ? AND ce.namespace_id = ? AND ce.workflow_id = ?`
 	lockCurrentChasmExecutionJoinExecutionsQuery = `SELECT
-ce.shard_id, ce.namespace_id, ce.business_id as workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_time, e.last_write_version, ce.data, ce.data_encoding
+ce.shard_id, ce.namespace_id, ce.business_id as workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_time, COALESCE(e.last_write_version, ce.last_write_version) AS last_write_version, ce.data, ce.data_encoding
 FROM current_chasm_executions ce
-INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.business_id AND e.run_id = ce.run_id
+LEFT JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.business_id AND e.run_id = ce.run_id
 WHERE ce.shard_id = ? AND ce.namespace_id = ? AND ce.business_id = ? AND ce.archetype_id = ?`
 
 	lockCurrentExecutionQuery      = getCurrentExecutionQuery

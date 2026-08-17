@@ -580,6 +580,9 @@ func lockCurrentExecutionIfExists(
 	workflowID string,
 	archetypeID chasm.ArchetypeID,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
+	// The join is a LEFT JOIN so a current_executions row whose executions record is
+	// gone still comes back. BrandNew can then return CurrentWorkflowConditionFailedError
+	// instead of failing the insert with a unique-constraint error.
 	rows, err := tx.LockCurrentExecutionsJoinExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
