@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -345,4 +346,55 @@ func (env *NexusTestEnv) respondNexusTaskCompletedWithOperationError(ctx context
 		return err
 	}
 	return nil
+}
+
+// completionHandler is a nexusrpc completion handler that hands each delivered completion to the
+// test on requestCh, then waits on requestCompleteCh for the error to return to the caller.
+type completionHandler struct {
+	requestCh         chan *nexusrpc.CompletionRequest
+	requestCompleteCh chan error
+	doneCh            chan struct{}
+}
+
+func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexusrpc.CompletionRequest) error {
+	// Push the request to the requests channel.
+	select {
+	case h.requestCh <- request:
+	case <-h.doneCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	// Pull from the rsponse channel.
+	select {
+	case err := <-h.requestCompleteCh:
+		return err
+	case <-h.doneCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// newNexusCompletionHandler returns a completion handler along with the URL of an HTTP server that
+// delivers completions to it, for use as the target of a completion callback. The server shuts
+// down when t cleans up.
+func newNexusCompletionHandler(t *testing.T) (*completionHandler, string) {
+	// Buffered so the server can deliver several completions (or retries) before the test drains them.
+	ch := &completionHandler{
+		requestCh:         make(chan *nexusrpc.CompletionRequest, 4),
+		requestCompleteCh: make(chan error, 4),
+		doneCh:            make(chan struct{}),
+	}
+
+	httpHandler := nexusrpc.CompletionHandlerOptions{Handler: ch}
+	srv := httptest.NewServer(nexusrpc.NewCompletionHTTPHandler(httpHandler))
+
+	t.Cleanup(func() {
+		// Unblock any calls to CompleteOperation; srv.Close waits for in-flight requests.
+		close(ch.doneCh)
+		srv.Close()
+	})
+	return ch, srv.URL
 }

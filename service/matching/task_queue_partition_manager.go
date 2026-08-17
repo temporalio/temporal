@@ -876,7 +876,7 @@ func (pm *taskQueuePartitionManagerImpl) GetPhysicalQueueAdjustedStats(
 		buildID = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
 	}
 
-	partitionInfo, err := pm.Describe(ctx, map[string]bool{buildID: true}, false, true, false, false)
+	partitionInfo, err := pm.Describe(ctx, map[string]bool{buildID: true}, false, true, false, false, false)
 	if err != nil {
 		return nil
 	}
@@ -1290,9 +1290,9 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
-	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool,
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive bool,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
-	return pm.describe(ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, false)
+	return pm.describe(ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive)
 }
 
 // Describe returns information about physical queues for the requested versions, including
@@ -1459,20 +1459,24 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 			isRampingDescribe := deploymentVersion.GetDeploymentName() == rampingVersion.GetDeploymentName() &&
 				deploymentVersion.GetBuildId() == rampingVersion.GetBuildId()
 
-			if isUnversionedDescribe {
-				// Reduce unversioned stats by any shares attributed to versioned queues.
-				if currentExists {
-					subtractStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+			// Skip versioning attribution for partitions that don't support versioning
+			// (e.g. sticky queues): their stats belong entirely to the queue itself.
+			if pm.partition.SupportsVersioning() {
+				if isUnversionedDescribe {
+					// Reduce unversioned stats by any shares attributed to versioned queues.
+					if currentExists {
+						subtractStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+					}
+					// Only subtract the ramping share when ramping is to a versioned deployment. If ramping is to
+					// unversioned, that share should remain part of the unversioned queue stats.
+					if rampingExists && !isRampingToUnversioned {
+						subtractStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
+					}
+				} else if isCurrentDescribe && currentExists {
+					mergeStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+				} else if isRampingDescribe && rampingExists {
+					mergeStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
 				}
-				// Only subtract the ramping share when ramping is to a versioned deployment. If ramping is to
-				// unversioned, that share should remain part of the unversioned queue stats.
-				if rampingExists && !isRampingToUnversioned {
-					subtractStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
-				}
-			} else if isCurrentDescribe && currentExists {
-				mergeStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
-			} else if isRampingDescribe && rampingExists {
-				mergeStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
 			}
 
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = adjustedStatsByPriority

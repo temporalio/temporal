@@ -47,6 +47,7 @@ func (o *operationTimeoutBelowMinError) Error() string {
 }
 
 var ErrInvalidOperationToken = errors.New("invalid operation token")
+var ErrResponseBodyTooLarge = errors.New("http: response body too large")
 var errRequestTimedOut = errors.New("request timed out")
 var errOpProcessorFailed = errors.New("nexus operation processor failed")
 
