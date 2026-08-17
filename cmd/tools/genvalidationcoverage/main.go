@@ -41,6 +41,12 @@ type templateData struct {
 	Imports     map[string]string
 }
 
+type pairTemplateData struct {
+	PairName string
+	Request  templateData
+	Response *templateData // nil if no Response type found in package
+}
+
 func main() {
 	var (
 		messageFlag      = flag.String("message", "", "Go protobuf message type, as import/path.Type. Repeat with comma-separated values for multiple messages")
@@ -72,7 +78,7 @@ func run(messageFlag, messagesFileFlag, outFlag string) error {
 		return errors.New("-message or -messages-file is required")
 	}
 
-	var allData []templateData
+	var pairs []pairTemplateData
 	for _, message := range messages {
 		importPath, typeName, err := splitMessage(message)
 		if err != nil {
@@ -84,28 +90,67 @@ func run(messageFlag, messagesFileFlag, outFlag string) error {
 			return err
 		}
 
-		fields, imports, err := findStructFields(pkgDir, typeName)
+		selfAlias := selfAliasForImport(importPath)
+		fields, imports, err := findStructFields(pkgDir, typeName, selfAlias)
 		if err != nil {
 			return err
 		}
 
-		allData = append(allData, templateData{
+		reqData := templateData{
 			PackageName: packageName,
 			ImportPath:  importPath,
 			TypeName:    typeName,
 			Prefix:      unexported(typeName),
-			SelfAlias:   selfAliasForImport(importPath),
+			SelfAlias:   selfAlias,
 			Fields:      fields,
 			Imports:     imports,
-		})
+		}
+
+		pair := pairTemplateData{
+			PairName: derivePairName(typeName),
+			Request:  reqData,
+		}
+
+		if respTypeName, ok := deriveResponseTypeName(typeName); ok {
+			respFields, respImports, err := findStructFields(pkgDir, respTypeName, selfAlias)
+			if err == nil {
+				respData := templateData{
+					PackageName: packageName,
+					ImportPath:  importPath,
+					TypeName:    respTypeName,
+					Prefix:      unexported(respTypeName),
+					SelfAlias:   selfAlias,
+					Fields:      respFields,
+					Imports:     respImports,
+				}
+				pair.Response = &respData
+			}
+		}
+
+		pairs = append(pairs, pair)
 	}
 
-	src, err := render(allData)
+	src, err := render(pairs)
 	if err != nil {
 		return err
 	}
 
 	return os.WriteFile(outFlag, src, 0o644)
+}
+
+func deriveResponseTypeName(typeName string) (string, bool) {
+	if strings.HasSuffix(typeName, "Request") {
+		return typeName[:len(typeName)-len("Request")] + "Response", true
+	}
+	return "", false
+}
+
+func derivePairName(typeName string) string {
+	name := strings.TrimSuffix(typeName, "Request")
+	if len(name) == 0 {
+		return name
+	}
+	return strings.ToLower(name[:1]) + name[1:]
 }
 
 func messageList(messageFlag string, messagesFile string) ([]string, error) {
@@ -152,7 +197,7 @@ func goListDir(importPath string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func findStructFields(pkgDir string, typeName string) ([]field, map[string]string, error) {
+func findStructFields(pkgDir, typeName, selfAlias string) ([]field, map[string]string, error) {
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, pkgDir, nil, parser.SkipObjectResolution)
 	if err != nil {
@@ -160,7 +205,7 @@ func findStructFields(pkgDir string, typeName string) ([]field, map[string]strin
 	}
 	for _, pkg := range pkgs {
 		for _, file := range pkg.Files {
-			if fields, imports, found, err := findStructFieldsInFile(fset, file, typeName); found || err != nil {
+			if fields, imports, found, err := findStructFieldsInFile(fset, file, typeName, selfAlias); found || err != nil {
 				return fields, imports, err
 			}
 		}
@@ -168,7 +213,7 @@ func findStructFields(pkgDir string, typeName string) ([]field, map[string]strin
 	return nil, nil, fmt.Errorf("type %s not found in %s", typeName, pkgDir)
 }
 
-func findStructFieldsInFile(fset *token.FileSet, file *ast.File, typeName string) ([]field, map[string]string, bool, error) {
+func findStructFieldsInFile(fset *token.FileSet, file *ast.File, typeName, selfAlias string) ([]field, map[string]string, bool, error) {
 	for _, decl := range file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || genDecl.Tok != token.TYPE {
@@ -183,14 +228,14 @@ func findStructFieldsInFile(fset *token.FileSet, file *ast.File, typeName string
 			if !ok {
 				return nil, nil, true, fmt.Errorf("%s is not a struct", typeName)
 			}
-			fields, imports, err := protoStructFields(fset, file, structType)
+			fields, imports, err := protoStructFields(fset, file, structType, selfAlias)
 			return fields, imports, true, err
 		}
 	}
 	return nil, nil, false, nil
 }
 
-func protoStructFields(fset *token.FileSet, file *ast.File, structType *ast.StructType) ([]field, map[string]string, error) {
+func protoStructFields(fset *token.FileSet, file *ast.File, structType *ast.StructType, selfAlias string) ([]field, map[string]string, error) {
 	importsByAlias := importsByAlias(file)
 	neededImports := make(map[string]string)
 	var fields []field
@@ -199,9 +244,13 @@ func protoStructFields(fset *token.FileSet, file *ast.File, structType *ast.Stru
 			if _, ok := internalProtoFields[name.Name]; ok {
 				continue
 			}
-			typeName, err := typeString(fset, structField.Type, importsByAlias, neededImports)
+			typeName, err := typeString(fset, structField.Type, importsByAlias, neededImports, selfAlias)
 			if err != nil {
 				return nil, nil, err
+			}
+			// Proto oneof fields have unexported interface types like isXxx_Field; skip them.
+			if isProtoOneofType(typeName) {
+				continue
 			}
 			fields = append(fields, field{GoName: name.Name, ProtoName: protoFieldName(name.Name, structField.Tag), Type: typeName})
 		}
@@ -218,6 +267,12 @@ func protoFieldName(goName string, tag *ast.BasicLit) string {
 		return goName
 	}
 	return match[1]
+}
+
+// isProtoOneofType reports whether typeName is a proto oneof interface type.
+// Proto generates unexported interface types of the form isTypeName_FieldName for oneof fields.
+func isProtoOneofType(typeName string) bool {
+	return strings.HasPrefix(typeName, "is") && len(typeName) > 2 && typeName[2] >= 'A' && typeName[2] <= 'Z'
 }
 
 func packageNameForOut(out string) (string, error) {
@@ -252,26 +307,47 @@ func selfAliasForImport(importPath string) string {
 	return last
 }
 
-func render(allData []templateData) ([]byte, error) {
-	if len(allData) == 0 {
+// shouldOmitAlias reports whether an explicit alias should be omitted for the given import.
+// This is the case when the alias matches the second-to-last path component of a versioned
+// import (e.g. alias "workflowservice" for "go.temporal.io/api/workflowservice/v1"),
+// meaning the Go package name already matches the desired alias.
+func shouldOmitAlias(alias, importPath string) bool {
+	parts := strings.Split(importPath, "/")
+	last := parts[len(parts)-1]
+	return generatedAliasPattern.MatchString(last) && len(parts) >= 2 && alias == parts[len(parts)-2]
+}
+
+func render(pairs []pairTemplateData) ([]byte, error) {
+	if len(pairs) == 0 {
 		return nil, errors.New("no messages specified")
 	}
 	var b bytes.Buffer
 	fmt.Fprint(&b, "// Code generated by genvalidationcoverage. DO NOT EDIT.\n\n")
-	fmt.Fprintf(&b, "package %s\n\n", allData[0].PackageName)
+	fmt.Fprintf(&b, "package %s\n\n", pairs[0].Request.PackageName)
 	fmt.Fprint(&b, "import (\n")
 	imports := make(map[string]string)
-	for _, data := range allData {
-		imports[data.SelfAlias] = data.ImportPath
-		maps.Copy(imports, data.Imports)
+	for _, pair := range pairs {
+		imports[pair.Request.SelfAlias] = pair.Request.ImportPath
+		maps.Copy(imports, pair.Request.Imports)
+		if pair.Response != nil {
+			maps.Copy(imports, pair.Response.Imports)
+		}
 	}
 	for _, alias := range sortedImportAliases(imports) {
-		fmt.Fprintf(&b, "\t%s %q\n", alias, imports[alias])
+		if shouldOmitAlias(alias, imports[alias]) {
+			fmt.Fprintf(&b, "\t%q\n", imports[alias])
+		} else {
+			fmt.Fprintf(&b, "\t%s %q\n", alias, imports[alias])
+		}
 	}
 	fmt.Fprint(&b, "\t\"go.temporal.io/server/common/validation\"\n")
 	fmt.Fprint(&b, ")\n\n")
-	for _, data := range allData {
-		renderValidator(&b, data)
+	for _, pair := range pairs {
+		renderValidator(&b, pair.Request)
+		if pair.Response != nil {
+			renderValidator(&b, *pair.Response)
+			renderPairWrapper(&b, pair)
+		}
 	}
 
 	src, err := format.Source(b.Bytes())
@@ -300,6 +376,19 @@ func renderValidator(b *bytes.Buffer, data templateData) {
 	fmt.Fprint(b, "}\n")
 }
 
+func renderPairWrapper(b *bytes.Buffer, pair pairTemplateData) {
+	fmt.Fprintf(b, "\ntype %sValidator struct {\n", pair.PairName)
+	fmt.Fprintf(b, "\tRequest  %sFieldValidators\n", pair.Request.Prefix)
+	fmt.Fprintf(b, "\tResponse %sFieldValidators\n", pair.Response.Prefix)
+	fmt.Fprint(b, "}\n\n")
+	fmt.Fprintf(b, "func (v %sValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {\n", pair.PairName)
+	fmt.Fprint(b, "\tif err := v.Request.RegisterValidator(registry); err != nil {\n")
+	fmt.Fprint(b, "\t\treturn err\n")
+	fmt.Fprint(b, "\t}\n")
+	fmt.Fprint(b, "\treturn v.Response.RegisterValidator(registry)\n")
+	fmt.Fprint(b, "}\n\n")
+}
+
 func importsByAlias(file *ast.File) map[string]string {
 	imports := make(map[string]string)
 	for _, spec := range file.Imports {
@@ -321,22 +410,27 @@ func typeString(
 	expr ast.Expr,
 	importsByAlias map[string]string,
 	neededImports map[string]string,
+	selfAlias string,
 ) (string, error) {
 	switch t := expr.(type) {
 	case *ast.Ident:
+		// Exported bare idents are types from the same package; qualify with selfAlias.
+		if len(t.Name) > 0 && t.Name[0] >= 'A' && t.Name[0] <= 'Z' {
+			return selfAlias + "." + t.Name, nil
+		}
 		return t.Name, nil
 	case *ast.StarExpr:
-		name, err := typeString(fset, t.X, importsByAlias, neededImports)
+		name, err := typeString(fset, t.X, importsByAlias, neededImports, selfAlias)
 		return "*" + name, err
 	case *ast.ArrayType:
-		name, err := typeString(fset, t.Elt, importsByAlias, neededImports)
+		name, err := typeString(fset, t.Elt, importsByAlias, neededImports, selfAlias)
 		return "[]" + name, err
 	case *ast.MapType:
-		key, err := typeString(fset, t.Key, importsByAlias, neededImports)
+		key, err := typeString(fset, t.Key, importsByAlias, neededImports, selfAlias)
 		if err != nil {
 			return "", err
 		}
-		value, err := typeString(fset, t.Value, importsByAlias, neededImports)
+		value, err := typeString(fset, t.Value, importsByAlias, neededImports, selfAlias)
 		if err != nil {
 			return "", err
 		}

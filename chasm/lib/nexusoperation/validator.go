@@ -11,16 +11,18 @@ import (
 
 var ValidatorModule = validation.Module(
 	"chasm.lib.nexusoperation.validators",
-	newDeleteNexusOperationExecutionRequestValidator,
+	newDeleteNexusOperationExecutionValidator,
 )
 
-func newDeleteNexusOperationExecutionRequestValidator(
-	config *Config,
-) deleteNexusOperationExecutionRequestFieldValidators {
-	return deleteNexusOperationExecutionRequestFieldValidators{
-		Namespace:   validation.NoOp[workflowservice.DeleteNexusOperationExecutionRequest, string](),
-		OperationId: validation.Field[workflowservice.DeleteNexusOperationExecutionRequest](requiredID(config.MaxIDLengthLimit())),
-		RunId:       validation.Field[workflowservice.DeleteNexusOperationExecutionRequest](validateOptionalRunID),
+func newDeleteNexusOperationExecutionValidator(config *Config) deleteNexusOperationExecutionValidator {
+	type req = workflowservice.DeleteNexusOperationExecutionRequest
+	return deleteNexusOperationExecutionValidator{
+		Request: deleteNexusOperationExecutionRequestFieldValidators{
+			Namespace:   validation.NoOp[req, string](),
+			OperationId: validation.Field[req](requiredID(config.MaxIDLengthLimit())),
+			RunId:       validation.Field[req](validateOptionalRunID),
+		},
+		Response: deleteNexusOperationExecutionResponseFieldValidators{},
 	}
 }
 

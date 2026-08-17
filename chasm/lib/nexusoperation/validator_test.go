@@ -9,9 +9,8 @@ import (
 )
 
 func newTestRegistry(config *Config) *validation.ValidatorRegistry {
-	v := newDeleteNexusOperationExecutionRequestValidator(config)
 	registry := validation.NewValidatorRegistry()
-	_ = v.RegisterValidator(registry)
+	_ = newDeleteNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	return registry
 }
 
@@ -76,4 +75,10 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateDeleteNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.DeleteNexusOperationExecutionResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
 }

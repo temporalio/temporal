@@ -289,7 +289,11 @@ func (h *frontendHandler) DeleteNexusOperationExecution(
 		return nil, err
 	}
 
-	return &workflowservice.DeleteNexusOperationExecutionResponse{}, nil
+	resp := &workflowservice.DeleteNexusOperationExecutionResponse{}
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // isStandaloneNexusOperationEnabled checks if standalone Nexus operations are enabled for the given namespace.

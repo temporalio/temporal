@@ -3,7 +3,7 @@
 package nexusoperation
 
 import (
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/validation"
 )
 
@@ -28,4 +28,27 @@ func (v deleteNexusOperationExecutionRequestFieldValidators) ValidateAndNormaliz
 
 func (v deleteNexusOperationExecutionRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
 	return validation.RegisterValidator[workflowservice.DeleteNexusOperationExecutionRequest](registry, v)
+}
+
+type deleteNexusOperationExecutionResponseFieldValidators struct {
+}
+
+func (v deleteNexusOperationExecutionResponseFieldValidators) ValidateAndNormalize(req *workflowservice.DeleteNexusOperationExecutionResponse) error {
+	return nil
+}
+
+func (v deleteNexusOperationExecutionResponseFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.DeleteNexusOperationExecutionResponse](registry, v)
+}
+
+type deleteNexusOperationExecutionValidator struct {
+	Request  deleteNexusOperationExecutionRequestFieldValidators
+	Response deleteNexusOperationExecutionResponseFieldValidators
+}
+
+func (v deleteNexusOperationExecutionValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	if err := v.Request.RegisterValidator(registry); err != nil {
+		return err
+	}
+	return v.Response.RegisterValidator(registry)
 }
