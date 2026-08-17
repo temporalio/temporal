@@ -4,6 +4,7 @@ package nexusoperation
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/validation"
@@ -123,6 +124,68 @@ type describeNexusOperationExecutionValidator struct {
 }
 
 func (v describeNexusOperationExecutionValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	if err := v.Request.RegisterValidator(registry); err != nil {
+		return err
+	}
+	return v.Response.RegisterValidator(registry)
+}
+
+type pollNexusOperationExecutionRequestFieldValidators struct {
+	Namespace   validation.FieldValidator[workflowservice.PollNexusOperationExecutionRequest, string]
+	OperationId validation.FieldValidator[workflowservice.PollNexusOperationExecutionRequest, string]
+	RunId       validation.FieldValidator[workflowservice.PollNexusOperationExecutionRequest, string]
+	WaitStage   validation.FieldValidator[workflowservice.PollNexusOperationExecutionRequest, enumspb.NexusOperationWaitStage]
+}
+
+func (v pollNexusOperationExecutionRequestFieldValidators) ValidateAndNormalize(req *workflowservice.PollNexusOperationExecutionRequest) error {
+	if err := v.Namespace(req, "namespace", req.GetNamespace()); err != nil {
+		return err
+	}
+	if err := v.OperationId(req, "operation_id", req.GetOperationId()); err != nil {
+		return err
+	}
+	if err := v.RunId(req, "run_id", req.GetRunId()); err != nil {
+		return err
+	}
+	if err := v.WaitStage(req, "wait_stage", req.GetWaitStage()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v pollNexusOperationExecutionRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.PollNexusOperationExecutionRequest](registry, v)
+}
+
+type pollNexusOperationExecutionResponseFieldValidators struct {
+	RunId          validation.FieldValidator[workflowservice.PollNexusOperationExecutionResponse, string]
+	WaitStage      validation.FieldValidator[workflowservice.PollNexusOperationExecutionResponse, enumspb.NexusOperationWaitStage]
+	OperationToken validation.FieldValidator[workflowservice.PollNexusOperationExecutionResponse, string]
+}
+
+func (v pollNexusOperationExecutionResponseFieldValidators) ValidateAndNormalize(req *workflowservice.PollNexusOperationExecutionResponse) error {
+	if err := v.RunId(req, "run_id", req.GetRunId()); err != nil {
+		return err
+	}
+	if err := v.WaitStage(req, "wait_stage", req.GetWaitStage()); err != nil {
+		return err
+	}
+	if err := v.OperationToken(req, "operation_token", req.GetOperationToken()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v pollNexusOperationExecutionResponseFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.PollNexusOperationExecutionResponse](registry, v)
+}
+
+type pollNexusOperationExecutionValidator struct {
+	Request  pollNexusOperationExecutionRequestFieldValidators
+	Response pollNexusOperationExecutionResponseFieldValidators
+}
+
+func (v pollNexusOperationExecutionValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
 	if err := v.Request.RegisterValidator(registry); err != nil {
 		return err
 	}

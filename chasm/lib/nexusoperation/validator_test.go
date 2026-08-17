@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/validation"
 )
@@ -12,6 +13,7 @@ func newTestRegistry(config *Config) *validation.ValidatorRegistry {
 	registry := validation.NewValidatorRegistry()
 	_ = newDeleteNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	_ = newDescribeNexusOperationExecutionValidator(config).RegisterValidator(registry)
+	_ = newPollNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	return registry
 }
 
@@ -144,5 +146,68 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 func TestValidateDescribeNexusOperationExecutionResponse(t *testing.T) {
 	registry := newTestRegistry(testConfig())
 	resp := &workflowservice.DescribeNexusOperationExecutionResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+
+	for _, tc := range []struct {
+		name    string
+		req     *workflowservice.PollNexusOperationExecutionRequest
+		wantErr string
+	}{
+		{
+			name: "valid",
+			req: &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "a7d6f9c2-1234-5678-abcd-ef0123456789",
+				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+			},
+		},
+		{
+			name: "valid without run_id",
+			req: &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+			},
+		},
+		{
+			name:    "missing operation_id",
+			req:     &workflowservice.PollNexusOperationExecutionRequest{Namespace: "ns", WaitStage: enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED},
+			wantErr: "operation_id is required",
+		},
+		{
+			name:    "unspecified wait_stage",
+			req:     &workflowservice.PollNexusOperationExecutionRequest{Namespace: "ns", OperationId: "op"},
+			wantErr: "wait_stage must be specified",
+		},
+		{
+			name: "invalid run_id",
+			req: &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "not-a-uuid",
+				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+			},
+			wantErr: "run_id is not a valid UUID",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validation.ValidateAndNormalize(registry, tc.req)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidatePollNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.PollNexusOperationExecutionResponse{}
 	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
 }

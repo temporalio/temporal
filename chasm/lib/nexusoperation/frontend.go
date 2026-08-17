@@ -128,11 +128,22 @@ func (h *frontendHandler) PollNexusOperationExecution(
 		return nil, err
 	}
 
-	resp, err := h.client.PollNexusOperation(ctx, &nexusoperationpb.PollNexusOperationRequest{
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
+	}
+
+	result, err := h.client.PollNexusOperation(ctx, &nexusoperationpb.PollNexusOperationRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	return resp.GetFrontendResponse(), err
+	if err != nil {
+		return nil, err
+	}
+	resp := result.GetFrontendResponse()
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (h *frontendHandler) ListNexusOperationExecutions(
