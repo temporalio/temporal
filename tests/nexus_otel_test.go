@@ -252,6 +252,7 @@ func (s *NexusOTELSuite) requireExportedNexusHTTPSpanPair(
 	handlerExporter *tracetest.InMemoryExporter,
 	pathSuffix string,
 ) {
+	s.T().Helper()
 	s.Await(func(s *NexusOTELSuite) {
 		callerSpans := callerExporter.GetSpans()
 		handlerSpans := handlerExporter.GetSpans()
