@@ -214,6 +214,8 @@ func (s *NexusOTELSuite) TestOperation() {
 		Reason:      tv.Any().String(),
 	})
 	s.NoError(err)
+
+	operationURLPath := "/nexus/endpoints/" + handlerWorkerEndpoint.Id + "/services/" + service.Name + "/" + operation.Name()
 	s.requireNexusHTTPSpans(exporter, oteltrace.SpanContext{}, []nexusHTTPSpan{
 		{
 			TraceID:     1,
