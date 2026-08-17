@@ -63,7 +63,8 @@ func (s *NexusOTELSuite) newTestEnv(exporter sdktrace.SpanExporter) *NexusTestEn
 
 // Verifies production callback wiring propagates trace context and stored headers end to end.
 func (s *NexusOTELSuite) TestCallback() {
-	env := s.newTestEnv(tracetest.NewInMemoryExporter())
+	exporter := tracetest.NewInMemoryExporter()
+	env := s.newTestEnv(exporter)
 
 	requestHeaders := make(chan http.Header, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -267,8 +268,12 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 
 	// Inject a fixed traceparent so this test exercises the server independently of client instrumentation.
 	// Nexus API tests separately verify that frontend request headers reach workers.
+	const (
+		traceID      = "4bf92f3577b34da6a3ce929d0e0e4736"
+		parentSpanID = "00f067aa0ba902b7"
+	)
 	requestHeaders := nexus.Header{
-		"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+		"traceparent": "00-" + traceID + "-" + parentSpanID + "-01",
 	}
 	_, err = nexusrpc.StartOperation(s.Context(), nexusClient, op, env.Tv().Any().String(), nexus.StartOperationOptions{
 		Header: requestHeaders,
@@ -276,28 +281,26 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	s.NoError(err)
 	s.NoError(<-pollerErrCh)
 
-	parentSpanContext := oteltrace.SpanContextFromContext(
-		propagation.TraceContext{}.Extract(s.Context(), propagation.MapCarrier(requestHeaders)),
-	)
-	s.Require().True(parentSpanContext.IsValid())
-	s.requireNexusHTTPSpans(exporter, parentSpanContext, []nexusHTTPSpan{{
-		TraceID:      1,
-		SpanID:       2,
-		ParentSpanID: 1,
-		Name:         "temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue",
-		ServiceName:  "io.temporal.frontend",
-		Kind:         oteltrace.SpanKindServer,
-		URLPath:      dispatchURL.Path + "/test-service/my-operation",
+	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
+		TraceID:     1,
+		SpanID:      1,
+		Name:        "temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue",
+		ServiceName: "io.temporal.frontend",
+		Kind:        oteltrace.SpanKindServer,
+		URLPath:     dispatchURL.Path + "/test-service/my-operation",
 	}})
+	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
+	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
 }
 
-// requireNexusHTTPSpans compares all exported HTTP spans after assigning stable local IDs.
+// requireNexusHTTPSpans compares all exported HTTP spans after assigning stable local IDs
+// and returns the matching raw spans for context propagation assertions.
 func (s *NexusOTELSuite) requireNexusHTTPSpans(
 	exporter *tracetest.InMemoryExporter,
-	externalParent oteltrace.SpanContext,
 	expected []nexusHTTPSpan,
-) {
+) tracetest.SpanStubs {
 	s.T().Helper()
+	var httpSpans tracetest.SpanStubs
 	s.Await(func(s *NexusOTELSuite) {
 		callerSpans := callerExporter.GetSpans()
 		handlerSpans := handlerExporter.GetSpans()
@@ -445,5 +448,5 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 			URLPath:      urlPath,
 		})
 	}
-	return result
+	return result, httpSpans
 }
