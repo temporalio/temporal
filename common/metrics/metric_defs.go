@@ -1125,6 +1125,8 @@ var (
 	ReplicationTasksShedByGradualConnect = NewCounterDef("replication_tasks_shed_by_gradual_connect")
 	// ReplicationGradualConnectPercent is the current admission percent of the gradual-connect ramp.
 	ReplicationGradualConnectPercent = NewGaugeDef("replication_gradual_connect_percent")
+	// ReplicationForceTaskBeforeGradualConnectReady counts force-replication tasks that bypass an incomplete ramp.
+	ReplicationForceTaskBeforeGradualConnectReady = NewCounterDef("replication_force_task_before_gradual_connect_ready")
 	// ParentWorkflowResendAttempts counts parent resends started by standby completion verification.
 	ParentWorkflowResendAttempts = NewCounterDef("parent_workflow_resend_attempts")
 	// ParentWorkflowResendSkipped counts attempts that found a resend for the same parent in flight.

@@ -15,7 +15,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -31,13 +30,8 @@ type (
 
 		mockMetadataMgr     *persistence.MockMetadataManager
 		namespaceReplicator *taskExecutorImpl
-		fakeTimeSource      *clock.EventTimeSource
 	}
 )
-
-// fakeConnectTime is the fixed time the suite's fakeTimeSource reports, used to construct the
-// deterministic ClusterConnectTime entries expected on receiver-side stamping.
-var fakeConnectTime = time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
 
 func TestNamespaceReplicationTaskExecutorSuite(t *testing.T) {
 	s := new(namespaceReplicationTaskExecutorSuite)
@@ -55,7 +49,6 @@ func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockMetadataMgr = persistence.NewMockMetadataManager(s.controller)
 	logger := log.NewTestLogger()
-	s.fakeTimeSource = clock.NewEventTimeSource().Update(fakeConnectTime)
 	s.namespaceReplicator = NewTaskExecutor(
 		"some random standby cluster name",
 		s.mockMetadataMgr,
@@ -63,7 +56,6 @@ func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 		NewDefaultAdmitter(),
 		logger,
 		testhooks.TestHooks{},
-		s.fakeTimeSource,
 	).(*taskExecutorImpl)
 }
 
@@ -254,9 +246,6 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 						FailoverVersion: 11,
 					},
 				},
-				ClusterConnectTime: map[string]*timestamppb.Timestamp{
-					clusterStandby: timestamppb.New(fakeConnectTime),
-				},
 			},
 			ConfigVersion:               configVersion,
 			FailoverNotificationVersion: 0,
@@ -387,9 +376,6 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: updateTask.ReplicationConfig.ActiveClusterName,
 				Clusters:          []string{clusterActive, clusterStandby},
-				ClusterConnectTime: map[string]*timestamppb.Timestamp{
-					clusterStandby: timestamppb.New(fakeConnectTime),
-				},
 			},
 			ConfigVersion:               configVersion,
 			FailoverNotificationVersion: 0,
@@ -492,9 +478,6 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 				ActiveClusterName: updateTask.ReplicationConfig.ActiveClusterName,
 				Clusters:          []string{updateClusterActive, updateClusterStandby},
 				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(failoverHistory),
-				ClusterConnectTime: map[string]*timestamppb.Timestamp{
-					updateClusterStandby: timestamppb.New(fakeConnectTime),
-				},
 			},
 			ConfigVersion:               updateConfigVersion,
 			FailoverNotificationVersion: updateFailoverVersion,
@@ -589,9 +572,6 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				Clusters: []string{updateClusterActive, updateClusterStandby},
-				ClusterConnectTime: map[string]*timestamppb.Timestamp{
-					updateClusterStandby: timestamppb.New(fakeConnectTime),
-				},
 			},
 			ConfigVersion:               updateConfigVersion,
 			FailoverNotificationVersion: 0,
@@ -604,10 +584,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 }
 
-// TestExecute_UpdateNamespaceTask_UnrelatedConfigEditDoesNotStampExistingMember guards against
-// stamping a fresh ClusterConnectTime on unrelated edits: a namespace whose membership predates
-// this field must not have that misread as "just connected."
-func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UnrelatedConfigEditDoesNotStampExistingMember() {
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UnrelatedConfigEditPreservesNoRamp() {
 	id := uuid.NewString()
 	name := "some random namespace test name"
 	updateState := enumspb.NAMESPACE_STATE_REGISTERED
@@ -645,7 +622,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		Info: &persistencespb.NamespaceInfo{Id: id},
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: updateClusterActive,
-			// updateClusterStandby has been a member all along, with no historical stamp.
+			// updateClusterStandby has been a member all along, with no ramp.
 			Clusters: []string{updateClusterActive, updateClusterStandby},
 		},
 		ConfigVersion:   existingConfigVersion,
@@ -666,7 +643,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: updateClusterActive,
 				Clusters:          []string{updateClusterActive, updateClusterStandby},
-				// No ClusterConnectTime entry should appear -- standby was already a member.
+				// No ramp should appear -- standby was already a member.
 			},
 			ConfigVersion:               updateConfigVersion,
 			FailoverNotificationVersion: 0,

@@ -5,7 +5,6 @@ package nsreplication
 import (
 	"context"
 	"maps"
-	"slices"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -13,13 +12,11 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -60,7 +57,6 @@ type (
 		admitter        NamespaceReplicationAdmitter
 		logger          log.Logger
 		testHooks       testhooks.TestHooks
-		timeSource      clock.TimeSource
 	}
 )
 
@@ -72,7 +68,6 @@ func NewTaskExecutor(
 	admitter NamespaceReplicationAdmitter,
 	logger log.Logger,
 	testHooks testhooks.TestHooks,
-	timeSource clock.TimeSource,
 ) TaskExecutor {
 	return &taskExecutorImpl{
 		currentCluster:  currentCluster,
@@ -81,7 +76,6 @@ func NewTaskExecutor(
 		admitter:        admitter,
 		logger:          logger,
 		testHooks:       testHooks,
-		timeSource:      timeSource,
 	}
 }
 
@@ -178,15 +172,11 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				CustomSearchAttributeAliases: task.Config.GetCustomSearchAttributeAliases(),
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
-				Clusters:          clusters,
-				State:             task.ReplicationConfig.GetState(),
-				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
-				// oldClusters is nil at CREATE: every member of the initial list counts as newly
-				// connected. This also ramps genuinely brand-new namespaces (no backlog to protect) --
-				// accepted, since a CREATE task can't cheaply tell that apart from a cluster newly
-				// added to an existing namespace with real history to catch up on.
-				ClusterConnectTime: h.stampOwnClusterConnectTime(nil, nil, clusters),
+				ActiveClusterName:       task.ReplicationConfig.GetActiveClusterName(),
+				Clusters:                clusters,
+				State:                   task.ReplicationConfig.GetState(),
+				FailoverHistory:         ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
+				ClusterReplicationRamps: maps.Clone(task.GetClusterReplicationRamps()),
 			},
 			ConfigVersion:   task.GetConfigVersion(),
 			FailoverVersion: task.GetFailoverVersion(),
@@ -290,10 +280,6 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		return err
 	}
 
-	// Snapshot the pre-update cluster list before it's overwritten below: stampOwnClusterConnectTime
-	// needs old vs. new membership to tell "just joined" from "already a member, no historical stamp."
-	oldClusters := slices.Clone(resp.Namespace.GetReplicationConfig().GetClusters())
-
 	recordUpdated := false
 	request := &persistence.UpdateNamespaceRequest{
 		Namespace:           resp.Namespace,
@@ -334,11 +320,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
 		}
 		request.Namespace.ReplicationConfig.Clusters = ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
-		request.Namespace.ReplicationConfig.ClusterConnectTime = h.stampOwnClusterConnectTime(
-			request.Namespace.ReplicationConfig.ClusterConnectTime,
-			oldClusters,
-			request.Namespace.ReplicationConfig.Clusters,
-		)
+		request.Namespace.ReplicationConfig.ClusterReplicationRamps = maps.Clone(task.GetClusterReplicationRamps())
 		request.Namespace.ConfigVersion = task.GetConfigVersion()
 	}
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
@@ -355,28 +337,6 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 
 	return h.metadataManager.UpdateNamespace(ctx, request)
-}
-
-// stampOwnClusterConnectTime records when h.currentCluster was genuinely added between oldClusters
-// and newClusters, anchoring the gradual-connect ramp locally. Never restamps an existing entry.
-func (h *taskExecutorImpl) stampOwnClusterConnectTime(
-	existing map[string]*timestamppb.Timestamp,
-	oldClusters []string,
-	newClusters []string,
-) map[string]*timestamppb.Timestamp {
-	if slices.Contains(oldClusters, h.currentCluster) || !slices.Contains(newClusters, h.currentCluster) {
-		return existing
-	}
-	if _, alreadyStamped := existing[h.currentCluster]; alreadyStamped {
-		return existing
-	}
-
-	result := maps.Clone(existing)
-	if result == nil {
-		result = make(map[string]*timestamppb.Timestamp, 1)
-	}
-	result[h.currentCluster] = timestamppb.New(h.timeSource.Now())
-	return result
 }
 
 func (h *taskExecutorImpl) validateNamespaceReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {

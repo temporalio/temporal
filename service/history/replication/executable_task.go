@@ -899,47 +899,47 @@ FilterLoop:
 }
 
 // admittedByGradualConnect reports whether businessID is admitted by the namespace gradual-connect
-// replication ramp. Fails open when the kill switch is off or there's no recorded connect time.
+// replication ramp. It fails open when no complete ramp schedule is recorded.
 func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.Namespace, businessID string) bool {
-	if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
-		// Shed tasks are dropped, not retried -- shedding these would strand a migration's verify loop.
-		return true
-	}
-	if !e.Config.EnableReplicationGradualConnect() {
-		return true
-	}
-	connectTime := namespaceEntry.InitialConnectTime(e.ClusterMetadata.GetCurrentClusterName())
-	if connectTime.IsZero() {
+	ramp := namespaceEntry.ReplicationRamp(e.ClusterMetadata.GetCurrentClusterName())
+	if ramp == nil || ramp.GetStartTime() == nil || ramp.GetDuration() == nil {
 		return true
 	}
 	nsName := namespaceEntry.Name().String()
 	percent := gradualConnectPercent(
-		connectTime,
+		ramp.GetStartTime().AsTime(),
 		e.TimeSource.Now(),
-		e.Config.ReplicationGradualConnectInitialPercent(nsName),
-		e.Config.ReplicationGradualConnectStepPercent(nsName),
-		e.Config.ReplicationGradualConnectStepDuration(nsName),
+		ramp.GetDuration().AsDuration(),
+		int(ramp.GetInitialPercentage()),
 	)
 	metrics.ReplicationGradualConnectPercent.With(e.MetricsHandler).Record(
 		float64(percent),
 		metrics.NamespaceTag(nsName),
 	)
+	if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
+		// Shed tasks are dropped, not retried -- shedding these would strand a migration's verify loop.
+		if percent < 100 {
+			metrics.ReplicationForceTaskBeforeGradualConnectReady.With(e.MetricsHandler).Record(
+				1,
+				metrics.NamespaceTag(nsName),
+			)
+		}
+		return true
+	}
 	return dynamicconfig.RolloutAccepts([]byte(businessID), percent)
 }
 
-// gradualConnectPercent computes the current admission percent, capped at 100. Fails open (100) if
-// now precedes connectTime or stepDuration is non-positive.
-func gradualConnectPercent(connectTime, now time.Time, initialPercent, stepPercent int, stepDuration time.Duration) int {
+// gradualConnectPercent computes the current admission percent, capped at 100. Fails open for an
+// invalid schedule or if now precedes connectTime.
+func gradualConnectPercent(connectTime, now time.Time, duration time.Duration, initialPercent int) int {
 	elapsed := now.Sub(connectTime)
-	if elapsed < 0 || stepDuration <= 0 {
+	if elapsed < 0 || duration <= 0 || initialPercent < 0 || initialPercent >= 100 {
 		return 100
 	}
-	percent := initialPercent + int(elapsed/stepDuration)*stepPercent
-	if percent < 0 {
-		// Misconfigured (negative InitialPercent/StepPercent) -- fail open, not fail closed.
+	if elapsed >= duration {
 		return 100
 	}
-	return min(percent, 100)
+	return initialPercent + int(float64(elapsed)/float64(duration)*float64(100-initialPercent))
 }
 
 func (e *ExecutableTaskImpl) MarkPoisonPill() error {

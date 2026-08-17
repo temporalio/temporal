@@ -219,7 +219,6 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockResource.GetLogger(),
 		testhooks.TestHooks{},
-		clock.NewRealTimeSource(),
 	)
 	s.handler = NewAdminHandler(args, namespaceDLQHandler)
 	s.handler.Start()

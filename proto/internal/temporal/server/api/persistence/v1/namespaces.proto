@@ -47,7 +47,14 @@ message NamespaceReplicationConfig {
   repeated string clusters = 2;
   temporal.api.enums.v1.ReplicationState state = 3;
   repeated FailoverStatus failover_history = 8;
-  map<string, google.protobuf.Timestamp> cluster_connect_time = 9;
+  map<string, NamespaceReplicationRamp> cluster_replication_ramps = 9;
+}
+
+// Immutable admission-ramp parameters for one namespace/target-cluster connection.
+message NamespaceReplicationRamp {
+  google.protobuf.Timestamp start_time = 1;
+  google.protobuf.Duration duration = 2;
+  int32 initial_percentage = 3;
 }
 
 // Represents a historical replication status of a Namespace

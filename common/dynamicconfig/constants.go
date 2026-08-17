@@ -866,6 +866,18 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		10,
 		`FrontendMaxBadBinaries is the max number of bad binaries in namespace config`,
 	)
+	ReplicationGradualConnectInitialPercent = NewNamespaceIntSetting(
+		"frontend.replicationGradualConnectInitialPercent",
+		10,
+		`Fraction of a namespace's replication tasks (by workflow ID hash) admitted immediately when a
+gradual connection starts. This value is snapshotted into namespace state and is immutable during a ramp.`,
+	)
+	ReplicationGradualConnectDuration = NewNamespaceDurationSetting(
+		"frontend.replicationGradualConnectDuration",
+		0,
+		`Duration of the replication admission ramp when a cluster is added to a namespace. Zero disables
+gradual connection for the namespace. This value is snapshotted into namespace state at connection time.`,
+	)
 	FrontendMaskInternalErrorDetails = NewNamespaceBoolSetting(
 		"frontend.maskInternalErrorDetails",
 		true,
@@ -1731,29 +1743,6 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 		"history.enableSeparateReplicationEnableFlag",
 		false,
 		`EnableSeparateReplicationEnableFlag controls whether to use the new ReplicationEnabled flag to control replication streams separately from cluster connectivity. When false, falls back to using only the Enabled flag for both connectivity and replication.`,
-	)
-	EnableReplicationGradualConnect = NewGlobalBoolSetting(
-		"history.enableReplicationGradualConnect",
-		false,
-		`Cluster-wide kill switch for the namespace gradual-connect admission ramp. When false, every
-replication task is admitted immediately; default off so this ships dark.`,
-	)
-	ReplicationGradualConnectInitialPercent = NewNamespaceIntSetting(
-		"history.replicationGradualConnectInitialPercent",
-		10,
-		`Fraction of a namespace's replication tasks (by workflow ID hash) admitted immediately when the
-current cluster is newly added, before the ramp's first step.`,
-	)
-	ReplicationGradualConnectStepPercent = NewNamespaceIntSetting(
-		"history.replicationGradualConnectStepPercent",
-		10,
-		`Additional percent admitted every ReplicationGradualConnectStepDuration, until reaching 100.
-Only raise mid-rollout -- lowering it can shed already-admitted workflows.`,
-	)
-	ReplicationGradualConnectStepDuration = NewNamespaceDurationSetting(
-		"history.replicationGradualConnectStepDuration",
-		5*time.Minute,
-		`Interval between admission-percent increases in the gradual-connect ramp.`,
 	)
 	EnableHistoryReplicationDLQV2 = NewGlobalBoolSetting(
 		"history.enableHistoryReplicationDLQV2",

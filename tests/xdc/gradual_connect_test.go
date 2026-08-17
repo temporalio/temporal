@@ -12,11 +12,14 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -56,18 +59,17 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	active := s.clusters[0]
 	standby := s.clusters[1]
 
-	// A single ramp step: 0% until it elapses, then a deterministic jump to 100%.
+	// Explicitly opt this namespace into a short ramp. The active cluster snapshots these values
+	// into namespace state when standby is added.
 	const rampStepDuration = 12 * time.Second
 	for _, override := range []struct {
 		setting dynamicconfig.GenericSetting
 		value   any
 	}{
-		{dynamicconfig.EnableReplicationGradualConnect, true},
 		{dynamicconfig.ReplicationGradualConnectInitialPercent, 0},
-		{dynamicconfig.ReplicationGradualConnectStepPercent, 100},
-		{dynamicconfig.ReplicationGradualConnectStepDuration, rampStepDuration},
+		{dynamicconfig.ReplicationGradualConnectDuration, rampStepDuration},
 	} {
-		s.T().Cleanup(standby.OverrideDynamicConfig(s.T(), override.setting, override.value))
+		s.T().Cleanup(active.OverrideDynamicConfig(s.T(), override.setting, override.value))
 	}
 
 	// Add standby to the namespace's cluster list.
@@ -78,12 +80,11 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	// namespace cache, to rule out a cache-refresh delay).
 	nsResp, err := standby.TestBase().MetadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: ns})
 	s.Require().NoError(err)
-	connectTimestamp := nsResp.Namespace.GetReplicationConfig().GetClusterConnectTime()[standby.ClusterName()]
-	s.Require().NotNil(connectTimestamp, "standby should have recorded its own connect time for this namespace")
-	s.Require().WithinDuration(connectedAt, connectTimestamp.AsTime(), namespaceCacheWaitTime+5*time.Second)
-	// Anchor on the recorded connect time, not the test's own wall-clock read -- propagation from
-	// active to standby can lag it by more than the shed check's window below.
-	connectTime := connectTimestamp.AsTime()
+	ramp := nsResp.Namespace.GetReplicationConfig().GetClusterReplicationRamps()[standby.ClusterName()]
+	s.Require().NotNil(ramp, "standby should receive the immutable ramp for this connection")
+	s.Require().WithinDuration(connectedAt, ramp.GetStartTime().AsTime(), namespaceCacheWaitTime+5*time.Second)
+	s.Require().Equal(rampStepDuration, ramp.GetDuration().AsDuration())
+	connectTime := ramp.GetStartTime().AsTime()
 
 	// Still inside the ramp window: a workflow started on active must not replicate to standby yet.
 	shedWorkflowID := "gc-shed-" + uuid.NewString()
@@ -101,6 +102,31 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	await.RequireTruef(s.T(), func() bool {
 		return s.gcWorkflowExistsOn(ctx, standby, ns, admittedWorkflowID)
 	}, replicationWaitTime, replicationCheckInterval, "workflow should replicate once the ramp has completed")
+
+	// Shed tasks are acknowledged and dropped, so force replication must restore the earlier
+	// workflow after the ramp. This is the recovery contract gradual connection relies on.
+	s.waitForVisibilityCount(ctx, ns, 2)
+	systemClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  active.Host().FrontendGRPCAddress(),
+		Namespace: primitives.SystemLocalNamespace,
+	})
+	s.Require().NoError(err)
+	defer systemClient.Close()
+	forceRun, err := systemClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                 "gc-force-replication-" + uuid.NewString(),
+		TaskQueue:          primitives.DefaultWorkerTaskQueue,
+		WorkflowRunTimeout: time.Minute,
+	}, "force-replication", migration.ForceReplicationParams{
+		Namespace:          ns,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  standby.ClusterName(),
+	})
+	s.Require().NoError(err)
+	s.Require().NoError(forceRun.Get(ctx, nil))
+	await.RequireTruef(s.T(), func() bool {
+		return s.gcWorkflowExistsOn(ctx, standby, ns, shedWorkflowID)
+	}, replicationWaitTime, replicationCheckInterval, "force replication should restore the workflow shed during the ramp")
 }
 
 // gcStartAndCompleteWorkflow starts and completes a workflow on cluster c via the raw frontend API,
