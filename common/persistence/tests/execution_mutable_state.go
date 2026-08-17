@@ -1872,7 +1872,6 @@ func (s *ExecutionMutableStateSuite) TestConflictResolvePromoteCHASMStaleExpecte
 	})
 	var conditionFailed *p.CurrentWorkflowConditionFailedError
 	s.Require().ErrorAs(err, &conditionFailed)
-	s.Equal(run1.ExecutionState.RunId, conditionFailed.RunID)
 	s.assertCurrentRunID(archetypeID, run1.ExecutionState.RunId)
 	s.AssertMSEqualWithDB(archetypeID, run1)
 	s.AssertMSEqualWithDB(archetypeID, run2VT1)

@@ -9971,11 +9971,7 @@ func (ms *MutableStateImpl) IsSubStateMachineDeleted() bool {
 }
 
 func (ms *MutableStateImpl) SetSuccessorRunID(runID string) {
-	if ms.executionInfo.SuccessorRunId == runID {
-		return
-	}
 	ms.executionInfo.SuccessorRunId = runID
-	ms.persistenceOnlyStateUpdated = true
 }
 
 // ActivityMatchWorkflowRules checks if the activity matches any of the workflow rules

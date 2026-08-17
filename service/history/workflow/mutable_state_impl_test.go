@@ -5464,33 +5464,6 @@ func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmClusterLocalStat
 	protorequire.ProtoEqual(s.T(), versionedTransition, mutableState.CurrentVersionedTransition())
 }
 
-func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmSuccessorRunIDPersistsWithoutAdvancingTransition() {
-	mutableState := s.newCleanStandaloneMutableState(
-		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-	)
-	versionedTransition := common.CloneProto(mutableState.CurrentVersionedTransition())
-
-	mutableState.SetSuccessorRunID("")
-	s.False(mutableState.persistenceOnlyStateUpdated)
-	mutableState.SetSuccessorRunID("successor-run-id")
-	s.True(mutableState.persistenceOnlyStateUpdated)
-	s.False(mutableState.isStateDirty())
-	s.True(mutableState.IsDirty())
-
-	mutation, eventsSeq, err := mutableState.CloseTransactionAsMutation(
-		context.Background(),
-		historyi.TransactionPolicyPassive,
-	)
-	s.Require().NoError(err)
-	s.Require().NotNil(mutation)
-	s.Empty(eventsSeq)
-	s.Equal("successor-run-id", mutation.ExecutionInfo.SuccessorRunId)
-	protorequire.ProtoEqual(s.T(), versionedTransition, mutableState.CurrentVersionedTransition())
-	s.Empty(mutation.Tasks[tasks.CategoryReplication])
-	s.False(mutableState.IsDirty())
-}
-
 func (s *mutableStateSuite) newCleanStandaloneMutableState(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
