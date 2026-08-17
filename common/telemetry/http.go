@@ -75,7 +75,7 @@ type debugHTTPClientRequestStateKey struct{}
 // debugHTTPClientSpanTransport stores response finalization here through the request context.
 // debugHTTPClientTransport runs it before otelhttp ends the span when the body closes before EOF.
 type debugHTTPClientRequestState struct {
-	finishResponse func()
+	finalizeResponse func()
 }
 
 type debugHTTPClientTransport struct {
@@ -88,10 +88,10 @@ func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response,
 	state := &debugHTTPClientRequestState{}
 	req = req.WithContext(context.WithValue(req.Context(), debugHTTPClientRequestStateKey{}, state))
 	resp, err := t.rt.RoundTrip(req)
-	if resp == nil || state.finishResponse == nil {
+	if resp == nil || state.finalizeResponse == nil {
 		return resp, err
 	}
-	resp.Body = newCloseFinishingReadCloser(resp.Body, state.finishResponse)
+	resp.Body = newCloseFinalizingReadCloser(resp.Body, state.finalizeResponse)
 	return resp, err
 }
 
@@ -123,7 +123,7 @@ func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Respo
 		span.SetAttributes(attribute.String("http.response.payload", payload))
 	})
 	if state, ok := req.Context().Value(debugHTTPClientRequestStateKey{}).(*debugHTTPClientRequestState); ok && responseCapture != nil {
-		state.finishResponse = responseCapture.finish
+		state.finalizeResponse = responseCapture.finalize
 	}
 	return resp, err
 }
@@ -145,7 +145,7 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		span.SetAttributes(attribute.String("http.request.payload", payload))
 	})
 
-	responseBody := payloadCapture{onFinish: func(payload string) {
+	responseBody := payloadCapture{onFinalize: func(payload string) {
 		span.SetAttributes(attribute.String("http.response.payload", payload))
 	}}
 	w = newPayloadCapturingResponseWriter(w, &responseBody)
@@ -154,11 +154,11 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Finalize after the handler returns because an unknown-length request may be fully consumed
 	// without a read that returns EOF.
 	if requestCapture != nil {
-		requestCapture.finish()
+		requestCapture.finalize()
 	}
 
 	annotateHTTPHeaders(span, "http.response.headers.", w.Header())
-	responseBody.finish()
+	responseBody.finalize()
 }
 
 // Use httpsnoop to intercept writes without dropping optional ResponseWriter interfaces.
@@ -187,17 +187,17 @@ func newPayloadCapturingResponseWriter(w http.ResponseWriter, capture *payloadCa
 // without a size limit.
 type payloadCapture struct {
 	bytes.Buffer
-	finished bool
-	onFinish func(string)
+	finalized  bool
+	onFinalize func(string)
 }
 
-func (c *payloadCapture) finish() {
-	if c.finished {
+func (c *payloadCapture) finalize() {
+	if c.finalized {
 		return
 	}
-	c.finished = true
+	c.finalized = true
 	if c.Len() > 0 {
-		c.onFinish(c.String())
+		c.onFinalize(c.String())
 	}
 }
 
@@ -210,14 +210,14 @@ type payloadCapturingReadCloser struct {
 func newPayloadCapturingReadCloser(
 	body io.ReadCloser,
 	contentLength int64,
-	onFinish func(string),
+	onFinalize func(string),
 ) (io.ReadCloser, *payloadCapture) {
 	if body == nil || body == http.NoBody {
 		return body, nil
 	}
 	capturingBody := &payloadCapturingReadCloser{
 		ReadCloser:    body,
-		capture:       payloadCapture{onFinish: onFinish},
+		capture:       payloadCapture{onFinalize: onFinalize},
 		contentLength: contentLength,
 	}
 	return preserveBodyWriter(body, capturingBody), &capturingBody.capture
@@ -230,31 +230,31 @@ func (r *payloadCapturingReadCloser) Read(p []byte) (int, error) {
 	}
 	// Finalize after ContentLength bytes because callers may stop without another read that returns EOF.
 	if err == io.EOF || r.contentLength > 0 && int64(r.capture.Len()) == r.contentLength {
-		r.capture.finish()
+		r.capture.finalize()
 	}
 	return n, err
 }
 
 func (r *payloadCapturingReadCloser) Close() error {
-	r.capture.finish()
+	r.capture.finalize()
 	return r.ReadCloser.Close()
 }
 
-type closeFinishingReadCloser struct {
+type closeFinalizingReadCloser struct {
 	io.ReadCloser
-	onClose func()
+	finalize func()
 }
 
-func newCloseFinishingReadCloser(body io.ReadCloser, onClose func()) io.ReadCloser {
-	finishingBody := &closeFinishingReadCloser{
+func newCloseFinalizingReadCloser(body io.ReadCloser, finalize func()) io.ReadCloser {
+	finalizingBody := &closeFinalizingReadCloser{
 		ReadCloser: body,
-		onClose:    onClose,
+		finalize:   finalize,
 	}
-	return preserveBodyWriter(body, finishingBody)
+	return preserveBodyWriter(body, finalizingBody)
 }
 
-func (r *closeFinishingReadCloser) Close() error {
-	r.onClose()
+func (r *closeFinalizingReadCloser) Close() error {
+	r.finalize()
 	return r.ReadCloser.Close()
 }
 
