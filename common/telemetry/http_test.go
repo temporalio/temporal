@@ -254,18 +254,18 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		})
 
 		// After an HTTP 101 response, callers use Response.Body to read from and write to the upgraded connection.
-		t.Run("PreservesUpgradedResponseBody", func(t *testing.T) {
+		t.Run("PreservesUpgradedConnection", func(t *testing.T) {
 			const (
 				serverMessage = "server message"
 				clientMessage = "client message"
 			)
 
 			traceEnv := newHTTPTraceEnv(t)
-			body := &readWriteCloser{Reader: bytes.NewBufferString(serverMessage)}
+			upgradedConnection := &readWriteCloser{Reader: bytes.NewBufferString(serverMessage)}
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusSwitchingProtocols, // HTTP 101
-					Body:       body,
+					Body:       upgradedConnection,
 					Header:     http.Header{},
 					Request:    r,
 				}, nil
@@ -276,17 +276,18 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.NoError(t, err)
 
 			// Read the response body to verify the server message.
-			responseBody, ok := resp.Body.(io.ReadWriteCloser)
+			connection, ok := resp.Body.(io.ReadWriteCloser)
 			require.True(t, ok)
-			responsePayload, err := io.ReadAll(responseBody)
+			responsePayload, err := io.ReadAll(connection)
 			require.NoError(t, err)
 			require.Equal(t, serverMessage, string(responsePayload))
 
 			// Write to the response body to simulate the client sending data.
-			_, err = responseBody.Write([]byte(clientMessage))
+			written, err := connection.Write([]byte(clientMessage))
 			require.NoError(t, err)
-			require.Equal(t, clientMessage, body.written.String())
-			require.NoError(t, responseBody.Close())
+			require.Equal(t, len(clientMessage), written)
+			require.Equal(t, clientMessage, upgradedConnection.written.String())
+			require.NoError(t, connection.Close())
 		})
 
 		// Decoders may stop after a complete value without reading a chunked body to EOF.
