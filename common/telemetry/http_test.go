@@ -140,7 +140,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		traceEnv := newHTTPTraceEnv(t)
 
 		var traceparent string
-		rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			traceparent = r.Header.Get("traceparent")
 			payload, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
@@ -153,12 +153,11 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				},
 				Request: r,
 			}, nil
-		})
+		}))
 
-		wrapped := traceEnv.newClientTransport(rt)
 		req := httptest.NewRequest(http.MethodPost, "http://example.com", strings.NewReader("request body"))
 		req.Header.Set("Request-Header", "request-value")
-		resp, err := wrapped.RoundTrip(req)
+		resp, err := rt.RoundTrip(req)
 		require.NoError(t, err)
 
 		body, err := io.ReadAll(resp.Body)
@@ -214,7 +213,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 			traceEnv := newHTTPTraceEnv(t, trace.WithIDGenerator(fixedIDGenerator{}))
 
-			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				payload, err := io.ReadAll(r.Body)
 				require.NoError(t, err)
 				require.Equal(t, requestPayload, string(payload))
@@ -226,13 +225,12 @@ func TestNewHTTPClientTransport(t *testing.T) {
 					},
 					Request: r,
 				}, nil
-			})
+			}))
 
-			wrapped := traceEnv.newClientTransport(rt)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString(requestPayload))
 			req.Header.Set("Request-Header", "request-value")
 
-			resp, err := wrapped.RoundTrip(req)
+			resp, err := rt.RoundTrip(req)
 			require.NoError(t, err)
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
@@ -262,17 +260,16 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 			traceEnv := newHTTPTraceEnv(t)
 			upgradedConnection := &readWriteCloser{Reader: bytes.NewBufferString(serverMessage)}
-			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusSwitchingProtocols, // HTTP 101
 					Body:       upgradedConnection,
 					Header:     http.Header{},
 					Request:    r,
 				}, nil
-			})
+			}))
 
-			wrapped := traceEnv.newClientTransport(rt)
-			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
+			resp, err := rt.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 
 			// Read the response body to verify the server message.
@@ -293,7 +290,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		// Decoders may stop after a complete value without reading a chunked body to EOF.
 		t.Run("AnnotatesChunkedResponsePayloadOnClose", func(t *testing.T) {
 			traceEnv := newHTTPTraceEnv(t)
-			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode:    http.StatusOK,
 					Body:          &readTrackingCloser{Reader: bytes.NewBufferString(`{"ok":true}`)},
@@ -301,10 +298,9 @@ func TestNewHTTPClientTransport(t *testing.T) {
 					Header:        http.Header{},
 					Request:       r,
 				}, nil
-			})
+			}))
 
-			wrapped := traceEnv.newClientTransport(rt)
-			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
+			resp, err := rt.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			var decoded map[string]bool
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&decoded))
@@ -318,17 +314,16 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		t.Run("DoesNotReadResponseBodyBeforeCaller", func(t *testing.T) {
 			traceEnv := newHTTPTraceEnv(t)
 			body := &readTrackingCloser{Reader: bytes.NewBufferString("response body")}
-			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Body:       body,
 					Header:     http.Header{},
 					Request:    r,
 				}, nil
-			})
+			}))
 
-			wrapped := traceEnv.newClientTransport(rt)
-			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
+			resp, err := rt.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			require.False(t, body.read)
 
@@ -345,7 +340,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			)
 
 			traceEnv := newHTTPTraceEnv(t)
-			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				requestBody := make([]byte, r.ContentLength)
 				requestReadBytes, err := io.ReadFull(r.Body, requestBody)
 				require.NoError(t, err)
@@ -358,11 +353,10 @@ func TestNewHTTPClientTransport(t *testing.T) {
 					Header:        http.Header{},
 					Request:       r,
 				}, nil
-			})
+			}))
 
-			wrapped := traceEnv.newClientTransport(rt)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString(requestPayload))
-			resp, err := wrapped.RoundTrip(req)
+			resp, err := rt.RoundTrip(req)
 			require.NoError(t, err)
 			responseBody := make([]byte, resp.ContentLength)
 			responseReadBytes, err := io.ReadFull(resp.Body, responseBody)
@@ -379,32 +373,30 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		// Wrapping the request body must not mask errors returned by the original body.
 		t.Run("PreservesRequestBodyReadErrors", func(t *testing.T) {
 			traceEnv := newHTTPTraceEnv(t)
-			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				_, err := io.ReadAll(r.Body)
 				return nil, err
-			})
+			}))
 
-			wrapped := traceEnv.newClientTransport(rt)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", nil)
 			req.Body = &failingReadCloser{payload: []byte("partial request")}
-			_, err := wrapped.RoundTrip(req)
+			_, err := rt.RoundTrip(req)
 			require.ErrorIs(t, err, errTestBodyRead)
 		})
 
 		// Wrapping the response body must not mask errors returned by the original body.
 		t.Run("PreservesResponseBodyReadErrors", func(t *testing.T) {
 			traceEnv := newHTTPTraceEnv(t)
-			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Body:       &failingReadCloser{payload: []byte("partial response")},
 					Header:     http.Header{},
 					Request:    r,
 				}, nil
-			})
+			}))
 
-			wrapped := traceEnv.newClientTransport(rt)
-			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
+			resp, err := rt.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			_, err = io.ReadAll(resp.Body)
 			require.ErrorIs(t, err, errTestBodyRead)
