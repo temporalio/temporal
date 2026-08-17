@@ -231,8 +231,8 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	})
 	s.NoError(err)
 
-	// Use a fixed traceparent to isolate server-side extraction from client instrumentation.
-	// Nexus API tests cover forwarding arbitrary headers to workers.
+	// Inject a fixed traceparent so this test exercises the server independently of client instrumentation.
+	// Nexus API tests separately verify that frontend request headers reach workers.
 	requestHeaders := nexus.Header{
 		"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
 	}
