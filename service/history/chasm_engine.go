@@ -189,7 +189,7 @@ func (e *ChasmEngine) startExecution(
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	options chasm.TransitionOptions,
 ) (result chasm.StartExecutionResult, retErr error) {
-	shardContext, err := e.getShardContext(executionRef)
+	shardContext, err := e.getShardContext(ctx, executionRef)
 	if err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
@@ -285,7 +285,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
 ) (result chasm.EngineUpdateWithStartExecutionResult, retError error) {
-	shardContext, err := e.getShardContext(executionRef)
+	shardContext, err := e.getShardContext(ctx, executionRef)
 	if err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
@@ -1180,15 +1180,26 @@ func (e *ChasmEngine) handleReusePolicy(
 }
 
 func (e *ChasmEngine) getShardContext(
+	ctx context.Context,
 	ref chasm.ComponentRef,
 ) (historyi.ShardContext, error) {
-	return e.shardController.GetShardByID(
+	shardContext, err := e.shardController.GetShardByID(
 		common.WorkflowIDToHistoryShard(
 			ref.NamespaceID,
 			ref.BusinessID,
 			e.config.NumberOfShards,
 		),
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Block until shard is acquired and ready to serve traffic.
+	_, err = shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return shardContext, nil
 }
 
 // getExecutionLease returns shard context and mutable state for the chasm execution, with the lock
@@ -1201,7 +1212,7 @@ func (e *ChasmEngine) getExecutionLease(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 ) (historyi.ShardContext, api.WorkflowLease, error) {
-	shardContext, err := e.getShardContext(ref)
+	shardContext, err := e.getShardContext(ctx, ref)
 	if err != nil {
 		return nil, nil, err
 	}

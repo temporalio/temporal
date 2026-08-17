@@ -8162,8 +8162,8 @@ func (ms *MutableStateImpl) UpdateLastRunningClock(
 
 		if len(eventsSeq) > 0 {
 			eventCount := 0
-			for _, events := range eventsSeq {
-				eventCount += len(events.Events)
+			for _, batch := range eventsSeq {
+				eventCount += len(batch.Events)
 			}
 			taskIDs, err := ms.shard.GenerateTaskIDs(eventCount)
 			if err != nil {
