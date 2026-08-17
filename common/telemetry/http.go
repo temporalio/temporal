@@ -95,6 +95,24 @@ func (t *debugHTTPClientTransport) RoundTrip(req *http.Request) (*http.Response,
 	return resp, err
 }
 
+type debugHTTPSpan struct {
+	trace.Span
+}
+
+func (s debugHTTPSpan) annotateHeaders(prefix string, headers http.Header) {
+	// Debug mode is explicit opt-in for diagnostics, so all header values, including sensitive ones,
+	// are recorded verbatim.
+	for key, values := range headers {
+		s.SetAttributes(attribute.StringSlice(prefix+strings.ToLower(key), values))
+	}
+}
+
+func (s debugHTTPSpan) payloadAnnotator(key string) func(string) {
+	return func(payload string) {
+		s.SetAttributes(attribute.String(key, payload))
+	}
+}
+
 type debugHTTPClientSpanTransport struct {
 	rt http.RoundTripper
 }
@@ -102,26 +120,30 @@ type debugHTTPClientSpanTransport struct {
 var _ http.RoundTripper = (*debugHTTPClientSpanTransport)(nil)
 
 func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	span := trace.SpanFromContext(req.Context())
+	span := debugHTTPSpan{Span: trace.SpanFromContext(req.Context())}
 	// Non-recording spans discard attributes, so skip the debug-capture work.
 	if !span.IsRecording() {
 		return t.rt.RoundTrip(req)
 	}
-	annotateHTTPHeaders(span, "http.request.headers.", req.Header)
-	req.Body, _ = newPayloadCapturingReadCloser(req.Body, req.ContentLength, func(payload string) {
-		span.SetAttributes(attribute.String("http.request.payload", payload))
-	})
+	span.annotateHeaders("http.request.headers.", req.Header)
+	req.Body, _ = newPayloadCapturingReadCloser(
+		req.Body,
+		req.ContentLength,
+		span.payloadAnnotator("http.request.payload"),
+	)
 
 	resp, err := t.rt.RoundTrip(req)
 	if resp == nil {
 		return resp, err
 	}
 
-	annotateHTTPHeaders(span, "http.response.headers.", resp.Header)
+	span.annotateHeaders("http.response.headers.", resp.Header)
 	var responseCapture *payloadCapture
-	resp.Body, responseCapture = newPayloadCapturingReadCloser(resp.Body, resp.ContentLength, func(payload string) {
-		span.SetAttributes(attribute.String("http.response.payload", payload))
-	})
+	resp.Body, responseCapture = newPayloadCapturingReadCloser(
+		resp.Body,
+		resp.ContentLength,
+		span.payloadAnnotator("http.response.payload"),
+	)
 	if state, ok := req.Context().Value(debugHTTPClientRequestStateKey{}).(*debugHTTPClientRequestState); ok && responseCapture != nil {
 		state.finalizeResponse = responseCapture.finalize
 	}
@@ -133,21 +155,21 @@ type debugHTTPHandler struct {
 }
 
 func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	span := trace.SpanFromContext(r.Context())
+	span := debugHTTPSpan{Span: trace.SpanFromContext(r.Context())}
 	// Non-recording spans discard attributes, so skip the debug-capture work.
 	if !span.IsRecording() {
 		h.handler.ServeHTTP(w, r)
 		return
 	}
-	annotateHTTPHeaders(span, "http.request.headers.", r.Header)
+	span.annotateHeaders("http.request.headers.", r.Header)
 	var requestCapture *payloadCapture
-	r.Body, requestCapture = newPayloadCapturingReadCloser(r.Body, r.ContentLength, func(payload string) {
-		span.SetAttributes(attribute.String("http.request.payload", payload))
-	})
+	r.Body, requestCapture = newPayloadCapturingReadCloser(
+		r.Body,
+		r.ContentLength,
+		span.payloadAnnotator("http.request.payload"),
+	)
 
-	responseBody := payloadCapture{onFinalize: func(payload string) {
-		span.SetAttributes(attribute.String("http.response.payload", payload))
-	}}
+	responseBody := payloadCapture{onFinalize: span.payloadAnnotator("http.response.payload")}
 	w = newPayloadCapturingResponseWriter(w, &responseBody)
 
 	h.handler.ServeHTTP(w, r)
@@ -157,7 +179,7 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		requestCapture.finalize()
 	}
 
-	annotateHTTPHeaders(span, "http.response.headers.", w.Header())
+	span.annotateHeaders("http.response.headers.", w.Header())
 	responseBody.finalize()
 }
 
@@ -266,12 +288,4 @@ func preserveBodyWriter(body io.ReadCloser, wrapped io.ReadCloser) io.ReadCloser
 		}{wrapped, writer}
 	}
 	return wrapped
-}
-
-func annotateHTTPHeaders(span trace.Span, prefix string, headers http.Header) {
-	// Debug mode is explicit opt-in for diagnostics, so all header values, including sensitive ones,
-	// are recorded verbatim.
-	for key, values := range headers {
-		span.SetAttributes(attribute.StringSlice(prefix+strings.ToLower(key), values))
-	}
 }
