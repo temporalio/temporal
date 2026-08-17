@@ -46,11 +46,11 @@ type RPCFactory struct {
 	logger         log.Logger
 	metricsHandler metrics.Handler
 
-	frontendURL                  string
-	frontendHTTPURL              string
-	frontendHTTPPort             int
-	frontendTLSConfig            *tls.Config
-	frontendHTTPTransportWrapper telemetry.HTTPClientTransportWrapper
+	frontendURL                       string
+	frontendHTTPURL                   string
+	frontendHTTPPort                  int
+	frontendTLSConfig                 *tls.Config
+	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter
 
 	grpcListener             func() net.Listener
 	tlsFactory               encryption.TLSConfigProvider
@@ -90,7 +90,7 @@ func NewFactory(
 	frontendHTTPURL string,
 	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
-	frontendHTTPTransportWrapper telemetry.HTTPClientTransportWrapper,
+	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
 	commonDialOptions []grpc.DialOption,
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
@@ -103,22 +103,22 @@ func NewFactory(
 		requireRemoteClusterAuth = cfg.Global.Authorization.RemoteClusterAuth.Require
 	}
 	f := &RPCFactory{
-		config:                       cfg,
-		serviceName:                  sName,
-		logger:                       logger,
-		metricsHandler:               metricsHandler,
-		frontendURL:                  frontendURL,
-		frontendHTTPURL:              frontendHTTPURL,
-		frontendHTTPPort:             frontendHTTPPort,
-		frontendTLSConfig:            frontendTLSConfig,
-		frontendHTTPTransportWrapper: frontendHTTPTransportWrapper,
-		tlsFactory:                   tlsProvider,
-		commonDialOptions:            commonDialOptions,
-		perServiceDialOptions:        perServiceDialOptions,
-		tokenProvider:                tokenProvider,
-		authHeaderName:               authHeaderName,
-		requireRemoteClusterAuth:     requireRemoteClusterAuth,
-		monitor:                      monitor,
+		config:                            cfg,
+		serviceName:                       sName,
+		logger:                            logger,
+		metricsHandler:                    metricsHandler,
+		frontendURL:                       frontendURL,
+		frontendHTTPURL:                   frontendHTTPURL,
+		frontendHTTPPort:                  frontendHTTPPort,
+		frontendTLSConfig:                 frontendTLSConfig,
+		frontendHTTPTransportInstrumenter: frontendHTTPTransportInstrumenter,
+		tlsFactory:                        tlsProvider,
+		commonDialOptions:                 commonDialOptions,
+		perServiceDialOptions:             perServiceDialOptions,
+		tokenProvider:                     tokenProvider,
+		authHeaderName:                    authHeaderName,
+		requireRemoteClusterAuth:          requireRemoteClusterAuth,
+		monitor:                           monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
@@ -460,7 +460,7 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		address = d.frontendHTTPURL
 	}
 	client := http.Client{
-		Transport: d.frontendHTTPTransportWrapper.Wrap(clientTransport),
+		Transport: d.frontendHTTPTransportInstrumenter.Instrument(clientTransport),
 	}
 
 	return &common.FrontendHTTPClient{

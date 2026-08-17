@@ -30,7 +30,7 @@ func httpCallerProviderProvider(
 	rpcFactory common.RPCFactory,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
-	httpClientTransportWrapper telemetry.HTTPClientTransportWrapper,
+	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
 ) (HTTPCallerProvider, error) {
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -41,7 +41,7 @@ func httpCallerProviderProvider(
 		return nil, err
 	}
 	defaultClient := &http.Client{
-		Transport: httpClientTransportWrapper.Wrap(defaultTransport),
+		Transport: httpClientTransportInstrumenter.Instrument(defaultTransport),
 	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
