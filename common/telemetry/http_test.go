@@ -272,14 +272,14 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			resp, err := rt.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 
-			// Read the response body to verify the server message.
+			// The wrapped connection must still receive server messages.
 			connection, ok := resp.Body.(io.ReadWriteCloser)
 			require.True(t, ok)
 			responsePayload, err := io.ReadAll(connection)
 			require.NoError(t, err)
 			require.Equal(t, serverMessage, string(responsePayload))
 
-			// Write to the response body to simulate the client sending data.
+			// The wrapped connection must still send client messages.
 			written, err := connection.Write([]byte(clientMessage))
 			require.NoError(t, err)
 			require.Equal(t, len(clientMessage), written)
