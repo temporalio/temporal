@@ -419,18 +419,18 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 // Verifies server handler construction, standard tracing, and debug body handling.
 func TestNewHTTPHandler(t *testing.T) {
-	// The wrapper carries HTTP tracing configuration without exposing it to handler owners.
-	t.Run("HandlerWrapper", func(t *testing.T) {
+	// The instrumenter carries HTTP tracing configuration without exposing it to handler owners.
+	t.Run("ServerHandlerInstrumenter", func(t *testing.T) {
 		t.Parallel()
 
 		handler := http.NewServeMux()
-		var disabled HTTPHandlerWrapper
-		require.Same(t, handler, disabled.Wrap(handler, "test-handler"))
+		var disabled HTTPServerHandlerInstrumenter
+		require.Same(t, handler, disabled.Instrument(handler, "test-handler"))
 
 		recorder := tracetest.NewSpanRecorder()
 		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
-		wrapper := NewHTTPHandlerWrapper(tp, nil)
-		wrapper.Wrap(handler, "test-handler").ServeHTTP(
+		instrumenter := NewHTTPServerHandlerInstrumenter(tp, nil)
+		instrumenter.Instrument(handler, "test-handler").ServeHTTP(
 			httptest.NewRecorder(),
 			httptest.NewRequest(http.MethodGet, "http://example.com", nil),
 		)

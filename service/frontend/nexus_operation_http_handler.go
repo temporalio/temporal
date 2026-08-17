@@ -46,7 +46,7 @@ type NexusOperationHTTPHandler struct {
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
-	httpHandlerWrapper                   telemetry.HTTPHandlerWrapper
+	httpServerHandlerInstrumenter        telemetry.HTTPServerHandlerInstrumenter
 }
 
 func NewNexusOperationHTTPHandler(
@@ -67,7 +67,7 @@ func NewNexusOperationHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
-	httpHandlerWrapper telemetry.HTTPHandlerWrapper,
+	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
 ) *NexusOperationHTTPHandler {
 	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
@@ -83,7 +83,7 @@ func NewNexusOperationHTTPHandler(
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
-		httpHandlerWrapper:                   httpHandlerWrapper,
+		httpServerHandlerInstrumenter:        httpServerHandlerInstrumenter,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
 				logger:                        logger,
@@ -112,9 +112,9 @@ func NewNexusOperationHTTPHandler(
 
 func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
-		Handler(h.httpHandlerWrapper.Wrap(http.HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue), strings.TrimPrefix(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, "/")))
+		Handler(h.httpServerHandlerInstrumenter.Instrument(http.HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue), strings.TrimPrefix(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, "/")))
 	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
-		Handler(h.httpHandlerWrapper.Wrap(http.HandlerFunc(h.dispatchNexusTaskByEndpoint), strings.TrimPrefix(configs.DispatchNexusTaskByEndpointAPIName, "/")))
+		Handler(h.httpServerHandlerInstrumenter.Instrument(http.HandlerFunc(h.dispatchNexusTaskByEndpoint), strings.TrimPrefix(configs.DispatchNexusTaskByEndpointAPIName, "/")))
 }
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {

@@ -35,25 +35,25 @@ func (i HTTPClientTransportInstrumenter) Instrument(rt http.RoundTripper) http.R
 	return i(rt)
 }
 
-// HTTPHandlerWrapper wraps HTTP handlers with the service's tracing configuration.
-type HTTPHandlerWrapper func(http.Handler, string) http.Handler
+// HTTPServerHandlerInstrumenter instruments an HTTP server handler and uses spanName for its spans.
+type HTTPServerHandlerInstrumenter func(handler http.Handler, spanName string) http.Handler
 
-// NewHTTPHandlerWrapper binds a tracer provider and propagator to HTTP handlers.
-func NewHTTPHandlerWrapper(
+// NewHTTPServerHandlerInstrumenter binds a tracer provider and propagator for reuse across HTTP server handlers.
+func NewHTTPServerHandlerInstrumenter(
 	tracerProvider trace.TracerProvider,
 	propagator propagation.TextMapPropagator,
-) HTTPHandlerWrapper {
-	return func(handler http.Handler, operation string) http.Handler {
-		return NewHTTPHandler(handler, operation, tracerProvider, propagator)
+) HTTPServerHandlerInstrumenter {
+	return func(handler http.Handler, spanName string) http.Handler {
+		return NewHTTPHandler(handler, spanName, tracerProvider, propagator)
 	}
 }
 
-// Wrap instruments handler, or returns it unchanged when the wrapper is unset.
-func (w HTTPHandlerWrapper) Wrap(handler http.Handler, operation string) http.Handler {
-	if w == nil {
+// Instrument instruments handler, or returns it unchanged when the instrumenter is unset.
+func (i HTTPServerHandlerInstrumenter) Instrument(handler http.Handler, spanName string) http.Handler {
+	if i == nil {
 		return handler
 	}
-	return w(handler, operation)
+	return i(handler, spanName)
 }
 
 // NewHTTPClientTransport instruments outbound HTTP requests with OpenTelemetry client spans
