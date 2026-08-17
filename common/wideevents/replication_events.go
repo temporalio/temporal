@@ -56,6 +56,7 @@ const (
 	ReplOperationPassiveTaskExecution             = "passive_task_execution"
 	ReplOperationPassiveApply                     = "passive_apply"
 	ReplOperationStandbyVerification              = "standby_verification"
+	ReplOperationStandbyTaskExecution             = "standby_task_execution"
 	ReplOperationSyncState                        = "sync_state"
 	ReplOperationSyncStateApply                   = "sync_state_apply"
 	ReplOperationSyncVersionedTransitionSyncState = "sync_versioned_transition_sync_state"
