@@ -283,6 +283,10 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 		return nil, err
 	}
 
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
+	}
+
 	_, err = h.client.TerminateNexusOperation(ctx, &nexusoperationpb.TerminateNexusOperationRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
@@ -291,7 +295,11 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 		return nil, err
 	}
 
-	return &workflowservice.TerminateNexusOperationExecutionResponse{}, nil
+	resp := &workflowservice.TerminateNexusOperationExecutionResponse{}
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (h *frontendHandler) DeleteNexusOperationExecution(

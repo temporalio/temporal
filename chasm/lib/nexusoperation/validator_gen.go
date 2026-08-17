@@ -249,3 +249,61 @@ func (v requestCancelNexusOperationExecutionValidator) RegisterValidator(registr
 	}
 	return v.Response.RegisterValidator(registry)
 }
+
+type terminateNexusOperationExecutionRequestFieldValidators struct {
+	Namespace   validation.FieldValidator[workflowservice.TerminateNexusOperationExecutionRequest, string]
+	OperationId validation.FieldValidator[workflowservice.TerminateNexusOperationExecutionRequest, string]
+	RunId       validation.FieldValidator[workflowservice.TerminateNexusOperationExecutionRequest, string]
+	Identity    validation.FieldValidator[workflowservice.TerminateNexusOperationExecutionRequest, string]
+	RequestId   validation.FieldValidator[workflowservice.TerminateNexusOperationExecutionRequest, string]
+	Reason      validation.FieldValidator[workflowservice.TerminateNexusOperationExecutionRequest, string]
+}
+
+func (v terminateNexusOperationExecutionRequestFieldValidators) ValidateAndNormalize(req *workflowservice.TerminateNexusOperationExecutionRequest) error {
+	if err := v.Namespace(req, "namespace", req.GetNamespace()); err != nil {
+		return err
+	}
+	if err := v.OperationId(req, "operation_id", req.GetOperationId()); err != nil {
+		return err
+	}
+	if err := v.RunId(req, "run_id", req.GetRunId()); err != nil {
+		return err
+	}
+	if err := v.Identity(req, "identity", req.GetIdentity()); err != nil {
+		return err
+	}
+	if err := v.RequestId(req, "request_id", req.GetRequestId()); err != nil {
+		return err
+	}
+	if err := v.Reason(req, "reason", req.GetReason()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v terminateNexusOperationExecutionRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.TerminateNexusOperationExecutionRequest](registry, v)
+}
+
+type terminateNexusOperationExecutionResponseFieldValidators struct {
+}
+
+func (v terminateNexusOperationExecutionResponseFieldValidators) ValidateAndNormalize(req *workflowservice.TerminateNexusOperationExecutionResponse) error {
+	return nil
+}
+
+func (v terminateNexusOperationExecutionResponseFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.TerminateNexusOperationExecutionResponse](registry, v)
+}
+
+type terminateNexusOperationExecutionValidator struct {
+	Request  terminateNexusOperationExecutionRequestFieldValidators
+	Response terminateNexusOperationExecutionResponseFieldValidators
+}
+
+func (v terminateNexusOperationExecutionValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	if err := v.Request.RegisterValidator(registry); err != nil {
+		return err
+	}
+	return v.Response.RegisterValidator(registry)
+}
