@@ -4,6 +4,8 @@ package nexusoperation
 
 import (
 	"github.com/google/uuid"
+	commonpb "go.temporal.io/api/common/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/validation"
@@ -12,6 +14,7 @@ import (
 var ValidatorModule = validation.Module(
 	"chasm.lib.nexusoperation.validators",
 	newDeleteNexusOperationExecutionValidator,
+	newDescribeNexusOperationExecutionValidator,
 )
 
 func newDeleteNexusOperationExecutionValidator(config *Config) deleteNexusOperationExecutionValidator {
@@ -23,6 +26,27 @@ func newDeleteNexusOperationExecutionValidator(config *Config) deleteNexusOperat
 			RunId:       validation.Field[req](validateOptionalRunID),
 		},
 		Response: deleteNexusOperationExecutionResponseFieldValidators{},
+	}
+}
+
+func newDescribeNexusOperationExecutionValidator(config *Config) describeNexusOperationExecutionValidator {
+	type req = workflowservice.DescribeNexusOperationExecutionRequest
+	type resp = workflowservice.DescribeNexusOperationExecutionResponse
+	return describeNexusOperationExecutionValidator{
+		Request: describeNexusOperationExecutionRequestFieldValidators{
+			Namespace:      validation.NoOp[req, string](),
+			OperationId:    validation.Field[req](requiredID(config.MaxIDLengthLimit())),
+			RunId:          validation.Field[req](validateOptionalRunID),
+			IncludeInput:   validation.NoOp[req, bool](),
+			IncludeOutcome: validation.NoOp[req, bool](),
+			LongPollToken:  validation.NoOp[req, []byte](),
+		},
+		Response: describeNexusOperationExecutionResponseFieldValidators{
+			RunId:         validation.NoOp[resp, string](),
+			Info:          validation.NoOp[resp, *nexuspb.NexusOperationExecutionInfo](),
+			Input:         validation.NoOp[resp, *commonpb.Payload](),
+			LongPollToken: validation.NoOp[resp, []byte](),
+		},
 	}
 }
 

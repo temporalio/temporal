@@ -3,6 +3,8 @@
 package nexusoperation
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/validation"
 )
@@ -47,6 +49,80 @@ type deleteNexusOperationExecutionValidator struct {
 }
 
 func (v deleteNexusOperationExecutionValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	if err := v.Request.RegisterValidator(registry); err != nil {
+		return err
+	}
+	return v.Response.RegisterValidator(registry)
+}
+
+type describeNexusOperationExecutionRequestFieldValidators struct {
+	Namespace      validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionRequest, string]
+	OperationId    validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionRequest, string]
+	RunId          validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionRequest, string]
+	IncludeInput   validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionRequest, bool]
+	IncludeOutcome validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionRequest, bool]
+	LongPollToken  validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionRequest, []byte]
+}
+
+func (v describeNexusOperationExecutionRequestFieldValidators) ValidateAndNormalize(req *workflowservice.DescribeNexusOperationExecutionRequest) error {
+	if err := v.Namespace(req, "namespace", req.GetNamespace()); err != nil {
+		return err
+	}
+	if err := v.OperationId(req, "operation_id", req.GetOperationId()); err != nil {
+		return err
+	}
+	if err := v.RunId(req, "run_id", req.GetRunId()); err != nil {
+		return err
+	}
+	if err := v.IncludeInput(req, "include_input", req.GetIncludeInput()); err != nil {
+		return err
+	}
+	if err := v.IncludeOutcome(req, "include_outcome", req.GetIncludeOutcome()); err != nil {
+		return err
+	}
+	if err := v.LongPollToken(req, "long_poll_token", req.GetLongPollToken()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v describeNexusOperationExecutionRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.DescribeNexusOperationExecutionRequest](registry, v)
+}
+
+type describeNexusOperationExecutionResponseFieldValidators struct {
+	RunId         validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionResponse, string]
+	Info          validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionResponse, *nexuspb.NexusOperationExecutionInfo]
+	Input         validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionResponse, *commonpb.Payload]
+	LongPollToken validation.FieldValidator[workflowservice.DescribeNexusOperationExecutionResponse, []byte]
+}
+
+func (v describeNexusOperationExecutionResponseFieldValidators) ValidateAndNormalize(req *workflowservice.DescribeNexusOperationExecutionResponse) error {
+	if err := v.RunId(req, "run_id", req.GetRunId()); err != nil {
+		return err
+	}
+	if err := v.Info(req, "info", req.GetInfo()); err != nil {
+		return err
+	}
+	if err := v.Input(req, "input", req.GetInput()); err != nil {
+		return err
+	}
+	if err := v.LongPollToken(req, "long_poll_token", req.GetLongPollToken()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v describeNexusOperationExecutionResponseFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.DescribeNexusOperationExecutionResponse](registry, v)
+}
+
+type describeNexusOperationExecutionValidator struct {
+	Request  describeNexusOperationExecutionRequestFieldValidators
+	Response describeNexusOperationExecutionResponseFieldValidators
+}
+
+func (v describeNexusOperationExecutionValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
 	if err := v.Request.RegisterValidator(registry); err != nil {
 		return err
 	}

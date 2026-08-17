@@ -96,11 +96,22 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		return nil, err
 	}
 
-	resp, err := h.client.DescribeNexusOperation(ctx, &nexusoperationpb.DescribeNexusOperationRequest{
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
+	}
+
+	result, err := h.client.DescribeNexusOperation(ctx, &nexusoperationpb.DescribeNexusOperationRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	return resp.GetFrontendResponse(), err
+	if err != nil {
+		return nil, err
+	}
+	resp := result.GetFrontendResponse()
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // PollNexusOperationExecution long-polls for a Nexus operation to reach a specific stage.
