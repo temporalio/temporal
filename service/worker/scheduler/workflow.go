@@ -351,6 +351,14 @@ func (s *scheduler) run() error {
 			s.State.NeedRefresh {
 			s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
 			s.State.NeedRefresh = false
+			// if for some reason the tweakables indicate that CHASM migration is not enabled
+			// but the state specifies that it should be, then unset the PendingMigration
+			// flag, as this is probably a rollback scenario where migration was enabled,
+			// then the workflow wasn't able to migrate, for some reason, and then
+			// migration was rolled back. We don't want to keep attempting to migrate
+			if s.State.PendingMigration && !s.tweakables.EnableCHASMMigration {
+				s.State.PendingMigration = false
+			}
 		}
 
 		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
