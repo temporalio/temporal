@@ -111,10 +111,22 @@ func NewNexusOperationHTTPHandler(
 }
 
 func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
-		Handler(h.httpServerHandlerInstrumenter.Instrument(http.HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue), strings.TrimPrefix(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, "/")))
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
-		Handler(h.httpServerHandlerInstrumenter.Instrument(http.HandlerFunc(h.dispatchNexusTaskByEndpoint), strings.TrimPrefix(configs.DispatchNexusTaskByEndpointAPIName, "/")))
+	register := func(route, apiName string, handler http.HandlerFunc) {
+		spanName := strings.TrimPrefix(apiName, "/")
+		instrumentedHandler := h.httpServerHandlerInstrumenter.Instrument(handler, spanName)
+		r.PathPrefix("/" + route + "/").Handler(instrumentedHandler)
+	}
+
+	register(
+		commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation(),
+		configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName,
+		h.dispatchNexusTaskByNamespaceAndTaskQueue,
+	)
+	register(
+		commonnexus.RouteDispatchNexusTaskByEndpoint.Representation(),
+		configs.DispatchNexusTaskByEndpointAPIName,
+		h.dispatchNexusTaskByEndpoint,
+	)
 }
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {
