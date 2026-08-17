@@ -148,12 +148,27 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	responseBody := payloadCapture{onFinish: func(payload string) {
 		span.SetAttributes(attribute.String("http.response.payload", payload))
 	}}
-	w = httpsnoop.Wrap(w, httpsnoop.Hooks{
+	w = newPayloadCapturingResponseWriter(w, &responseBody)
+
+	h.handler.ServeHTTP(w, r)
+	// Finalize after the handler returns because an unknown-length request may be fully consumed
+	// without a read that returns EOF.
+	if requestCapture != nil {
+		requestCapture.finish()
+	}
+
+	annotateHTTPHeaders(span, "http.response.headers.", w.Header())
+	responseBody.finish()
+}
+
+// Use httpsnoop to intercept writes without dropping optional ResponseWriter interfaces.
+func newPayloadCapturingResponseWriter(w http.ResponseWriter, capture *payloadCapture) http.ResponseWriter {
+	return httpsnoop.Wrap(w, httpsnoop.Hooks{
 		Write: func(next httpsnoop.WriteFunc) httpsnoop.WriteFunc {
 			return func(p []byte) (int, error) {
 				n, err := next(p)
 				if n > 0 {
-					_, _ = responseBody.Write(p[:n])
+					_, _ = capture.Write(p[:n])
 				}
 				return n, err
 			}
@@ -166,16 +181,6 @@ func (h *debugHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		},
 	})
-
-	h.handler.ServeHTTP(w, r)
-	// Finalize after the handler returns because an unknown-length request may be fully consumed
-	// without a read that returns EOF.
-	if requestCapture != nil {
-		requestCapture.finish()
-	}
-
-	annotateHTTPHeaders(span, "http.response.headers.", w.Header())
-	responseBody.finish()
 }
 
 // Debug mode favors complete diagnostics, so it buffers all observed payload bytes in memory
