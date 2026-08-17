@@ -161,20 +161,24 @@ func (s *monitorSuite) receivedStuckAlert() bool {
 	}
 }
 
-func (s *monitorSuite) TestReaderWatermarkStats_DrainedReadsNeitherCountNorReset() {
+func (s *monitorSuite) TestReaderWatermarkStats_DrainedReadClearsAttempts() {
 	key := tasks.NewKey(monitorTestFireTime, 1)
 	criticalAttempts := s.monitor.options.ReaderStuckCriticalAttempts()
 
-	// Interleaving drained reads distinguishes ignoring them from resetting prior attempts.
-	s.monitor.SetReaderWatermark(DefaultReaderId, key, false)
 	for i := 0; i != criticalAttempts-1; i++ {
 		s.monitor.SetReaderWatermark(DefaultReaderId, key, true)
-		s.monitor.SetReaderWatermark(DefaultReaderId, key, false)
 	}
-	s.False(s.receivedStuckAlert(), "only reads that left tasks behind should count toward the threshold")
+
+	s.monitor.SetReaderWatermark(DefaultReaderId, key, false)
+	s.False(s.receivedStuckAlert(), "a drained read must not count toward the threshold")
+
+	for i := 0; i != criticalAttempts-1; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, key, true)
+	}
+	s.False(s.receivedStuckAlert(), "a drained read must clear what earlier reads accumulated")
 
 	s.monitor.SetReaderWatermark(DefaultReaderId, key, true)
-	s.True(s.receivedStuckAlert(), "expected an alert once enough reads had left tasks behind")
+	s.True(s.receivedStuckAlert(), "consecutive reads that leave tasks behind must still alert")
 }
 
 func (s *monitorSuite) TestReaderWatermarkStats_DrainedReadRecordsItsWatermark() {
@@ -201,10 +205,6 @@ func (s *monitorSuite) TestReaderWatermarkStats_AdvancingWatermarkResetsAttempts
 	for i := 0; i != criticalAttempts-1; i++ {
 		s.monitor.SetReaderWatermark(DefaultReaderId, inWindow, true)
 	}
-
-	// However the move to the next window is reported, what the previous one accumulated
-	// must not carry over.
-	s.monitor.SetReaderWatermark(DefaultReaderId, inNextWindow, false)
 	for i := 0; i != criticalAttempts-1; i++ {
 		s.monitor.SetReaderWatermark(DefaultReaderId, inNextWindow, true)
 	}

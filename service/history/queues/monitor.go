@@ -182,6 +182,7 @@ func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key, mo
 	}
 
 	if !moreTasks {
+		stats.progress.attempts = 0
 		m.readerStats[readerID] = stats
 		return
 	}
