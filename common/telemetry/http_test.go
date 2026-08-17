@@ -253,13 +253,18 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			}, traceEnv.spanAttrs())
 		})
 
-		// Protocol upgrades require response bodies to retain bidirectional I/O.
-		t.Run("PreservesReadWriteCloserResponseBodies", func(t *testing.T) {
+		// After an HTTP 101 response, callers use Response.Body to read from and write to the upgraded connection.
+		t.Run("PreservesUpgradedResponseBody", func(t *testing.T) {
+			const (
+				serverMessage = "server message"
+				clientMessage = "client message"
+			)
+
 			traceEnv := newHTTPTraceEnv(t)
-			body := &readWriteCloser{Reader: bytes.NewBufferString("server message")}
+			body := &readWriteCloser{Reader: bytes.NewBufferString(serverMessage)}
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
-					StatusCode: http.StatusSwitchingProtocols,
+					StatusCode: http.StatusSwitchingProtocols, // HTTP 101
 					Body:       body,
 					Header:     http.Header{},
 					Request:    r,
@@ -269,11 +274,18 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			wrapped := traceEnv.newClientTransport(rt)
 			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
+
+			// Read the response body to verify the server message.
 			responseBody, ok := resp.Body.(io.ReadWriteCloser)
 			require.True(t, ok)
-			_, err = responseBody.Write([]byte("client message"))
+			responsePayload, err := io.ReadAll(responseBody)
 			require.NoError(t, err)
-			require.Equal(t, "client message", body.written.String())
+			require.Equal(t, serverMessage, string(responsePayload))
+
+			// Write to the response body to simulate the client sending data.
+			_, err = responseBody.Write([]byte(clientMessage))
+			require.NoError(t, err)
+			require.Equal(t, clientMessage, body.written.String())
 			require.NoError(t, responseBody.Close())
 		})
 
