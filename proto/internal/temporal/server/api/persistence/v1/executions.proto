@@ -386,8 +386,11 @@ message WorkflowExecutionState {
   VersionedTransition last_update_versioned_transition = 5;
   google.protobuf.Timestamp start_time = 6;
   // Request IDs that are attached to the workflow execution. It can be the request ID that started
-  // the workflow execution or request IDs that were attached to an existing running workflow
-  // execution via StartWorkflowExecutionRequest.OnConflictOptions.
+  // the workflow execution, request IDs that were attached to an existing running workflow
+  // execution via StartWorkflowExecutionRequest.OnConflictOptions, or (for CHASM executions) request
+  // IDs recorded for UpdateComponent idempotency - the latter are marked by RequestIDInfo.attach_time
+  // and are swept per-execution by count (history.maximumRequestIDsPerExecution) and age
+  // (history.requestIDMaxAge).
   map<string, RequestIDInfo> request_ids = 7;
   // Run ID of the first execution in the chain (set on WorkflowExecutionStarted). Equals run_id
   // only for a first run; any continuation (continue-as-new, retry, cron, or reset)
@@ -399,6 +402,9 @@ message WorkflowExecutionState {
 message RequestIDInfo {
   temporal.api.enums.v1.EventType event_type = 1;
   int64 event_id = 2;
+  // Set only for request IDs attached by the CHASM framework for UpdateComponent idempotency.
+  // Used as an ordering key for lazy eviction when set.
+  google.protobuf.Timestamp attach_time = 3;
 }
 
 // transfer column

@@ -2,6 +2,7 @@ package matching
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/emirpasic/gods/maps/treemap"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -15,6 +16,10 @@ type fairLevel struct {
 	pass int64
 	id   int64
 }
+
+// maxFairLevel is higher than any real level. It's used as a sentinel "trim point" meaning
+// "nothing is trimmed": no real task can reach it, so ranges up to it are effectively unbounded.
+var maxFairLevel = fairLevel{pass: math.MaxInt64, id: math.MaxInt64}
 
 func (a fairLevel) String() string {
 	return fmt.Sprintf("<%d,%d>", a.pass, a.id)

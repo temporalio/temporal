@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -45,6 +46,7 @@ type Config struct {
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog                            dynamicconfig.BoolPropertyFn
+	EmitImmediateQueueBacklogAge               dynamicconfig.BoolPropertyFn
 	EnableDataLossMetrics                      dynamicconfig.BoolPropertyFn
 	ThrottledLogRPS                            dynamicconfig.IntPropertyFn
 	EnableStickyQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -206,6 +208,8 @@ type Config struct {
 	MaximumBufferedEventsBatch       dynamicconfig.IntPropertyFn
 	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaximumRequestIDsPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RequestIDMaxAge                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
@@ -281,6 +285,8 @@ type Config struct {
 
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
+	EnableAsyncParentWorkflowResend                      dynamicconfig.BoolPropertyFn
+	ParentWorkflowResendMaxInFlight                      dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherAggregationInterval            dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherTimerJitterCoefficient         dynamicconfig.FloatPropertyFn
@@ -303,6 +309,7 @@ type Config struct {
 	ReplicationStreamSenderErrorRetryMaxInterval         dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderErrorRetryMaxAttempts         dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderErrorRetryExpiration          dynamicconfig.DurationPropertyFn
+	ReplicationStreamSenderSkipStuckTask                 dynamicconfig.BoolPropertyFn
 
 	ReplicationExecutableTaskErrorRetryWait               dynamicconfig.DurationPropertyFn
 	ReplicationExecutableTaskErrorRetryBackoffCoefficient dynamicconfig.FloatPropertyFn
@@ -317,6 +324,7 @@ type Config struct {
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
+	EnableReplicationReaderGroup                        dynamicconfig.BoolPropertyFn
 	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
@@ -333,6 +341,8 @@ type Config struct {
 	ReplicationEnableRateLimitShadowMode                dynamicconfig.BoolPropertyFn
 	ReplicationStreamReceiverLivenessMultiplier         dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
+	ReplicationStreamMaxLifetime                        dynamicconfig.DurationPropertyFn
+	ReplicationStreamMaxLifetimeJitter                  dynamicconfig.FloatPropertyFn
 	EnableHistoryReplicationRateLimiter                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// The following are used by consistent query
@@ -419,6 +429,7 @@ type Config struct {
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
+	HealthCheckHistoryGRPCSettings      dynamicconfig.TypedPropertyFn[health.Settings]
 	HealthPersistenceLatencyFailure     dynamicconfig.FloatPropertyFn
 	HealthPersistenceLatencyPercentiles dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
 	HealthPersistenceErrorRatio         dynamicconfig.FloatPropertyFn
@@ -491,8 +502,9 @@ func NewConfig(
 		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
 		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
-		EmitShardLagLog:       dynamicconfig.EmitShardLagLog.Get(dc),
-		EnableDataLossMetrics: dynamicconfig.EnableDataLossMetrics.Get(dc),
+		EmitShardLagLog:              dynamicconfig.EmitShardLagLog.Get(dc),
+		EmitImmediateQueueBacklogAge: dynamicconfig.EmitImmediateQueueBacklogAge.Get(dc),
+		EnableDataLossMetrics:        dynamicconfig.EnableDataLossMetrics.Get(dc),
 		// HistoryCacheLimitSizeBased should not change during runtime.
 		HistoryCacheLimitSizeBased:                 dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
 		HistoryHostLevelCacheMaxSize:               dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),
@@ -634,6 +646,7 @@ func NewConfig(
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
+		EnableReplicationReaderGroup:                        dynamicconfig.EnableReplicationReaderGroup.Get(dc),
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
@@ -650,11 +663,15 @@ func NewConfig(
 		ReplicationStreamSendEmptyTaskDuration:              dynamicconfig.ReplicationStreamSendEmptyTaskDuration.Get(dc),
 		ReplicationStreamReceiverLivenessMultiplier:         dynamicconfig.ReplicationStreamReceiverLivenessMultiplier.Get(dc),
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
+		ReplicationStreamMaxLifetime:                        dynamicconfig.ReplicationStreamMaxLifetime.Get(dc),
+		ReplicationStreamMaxLifetimeJitter:                  dynamicconfig.ReplicationStreamMaxLifetimeJitter.Get(dc),
 		EnableHistoryReplicationRateLimiter:                 dynamicconfig.EnableHistoryReplicationRateLimiter.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
+		MaximumRequestIDsPerExecution:    dynamicconfig.MaximumRequestIDsPerExecution.Get(dc),
+		RequestIDMaxAge:                  dynamicconfig.RequestIDMaxAge.Get(dc),
 		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
 		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),
@@ -705,6 +722,8 @@ func NewConfig(
 		SendTransientOrSpeculativeWorkflowTaskEvents:     dynamicconfig.SendTransientOrSpeculativeWorkflowTaskEvents.Get(dc),
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
+		EnableAsyncParentWorkflowResend:              dynamicconfig.EnableAsyncParentWorkflowResend.Get(dc),
+		ParentWorkflowResendMaxInFlight:              dynamicconfig.ParentWorkflowResendMaxInFlight.Get(dc),
 		ReplicationTaskFetcherParallelism:            dynamicconfig.ReplicationTaskFetcherParallelism.Get(dc),
 		ReplicationTaskFetcherAggregationInterval:    dynamicconfig.ReplicationTaskFetcherAggregationInterval.Get(dc),
 		ReplicationTaskFetcherTimerJitterCoefficient: dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient.Get(dc),
@@ -725,6 +744,7 @@ func NewConfig(
 		ReplicationStreamSenderErrorRetryMaxInterval:        dynamicconfig.ReplicationStreamSenderErrorRetryMaxInterval.Get(dc),
 		ReplicationStreamSenderErrorRetryMaxAttempts:        dynamicconfig.ReplicationStreamSenderErrorRetryMaxAttempts.Get(dc),
 		ReplicationStreamSenderErrorRetryExpiration:         dynamicconfig.ReplicationStreamSenderErrorRetryExpiration.Get(dc),
+		ReplicationStreamSenderSkipStuckTask:                dynamicconfig.ReplicationStreamSenderSkipStuckTask.Get(dc),
 
 		ReplicationExecutableTaskErrorRetryWait:               dynamicconfig.ReplicationExecutableTaskErrorRetryWait.Get(dc),
 		ReplicationExecutableTaskErrorRetryBackoffCoefficient: dynamicconfig.ReplicationExecutableTaskErrorRetryBackoffCoefficient.Get(dc),
@@ -813,6 +833,7 @@ func NewConfig(
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
 
+		HealthCheckHistoryGRPCSettings:      dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
 		HealthPersistenceLatencyFailure:     dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceLatencyPercentiles: dynamicconfig.PersistenceHealthSignalPercentileLatencySettings.Get(dc),
 		HealthPersistenceErrorRatio:         dynamicconfig.HealthPersistenceErrorRatio.Get(dc),

@@ -6,9 +6,17 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 )
+
+// Compact8 encodes backlogs below 32 as zero. Using the smallest representable Compact8 as
+// the weight floor limits the first representable backlog bucket to twice the weight of an
+// encoded-zero partition while preserving poll traffic to empty partitions.
+// Choosing a lower floor would weight polls more aggressively away from encoded-zero partitions
+// when another partition has encoded-greater-than-zero backlog. 2x feels like a good ratio.
+var readPartitionWeightFloor = number.DecodeCompact8(1)
 
 type (
 	// LoadBalancer is the interface for implementers of
@@ -95,7 +103,45 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		partitionCount = max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
 	}
 
-	return taskQueue.NormalPartition(rand.Intn(partitionCount))
+	return taskQueue.NormalPartition(pickWritePartitionByGap(
+		pc.BacklogCount,
+		partitionCount,
+		number.DecodeCompact8(pc.BacklogCap),
+	))
+}
+
+// pickWritePartitionByGap picks a partition with probability proportional to how far its backlog
+// is below backlogCap. Falls back to uniform random if any of these are true:
+//   - every partition is at or above the backlogCap
+//   - backlogCap is 0
+//   - when backlog data is not available for all write partitions
+func pickWritePartitionByGap(counts []number.Compact8, partitionCount int, backlogCap int64) int {
+	if backlogCap == 0 ||
+		len(counts) < partitionCount {
+		return rand.Intn(partitionCount)
+	}
+
+	var total int64
+	for i := range partitionCount {
+		if gap := backlogCap - number.DecodeCompact8(counts[i]); gap > 0 {
+			total += gap
+		}
+	}
+	if total <= 0 { // all partitions are at or above cap
+		return rand.Intn(partitionCount)
+	}
+	r := rand.Int63n(total)
+	for i := range partitionCount {
+		gap := backlogCap - number.DecodeCompact8(counts[i])
+		if gap <= 0 { // this partition is at or above cap
+			continue
+		}
+		if r < gap { // more likely to be true the bigger this partition's gap is
+			return i
+		}
+		r -= gap
+	}
+	return partitionCount - 1 // unreachable in practice; guard against compact8 rounding
 }
 
 // PickReadPartition picks a partition for poller to poll task from, and keeps load balanced between partitions.
@@ -109,21 +155,19 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	// For read path it's safer to return global default partition count instead of root partition, when we fail to
 	// map namespace ID to name.
 	var partitionCount = dynamicconfig.GlobalDefaultNumTaskQueuePartitions
+	namespaceName, namespaceErr := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
 
 	if pc.Read > 0 {
 		partitionCount = int(pc.Read)
-	} else {
-		namespaceName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
-		if err == nil {
-			partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
-		}
+	} else if namespaceErr == nil {
+		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
 	}
 
 	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceReadPartition, namespace.ID(taskQueue.NamespaceId())); ok {
 		return tqlb.forceReadPartition(partitionCount, n)
 	}
 
-	return tqlb.pickReadPartition(partitionCount)
+	return tqlb.pickReadPartition(partitionCount, pc.BacklogCount, pc.BacklogCap)
 }
 
 func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
@@ -150,19 +194,65 @@ func newTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
 	}
 }
 
-func (b *tqLoadBalancer) pickReadPartition(partitionCount int) *pollToken {
+func (b *tqLoadBalancer) pickReadPartition(
+	partitionCount int,
+	backlogCounts []number.Compact8,
+	backlogCap number.Compact8,
+) *pollToken {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
 	b.ensurePartitionCountLocked(partitionCount)
-	partitionID := b.pickReadPartitionWithFewestPolls(partitionCount)
 
-	b.pollerCounts[partitionID]++
+	var pickedPartitionID int
+	if backlogCap > 0 && hasCompleteAndPositiveBacklog(partitionCount, backlogCounts) {
+		pickedPartitionID = pickPartitionByWeight(partitionCount, backlogCounts)
+	} else {
+		pickedPartitionID = b.pickReadPartitionWithFewestPolls(partitionCount)
+	}
+
+	b.pollerCounts[pickedPartitionID]++
 
 	return &pollToken{
-		TQPartition: b.taskQueue.NormalPartition(partitionID),
+		TQPartition: b.taskQueue.NormalPartition(pickedPartitionID),
 		balancer:    b,
 	}
+}
+
+func hasCompleteAndPositiveBacklog(partitionCount int, backlogCounts []number.Compact8) bool {
+	if len(backlogCounts) < partitionCount {
+		return false
+	}
+	for partitionID := range partitionCount {
+		if backlogCounts[partitionID] > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// pickPartitionByWeight randomly selects a partition in proportion to its backlog weight.
+func pickPartitionByWeight(partitionCount int, backlogCounts []number.Compact8) int {
+	var totalWeight int64
+	for partitionID := range partitionCount {
+		totalWeight += readPartitionWeight(backlogCounts, partitionID)
+	}
+
+	r := rand.Int63n(totalWeight)
+	for partitionID := range partitionCount {
+		r -= readPartitionWeight(backlogCounts, partitionID)
+		if r < 0 {
+			return partitionID
+		}
+	}
+	return partitionCount - 1
+}
+
+func readPartitionWeight(backlogCounts []number.Compact8, partitionID int) int64 {
+	if partitionID >= len(backlogCounts) {
+		return readPartitionWeightFloor
+	}
+	return number.DecodeCompact8(backlogCounts[partitionID]) + readPartitionWeightFloor
 }
 
 func (b *tqLoadBalancer) forceReadPartition(partitionCount, partitionID int) *pollToken {
