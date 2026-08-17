@@ -154,6 +154,10 @@ func (h *frontendHandler) ListNexusOperationExecutions(
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
+	}
+
 	pageSize := req.GetPageSize()
 	maxPageSize := int32(h.config.VisibilityMaxPageSize(req.GetNamespace()))
 	if pageSize <= 0 || pageSize > maxPageSize {
@@ -202,10 +206,14 @@ func (h *frontendHandler) ListNexusOperationExecutions(
 		})
 	}
 
-	return &workflowservice.ListNexusOperationExecutionsResponse{
+	listResp := &workflowservice.ListNexusOperationExecutionsResponse{
 		Operations:    operations,
 		NextPageToken: resp.NextPageToken,
-	}, nil
+	}
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, listResp); err != nil {
+		return nil, err
+	}
+	return listResp, nil
 }
 
 func (h *frontendHandler) CountNexusOperationExecutions(

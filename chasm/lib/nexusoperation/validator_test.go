@@ -16,6 +16,7 @@ func newTestRegistry(config *Config) *validation.ValidatorRegistry {
 	_ = newPollNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	_ = newRequestCancelNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	_ = newTerminateNexusOperationExecutionValidator(config).RegisterValidator(registry)
+	_ = newListNexusOperationExecutionsValidator().RegisterValidator(registry)
 	return registry
 }
 
@@ -324,5 +325,21 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 func TestValidateTerminateNexusOperationExecutionResponse(t *testing.T) {
 	registry := newTestRegistry(testConfig())
 	resp := &workflowservice.TerminateNexusOperationExecutionResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidateListNexusOperationExecutionsRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	req := &workflowservice.ListNexusOperationExecutionsRequest{
+		Namespace: "ns",
+		PageSize:  10,
+		Query:     "WorkflowType='foo'",
+	}
+	require.NoError(t, validation.ValidateAndNormalize(registry, req))
+}
+
+func TestValidateListNexusOperationExecutionsResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.ListNexusOperationExecutionsResponse{}
 	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
 }

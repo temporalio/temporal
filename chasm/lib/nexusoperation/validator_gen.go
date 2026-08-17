@@ -307,3 +307,61 @@ func (v terminateNexusOperationExecutionValidator) RegisterValidator(registry *v
 	}
 	return v.Response.RegisterValidator(registry)
 }
+
+type listNexusOperationExecutionsRequestFieldValidators struct {
+	Namespace     validation.FieldValidator[workflowservice.ListNexusOperationExecutionsRequest, string]
+	PageSize      validation.FieldValidator[workflowservice.ListNexusOperationExecutionsRequest, int32]
+	NextPageToken validation.FieldValidator[workflowservice.ListNexusOperationExecutionsRequest, []byte]
+	Query         validation.FieldValidator[workflowservice.ListNexusOperationExecutionsRequest, string]
+}
+
+func (v listNexusOperationExecutionsRequestFieldValidators) ValidateAndNormalize(req *workflowservice.ListNexusOperationExecutionsRequest) error {
+	if err := v.Namespace(req, "namespace", req.GetNamespace()); err != nil {
+		return err
+	}
+	if err := v.PageSize(req, "page_size", req.GetPageSize()); err != nil {
+		return err
+	}
+	if err := v.NextPageToken(req, "next_page_token", req.GetNextPageToken()); err != nil {
+		return err
+	}
+	if err := v.Query(req, "query", req.GetQuery()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v listNexusOperationExecutionsRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.ListNexusOperationExecutionsRequest](registry, v)
+}
+
+type listNexusOperationExecutionsResponseFieldValidators struct {
+	Operations    validation.FieldValidator[workflowservice.ListNexusOperationExecutionsResponse, []*nexuspb.NexusOperationExecutionListInfo]
+	NextPageToken validation.FieldValidator[workflowservice.ListNexusOperationExecutionsResponse, []byte]
+}
+
+func (v listNexusOperationExecutionsResponseFieldValidators) ValidateAndNormalize(req *workflowservice.ListNexusOperationExecutionsResponse) error {
+	if err := v.Operations(req, "operations", req.GetOperations()); err != nil {
+		return err
+	}
+	if err := v.NextPageToken(req, "next_page_token", req.GetNextPageToken()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v listNexusOperationExecutionsResponseFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.ListNexusOperationExecutionsResponse](registry, v)
+}
+
+type listNexusOperationExecutionsValidator struct {
+	Request  listNexusOperationExecutionsRequestFieldValidators
+	Response listNexusOperationExecutionsResponseFieldValidators
+}
+
+func (v listNexusOperationExecutionsValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	if err := v.Request.RegisterValidator(registry); err != nil {
+		return err
+	}
+	return v.Response.RegisterValidator(registry)
+}
