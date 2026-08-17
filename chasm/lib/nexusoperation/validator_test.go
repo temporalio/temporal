@@ -18,6 +18,7 @@ func newTestRegistry(config *Config) *validation.ValidatorRegistry {
 	_ = newTerminateNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	_ = newListNexusOperationExecutionsValidator().RegisterValidator(registry)
 	_ = newCountNexusOperationExecutionsValidator().RegisterValidator(registry)
+	_ = newStartNexusOperationExecutionValidator(config).RegisterValidator(registry)
 	return registry
 }
 
@@ -357,5 +358,88 @@ func TestValidateCountNexusOperationExecutionsRequest(t *testing.T) {
 func TestValidateCountNexusOperationExecutionsResponse(t *testing.T) {
 	registry := newTestRegistry(testConfig())
 	resp := &workflowservice.CountNexusOperationExecutionsResponse{Count: 42}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+
+	for _, tc := range []struct {
+		name    string
+		req     *workflowservice.StartNexusOperationExecutionRequest
+		wantErr string
+	}{
+		{
+			name: "valid",
+			req: &workflowservice.StartNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				Endpoint:    "my-endpoint",
+				Service:     "my-service",
+				Operation:   "my-operation",
+				OperationId: "my-op-id",
+				RequestId:   "a7d6f9c2-1234-5678-abcd-ef0123456789",
+			},
+		},
+		{
+			name: "valid without optional fields",
+			req: &workflowservice.StartNexusOperationExecutionRequest{
+				Namespace: "ns",
+				Endpoint:  "my-endpoint",
+				Service:   "my-service",
+				Operation: "my-operation",
+			},
+		},
+		{
+			name:    "missing endpoint",
+			req:     &workflowservice.StartNexusOperationExecutionRequest{Namespace: "ns", Service: "svc", Operation: "op"},
+			wantErr: "endpoint is required",
+		},
+		{
+			name:    "missing service",
+			req:     &workflowservice.StartNexusOperationExecutionRequest{Namespace: "ns", Endpoint: "ep", Operation: "op"},
+			wantErr: "service is required",
+		},
+		{
+			name:    "missing operation",
+			req:     &workflowservice.StartNexusOperationExecutionRequest{Namespace: "ns", Endpoint: "ep", Service: "svc"},
+			wantErr: "operation is required",
+		},
+		{
+			name: "operation_id too long",
+			req: &workflowservice.StartNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				Endpoint:    "ep",
+				Service:     "svc",
+				Operation:   "op",
+				OperationId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			},
+			wantErr: "operation_id exceeds length limit",
+		},
+		{
+			name: "invalid request_id",
+			req: &workflowservice.StartNexusOperationExecutionRequest{
+				Namespace: "ns",
+				Endpoint:  "ep",
+				Service:   "svc",
+				Operation: "op",
+				RequestId: "not-a-uuid",
+			},
+			wantErr: "request_id is not a valid UUID",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validation.ValidateAndNormalize(registry, tc.req)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateStartNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.StartNexusOperationExecutionResponse{RunId: "a7d6f9c2-1234-5678-abcd-ef0123456789", Started: true}
 	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
 }

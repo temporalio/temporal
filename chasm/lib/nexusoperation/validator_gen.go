@@ -6,8 +6,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/validation"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 )
 
 type deleteNexusOperationExecutionRequestFieldValidators struct {
@@ -410,6 +412,112 @@ type countNexusOperationExecutionsValidator struct {
 }
 
 func (v countNexusOperationExecutionsValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	if err := v.Request.RegisterValidator(registry); err != nil {
+		return err
+	}
+	return v.Response.RegisterValidator(registry)
+}
+
+type startNexusOperationExecutionRequestFieldValidators struct {
+	Namespace              validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, string]
+	Identity               validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, string]
+	RequestId              validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, string]
+	OperationId            validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, string]
+	Endpoint               validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, string]
+	Service                validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, string]
+	Operation              validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, string]
+	ScheduleToCloseTimeout validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, *durationpb.Duration]
+	ScheduleToStartTimeout validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, *durationpb.Duration]
+	StartToCloseTimeout    validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, *durationpb.Duration]
+	Input                  validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, *commonpb.Payload]
+	IdReusePolicy          validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, enumspb.NexusOperationIdReusePolicy]
+	IdConflictPolicy       validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, enumspb.NexusOperationIdConflictPolicy]
+	SearchAttributes       validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, *commonpb.SearchAttributes]
+	NexusHeader            validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, map[string]string]
+	UserMetadata           validation.FieldValidator[workflowservice.StartNexusOperationExecutionRequest, *sdkpb.UserMetadata]
+}
+
+func (v startNexusOperationExecutionRequestFieldValidators) ValidateAndNormalize(req *workflowservice.StartNexusOperationExecutionRequest) error {
+	if err := v.Namespace(req, "namespace", req.GetNamespace()); err != nil {
+		return err
+	}
+	if err := v.Identity(req, "identity", req.GetIdentity()); err != nil {
+		return err
+	}
+	if err := v.RequestId(req, "request_id", req.GetRequestId()); err != nil {
+		return err
+	}
+	if err := v.OperationId(req, "operation_id", req.GetOperationId()); err != nil {
+		return err
+	}
+	if err := v.Endpoint(req, "endpoint", req.GetEndpoint()); err != nil {
+		return err
+	}
+	if err := v.Service(req, "service", req.GetService()); err != nil {
+		return err
+	}
+	if err := v.Operation(req, "operation", req.GetOperation()); err != nil {
+		return err
+	}
+	if err := v.ScheduleToCloseTimeout(req, "schedule_to_close_timeout", req.GetScheduleToCloseTimeout()); err != nil {
+		return err
+	}
+	if err := v.ScheduleToStartTimeout(req, "schedule_to_start_timeout", req.GetScheduleToStartTimeout()); err != nil {
+		return err
+	}
+	if err := v.StartToCloseTimeout(req, "start_to_close_timeout", req.GetStartToCloseTimeout()); err != nil {
+		return err
+	}
+	if err := v.Input(req, "input", req.GetInput()); err != nil {
+		return err
+	}
+	if err := v.IdReusePolicy(req, "id_reuse_policy", req.GetIdReusePolicy()); err != nil {
+		return err
+	}
+	if err := v.IdConflictPolicy(req, "id_conflict_policy", req.GetIdConflictPolicy()); err != nil {
+		return err
+	}
+	if err := v.SearchAttributes(req, "search_attributes", req.GetSearchAttributes()); err != nil {
+		return err
+	}
+	if err := v.NexusHeader(req, "nexus_header", req.GetNexusHeader()); err != nil {
+		return err
+	}
+	if err := v.UserMetadata(req, "user_metadata", req.GetUserMetadata()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v startNexusOperationExecutionRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.StartNexusOperationExecutionRequest](registry, v)
+}
+
+type startNexusOperationExecutionResponseFieldValidators struct {
+	RunId   validation.FieldValidator[workflowservice.StartNexusOperationExecutionResponse, string]
+	Started validation.FieldValidator[workflowservice.StartNexusOperationExecutionResponse, bool]
+}
+
+func (v startNexusOperationExecutionResponseFieldValidators) ValidateAndNormalize(req *workflowservice.StartNexusOperationExecutionResponse) error {
+	if err := v.RunId(req, "run_id", req.GetRunId()); err != nil {
+		return err
+	}
+	if err := v.Started(req, "started", req.GetStarted()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v startNexusOperationExecutionResponseFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservice.StartNexusOperationExecutionResponse](registry, v)
+}
+
+type startNexusOperationExecutionValidator struct {
+	Request  startNexusOperationExecutionRequestFieldValidators
+	Response startNexusOperationExecutionResponseFieldValidators
+}
+
+func (v startNexusOperationExecutionValidator) RegisterValidator(registry *validation.ValidatorRegistry) error {
 	if err := v.Request.RegisterValidator(registry); err != nil {
 		return err
 	}

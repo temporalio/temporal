@@ -69,18 +69,29 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		return nil, err
 	}
 
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
+	}
+
 	// Verify the endpoint exists before creating the operation.
 	endpointEntry, err := h.endpointRegistry.GetByName(ctx, namespaceID, req.GetEndpoint())
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := h.client.StartNexusOperation(ctx, &nexusoperationpb.StartNexusOperationRequest{
+	result, err := h.client.StartNexusOperation(ctx, &nexusoperationpb.StartNexusOperationRequest{
 		EndpointId:      endpointEntry.GetId(),
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	return resp.GetFrontendResponse(), err
+	if err != nil {
+		return nil, err
+	}
+	resp := result.GetFrontendResponse()
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (h *frontendHandler) DescribeNexusOperationExecution(

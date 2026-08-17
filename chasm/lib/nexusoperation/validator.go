@@ -7,9 +7,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/validation"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var ValidatorModule = validation.Module(
@@ -21,6 +23,7 @@ var ValidatorModule = validation.Module(
 	newTerminateNexusOperationExecutionValidator,
 	newListNexusOperationExecutionsValidator,
 	newCountNexusOperationExecutionsValidator,
+	newStartNexusOperationExecutionValidator,
 )
 
 func newDeleteNexusOperationExecutionValidator(config *Config) deleteNexusOperationExecutionValidator {
@@ -52,6 +55,35 @@ func newDescribeNexusOperationExecutionValidator(config *Config) describeNexusOp
 			Info:          validation.NoOp[resp, *nexuspb.NexusOperationExecutionInfo](),
 			Input:         validation.NoOp[resp, *commonpb.Payload](),
 			LongPollToken: validation.NoOp[resp, []byte](),
+		},
+	}
+}
+
+func newStartNexusOperationExecutionValidator(config *Config) startNexusOperationExecutionValidator {
+	type req = workflowservice.StartNexusOperationExecutionRequest
+	type resp = workflowservice.StartNexusOperationExecutionResponse
+	return startNexusOperationExecutionValidator{
+		Request: startNexusOperationExecutionRequestFieldValidators{
+			Namespace:              validation.NoOp[req, string](),
+			Identity:               validation.NoOp[req, string](),
+			RequestId:              validation.Field[req](validateOptionalRunID),
+			OperationId:            validation.Field[req](validateIDLength0(config.MaxIDLengthLimit())),
+			Endpoint:               validation.Field[req](requiredString),
+			Service:                validation.Field[req](requiredString),
+			Operation:              validation.Field[req](requiredString),
+			ScheduleToCloseTimeout: validation.NoOp[req, *durationpb.Duration](),
+			ScheduleToStartTimeout: validation.NoOp[req, *durationpb.Duration](),
+			StartToCloseTimeout:    validation.NoOp[req, *durationpb.Duration](),
+			Input:                  validation.NoOp[req, *commonpb.Payload](),
+			IdReusePolicy:          validation.NoOp[req, enumspb.NexusOperationIdReusePolicy](),
+			IdConflictPolicy:       validation.NoOp[req, enumspb.NexusOperationIdConflictPolicy](),
+			SearchAttributes:       validation.NoOp[req, *commonpb.SearchAttributes](),
+			NexusHeader:            validation.NoOp[req, map[string]string](),
+			UserMetadata:           validation.NoOp[req, *sdkpb.UserMetadata](),
+		},
+		Response: startNexusOperationExecutionResponseFieldValidators{
+			RunId:   validation.NoOp[resp, string](),
+			Started: validation.NoOp[resp, bool](),
 		},
 	}
 }
@@ -133,6 +165,23 @@ func newPollNexusOperationExecutionValidator(config *Config) pollNexusOperationE
 			WaitStage:      validation.NoOp[resp, enumspb.NexusOperationWaitStage](),
 			OperationToken: validation.NoOp[resp, string](),
 		},
+	}
+}
+
+func requiredString(fieldName, value string) error {
+	if value == "" {
+		return serviceerror.NewInvalidArgumentf("%s is required", fieldName)
+	}
+	return nil
+}
+
+// validateIDLength0 validates an optional ID: empty is allowed but if provided it must be within the length limit.
+func validateIDLength0(limit int) func(string, string) error {
+	return func(fieldName, value string) error {
+		if value == "" {
+			return nil
+		}
+		return validateIDLength(fieldName, value, limit)
 	}
 }
 
