@@ -433,3 +433,139 @@ func createHeartbeatTimeoutFailure() *failurepb.Failure {
 		},
 	}
 }
+
+// Transition bodies. Each is invoked from a chasm.Transition in statemachine.go, which
+// has already validated that the activity is in a legal source state.
+
+// applyScheduled is the body of TransitionScheduled: it opens the first attempt and
+// emits the dispatch, ScheduleToStart and ScheduleToClose tasks.
+func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
+	attempt := a.LastAttempt.Get(ctx)
+
+	attempt.Count++
+	attempt.Stamp++
+
+	// Start delay defers the dispatch and extends ScheduleToClose and ScheduleToStart timeouts. StartToClose and
+	// Heartbeat timeouts are unaffected as they only start when a worker picks up the task.
+	dispatchTime := a.firstDispatchTime()
+	attempt.DispatchTime = timestamppb.New(dispatchTime)
+
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{
+				ScheduledTime: dispatchTime.Add(timeout),
+			},
+			&activitypb.ScheduleToStartTimeoutTask{
+				Stamp: attempt.GetStamp(),
+			})
+	}
+
+	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		a.ScheduleToCloseStamp++
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{
+				ScheduledTime: deadline,
+			},
+			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()})
+	}
+
+	dispatchAttrs := chasm.TaskAttributes{}
+	if dispatchTime.After(a.ScheduleTime.AsTime()) {
+		dispatchAttrs.ScheduledTime = dispatchTime
+	}
+	ctx.AddTask(
+		a,
+		dispatchAttrs,
+		a.newActivityDispatchTask(ctx))
+
+	return nil
+}
+
+// applyRescheduled is the body of TransitionRescheduled: it records the failed attempt
+// and re-emits the dispatch and ScheduleToStart tasks at the retry time.
+func (a *Activity) applyRescheduled(ctx chasm.MutableContext, event rescheduleEvent) error {
+	if err := a.applyFailedAttempt(ctx, event); err != nil {
+		return err
+	}
+
+	attempt := a.LastAttempt.Get(ctx)
+	retryScheduledTime := dispatchTimeForRetry(attempt).AsTime()
+	attempt.DispatchTime = timestamppb.New(retryScheduledTime)
+
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{
+				ScheduledTime: retryScheduledTime.Add(timeout),
+			},
+			&activitypb.ScheduleToStartTimeoutTask{
+				Stamp: attempt.GetStamp(),
+			})
+	}
+
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{
+			ScheduledTime: retryScheduledTime,
+		},
+		a.newActivityDispatchTask(ctx))
+
+	return nil
+}
+
+// applyTimedOut is the body of TransitionTimedOut: it records the timeout failure for the
+// relevant timeout type and closes the activity.
+func (a *Activity) applyTimedOut(ctx chasm.MutableContext, event timeoutEvent) error {
+	timeoutType := event.timeoutType
+
+	return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+		a.Outcome.Get(ctx).RetryState = event.retryState
+		priorAttemptFailure := a.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure()
+		var err error
+		switch timeoutType {
+		case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+			err = a.recordScheduleToStartOrCloseTimeoutFailure(
+				ctx,
+				timeoutType,
+				fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
+				priorAttemptFailure,
+			)
+		case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
+			failure := createStartToCloseTimeoutFailure()
+			failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
+			failure.Cause = priorAttemptFailure
+			err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
+		case enumspb.TIMEOUT_TYPE_HEARTBEAT:
+			failure := createHeartbeatTimeoutFailure()
+			failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
+			failure.Cause = priorAttemptFailure
+			err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
+		default:
+			err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
+		}
+		if err != nil {
+			return err
+		}
+
+		retryPreventedByScheduleToClose := event.retryState == enumspb.RETRY_STATE_TIMEOUT &&
+			(timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+				timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT)
+		if retryPreventedByScheduleToClose {
+			if err := a.recordScheduleToStartOrCloseTimeoutFailure(
+				ctx,
+				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				common.FailureReasonActivityRetryScheduleToCloseTimeout,
+				priorAttemptFailure,
+			); err != nil {
+				return err
+			}
+		}
+
+		a.emitOnTimedOutMetrics(event.metricsHandler, timeoutType)
+
+		return nil
+	})
+}
