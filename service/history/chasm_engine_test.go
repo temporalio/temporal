@@ -143,7 +143,7 @@ func (s *chasmEngineSuite) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
-func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
+func (s *chasmEngineSuite) TestStartExecution_BrandNew() {
 	tv := testvars.New(s.T())
 
 	ref := chasm.NewComponentRef[*testComponent](
@@ -188,6 +188,41 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 	s.True(result.Created)
 }
 
+func (s *chasmEngineSuite) TestStartExecution_WaitsForShardEngine() {
+	tv := testvars.New(s.T())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       "",
+		},
+	)
+
+	// Use a mock shard context here which is easier to assert that GetEngine method is called.
+	mockShardContext := historyi.NewMockShardContext(s.controller)
+	mockShardController := shard.NewMockController(s.controller)
+	s.engine.SetShardController(mockShardController)
+
+	expectedErr := serviceerror.NewUnavailable("shard not ready")
+	mockShardController.EXPECT().GetShardByID(gomock.Any()).Return(mockShardContext, nil).Times(1)
+	mockShardContext.EXPECT().GetEngine(gomock.Any()).Return(nil, expectedErr).Times(1)
+
+	startFnCalled := false
+	result, err := s.engine.StartExecution(
+		context.Background(),
+		ref,
+		func(chasm.MutableContext) (chasm.RootComponent, error) {
+			startFnCalled = true
+			return &testComponent{}, nil
+		},
+	)
+
+	s.ErrorIs(err, expectedErr)
+	s.False(startFnCalled)
+	s.False(result.Created)
+}
+
 func (s *chasmEngineSuite) TestStartExecution_SetsContextMetadata() {
 	tv := testvars.New(s.T())
 
@@ -217,7 +252,7 @@ func (s *chasmEngineSuite) TestStartExecution_SetsContextMetadata() {
 	s.assertTestContextMetadata(requestCtx, newActivityID, "start-request")
 }
 
-func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
+func (s *chasmEngineSuite) TestStartExecution_RequestIDDedup() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -257,7 +292,7 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 	s.False(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
+func (s *chasmEngineSuite) TestStartExecution_ReusePolicy_AllowDuplicate() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -333,7 +368,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 	s.True(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
+func (s *chasmEngineSuite) TestStartExecution_ReusePolicy_FailedOnly_Success() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -409,7 +444,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 	s.True(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
+func (s *chasmEngineSuite) TestStartExecution_ReusePolicy_FailedOnly_Fail() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -444,7 +479,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 	s.False(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
+func (s *chasmEngineSuite) TestStartExecution_ReusePolicy_RejectDuplicate() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -479,7 +514,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 	s.False(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
+func (s *chasmEngineSuite) TestStartExecution_ConflictPolicy_UseExisting() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -524,7 +559,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 	s.False(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
+func (s *chasmEngineSuite) TestStartExecution_ConflictPolicy_TerminateExisting() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
