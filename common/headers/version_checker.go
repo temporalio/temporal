@@ -23,7 +23,7 @@ const (
 
 	// ServerVersion value can be changed by the create-tag Github workflow.
 	// If you change the var name or move it, be sure to update the workflow.
-	ServerVersion = "1.32.0"
+	ServerVersion = "1.32.0-162.0-rc.20260817113125"
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
