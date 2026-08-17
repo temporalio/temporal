@@ -321,32 +321,41 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		// io.ReadFull can consume the declared length without performing the read that returns EOF.
 		t.Run("AnnotatesFixedLengthPayloadsWithoutEOF", func(t *testing.T) {
+			const (
+				requestPayload  = "request body"
+				responsePayload = "response body"
+			)
+
 			traceEnv := newHTTPTraceEnv(t)
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
-				requestPayload := make([]byte, r.ContentLength)
-				_, err := io.ReadFull(r.Body, requestPayload)
+				requestBody := make([]byte, r.ContentLength)
+				requestReadBytes, err := io.ReadFull(r.Body, requestBody)
 				require.NoError(t, err)
+				require.Equal(t, len(requestPayload), requestReadBytes)
+				require.Equal(t, requestPayload, string(requestBody))
 				return &http.Response{
 					StatusCode:    http.StatusOK,
-					Body:          io.NopCloser(bytes.NewBufferString("response body")),
-					ContentLength: int64(len("response body")),
+					Body:          io.NopCloser(bytes.NewBufferString(responsePayload)),
+					ContentLength: int64(len(responsePayload)),
 					Header:        http.Header{},
 					Request:       r,
 				}, nil
 			})
 
 			wrapped := traceEnv.newClientTransport(rt)
-			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
+			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString(requestPayload))
 			resp, err := wrapped.RoundTrip(req)
 			require.NoError(t, err)
-			responsePayload := make([]byte, resp.ContentLength)
-			_, err = io.ReadFull(resp.Body, responsePayload)
+			responseBody := make([]byte, resp.ContentLength)
+			responseReadBytes, err := io.ReadFull(resp.Body, responseBody)
 			require.NoError(t, err)
+			require.Equal(t, len(responsePayload), responseReadBytes)
+			require.Equal(t, responsePayload, string(responseBody))
 			require.NoError(t, resp.Body.Close())
 
 			attrs := traceEnv.spanAttrs()
-			require.Equal(t, "request body", attrs["http.request.payload"])
-			require.Equal(t, "response body", attrs["http.response.payload"])
+			require.Equal(t, requestPayload, attrs["http.request.payload"])
+			require.Equal(t, responsePayload, attrs["http.response.payload"])
 		})
 
 		// Wrapping the request body must not mask errors returned by the original body.
@@ -507,21 +516,26 @@ func TestNewHTTPHandler(t *testing.T) {
 
 		// Handlers may consume the expected bytes from an unknown-length body without reading EOF.
 		t.Run("AnnotatesChunkedRequestPayloadWithoutEOF", func(t *testing.T) {
+			const requestPayload = "request body"
+
 			traceEnv := newHTTPTraceEnv(t)
+			handlerPayload := make([]byte, len(requestPayload))
+			var handlerReadBytes int
 			var handlerErr error
 			handler := traceEnv.newHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				payload := make([]byte, len("request body"))
-				_, handlerErr = io.ReadFull(r.Body, payload)
+				handlerReadBytes, handlerErr = io.ReadFull(r.Body, handlerPayload)
 			}))
 
-			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
+			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString(requestPayload))
 			req.ContentLength = -1
 			req.TransferEncoding = []string{"chunked"}
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 			require.NoError(t, handlerErr)
+			require.Equal(t, len(requestPayload), handlerReadBytes)
+			require.Equal(t, requestPayload, string(handlerPayload))
 
 			attrs := traceEnv.spanAttrs()
-			require.Equal(t, "request body", attrs["http.request.payload"])
+			require.Equal(t, requestPayload, attrs["http.request.payload"])
 		})
 
 		// io.Copy can use ReaderFrom and bypass the Write hook that tracks standard response size.
