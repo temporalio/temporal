@@ -78,6 +78,49 @@ func (r *failingReadCloser) Read(p []byte) (int, error) {
 
 func (r *failingReadCloser) Close() error { return nil }
 
+type httpTraceEnv struct {
+	t              *testing.T
+	recorder       *tracetest.SpanRecorder
+	tracerProvider *trace.TracerProvider
+}
+
+func newHTTPTraceEnv(t *testing.T, options ...trace.TracerProviderOption) *httpTraceEnv {
+	t.Helper()
+	recorder := tracetest.NewSpanRecorder()
+	options = append(options, trace.WithSpanProcessor(recorder))
+	return &httpTraceEnv{
+		t:              t,
+		recorder:       recorder,
+		tracerProvider: trace.NewTracerProvider(options...),
+	}
+}
+
+func (env *httpTraceEnv) newClientTransport(rt http.RoundTripper) http.RoundTripper {
+	return NewHTTPClientTransport(rt, env.tracerProvider, nil)
+}
+
+func (env *httpTraceEnv) newHandler(handler http.Handler) http.Handler {
+	return NewHTTPHandler(handler, "test-handler", env.tracerProvider, nil)
+}
+
+func (env *httpTraceEnv) requireSpans(count int) []trace.ReadOnlySpan {
+	env.t.Helper()
+	spans := env.recorder.Ended()
+	require.Len(env.t, spans, count)
+	return spans
+}
+
+func (env *httpTraceEnv) spanAttrs() map[string]any {
+	env.t.Helper()
+	spans := env.requireSpans(1)
+	attrs := spans[0].Attributes()
+	attrsByKey := make(map[string]any, len(attrs))
+	for _, attr := range attrs {
+		attrsByKey[string(attr.Key)] = attr.Value.AsInterface()
+	}
+	return attrsByKey
+}
+
 var errTestBodyRead = errors.New("body read failed")
 
 // Verifies client transport construction, propagation, and debug body handling.
@@ -94,8 +137,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 	t.Run("SkipsHeadersAndPayloadsByDefault", func(t *testing.T) {
 		t.Parallel()
 
-		recorder := tracetest.NewSpanRecorder()
-		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+		traceEnv := newHTTPTraceEnv(t)
 
 		var traceparent string
 		rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -113,7 +155,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			}, nil
 		})
 
-		wrapped := NewHTTPClientTransport(rt, tp, nil)
+		wrapped := traceEnv.newClientTransport(rt)
 		req := httptest.NewRequest(http.MethodPost, "http://example.com", strings.NewReader("request body"))
 		req.Header.Set("Request-Header", "request-value")
 		resp, err := wrapped.RoundTrip(req)
@@ -125,8 +167,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		require.Equal(t, "response body", string(body))
 
 		require.NotEmpty(t, traceparent)
-		require.Len(t, recorder.Ended(), 1)
-		attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+		attrs := traceEnv.spanAttrs()
 		require.NotContains(t, attrs, "http.request.payload")
 		require.NotContains(t, attrs, "http.response.payload")
 		require.NotContains(t, attrs, "http.request.headers.request-header")
@@ -166,11 +207,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		// Debug spans must contain the headers and payloads needed to diagnose an exchange.
 		t.Run("AnnotatesHeadersAndPayloads", func(t *testing.T) {
-			recorder := tracetest.NewSpanRecorder()
-			tp := trace.NewTracerProvider(
-				trace.WithSpanProcessor(recorder),
-				trace.WithIDGenerator(fixedIDGenerator{}),
-			)
+			traceEnv := newHTTPTraceEnv(t, trace.WithIDGenerator(fixedIDGenerator{}))
 
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				payload, err := io.ReadAll(r.Body)
@@ -186,7 +223,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := NewHTTPClientTransport(rt, tp, nil)
+			wrapped := traceEnv.newClientTransport(rt)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
 			req.Header.Set("Request-Header", "request-value")
 
@@ -208,12 +245,12 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				"network.protocol.version":              "1.1",
 				"server.address":                        "example.com",
 				"url.full":                              "http://example.com",
-			}, spanAttrsByKey(recorder.Ended()[0].Attributes()))
+			}, traceEnv.spanAttrs())
 		})
 
 		// Protocol upgrades require response bodies to retain bidirectional I/O.
 		t.Run("PreservesReadWriteCloserResponseBodies", func(t *testing.T) {
-			tp := trace.NewTracerProvider()
+			traceEnv := newHTTPTraceEnv(t)
 			body := &readWriteCloser{Reader: bytes.NewBufferString("server message")}
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -224,7 +261,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := NewHTTPClientTransport(rt, tp, nil)
+			wrapped := traceEnv.newClientTransport(rt)
 			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			responseBody, ok := resp.Body.(io.ReadWriteCloser)
@@ -237,8 +274,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		// Decoders may stop after a complete value without reading a chunked body to EOF.
 		t.Run("AnnotatesChunkedResponsePayloadOnClose", func(t *testing.T) {
-			recorder := tracetest.NewSpanRecorder()
-			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+			traceEnv := newHTTPTraceEnv(t)
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode:    http.StatusOK,
@@ -249,20 +285,20 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := NewHTTPClientTransport(rt, tp, nil)
+			wrapped := traceEnv.newClientTransport(rt)
 			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			var decoded map[string]bool
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&decoded))
 			require.NoError(t, resp.Body.Close())
 
-			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+			attrs := traceEnv.spanAttrs()
 			require.Equal(t, `{"ok":true}`, attrs["http.response.payload"])
 		})
 
 		// Instrumentation must not consume a streaming response before application code reads it.
 		t.Run("DoesNotReadResponseBodyBeforeCaller", func(t *testing.T) {
-			tp := trace.NewTracerProvider()
+			traceEnv := newHTTPTraceEnv(t)
 			body := &readTrackingCloser{Reader: bytes.NewBufferString("response body")}
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -273,7 +309,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := NewHTTPClientTransport(rt, tp, nil)
+			wrapped := traceEnv.newClientTransport(rt)
 			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			require.False(t, body.read)
@@ -285,8 +321,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		// io.ReadFull can consume the declared length without performing the read that returns EOF.
 		t.Run("AnnotatesFixedLengthPayloadsWithoutEOF", func(t *testing.T) {
-			recorder := tracetest.NewSpanRecorder()
-			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+			traceEnv := newHTTPTraceEnv(t)
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				requestPayload := make([]byte, r.ContentLength)
 				_, err := io.ReadFull(r.Body, requestPayload)
@@ -300,7 +335,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := NewHTTPClientTransport(rt, tp, nil)
+			wrapped := traceEnv.newClientTransport(rt)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
 			resp, err := wrapped.RoundTrip(req)
 			require.NoError(t, err)
@@ -309,20 +344,20 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
 
-			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+			attrs := traceEnv.spanAttrs()
 			require.Equal(t, "request body", attrs["http.request.payload"])
 			require.Equal(t, "response body", attrs["http.response.payload"])
 		})
 
 		// Wrapping the request body must not mask errors returned by the original body.
 		t.Run("PreservesRequestBodyReadErrors", func(t *testing.T) {
-			tp := trace.NewTracerProvider()
+			traceEnv := newHTTPTraceEnv(t)
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				_, err := io.ReadAll(r.Body)
 				return nil, err
 			})
 
-			wrapped := NewHTTPClientTransport(rt, tp, nil)
+			wrapped := traceEnv.newClientTransport(rt)
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", nil)
 			req.Body = &failingReadCloser{payload: []byte("partial request")}
 			_, err := wrapped.RoundTrip(req)
@@ -331,7 +366,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 
 		// Wrapping the response body must not mask errors returned by the original body.
 		t.Run("PreservesResponseBodyReadErrors", func(t *testing.T) {
-			tp := trace.NewTracerProvider()
+			traceEnv := newHTTPTraceEnv(t)
 			rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusOK,
@@ -341,7 +376,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 				}, nil
 			})
 
-			wrapped := NewHTTPClientTransport(rt, tp, nil)
+			wrapped := traceEnv.newClientTransport(rt)
 			resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, err)
 			_, err = io.ReadAll(resp.Body)
@@ -357,17 +392,16 @@ func TestNewHTTPHandler(t *testing.T) {
 	t.Run("SkipsHeadersAndPayloadsByDefault", func(t *testing.T) {
 		t.Parallel()
 
-		recorder := tracetest.NewSpanRecorder()
-		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+		traceEnv := newHTTPTraceEnv(t)
 		var handlerErr error
-		handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := traceEnv.newHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, handlerErr = io.ReadAll(r.Body)
 			if handlerErr != nil {
 				return
 			}
 			w.Header().Set("Response-Header", "response-value")
 			_, handlerErr = w.Write([]byte("response body"))
-		}), "test-handler", tp, nil)
+		}))
 
 		req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
 		req.Header.Set("Request-Header", "request-value")
@@ -376,7 +410,7 @@ func TestNewHTTPHandler(t *testing.T) {
 		require.NoError(t, handlerErr)
 		require.Equal(t, "response body", rec.Body.String())
 
-		attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+		attrs := traceEnv.spanAttrs()
 		require.NotContains(t, attrs, "http.request.payload")
 		require.NotContains(t, attrs, "http.response.payload")
 		require.NotContains(t, attrs, "http.request.headers.request-header")
@@ -410,9 +444,8 @@ func TestNewHTTPHandler(t *testing.T) {
 
 		// Debug spans must contain the headers and payloads needed to diagnose an exchange.
 		t.Run("AnnotatesHeadersAndPayloads", func(t *testing.T) {
-			recorder := tracetest.NewSpanRecorder()
-			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
-			handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			traceEnv := newHTTPTraceEnv(t)
+			handler := traceEnv.newHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				payload, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Errorf("ReadAll() error = %v", err)
@@ -425,7 +458,7 @@ func TestNewHTTPHandler(t *testing.T) {
 				if err != nil {
 					t.Errorf("Write() error = %v", err)
 				}
-			}), "test-handler", tp, nil)
+			}))
 
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
 			req.Header.Set("Request-Header", "request-value")
@@ -448,20 +481,20 @@ func TestNewHTTPHandler(t *testing.T) {
 				"network.protocol.version":              "1.1",
 				"server.address":                        "example.com",
 				"url.scheme":                            "http",
-			}, spanAttrsByKey(recorder.Ended()[0].Attributes()))
+			}, traceEnv.spanAttrs())
 		})
 
 		// Instrumentation must leave request consumption under the application handler's control.
 		t.Run("DoesNotReadRequestBodyBeforeHandler", func(t *testing.T) {
-			tp := trace.NewTracerProvider()
+			traceEnv := newHTTPTraceEnv(t)
 			body := &readTrackingCloser{Reader: bytes.NewBufferString("request body")}
 			var readBeforeHandler bool
 			var handlerErr error
 			var handlerPayload []byte
-			handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := traceEnv.newHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				readBeforeHandler = body.read
 				handlerPayload, handlerErr = io.ReadAll(r.Body)
-			}), "test-handler", tp, nil)
+			}))
 
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", nil)
 			req.Body = body
@@ -474,13 +507,12 @@ func TestNewHTTPHandler(t *testing.T) {
 
 		// Handlers may consume the expected bytes from an unknown-length body without reading EOF.
 		t.Run("AnnotatesChunkedRequestPayloadWithoutEOF", func(t *testing.T) {
-			recorder := tracetest.NewSpanRecorder()
-			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+			traceEnv := newHTTPTraceEnv(t)
 			var handlerErr error
-			handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := traceEnv.newHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				payload := make([]byte, len("request body"))
 				_, handlerErr = io.ReadFull(r.Body, payload)
-			}), "test-handler", tp, nil)
+			}))
 
 			req := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString("request body"))
 			req.ContentLength = -1
@@ -488,25 +520,24 @@ func TestNewHTTPHandler(t *testing.T) {
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 			require.NoError(t, handlerErr)
 
-			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+			attrs := traceEnv.spanAttrs()
 			require.Equal(t, "request body", attrs["http.request.payload"])
 		})
 
 		// io.Copy can use ReaderFrom and bypass the Write hook that tracks standard response size.
 		t.Run("AnnotatesResponseSizeWhenUsingReadFrom", func(t *testing.T) {
-			recorder := tracetest.NewSpanRecorder()
-			tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+			traceEnv := newHTTPTraceEnv(t)
 			var handlerErr error
-			handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := traceEnv.newHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_, handlerErr = io.Copy(w, io.LimitReader(bytes.NewBufferString("response body"), int64(len("response body"))))
-			}), "test-handler", tp, nil)
+			}))
 
 			rec := &readerFromResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
 			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com", nil))
 			require.NoError(t, handlerErr)
 			require.Equal(t, "response body", rec.Body.String())
 
-			attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+			attrs := traceEnv.spanAttrs()
 			require.Equal(t, int64(len("response body")), attrs["http.response.body.size"])
 		})
 	})
@@ -519,16 +550,15 @@ func TestHTTP2Instrumentation(t *testing.T) {
 		err     error
 	}
 
-	recorder := tracetest.NewSpanRecorder()
-	tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+	traceEnv := newHTTPTraceEnv(t)
 	resultCh := make(chan handlerResult, 1)
-	handler := NewHTTPHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := traceEnv.newHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		if err == nil {
 			_, err = w.Write([]byte("response body"))
 		}
 		resultCh <- handlerResult{payload: string(payload), err: err}
-	}), "test-handler", tp, nil)
+	}))
 
 	server := httptest.NewUnstartedServer(handler)
 	server.EnableHTTP2 = true
@@ -536,7 +566,7 @@ func TestHTTP2Instrumentation(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	client := server.Client()
-	client.Transport = NewHTTPClientTransport(client.Transport, tp, nil)
+	client.Transport = traceEnv.newClientTransport(client.Transport)
 	req, err := http.NewRequest(http.MethodPost, server.URL, bytes.NewBufferString("request body"))
 	require.NoError(t, err)
 	resp, err := client.Do(req)
@@ -553,7 +583,7 @@ func TestHTTP2Instrumentation(t *testing.T) {
 	require.Equal(t, 2, resp.ProtoMajor)
 
 	var clientSpan, serverSpan trace.ReadOnlySpan
-	for _, span := range recorder.Ended() {
+	for _, span := range traceEnv.requireSpans(2) {
 		switch span.SpanKind() {
 		case oteltrace.SpanKindClient:
 			clientSpan = span
@@ -568,14 +598,5 @@ func TestHTTP2Instrumentation(t *testing.T) {
 	require.Equal(t, clientSpan.SpanContext().TraceID(), serverSpan.SpanContext().TraceID())
 	require.Equal(t, clientSpan.SpanContext().SpanID(), serverSpan.Parent().SpanID())
 
-	serverAttrs := spanAttrsByKey(serverSpan.Attributes())
-	require.Equal(t, "2.0", serverAttrs["network.protocol.version"])
-}
-
-func spanAttrsByKey(attrs []attribute.KeyValue) map[string]any {
-	attrsByKey := make(map[string]any, len(attrs))
-	for _, attr := range attrs {
-		attrsByKey[string(attr.Key)] = attr.Value.AsInterface()
-	}
-	return attrsByKey
+	require.Contains(t, serverSpan.Attributes(), attribute.String("network.protocol.version", "2.0"))
 }
