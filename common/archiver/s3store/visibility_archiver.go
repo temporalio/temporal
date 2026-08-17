@@ -259,7 +259,7 @@ func (v *visibilityArchiver) query(
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
 	primaryIndex := primaryIndexKeyWorkflowTypeName
-	primaryIndexValue := request.parsedQuery.workflowTypeName
+	primaryIndexValue := request.parsedQuery.workflowType
 	if request.parsedQuery.workflowID != nil {
 		primaryIndex = primaryIndexKeyWorkflowID
 		primaryIndexValue = request.parsedQuery.workflowID

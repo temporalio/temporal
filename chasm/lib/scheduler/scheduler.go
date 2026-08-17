@@ -147,6 +147,7 @@ func NewScheduler(
 	}
 	sched.setNullableFields()
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
+	sched.applyPausePatch(ctx, patch)
 
 	invoker := NewInvoker(ctx)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
@@ -217,6 +218,22 @@ func (s *Scheduler) setNullableFields() {
 	}
 	if s.Schedule.State == nil {
 		s.Schedule.State = &schedulepb.ScheduleState{}
+	}
+}
+
+func (s *Scheduler) applyPausePatch(ctx chasm.MutableContext, patch *schedulepb.SchedulePatch) {
+	if patch == nil {
+		return
+	}
+	if patch.Pause != "" {
+		s.Schedule.State.Paused = true
+		s.Schedule.State.Notes = patch.Pause
+		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("paused via API: %s", patch.Pause))
+	}
+	if patch.Unpause != "" {
+		s.Schedule.State.Paused = false
+		s.Schedule.State.Notes = patch.Unpause
+		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("unpaused via API: %s", patch.Unpause))
 	}
 }
 
@@ -657,6 +674,7 @@ func (s *Scheduler) HandleNexusCompletion(
 			strings.ToLower(wfStatus.String()),
 			workflowID,
 		)
+		s.updateConflictToken()
 	}
 
 	// Record the completed action in the Invoker.
@@ -697,10 +715,9 @@ func (s *Scheduler) Describe(
 	if schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
 		schedule.Policies.OverlapPolicy = s.overlapPolicy()
 	}
-	if !schedule.GetPolicies().GetCatchupWindow().IsValid() {
-		// TODO - this should be set from Tweakables.DefaultCatchupWindow.
-		schedule.Policies.CatchupWindow = durationpb.New(365 * 24 * time.Hour)
-	}
+	schedule.Policies.CatchupWindow = durationpb.New(
+		catchupWindow(s, tweakablesFromContext(ctx)),
+	)
 	cleanSpec(schedule.Spec)
 
 	generator := s.Generator.Get(ctx)
@@ -941,17 +958,7 @@ func (s *Scheduler) Patch(
 	if s.WorkflowMigration != nil {
 		return nil, ErrMigrationPending
 	}
-	// Handle paused status.
-	if req.FrontendRequest.Patch.Pause != "" {
-		s.Schedule.State.Paused = true
-		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
-		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("paused via API: %s", req.FrontendRequest.Patch.Pause))
-	}
-	if req.FrontendRequest.Patch.Unpause != "" {
-		s.Schedule.State.Paused = false
-		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
-		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("unpaused via API: %s", req.FrontendRequest.Patch.Unpause))
-	}
+	s.applyPausePatch(ctx, req.FrontendRequest.Patch)
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
 		return nil, err

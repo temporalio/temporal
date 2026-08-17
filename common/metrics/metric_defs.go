@@ -828,6 +828,10 @@ var (
 		"shardinfo_scheduled_queue_lag",
 		WithDescription("A histogram across history shards for the difference between the earliest scheduled time of pending history tasks and current time."),
 	)
+	ShardInfoImmediateQueueBacklogAge = NewTimerDef(
+		"shardinfo_immediate_queue_backlog_age",
+		WithDescription("Age of the oldest task at or above the last checkpointed ack level, per immediate task category. The time-based counterpart to shardinfo_immediate_queue_lag, sharing its ack level and so its blind spots. The ack level advances once per queue checkpoint, so a task completed since that checkpoint still counts until the next one, and the age it reports is its own, not a bound. Not emitted when the read is shed or fails, so absence does not mean no backlog."),
+	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
 	FinalizerRuns              = NewCounterDef(
@@ -933,6 +937,10 @@ var (
 	ChasmIncomingSignalDuplicate = NewCounterDef(
 		"chasm_incoming_signal_duplicate",
 		WithDescription("The number of duplicate signal request IDs detected when writing to the CHASM IncomingSignals map. Non-zero values indicate unexpected signal redelivery."),
+	)
+	CHASMRequestIDEvicted = NewCounterDef(
+		"chasm_request_id_evicted",
+		WithDescription("The number of CHASM-attached request IDs swept from an execution's dedup map for exceeding history.maximumRequestIDsPerExecution or history.requestIDMaxAge."),
 	)
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
@@ -1092,20 +1100,42 @@ var (
 	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
 	ReplicationStreamChannelFull          = NewCounterDef("replication_stream_channel_full")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
-	ReplicationTaskSendAttempt            = NewDimensionlessHistogramDef("replication_task_send_attempt")
-	ReplicationTaskSendError              = NewCounterDef("replication_task_send_error")
-	ReplicationTaskGenerationLatency      = NewTimerDef("replication_task_generation_latency")
-	ReplicationTaskLoadLatency            = NewTimerDef("replication_task_load_latency")
-	ReplicationTaskLoadSize               = NewDimensionlessHistogramDef("replication_task_load_size")
-	ReplicationTaskSendLatency            = NewTimerDef("replication_task_send_latency")
-	ReplicationTaskSendBacklog            = NewDimensionlessHistogramDef("replication_task_send_backlog")
-	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
-	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
-	ReplicationTasksSkipped               = NewCounterDef("replication_tasks_skipped")
-	ReplicationTasksApplied               = NewCounterDef("replication_tasks_applied")
-	ReplicationTasksFailed                = NewCounterDef("replication_tasks_failed")
-	ReplicationTasksBackFill              = NewCounterDef("replication_tasks_back_fill")
-	ReplicationTasksBackFillLatency       = NewTimerDef("replication_tasks_back_fill_latency")
+	// ReplicationStreamReadBufferHits counts replication queue read pages served from the
+	// shard's read-through buffer; ReplicationStreamReadBufferMisses counts pages that fell
+	// through to persistence while the buffer was enabled. With N streams/lanes scanning the
+	// same tip, the ideal shape is one miss (the fetch that fills the buffer) per N-1 hits.
+	ReplicationStreamReadBufferHits   = NewCounterDef("replication_stream_read_buffer_hits")
+	ReplicationStreamReadBufferMisses = NewCounterDef("replication_stream_read_buffer_misses")
+	// ReplicationStreamReadBufferMissLag records, for misses that start below the buffered
+	// range, how far below coverage the read began (in task ids). Small values mean a larger
+	// buffer would convert these misses to hits; large values mean the reader is deep in
+	// backlog, where no tip buffer helps and reads are paced by the reader itself.
+	ReplicationStreamReadBufferMissLag = NewDimensionlessHistogramDef("replication_stream_read_buffer_miss_lag")
+	ReplicationTaskSendAttempt         = NewDimensionlessHistogramDef("replication_task_send_attempt")
+	ReplicationTaskSendError           = NewCounterDef("replication_task_send_error")
+	ReplicationTaskSendSkipped         = NewCounterDef("replication_task_send_skipped")
+	ReplicationTaskGenerationLatency   = NewTimerDef("replication_task_generation_latency")
+	ReplicationTaskLoadLatency         = NewTimerDef("replication_task_load_latency")
+	ReplicationTaskLoadSize            = NewDimensionlessHistogramDef("replication_task_load_size")
+	ReplicationTaskSendLatency         = NewTimerDef("replication_task_send_latency")
+	ReplicationTaskSendBacklog         = NewDimensionlessHistogramDef("replication_task_send_backlog")
+	ReplicationTasksRecv               = NewCounterDef("replication_tasks_recv")
+	ReplicationTasksRecvBacklog        = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
+	ReplicationTasksSkipped            = NewCounterDef("replication_tasks_skipped")
+	ReplicationTasksApplied            = NewCounterDef("replication_tasks_applied")
+	ReplicationTasksFailed             = NewCounterDef("replication_tasks_failed")
+	ReplicationTasksBackFill           = NewCounterDef("replication_tasks_back_fill")
+	ReplicationTasksBackFillLatency    = NewTimerDef("replication_tasks_back_fill_latency")
+	// ParentWorkflowResendAttempts counts parent resends started by standby completion verification.
+	ParentWorkflowResendAttempts = NewCounterDef("parent_workflow_resend_attempts")
+	// ParentWorkflowResendSkipped counts attempts that found a resend for the same parent in flight.
+	ParentWorkflowResendSkipped = NewCounterDef("parent_workflow_resend_skipped")
+	// ParentWorkflowResendFailures counts failed resends. Async resends report failure nowhere else.
+	ParentWorkflowResendFailures = NewCounterDef("parent_workflow_resend_failures")
+	// ParentWorkflowResendLimited counts resends dropped because the shard was at its in-flight cap.
+	ParentWorkflowResendLimited = NewCounterDef("parent_workflow_resend_limited")
+	// ParentWorkflowResendLatency measures a resend: cross-cluster state fetch plus local apply.
+	ParentWorkflowResendLatency = NewTimerDef("parent_workflow_resend_latency")
 	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
 	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
 	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")

@@ -533,9 +533,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			closeTime:        new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision:  new(testData.precision),
-			workflowTypeName: new(testWorkflowTypeName),
+			closeTime:       new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: new(testData.precision),
+			workflowType:    new(testWorkflowTypeName),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -546,9 +546,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			startTime:        new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision:  new(testData.precision),
-			workflowTypeName: new(testWorkflowTypeName),
+			startTime:       new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: new(testData.precision),
+			workflowType:    new(testWorkflowTypeName),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -601,7 +601,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 
 	mockParser = NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		workflowTypeName: new(testWorkflowTypeName),
+		workflowType: new(testWorkflowTypeName),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request = &archiver.QueryVisibilityRequest{

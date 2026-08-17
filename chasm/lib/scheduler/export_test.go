@@ -44,6 +44,13 @@ func (i *Invoker) RunningWorkflowID(requestID string) string {
 	return i.runningWorkflowID(requestID)
 }
 
+func ContextWithTweakables(ctx chasm.Context, tweakables Tweakables) chasm.Context {
+	config := Config{
+		Tweakables: func(string) Tweakables { return tweakables },
+	}
+	return chasm.ContextWithValue(ctx, tweakablesCtxKey, config.Tweakables)
+}
+
 // RecentActionCount exposes the completed-retention limit for tests.
 const RecentActionCount = recentActionCount
 
