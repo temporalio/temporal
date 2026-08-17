@@ -868,6 +868,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		})
 		s.NoError(err)
 
+		beforeCancelRequest := time.Now()
 		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
@@ -875,6 +876,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 			Reason:      "test cancellation",
 		})
 		s.NoError(err)
+		afterCancelRequest := time.Now()
 
 		// Verify state after cancel — operation is still running
 		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
@@ -900,6 +902,8 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		}, descResp.GetInfo(), protorequire.IgnoreFields("operation_token", "last_attempt_complete_time", "request_id", "schedule_time", "expiration_time", "execution_duration", "cancellation_info"))
 		cancellationInfo := descResp.GetInfo().GetCancellationInfo()
 		s.NotNil(cancellationInfo)
+		s.Require().NotNil(cancellationInfo.GetRequestedTime())
+		s.WithinRange(cancellationInfo.GetRequestedTime().AsTime(), beforeCancelRequest, afterCancelRequest)
 		s.NotEqual(enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED, cancellationInfo.GetState())
 		protorequire.ProtoEqual(s.T(), &nexuspb.NexusOperationExecutionCancellationInfo{
 			Attempt: 1,
