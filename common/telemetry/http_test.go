@@ -90,8 +90,8 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		require.Same(t, rt, NewHTTPClientTransport(rt, nil, nil))
 	})
 
-	// Downstream services need the injected trace context to continue the client span's trace.
-	t.Run("InjectsTraceContext", func(t *testing.T) {
+	// Debug-only headers and payloads must remain absent unless debug mode is enabled.
+	t.Run("SkipsHeadersAndPayloadsByDefault", func(t *testing.T) {
 		t.Parallel()
 
 		recorder := tracetest.NewSpanRecorder()
@@ -100,21 +100,37 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		var traceparent string
 		rt := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			traceparent = r.Header.Get("traceparent")
+			payload, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			require.Equal(t, "request body", string(payload))
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       http.NoBody,
-				Header:     http.Header{},
-				Request:    r,
+				Body:       io.NopCloser(strings.NewReader("response body")),
+				Header: http.Header{
+					"Response-Header": []string{"response-value"},
+				},
+				Request: r,
 			}, nil
 		})
 
 		wrapped := NewHTTPClientTransport(rt, tp, nil)
-		resp, err := wrapped.RoundTrip(httptest.NewRequest(http.MethodGet, "http://example.com", nil))
+		req := httptest.NewRequest(http.MethodPost, "http://example.com", strings.NewReader("request body"))
+		req.Header.Set("Request-Header", "request-value")
+		resp, err := wrapped.RoundTrip(req)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
+		require.Equal(t, "response body", string(body))
 
 		require.NotEmpty(t, traceparent)
-		require.NotEmpty(t, recorder.Ended())
+		require.Len(t, recorder.Ended(), 1)
+		attrs := spanAttrsByKey(recorder.Ended()[0].Attributes())
+		require.NotContains(t, attrs, "http.request.payload")
+		require.NotContains(t, attrs, "http.response.payload")
+		require.NotContains(t, attrs, "http.request.headers.request-header")
+		require.NotContains(t, attrs, "http.response.headers.response-header")
 	})
 
 	// Debug mode adds diagnostic HTTP headers and payloads to client spans.
