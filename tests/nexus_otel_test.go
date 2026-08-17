@@ -272,11 +272,8 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 		traceID      = "4bf92f3577b34da6a3ce929d0e0e4736"
 		parentSpanID = "00f067aa0ba902b7"
 	)
-	requestHeaders := nexus.Header{
-		"traceparent": "00-" + traceID + "-" + parentSpanID + "-01",
-	}
 	_, err = nexusrpc.StartOperation(s.Context(), nexusClient, op, env.Tv().Any().String(), nexus.StartOperationOptions{
-		Header: requestHeaders,
+		Header: nexus.Header{"traceparent": "00-" + traceID + "-" + parentSpanID + "-01"},
 	})
 	s.NoError(err)
 	s.NoError(<-pollerErrCh)
