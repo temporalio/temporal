@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	otellog "go.opentelemetry.io/otel/log"
 	wcicomponent "go.temporal.io/auto-scaled-workers/wci/workercomponent"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
@@ -92,6 +93,8 @@ var Module = fx.Options(
 		dataMerger nsreplication.NamespaceDataMerger,
 		admitter nsreplication.NamespaceReplicationAdmitter,
 		logger log.Logger,
+		eventLogger otellog.Logger,
+		serviceConfig *Config,
 		testHooks testhooks.TestHooks,
 	) nsreplication.TaskExecutor {
 		return nsreplication.NewTaskExecutor(
@@ -101,6 +104,10 @@ var Module = fx.Options(
 			admitter,
 			logger,
 			testHooks,
+			nsreplication.WithNamespaceReplicationLifecycleEvents(
+				eventLogger,
+				serviceConfig.EmitNamespaceReplicationLifecycleEvents,
+			),
 		)
 	}),
 	fx.Provide(nsreplication.NewNoopDataMerger),

@@ -8,11 +8,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -29,17 +31,19 @@ const replicationQueueCleanupInterval = 5 * time.Minute
 type (
 	// Replicator is the processor for replication tasks
 	Replicator struct {
-		status                           int32
-		clusterMetadata                  cluster.Metadata
-		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
-		customTaskHandler                func(ctx context.Context, task *replicationspb.ReplicationTask) error
-		clientBean                       client.Bean
-		logger                           log.Logger
-		metricsHandler                   metrics.Handler
-		hostInfo                         membership.HostInfo
-		serviceResolver                  membership.ServiceResolver
-		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
-		replicationCleanupGroup          goro.Group
+		status                                  int32
+		clusterMetadata                         cluster.Metadata
+		namespaceReplicationTaskExecutor        nsreplication.TaskExecutor
+		customTaskHandler                       func(ctx context.Context, task *replicationspb.ReplicationTask) error
+		clientBean                              client.Bean
+		logger                                  log.Logger
+		eventLogger                             otellog.Logger
+		emitNamespaceReplicationLifecycleEvents dynamicconfig.BoolPropertyFn
+		metricsHandler                          metrics.Handler
+		hostInfo                                membership.HostInfo
+		serviceResolver                         membership.ServiceResolver
+		namespaceReplicationQueue               persistence.NamespaceReplicationQueue
+		replicationCleanupGroup                 goro.Group
 
 		namespaceProcessorsLock sync.Mutex
 		namespaceProcessors     map[string]*replicationMessageProcessor
@@ -57,6 +61,8 @@ func NewReplicator(
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
 	logger log.Logger,
+	eventLogger otellog.Logger,
+	emitNamespaceReplicationLifecycleEvents dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
@@ -66,18 +72,20 @@ func NewReplicator(
 	namespaceRegistry namespace.Registry,
 ) *Replicator {
 	return &Replicator{
-		status:                           common.DaemonStatusInitialized,
-		hostInfo:                         hostInfo,
-		serviceResolver:                  serviceResolver,
-		clusterMetadata:                  clusterMetadata,
-		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
-		namespaceProcessors:              make(map[string]*replicationMessageProcessor),
-		clientBean:                       clientBean,
-		logger:                           log.With(logger, tag.ComponentReplicator),
-		metricsHandler:                   metricsHandler,
-		namespaceReplicationQueue:        namespaceReplicationQueue,
-		matchingClient:                   matchingClient,
-		namespaceRegistry:                namespaceRegistry,
+		status:                                  common.DaemonStatusInitialized,
+		hostInfo:                                hostInfo,
+		serviceResolver:                         serviceResolver,
+		clusterMetadata:                         clusterMetadata,
+		namespaceReplicationTaskExecutor:        namespaceReplicationTaskExecutor,
+		namespaceProcessors:                     make(map[string]*replicationMessageProcessor),
+		clientBean:                              clientBean,
+		logger:                                  log.With(logger, tag.ComponentReplicator),
+		eventLogger:                             eventLogger,
+		emitNamespaceReplicationLifecycleEvents: emitNamespaceReplicationLifecycleEvents,
+		metricsHandler:                          metricsHandler,
+		namespaceReplicationQueue:               namespaceReplicationQueue,
+		matchingClient:                          matchingClient,
+		namespaceRegistry:                       namespaceRegistry,
 	}
 }
 
@@ -151,6 +159,8 @@ func (r *Replicator) listenToClusterMetadataChange() {
 						currentClusterName,
 						clusterName,
 						log.With(r.logger, tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
+						r.eventLogger,
+						r.emitNamespaceReplicationLifecycleEvents,
 						remoteAdminClient,
 						r.metricsHandler,
 						r.namespaceReplicationTaskExecutor,
