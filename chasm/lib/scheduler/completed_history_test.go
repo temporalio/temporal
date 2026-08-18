@@ -21,7 +21,7 @@ func TestCompletedHistoryDoesNotConsumeBackfillCapacity(t *testing.T) {
 		EndTime:   timestamppb.New(env.TimeSource.Now().Add(time.Hour)),
 	})
 	invoker := env.Scheduler.Invoker.Get(ctx)
-	for i := range 10 {
+	for i := range scheduler.RecentActionCount {
 		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
 			RequestId: fmt.Sprintf("completed-%d", i),
 			Completed: &schedulespb.CompletedResult{
@@ -44,28 +44,35 @@ func TestCompletedHistoryDoesNotConsumeBackfillCapacity(t *testing.T) {
 	require.Positive(t, limit, "retained completed actions must not consume actionable buffer capacity")
 }
 
-// TestAllowedBufferedStartsDiscountsRetainedHistory pins the allowedBufferedStarts
-// arithmetic: actionable (non-completed) buffered starts consume backfill
-// capacity, but the first recentActionCount slots are discounted (they may be
-// retained history), and the result is clamped at zero once the buffer fills.
-func TestAllowedBufferedStartsDiscountsRetainedHistory(t *testing.T) {
-	// recentActionCount is 10 (scheduler.recentActionCount, unexported). With one
-	// backfiller, MaxBufferSize=20 and no generator reserve, base capacity is
-	// (20/2)/1 = 10 and the first 10 buffered starts are discounted.
+// TestAllowedBufferedStartsCountsOnlyActionableWork pins the corrected
+// allowedBufferedStarts arithmetic: actionable (non-completed) buffered starts
+// always consume backfill capacity 1:1, with no free discount by count, while
+// retained completed history -- regardless of how many entries are actually
+// present -- never consumes any capacity. This guards against reintroducing a
+// flat recentActionCount-sized discount: subtracting the retention cap
+// unconditionally (instead of the live completed count) let MaxBufferSize be
+// exceeded whenever the buffer held fewer completions than the cap allowed,
+// e.g. a fresh buffer with zero completions and recentActionCount actionable
+// starts was wrongly treated as having recentActionCount of free capacity.
+func TestAllowedBufferedStartsCountsOnlyActionableWork(t *testing.T) {
+	// With one backfiller, MaxBufferSize=20 and no generator reserve, base
+	// capacity is (20/2)/1 = 10.
 	const (
-		maxBufferSize     = 20
-		recentActionCount = 10
-		baseCapacity      = (maxBufferSize / 2) / 1
+		maxBufferSize = 20
+		baseCapacity  = (maxBufferSize / 2) / 1
 	)
 	cases := []struct {
 		name       string
+		completed  int
 		actionable int
 		expected   int
 	}{
-		{"empty buffer keeps full capacity", 0, baseCapacity},
-		{"up to recentActionCount is fully discounted", recentActionCount, baseCapacity},
-		{"beyond recentActionCount reduces capacity 1:1", 15, baseCapacity - (15 - recentActionCount)},
-		{"buffer full of actionable starts clamps to zero", maxBufferSize, 0},
+		{"empty buffer keeps full capacity", 0, 0, baseCapacity},
+		{"actionable starts cost capacity 1:1, no free discount", 0, 5, baseCapacity - 5},
+		{"actionable starts at recentActionCount still cost 1:1", 0, scheduler.RecentActionCount, baseCapacity - scheduler.RecentActionCount},
+		{"completed history never costs capacity, however many entries", scheduler.RecentActionCount, 0, baseCapacity},
+		{"completed history and actionable work are counted independently", scheduler.RecentActionCount, 5, baseCapacity - 5},
+		{"buffer full of actionable starts clamps to zero", 0, maxBufferSize, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -76,6 +83,14 @@ func TestAllowedBufferedStartsDiscountsRetainedHistory(t *testing.T) {
 				EndTime:   timestamppb.New(env.TimeSource.Now().Add(time.Hour)),
 			})
 			invoker := env.Scheduler.Invoker.Get(ctx)
+			for i := range tc.completed {
+				invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
+					RequestId: fmt.Sprintf("completed-%d", i),
+					Completed: &schedulespb.CompletedResult{
+						CloseTime: timestamppb.New(env.TimeSource.Now()),
+					},
+				})
+			}
 			for i := range tc.actionable {
 				invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
 					RequestId: fmt.Sprintf("pending-%d", i),

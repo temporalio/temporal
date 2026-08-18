@@ -2,12 +2,14 @@ package scheduler_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -176,6 +178,80 @@ func TestGeneratorTask_BufferOverrunDropsActions(t *testing.T) {
 		total += v
 	}
 	require.Equal(t, sched.Info.BufferDropped, total)
+}
+
+// Retained completed history must not itself consume Generator buffer capacity
+// (see SCH-093): the Generator used to count every entry in BufferedStarts,
+// including completed actions kept around purely for recent-action reporting,
+// against MaxBufferSize.
+func TestGeneratorTask_CompletedHistoryDoesNotConsumeBufferCapacity(t *testing.T) {
+	env := newTestEnv(t)
+
+	const maxBufferSize = scheduler.RecentActionCount
+	handler := newGeneratorHandler(env, withTweakables(func(tw *scheduler.Tweakables) { tw.MaxBufferSize = maxBufferSize }))
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+	invoker := sched.Invoker.Get(ctx)
+
+	// Seed the buffer with scheduler.RecentActionCount retained completed
+	// actions, exactly exhausting MaxBufferSize if they were wrongly counted as
+	// pending.
+	for i := range scheduler.RecentActionCount {
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
+			RequestId: fmt.Sprintf("completed-%d", i),
+			Completed: &schedulespb.CompletedResult{
+				CloseTime: timestamppb.New(env.TimeSource.Now()),
+			},
+		})
+	}
+
+	// Pull the high water mark back so the range yields a single due action.
+	highWatermark := ctx.Now(generator).UTC().Add(-defaultInterval)
+	generator.LastProcessedTime = timestamppb.New(highWatermark)
+
+	require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+
+	require.Zero(t, sched.Info.BufferDropped, "retained completed history must not consume generator buffer capacity")
+}
+
+// The discount for retained completion history must come from the actual
+// completed count, not a flat recentActionCount allowance: a buffer already
+// full of real (non-completed) pending work must not be mistaken for having
+// recentActionCount of free capacity. Regression test for a review finding on
+// the SCH-093 fix, where subtracting the retention cap unconditionally let
+// MaxBufferSize be exceeded whenever the buffer held fewer completions than
+// the cap allowed.
+func TestGeneratorTask_PendingWorkIsNeverDiscounted(t *testing.T) {
+	env := newTestEnv(t)
+
+	const maxBufferSize = scheduler.RecentActionCount
+	handler := newGeneratorHandler(env, withTweakables(func(tw *scheduler.Tweakables) { tw.MaxBufferSize = maxBufferSize }))
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+	invoker := sched.Invoker.Get(ctx)
+
+	// Seed the buffer with scheduler.RecentActionCount non-completed
+	// (actionable) starts: real pending work, not retained history. A flat
+	// recentActionCount discount would wrongly treat this as fully free
+	// capacity and let the buffer double past MaxBufferSize.
+	for i := range scheduler.RecentActionCount {
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
+			RequestId: fmt.Sprintf("pending-%d", i),
+		})
+	}
+
+	// Pull the high water mark back so the range yields a single due action.
+	highWatermark := ctx.Now(generator).UTC().Add(-defaultInterval)
+	generator.LastProcessedTime = timestamppb.New(highWatermark)
+
+	require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+
+	require.Equal(t, int64(1), sched.Info.BufferDropped, "a buffer already full of pending work must drop the new due action, not treat retention headroom as free")
+	require.Len(t, invoker.BufferedStarts, maxBufferSize, "the buffer must not be allowed to grow past MaxBufferSize")
 }
 
 // A non-positive MaxBufferSize disables the limit: nothing is dropped even over

@@ -90,7 +90,7 @@ func (g *GeneratorTaskHandler) Execute(
 	tweakables := g.config.Tweakables(scheduler.Namespace)
 	var limit *int
 	if tweakables.MaxBufferSize > 0 {
-		remaining := tweakables.MaxBufferSize - len(invoker.GetBufferedStarts())
+		remaining := generatorBufferCapacity(len(invoker.GetBufferedStarts()), invoker.completedBufferedStartCount(), tweakables.MaxBufferSize)
 		limit = &remaining
 	}
 
@@ -210,4 +210,12 @@ func (g *GeneratorTaskHandler) Validate(
 		generator.GetLastProcessedTime(),
 		attrs.ScheduledTime,
 	)
+}
+
+// generatorBufferCapacity returns how many additional BufferedStarts the
+// Generator may buffer before hitting maxBufferSize. completedCount must be
+// the actual number of completed BufferedStarts currently buffered (see
+// incompleteBufferedStartCount), not the recentActionCount retention cap.
+func generatorBufferCapacity(bufferedCount, completedCount, maxBufferSize int) int {
+	return maxBufferSize - incompleteBufferedStartCount(bufferedCount, completedCount)
 }
