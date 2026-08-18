@@ -132,6 +132,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		rt := http.DefaultTransport
 		var disabled HTTPClientTransportInstrumenter
 		require.Same(t, rt, disabled.Instrument(rt))
+
 		require.Nil(t, NewHTTPClientTransportInstrumenter(nil, nil))
 		require.Nil(t, NewHTTPClientTransportInstrumenter(NoopTracerProvider, nil))
 
@@ -453,6 +454,9 @@ func TestNewHTTPHandler(t *testing.T) {
 		handler := http.NewServeMux()
 		var disabled HTTPServerHandlerInstrumenter
 		require.Same(t, handler, disabled.Instrument(handler, "test-handler"))
+
+		require.Nil(t, NewHTTPServerHandlerInstrumenter(nil, nil))
+		require.Nil(t, NewHTTPServerHandlerInstrumenter(NoopTracerProvider, nil))
 
 		recorder := tracetest.NewSpanRecorder()
 		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))

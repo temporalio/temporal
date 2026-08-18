@@ -44,10 +44,14 @@ func (i HTTPClientTransportInstrumenter) Instrument(rt http.RoundTripper) http.R
 type HTTPServerHandlerInstrumenter func(handler http.Handler, spanName string) http.Handler
 
 // NewHTTPServerHandlerInstrumenter binds a tracer provider and propagator for reuse across HTTP server handlers.
+// It returns nil when tracing is disabled so callers can avoid tracing-only work.
 func NewHTTPServerHandlerInstrumenter(
 	tracerProvider trace.TracerProvider,
 	propagator propagation.TextMapPropagator,
 ) HTTPServerHandlerInstrumenter {
+	if !isEnabled(tracerProvider) {
+		return nil
+	}
 	return func(handler http.Handler, spanName string) http.Handler {
 		return NewHTTPHandler(handler, spanName, tracerProvider, propagator)
 	}
