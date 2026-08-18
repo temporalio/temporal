@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -97,6 +98,91 @@ func updateRequestFields(req *workflowservice.UpdateNamespaceRequest) wideevents
 	}
 }
 
+// updateRequestFieldNames identifies the non-default request directives represented in the sparse
+// requested snapshot. The UpdateNamespace proto does not provide scalar presence, but its handler
+// also ignores scalar zero values, so this list distinguishes every field that can affect the write.
+func updateRequestFieldNames(req *workflowservice.UpdateNamespaceRequest) []string {
+	if req == nil {
+		return nil
+	}
+	fields := updateInfoRequestFieldNames(req.UpdateInfo)
+	fields = append(fields, configRequestFieldNames(req.Config)...)
+	fields = append(fields, replicationRequestFieldNames(req.ReplicationConfig)...)
+	if req.GetDeleteBadBinary() != "" {
+		fields = append(fields, "delete_bad_binary")
+	}
+	if req.GetPromoteNamespace() {
+		fields = append(fields, "promote_namespace")
+	}
+	return fields
+}
+
+func updateInfoRequestFieldNames(info *namespacepb.UpdateNamespaceInfo) []string {
+	if info == nil {
+		return nil
+	}
+	var fields []string
+	if info.GetDescription() != "" {
+		fields = append(fields, "description")
+	}
+	if info.GetOwnerEmail() != "" {
+		fields = append(fields, "owner")
+	}
+	if info.GetState() != enumspb.NAMESPACE_STATE_UNSPECIFIED {
+		fields = append(fields, "state")
+	}
+	if info.Data != nil {
+		fields = append(fields, "data")
+	}
+	return fields
+}
+
+func configRequestFieldNames(config *namespacepb.NamespaceConfig) []string {
+	if config == nil {
+		return nil
+	}
+	var fields []string
+	if config.GetWorkflowExecutionRetentionTtl() != nil {
+		fields = append(fields, "retention")
+	}
+	if config.GetHistoryArchivalState() != enumspb.ARCHIVAL_STATE_UNSPECIFIED {
+		fields = append(fields, "history_archival_state")
+	}
+	if config.GetHistoryArchivalUri() != "" {
+		fields = append(fields, "history_archival_uri")
+	}
+	if config.GetVisibilityArchivalState() != enumspb.ARCHIVAL_STATE_UNSPECIFIED {
+		fields = append(fields, "visibility_archival_state")
+	}
+	if config.GetVisibilityArchivalUri() != "" {
+		fields = append(fields, "visibility_archival_uri")
+	}
+	if config.BadBinaries != nil {
+		fields = append(fields, "bad_binaries")
+	}
+	if len(config.CustomSearchAttributeAliases) != 0 {
+		fields = append(fields, "custom_search_attribute_aliases")
+	}
+	return fields
+}
+
+func replicationRequestFieldNames(config *replicationpb.NamespaceReplicationConfig) []string {
+	if config == nil {
+		return nil
+	}
+	var fields []string
+	if config.GetActiveClusterName() != "" {
+		fields = append(fields, "active_cluster")
+	}
+	if len(config.Clusters) != 0 {
+		fields = append(fields, "clusters")
+	}
+	if config.GetState() != enumspb.REPLICATION_STATE_UNSPECIFIED {
+		fields = append(fields, "replication_state")
+	}
+	return fields
+}
+
 // buildNamespaceRegisteredInput builds the input for a namespace_registered event.
 func buildNamespaceRegisteredInput(req *persistence.CreateNamespaceRequest, nsID string, rawReq *workflowservice.RegisterNamespaceRequest) wideevents.NamespaceRegisteredInput {
 	return wideevents.NamespaceRegisteredInput{
@@ -123,14 +209,16 @@ func buildNamespaceUpdatedInput(
 		requested = updateRequestFields(rawReq)
 	}
 	return wideevents.NamespaceUpdatedInput{
-		Namespace:       updated.GetInfo().GetName(),
-		NamespaceID:     updated.GetInfo().GetId(),
-		IsFailover:      isFailover,
-		IsPromotion:     isPromotion,
-		DeleteBadBinary: rawReq.GetDeleteBadBinary(),
-		Before:          before,
-		After:           namespaceStateFields(updated, isGlobal),
-		Requested:       requested,
+		Namespace:                 updated.GetInfo().GetName(),
+		NamespaceID:               updated.GetInfo().GetId(),
+		IsFailover:                isFailover,
+		IsPromotion:               isPromotion,
+		PromoteNamespaceRequested: rawReq.GetPromoteNamespace(),
+		DeleteBadBinary:           rawReq.GetDeleteBadBinary(),
+		RequestedFields:           updateRequestFieldNames(rawReq),
+		Before:                    before,
+		After:                     namespaceStateFields(updated, isGlobal),
+		Requested:                 requested,
 	}
 }
 

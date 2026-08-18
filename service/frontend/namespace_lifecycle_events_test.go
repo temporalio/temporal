@@ -127,6 +127,7 @@ func TestBuildNamespaceUpdatedInputCapturesBeforeAndAfter(t *testing.T) {
 	in := buildNamespaceUpdatedInput(before, after, true, true, false, &workflowservice.UpdateNamespaceRequest{
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{ActiveClusterName: "clusterB"},
 		DeleteBadBinary:   "cksum-old",
+		PromoteNamespace:  true,
 	})
 
 	require.Equal(t, "ns", in.Namespace)
@@ -138,6 +139,52 @@ func TestBuildNamespaceUpdatedInputCapturesBeforeAndAfter(t *testing.T) {
 	require.EqualValues(t, 21, in.After.FailoverVersion)
 	require.Equal(t, "clusterB", in.Requested.ActiveCluster)
 	require.Equal(t, "cksum-old", in.DeleteBadBinary)
+	require.True(t, in.PromoteNamespaceRequested)
+	require.Equal(t, []string{"active_cluster", "delete_bad_binary", "promote_namespace"}, in.RequestedFields)
+}
+
+func TestUpdateRequestFieldNames(t *testing.T) {
+	req := &workflowservice.UpdateNamespaceRequest{
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+			Description: "description",
+			State:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			Data:        map[string]string{},
+		},
+		Config: &namespacepb.NamespaceConfig{
+			WorkflowExecutionRetentionTtl: durationpb.New(24 * time.Hour),
+			HistoryArchivalState:          enumspb.ARCHIVAL_STATE_ENABLED,
+			HistoryArchivalUri:            "s3://history",
+			VisibilityArchivalState:       enumspb.ARCHIVAL_STATE_DISABLED,
+			VisibilityArchivalUri:         "s3://visibility",
+			BadBinaries:                   &namespacepb.BadBinaries{},
+			CustomSearchAttributeAliases:  map[string]string{"alias": "Keyword01"},
+		},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: "clusterB",
+			Clusters:          []*replicationpb.ClusterReplicationConfig{{ClusterName: "clusterB"}},
+			State:             enumspb.REPLICATION_STATE_NORMAL,
+		},
+		DeleteBadBinary:  "cksum-old",
+		PromoteNamespace: true,
+	}
+
+	require.Equal(t, []string{
+		"description",
+		"state",
+		"data",
+		"retention",
+		"history_archival_state",
+		"history_archival_uri",
+		"visibility_archival_state",
+		"visibility_archival_uri",
+		"bad_binaries",
+		"custom_search_attribute_aliases",
+		"active_cluster",
+		"clusters",
+		"replication_state",
+		"delete_bad_binary",
+		"promote_namespace",
+	}, updateRequestFieldNames(req))
 }
 
 // DeprecateNamespace reuses namespace_updated with a nil request, so Requested is the empty snapshot.
@@ -145,6 +192,7 @@ func TestBuildNamespaceUpdatedInputNilRequest(t *testing.T) {
 	before := namespaceStateFields(testNamespaceDetail(), true)
 	in := buildNamespaceUpdatedInput(before, testNamespaceDetail(), true, false, false, nil)
 	require.Equal(t, wideevents.NamespaceStateFields{}, in.Requested)
+	require.Nil(t, in.RequestedFields)
 }
 
 // The request snapshot builders read only namespace fields, never the request's security_token.

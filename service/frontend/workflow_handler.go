@@ -7255,7 +7255,9 @@ func (wh *WorkflowHandler) CreateWorkflowRule(
 		request.GetSpec(),
 		request.GetIdentity(),
 		request.GetDescription(),
-		request.GetNamespace())
+		request.GetNamespace(),
+		request.GetForceScan(),
+		request.GetRequestId())
 	if err != nil {
 		return nil, err
 	}

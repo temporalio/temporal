@@ -722,7 +722,7 @@ func (d *namespaceHandler) DeprecateNamespace(
 
 	wideevents.EmitNamespaceUpdated(d.eventLogger, buildNamespaceUpdatedInput(
 		eventBefore,
-		getResponse.Namespace,
+		updateReq.Namespace,
 		getResponse.IsGlobalNamespace,
 		false,
 		false,
@@ -737,6 +737,8 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	createdByIdentity string,
 	description string,
 	nsName string,
+	forceScan bool,
+	requestID string,
 ) (*rulespb.WorkflowRule, error) {
 
 	if ruleSpec.GetId() == "" {
@@ -804,6 +806,8 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	updatedInput := buildNamespaceUpdatedInput(eventBefore, updateReq.Namespace, getNamespaceResponse.IsGlobalNamespace, false, false, nil)
 	updatedInput.WorkflowRuleCreated = ruleSpec.GetId()
 	updatedInput.WorkflowRuleCreatedDetail = workflowRule.String()
+	updatedInput.WorkflowRuleForceScan = forceScan
+	updatedInput.WorkflowRuleRequestID = requestID
 	wideevents.EmitNamespaceUpdated(d.eventLogger, updatedInput)
 
 	return workflowRule, nil

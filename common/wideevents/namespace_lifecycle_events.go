@@ -251,8 +251,9 @@ type NamespaceRegisteredInput struct {
 }
 
 // NamespaceUpdatedInput is the input to EmitNamespaceUpdated. IsFailover marks an active-cluster
-// change; IsPromotion marks a local->global promotion; DeleteBadBinary is the checksum the request
-// asked to remove, if any; WorkflowRuleCreated / WorkflowRuleDeleted name the rule id a
+// change; IsPromotion marks a local->global promotion, while PromoteNamespaceRequested preserves
+// the raw request directive; DeleteBadBinary is the checksum the request asked to remove, if any;
+// WorkflowRuleCreated / WorkflowRuleDeleted name the rule id a
 // CreateWorkflowRule / DeleteWorkflowRule op changed, with WorkflowRuleCreatedDetail /
 // WorkflowRuleDeletedDetail carrying that rule's content (WorkflowRule text) so the event is a
 // durable record of what was created/removed even after the rule is gone. These are request
@@ -267,11 +268,15 @@ type NamespaceUpdatedInput struct {
 	NamespaceID               string
 	IsFailover                bool
 	IsPromotion               bool
+	PromoteNamespaceRequested bool
 	DeleteBadBinary           string
 	WorkflowRuleCreated       string
 	WorkflowRuleCreatedDetail string
 	WorkflowRuleDeleted       string
 	WorkflowRuleDeletedDetail string
+	WorkflowRuleForceScan     bool
+	WorkflowRuleRequestID     string
+	RequestedFields           []string
 	Before                    NamespaceStateFields
 	After                     NamespaceStateFields
 	Requested                 NamespaceStateFields
@@ -299,11 +304,15 @@ func EmitNamespaceUpdated(logger otellog.Logger, in NamespaceUpdatedInput) {
 		Details: map[string]any{
 			"is_failover":                  in.IsFailover,
 			"is_promotion":                 in.IsPromotion,
+			"promote_namespace_requested":  in.PromoteNamespaceRequested,
 			"delete_bad_binary":            in.DeleteBadBinary,
 			"workflow_rule_created":        in.WorkflowRuleCreated,
 			"workflow_rule_created_detail": in.WorkflowRuleCreatedDetail,
 			"workflow_rule_deleted":        in.WorkflowRuleDeleted,
 			"workflow_rule_deleted_detail": in.WorkflowRuleDeletedDetail,
+			"workflow_rule_force_scan":     in.WorkflowRuleForceScan,
+			"workflow_rule_request_id":     in.WorkflowRuleRequestID,
+			"requested_fields":             in.RequestedFields,
 			"requested":                    in.Requested,
 			"before":                       in.Before,
 			"after":                        in.After,
