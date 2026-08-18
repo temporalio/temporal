@@ -3849,6 +3849,9 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
+	if err := wh.validateScheduleOverlapPolicies(request.Schedule, request.InitialPatch, namespaceName.String()); err != nil {
+		return nil, err
+	}
 	err := wh.canonicalizeScheduleSpec(request.Schedule, namespaceName.String())
 	if err != nil {
 		return nil, err
@@ -4666,6 +4669,9 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
+	if err := wh.validateScheduleOverlapPolicies(request.Schedule, nil, namespaceName.String()); err != nil {
+		return nil, err
+	}
 	err := wh.canonicalizeScheduleSpec(request.Schedule, namespaceName.String())
 	if err != nil {
 		return nil, err
@@ -4811,6 +4817,9 @@ func (wh *WorkflowHandler) PatchSchedule(
 	if len(request.Patch.Pause) > common.ScheduleNotesSizeLimit ||
 		len(request.Patch.Unpause) > common.ScheduleNotesSizeLimit {
 		return nil, errNotesTooLong
+	}
+	if err := wh.validateScheduleOverlapPolicies(nil, request.Patch, request.Namespace); err != nil {
+		return nil, err
 	}
 
 	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
@@ -6900,9 +6909,81 @@ func validateScheduleIntervalDurations(spec *schedulepb.ScheduleSpec) error {
 	return nil
 }
 
+func validateScheduleTimestamps(spec *schedulepb.ScheduleSpec) error {
+	if startTime := spec.GetStartTime(); startTime != nil {
+		if err := startTime.CheckValid(); err != nil {
+			return fmt.Errorf("start time is not a valid timestamp: %w", err)
+		}
+	}
+	if endTime := spec.GetEndTime(); endTime != nil {
+		if err := endTime.CheckValid(); err != nil {
+			return fmt.Errorf("end time is not a valid timestamp: %w", err)
+		}
+	}
+	return nil
+}
+
+func validateScheduleRemainingActions(schedule *schedulepb.Schedule) error {
+	if schedule.GetState().GetRemainingActions() < 0 {
+		return fmt.Errorf("remaining actions cannot be negative")
+	}
+	return nil
+}
+
+func validateScheduleOverlapPolicy(policy enumspb.ScheduleOverlapPolicy, field string) error {
+	if _, ok := enumspb.ScheduleOverlapPolicy_name[int32(policy)]; !ok {
+		return fmt.Errorf("%s has unsupported overlap policy %v", field, policy)
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateScheduleOverlapPolicies(
+	schedule *schedulepb.Schedule,
+	patch *schedulepb.SchedulePatch,
+	namespaceName string,
+) error {
+	if schedule != nil {
+		if err := validateScheduleOverlapPolicy(schedule.GetPolicies().GetOverlapPolicy(), "schedule policies"); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationOverlapPolicy, namespaceName)
+		}
+	}
+	if patch == nil {
+		return nil
+	}
+	if trigger := patch.GetTriggerImmediately(); trigger != nil {
+		if err := validateScheduleOverlapPolicy(trigger.GetOverlapPolicy(), "trigger immediately request"); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationOverlapPolicy, namespaceName)
+		}
+	}
+	for i, backfill := range patch.GetBackfillRequest() {
+		if err := validateScheduleOverlapPolicy(backfill.GetOverlapPolicy(), fmt.Sprintf("backfill request %d", i)); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationOverlapPolicy, namespaceName)
+		}
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) handleScheduleValidationError(err error, validation, namespaceName string) error {
+	if !wh.config.IsScheduleValidationDisabled(validation, namespaceName) {
+		return serviceerror.NewInvalidArgumentf("Invalid schedule: %v", err)
+	}
+	wh.throttledLogger.Warn(
+		"Ignoring disabled schedule validation",
+		tag.WorkflowNamespace(namespaceName),
+		tag.NewStringTag("validation", validation),
+		tag.Error(err),
+	)
+	return nil
+}
+
 func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedule, namespaceName string) error {
 	if schedule.Spec == nil {
 		schedule.Spec = &schedulepb.ScheduleSpec{}
+	}
+	if err := validateScheduleRemainingActions(schedule); err != nil {
+		if err := wh.handleScheduleValidationError(err, scheduleValidationRemainingActions, namespaceName); err != nil {
+			return err
+		}
 	}
 	if err := validateScheduleIntervalDurations(schedule.Spec); err != nil {
 		if !wh.config.IsScheduleValidationDisabled(scheduleValidationScheduleDuration, namespaceName) {
@@ -6914,6 +6995,11 @@ func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedul
 			tag.NewStringTag("validation", scheduleValidationScheduleDuration),
 			tag.Error(err),
 		)
+	}
+	if err := validateScheduleTimestamps(schedule.Spec); err != nil {
+		if err := wh.handleScheduleValidationError(err, scheduleValidationTimestamp, namespaceName); err != nil {
+			return err
+		}
 	}
 	compiledSpec, err := wh.scheduleSpecBuilder.NewCompiledSpec(schedule.Spec)
 	if err != nil {
