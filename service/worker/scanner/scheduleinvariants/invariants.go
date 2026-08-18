@@ -216,7 +216,10 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 			if checked >= int64(maxChecks) {
 				a.logger.Warn("overdue scan hit per-namespace check cap; remaining schedules left unchecked this pass",
 					tag.WorkflowNamespace(nsName),
-					tag.NewInt("cap", maxChecks))
+					tag.ScheduleID(scheduleID),
+					tag.NewInt64("checked", checked),
+					tag.NewInt("cap", maxChecks),
+					tag.NewInt64("anomalies-found-so-far", nsAnomalies))
 				metrics.ScheduleInvariantsScannerOverdueNextActionTimeCapHitCount.With(
 					a.metricsHandler.WithTags(metrics.NamespaceTag(nsName))).Record(1)
 				break
