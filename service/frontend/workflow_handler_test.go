@@ -411,7 +411,7 @@ func (s *WorkflowHandlerSuite) TestPollWorkflowTaskQueue_EmptyLongPollDoesNotAnn
 	span.End()
 	s.NoError(err)
 	s.NotNil(resp)
-	s.False(spanHasAttribute(recorder.Ended()[0], "temporal.worker_task.type"))
+	s.False(spanHasAttribute(recorder.Ended()[0], "worker_task.type"))
 }
 
 func (s *WorkflowHandlerSuite) TestPollActivityTaskQueue_EmptyLongPollDoesNotAnnotateWorkerTask() {
@@ -433,7 +433,7 @@ func (s *WorkflowHandlerSuite) TestPollActivityTaskQueue_EmptyLongPollDoesNotAnn
 	span.End()
 	s.NoError(err)
 	s.NotNil(resp)
-	s.False(spanHasAttribute(recorder.Ended()[0], "temporal.worker_task.type"))
+	s.False(spanHasAttribute(recorder.Ended()[0], "worker_task.type"))
 }
 
 func spanHasAttribute(span sdktrace.ReadOnlySpan, key string) bool {
