@@ -116,6 +116,7 @@ type Config struct {
 
 	QueuePendingTaskCriticalCount      dynamicconfig.IntPropertyFn
 	QueueReaderStuckCriticalAttempts   dynamicconfig.IntPropertyFn
+	QueueReaderStuckShadowMode         dynamicconfig.BoolPropertyFn
 	QueueCriticalSlicesCount           dynamicconfig.IntPropertyFn
 	QueuePendingTaskMaxCount           dynamicconfig.IntPropertyFn
 	QueueMaxPredicateSize              dynamicconfig.IntPropertyFn
@@ -208,6 +209,8 @@ type Config struct {
 	MaximumBufferedEventsBatch       dynamicconfig.IntPropertyFn
 	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaximumRequestIDsPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RequestIDMaxAge                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
@@ -307,6 +310,7 @@ type Config struct {
 	ReplicationStreamSenderErrorRetryMaxInterval         dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderErrorRetryMaxAttempts         dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderErrorRetryExpiration          dynamicconfig.DurationPropertyFn
+	ReplicationStreamSenderSkipStuckTask                 dynamicconfig.BoolPropertyFn
 
 	ReplicationExecutableTaskErrorRetryWait               dynamicconfig.DurationPropertyFn
 	ReplicationExecutableTaskErrorRetryBackoffCoefficient dynamicconfig.FloatPropertyFn
@@ -553,6 +557,7 @@ func NewConfig(
 
 		QueuePendingTaskCriticalCount:      dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
 		QueueReaderStuckCriticalAttempts:   dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
+		QueueReaderStuckShadowMode:         dynamicconfig.QueueReaderStuckShadowMode.Get(dc),
 		QueueCriticalSlicesCount:           dynamicconfig.QueueCriticalSlicesCount.Get(dc),
 		QueuePendingTaskMaxCount:           dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
 		QueueMaxPredicateSize:              dynamicconfig.QueueMaxPredicateSize.Get(dc),
@@ -667,6 +672,8 @@ func NewConfig(
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
+		MaximumRequestIDsPerExecution:    dynamicconfig.MaximumRequestIDsPerExecution.Get(dc),
+		RequestIDMaxAge:                  dynamicconfig.RequestIDMaxAge.Get(dc),
 		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
 		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),
@@ -739,6 +746,7 @@ func NewConfig(
 		ReplicationStreamSenderErrorRetryMaxInterval:        dynamicconfig.ReplicationStreamSenderErrorRetryMaxInterval.Get(dc),
 		ReplicationStreamSenderErrorRetryMaxAttempts:        dynamicconfig.ReplicationStreamSenderErrorRetryMaxAttempts.Get(dc),
 		ReplicationStreamSenderErrorRetryExpiration:         dynamicconfig.ReplicationStreamSenderErrorRetryExpiration.Get(dc),
+		ReplicationStreamSenderSkipStuckTask:                dynamicconfig.ReplicationStreamSenderSkipStuckTask.Get(dc),
 
 		ReplicationExecutableTaskErrorRetryWait:               dynamicconfig.ReplicationExecutableTaskErrorRetryWait.Get(dc),
 		ReplicationExecutableTaskErrorRetryBackoffCoefficient: dynamicconfig.ReplicationExecutableTaskErrorRetryBackoffCoefficient.Get(dc),

@@ -6,11 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -183,6 +185,54 @@ func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 		logger,
 		newLegacySpecBuilder(0, 0),
 	)
+}
+
+// engineTestConfig holds configuration options for newTestEngineContext.
+type engineTestConfig struct {
+	specProcessor scheduler.SpecProcessor
+	engineOpts    []chasmtest.EngineOption
+}
+
+// engineTestOption is a functional option for configuring newTestEngineContext.
+type engineTestOption func(*engineTestConfig)
+
+// withEngineSpecProcessor configures newTestEngineContext with a custom
+// SpecProcessor, instead of the default real one.
+func withEngineSpecProcessor(sp scheduler.SpecProcessor) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.specProcessor = sp
+	}
+}
+
+// withEngineTimeSource configures the CHASM test engine with a controllable
+// time source, for tests that need to advance time explicitly.
+func withEngineTimeSource(ts *clock.EventTimeSource) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.engineOpts = append(c.engineOpts, chasmtest.WithTimeSource(ts))
+	}
+}
+
+// newTestEngineContext builds a CHASM registry with the core and scheduler
+// libraries registered, wraps it in a chasmtest.Engine, and returns the
+// engine along with an engine-bound context ready for chasm.StartExecution /
+// ReadComponent / etc.
+func newTestEngineContext(t *testing.T, logger log.Logger, opts ...engineTestOption) (*chasmtest.Engine, context.Context) {
+	config := &engineTestConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
+
+	specProcessor := config.specProcessor
+	if specProcessor == nil {
+		specProcessor = newRealSpecProcessor(gomock.NewController(t), logger)
+	}
+
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
+
+	engine := chasmtest.NewEngine(t, registry, config.engineOpts...)
+	return engine, chasm.NewEngineContext(context.Background(), engine)
 }
 
 // newTestEnv creates a new test environment with the given options.
