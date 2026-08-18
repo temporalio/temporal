@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
-	"go.temporal.io/server/common/authorization"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -278,8 +277,8 @@ func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, 
 // NexusOperationCancelRequested events land in the caller's history ahead of the close event.
 //
 // The auto-close distinction is event-sourced: the NexusOperationCancelRequested event is stamped with
-// the system principal, which the event's Apply reads to set the cancellation's auto_close flag. This
-// keeps it correct when a reset rebuilds a still-pending cancellation from history.
+// the system principal, which the event's Apply copies onto the cancellation. This keeps it correct
+// when a reset rebuilds a still-pending cancellation from history.
 //
 // CONSIDER(stephanos): this fans out inline within the workflow-close transaction, one event +
 // cancellation component per pending operation. The count is bounded by
@@ -327,10 +326,7 @@ func (w *Workflow) requestAutoCloseCancel(ctx chasm.MutableContext, scheduledEve
 		}
 		// System principal → Apply flags it auto-close. Survives close-transaction stamping, which
 		// only fills nil principals.
-		e.Principal = &commonpb.Principal{
-			Type: authorization.InternalPrincipalType,
-			Name: authorization.InternalPrincipalName,
-		}
+		e.Principal = nexusoperation.SystemPrincipal()
 		// nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.WorkerMayIgnore = true // For compatibility with older SDKs.
 	})

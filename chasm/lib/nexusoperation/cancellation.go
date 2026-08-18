@@ -10,8 +10,20 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/backoff"
 )
+
+// SystemPrincipal is Temporal's internal principal, used to mark a cancellation as system-initiated
+// (auto-close) rather than user-initiated.
+func SystemPrincipal() *commonpb.Principal {
+	return &commonpb.Principal{Type: authorization.InternalPrincipalType, Name: authorization.InternalPrincipalName}
+}
+
+// isSystemPrincipal reports whether p is Temporal's internal (system) principal.
+func isSystemPrincipal(p *commonpb.Principal) bool {
+	return p.GetType() == authorization.InternalPrincipalType
+}
 
 var _ chasm.Component = (*Cancellation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.CancellationStatus] = (*Cancellation)(nil)
@@ -69,8 +81,9 @@ type cancelArgs struct {
 	startToCloseTimeout    time.Duration
 	headers                map[string]string
 	payload                *commonpb.Payload
-	// autoClose skips the clamp to the operation's remaining timeout (set by the auto-close policy).
-	autoClose bool
+	// principal is who requested the cancel; a system principal skips the clamp to the operation's
+	// remaining timeout (set by the auto-close policy).
+	principal *commonpb.Principal
 }
 
 func (c *Cancellation) onCompleted(ctx chasm.MutableContext) error {
@@ -127,7 +140,7 @@ func (c *Cancellation) loadArgs(
 		startToCloseTimeout:    op.GetStartToCloseTimeout().AsDuration(),
 		headers:                maps.Clone(invocationData.Header),
 		payload:                invocationData.Input,
-		autoClose:              c.GetAutoClose(),
+		principal:              c.GetPrincipal(),
 	}, nil
 }
 

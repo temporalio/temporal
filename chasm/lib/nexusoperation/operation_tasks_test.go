@@ -883,7 +883,7 @@ func TestStartToCloseTimeoutTaskHandler_Execute_RequestCancel(t *testing.T) {
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, op.Status)
 	cancel, ok := op.Cancellation.TryGet(ctx)
 	require.True(t, ok, "expected an auto-close cancellation to be created for the started op")
-	require.True(t, cancel.GetAutoClose())
+	require.True(t, isSystemPrincipal(cancel.GetPrincipal()))
 }
 
 func TestScheduleToCloseTimeoutTaskHandler_Validate(t *testing.T) {

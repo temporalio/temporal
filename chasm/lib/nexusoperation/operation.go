@@ -220,7 +220,7 @@ func (o *Operation) RequestCancelOnAutoClose(ctx chasm.MutableContext) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationAutoCloseCancelRequested(ctx, o)
 	}
-	if err := o.RequestCancel(ctx, &nexusoperationpb.CancellationState{AutoClose: true}); err != nil {
+	if err := o.RequestCancel(ctx, &nexusoperationpb.CancellationState{Principal: SystemPrincipal()}); err != nil {
 		if errors.Is(err, ErrCancellationAlreadyRequested) || errors.Is(err, ErrOperationAlreadyCompleted) {
 			return nil
 		}
