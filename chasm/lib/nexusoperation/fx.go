@@ -146,10 +146,9 @@ func clientProviderFactory(
 	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 		var url string
 		var targetNamespaceName string
-
 		var httpClient *http.Client
-		var httpCaller func(*http.Request) (*http.Response, error)
 		// Populate source header for worker targets, and route internally. Callback assumes external target if unset.
+		needsCallbackSourceHeader := false
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
@@ -158,31 +157,28 @@ func clientProviderFactory(
 			if err != nil {
 				return nil, err
 			}
-			httpCaller = httpClient.Do
-			if clusterID != "" {
-				httpCaller = func(r *http.Request) (*http.Response, error) {
-					resp, callErr := httpClient.Do(r)
-					commonnexus.SetFailureSourceOnContext(ctx, resp)
-					return resp, callErr
-				}
-			}
 		case *persistencespb.NexusEndpointTarget_Worker_:
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
-			httpCaller = httpClient.Do
-			if clusterID != "" {
-				httpCaller = func(r *http.Request) (*http.Response, error) {
-					r.Header.Set(nexusCallbackSourceHeader, clusterID)
-					resp, callErr := httpClient.Do(r)
-					commonnexus.SetFailureSourceOnContext(ctx, resp)
-					return resp, callErr
-				}
-			}
+			needsCallbackSourceHeader = true
 			if namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(variant.Worker.GetNamespaceId())); err == nil {
 				targetNamespaceName = namespaceName.String()
 			}
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
+		}
+
+		httpCaller := httpClient.Do
+		if clusterID != "" {
+			httpCaller = func(r *http.Request) (*http.Response, error) {
+				if needsCallbackSourceHeader {
+					r.Header.Set(nexusCallbackSourceHeader, clusterID)
+				}
+				resp, callErr := httpClient.Do(r)
+				// nexusrpc.HTTPClient does not return the raw HTTP response, so copy the failure-source header into the call context.
+				commonnexus.SetFailureSourceOnContext(ctx, resp)
+				return resp, callErr
+			}
 		}
 
 		baseHTTPCaller := httpCaller
