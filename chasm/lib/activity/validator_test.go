@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -525,6 +526,80 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
 		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+}
+
+func TestValidateAndPopulateStartRequest_ValidatesCompletionCallbackLinks(t *testing.T) {
+	h := &frontendHandler{
+		config: &Config{
+			BlobSizeLimitError:         defaultBlobSizeLimitError,
+			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+			DefaultActivityRetryPolicy: getDefaultRetrySettings,
+			EnableCallbacks:            func(string) bool { return true },
+			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
+		},
+		callbackValidator: callback.NewValidator(
+			func(string) int { return 10 },
+			func(string) int { return 1000 },
+			func(string) int { return 4096 },
+			func(string) callback.AddressMatchRules { return callback.AddressMatchRules{} },
+		),
+		linkValidator: newLinkValidator(
+			func(string) int { return 1 },
+			func(string) int { return 2000 },
+			defaultLinkMaxSize,
+		),
+		logger: log.NewNoopLogger(),
+	}
+	newRequest := func(callbackLinks []*commonpb.Link) *workflowservice.StartActivityExecutionRequest {
+		return &workflowservice.StartActivityExecutionRequest{
+			Namespace:           defaultNamespaceID,
+			ActivityId:          defaultActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			StartToCloseTimeout: durationpb.New(10 * time.Second),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: callbackLinks,
+			}},
+		}
+	}
+
+	t.Run("invalid callback link", func(t *testing.T) {
+		req := newRequest([]*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{},
+			},
+		}})
+
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
+		require.ErrorContains(t, err, "batch job link must not have an empty job ID")
+	})
+
+	t.Run("too many combined links", func(t *testing.T) {
+		req := newRequest([]*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+			},
+		}})
+		req.Links = []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}}
+
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
+		require.ErrorContains(t, err, "cannot attach more than 1 links per request, got 2")
 	})
 }
 
