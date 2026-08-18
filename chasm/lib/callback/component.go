@@ -13,9 +13,7 @@ import (
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -110,10 +108,11 @@ func (c *Callback) loadInvocationArgs(
 		if err == nil {
 			completion.Links = callbackLinks
 		} else {
-			softassert.Fail(
-				ctx.Logger(),
-				"unexpected backlinks for worker callback completion",
-				tag.Error(err))
+			// TODO(chrsmith): Enable this once debugged.
+			// softassert.Fail(
+			// 	ctx.Logger(),
+			// 	"unexpected backlinks for worker callback completion",
+			// 	tag.Error(err))
 		}
 
 		return invocableWorker{

@@ -477,8 +477,8 @@ func (s *NexusStandaloneCallbacksTestSuite) TestLinkingE2E() {
 			- To the other resource it spawned.
 	*/
 
-	TODO: Migrate the test infra from the worker-callbacks tests
-	tests/callbacks_worker_test.go
-	Or just put the logic there, to uplevel it.
+	// TODO: Migrate the test infra from the worker-callbacks tests
+	// tests/callbacks_worker_test.go
+	// Or just put the logic there, to uplevel it.
 
 }
