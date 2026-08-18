@@ -5718,7 +5718,9 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 }
 
 func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
-	wh := s.getWorkflowHandler(s.newConfig())
+	config := s.newConfig()
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
+	wh := s.getWorkflowHandler(config)
 	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
 		return &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         s.testNamespace.String(),
@@ -5758,6 +5760,51 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 
 		s.NoError(err)
 		s.Equal(map[string]string{"x-request-id": "value"}, request.GetRequest().GetCompletionCallbacks()[0].GetNexus().GetHeader())
+	})
+
+	s.Run("rejects invalid callback links", func() {
+		err := wh.prepareUpdateWorkflowRequest(
+			context.Background(),
+			s.testNamespace,
+			newRequest([]*commonpb.Callback{{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{{
+					Variant: &commonpb.Link_BatchJob_{
+						BatchJob: &commonpb.Link_BatchJob{},
+					},
+				}},
+			}}),
+		)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "batch job link must not have an empty job ID")
+	})
+
+	s.Run("rejects too many combined links", func() {
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{{
+				Variant: &commonpb.Link_BatchJob_{
+					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+				},
+			}},
+		}})
+		request.Request.Links = []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}}
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "cannot attach more than 1 links per request, got 2")
 	})
 }
 
