@@ -5478,6 +5478,11 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		}
 	}
 
+	request.GetRequest().Links = dedupLinksFromCallbacks(
+		request.GetRequest().GetLinks(),
+		request.GetRequest().GetCompletionCallbacks(),
+	)
+
 	return commonlinks.ValidateRequest(
 		request.GetRequest().GetLinks(),
 		request.GetRequest().GetCompletionCallbacks(),
