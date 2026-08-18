@@ -14,6 +14,9 @@ const ReplicationLifecycleEventName = "replication_lifecycle"
 
 type ReplicationPhase string
 
+// ReplicationDisposition is the stable action or outcome vocabulary stored in details.disposition.
+type ReplicationDisposition string
+
 const (
 	ReplicationSent      ReplicationPhase = "sent"
 	ReplicationExecuting ReplicationPhase = "executing"
@@ -24,6 +27,20 @@ const (
 	// ends. See StreamSenderImpl.recordStuckTaskSkipped.
 	ReplicationSkipped ReplicationPhase = "skipped"
 	ReplicationError   ReplicationPhase = "error"
+)
+
+const (
+	ReplDispositionError         ReplicationDisposition = "error"
+	ReplDispositionRetry         ReplicationDisposition = "retry"
+	ReplDispositionDiscarded     ReplicationDisposition = "discarded"
+	ReplDispositionDropped       ReplicationDisposition = "dropped"
+	ReplDispositionCleanup       ReplicationDisposition = "cleanup"
+	ReplDispositionSkipped       ReplicationDisposition = "skipped"
+	ReplDispositionAbandoned     ReplicationDisposition = "abandoned"
+	ReplDispositionEnqueued      ReplicationDisposition = "enqueued"
+	ReplDispositionSyncState     ReplicationDisposition = "sync_state"
+	ReplDispositionResendHistory ReplicationDisposition = "resend_history"
+	ReplDispositionDuplicate     ReplicationDisposition = "duplicate"
 )
 
 const (

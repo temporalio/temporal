@@ -501,7 +501,7 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationApplyError(
 		"artifact_kind": artifactKind,
 	}
 	if errors.Is(err, consts.ErrDuplicate) {
-		details["disposition"] = "duplicate"
+		details["disposition"] = wideevents.ReplDispositionDuplicate
 	}
 	r.emitReplicationError(ctx, payload, sourceClusterName, wideevents.ReplOperationPassiveApply, message, err, details)
 }

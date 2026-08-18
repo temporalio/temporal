@@ -34,11 +34,11 @@ func emitStandbyTaskError(
 		activeCluster = entry.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()})
 	}
 
-	disposition := "error"
+	disposition := wideevents.ReplDispositionError
 	if errors.Is(err, consts.ErrTaskRetry) {
-		disposition = "retry"
+		disposition = wideevents.ReplDispositionRetry
 	} else if errors.Is(err, consts.ErrTaskDiscarded) {
-		disposition = "discarded"
+		disposition = wideevents.ReplDispositionDiscarded
 	}
 	details := map[string]any{
 		"active_cluster":  activeCluster,
