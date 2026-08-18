@@ -14,8 +14,6 @@ const (
 	BusinessIDKey = "temporalBusinessID"
 	RunIDKey      = "temporalRunID"
 
-	NamespaceKey = "temporalNamespace"
-
 	NexusEndpointKey  = "nexus.endpoint"
 	NexusNamespaceKey = "nexus.namespace"
 	NexusOperationKey = "nexus.operation"

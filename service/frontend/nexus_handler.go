@@ -89,7 +89,21 @@ type operationContext struct {
 	cleanupFunctions              []func(map[string]string, error)
 }
 
-// Panic handler and metrics recording function.
+// annotateInboundSpan sets Temporal-domain attributes from the resolved operation context
+// on the active Nexus HTTP server span.
+func (c *operationContext) annotateInboundSpan(
+	ctx context.Context,
+	service, operation, requestID string,
+) {
+	nexusrpc.AnnotateServerSpan(trace.SpanFromContext(ctx), nexusrpc.ServerSpanAttributes{
+		Endpoint:  c.endpointName,
+		Service:   service,
+		Operation: operation,
+		RequestID: requestID,
+	})
+}
+
+// Recovers panics and finalizes request metrics, cleanup, and span status.
 // Used as a deferred statement in Nexus handler methods.
 func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
 	recovered := recover() //nolint:revive
@@ -118,6 +132,12 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 
 	for _, fn := range c.cleanupFunctions {
 		fn(c.responseHeaders, *errPtr)
+	}
+
+	if *errPtr != nil {
+		span := trace.SpanFromContext(*ctxPtr)
+		span.RecordError(*errPtr)
+		span.SetStatus(codes.Error, (*errPtr).Error())
 	}
 }
 
@@ -348,33 +368,6 @@ type nexusHandler struct {
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
 }
 
-// annotateInboundSpan sets Temporal-domain attributes from the resolved operation context
-// on the active Nexus HTTP server span.
-func annotateInboundSpan(
-	ctx context.Context,
-	oc *operationContext,
-	service, operation, requestID string,
-) {
-	nexusrpc.AnnotateServerSpan(trace.SpanFromContext(ctx), nexusrpc.ServerSpanAttributes{
-		NamespaceName: oc.namespaceName,
-		Endpoint:      oc.endpointName,
-		Service:       service,
-		Operation:     operation,
-		RequestID:     requestID,
-	})
-}
-
-// recordInboundSpanStatus records the terminal status on the active Nexus HTTP server span. It is
-// designed to be called from deferred statements with a pointer to the handler's named
-// return value so it can see the final error.
-func recordInboundSpanStatus(ctx context.Context, errPtr *error) {
-	if errPtr != nil && *errPtr != nil {
-		span := trace.SpanFromContext(ctx)
-		span.RecordError(*errPtr)
-		span.SetStatus(codes.Error, (*errPtr).Error())
-	}
-}
-
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
 // Resolves the context's namespace name to a registered Namespace.
 func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (*operationContext, error) {
@@ -441,8 +434,7 @@ func (h *nexusHandler) StartOperation(
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
 
-	annotateInboundSpan(ctx, oc, service, operation, options.RequestID)
-	defer recordInboundSpanStatus(ctx, &retErr)
+	oc.annotateInboundSpan(ctx, service, operation, options.RequestID)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -685,8 +677,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, "")
 
-	annotateInboundSpan(ctx, oc, service, operation, "")
-	defer recordInboundSpanStatus(ctx, &retErr)
+	oc.annotateInboundSpan(ctx, service, operation, "")
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{

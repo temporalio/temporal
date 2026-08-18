@@ -149,10 +149,6 @@ func clientProviderFactory(
 		// Populate source header for worker targets, and route internally. Callback assumes external target if unset.
 		needsCallbackSourceHeader := false
 		var targetNamespaceName string
-		originNamespaceName := namespaceID
-		if namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID)); err == nil {
-			originNamespaceName = namespaceName.String()
-		}
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
@@ -172,7 +168,7 @@ func clientProviderFactory(
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
 		httpCaller := func(r *http.Request) (*http.Response, error) {
-			nexusrpc.AnnotateClientRequest(r, originNamespaceName, targetNamespaceName)
+			nexusrpc.AnnotateClientRequest(r, targetNamespaceName)
 			if needsCallbackSourceHeader && clusterID != "" {
 				r.Header.Set(nexusCallbackSourceHeader, clusterID)
 			}

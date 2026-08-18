@@ -10,7 +10,6 @@ import (
 
 // ServerSpanAttributes describes Nexus request attributes added to a server trace span.
 type ServerSpanAttributes struct {
-	NamespaceName       string
 	TargetNamespaceName string
 	Endpoint            string
 	Service             string
@@ -19,10 +18,7 @@ type ServerSpanAttributes struct {
 }
 
 func (a ServerSpanAttributes) keyValues() []attribute.KeyValue {
-	kvs := make([]attribute.KeyValue, 0, 6)
-	if a.NamespaceName != "" {
-		kvs = append(kvs, attribute.String(telemetry.NamespaceKey, a.NamespaceName))
-	}
+	kvs := make([]attribute.KeyValue, 0, 5)
 	if a.TargetNamespaceName != "" {
 		kvs = append(kvs, attribute.String(telemetry.NexusNamespaceKey, a.TargetNamespaceName))
 	}
@@ -49,9 +45,8 @@ func AnnotateServerSpan(span trace.Span, attrs ServerSpanAttributes) {
 }
 
 // AnnotateClientRequest adds Nexus attributes to the HTTP client span created for req.
-func AnnotateClientRequest(req *http.Request, namespaceName string, targetNamespaceName string) {
+func AnnotateClientRequest(req *http.Request, targetNamespaceName string) {
 	telemetry.SetHTTPClientSpanAttributes(req, ServerSpanAttributes{
-		NamespaceName:       namespaceName,
 		TargetNamespaceName: targetNamespaceName,
 		RequestID:           req.Header.Get(headerRequestID),
 	}.keyValues()...)
