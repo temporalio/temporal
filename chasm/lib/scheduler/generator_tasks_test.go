@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/testlogger"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
@@ -228,6 +229,41 @@ func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, generator.FutureActionTimes, 2)
+}
+
+func TestGeneratorTask_UpdateFutureActionTimes_NegativeRemainingActionsDoesNotPanic(t *testing.T) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	engine, engineCtx := newTestEngineContext(t, logger)
+
+	input := defaultSchedule()
+	input.State.LimitedActions = true
+	input.State.RemainingActions = -1
+
+	result, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+		scheduler.CreateScheduler,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Schedule:   input,
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](result.ExecutionKey)
+	_, err = engine.FirePureTasks(rootRef, time.Now())
+	require.NoError(t, err)
+
+	_, err = chasm.ReadComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			require.Empty(t, s.Generator.Get(ctx).FutureActionTimes)
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
 }
 
 func TestGeneratorTask_Idle_SetsIdleCloseTime(t *testing.T) {
