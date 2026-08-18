@@ -84,7 +84,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 
 	emitLifecycle := e.Config.EmitReplicationLifecycleEvents()
 	if emitLifecycle {
-		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()), e.SourceClusterName(), e.SourceShardKey().ShardID)
 	}
 
 	// inspectedMS is the mutable-state snapshot examined during verification, captured for the

@@ -148,6 +148,9 @@ type (
 		SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo)
 		GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo
 		AttachRequestID(requestID string, eventType enumspb.EventType, eventID int64)
+		// AttachChasmRequestID records a request ID attached by the CHASM framework for
+		// UpdateComponent idempotency. Such entries are sweepable (oldest-first) at transaction close.
+		AttachChasmRequestID(requestID string)
 
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
@@ -347,6 +350,7 @@ type (
 		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.
 		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsSnapshot(ctx context.Context, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
+		UpdateLastRunningClock([]*persistence.WorkflowEvents) (*persistencespb.WorkflowExecutionInfo, []*persistence.WorkflowEvents, error)
 		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
 
 		// ContinueAsNewMinBackoff calculate minimal backoff for next ContinueAsNew run.

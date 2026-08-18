@@ -418,6 +418,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		Namespace:     ns,
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
+	defer sdkClient.Close()
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
@@ -606,6 +607,7 @@ func (a *activities) startTaskProcessor(
 // lets the server's idempotency checks collapse retries of the same call.
 func deterministicRequestID(jobID string, parts ...string) string {
 	var key strings.Builder
+	key.WriteString(jobID)
 	for _, part := range parts {
 		key.WriteString(":" + part)
 	}

@@ -66,6 +66,7 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -1818,10 +1819,34 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 		s.Run("with success", func() {
 
 			s.Run("and id reuse policy is ALLOW_DUPLICATE", func() {
+				var currentExecutionLastRunningClock int64
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
-					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+					DoAndReturn(
+						func(
+							_ context.Context,
+							request *persistence.CreateWorkflowExecutionRequest,
+						) (*persistence.CreateWorkflowExecutionResponse, error) {
+							// Test the case where current execution is closed after new execution's mutable state
+							// snapshot is prepared in memory.
+							var err error
+							currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
+							if err != nil {
+								return nil, err
+							}
+							return nil, makeCurrentWorkflowConditionFailedError(prevRequestID)
+						},
+					)
+
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
-					Return(tests.CreateWorkflowExecutionResponse, nil)
+					DoAndReturn(
+						func(
+							_ context.Context,
+							request *persistence.CreateWorkflowExecutionRequest,
+						) (*persistence.CreateWorkflowExecutionResponse, error) {
+							s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
+							return tests.CreateWorkflowExecutionResponse, nil
+						},
+					)
 
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
@@ -1833,10 +1858,34 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 			})
 
 			s.Run("and id reuse policy is TERMINATE_IF_RUNNING", func() {
+				var currentExecutionLastRunningClock int64
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
-					Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+					DoAndReturn(
+						func(
+							_ context.Context,
+							request *persistence.CreateWorkflowExecutionRequest,
+						) (*persistence.CreateWorkflowExecutionResponse, error) {
+							// Test the case where current execution is closed after new execution's mutable state
+							// snapshot is prepared in memory.
+							var err error
+							currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
+							if err != nil {
+								return nil, err
+							}
+							return nil, makeCurrentWorkflowConditionFailedError(prevRequestID)
+						},
+					)
+
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
-					Return(tests.CreateWorkflowExecutionResponse, nil)
+					DoAndReturn(
+						func(
+							_ context.Context,
+							request *persistence.CreateWorkflowExecutionRequest,
+						) (*persistence.CreateWorkflowExecutionResponse, error) {
+							s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
+							return tests.CreateWorkflowExecutionResponse, nil
+						},
+					)
 
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
@@ -1919,10 +1968,34 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 					})
 
 					s.Run("and id reuse policy ALLOW_DUPLICATE_FAILED_ONLY", func() {
+						var currentExecutionLastRunningClock int64
 						s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
-							Return(nil, makeCurrentWorkflowConditionFailedError(prevRequestID))
+							DoAndReturn(
+								func(
+									_ context.Context,
+									request *persistence.CreateWorkflowExecutionRequest,
+								) (*persistence.CreateWorkflowExecutionResponse, error) {
+									// Test the case where current execution is closed after new execution's mutable state
+									// snapshot is prepared in memory.
+									var err error
+									currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
+									if err != nil {
+										return nil, err
+									}
+									return nil, makeCurrentWorkflowConditionFailedError(prevRequestID)
+								},
+							)
+
 						s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).
-							Return(tests.CreateWorkflowExecutionResponse, nil)
+							DoAndReturn(
+								func(
+									_ context.Context,
+									request *persistence.CreateWorkflowExecutionRequest,
+								) (*persistence.CreateWorkflowExecutionResponse, error) {
+									s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
+									return tests.CreateWorkflowExecutionResponse, nil
+								},
+							)
 
 						resp, err := s.historyEngine.StartWorkflowExecution(
 							metrics.AddMetricsContext(context.Background()),
@@ -2041,7 +2114,15 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	notExistErr := serviceerror.NewNotFound("Workflow not exist")
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, notExistErr)
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.Equal(persistence.CreateWorkflowModeBrandNew, request.Mode)
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.Nil(err)
@@ -2106,9 +2187,32 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 
+	var currentExecutionLastRunningClock int64
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.GetWorkflowExecutionRequest,
+		) (*persistence.GetWorkflowExecutionResponse, error) {
+			// Test the case where current execution is closed after new execution's mutable state is created in memory.
+			var err error
+			currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
+			if err != nil {
+				return nil, err
+			}
+			return gwmsResponse, nil
+		},
+	)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.Equal(persistence.CreateWorkflowModeUpdateCurrent, request.Mode)
+			s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.Nil(err)
@@ -2578,6 +2682,8 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExi
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent() {
+	// Inline resend: the RPC pulls and re-verifies before returning.
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return false }
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -2663,6 +2769,112 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 
 	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.NoError(err)
+}
+
+// Async resend: the RPC returns the verification error immediately and the pull runs in the
+// background.
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsync() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+
+	// Parent is absent locally, so verification fails and a resend is eligible.
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	// Signal when the background resend lands, so assertions do not race the goroutine.
+	syncCalled := make(chan struct{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+			close(syncCalled)
+			return nil, serviceerror.NewUnavailable("source cluster unavailable")
+		}).Times(1)
+
+	// The RPC itself returns the verification error without waiting for the resend.
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+
+	select {
+	case <-syncCalled:
+	case <-time.After(10 * time.Second):
+		s.Fail("background resend did not call SyncWorkflowState")
+	}
+}
+
+// TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped asserts that a second attempt for
+// the same parent does not start a concurrent resend while the first is still running.
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	// Times(1): only one resend may reach the source. It blocks so the second attempt overlaps.
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+			close(entered)
+			<-release
+			return nil, serviceerror.NewUnavailable("source cluster unavailable")
+		}).Times(1)
+
+	ctx := metrics.AddMetricsContext(context.Background())
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(ctx, request)
+	s.Error(err)
+
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		s.Fail("first resend did not reach the source cluster")
+	}
+
+	// Second attempt while the first is in flight: must not start another resend.
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(ctx, request)
+	s.Error(err)
+
+	close(release)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed() {
@@ -2921,14 +3133,22 @@ func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we *commonpb.Wo
 	return weContext.(*workflow.ContextImpl).MutableState
 }
 
-type createWorkflowExecutionRequestMatcher struct {
-	f func(request *persistence.CreateWorkflowExecutionRequest) bool
+func (s *engine2Suite) assertWorkflowLastRunningClockUpdated(
+	currentExecutionLastRunningClock int64,
+	request *persistence.CreateWorkflowExecutionRequest,
+) {
+	updatedLastRunningClock := request.NewWorkflowSnapshot.ExecutionInfo.LastRunningClock
+	s.Less(currentExecutionLastRunningClock, updatedLastRunningClock)
+	s.NotEmpty(request.NewWorkflowEvents)
+
+	lastBatch := request.NewWorkflowEvents[len(request.NewWorkflowEvents)-1]
+	s.NotEmpty(lastBatch.Events)
+	lastEvent := lastBatch.Events[len(lastBatch.Events)-1]
+	s.Equal(updatedLastRunningClock, lastEvent.GetTaskId())
 }
 
-func newCreateWorkflowExecutionRequestMatcher(f func(request *persistence.CreateWorkflowExecutionRequest) bool) gomock.Matcher {
-	return &createWorkflowExecutionRequestMatcher{
-		f: f,
-	}
+type createWorkflowExecutionRequestMatcher struct {
+	f func(request *persistence.CreateWorkflowExecutionRequest) bool
 }
 
 func (m *createWorkflowExecutionRequestMatcher) Matches(x any) bool {
