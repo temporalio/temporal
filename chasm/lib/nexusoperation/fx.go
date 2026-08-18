@@ -144,7 +144,7 @@ func clientProviderFactory(
 	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 		var url string
 		var httpClient *http.Client
-		httpCaller := httpClient.Do
+		var httpCaller func(*http.Request) (*http.Response, error)
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
@@ -153,6 +153,7 @@ func clientProviderFactory(
 			if err != nil {
 				return nil, err
 			}
+			httpCaller = httpClient.Do
 			if clusterID != "" {
 				httpCaller = func(r *http.Request) (*http.Response, error) {
 					resp, callErr := httpClient.Do(r)
@@ -163,6 +164,7 @@ func clientProviderFactory(
 		case *persistencespb.NexusEndpointTarget_Worker_:
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
+			httpCaller = httpClient.Do
 			if clusterID != "" {
 				httpCaller = func(r *http.Request) (*http.Response, error) {
 					r.Header.Set(nexusCallbackSourceHeader, clusterID)
