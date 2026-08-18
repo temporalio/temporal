@@ -109,7 +109,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	}
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
-	ctx = setReplicationTaskOrigin(ctx, e.ExecutableTask, wideevents.ReplArtifactOriginTaskPayload)
+	ctx = setReplicationTaskOrigin(ctx, e.ExecutableTask, wideevents.ReplApplyArtifactSourceTaskPayload)
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),

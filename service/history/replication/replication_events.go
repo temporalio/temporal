@@ -91,8 +91,8 @@ func (e *ExecutableTaskImpl) emitReplicationTaskError(
 	details["attempt"] = e.Attempt()
 	details["priority"] = e.GetPriority().String()
 	details["target_cluster"] = e.ClusterMetadata.GetCurrentClusterName()
-	if _, ok := details["artifact_origin"]; !ok {
-		details["artifact_origin"] = wideevents.ReplArtifactOriginTaskPayload
+	if _, ok := details["apply_artifact_source"]; !ok {
+		details["apply_artifact_source"] = wideevents.ReplApplyArtifactSourceTaskPayload
 	}
 	sourceTaskID := e.replicationTask.GetSourceTaskId()
 	if sourceTaskID == 0 {
@@ -124,17 +124,17 @@ type replicationErrorEmitter interface {
 func setReplicationTaskOrigin(
 	ctx context.Context,
 	task ExecutableTask,
-	artifactOrigin string,
+	applyArtifactSource wideevents.ReplicationApplyArtifactSource,
 ) context.Context {
 	taskImpl, ok := task.(*ExecutableTaskImpl)
 	if !ok {
 		return ctx
 	}
 	return wideevents.SetReplicationTaskOrigin(ctx, wideevents.ReplicationTaskOrigin{
-		ClusterName:    taskImpl.sourceClusterName,
-		ShardID:        taskImpl.sourceShardKey.ShardID,
-		TaskID:         taskImpl.taskID,
-		ArtifactOrigin: artifactOrigin,
+		ClusterName:         taskImpl.sourceClusterName,
+		ShardID:             taskImpl.sourceShardKey.ShardID,
+		TaskID:              taskImpl.taskID,
+		ApplyArtifactSource: applyArtifactSource,
 	})
 }
 

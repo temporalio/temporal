@@ -826,13 +826,13 @@ func (e *ExecutableTaskImpl) SyncState(
 	if err != nil {
 		return false, err
 	}
-	ctx = setReplicationTaskOrigin(ctx, e, wideevents.ReplArtifactOriginSyncStateRefetch)
+	ctx = setReplicationTaskOrigin(ctx, e, wideevents.ReplApplyArtifactSourceSyncStateRefetch)
 	err = engine.ReplicateVersionedTransition(ctx, syncStateErr.ArchetypeId, resp.VersionedTransitionArtifact, e.SourceClusterName())
 	if err == nil || errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
 	}
 	e.emitReplicationTaskError(wideevents.ReplOperationSyncStateApply, "Failed to apply mutable state refetched from source", err, map[string]any{
-		"artifact_origin": wideevents.ReplArtifactOriginSyncStateRefetch,
+		"apply_artifact_source": wideevents.ReplApplyArtifactSourceSyncStateRefetch,
 	})
 	return false, err
 }

@@ -24,6 +24,9 @@ type ReplicationRecoveryAction string
 // ReplicationErrorClassification adds a queryable semantic classification to an error.
 type ReplicationErrorClassification string
 
+// ReplicationApplyArtifactSource records how the state artifact supplied to an apply was obtained.
+type ReplicationApplyArtifactSource string
+
 const (
 	ReplicationSent      ReplicationPhase = "sent"
 	ReplicationExecuting ReplicationPhase = "executing"
@@ -50,6 +53,11 @@ const (
 
 const (
 	ReplErrorClassificationDuplicate ReplicationErrorClassification = "duplicate"
+)
+
+const (
+	ReplApplyArtifactSourceTaskPayload      ReplicationApplyArtifactSource = "task_payload"
+	ReplApplyArtifactSourceSyncStateRefetch ReplicationApplyArtifactSource = "sync_state_refetch"
 )
 
 const (
@@ -94,8 +102,6 @@ const (
 	ReplOperationHistoryBranchCleanup             = "history_branch_cleanup"
 	ReplOperationNamespaceSync                    = "namespace_sync"
 	ReplOperationDLQWrite                         = "dlq_write"
-	ReplArtifactOriginTaskPayload                 = "task_payload"
-	ReplArtifactOriginSyncStateRefetch            = "sync_state_refetch"
 )
 
 // EmitReplicationError normalizes the common error envelope and emits it into the existing

@@ -6,10 +6,10 @@ type replicationTaskOriginCtxKey struct{}
 
 // ReplicationTaskOrigin identifies the source task whose processing produced an event.
 type ReplicationTaskOrigin struct {
-	ClusterName    string
-	ShardID        int32
-	TaskID         int64
-	ArtifactOrigin string
+	ClusterName         string
+	ShardID             int32
+	TaskID              int64
+	ApplyArtifactSource ReplicationApplyArtifactSource
 }
 
 // SetReplicationTaskOrigin stamps origin onto ctx.

@@ -415,8 +415,8 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		SourceShard:   origin.ShardID,
 		SourceTaskID:  origin.TaskID,
 	}
-	if origin.ArtifactOrigin != "" {
-		payload.Details = map[string]any{"artifact_origin": origin.ArtifactOrigin}
+	if origin.ApplyArtifactSource != "" {
+		payload.Details = map[string]any{"apply_artifact_source": origin.ApplyArtifactSource}
 	}
 	if ms != nil {
 		info := ms.GetExecutionInfo()
@@ -530,8 +530,8 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationError(
 	payload.Details = map[string]any{
 		"target_cluster": r.clusterMetadata.GetCurrentClusterName(),
 	}
-	if origin.ArtifactOrigin != "" {
-		payload.Details["artifact_origin"] = origin.ArtifactOrigin
+	if origin.ApplyArtifactSource != "" {
+		payload.Details["apply_artifact_source"] = origin.ApplyArtifactSource
 	}
 	wideevents.EmitReplicationError(r.eventLogger, payload, operation, message, err, details)
 }
