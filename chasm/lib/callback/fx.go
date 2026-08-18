@@ -36,12 +36,12 @@ func httpCallerProviderProvider(
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
-	defaultTransport, err := common.NewHTTPTransport(nil)
+	externalTransport, err := common.NewHTTPTransport(nil)
 	if err != nil {
 		return nil, err
 	}
-	defaultClient := &http.Client{
-		Transport: httpClientTransportInstrumenter.Instrument(defaultTransport),
+	externalClient := &http.Client{
+		Transport: httpClientTransportInstrumenter.Instrument(externalTransport),
 	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
@@ -52,7 +52,7 @@ func httpCallerProviderProvider(
 				namespaceRegistry,
 				httpClientCache,
 				callbackTokenGenerator,
-				defaultClient,
+				externalClient,
 				localClient,
 				logger,
 			)
