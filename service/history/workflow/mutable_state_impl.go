@@ -7591,13 +7591,6 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, nil, err
 	}
 
-	if result.skipPersistence {
-		if err := ms.cleanupTransaction(); err != nil {
-			return nil, nil, err
-		}
-		return nil, nil, nil
-	}
-
 	workflowMutation := &persistence.WorkflowMutation{
 		ExecutionInfo:  ms.executionInfo,
 		ExecutionState: ms.executionState,
@@ -7723,7 +7716,6 @@ type closeTransactionResult struct {
 	workflowEventsSeq  []*persistence.WorkflowEvents
 	bufferEvents       []*historypb.HistoryEvent
 	clearBuffer        bool
-	skipPersistence    bool
 	checksum           *persistencespb.Checksum
 	chasmNodesMutation chasm.NodesMutation
 }
@@ -7825,13 +7817,6 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
-
-	if ms.closeTransactionShouldSkipPersistence(isStateDirty, chasmNodesMutation) {
-		return closeTransactionResult{
-			skipPersistence: true,
-		}, nil
-	}
-
 	for nodePath := range chasmNodesMutation.DeletedNodes {
 		ms.approximateSize -= ms.chasmNodeSizes[nodePath]
 		delete(ms.chasmNodeSizes, nodePath)
@@ -7898,10 +7883,6 @@ func (ms *MutableStateImpl) closeTransaction(
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
 	}, nil
-}
-
-func (ms *MutableStateImpl) closeTransactionShouldSkipPersistence(isStateDirty bool, chasmNodesMutation chasm.NodesMutation) bool {
-	return !ms.IsWorkflow() && !isStateDirty && chasmNodesMutation.IsEmpty()
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
@@ -9329,6 +9310,39 @@ func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *
 	return false
 }
 
+// getActivityTimerTaskStatus returns the activity timer task status bits to carry over
+// when applying `incoming` on top of `current` during state-based replication. A bit is
+// kept only when the timer task already created for it is still valid, so that a
+// subsequent task refresh does not regenerate a timeout task that is already pending.
+//
+// Validity is decided purely by the deadline. An ActivityTimeoutTask is a wake-up at a
+// point in time: processSingleActivityTimeoutTask re-derives the whole timer sequence
+// from current mutable state and fires whatever has expired, without consulting the
+// task's attempt or stamp ("we don't need to check activity Stamps"). So a pending task
+// whose deadline is unchanged is still correct no matter what else moved, and a task
+// whose deadline moved is useless no matter what stayed put.
+//
+// Attempt and stamp are therefore deliberately not consulted here: they are only ever
+// proxies for "some deadline probably moved", and comparing the deadlines answers that
+// question directly. A new attempt, for instance, clears start-to-close and heartbeat
+// because clearing the started state removes those timers outright, and moves
+// schedule-to-start because its anchor advances — while schedule-to-close survives,
+// being anchored to the untouched FirstScheduledTime.
+//
+// The exception is a cross-cluster version change, which is about task provenance
+// rather than deadlines: tasks generated under the previous owning cluster are dropped
+// as stale at execution, so everything has to be recreated.
+func (ms *MutableStateImpl) getActivityTimerTaskStatus(current, incoming *persistencespb.ActivityInfo) int32 {
+	if current == nil {
+		return TimerTaskStatusNone
+	}
+	if !ms.clusterMetadata.IsVersionFromSameCluster(current.Version, incoming.Version) {
+		return TimerTaskStatusNone
+	}
+	return current.TimerTaskStatus &^
+		getActivityTimerDeadlines(current).changedMask(getActivityTimerDeadlines(incoming))
+}
+
 func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	updatedActivityInfos map[int64]*persistencespb.ActivityInfo,
 	updatedTimerInfos map[string]*persistencespb.TimerInfo,
@@ -9338,11 +9352,7 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	isSnapshot bool,
 ) error {
 	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
-		if current == nil || ms.ShouldResetActivityTimerTaskMask(current, incoming) {
-			incoming.TimerTaskStatus = TimerTaskStatusNone
-		} else {
-			incoming.TimerTaskStatus = current.TimerTaskStatus
-		}
+		incoming.TimerTaskStatus = ms.getActivityTimerTaskStatus(current, incoming)
 	}, func(ai *persistencespb.ActivityInfo) {
 		ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 		ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
