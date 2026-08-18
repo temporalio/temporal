@@ -1005,6 +1005,7 @@ func (h *otelLoggerErrorHandler) add(registration *otelLoggerErrorHandlerRegistr
 func (h *otelLoggerErrorHandler) remove(registration *otelLoggerErrorHandlerRegistration) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	// The lifecycle hook keeps the registration alive, so drop the logger reference explicitly.
 	registration.logger = nil
 	if i := slices.Index(h.registrations, registration); i >= 0 {
 		h.registrations = slices.Delete(h.registrations, i, i+1)
