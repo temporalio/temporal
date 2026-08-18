@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/telemetry"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
@@ -48,9 +47,6 @@ func httpCallerProviderProvider(
 
 	m := collection.NewOnceMap(func(queuescommon.NamespaceIDAndDestination) HTTPCaller {
 		return func(r *http.Request) (*http.Response, error) {
-			if httpClientTransportInstrumenter != nil {
-				r = nexusrpc.AnnotateClientRequest(r, "")
-			}
 			return routeRequest(r,
 				clusterMetadata,
 				namespaceRegistry,
