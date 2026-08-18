@@ -282,6 +282,23 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				AttachCompletionCallbacks: true,
 				AttachLinks:               true,
 			}
+			workflowEventLink := func(workflowID string) *commonpb.Link {
+				return &commonpb.Link{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{
+							Namespace:  env.Namespace().String(),
+							WorkflowId: workflowID,
+							RunId:      "run-id",
+							Reference: &commonpb.Link_WorkflowEvent_EventRef{
+								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+									EventId:   1,
+									EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+								},
+							},
+						},
+					},
+				}
+			}
 
 			t.Run("AttachesToNewActivity", func(t *testing.T) {
 				newActivityID := testcore.RandomizeStr(t.Name())
@@ -354,23 +371,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				bothTaskQueue := testcore.RandomizeStr(t.Name())
 				bothStartResp := env.startAndValidateActivity(ctx, t, bothActivityID, bothTaskQueue)
 
-				attachedLinks := []*commonpb.Link{
-					{
-						Variant: &commonpb.Link_WorkflowEvent_{
-							WorkflowEvent: &commonpb.Link_WorkflowEvent{
-								Namespace:  env.Namespace().String(),
-								WorkflowId: "both-wf",
-								RunId:      "both-run",
-								Reference: &commonpb.Link_WorkflowEvent_EventRef{
-									EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-										EventId:   1,
-										EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-									},
-								},
-							},
-						},
-					},
-				}
+				attachedLinks := []*commonpb.Link{workflowEventLink("both-wf")}
 
 				resp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 					Namespace:    env.Namespace().String(),
@@ -411,6 +412,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				idempotentStartResp := env.startAndValidateActivity(s.Context(), t, idempotentActivityID, idempotentTaskQueue)
 
 				requestID := env.Tv().Any().String()
+				originalLinks := []*commonpb.Link{workflowEventLink("idempotent-original")}
 				startReq := &workflowservice.StartActivityExecutionRequest{
 					Namespace:    env.Namespace().String(),
 					ActivityId:   idempotentActivityID,
@@ -426,15 +428,20 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 					CompletionCallbacks: []*commonpb.Callback{
 						{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/idempotent-cb"}}},
 					},
+					Links:             originalLinks,
 					OnConflictOptions: onConflictOpts,
 				}
 
-				// First call attaches the callback.
+				// First call attaches both values.
 				resp1, err := env.FrontendClient().StartActivityExecution(s.Context(), startReq)
 				require.NoError(t, err)
 				require.False(t, resp1.GetStarted())
 
-				// Second call with the same request ID should not duplicate the callback.
+				// A retry with the same request ID is ignored even if its payload changed.
+				startReq.CompletionCallbacks = []*commonpb.Callback{
+					{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/retry-cb"}}},
+				}
+				startReq.Links = []*commonpb.Link{workflowEventLink("idempotent-retry")}
 				resp2, err := env.FrontendClient().StartActivityExecution(s.Context(), startReq)
 				require.NoError(t, err)
 				require.False(t, resp2.GetStarted())
@@ -445,9 +452,9 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 					RunId:      idempotentStartResp.RunId,
 				})
 				require.NoError(t, err)
-				// Only 1 callback: the second call with the same request ID should not add another.
 				require.Len(t, descResp.Callbacks, 1)
 				require.Equal(t, "http://localhost/idempotent-cb", descResp.Callbacks[0].GetInfo().GetCallback().GetNexus().GetUrl())
+				protorequire.ProtoSliceEqual(t, originalLinks, descResp.GetInfo().GetLinks())
 			})
 
 			t.Run("IdempotentWithSameRequestIdAfterClose", func(t *testing.T) {
@@ -503,6 +510,71 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				})
 				require.NoError(t, err)
 				require.Len(t, descResp.GetCallbacks(), 1)
+			})
+
+			t.Run("ConflictUpdateIdempotentAfterClose", func(t *testing.T) {
+				activityID := testcore.RandomizeStr(t.Name())
+				taskQueue := testcore.RandomizeStr(t.Name())
+				startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+				requestID := env.Tv().Any().String()
+				ch, callbackAddress := newNexusCompletionHandler(t)
+				originalLinks := []*commonpb.Link{workflowEventLink("after-close-original")}
+				conflictReq := &workflowservice.StartActivityExecutionRequest{
+					Namespace:           env.Namespace().String(),
+					ActivityId:          activityID,
+					ActivityType:        env.Tv().ActivityType(),
+					Identity:            env.Tv().WorkerIdentity(),
+					Input:               defaultInput,
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+					StartToCloseTimeout: durationpb.New(time.Minute),
+					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+					RequestId:           requestID,
+					CompletionCallbacks: []*commonpb.Callback{{
+						Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+					}},
+					Links:             originalLinks,
+					OnConflictOptions: onConflictOpts,
+				}
+
+				conflictResp, err := env.FrontendClient().StartActivityExecution(ctx, conflictReq)
+				require.NoError(t, err)
+				require.False(t, conflictResp.GetStarted())
+				require.Equal(t, startResp.GetRunId(), conflictResp.GetRunId())
+
+				pollResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, startResp.GetRunId())
+				_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: pollResp.GetTaskToken(),
+					Result:    defaultResult,
+					Identity:  defaultIdentity,
+				})
+				require.NoError(t, err)
+
+				select {
+				case <-ch.requestCh:
+				case <-ctx.Done():
+					require.Fail(t, "timed out waiting for completion callback")
+				}
+
+				conflictReq.CompletionCallbacks = []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/retry-cb"}},
+				}}
+				conflictReq.Links = []*commonpb.Link{workflowEventLink("after-close-retry")}
+				retryResp, err := env.FrontendClient().StartActivityExecution(ctx, conflictReq)
+				require.NoError(t, err)
+				require.False(t, retryResp.GetStarted())
+				require.Equal(t, startResp.GetRunId(), retryResp.GetRunId())
+				ch.requestCompleteCh <- nil
+
+				descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      startResp.GetRunId(),
+				})
+				require.NoError(t, err)
+				require.Len(t, descResp.GetCallbacks(), 1)
+				require.Equal(t, callbackAddress, descResp.GetCallbacks()[0].GetInfo().GetCallback().GetNexus().GetUrl())
+				protorequire.ProtoSliceEqual(t, originalLinks, descResp.GetInfo().GetLinks())
 			})
 		})
 

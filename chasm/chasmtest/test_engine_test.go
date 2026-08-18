@@ -60,6 +60,7 @@ func TestUpdateComponentDeduplicatesRequestID(t *testing.T) {
 	updatedRef, err = update()
 	var failedPrecondition *serviceerror.FailedPrecondition
 	require.ErrorAs(t, err, &failedPrecondition)
+	require.ErrorIs(t, err, chasm.ErrRequestIDAlreadyUsed)
 	require.Nil(t, updatedRef)
 	require.Equal(t, 1, updateCount)
 }
