@@ -168,7 +168,7 @@ func clientProviderFactory(
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
 		httpCaller := func(r *http.Request) (*http.Response, error) {
-			nexusrpc.AnnotateClientRequest(r, targetNamespaceName)
+			r = nexusrpc.AnnotateClientRequest(r, targetNamespaceName)
 			if needsCallbackSourceHeader && clusterID != "" {
 				r.Header.Set(nexusCallbackSourceHeader, clusterID)
 			}

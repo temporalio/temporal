@@ -201,9 +201,9 @@ func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Respo
 
 type httpClientSpanAttributesKey struct{}
 
-// SetHTTPClientSpanAttributes adds attrs to the HTTP client span created for req.
-func SetHTTPClientSpanAttributes(req *http.Request, attrs ...attribute.KeyValue) {
-	*req = *req.WithContext(context.WithValue(req.Context(), httpClientSpanAttributesKey{}, attrs))
+// WithHTTPClientSpanAttributes returns req with attrs for its HTTP client span.
+func WithHTTPClientSpanAttributes(req *http.Request, attrs ...attribute.KeyValue) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), httpClientSpanAttributesKey{}, attrs))
 }
 
 type debugHTTPHandler struct {

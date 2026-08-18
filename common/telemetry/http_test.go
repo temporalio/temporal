@@ -200,7 +200,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		}))
 
 		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
-		SetHTTPClientSpanAttributes(req, attribute.String("test.attribute", "value"))
+		req = WithHTTPClientSpanAttributes(req, attribute.String("test.attribute", "value"))
 
 		resp, err := rt.RoundTrip(req)
 		require.NoError(t, err)

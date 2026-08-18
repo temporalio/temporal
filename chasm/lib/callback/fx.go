@@ -46,7 +46,7 @@ func httpCallerProviderProvider(
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
 	caller := func(r *http.Request) (*http.Response, error) {
-		nexusrpc.AnnotateClientRequest(r, "")
+		r = nexusrpc.AnnotateClientRequest(r, "")
 		return routeRequest(r,
 			clusterMetadata,
 			namespaceRegistry,

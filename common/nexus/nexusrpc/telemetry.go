@@ -39,8 +39,8 @@ func AnnotateServerSpan(span trace.Span, attrs ServerSpanAttributes) {
 	span.SetAttributes(attrs.keyValues()...)
 }
 
-// AnnotateClientRequest adds Nexus attributes to the HTTP client span created for req.
-func AnnotateClientRequest(req *http.Request, targetNamespaceName string) {
+// AnnotateClientRequest returns req with Nexus attributes for its HTTP client span.
+func AnnotateClientRequest(req *http.Request, targetNamespaceName string) *http.Request {
 	attrs := make([]attribute.KeyValue, 0, 2)
 	if targetNamespaceName != "" {
 		attrs = append(attrs, attribute.String(telemetry.NexusNamespaceKey, targetNamespaceName))
@@ -49,6 +49,7 @@ func AnnotateClientRequest(req *http.Request, targetNamespaceName string) {
 		attrs = append(attrs, attribute.String(telemetry.NexusRequestIDKey, requestID))
 	}
 	if len(attrs) > 0 {
-		telemetry.SetHTTPClientSpanAttributes(req, attrs...)
+		return telemetry.WithHTTPClientSpanAttributes(req, attrs...)
 	}
+	return req
 }
