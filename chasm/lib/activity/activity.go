@@ -434,6 +434,11 @@ func (a *Activity) addCompletionCallbacks(
 	if len(completionCallbacks) == 0 {
 		return nil
 	}
+	for _, callbackField := range a.Callbacks {
+		if callbackField.Get(ctx).GetRequestId() == requestID {
+			return nil
+		}
+	}
 	if a.LifecycleState(ctx).IsClosed() {
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
 	}

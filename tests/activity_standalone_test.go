@@ -449,6 +449,61 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				require.Len(t, descResp.Callbacks, 1)
 				require.Equal(t, "http://localhost/idempotent-cb", descResp.Callbacks[0].GetInfo().GetCallback().GetNexus().GetUrl())
 			})
+
+			t.Run("IdempotentWithSameRequestIdAfterClose", func(t *testing.T) {
+				activityID := testcore.RandomizeStr(t.Name())
+				taskQueue := testcore.RandomizeStr(t.Name())
+				requestID := env.Tv().Any().String()
+				ch, callbackAddress := newNexusCompletionHandler(t)
+				startReq := &workflowservice.StartActivityExecutionRequest{
+					Namespace:           env.Namespace().String(),
+					ActivityId:          activityID,
+					ActivityType:        env.Tv().ActivityType(),
+					Identity:            env.Tv().WorkerIdentity(),
+					Input:               defaultInput,
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+					StartToCloseTimeout: durationpb.New(time.Minute),
+					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+					RequestId:           requestID,
+					CompletionCallbacks: []*commonpb.Callback{{
+						Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+					}},
+					OnConflictOptions: onConflictOpts,
+				}
+
+				startResp, err := env.FrontendClient().StartActivityExecution(ctx, startReq)
+				require.NoError(t, err)
+				require.True(t, startResp.GetStarted())
+
+				pollResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, startResp.GetRunId())
+				_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: pollResp.GetTaskToken(),
+					Result:    defaultResult,
+					Identity:  defaultIdentity,
+				})
+				require.NoError(t, err)
+
+				select {
+				case <-ch.requestCh:
+				case <-ctx.Done():
+					require.Fail(t, "timed out waiting for completion callback")
+				}
+
+				retryResp, err := env.FrontendClient().StartActivityExecution(ctx, startReq)
+				require.NoError(t, err)
+				require.False(t, retryResp.GetStarted())
+				require.Equal(t, startResp.GetRunId(), retryResp.GetRunId())
+				ch.requestCompleteCh <- nil
+
+				descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      startResp.GetRunId(),
+				})
+				require.NoError(t, err)
+				require.Len(t, descResp.GetCallbacks(), 1)
+			})
 		})
 
 		t.Run("DoesNotApplyToCompletedActivity", func(t *testing.T) {
