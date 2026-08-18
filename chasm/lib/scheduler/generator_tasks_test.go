@@ -322,14 +322,9 @@ func TestGeneratorTask_NonIdle_ClearsIdleCloseTime(t *testing.T) {
 func TestGeneratorTask_FutureActionTimesRespectLastProcessedTimeWatermark(t *testing.T) {
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
-
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
-	engine := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(timeSource))
-	engineCtx := chasm.NewEngineContext(context.Background(), engine)
+	engine, engineCtx := newTestEngineContext(t, logger, withEngineSpecProcessor(specProcessor), withEngineTimeSource(timeSource))
 	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{
 		NamespaceID: namespaceID,
 		BusinessID:  scheduleID,
