@@ -257,6 +257,15 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 			"child_execution_count": int64(2),
 			"update_count":          int64(1),
 		}),
+		// source_cluster/source_shard/source_task_id come from base: they are the phase-independent
+		// join key Attributes emits for every phase, including skipped.
+		ReplicationSkipped: mergeFields(base, map[string]any{
+			"phase":          "skipped",
+			"target_cluster": "target-cluster",
+			"priority":       "TASK_PRIORITY_LOW",
+			"attempt":        int64(2),
+			"error":          "boom",
+		}),
 	}
 
 	for phase, wantFields := range want {

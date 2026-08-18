@@ -31,10 +31,10 @@ type ArtifactResult struct {
 }
 
 // processArtifactsParallel downloads and processes artifacts in parallel with a worker pool
-// Returns: all failures, all test runs, and count of successfully processed artifacts
-func processArtifactsParallel(ctx context.Context, jobs []ArtifactJob, concurrency int) ([]TestFailure, []TestRun, int) {
+// Returns: all failures, all test runs, count of successfully processed artifacts, and any rate-limit error.
+func processArtifactsParallel(ctx context.Context, jobs []ArtifactJob, concurrency int) ([]TestFailure, []TestRun, int, error) {
 	if len(jobs) == 0 {
-		return nil, nil, 0
+		return nil, nil, 0, nil
 	}
 
 	totalArtifacts := len(jobs)
@@ -72,6 +72,9 @@ func processArtifactsParallel(ctx context.Context, jobs []ArtifactJob, concurren
 
 	for result := range resultChan {
 		if result.Error != nil {
+			if isGitHubRateLimitError(result.Error) {
+				return nil, nil, 0, fmt.Errorf("cannot generate complete report: GitHub API rate limit while downloading artifacts: %w", result.Error)
+			}
 			errorCount++
 			// Error already logged by worker
 			continue
@@ -85,7 +88,7 @@ func processArtifactsParallel(ctx context.Context, jobs []ArtifactJob, concurren
 		fmt.Printf("Warning: %d artifacts failed to process\n", errorCount)
 	}
 
-	return allFailures, allTestRuns, processedArtifacts
+	return allFailures, allTestRuns, processedArtifacts, nil
 }
 
 // worker processes jobs from the job channel
@@ -110,7 +113,11 @@ func processArtifactJob(ctx context.Context, job ArtifactJob, totalArtifacts int
 	zipPath, err := github.DownloadArtifact(ctx, job.Repo, job.Artifact.ID, job.TempDir)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to download artifact %d: %w", job.Artifact.ID, err)
-		fmt.Printf("  Warning: %v\n", result.Error)
+		if isGitHubRateLimitError(result.Error) {
+			fmt.Printf("  Error: %v\n", result.Error)
+		} else {
+			fmt.Printf("  Warning: %v\n", result.Error)
+		}
 		return result
 	}
 

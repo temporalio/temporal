@@ -279,6 +279,31 @@ func TestGenerateSuiteReports(t *testing.T) {
 	require.Equal(t, twoDaysAgo, reports[1].LastFailure)
 }
 
+func TestGenerateSuiteReportsSortsByName(t *testing.T) {
+	failures := []TestFailure{
+		{Name: "TestB", SuiteName: "TestFunctionalSuiteB", RunID: 1, MatrixName: "db"},
+		{Name: "TestA", SuiteName: "TestFunctionalSuiteA", RunID: 1, MatrixName: "db"},
+		{Name: "TestC", SuiteName: "TestFunctionalSuiteC", RunID: 1, MatrixName: "db"},
+	}
+	allRuns := []TestRun{
+		{SuiteName: "TestFunctionalSuiteB", RunID: 1, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteA", RunID: 1, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteA", RunID: 2, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteC", RunID: 1, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteC", RunID: 2, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteC", RunID: 3, MatrixName: "db"},
+	}
+
+	reports := generateSuiteReports(failures, allRuns)
+
+	require.Len(t, reports, 3)
+	require.Equal(t, []string{
+		"TestFunctionalSuiteA",
+		"TestFunctionalSuiteB",
+		"TestFunctionalSuiteC",
+	}, []string{reports[0].SuiteName, reports[1].SuiteName, reports[2].SuiteName})
+}
+
 func TestNormalizeTestNameFinal(t *testing.T) {
 	tests := []struct {
 		name     string
