@@ -6,12 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	apinexusoperationpb "go.temporal.io/api/nexusoperation/v1"
+	notificationpb "go.temporal.io/api/notificationservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/callback"
@@ -19,6 +21,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -441,44 +444,169 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCallbacksDisabled() {
 	})
 }
 
-// Verifies that worker callbacks propagate links as expected,
+// TestLinkingE2E follows the links along a standalone Nexus operation's whole lifecycle: the request
+// the operation sends its own handler, the link that handler answers with, and finally the
+// Worker-variant completion callback the operation's outcome is delivered to.
+//
+// Both handlers are driven with raw PollNexusTaskQueue/RespondNexusTaskCompleted calls instead of SDK
+// workers. That is deliberate: the Go SDK (v1.44.0) drops link types it does not recognize, including
+// the Link.Callback a worker callback delivery carries, so an SDK worker never sees the links this
+// test exists to assert. Polling directly also keeps every link exactly as the server sent it, with
+// no data converter or link converter in between.
 func (s *NexusStandaloneCallbacksTestSuite) TestLinkingE2E() {
+	env := newNexusTestEnv(s.T(), true,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		// Worker callbacks are only implemented by the CHASM callback library.
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
+		testcore.WithDynamicConfig(nexusoperation.EnableCallbacks, true),
+		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, []string{"worker"}),
+	)
 
-	/*
-		Test Infrastructure:
+	t := s.T()
+	// Every wait in this test is a long poll, so the deadline is what fails the test rather than
+	// hanging it.
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+	defer cancel()
 
-		NexusService "nexus-service"
-		Operation "always-fail", return a non-retryable application failure with error "nexus handler failed"
-		Operation "sync-success", ignore
+	// The operation's handler and the callback's handler poll their own task queues, so the two hops
+	// can be observed independently of each other.
+	operationTaskQueue := "sano-tq-" + uuid.NewString()
+	callbackTaskQueue := "callback-tq-" + uuid.NewString()
+	endpointName := env.createNexusEndpoint(
+		ctx, t, testcore.RandomizedNexusEndpoint(t.Name()), operationTaskQueue).GetSpec().GetName()
 
-		Create a SANO
-			Attach worker callback: sync-success
-			Attach worker callback: async-success
+	// The request that registers the callback is what identifies it later: its ID ends up both in the
+	// Nexus request ID of the delivery and in the link the delivery carries.
+	requestID := uuid.NewString()
+	operationID := testvars.New(t).Any().String()
+	sourceContext := payload.EncodeString("source-context")
+	workerCallback := &commonpb.Callback{
+		Variant: &commonpb.Callback_Worker_{
+			Worker: &commonpb.Callback_Worker{
+				TaskQueueName: callbackTaskQueue,
+				Service:       "completion-service",
+				Operation:     "on-complete",
+				SourceContext: sourceContext,
+			},
+		},
+	}
 
-		SANO is backed by a workflow.
-		That workflow calls a Nexus operation.
+	startResp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+		OperationId:         operationID,
+		Endpoint:            endpointName,
+		RequestId:           requestID,
+		CompletionCallbacks: []*commonpb.Callback{workerCallback},
+	})
+	s.NoError(err)
+	s.True(startResp.GetStarted())
 
-		async-success completion handler is backed by a workflow.
-		That workflow calls a Nexus operation (sync-success)
+	// Hop 1: the operation's own request carries a back-link to the operation, which is how the
+	// handler can point back at what invoked it.
+	operationTask := env.awaitNexusTask(ctx, t, operationTaskQueue)
+	operationStart := operationTask.GetRequest().GetStartOperation()
+	wantOperationLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+		Namespace:   env.Namespace().String(),
+		OperationId: operationID,
+		RunId:       startResp.GetRunId(),
+	})
+	s.Require().Len(operationStart.GetLinks(), 1)
+	s.Equal(wantOperationLink.URL.String(), operationStart.GetLinks()[0].GetUrl())
+	s.Equal(wantOperationLink.Type, operationStart.GetLinks()[0].GetType())
 
-		Verify:
-		The SANO has links.
-			- To the backing workflow
-		The source sano workflow has links
-			- To the sync-success nexus operation(?) Probably not.
-			- To the source SANO
+	// Hop 2: the handler completes the operation and answers with a link of its own, naming the
+	// workflow it ran the operation on. The operation records it.
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: "handler-workflow",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	operationResult := payload.EncodeString("operation-result")
+	env.respondNexusTaskCompleted(ctx, t, operationTask.GetTaskToken(), &nexusTaskResponse{
+		StartResult: &nexus.HandlerStartOperationResultSync[*commonpb.Payload]{Value: operationResult},
+		Links:       []nexus.Link{commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)},
+	})
 
-		The SANO's callback[0] has no links (sync-success handler has no links)
-		The SANO's callback[1] has links
-			- To the workflow backing the operation.
+	// Hop 3: completing the operation releases the callback, which is delivered as a Nexus task on
+	// the callback's own task queue, naming the service and operation the callback was registered
+	// with.
+	callbackTask := env.awaitNexusTask(ctx, t, callbackTaskQueue)
+	callbackStart := callbackTask.GetRequest().GetStartOperation()
+	s.Equal("completion-service", callbackStart.GetService())
+	s.Equal("on-complete", callbackStart.GetOperation())
+	// The registering request's ID doubles as the delivery's Nexus request ID, so a redelivery is
+	// idempotent from the handler's perspective.
+	s.Equal(requestID, callbackStart.GetRequestId())
 
-		The workflow backing the sano callback op has links
-			- To the SANO-callback[1]
-			- To the other resource it spawned.
-	*/
+	// The delivery carries the operation's outcome, along with the context the callback was
+	// registered with.
+	var onComplete notificationpb.OnCompleteRequest
+	s.NoError(payload.Decode(callbackStart.GetPayload(), &onComplete))
+	s.Nil(onComplete.GetFailure())
+	protorequire.ProtoEqual(t, operationResult, onComplete.GetSuccess())
+	protorequire.ProtoEqual(t, sourceContext, onComplete.GetSourceContext())
 
-	// TODO: Migrate the test infra from the worker-callbacks tests
-	// tests/callbacks_worker_test.go
-	// Or just put the logic there, to uplevel it.
+	// The delivery links to the callback attached to the operation rather than to the operation
+	// itself: what the handler is being told about is this callback's completion, and the request ID
+	// is what distinguishes callbacks registered on the same operation by different requests.
+	wantCallbackLink := &commonpb.Link_Callback{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.Execution{
+			Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+			BusinessId: operationID,
+			RunId:      startResp.GetRunId(),
+		},
+		RequestId: requestID,
+	}
+	wantCallbackNexusLink, err := commonnexus.ConvertLinkCallbackToNexusLink(wantCallbackLink)
+	s.NoError(err)
+	s.Require().Len(callbackStart.GetLinks(), 1)
+	s.Equal(wantCallbackNexusLink.URL.String(), callbackStart.GetLinks()[0].GetUrl())
+	s.Equal(wantCallbackNexusLink.Type, callbackStart.GetLinks()[0].GetType())
+	// It also round-trips back into the Link_Callback a handler would resolve it to, so the link is
+	// consumable and not merely well-formed.
+	gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(
+		commonnexus.ConvertLinksFromProto(callbackStart.GetLinks())[0])
+	s.NoError(err)
+	protorequire.ProtoEqual(t, wantCallbackLink, gotCallbackLink)
 
+	// Hop 4: the callback handler starts an operation of its own to process the completion and
+	// answers async, naming the workflow backing it. An async start counts as delivered: the handler
+	// accepted the completion, and the callback does not wait for it to finish.
+	callbackHandlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: "callback-handler-workflow",
+		RunId:      "callback-handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	env.respondNexusTaskCompleted(ctx, t, callbackTask.GetTaskToken(), &nexusTaskResponse{
+		StartResult: &nexus.HandlerStartOperationResultAsync{OperationToken: "callback-operation-token"},
+		Links:       []nexus.Link{commonnexus.ConvertLinkWorkflowEventToNexusLink(callbackHandlerLink)},
+	})
+
+	cbInfo := s.awaitCallbackInfo(env, operationID, enumspb.CALLBACK_STATE_SUCCEEDED)
+	s.NotNil(cbInfo.GetSuccess())
+	protorequire.ProtoEqual(t, workerCallback, cbInfo.GetCallback())
+
+	// The operation itself only ever links to its own handler's response: a callback delivery is a
+	// notification, so neither the delivery nor anything the callback's handler answered with is
+	// linked back onto the operation. Note that callbackHandlerLink is currently discarded entirely
+	// rather than recorded against the callback — update this once outbound links are wired up.
+	descResp := env.describeNexusOperation(ctx, t, operationID)
+	s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+	protorequire.ProtoEqual(t, operationResult, descResp.GetResult())
+	protorequire.ProtoSliceEqual(t, []*commonpb.Link{
+		{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: handlerLink}},
+	}, descResp.GetInfo().GetLinks())
 }

@@ -171,8 +171,99 @@ type nexusTaskResponse struct {
 	// If nil, the response is a cancel operation acknowledgement.
 	StartResult  nexus.HandlerStartOperationResult[*commonpb.Payload]
 	CancelResult *struct{}
-	// Links to include in async start operation responses.
+	// Links to include in start operation responses.
 	Links []nexus.Link
+}
+
+// nexusTaskCompletionResponse builds the response a handler sends via RespondNexusTaskCompleted.
+func nexusTaskCompletionResponse(result *nexusTaskResponse) *nexuspb.Response {
+	if result.CancelResult != nil {
+		return &nexuspb.Response{
+			Variant: &nexuspb.Response_CancelOperation{
+				CancelOperation: &nexuspb.CancelOperationResponse{},
+			},
+		}
+	}
+	switch r := result.StartResult.(type) {
+	case *nexus.HandlerStartOperationResultSync[*commonpb.Payload]:
+		return &nexuspb.Response{
+			Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+						SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+							Payload: r.Value,
+							Links:   cnexus.ConvertLinksToProto(result.Links),
+						},
+					},
+				},
+			},
+		}
+	case *nexus.HandlerStartOperationResultAsync:
+		return &nexuspb.Response{
+			Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+						AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+							OperationToken: r.OperationToken,
+							Links:          cnexus.ConvertLinksToProto(result.Links),
+						},
+					},
+				},
+			},
+		}
+	default:
+		panic("unreachable") // nolint:revive // all implementations of HandlerStartOperationResult must be covered here, so this should be unreachable.
+	}
+}
+
+// awaitNexusTask polls taskQueue until a Nexus task is dispatched to it, retrying long polls that
+// expire before a task arrives, and returns the task.
+//
+// Unlike [NexusTestEnv.nexusTaskPoller] it makes no assumption about the service the task names, so
+// it also serves tasks the server dispatches on its own behalf rather than on a caller's, e.g. the
+// delivery of a Worker-variant completion callback. ctx must have a deadline: an expired poll is
+// what ends the retry loop.
+func (env *NexusTestEnv) awaitNexusTask(
+	ctx context.Context,
+	t require.TestingT,
+	taskQueue string,
+) *workflowservice.PollNexusTaskQueueResponse {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	for {
+		res, err := env.FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			Identity:  uuid.NewString(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+		})
+		require.NoError(t, err, "no Nexus task was dispatched to %q", taskQueue)
+		if res.GetTaskToken() != nil {
+			return res
+		}
+	}
+}
+
+// respondNexusTaskCompleted answers a task returned by [NexusTestEnv.awaitNexusTask].
+func (env *NexusTestEnv) respondNexusTaskCompleted(
+	ctx context.Context,
+	t require.TestingT,
+	taskToken []byte,
+	result *nexusTaskResponse,
+) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	_, err := env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		Identity:  uuid.NewString(),
+		TaskToken: taskToken,
+		Response:  nexusTaskCompletionResponse(result),
+	})
+	require.NoError(t, err)
 }
 
 type nexusTaskHandler func(t *testing.T, res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error)
@@ -231,62 +322,11 @@ func (env *NexusTestEnv) versionedNexusTaskPollerDo(ctx context.Context, t *test
 	if result == nil {
 		return nil
 	}
-	var response *nexuspb.Response
-	if result.CancelResult != nil {
-		response = &nexuspb.Response{
-			Variant: &nexuspb.Response_CancelOperation{
-				CancelOperation: &nexuspb.CancelOperationResponse{},
-			},
-		}
-	} else {
-		switch r := result.StartResult.(type) {
-		case *nexus.HandlerStartOperationResultSync[*commonpb.Payload]:
-			syncResp := &nexuspb.StartOperationResponse_Sync{
-				Payload: r.Value,
-			}
-			for _, l := range result.Links {
-				syncResp.Links = append(syncResp.Links, &nexuspb.Link{
-					Url:  l.URL.String(),
-					Type: l.Type,
-				})
-			}
-			response = &nexuspb.Response{
-				Variant: &nexuspb.Response_StartOperation{
-					StartOperation: &nexuspb.StartOperationResponse{
-						Variant: &nexuspb.StartOperationResponse_SyncSuccess{
-							SyncSuccess: syncResp,
-						},
-					},
-				},
-			}
-		case *nexus.HandlerStartOperationResultAsync:
-			asyncResp := &nexuspb.StartOperationResponse_Async{
-				OperationToken: r.OperationToken,
-			}
-			for _, l := range result.Links {
-				asyncResp.Links = append(asyncResp.Links, &nexuspb.Link{
-					Url:  l.URL.String(),
-					Type: l.Type,
-				})
-			}
-			response = &nexuspb.Response{
-				Variant: &nexuspb.Response_StartOperation{
-					StartOperation: &nexuspb.StartOperationResponse{
-						Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
-							AsyncSuccess: asyncResp,
-						},
-					},
-				},
-			}
-		default:
-			panic("unreachable") // nolint:revive // all implementations of HandlerStartOperationResult must be covered here, so this should be unreachable.
-		}
-	}
 	_, err = env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
 		Namespace: env.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: res.TaskToken,
-		Response:  response,
+		Response:  nexusTaskCompletionResponse(result),
 	})
 	if _, ok := errors.AsType[*serviceerror.NotFound](err); err != nil && ctx.Err() == nil && !ok {
 		return err
