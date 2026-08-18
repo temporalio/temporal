@@ -257,17 +257,13 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	var ms historyi.MutableState
 	var appliedMS *persistencespb.WorkflowMutableState
 	origin := wideevents.ReplicationTaskOriginFromContext(ctx)
-	artifactKind := "mutation"
-	if snapshot != nil {
-		artifactKind = "snapshot"
-	}
 	defer func() {
 		if emitLifecycle && retError == nil {
 			r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS, sourceClusterName, origin)
 		} else if emitLifecycle && !errors.Is(retError, consts.ErrDuplicate) {
-			r.emitReplicationApplyError(
+			r.emitReplicationVersionedTransitionApplyError(
 				ctx, wideevents.ReplTaskSyncVersionedTransition, sourceClusterName, executionInfo, executionState,
-				artifactKind, "Failed to apply replicated versioned transition", retError)
+				versionedTransitionArtifact, "Failed to apply replicated versioned transition", retError)
 		}
 	}()
 
@@ -461,6 +457,23 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 	}
 
 	wideevents.Emit(r.eventLogger, payload)
+}
+
+func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplyError(
+	ctx context.Context,
+	taskType string,
+	sourceClusterName string,
+	info *persistencespb.WorkflowExecutionInfo,
+	state *persistencespb.WorkflowExecutionState,
+	artifact *replicationspb.VersionedTransitionArtifact,
+	message string,
+	err error,
+) {
+	artifactKind := wideevents.ArtifactKindMutation
+	if artifact.GetSyncWorkflowStateSnapshotAttributes() != nil {
+		artifactKind = wideevents.ArtifactKindSnapshot
+	}
+	r.emitReplicationApplyError(ctx, taskType, sourceClusterName, info, state, artifactKind, message, err)
 }
 
 // emitReplicationApplyError extracts artifact identity before delegating to the apply-side adapter.
