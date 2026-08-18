@@ -149,7 +149,10 @@ func (s *NexusOTELSuite) TestOperation() {
 		"test-operation",
 		handlerWorkflow,
 		func(_ context.Context, _ nexus.NoValue, options nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
-			requestIDs <- options.RequestID
+			select {
+			case requestIDs <- options.RequestID:
+			default:
+			}
 			return client.StartWorkflowOptions{
 				ID:        options.RequestID,
 				TaskQueue: handlerTaskQueue,
