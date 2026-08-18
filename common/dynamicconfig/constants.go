@@ -470,6 +470,20 @@ If exceeded, failure will be truncated before being stored in mutable state.`,
 		2*1024,
 		`MutableStateActivityFailureSizeLimitWarn is the per activity failure size warning limit for workflow mutable state`,
 	)
+	MutableStateActivityFailureTotalSizeLimitError = NewNamespaceIntSetting(
+		"limit.mutableStateActivityFailureTotalSize.error",
+		4*1024*1024,
+		`MutableStateActivityFailureTotalSizeLimitError is the limit on the total size of the last failures
+retained across all of a workflow's pending activities. Once the total is exceeded, newly recorded activity
+failures will be truncated. Set to 0 for no limit.`,
+	)
+	MutableStateActivityFailureTotalSizeLimitWarn = NewNamespaceIntSetting(
+		"limit.mutableStateActivityFailureTotalSize.warn",
+		2*1024*1024,
+		`MutableStateActivityFailureTotalSizeLimitWarn is the warning limit on the total size of the last
+failures retained across all of a workflow's pending activities. Controls what is logged without changing what is stored.
+Set to 0 for no limit.`,
+	)
 	MutableStateSizeLimitError = NewGlobalIntSetting(
 		"limit.mutableStateSize.error",
 		8*1024*1024,
