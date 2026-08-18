@@ -121,7 +121,6 @@ func (s *NexusOTELSuite) TestCallback() {
 		ServiceName: "io.temporal.history",
 		Kind:        oteltrace.SpanKindClient,
 		Attrs: map[string]any{
-			"nexus.request":     true,
 			"temporalNamespace": env.Namespace().String(),
 		},
 	}})
@@ -204,7 +203,6 @@ func (s *NexusOTELSuite) TestOperation() {
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath,
 			Attrs: map[string]any{
-				"nexus.request":     true,
 				"temporalNamespace": callerEnv.Namespace().String(),
 			},
 		},
@@ -219,7 +217,6 @@ func (s *NexusOTELSuite) TestOperation() {
 			Attrs: map[string]any{
 				"nexus.endpoint":    handlerWorkerEndpoint.GetSpec().GetName(),
 				"nexus.operation":   operation.Name(),
-				"nexus.request":     true,
 				"nexus.service":     service.Name,
 				"temporalNamespace": handlerEnv.Namespace().String(),
 			},
@@ -232,7 +229,6 @@ func (s *NexusOTELSuite) TestOperation() {
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath + "/cancel",
 			Attrs: map[string]any{
-				"nexus.request":     true,
 				"temporalNamespace": callerEnv.Namespace().String(),
 			},
 		},
@@ -247,7 +243,6 @@ func (s *NexusOTELSuite) TestOperation() {
 			Attrs: map[string]any{
 				"nexus.endpoint":    handlerWorkerEndpoint.GetSpec().GetName(),
 				"nexus.operation":   operation.Name(),
-				"nexus.request":     true,
 				"nexus.service":     service.Name,
 				"temporalNamespace": handlerEnv.Namespace().String(),
 			},
@@ -303,7 +298,6 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 			URLPath:     operationURLPath,
 			Attrs: map[string]any{
 				"nexus.namespace":   env.Namespace().String(),
-				"nexus.request":     true,
 				"temporalNamespace": env.Namespace().String(),
 			},
 		},
@@ -318,7 +312,6 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 			Attrs: map[string]any{
 				"nexus.endpoint":    endpoint.GetSpec().GetName(),
 				"nexus.operation":   operation.Name(),
-				"nexus.request":     true,
 				"nexus.service":     service.Name,
 				"temporalNamespace": env.Namespace().String(),
 			},
@@ -369,7 +362,6 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 		URLPath:     dispatchURL.Path + "/test-service/my-operation",
 		Attrs: map[string]any{
 			"nexus.operation":   "my-operation",
-			"nexus.request":     true,
 			"nexus.request_id":  requestID,
 			"nexus.service":     "test-service",
 			"temporalNamespace": env.Namespace().String(),

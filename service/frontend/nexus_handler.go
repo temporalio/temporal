@@ -356,7 +356,6 @@ func annotateInboundSpan(
 	service, operation, requestID string,
 ) {
 	nexusrpc.SetSpanAttributes(trace.SpanFromContext(ctx), nexusrpc.SpanAttributes{
-		Request:       true,
 		NamespaceName: oc.namespaceName,
 		Endpoint:      oc.endpointName,
 		Service:       service,

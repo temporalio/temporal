@@ -19,7 +19,6 @@ const (
 	NexusEndpointKey  = "nexus.endpoint"
 	NexusNamespaceKey = "nexus.namespace"
 	NexusOperationKey = "nexus.operation"
-	NexusRequestKey   = "nexus.request"
 	NexusRequestIDKey = "nexus.request_id"
 	NexusServiceKey   = "nexus.service"
 )

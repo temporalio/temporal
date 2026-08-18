@@ -10,7 +10,6 @@ import (
 
 // SpanAttributes describes Nexus request attributes added to a trace span.
 type SpanAttributes struct {
-	Request             bool
 	NamespaceName       string
 	TargetNamespaceName string
 	Endpoint            string
@@ -20,10 +19,7 @@ type SpanAttributes struct {
 }
 
 func (a SpanAttributes) keyValues() []attribute.KeyValue {
-	kvs := make([]attribute.KeyValue, 0, 7)
-	if a.Request {
-		kvs = append(kvs, attribute.Bool(telemetry.NexusRequestKey, true))
-	}
+	kvs := make([]attribute.KeyValue, 0, 6)
 	if a.NamespaceName != "" {
 		kvs = append(kvs, attribute.String(telemetry.NamespaceKey, a.NamespaceName))
 	}
@@ -55,7 +51,6 @@ func SetSpanAttributes(span trace.Span, attrs SpanAttributes) {
 // MarkHTTPRequest adds Nexus attributes to the HTTP client span created for req.
 func MarkHTTPRequest(req *http.Request, namespaceName string, targetNamespaceName string) {
 	telemetry.SetHTTPClientSpanAttributes(req, SpanAttributes{
-		Request:             true,
 		NamespaceName:       namespaceName,
 		TargetNamespaceName: targetNamespaceName,
 		RequestID:           req.Header.Get(HeaderRequestID),
