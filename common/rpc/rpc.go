@@ -432,26 +432,15 @@ func (d *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 // createLocalFrontendHTTPClient creates an HTTP client for communicating with the frontend.
 // It uses either the provided frontendURL or membership to resolve the frontend address.
 func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient, error) {
-	// dialer and transport field values copied from http.DefaultTransport.
-	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           dialer.DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+	transport, err := common.NewHTTPTransport(d.frontendTLSConfig)
+	if err != nil {
+		return nil, err
 	}
 	client := http.Client{}
 
 	// Default to http unless TLS is configured.
 	scheme := "http"
 	if d.frontendTLSConfig != nil {
-		transport.TLSClientConfig = d.frontendTLSConfig
 		scheme = "https"
 	}
 
