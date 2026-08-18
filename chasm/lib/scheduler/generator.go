@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -99,13 +100,7 @@ func (g *Generator) computeFutureActionTimes(
 	// Start from max(now, updateTime, lastProcessedTime) to ensure we skip times
 	// before the last update and times already processed (or skipped) by the
 	// generator's high water mark.
-	t := ctx.Now(g)
-	if updateTime := sched.Info.GetUpdateTime().AsTime(); updateTime.After(t) {
-		t = updateTime
-	}
-	if lastProcessedTime := g.GetLastProcessedTime().AsTime(); lastProcessedTime.After(t) {
-		t = lastProcessedTime
-	}
+	t := util.MaxTime(ctx.Now(g), sched.Info.GetUpdateTime().AsTime(), g.GetLastProcessedTime().AsTime())
 	for len(futureTimes) < count {
 		res, err := spec.GetNextTime(sched.jitterSeed(), t)
 		if err != nil || res.Next.IsZero() {
