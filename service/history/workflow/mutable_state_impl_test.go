@@ -6305,7 +6305,7 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_DiffCluster_ResetsEver
 	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(current.Version, incoming.Version).Return(false)
 
 	// Tasks from the previous owning cluster are stale, so everything is recreated.
-	s.Equal(int32(TimerTaskStatusNone), s.mutableState.nextActivityTimerTaskMask(current, incoming))
+	s.Equal(int32(TimerTaskStatusNone), s.mutableState.getActivityTimerTaskStatus(current, incoming))
 }
 
 // retryActivityInfoForMask applies to `ai` the same field changes the active side makes
@@ -6332,7 +6332,7 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Retry_KeepsOnlySchedul
 	// Note the attempt itself is never consulted: the deadlines carry the decision.
 	s.Equal(
 		int32(TimerTaskStatusCreatedScheduleToClose),
-		s.mutableState.nextActivityTimerTaskMask(current, incoming),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
 	)
 }
 
@@ -6349,7 +6349,7 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Retry_LegacyAnchor_Cle
 
 	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
-	s.Equal(int32(TimerTaskStatusNone), s.mutableState.nextActivityTimerTaskMask(current, incoming))
+	s.Equal(int32(TimerTaskStatusNone), s.mutableState.getActivityTimerTaskStatus(current, incoming))
 }
 
 // Attempt moving on its own decides nothing; an unchanged deadline keeps its task.
@@ -6360,7 +6360,7 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_AttemptChangedWithoutD
 
 	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
-	s.Equal(current.TimerTaskStatus, s.mutableState.nextActivityTimerTaskMask(current, incoming))
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
 }
 
 func (s *mutableStateSuite) TestNextActivityTimerTaskMask_ClearsOnlyMovedDeadlines() {
@@ -6375,7 +6375,7 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_ClearsOnlyMovedDeadlin
 
 	s.Equal(
 		int32(TimerTaskStatusCreatedScheduleToClose|TimerTaskStatusCreatedStartToClose),
-		s.mutableState.nextActivityTimerTaskMask(current, incoming),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
 	)
 }
 
@@ -6388,7 +6388,7 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_UnrelatedOptionChanged
 
 	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
-	s.Equal(current.TimerTaskStatus, s.mutableState.nextActivityTimerTaskMask(current, incoming))
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
 }
 
 func (s *mutableStateSuite) TestNextActivityTimerTaskMask_TimerDisappears() {
@@ -6402,7 +6402,7 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_TimerDisappears() {
 
 	s.Equal(
 		int32(TimerTaskStatusCreatedScheduleToClose|TimerTaskStatusCreatedStartToClose),
-		s.mutableState.nextActivityTimerTaskMask(current, incoming),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
 	)
 }
 
@@ -6413,13 +6413,13 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Unchanged_KeepsMask() 
 
 	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
-	s.Equal(current.TimerTaskStatus, s.mutableState.nextActivityTimerTaskMask(current, incoming))
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
 }
 
 func (s *mutableStateSuite) TestNextActivityTimerTaskMask_NewActivity_NoMask() {
 	s.Equal(
 		int32(TimerTaskStatusNone),
-		s.mutableState.nextActivityTimerTaskMask(nil, startedActivityInfoForMask(int64(99), 1, 1)),
+		s.mutableState.getActivityTimerTaskStatus(nil, startedActivityInfoForMask(int64(99), 1, 1)),
 	)
 }
 

@@ -9287,7 +9287,7 @@ func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *
 	return false
 }
 
-// nextActivityTimerTaskMask returns the activity timer task status bits to carry over
+// getActivityTimerTaskStatus returns the activity timer task status bits to carry over
 // when applying `incoming` on top of `current` during state-based replication. A bit is
 // kept only when the timer task already created for it is still valid, so that a
 // subsequent task refresh does not regenerate a timeout task that is already pending.
@@ -9309,7 +9309,7 @@ func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *
 // The exception is a cross-cluster version change, which is about task provenance
 // rather than deadlines: tasks generated under the previous owning cluster are dropped
 // as stale at execution, so everything has to be recreated.
-func (ms *MutableStateImpl) nextActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) int32 {
+func (ms *MutableStateImpl) getActivityTimerTaskStatus(current, incoming *persistencespb.ActivityInfo) int32 {
 	if current == nil {
 		return TimerTaskStatusNone
 	}
@@ -9329,7 +9329,7 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	isSnapshot bool,
 ) error {
 	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
-		incoming.TimerTaskStatus = ms.nextActivityTimerTaskMask(current, incoming)
+		incoming.TimerTaskStatus = ms.getActivityTimerTaskStatus(current, incoming)
 	}, func(ai *persistencespb.ActivityInfo) {
 		ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 		ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
