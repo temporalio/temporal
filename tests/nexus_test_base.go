@@ -67,16 +67,20 @@ func (env *NexusTestEnv) createRandomNexusEndpoint(ctx context.Context, t *testi
 
 // createRandomExternalNexusServer creates a mock nexus server that listens via a randomized endpointName and return this name to the caller.
 func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t *testing.T, handler nexustest.Handler) string {
-	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
 	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(t, listenAddr, handler)
+	return env.createExternalNexusEndpoint(ctx, t, "http://"+listenAddr)
+}
+
+func (env *NexusTestEnv) createExternalNexusEndpoint(ctx context.Context, t *testing.T, url string) string {
+	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
 	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: endpointName,
 			Target: &nexuspb.EndpointTarget{
 				Variant: &nexuspb.EndpointTarget_External_{
 					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
+						Url: url,
 					},
 				},
 			},
@@ -93,6 +97,10 @@ func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t 
 	})
 
 	return endpointName
+}
+
+func (env *NexusTestEnv) dispatchByEndpointURL(endpoint string) string {
+	return "http://" + env.HttpAPIAddress() + "/" + cnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint)
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.
