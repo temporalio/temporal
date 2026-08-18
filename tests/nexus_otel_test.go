@@ -375,13 +375,16 @@ func (s *NexusOTELSuite) requireNexusHTTPSpans(
 	s.T().Helper()
 	var httpSpans tracetest.SpanStubs
 	s.Await(func(s *NexusOTELSuite) {
+		// Convert actual spans to nexusHTTPSpan structs.
 		var actual []nexusHTTPSpan
 		actual, httpSpans = s.nexusHTTPSpans(exporter.GetSpans())
-		s.Require().Len(actual, len(expected))
 		for i := range actual {
 			s.Require().Subset(actual[i].Attrs, expected[i].Attrs)
 			actual[i].Attrs = nil
 		}
+		s.Require().Len(actual, len(expected))
+
+		// Compare actual spans with expected attribute subsets.
 		expectedWithoutAttrs := slices.Clone(expected)
 		for i := range expectedWithoutAttrs {
 			expectedWithoutAttrs[i].Attrs = nil
