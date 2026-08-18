@@ -28,6 +28,7 @@ func TestRpoSuite(t *testing.T) {
 func TestDynamicDiscoverProviderHosts(t *testing.T) {
 	calls := 0
 	provider := dynamicDiscoverProvider{
+		initialHostPorts: []string{"bootstrap-host"},
 		bootstrapHostPortRetriever: func() ([]string, error) {
 			calls++
 			return []string{fmt.Sprintf("host-%d", calls)}, nil
@@ -36,11 +37,13 @@ func TestDynamicDiscoverProviderHosts(t *testing.T) {
 
 	hosts, err := provider.Hosts()
 	require.NoError(t, err)
-	require.Equal(t, []string{"host-1"}, hosts)
+	require.Equal(t, []string{"bootstrap-host"}, hosts)
+	require.Zero(t, calls)
 
 	hosts, err = provider.Hosts()
 	require.NoError(t, err)
-	require.Equal(t, []string{"host-2"}, hosts)
+	require.Equal(t, []string{"host-1"}, hosts)
+	require.Equal(t, 1, calls)
 }
 
 func TestDynamicDiscoverProviderHostsReturnsError(t *testing.T) {

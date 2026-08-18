@@ -69,10 +69,16 @@ type monitor struct {
 }
 
 type dynamicDiscoverProvider struct {
+	initialHostPorts           []string
 	bootstrapHostPortRetriever func() ([]string, error)
 }
 
 func (p *dynamicDiscoverProvider) Hosts() ([]string, error) {
+	if p.initialHostPorts != nil {
+		hostPorts := p.initialHostPorts
+		p.initialHostPorts = nil
+		return hostPorts, nil
+	}
 	return p.bootstrapHostPortRetriever()
 }
 
@@ -210,6 +216,7 @@ func (rpo *monitor) bootstrapRingPop() error {
 			JoinSize:          1,
 			MaxJoinDuration:   rpo.maxJoinDuration,
 			DiscoverProvider: &dynamicDiscoverProvider{
+				initialHostPorts:           hostPorts,
 				bootstrapHostPortRetriever: rpo.fetchCurrentBootstrapHostports,
 			},
 		}
