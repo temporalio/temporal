@@ -803,18 +803,12 @@ func (e *ExecutableTaskImpl) SyncState(
 			})
 		}
 
-		fallbackCause := err
 		_, err := remoteAdminClient.AddTasks(ctx, &adminservice.AddTasksRequest{
 			ShardId: e.sourceShardKey.ShardID,
 			Tasks:   tasksToAdd,
 		})
 		if err != nil {
 			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Failed to enqueue event-based replication task equivalents", err, map[string]any{
-				"equivalent_count": len(tasksToAdd),
-			})
-		} else {
-			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Fell back to event-based replication task equivalents", fallbackCause, map[string]any{
-				"disposition":      "fallback_enqueued",
 				"equivalent_count": len(tasksToAdd),
 			})
 		}
