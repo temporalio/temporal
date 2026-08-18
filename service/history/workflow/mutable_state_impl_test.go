@@ -6191,6 +6191,155 @@ func (s *mutableStateSuite) TestRefreshTask_SameCluster_SameAttempt() {
 	s.False(shouldReset)
 }
 
+// startedActivityInfoForMask builds a started activity that has all four timer bits
+// set, so a test can assert precisely which ones survive an update.
+func startedActivityInfoForMask(version int64, attempt, stamp int32) *persistencespb.ActivityInfo {
+	scheduledTime := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+	return &persistencespb.ActivityInfo{
+		Version:                version,
+		Attempt:                attempt,
+		Stamp:                  stamp,
+		ScheduledEventId:       int64(7),
+		StartedEventId:         int64(8),
+		ScheduledTime:          timestamppb.New(scheduledTime),
+		FirstScheduledTime:     timestamppb.New(scheduledTime),
+		StartedTime:            timestamppb.New(scheduledTime.Add(time.Second)),
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+		StartToCloseTimeout:    durationpb.New(10 * time.Minute),
+		HeartbeatTimeout:       durationpb.New(time.Minute),
+		// Schedule-to-start no longer applies once the activity has started, so only the
+		// other three timers can have a task outstanding.
+		TimerTaskStatus: TimerTaskStatusCreatedScheduleToClose |
+			TimerTaskStatusCreatedStartToClose |
+			TimerTaskStatusCreatedHeartbeat,
+	}
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_DiffCluster_ResetsEverything() {
+	current := startedActivityInfoForMask(int64(100), 1, 1)
+	incoming := startedActivityInfoForMask(int64(99), 1, 1)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(current.Version, incoming.Version).Return(false)
+
+	// Tasks from the previous owning cluster are stale, so everything is recreated.
+	s.Equal(int32(TimerTaskStatusNone), s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+// retryActivityInfoForMask applies to `ai` the same field changes the active side makes
+// on a retry (UpdateActivityInfoForRetries): next attempt, started state cleared, and
+// the schedule time advanced by the retry backoff. FirstScheduledTime is untouched.
+func retryActivityInfoForMask(ai *persistencespb.ActivityInfo, backoff time.Duration) *persistencespb.ActivityInfo {
+	ai.Attempt++
+	ai.StartedEventId = common.EmptyEventID
+	ai.StartedTime = nil
+	ai.ScheduledTime = timestamppb.New(ai.ScheduledTime.AsTime().Add(backoff))
+	return ai
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Retry_KeepsOnlyScheduleToClose() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := retryActivityInfoForMask(startedActivityInfoForMask(version, 1, 1), 10*time.Second)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	// Clearing the started state removes the start-to-close and heartbeat timers, so
+	// their tasks are useless and the bits go. Schedule-to-close is anchored to the
+	// untouched FirstScheduledTime, so its pending task is still correct and survives.
+	// Note the attempt itself is never consulted: the deadlines carry the decision.
+	s.Equal(
+		int32(TimerTaskStatusCreatedScheduleToClose),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
+	)
+}
+
+// Pre-FirstScheduledTime mutable state falls back to anchoring schedule-to-close on
+// ScheduledTime, which a retry does move. The deadline comparison notices and clears the
+// bit, where keying off the attempt alone would have preserved a task pointing at the
+// old, earlier instant.
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Retry_LegacyAnchor_ClearsScheduleToClose() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	current.FirstScheduledTime = nil
+	incoming := retryActivityInfoForMask(startedActivityInfoForMask(version, 1, 1), 10*time.Second)
+	incoming.FirstScheduledTime = nil
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(int32(TimerTaskStatusNone), s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+// Attempt moving on its own decides nothing; an unchanged deadline keeps its task.
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_AttemptChangedWithoutDeadlineMove_KeepsMask() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 2, 1)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_ClearsOnlyMovedDeadlines() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	// Activity options were updated, bumping the stamp; only the heartbeat timeout was
+	// shortened, so only that deadline moves.
+	incoming := startedActivityInfoForMask(version, 1, 2)
+	incoming.HeartbeatTimeout = durationpb.New(30 * time.Second)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(
+		int32(TimerTaskStatusCreatedScheduleToClose|TimerTaskStatusCreatedStartToClose),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
+	)
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_UnrelatedOptionChanged_KeepsMask() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	// Stamp moved because some unrelated option changed; no deadline is affected, so
+	// every pending task is still correct.
+	incoming := startedActivityInfoForMask(version, 1, 2)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_TimerDisappears() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 1, 2)
+	// Heartbeat timeout removed entirely: the timer no longer applies, so its bit goes.
+	incoming.HeartbeatTimeout = nil
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(
+		int32(TimerTaskStatusCreatedScheduleToClose|TimerTaskStatusCreatedStartToClose),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
+	)
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Unchanged_KeepsMask() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 1, 1)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_NewActivity_NoMask() {
+	s.Equal(
+		int32(TimerTaskStatusNone),
+		s.mutableState.getActivityTimerTaskStatus(nil, startedActivityInfoForMask(int64(99), 1, 1)),
+	)
+}
+
 func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
 	dbState := s.buildWorkflowMutableState()
 	scheduleEventId := int64(781)
