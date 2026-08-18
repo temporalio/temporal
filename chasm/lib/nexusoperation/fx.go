@@ -168,7 +168,7 @@ func clientProviderFactory(
 				r.Header.Set(nexusCallbackSourceHeader, clusterID)
 			}
 			resp, callErr := httpClient.Do(r)
-			// nexusrpc.HTTPClient does not return the raw HTTP response, so copy its failure-source header into the call context.
+			// nexusrpc.HTTPClient does not return the raw HTTP response, so copy the failure-source header into the call context.
 			commonnexus.SetFailureSourceOnContext(ctx, resp)
 			return resp, callErr
 		}
