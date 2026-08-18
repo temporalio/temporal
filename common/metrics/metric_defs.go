@@ -954,6 +954,7 @@ var (
 	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueActionCounter           = NewCounterDef("queue_actions")
+	QueueAlertShadowCounter      = NewCounterDef("queue_alert_shadow")
 	QueuePredicateResolutionLoss = NewCounterDef(
 		"queue_predicate_resolution_loss",
 		WithDescription("The number of times a queue slice lost predicate resolution by keeping a broad predicate "+
@@ -1113,6 +1114,7 @@ var (
 	ReplicationStreamReadBufferMissLag = NewDimensionlessHistogramDef("replication_stream_read_buffer_miss_lag")
 	ReplicationTaskSendAttempt         = NewDimensionlessHistogramDef("replication_task_send_attempt")
 	ReplicationTaskSendError           = NewCounterDef("replication_task_send_error")
+	ReplicationTaskSendSkipped         = NewCounterDef("replication_task_send_skipped")
 	ReplicationTaskGenerationLatency   = NewTimerDef("replication_task_generation_latency")
 	ReplicationTaskLoadLatency         = NewTimerDef("replication_task_load_latency")
 	ReplicationTaskLoadSize            = NewDimensionlessHistogramDef("replication_task_load_size")

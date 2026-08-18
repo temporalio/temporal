@@ -154,6 +154,8 @@ func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePaylo
 		ParentInitiatedID:        3,
 		Details:                  map[string]any{"k": "v"},
 		NewRunID:                 "new-run",
+		SourceCluster:            "source-cluster",
+		SourceShard:              11,
 		SourceTaskID:             42,
 		IsFirstSync:              true,
 		FirstEventID:             1,
@@ -207,6 +209,9 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 		"parent_run_id":         "p-run",
 		"parent_initiated_id":   int64(3),
 		"details":               `{"k":"v"}`,
+		"source_cluster":        "source-cluster",
+		"source_shard":          int64(11),
+		"source_task_id":        int64(42),
 		"event_version_history": `[{"event_id":9,"version":5}]`,
 	}
 	// want pins each phase's complete emitted field set AND values — the published wire contract.
@@ -216,7 +221,6 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 		ReplicationSent: mergeFields(base, map[string]any{
 			"phase":          "sent",
 			"new_run_id":     "new-run",
-			"source_task_id": int64(42),
 			"is_first_sync":  true,
 			"first_event_id": int64(1),
 			"next_event_id":  int64(8),
@@ -252,6 +256,15 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 			"user_timer_count":      int64(3),
 			"child_execution_count": int64(2),
 			"update_count":          int64(1),
+		}),
+		// source_cluster/source_shard/source_task_id come from base: they are the phase-independent
+		// join key Attributes emits for every phase, including skipped.
+		ReplicationSkipped: mergeFields(base, map[string]any{
+			"phase":          "skipped",
+			"target_cluster": "target-cluster",
+			"priority":       "TASK_PRIORITY_LOW",
+			"attempt":        int64(2),
+			"error":          "boom",
 		}),
 	}
 
