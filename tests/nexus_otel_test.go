@@ -122,7 +122,6 @@ func (s *NexusOTELSuite) TestCallback() {
 		Name:        "HTTP POST",
 		ServiceName: "io.temporal.history",
 		Kind:        oteltrace.SpanKindClient,
-		Attrs:       map[string]any{},
 	}})
 	spanContext := oteltrace.SpanContextFromContext(
 		propagation.TraceContext{}.Extract(s.Context(), propagation.HeaderCarrier(headers)),
@@ -202,7 +201,6 @@ func (s *NexusOTELSuite) TestOperation() {
 			ServiceName: "io.temporal.history",
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath,
-			Attrs:       map[string]any{},
 		},
 		{
 			TraceID:      1,
@@ -225,7 +223,6 @@ func (s *NexusOTELSuite) TestOperation() {
 			ServiceName: "io.temporal.history",
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath + "/cancel",
-			Attrs:       map[string]any{},
 		},
 		{
 			TraceID:      2,
