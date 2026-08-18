@@ -5331,6 +5331,90 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 // carry (10000 years). Anything beyond it fails durationpb's CheckValid.
 const maxProtoDurationSeconds = int64(315576000000)
 
+func TestValidateActivityFailureNextRetryDelays(t *testing.T) {
+	applicationFailure := func(delay *durationpb.Duration, cause *failurepb.Failure) *failurepb.Failure {
+		return &failurepb.Failure{
+			Cause: cause,
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NextRetryDelay: delay},
+			},
+		}
+	}
+
+	testCases := []struct {
+		name    string
+		failure *failurepb.Failure
+		wantErr bool
+	}{
+		{name: "nil failure"},
+		{name: "nil retry delay", failure: applicationFailure(nil, nil)},
+		{name: "zero retry delay", failure: applicationFailure(durationpb.New(0), nil)},
+		{name: "negative retry delay", failure: applicationFailure(durationpb.New(-time.Second), nil)},
+		{
+			name:    "maximum duration",
+			failure: applicationFailure(&durationpb.Duration{Seconds: maxProtoDurationSeconds}, nil),
+		},
+		{
+			name:    "minimum duration",
+			failure: applicationFailure(&durationpb.Duration{Seconds: -maxProtoDurationSeconds}, nil),
+		},
+		{
+			name:    "mismatched positive seconds",
+			failure: applicationFailure(&durationpb.Duration{Seconds: 1, Nanos: -1}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "mismatched negative seconds",
+			failure: applicationFailure(&durationpb.Duration{Seconds: -1, Nanos: 1}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "nanos above range",
+			failure: applicationFailure(&durationpb.Duration{Nanos: 1000000000}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "nanos below range",
+			failure: applicationFailure(&durationpb.Duration{Nanos: -1000000000}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "seconds above range",
+			failure: applicationFailure(&durationpb.Duration{Seconds: maxProtoDurationSeconds + 1}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "seconds below range",
+			failure: applicationFailure(&durationpb.Duration{Seconds: -maxProtoDurationSeconds - 1}, nil),
+			wantErr: true,
+		},
+		{
+			name: "invalid nested retry delay",
+			failure: applicationFailure(nil, &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+					TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{},
+				},
+				Cause: applicationFailure(&durationpb.Duration{Seconds: 1, Nanos: -1}, nil),
+			}),
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateActivityFailureNextRetryDelays(tc.failure)
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, "NextRetryDelay is not a valid duration")
+		})
+	}
+}
+
 // newScheduleSpecHandler builds the minimum WorkflowHandler that canonicalizeScheduleSpec
 // needs: a config, a spec builder, and a logger for the non-enforcing path. configure is
 // nil to exercise the shipped dynamic config defaults.

@@ -19,6 +19,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -1818,6 +1819,17 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	return &workflowservice.RespondActivityTaskCompletedByIdResponse{}, nil
 }
 
+func validateActivityFailureNextRetryDelays(activityFailure *failurepb.Failure) error {
+	for current := activityFailure; current != nil; current = current.GetCause() {
+		if delay := current.GetApplicationFailureInfo().GetNextRetryDelay(); delay != nil {
+			if err := delay.CheckValid(); err != nil {
+				return serviceerror.NewInvalidArgumentf("NextRetryDelay is not a valid duration: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
 // RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
 // result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
 // created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
@@ -1851,6 +1863,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 
 	if request.GetFailure() != nil && request.GetFailure().GetApplicationFailureInfo() == nil {
 		return nil, errFailureMustHaveApplicationFailureInfo
+	}
+	if err := validateActivityFailureNextRetryDelays(request.GetFailure()); err != nil {
+		return nil, err
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -1987,6 +2002,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
 
 	response := workflowservice.RespondActivityTaskFailedByIdResponse{}
+	if err := validateActivityFailureNextRetryDelays(request.GetFailure()); err != nil {
+		return nil, err
+	}
 
 	if request.GetLastHeartbeatDetails() != nil {
 		if err := common.CheckEventBlobSizeLimit(

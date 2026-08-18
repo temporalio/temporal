@@ -1492,6 +1492,69 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		env.validateFailure(s.Context(), t, activityID, runID, nil, env.Tv().WorkerIdentity())
 	})
 
+	t.Run("InvalidNextRetryDelay", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			byID bool
+		}{
+			{name: "ByToken"},
+			{name: "ByID", byID: true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				activityID := testcore.RandomizeStr(t.Name())
+				taskQueue := testcore.RandomizeStr(t.Name())
+
+				startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+				runID := startResp.RunId
+				pollResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+
+				invalidFailure := &failurepb.Failure{
+					Message: "invalid retry delay",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+							NonRetryable:   true,
+							NextRetryDelay: &durationpb.Duration{Seconds: 1, Nanos: -1},
+						},
+					},
+				}
+
+				respondFailed := func(failure *failurepb.Failure) error {
+					if tc.byID {
+						_, err := env.FrontendClient().RespondActivityTaskFailedById(s.Context(), &workflowservice.RespondActivityTaskFailedByIdRequest{
+							Namespace:  env.Namespace().String(),
+							RunId:      runID,
+							ActivityId: activityID,
+							Failure:    failure,
+						})
+						return err
+					}
+					_, err := env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+						Namespace: env.Namespace().String(),
+						TaskToken: pollResp.TaskToken,
+						Failure:   failure,
+					})
+					return err
+				}
+
+				err := respondFailed(invalidFailure)
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.ErrorContains(t, err, "NextRetryDelay is not a valid duration")
+
+				describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      runID,
+				})
+				require.NoError(t, err)
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, describeResp.GetInfo().GetStatus())
+
+				require.NoError(t, respondFailed(defaultFailure))
+				env.validateFailure(s.Context(), t, activityID, runID, nil, "")
+			})
+		}
+	})
+
 	t.Run("StaleToken", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
