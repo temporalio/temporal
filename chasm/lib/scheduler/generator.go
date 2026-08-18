@@ -96,10 +96,15 @@ func (g *Generator) computeFutureActionTimes(
 	}
 
 	futureTimes := make([]*timestamppb.Timestamp, 0, count)
-	// Start from max(now, updateTime) to ensure we skip times before the last update.
+	// Start from max(now, updateTime, lastProcessedTime) to ensure we skip times
+	// before the last update and times already processed (or skipped) by the
+	// generator's high water mark.
 	t := ctx.Now(g)
 	if updateTime := sched.Info.GetUpdateTime().AsTime(); updateTime.After(t) {
 		t = updateTime
+	}
+	if lastProcessedTime := g.GetLastProcessedTime().AsTime(); lastProcessedTime.After(t) {
+		t = lastProcessedTime
 	}
 	for len(futureTimes) < count {
 		res, err := spec.GetNextTime(sched.jitterSeed(), t)

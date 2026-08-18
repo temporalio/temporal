@@ -1,6 +1,7 @@
 package scheduler_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -9,10 +10,13 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/testlogger"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
@@ -269,6 +273,80 @@ func TestGeneratorTask_NonIdle_ClearsIdleCloseTime(t *testing.T) {
 
 	require.NotEmpty(t, generator.FutureActionTimes)
 	require.Nil(t, sched.IdleCloseTime, "expected IdleCloseTime to be cleared when the schedule has work")
+}
+
+// TestGeneratorTask_FutureActionTimesRespectLastProcessedTimeWatermark pins the
+// fix for advertised future actions preceding the generator's own high water
+// mark. Generator execution clamps its processed range to LastProcessedTime,
+// so any occurrence at or before it has already been processed (or skipped) -
+// UpdateFutureActionTimes must not advertise it as still upcoming.
+//
+// Uses the CHASM test engine directly, rather than the scheduler-specific
+// newTestEnv harness, so the watermark mutation and the task execution that
+// reads it cross the same transaction boundary as production.
+func TestGeneratorTask_FutureActionTimesRespectLastProcessedTimeWatermark(t *testing.T) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
+
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Now())
+	engine := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(timeSource))
+	engineCtx := chasm.NewEngineContext(context.Background(), engine)
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{
+		NamespaceID: namespaceID,
+		BusinessID:  scheduleID,
+	})
+
+	createHandler := scheduler.NewTestHandler(logger)
+	_, err := createHandler.CreateSchedule(engineCtx, &schedulerpb.CreateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.CreateScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Schedule:   defaultSchedule(),
+			RequestId:  "req-create",
+		},
+	})
+	require.NoError(t, err)
+
+	// Push the generator's high water mark ten intervals ahead of "now",
+	// simulating a watermark that execution has already advanced past.
+	watermark := timeSource.Now().Add(10 * defaultInterval)
+	var generator *scheduler.Generator
+	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			generator = s.Generator.Get(ctx)
+			generator.LastProcessedTime = timestamppb.New(watermark)
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
+
+	handler := scheduler.NewGeneratorTaskHandler(scheduler.GeneratorTaskHandlerOptions{
+		Config:         defaultConfig(),
+		MetricsHandler: metrics.NoopMetricsHandler,
+		BaseLogger:     logger,
+		SpecProcessor:  specProcessor,
+		SpecBuilder:    newLegacySpecBuilder(0, 0),
+	})
+	dropped, err := chasmtest.ExecutePureTask(
+		context.Background(), engine, generator, handler, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+	require.False(t, dropped)
+
+	_, err = chasm.ReadComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			generator := s.Generator.Get(ctx)
+			require.NotEmpty(t, generator.GetFutureActionTimes())
+			for _, future := range generator.GetFutureActionTimes() {
+				require.True(t, future.AsTime().After(watermark),
+					"advertised future action %v is not after watermark %v", future.AsTime(), watermark)
+			}
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
 }
 
 func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.T) {
