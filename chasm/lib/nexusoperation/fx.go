@@ -163,14 +163,17 @@ func clientProviderFactory(
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
 
-		httpCaller := func(r *http.Request) (*http.Response, error) {
-			if needsCallbackSourceHeader && clusterID != "" {
-				r.Header.Set(nexusCallbackSourceHeader, clusterID)
+		httpCaller := httpClient.Do
+		if clusterID != "" {
+			httpCaller = func(r *http.Request) (*http.Response, error) {
+				if needsCallbackSourceHeader {
+					r.Header.Set(nexusCallbackSourceHeader, clusterID)
+				}
+				resp, callErr := httpClient.Do(r)
+				// nexusrpc.HTTPClient does not return the raw HTTP response, so copy the failure-source header into the call context.
+				commonnexus.SetFailureSourceOnContext(ctx, resp)
+				return resp, callErr
 			}
-			resp, callErr := httpClient.Do(r)
-			// nexusrpc.HTTPClient does not return the raw HTTP response, so copy the failure-source header into the call context.
-			commonnexus.SetFailureSourceOnContext(ctx, resp)
-			return resp, callErr
 		}
 
 		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
