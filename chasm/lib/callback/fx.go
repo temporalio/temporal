@@ -46,10 +46,11 @@ func httpCallerProviderProvider(
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
 	m := collection.NewOnceMap(func(key queuescommon.NamespaceIDAndDestination) HTTPCaller {
-		namespaceName := key.NamespaceID
+		var namespaceName string
 		if ns, err := namespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID)); err == nil {
 			namespaceName = ns.String()
 		}
+
 		return func(r *http.Request) (*http.Response, error) {
 			telemetry.MarkNexusHTTPRequest(r, namespaceName, "")
 			return routeRequest(r,
