@@ -132,6 +132,8 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		rt := http.DefaultTransport
 		var disabled HTTPClientTransportInstrumenter
 		require.Same(t, rt, disabled.Instrument(rt))
+		require.Nil(t, NewHTTPClientTransportInstrumenter(nil, nil))
+		require.Nil(t, NewHTTPClientTransportInstrumenter(NoopTracerProvider, nil))
 
 		instrumenter := NewHTTPClientTransportInstrumenter(trace.NewTracerProvider(), nil)
 		require.NotSame(t, rt, instrumenter.Instrument(rt))

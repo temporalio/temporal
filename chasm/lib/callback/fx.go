@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -45,19 +46,23 @@ func httpCallerProviderProvider(
 	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
-	caller := func(r *http.Request) (*http.Response, error) {
-		r = nexusrpc.AnnotateClientRequest(r, "")
-		return routeRequest(r,
-			clusterMetadata,
-			namespaceRegistry,
-			httpClientCache,
-			callbackTokenGenerator,
-			externalClient,
-			localClient,
-			logger,
-		)
-	}
-	return func(queuescommon.NamespaceIDAndDestination) HTTPCaller { return caller }, nil
+	m := collection.NewOnceMap(func(queuescommon.NamespaceIDAndDestination) HTTPCaller {
+		return func(r *http.Request) (*http.Response, error) {
+			if httpClientTransportInstrumenter != nil {
+				r = nexusrpc.AnnotateClientRequest(r, "")
+			}
+			return routeRequest(r,
+				clusterMetadata,
+				namespaceRegistry,
+				httpClientCache,
+				callbackTokenGenerator,
+				externalClient,
+				localClient,
+				logger,
+			)
+		}
+	})
+	return m.Get, nil
 }
 
 var Module = fx.Module(

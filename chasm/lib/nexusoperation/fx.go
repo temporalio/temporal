@@ -181,11 +181,13 @@ func clientProviderFactory(
 			}
 		}
 
-		// Wrap the httpCaller to annotate requests.
-		baseHTTPCaller := httpCaller
-		httpCaller = func(r *http.Request) (*http.Response, error) {
-			r = nexusrpc.AnnotateClientRequest(r, targetNamespaceName)
-			return baseHTTPCaller(r)
+		if httpClientTransportInstrumenter != nil {
+			// Add Nexus attributes when the HTTP transport will create a client span.
+			baseHTTPCaller := httpCaller
+			httpCaller = func(r *http.Request) (*http.Response, error) {
+				r = nexusrpc.AnnotateClientRequest(r, targetNamespaceName)
+				return baseHTTPCaller(r)
+			}
 		}
 
 		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{

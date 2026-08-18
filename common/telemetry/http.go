@@ -19,10 +19,14 @@ import (
 type HTTPClientTransportInstrumenter func(http.RoundTripper) http.RoundTripper
 
 // NewHTTPClientTransportInstrumenter binds a tracer provider and propagator for reuse across HTTP transports.
+// It returns nil when tracing is disabled so callers can avoid tracing-only work.
 func NewHTTPClientTransportInstrumenter(
 	tracerProvider trace.TracerProvider,
 	propagator propagation.TextMapPropagator,
 ) HTTPClientTransportInstrumenter {
+	if !isEnabled(tracerProvider) {
+		return nil
+	}
 	return func(rt http.RoundTripper) http.RoundTripper {
 		return NewHTTPClientTransport(rt, tracerProvider, propagator)
 	}
