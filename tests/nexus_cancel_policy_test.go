@@ -92,6 +92,33 @@ func (s *NexusCancelPolicyTestSuite) TestTerminateCaller_Delivered() {
 	requireCancelDelivered(s.T(), cancelCh)
 }
 
+// Caller workflow terminated while the operation's start is still in-flight (handler blocked in
+// StartOperation, op SCHEDULED). The caller never records a token, so even under REQUEST_CANCEL no
+// CancelOperation can be delivered — the operation is abandoned. Pins the in-flight-start orphan:
+// REQUEST_CANCEL guarantees delivery only for operations the caller durably observed as STARTED.
+func (s *NexusCancelPolicyTestSuite) TestTerminateCaller_StartInFlight_NotDelivered() {
+	cancelCh := make(chan struct{}, 1)
+	startGate := make(chan struct{})
+	env := s.newTestEnv()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexusCancelBlockingStartHandler(startGate, cancelCh))
+
+	run := nexusCancelStartSchedule(s.T(), env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	}, 0)
+	// The handler blocks in StartOperation, so the start is in-flight and the op stays SCHEDULED.
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
+
+	// Terminate the caller while the start is still in-flight.
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), run.GetID(), run.GetRunID(), "test"))
+
+	// Releasing the start lets the handler "start", but the caller is already closed and never
+	// recorded the token, so the operation can never reach STARTED and no cancel is delivered.
+	close(startGate)
+	requireCancelNotDelivered(s.T(), cancelCh, 5*time.Second)
+}
+
 // Caller workflow fails with a STARTED op → now delivered.
 func (s *NexusCancelPolicyTestSuite) TestFailCaller_Delivered() {
 	cancelCh := make(chan struct{}, 1)

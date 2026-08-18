@@ -177,11 +177,32 @@ func (w *Workflow) OnNexusOperationTimedOut(
 	return err
 }
 
+// removeNexusOperationIfTerminal drops an operation whose cancel has now resolved when the operation
+// was already terminal (it was kept resident only to deliver the cancel). A still-running ("started")
+// operation is left as-is; it only leaves "started" when the handler delivers the actual outcome.
+func (w *Workflow) removeNexusOperationIfTerminal(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
+	if op.LifecycleState(ctx) == chasm.LifecycleStateRunning {
+		return nil
+	}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+	w.removeNexusOperation(parentData.GetScheduledEventId())
+	return nil
+}
+
 func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
 	if !w.IsRunning() {
-		// Caller workflow already closed (e.g. by close policy). The cancel was delivered;
-		// skip the history event to avoid ErrWorkflowFinished retry storms.
-		return nil
+		// Caller workflow already closed (e.g. by the auto-close policy). The cancel was delivered;
+		// resolve the cancellation's own state and drop an already-terminal operation, but skip the
+		// history event since history is sealed (avoids ErrWorkflowFinished retry storms). A still-
+		// "started" operation is left as-is — it only leaves "started" when the handler delivers the
+		// actual outcome, which a closed caller cannot observe.
+		if err := nexusoperation.TransitionCancellationSucceeded.Apply(op.Cancellation.Get(ctx), ctx, nexusoperation.EventCancellationSucceeded{}); err != nil {
+			return err
+		}
+		return w.removeNexusOperationIfTerminal(ctx, op)
 	}
 	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
@@ -208,7 +229,13 @@ func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContex
 
 func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, op *nexusoperation.Operation, failure *failurepb.Failure) error {
 	if !w.IsRunning() {
-		return nil
+		// Caller workflow already closed. The cancel resolved (delivery failed); record the
+		// cancellation's failed state and drop an already-terminal operation, but skip the history
+		// event since history is sealed. A still-"started" operation is left as-is.
+		if err := nexusoperation.TransitionCancellationFailed.Apply(op.Cancellation.Get(ctx), ctx, nexusoperation.EventCancellationFailed{Failure: failure}); err != nil {
+			return err
+		}
+		return w.removeNexusOperationIfTerminal(ctx, op)
 	}
 	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
@@ -234,18 +261,19 @@ func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, 
 	return err
 }
 
-// RequestCancelPendingNexusOperations requests cancellation of every pending async Nexus
+// RequestCancelPendingNexusOperations requests cancellation of every STARTED async Nexus
 // operation owned by the workflow, recording a NexusOperationCancelRequested event for each so
 // the cancellation is visible in the caller's history. It is intended to be called from
 // workflow-close paths (Nexus auto-close policy) while mutable state is still writable, i.e.
 // before the workflow close event is added.
 //
 // Semantics worth noting:
-//   - Only operations that already reached STARTED get an outbound cancel delivered to the
-//     handler. For not-yet-started operations RequestCancel records the intent, but the cancel
-//     never actually fires: once the workflow closes, the Operation's start task is dropped
-//     (the Operation component, unlike Cancellation, is not detached), so the operation never
-//     transitions to STARTED. Such operations have no running handler to notify, so this is benign.
+//   - Only STARTED operations are cancelled — they are the only ones with a running handler (and a
+//     token) to notify. Not-yet-started operations (SCHEDULED/BACKING_OFF) are skipped: once the
+//     workflow closes their start task is dropped (the Operation, unlike Cancellation, is not
+//     detached), so they can never reach STARTED, and requesting a cancel would only record an
+//     undeliverable event. A start racing the close (in-flight when the workflow closes) is likewise
+//     abandoned — the caller never recorded a token to cancel with.
 //   - The Nexus protocol's CancelOperation carries no reason/identity, so the cause of the
 //     cancellation is only recorded caller-side (via the event added here), not forwarded to
 //     the handler.
@@ -268,8 +296,9 @@ func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, 
 func (w *Workflow) RequestCancelPendingNexusOperations(ctx chasm.MutableContext) error {
 	for scheduledEventID, field := range w.Operations {
 		op := field.Get(ctx)
-		if op.LifecycleState(ctx) != chasm.LifecycleStateRunning {
-			continue // already terminal
+		// Only STARTED operations have a running handler (and a token) to cancel; skip the rest.
+		if op.GetStatus() != nexusoperationpb.OPERATION_STATUS_STARTED {
+			continue
 		}
 		if err := w.requestAutoCloseCancel(ctx, scheduledEventID, op); err != nil {
 			return err
