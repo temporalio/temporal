@@ -52,8 +52,8 @@ var (
 	globalGrpcBuilder grpcBuilder
 	grpcResolverID    atomic.Uint64
 
-	errInvalidUrl     = errors.New("invalid grpc resolver url")
-	errNotInitialized = errors.New("grpc resolver has not been initialized yet")
+	errInvalidUrl    = errors.New("invalid grpc resolver url")
+	errNotRegistered = errors.New("grpc resolver is not registered; it may not have been created or may already have been released")
 )
 
 func init() {
@@ -116,7 +116,7 @@ func (m *grpcBuilder) getServiceResolver(u *url.URL) (ServiceResolver, error) {
 	}
 	v, ok := m.resolvers.Load(registrationID)
 	if !ok {
-		return nil, errNotInitialized
+		return nil, errNotRegistered
 	}
 	return v.(Monitor).GetResolver(primitives.ServiceName(service))
 }

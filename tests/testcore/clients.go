@@ -147,6 +147,9 @@ func (c *clients) ensureHistory() {
 
 func (c *clients) MatchingClient() matchingservice.MatchingServiceClient {
 	c.ensureMatching()
+	if c.matching.client == nil {
+		panic("matching test client used after cluster shutdown")
+	}
 	return c.matching.client
 }
 
