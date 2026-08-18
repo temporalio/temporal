@@ -145,6 +145,7 @@ func generateOccurrenceReportTable(reports []TestReport, nameHeader, countHeader
 	if len(reports) == 0 {
 		return ""
 	}
+	reports = limitReportRows(reports)
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("| %s | %s | Last Occurrence | Trend | Links |\n", nameHeader, countHeader))

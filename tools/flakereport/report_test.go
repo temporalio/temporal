@@ -99,6 +99,7 @@ func TestBuildReportSummaryExcludesHundredPercentFlakyTests(t *testing.T) {
 	summary := buildReportSummary(
 		[]TestReport{fullyFailing, flaky},
 		[]TestReport{timeout},
+		nil,
 		[]TestReport{crash},
 		[]TestReport{ciBreaker},
 		nil, nil, nil, nil, 0,
@@ -156,7 +157,7 @@ func TestGenerateReportLimitsNonSuiteTableRows(t *testing.T) {
 		TotalFlakyCount: total,
 	}
 
-	summaryContent := generateGitHubSummary(summary, "", 0)
+	summaryContent := generateGitHubSummary(summary, nil, "", "", 0, 0)
 	summaryContent += generateBisectSummary(bisectReports, "temporalio/temporal", 0.5)
 
 	require.Contains(t, summaryContent, "| Flaky Tests | 101 |")
