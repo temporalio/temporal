@@ -2,12 +2,15 @@ package nsreplication
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -15,23 +18,39 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
+	replicationEventCaptureLogger struct {
+		embedded.Logger
+		records []otellog.Record
+	}
+
 	namespaceReplicationTaskExecutorSuite struct {
 		suite.Suite
 		controller *gomock.Controller
 
 		mockMetadataMgr     *persistence.MockMetadataManager
 		namespaceReplicator *taskExecutorImpl
+		eventLogger         *replicationEventCaptureLogger
 	}
 )
+
+func (l *replicationEventCaptureLogger) Emit(_ context.Context, record otellog.Record) {
+	l.records = append(l.records, record)
+}
+
+func (l *replicationEventCaptureLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
+}
 
 func TestNamespaceReplicationTaskExecutorSuite(t *testing.T) {
 	s := new(namespaceReplicationTaskExecutorSuite)
@@ -49,6 +68,7 @@ func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockMetadataMgr = persistence.NewMockMetadataManager(s.controller)
 	logger := log.NewTestLogger()
+	s.eventLogger = &replicationEventCaptureLogger{}
 	s.namespaceReplicator = NewTaskExecutor(
 		"some random standby cluster name",
 		s.mockMetadataMgr,
@@ -56,11 +76,63 @@ func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 		NewDefaultAdmitter(),
 		logger,
 		testhooks.TestHooks{},
+		WithNamespaceReplicationLifecycleEvents(
+			s.eventLogger,
+			dynamicconfig.GetBoolPropertyFn(true),
+		),
 	).(*taskExecutorImpl)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) replicationEventContext() context.Context {
+	return wideevents.SetNamespaceReplicationTaskContext(context.Background(), wideevents.NamespaceReplicationTaskContext{
+		SourceCluster: "source-cluster",
+		TargetCluster: "target-cluster",
+		SourceTaskID:  42,
+		AttemptCount:  2,
+	})
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) processedPersistenceRequest() map[string]any {
+	s.Require().Len(s.eventLogger.records, 1)
+	values := make(map[string]otellog.Value)
+	s.eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		values[kv.Key] = kv.Value
+		return true
+	})
+	s.Equal("processed", values["phase"].AsString())
+	s.Equal("source-cluster", values["source_cluster"].AsString())
+	s.Equal("target-cluster", values["target_cluster"].AsString())
+	s.Equal(int64(42), values["source_task_id"].AsInt64())
+	s.Equal(int64(2), values["attempt_count"].AsInt64())
+
+	if _, ok := values["persistence_request"]; !ok {
+		return nil
+	}
+	var request map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(values["persistence_request"].AsString()), &request))
+	return request
+}
+
+func (s *namespaceReplicationTaskExecutorSuite) TestEmitProcessedRequiresExplicitConfigAndContext() {
+	task := &replicationspb.NamespaceTaskAttributes{
+		Id:   "namespace-id",
+		Info: &namespacepb.NamespaceInfo{Name: "namespace-name"},
+	}
+
+	s.namespaceReplicator.emitNamespaceReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(false)
+	s.namespaceReplicator.emitNamespaceReplicationProcessed(s.replicationEventContext(), task, nil, nil)
+	s.Empty(s.eventLogger.records)
+
+	s.namespaceReplicator.emitNamespaceReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.namespaceReplicator.emitNamespaceReplicationProcessed(context.Background(), task, nil, nil)
+	s.Empty(s.eventLogger.records)
+
+	s.namespaceReplicator.emitNamespaceReplicationProcessed(s.replicationEventContext(), task, nil, nil)
+	s.Len(s.eventLogger.records, 1)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_NameUUIDCollision() {
@@ -253,8 +325,12 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(context.Background(), task)
+	err := s.namespaceReplicator.Execute(s.replicationEventContext(), task)
 	s.Nil(err)
+	request := s.processedPersistenceRequest()
+	s.Equal("CreateNamespaceRequest", request["request_type"])
+	s.Equal(true, request["is_global_namespace"])
+	s.Equal(id, request["namespace"].(map[string]any)["info"].(map[string]any)["id"])
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTask_Duplicate() {
@@ -383,8 +459,11 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
+	err := s.namespaceReplicator.Execute(s.replicationEventContext(), updateTask)
 	s.Nil(err)
+	request := s.processedPersistenceRequest()
+	s.Equal("CreateNamespaceRequest", request["request_type"])
+	s.Equal("12", request["namespace"].(map[string]any)["config_version"])
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_UpdateActiveCluster() {
@@ -486,8 +565,12 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		IsGlobalNamespace:   false,
 		NotificationVersion: updateFailoverVersion,
 	})
-	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
+	err := s.namespaceReplicator.Execute(s.replicationEventContext(), updateTask)
 	s.Nil(err)
+	request := s.processedPersistenceRequest()
+	s.Equal("UpdateNamespaceRequest", request["request_type"])
+	s.Equal("1", request["namespace"].(map[string]any)["config_version"])
+	s.Equal(float64(updateFailoverVersion), request["notification_version"])
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_NoUpdateActiveCluster() {
@@ -732,8 +815,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	}, nil).Times(1)
 
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Times(0)
-	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
+	err := s.namespaceReplicator.Execute(s.replicationEventContext(), updateTask)
 	s.Nil(err)
+	s.Nil(s.processedPersistenceRequest())
 }
 
 // TestExecute_UpdateNamespaceTask_FailoverPropagatesNormalState verifies the

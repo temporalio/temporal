@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/api/serviceerror"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -44,6 +45,7 @@ type (
 	// Archiver: Handles archival of workflow histories.
 	Service struct {
 		logger                 log.Logger
+		eventLogger            otellog.Logger
 		clusterMetadata        cluster.Metadata
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
@@ -79,24 +81,25 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ScannerCfg                           *scanner.Config
-		ParentCloseCfg                       *parentclosepolicy.Config
-		ThrottledLogRPS                      dynamicconfig.IntPropertyFn
-		PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
-		PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
-		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
-		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
-		EnableBatcher                        dynamicconfig.BoolPropertyFn
-		BatcherRPS                           dynamicconfig.IntPropertyFnWithNamespaceFilter
-		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
-		PerNamespaceWorkerCount              dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
-		PerNamespaceWorkerOptions            dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
-		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
+		ScannerCfg                              *scanner.Config
+		ParentCloseCfg                          *parentclosepolicy.Config
+		ThrottledLogRPS                         dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS                       dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS                 dynamicconfig.IntPropertyFn
+		PersistenceNamespaceMaxQPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceGlobalNamespaceMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistencePerShardNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PersistenceDynamicRateLimitingParams    dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
+		PersistenceQPSBurstRatio                dynamicconfig.FloatPropertyFn
+		OperatorRPSRatio                        dynamicconfig.FloatPropertyFn
+		EnableBatcher                           dynamicconfig.BoolPropertyFn
+		BatcherRPS                              dynamicconfig.IntPropertyFnWithNamespaceFilter
+		BatcherConcurrency                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+		EnableParentClosePolicyWorker           dynamicconfig.BoolPropertyFn
+		EmitNamespaceReplicationLifecycleEvents dynamicconfig.BoolPropertyFn
+		PerNamespaceWorkerCount                 dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
+		PerNamespaceWorkerOptions               dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
+		PerNamespaceWorkerStartRate             dynamicconfig.FloatPropertyFn
 
 		VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 		VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
@@ -111,6 +114,7 @@ type (
 
 func NewService(
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
 	clusterMetadata cluster.Metadata,
@@ -144,6 +148,7 @@ func NewService(
 		config:                    serviceConfig,
 		sdkClientFactory:          sdkClientFactory,
 		logger:                    logger,
+		eventLogger:               eventLogger,
 		clusterMetadata:           clusterMetadata,
 		clientBean:                clientBean,
 		clusterMetadataManager:    clusterMetadataManager,
@@ -216,21 +221,22 @@ func NewConfig(
 
 			ScheduleInvariantsScannerOptions: dynamicconfig.ScheduleInvariantsScannerOptions.Get(dc),
 		},
-		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
-		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
-		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
-		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
-		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
-		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
-		ThrottledLogRPS:                      dynamicconfig.WorkerThrottledLogRPS.Get(dc),
-		PersistenceMaxQPS:                    dynamicconfig.WorkerPersistenceMaxQPS.Get(dc),
-		PersistenceGlobalMaxQPS:              dynamicconfig.WorkerPersistenceGlobalMaxQPS.Get(dc),
-		PersistenceNamespaceMaxQPS:           dynamicconfig.WorkerPersistenceNamespaceMaxQPS.Get(dc),
-		PersistenceGlobalNamespaceMaxQPS:     dynamicconfig.WorkerPersistenceGlobalNamespaceMaxQPS.Get(dc),
-		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.DefaultPerShardNamespaceRPSMax,
-		PersistenceDynamicRateLimitingParams: dynamicconfig.WorkerPersistenceDynamicRateLimitingParams.Get(dc),
-		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
-		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
+		BatcherRPS:                              dynamicconfig.BatcherRPS.Get(dc),
+		BatcherConcurrency:                      dynamicconfig.BatcherConcurrency.Get(dc),
+		EnableParentClosePolicyWorker:           dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
+		EmitNamespaceReplicationLifecycleEvents: dynamicconfig.EmitNamespaceReplicationLifecycleEvents.Get(dc),
+		PerNamespaceWorkerCount:                 dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
+		PerNamespaceWorkerOptions:               dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
+		PerNamespaceWorkerStartRate:             dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
+		ThrottledLogRPS:                         dynamicconfig.WorkerThrottledLogRPS.Get(dc),
+		PersistenceMaxQPS:                       dynamicconfig.WorkerPersistenceMaxQPS.Get(dc),
+		PersistenceGlobalMaxQPS:                 dynamicconfig.WorkerPersistenceGlobalMaxQPS.Get(dc),
+		PersistenceNamespaceMaxQPS:              dynamicconfig.WorkerPersistenceNamespaceMaxQPS.Get(dc),
+		PersistenceGlobalNamespaceMaxQPS:        dynamicconfig.WorkerPersistenceGlobalNamespaceMaxQPS.Get(dc),
+		PersistencePerShardNamespaceMaxQPS:      dynamicconfig.DefaultPerShardNamespaceRPSMax,
+		PersistenceDynamicRateLimitingParams:    dynamicconfig.WorkerPersistenceDynamicRateLimitingParams.Get(dc),
+		PersistenceQPSBurstRatio:                dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		OperatorRPSRatio:                        dynamicconfig.OperatorRPSRatio.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
@@ -372,6 +378,8 @@ func (s *Service) startReplicator() {
 		s.clusterMetadata,
 		s.clientBean,
 		s.logger,
+		s.eventLogger,
+		s.config.EmitNamespaceReplicationLifecycleEvents,
 		s.metricsHandler,
 		s.hostInfo,
 		s.workerServiceResolver,

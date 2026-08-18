@@ -89,7 +89,13 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.mockMetadataMgr = persistence.NewMockMetadataManager(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
-	s.mockNamespaceReplicator = nsreplication.NewReplicator(s.mockProducer, logger)
+	s.mockNamespaceReplicator = nsreplication.NewReplicator(
+		s.mockProducer,
+		logger,
+		nil,
+		dc.GetBoolPropertyFn(false),
+		func() string { return "cluster-a" },
+	)
 	s.archivalMetadata = archiver.NewArchivalMetadata(
 		dcCollection,
 		"",
