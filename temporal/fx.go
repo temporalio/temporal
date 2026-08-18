@@ -988,8 +988,8 @@ func (h *otelLoggerErrorHandler) Handle(err error) {
 }
 
 func (h *otelLoggerErrorHandler) currentLogger() log.Logger {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if len(h.registrations) == 0 {
 		return nil
 	}
@@ -1053,6 +1053,7 @@ var TraceExportModule = fx.Options(
 		inputs.Lifecycyle.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
 				if err := startExporters(ctx); err != nil {
+					globalOTELLoggerErrorHandler.remove(registration)
 					return err
 				}
 				// Ignore errors during startup by registering only once the exporters are running.
