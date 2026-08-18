@@ -145,7 +145,7 @@ func clientProviderFactory(
 
 	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 		var url string
-		var targetNamespaceName string
+		var targetNamespaceID string
 		var httpClient *http.Client
 		// Populate source header for worker targets, and route internally. Callback assumes external target if unset.
 		needsCallbackSourceHeader := false
@@ -161,9 +161,7 @@ func clientProviderFactory(
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
 			needsCallbackSourceHeader = true
-			if namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(variant.Worker.GetNamespaceId())); err == nil {
-				targetNamespaceName = namespaceName.String()
-			}
+			targetNamespaceID = variant.Worker.GetNamespaceId()
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
@@ -182,6 +180,13 @@ func clientProviderFactory(
 		}
 
 		if httpClientTransportInstrumenter != nil {
+			var targetNamespaceName string
+			if targetNamespaceID != "" {
+				if namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(targetNamespaceID)); err == nil {
+					targetNamespaceName = namespaceName.String()
+				}
+			}
+
 			// Add Nexus attributes when the HTTP transport will create a client span.
 			baseHTTPCaller := httpCaller
 			httpCaller = func(r *http.Request) (*http.Response, error) {
