@@ -56,7 +56,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 }
 
 func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *VersioningTestEnv {
-	return setupVersioning3Env(s.T(), opts...)
+	return newVersioning3TestEnv(s.T(), opts...)
 }
 
 func (s *Versioning3Suite) runTestWithMatchingBehavior(testFn func(*VersioningTestEnv, *Versioning3Suite), opts ...testcore.TestOption) {

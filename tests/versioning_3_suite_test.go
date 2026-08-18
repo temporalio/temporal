@@ -13,7 +13,7 @@ type versioning3TestSuite[T any] interface {
 	Run(string, func(T)) bool
 }
 
-func setupVersioning3Env(t *testing.T, opts ...testcore.TestOption) *VersioningTestEnv {
+func newVersioning3TestEnv(t *testing.T, opts ...testcore.TestOption) *VersioningTestEnv {
 	opts = append([]testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(versioning3DeploymentWorkflowVersion)),
 
@@ -25,7 +25,7 @@ func setupVersioning3Env(t *testing.T, opts ...testcore.TestOption) *VersioningT
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4),
 
-		// Overriding the number of deployments that can be registered in a single namespace. Done only for this test suite
+		// Overriding the number of deployments that can be registered in a single namespace. Done only for this env
 		// since it creates a large number of unique deployments in the test suite's namespace.
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxDeployments, 1000),
 
@@ -47,7 +47,7 @@ func runVersioning3TestWithMatchingBehavior[T versioning3TestSuite[T]](
 		s.Run(behavior.Name(), func(s T) {
 			envOpts := append([]testcore.TestOption{}, opts...)
 			envOpts = append(envOpts, behavior.Options()...)
-			env := setupVersioning3Env(s.T(), envOpts...)
+			env := newVersioning3TestEnv(s.T(), envOpts...)
 			behavior.InjectHooks(env)
 			testFn(env, s)
 		})
