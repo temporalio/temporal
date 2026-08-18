@@ -16,27 +16,23 @@ type ServerSpanAttributes struct {
 	RequestID string
 }
 
-func (a ServerSpanAttributes) keyValues() []attribute.KeyValue {
-	kvs := []attribute.KeyValue{
-		attribute.String(telemetry.NexusServiceKey, a.Service),
-		attribute.String(telemetry.NexusOperationKey, a.Operation),
-	}
-	if a.Endpoint != "" {
-		kvs = append(kvs, attribute.String(telemetry.NexusEndpointKey, a.Endpoint))
-	}
-	if a.RequestID != "" {
-		kvs = append(kvs, attribute.String(telemetry.NexusRequestIDKey, a.RequestID))
-	}
-	return kvs
-}
-
 // AnnotateServerSpan adds Nexus request attributes to span.
 func AnnotateServerSpan(span trace.Span, attrs ServerSpanAttributes) {
 	// Non-recording spans discard attributes, so avoid constructing them.
 	if !span.IsRecording() {
 		return
 	}
-	span.SetAttributes(attrs.keyValues()...)
+	kvs := []attribute.KeyValue{
+		attribute.String(telemetry.NexusServiceKey, attrs.Service),
+		attribute.String(telemetry.NexusOperationKey, attrs.Operation),
+	}
+	if attrs.Endpoint != "" {
+		kvs = append(kvs, attribute.String(telemetry.NexusEndpointKey, attrs.Endpoint))
+	}
+	if attrs.RequestID != "" {
+		kvs = append(kvs, attribute.String(telemetry.NexusRequestIDKey, attrs.RequestID))
+	}
+	span.SetAttributes(kvs...)
 }
 
 // AnnotateClientRequest returns req with Nexus attributes for its HTTP client span.
