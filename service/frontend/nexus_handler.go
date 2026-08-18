@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
@@ -103,7 +102,7 @@ func (c *operationContext) annotateInboundSpan(
 	})
 }
 
-// Recovers panics and finalizes request metrics, cleanup, and span status.
+// Recovers panics, records request metrics, and runs response cleanup.
 // Used as a deferred statement in Nexus handler methods.
 func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
 	recovered := recover() //nolint:revive
@@ -132,12 +131,6 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 
 	for _, fn := range c.cleanupFunctions {
 		fn(c.responseHeaders, *errPtr)
-	}
-
-	if *errPtr != nil {
-		span := trace.SpanFromContext(*ctxPtr)
-		span.RecordError(*errPtr)
-		span.SetStatus(codes.Error, (*errPtr).Error())
 	}
 }
 

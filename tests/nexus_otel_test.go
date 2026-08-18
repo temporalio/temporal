@@ -42,7 +42,6 @@ type nexusHTTPSpan struct {
 	Kind         oteltrace.SpanKind
 	URLPath      string
 	Status       codes.Code
-	Events       []string
 	Attrs        map[string]any
 }
 
@@ -360,7 +359,6 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 		Kind:        oteltrace.SpanKindServer,
 		URLPath:     dispatchURL.Path + "/test-service/my-operation",
 		Status:      codes.Error,
-		Events:      []string{"exception"},
 		Attrs: map[string]any{
 			"nexus.operation":  "my-operation",
 			"nexus.request_id": requestID,
@@ -428,7 +426,6 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 			}
 		}
 		var urlPath string
-		var events []string
 		attrs := make(map[string]any, len(span.Attributes))
 		for _, attr := range span.Attributes {
 			attrs[string(attr.Key)] = attr.Value.AsInterface()
@@ -441,9 +438,6 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 				}
 			}
 		}
-		for _, event := range span.Events {
-			events = append(events, event.Name)
-		}
 		result = append(result, nexusHTTPSpan{
 			TraceID:      traceIDs[traceID],
 			SpanID:       spanIDs[traceID][span.SpanContext.SpanID()],
@@ -453,7 +447,6 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 			Kind:         span.SpanKind,
 			URLPath:      urlPath,
 			Status:       span.Status.Code,
-			Events:       events,
 			Attrs:        attrs,
 		})
 	}
