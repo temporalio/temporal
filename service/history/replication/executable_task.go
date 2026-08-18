@@ -929,12 +929,16 @@ func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.
 	return dynamicconfig.RolloutAccepts([]byte(businessID), percent)
 }
 
-// gradualConnectPercent computes the current admission percent, capped at 100. Fails open for an
-// invalid schedule or if now precedes connectTime.
+// gradualConnectPercent computes the current admission percent, capped at 100. It treats a time
+// before connectTime as the start of the ramp so clock skew cannot temporarily admit tasks that a
+// later evaluation would shed. Invalid schedules fail open.
 func gradualConnectPercent(connectTime, now time.Time, duration time.Duration, initialPercent int) int {
 	elapsed := now.Sub(connectTime)
-	if elapsed < 0 || duration <= 0 || initialPercent < 0 || initialPercent >= 100 {
+	if duration <= 0 || initialPercent < 0 || initialPercent >= 100 {
 		return 100
+	}
+	if elapsed < 0 {
+		elapsed = 0
 	}
 	if elapsed >= duration {
 		return 100

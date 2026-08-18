@@ -1108,7 +1108,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_NoRampAdmits()
 	s.True(toProcess)
 }
 
-func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInFuture_Admits() {
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInFutureUsesInitialPercent() {
 	future := s.timeSource.Now().Add(time.Hour)
 	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&persistencespb.NamespaceReplicationRamp{
 		StartTime:         timestamppb.New(future),
@@ -1119,7 +1119,12 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInF
 
 	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
-	s.True(toProcess, "a connect time in the future (clock skew) must fail open (admit) despite InitialPercent=0")
+	s.False(toProcess, "clock skew must not temporarily admit a workflow that could be shed once clocks catch up")
+
+	s.timeSource.Update(future)
+	_, toProcess, err = s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.False(toProcess, "catching up to the ramp start must not reduce the admission percentage")
 }
 
 // TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits: a shed task is dropped for good, so
@@ -1148,7 +1153,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_A
 	})
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
 
-	s.timeSource.Update(connectTime.Add(time.Hour)) // well past 10 steps of 1 minute each
+	s.timeSource.Update(connectTime.Add(time.Hour)) // well past the ramp duration
 	for range 20 {
 		_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, uuid.NewString())
 		s.NoError(err)
@@ -1159,11 +1164,11 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_A
 // TestGetNamespaceInfo_GradualConnect_Monotonicity checks that admission only grows over time: a
 // workflow ID admitted at one tick is never shed later. DELETE/VERIFY task safety depends on this.
 func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_Monotonicity() {
-	stepDuration := time.Minute
+	sampleInterval := time.Minute
 	connectTime := s.timeSource.Now()
 	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&persistencespb.NamespaceReplicationRamp{
 		StartTime:         timestamppb.New(connectTime),
-		Duration:          durationpb.New(10 * stepDuration),
+		Duration:          durationpb.New(10 * sampleInterval),
 		InitialPercentage: 10,
 	})
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
@@ -1175,8 +1180,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_Monotonicity()
 	}
 
 	admitted := make(map[string]bool, numWorkflows)
-	for tick := 0; tick <= 10; tick++ { // 0% .. 100% in 10 steps of 10%, plus the initial 10%
-		s.timeSource.Update(connectTime.Add(time.Duration(tick) * stepDuration))
+	for tick := 0; tick <= 10; tick++ { // Sample the linear ramp once per minute.
+		s.timeSource.Update(connectTime.Add(time.Duration(tick) * sampleInterval))
 		for _, wfID := range workflowIDs {
 			_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, wfID)
 			s.NoError(err)
@@ -1409,11 +1414,11 @@ func TestGradualConnectPercent(t *testing.T) {
 			want:           100,
 		},
 		{
-			name:           "negative_elapsed_admits_everything",
+			name:           "negative_elapsed_uses_initial_percent",
 			now:            connectTime.Add(-time.Minute),
-			initialPercent: 0,
+			initialPercent: 10,
 			duration:       50 * time.Minute,
-			want:           100,
+			want:           10,
 		},
 		{
 			name:           "non_positive_duration_admits_everything",

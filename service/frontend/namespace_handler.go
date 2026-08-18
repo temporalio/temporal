@@ -533,6 +533,10 @@ func (d *namespaceHandler) UpdateNamespace(
 
 	if updateRequest.ReplicationConfig != nil {
 		updateReplicationConfig := updateRequest.ReplicationConfig
+		effectiveActiveCluster := replicationConfig.GetActiveClusterName()
+		if updateReplicationConfig.GetActiveClusterName() != "" {
+			effectiveActiveCluster = updateReplicationConfig.GetActiveClusterName()
+		}
 		if len(updateReplicationConfig.Clusters) != 0 {
 			configurationChanged = true
 			clusterListChanged = true
@@ -546,7 +550,7 @@ func (d *namespaceHandler) UpdateNamespace(
 				replicationConfig.GetClusterReplicationRamps(),
 				oldReplicationClusters,
 				clustersNew,
-				replicationConfig.GetActiveClusterName(),
+				effectiveActiveCluster,
 			)
 		}
 		if updateReplicationConfig.State != enumspb.REPLICATION_STATE_UNSPECIFIED &&

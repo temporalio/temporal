@@ -140,6 +140,22 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSnapshotsAndRest
 	s.Equal(int32(25), reconnected["standby"].GetInitialPercentage())
 }
 
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSkipsEffectiveActiveCluster() {
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
+	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(time.Hour)
+	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(10)
+
+	ramps := s.handler.updateReplicationRamps(
+		"test-ns",
+		nil,
+		[]string{"old-active"},
+		[]string{"old-active", "new-active", "new-standby"},
+		"new-active",
+	)
+	s.NotContains(ramps, "new-active")
+	s.Contains(ramps, "new-standby")
+}
+
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
 	out := s.handler.mergeNamespaceData(
 		map[string]string{

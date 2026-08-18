@@ -61,14 +61,14 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 
 	// Explicitly opt this namespace into a short ramp. The active cluster snapshots these values
 	// into namespace state when standby is added.
-	const rampStepDuration = 12 * time.Second
+	const rampDuration = 12 * time.Second
 	for _, override := range []struct {
 		setting dynamicconfig.GenericSetting
 		value   any
 	}{
 		{dynamicconfig.EnableReplicationGradualConnect, true},
 		{dynamicconfig.ReplicationGradualConnectInitialPercent, 0},
-		{dynamicconfig.ReplicationGradualConnectDuration, rampStepDuration},
+		{dynamicconfig.ReplicationGradualConnectDuration, rampDuration},
 	} {
 		s.T().Cleanup(active.OverrideDynamicConfig(s.T(), override.setting, override.value))
 	}
@@ -84,7 +84,7 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	ramp := nsResp.Namespace.GetReplicationConfig().GetClusterReplicationRamps()[standby.ClusterName()]
 	s.Require().NotNil(ramp, "standby should receive the immutable ramp for this connection")
 	s.Require().WithinDuration(connectedAt, ramp.GetStartTime().AsTime(), namespaceCacheWaitTime+5*time.Second)
-	s.Require().Equal(rampStepDuration, ramp.GetDuration().AsDuration())
+	s.Require().Equal(rampDuration, ramp.GetDuration().AsDuration())
 	connectTime := ramp.GetStartTime().AsTime()
 
 	// Still inside the ramp window: a workflow started on active must not replicate to standby yet.
@@ -100,10 +100,10 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 		return s.gcWorkflowExistsOn(ctx, standby, ns, shedWorkflowID)
 	}, 3*time.Second, 200*time.Millisecond, "workflow should be shed while the ramp is still active")
 
-	// Once the ramp step has elapsed, a new workflow started on active must replicate normally.
+	// Once the ramp has completed, a new workflow started on active must replicate normally.
 	// Sleep-until-deadline is deliberate, not poll-until-condition: a task generated before the
 	// deadline is dropped for good by the shed gate, so polling early can't substitute for it.
-	time.Sleep(time.Until(connectTime.Add(rampStepDuration + 3*time.Second))) //nolint:forbidigo
+	time.Sleep(time.Until(connectTime.Add(rampDuration + 3*time.Second))) //nolint:forbidigo
 	admittedWorkflowID := "gc-admit-" + uuid.NewString()
 	s.gcStartAndCompleteWorkflow(ctx, active, ns, admittedWorkflowID)
 	await.RequireTruef(s.T(), func() bool {
