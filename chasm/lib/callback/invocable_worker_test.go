@@ -170,7 +170,7 @@ func TestExecuteInvocationTaskWorker_Outcomes(t *testing.T) {
 					},
 				},
 			}),
-			expectedMetricOutcome: "failure",
+			expectedMetricOutcome: "operation-failure",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				requireTerminalFailure(t, cb, "handler rejected the completion")
