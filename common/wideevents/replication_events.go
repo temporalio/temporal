@@ -15,6 +15,11 @@ const (
 	ReplicationSent      ReplicationPhase = "sent"
 	ReplicationExecuting ReplicationPhase = "executing"
 	ReplicationApplied   ReplicationPhase = "applied"
+	// ReplicationSkipped is a terminal source-side phase: the sender could not build ("convert")
+	// the task after exhausting retries and skipped it (advanced the watermark past it) instead of
+	// wedging the stream. Such a task never reaches executing/applied, so this is where its trace
+	// ends. See StreamSenderImpl.recordStuckTaskSkipped.
+	ReplicationSkipped ReplicationPhase = "skipped"
 )
 
 const (
@@ -22,6 +27,12 @@ const (
 	ReplTaskSyncVersionedTransition   = "sync_versioned_transition"
 	ReplTaskVerifyVersionedTransition = "verify_versioned_transition"
 	ReplTaskDeleteExecution           = "delete_execution"
+	// The three below have no sent/executing/applied event today (emitReplicationSent does not build
+	// them), but a raw queue task of these types can still be skipped, so the skipped event maps them
+	// to keep task_type a single vocabulary across every phase.
+	ReplTaskHistory      = "history"
+	ReplTaskSyncActivity = "sync_activity"
+	ReplTaskSyncHSM      = "sync_hsm"
 )
 
 // A mutation carries only what changed within (ExclusiveStartVT, HydratedVT]; a snapshot carries
@@ -32,7 +43,7 @@ const (
 )
 
 type ReplicationLifecyclePayload struct {
-	// Phase is sent, executing or applied.
+	// Phase is sent, executing, applied or skipped.
 	Phase ReplicationPhase
 	// TaskType is which replication task this is.
 	TaskType string
@@ -75,9 +86,10 @@ type ReplicationLifecyclePayload struct {
 	// What the task carried (sent-only). Not recoverable later: the bounds come from the sender's
 	// in-memory per-(run, target) progress cache, and per-entity stamps get overwritten.
 
-	// TargetCluster is the target streamed to; progress is cached per target.
+	// TargetCluster is the target streamed to; progress is cached per target. Also emitted on skipped,
+	// where it is the passive now missing the dropped task's state.
 	TargetCluster string
-	// Priority is the stream it went out on.
+	// Priority is the stream it went out on. Also emitted on skipped.
 	Priority string
 	// ArtifactKind is snapshot (whole state) or mutation (a diff).
 	ArtifactKind string
@@ -95,7 +107,8 @@ type ReplicationLifecyclePayload struct {
 
 	// executing-only
 
-	// Attempt is which delivery attempt this is; > 0 means the apply is being retried.
+	// Attempt is which delivery attempt this is; > 0 means the apply is being retried. On a skipped
+	// event it is instead the source-side send/convert attempts exhausted before the task was dropped.
 	Attempt int32
 
 	// EventVersionHistory is the (event_id, version) branch, from the task on executing and from
@@ -193,6 +206,8 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 		attrs = append(attrs, log.Int64("attempt", int64(p.Attempt)))
 	case ReplicationApplied:
 		attrs = p.appendApplied(attrs)
+	case ReplicationSkipped:
+		attrs = p.appendSkipped(attrs)
 	default:
 	}
 	return attrs
@@ -231,6 +246,26 @@ func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyV
 			log.Int64("shipped_last_event_id", p.ShippedLastEventID),
 			log.Int64("shipped_last_event_version", p.ShippedLastEventVersion),
 		)
+	}
+	return attrs
+}
+
+// appendSkipped emits the fields for a terminal "skipped" event: target_cluster identifies the
+// passive now missing the dropped state, priority tells whether it was live traffic (high) or force
+// replication (low), attempt records how many convert attempts were exhausted before giving up, and
+// error carries the last convert failure so an operator can investigate. The source_cluster /
+// source_shard / source_task_id join key back to the source queue is emitted by Attributes for every
+// phase, so it is not repeated here.
+func (p ReplicationLifecyclePayload) appendSkipped(attrs []log.KeyValue) []log.KeyValue {
+	if p.TargetCluster != "" {
+		attrs = append(attrs, log.String("target_cluster", p.TargetCluster))
+	}
+	if p.Priority != "" {
+		attrs = append(attrs, log.String("priority", p.Priority))
+	}
+	attrs = append(attrs, log.Int64("attempt", int64(p.Attempt)))
+	if p.Error != "" {
+		attrs = append(attrs, log.String("error", p.Error))
 	}
 	return attrs
 }
