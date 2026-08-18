@@ -1054,7 +1054,7 @@ var TraceExportModule = fx.Options(
 				if err := startExporters(ctx); err != nil {
 					return err
 				}
-				// Ignore errors during startup and shutdown by registering only while the exporters are running.
+				// Ignore errors during startup by registering only once the exporters are running.
 				globalOTELLoggerErrorHandler.add(registration)
 				otel.SetErrorHandler(&globalOTELLoggerErrorHandler)
 				return nil
