@@ -973,40 +973,32 @@ type SpanExporterInputs struct {
 
 type otelLoggerErrorHandler struct {
 	mu            sync.Mutex
-	registrations []*otelLoggerErrorHandlerRegistration
-}
-
-type otelLoggerErrorHandlerRegistration struct {
-	logger log.Logger
+	registrations []*log.Logger
 }
 
 func (h *otelLoggerErrorHandler) Handle(err error) {
-	logger := h.currentLogger()
+	h.mu.Lock()
+	var logger log.Logger
+	if len(h.registrations) != 0 {
+		logger = *h.registrations[len(h.registrations)-1]
+	}
+	h.mu.Unlock()
 	if logger != nil {
 		logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
 	}
 }
 
-func (h *otelLoggerErrorHandler) currentLogger() log.Logger {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if len(h.registrations) == 0 {
-		return nil
-	}
-	return h.registrations[len(h.registrations)-1].logger
-}
-
-func (h *otelLoggerErrorHandler) add(registration *otelLoggerErrorHandlerRegistration) {
+func (h *otelLoggerErrorHandler) add(registration *log.Logger) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.registrations = append(h.registrations, registration)
 }
 
-func (h *otelLoggerErrorHandler) remove(registration *otelLoggerErrorHandlerRegistration) {
+func (h *otelLoggerErrorHandler) remove(registration *log.Logger) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	// The lifecycle hook keeps the registration alive, so drop the logger reference explicitly.
-	registration.logger = nil
+	*registration = nil
 	if i := slices.Index(h.registrations, registration); i >= 0 {
 		h.registrations = slices.Delete(h.registrations, i, i+1)
 	}
@@ -1045,7 +1037,8 @@ var TraceExportModule = fx.Options(
 		maps.Copy(exportersByType, exportersByTypeFromEnv) // env overrides config
 		maps.Copy(exportersByType, customExportersByType)  // custom overrides all
 		exporters := expmaps.Values(exportersByType)
-		registration := &otelLoggerErrorHandlerRegistration{logger: inputs.Logger}
+		registration := new(log.Logger)
+		*registration = inputs.Logger
 		startExporters := startAll(exporters)
 		shutdownExporters := shutdownAll(exporters)
 
