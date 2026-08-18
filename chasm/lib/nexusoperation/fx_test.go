@@ -105,6 +105,7 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 					return endpointTransport
 				},
 				clusterMetadata,
+				nil,
 				rpcFactory,
 				nil,
 			)

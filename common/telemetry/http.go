@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"net/http/httptrace"
 	"strings"
 
 	"github.com/felixge/httpsnoop"
@@ -78,23 +77,18 @@ func NewHTTPClientTransport(
 	if propagator == nil {
 		propagator = propagation.TraceContext{}
 	}
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+	rt = &httpClientSpanAttributesTransport{rt: rt}
 	isDebug := DebugMode()
 	if isDebug {
-		if rt == nil {
-			rt = http.DefaultTransport
-		}
 		rt = &debugHTTPClientSpanTransport{rt: rt}
 	}
 	rt = otelhttp.NewTransport(
 		rt,
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
-		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
-			if attrs, ok := ctx.Value(httpClientSpanAttributesKey{}).([]attribute.KeyValue); ok {
-				trace.SpanFromContext(ctx).SetAttributes(attrs...)
-			}
-			return &httptrace.ClientTrace{}
-		}),
 	)
 	if isDebug {
 		rt = &debugHTTPClientTransport{rt: rt}
@@ -125,6 +119,29 @@ func NewHTTPHandler(
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
 	)
+}
+
+type httpClientSpanAttributesKey struct{}
+
+// WithHTTPClientSpanAttributes returns req with attrs for its HTTP client span.
+func WithHTTPClientSpanAttributes(req *http.Request, attrs ...attribute.KeyValue) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), httpClientSpanAttributesKey{}, attrs))
+}
+
+type httpClientSpanAttributesTransport struct {
+	rt http.RoundTripper
+}
+
+var _ http.RoundTripper = (*httpClientSpanAttributesTransport)(nil)
+
+func (t *httpClientSpanAttributesTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	span := trace.SpanFromContext(req.Context())
+	if span.IsRecording() {
+		if attrs, ok := req.Context().Value(httpClientSpanAttributesKey{}).([]attribute.KeyValue); ok {
+			span.SetAttributes(attrs...)
+		}
+	}
+	return t.rt.RoundTrip(req)
 }
 
 type debugHTTPClientRequestStateKey struct{}
@@ -205,13 +222,6 @@ func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Respo
 		state.finalizeResponse = responseCapture.finalize
 	}
 	return resp, err
-}
-
-type httpClientSpanAttributesKey struct{}
-
-// WithHTTPClientSpanAttributes returns req with attrs for its HTTP client span.
-func WithHTTPClientSpanAttributes(req *http.Request, attrs ...attribute.KeyValue) *http.Request {
-	return req.WithContext(context.WithValue(req.Context(), httpClientSpanAttributesKey{}, attrs))
 }
 
 type debugHTTPHandler struct {
