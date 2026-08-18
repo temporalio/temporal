@@ -78,9 +78,8 @@ type OperationStore interface {
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
 	OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, operation *Operation) error
 	OnNexusOperationCancellationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
-	// OnNexusOperationAutoCloseCancelRequested records a NexusOperationCancelRequested history event
-	// for the operation and flags the resulting cancellation as auto-close. Event-sourcing the request
-	// (rather than creating the cancellation component directly) keeps it reconstructible on reset.
+	// OnNexusOperationAutoCloseCancelRequested records a NexusOperationCancelRequested event (so the
+	// auto-close cancellation is reconstructible on reset).
 	OnNexusOperationAutoCloseCancelRequested(ctx chasm.MutableContext, operation *Operation) error
 	// NexusOperationInvocationData loads invocation data (Input, Header, NexusLinks) from the scheduled history event.
 	NexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
@@ -207,10 +206,8 @@ func (o *Operation) RequestCancel(
 	return nil
 }
 
-// RequestCancelOnAutoClose schedules a CancelOperation to the handler when the operation is being
-// auto-closed (schedule-to-close timeout or standalone terminate) while a handler is running. It is
-// a no-op unless the operation is STARTED (a handler exists to notify) and no cancellation has
-// already been requested. Callers gate on the AutoClosePolicy.
+// RequestCancelOnAutoClose requests a CancelOperation when the operation is auto-closed (its own
+// timeout, or standalone terminate). No-op unless STARTED (a handler exists) and not already cancelling.
 func (o *Operation) RequestCancelOnAutoClose(ctx chasm.MutableContext) error {
 	if o.Status != nexusoperationpb.OPERATION_STATUS_STARTED {
 		return nil
@@ -218,9 +215,8 @@ func (o *Operation) RequestCancelOnAutoClose(ctx chasm.MutableContext) error {
 	if _, ok := o.Cancellation.TryGet(ctx); ok {
 		return nil
 	}
-	// Workflow-backed operations event-source the cancel request (so a reset can rebuild it) and defer
-	// the operation's removal until the cancel is delivered. Standalone operations have no store: the
-	// operation is the root entity, so its close snapshot already carries the detached cancellation.
+	// Workflow-backed ops event-source the request (so a reset can rebuild it); standalone ops have no
+	// store and just carry the detached cancellation on their close snapshot.
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationAutoCloseCancelRequested(ctx, o)
 	}

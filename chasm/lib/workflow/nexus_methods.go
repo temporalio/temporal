@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	"go.temporal.io/server/common/authorization"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -177,9 +178,8 @@ func (w *Workflow) OnNexusOperationTimedOut(
 	return err
 }
 
-// removeNexusOperationIfTerminal drops an operation whose cancel has now resolved when the operation
-// was already terminal (it was kept resident only to deliver the cancel). A still-running ("started")
-// operation is left as-is; it only leaves "started" when the handler delivers the actual outcome.
+// removeNexusOperationIfTerminal drops an operation whose cancel has resolved if it was already
+// terminal (kept resident only to deliver the cancel). A still-"started" op is left as-is.
 func (w *Workflow) removeNexusOperationIfTerminal(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
 	if op.LifecycleState(ctx) == chasm.LifecycleStateRunning {
 		return nil
@@ -194,11 +194,8 @@ func (w *Workflow) removeNexusOperationIfTerminal(ctx chasm.MutableContext, op *
 
 func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
 	if !w.IsRunning() {
-		// Caller workflow already closed (e.g. by the auto-close policy). The cancel was delivered;
-		// resolve the cancellation's own state and drop an already-terminal operation, but skip the
-		// history event since history is sealed (avoids ErrWorkflowFinished retry storms). A still-
-		// "started" operation is left as-is — it only leaves "started" when the handler delivers the
-		// actual outcome, which a closed caller cannot observe.
+		// Workflow already closed: resolve the cancellation and drop an already-terminal op, but skip
+		// the history event (sealed). A still-"started" op stays "started".
 		if err := nexusoperation.TransitionCancellationSucceeded.Apply(op.Cancellation.Get(ctx), ctx, nexusoperation.EventCancellationSucceeded{}); err != nil {
 			return err
 		}
@@ -229,9 +226,8 @@ func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContex
 
 func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, op *nexusoperation.Operation, failure *failurepb.Failure) error {
 	if !w.IsRunning() {
-		// Caller workflow already closed. The cancel resolved (delivery failed); record the
-		// cancellation's failed state and drop an already-terminal operation, but skip the history
-		// event since history is sealed. A still-"started" operation is left as-is.
+		// Workflow already closed: record the failed cancellation and drop an already-terminal op, but
+		// skip the history event (sealed). A still-"started" op stays "started".
 		if err := nexusoperation.TransitionCancellationFailed.Apply(op.Cancellation.Get(ctx), ctx, nexusoperation.EventCancellationFailed{Failure: failure}); err != nil {
 			return err
 		}
@@ -281,12 +277,9 @@ func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, 
 // Must be called from the pre-close hooks (before the close event is added) so the recorded
 // NexusOperationCancelRequested events land in the caller's history ahead of the close event.
 //
-// KNOWN LIMITATION: the auto_close flag is set on the cancellation component after the
-// NexusOperationCancelRequested event is applied, and is not carried in the event attributes. A reset
-// that rebuilds a still-pending auto-close cancellation from history therefore recreates it with
-// auto_close=false, which re-clamps the cancel call to the operation's (already ~expired)
-// schedule-to-close and may fail to deliver. The window is narrow (reset mid-cancel-delivery); a
-// durable fix needs the flag event-sourced (see design doc open items).
+// The auto-close distinction is event-sourced: the NexusOperationCancelRequested event is stamped with
+// the system principal, which the event's Apply reads to set the cancellation's auto_close flag. This
+// keeps it correct when a reset rebuilds a still-pending cancellation from history.
 //
 // CONSIDER(stephanos): this fans out inline within the workflow-close transaction, one event +
 // cancellation component per pending operation. The count is bounded by
@@ -318,9 +311,9 @@ func (w *Workflow) OnNexusOperationAutoCloseCancelRequested(ctx chasm.MutableCon
 	return w.requestAutoCloseCancel(ctx, parentData.GetScheduledEventId(), op)
 }
 
-// requestAutoCloseCancel records a NexusOperationCancelRequested event for the operation (so a reset
-// can rebuild the cancellation) and flags the resulting cancellation as auto-close. No-op if a
-// cancellation already exists.
+// requestAutoCloseCancel records a NexusOperationCancelRequested event stamped with the system
+// principal; the event's Apply reads it to flag the cancellation as auto-close. Event-sourcing the
+// flag (vs. a post-hoc component write) keeps it correct across reset. No-op if one already exists.
 func (w *Workflow) requestAutoCloseCancel(ctx chasm.MutableContext, scheduledEventID int64, op *nexusoperation.Operation) error {
 	if _, ok := op.Cancellation.TryGet(ctx); ok {
 		return nil // cancellation already requested (e.g. by the workflow itself)
@@ -332,6 +325,12 @@ func (w *Workflow) requestAutoCloseCancel(ctx chasm.MutableContext, scheduledEve
 				ScheduledEventId: scheduledEventID,
 			},
 		}
+		// System principal → Apply flags it auto-close. Survives close-transaction stamping, which
+		// only fills nil principals.
+		e.Principal = &commonpb.Principal{
+			Type: authorization.InternalPrincipalType,
+			Name: authorization.InternalPrincipalName,
+		}
 		// nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.WorkerMayIgnore = true // For compatibility with older SDKs.
 	})
@@ -341,13 +340,6 @@ func (w *Workflow) requestAutoCloseCancel(ctx chasm.MutableContext, scheduledEve
 			return nil
 		}
 		return err
-	}
-
-	// Mark the cancellation as auto-close (system-initiated) so the cancel call is not clamped to the
-	// operation's remaining schedule-to-close time — which is ~0 when closing at a timeout, and would
-	// otherwise starve the cancel call.
-	if cancel, ok := op.Cancellation.TryGet(ctx); ok {
-		cancel.AutoClose = true
 	}
 	return nil
 }

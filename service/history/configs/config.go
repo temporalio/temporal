@@ -64,21 +64,18 @@ type Config struct {
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
-	HistoryCacheLimitSizeBased            bool
-	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
-	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
-	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
-	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
-	HistoryCacheBackgroundEvict           dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
-	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
-	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
-	EnableTransitionHistory               dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerUpdateID               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	// NexusOperationAutoClosePolicy controls what happens to started async Nexus operations when the caller side is
-	// force-closed without the operation completing (workflow terminate/fail/complete/cancel/run-timeout/
-	// execution-timeout, or standalone operation terminate/timeout): 0 = abandon (default), 1 = request cancel.
+	HistoryCacheLimitSizeBased                 bool
+	HistoryHostLevelCacheMaxSize               dynamicconfig.IntPropertyFn
+	HistoryHostLevelCacheMaxSizeBytes          dynamicconfig.IntPropertyFn
+	HistoryCacheTTL                            dynamicconfig.DurationPropertyFn
+	HistoryCacheNonUserContextLockTimeout      dynamicconfig.DurationPropertyFn
+	HistoryCacheBackgroundEvict                dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
+	EnableWorkflowExecutionTimeoutTimer        dynamicconfig.BoolPropertyFn
+	EnableUpdateWorkflowModeIgnoreCurrent      dynamicconfig.BoolPropertyFn
+	EnableTransitionHistory                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerUpdateID                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusOperationAutoClosePolicy              dynamicconfig.IntPropertyFn
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSkipPersistence                 dynamicconfig.BoolPropertyFnWithNamespaceFilter

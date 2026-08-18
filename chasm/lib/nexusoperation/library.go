@@ -63,9 +63,8 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				},
 			}),
 		),
-		// WithDetached allows cancellation tasks to execute even after the parent
-		// workflow has been closed (e.g. by parent-close policy termination).
-		// This mirrors how Callback components work.
+		// WithDetached lets cancellation tasks run after the parent operation/workflow closes
+		// (like Callback components).
 		chasm.NewRegistrableComponent[*Cancellation]("cancellation", chasm.WithDetached()),
 	}
 }

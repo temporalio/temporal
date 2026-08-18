@@ -123,11 +123,8 @@ func (h *cancellationInvocationTaskHandler) Execute(
 
 	callTimeout := h.config.RequestTimeout(ns.Name().String(), attrs.Destination)
 	var timeoutType enumspb.TimeoutType
-	// For a system/auto-close cancellation the cancel fires at (or after) the operation's
-	// schedule-to-close deadline, so the remaining time is ~0. Clamping the cancel call to it would
-	// starve it below MinRequestTimeout and it would never reach the handler. The whole point of the
-	// auto-close policy is to notify the handler at that moment, so skip the clamp. A user-initiated
-	// cancel keeps the clamp (it should not outlive the operation's own timeout).
+	// Auto-close cancels fire at the operation's ~expired deadline, so clamping would starve the call
+	// below MinRequestTimeout and it'd never reach the handler. Only user-initiated cancels clamp.
 	if !args.autoClose {
 		if args.startToCloseTimeout > 0 {
 			if t := args.startToCloseTimeout - args.currentTime.Sub(args.startedTime); t < callTimeout {
