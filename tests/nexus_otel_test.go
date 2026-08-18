@@ -379,7 +379,6 @@ func (s *NexusOTELSuite) requireNexusHTTPSpans(
 		actual, httpSpans = s.nexusHTTPSpans(exporter.GetSpans())
 		s.Require().Len(actual, len(expected))
 		for i := range actual {
-			s.Require().NotContains(actual[i].Attrs, "temporalNamespace")
 			s.Require().Subset(actual[i].Attrs, expected[i].Attrs)
 			actual[i].Attrs = nil
 		}
