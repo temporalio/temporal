@@ -100,6 +100,7 @@ func (c *operationContext) annotateInboundSpan(
 	})
 }
 
+// Panic handler and metrics recording function.
 // Used as a deferred statement in Nexus handler methods.
 func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
 	recovered := recover() //nolint:revive
