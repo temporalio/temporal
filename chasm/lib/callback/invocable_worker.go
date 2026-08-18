@@ -341,3 +341,34 @@ func startOperationFailed(resp *matchingservice.DispatchNexusTaskResponse) bool 
 		return false
 	}
 }
+
+// rewriteWorkerCallbackLinks converts converts the backlinks for a worker callback delivery into
+// the appropriate Link_Callback variant instead. (Requires exactly one link, exactly of type
+// Nexus operation.)
+func rewriteWorkerCallbackLinks(links []nexus.Link, requestID string) ([]nexus.Link, error) {
+	if len(links) != 1 {
+		return nil, fmt.Errorf("got unexpected number of links (%d)", len(links))
+	}
+
+	// Worker callbacks are only supported for standalone Nexus operations. So we reject
+	// any other type of Nexus link.
+	sanoLink, err := commonnexus.ConvertNexusLinkToLinkNexusOperation(links[0])
+	if err != nil {
+		return nil, fmt.Errorf("converting link to NexusOp (%w)", err)
+	}
+
+	callbackLink := &commonpb.Link_Callback{
+		Namespace: sanoLink.Namespace,
+		Execution: &commonpb.Execution{
+			Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+			BusinessId: sanoLink.OperationId,
+			RunId:      sanoLink.RunId,
+		},
+		RequestId: requestID,
+	}
+	gotNexusLink, err := commonnexus.ConvertLinkCallbackToNexusLink(callbackLink)
+	if err != nil {
+		return nil, fmt.Errorf("converting to callback into nexus link: %w", err)
+	}
+	return []nexus.Link{gotNexusLink}, nil
+}

@@ -440,3 +440,45 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCallbacksDisabled() {
 		s.ErrorContains(err, "completion callbacks are not enabled for this namespace")
 	})
 }
+
+// Verifies that worker callbacks propagate links as expected,
+func (s *NexusStandaloneCallbacksTestSuite) TestLinkingE2E() {
+
+	/*
+		Test Infrastructure:
+
+		NexusService "nexus-service"
+		Operation "always-fail", return a non-retryable application failure with error "nexus handler failed"
+		Operation "sync-success", ignore
+
+		Create a SANO
+			Attach worker callback: sync-success
+			Attach worker callback: async-success
+
+		SANO is backed by a workflow.
+		That workflow calls a Nexus operation.
+
+		async-success completion handler is backed by a workflow.
+		That workflow calls a Nexus operation (sync-success)
+
+		Verify:
+		The SANO has links.
+			- To the backing workflow
+		The source sano workflow has links
+			- To the sync-success nexus operation(?) Probably not.
+			- To the source SANO
+
+		The SANO's callback[0] has no links (sync-success handler has no links)
+		The SANO's callback[1] has links
+			- To the workflow backing the operation.
+
+		The workflow backing the sano callback op has links
+			- To the SANO-callback[1]
+			- To the other resource it spawned.
+	*/
+
+	TODO: Migrate the test infra from the worker-callbacks tests
+	tests/callbacks_worker_test.go
+	Or just put the logic there, to uplevel it.
+
+}
