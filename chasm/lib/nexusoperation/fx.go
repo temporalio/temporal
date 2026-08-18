@@ -144,7 +144,8 @@ func clientProviderFactory(
 	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 		var url string
 		var httpClient *http.Client
-		setCallbackSource := false
+		// Populate source header for worker targets, and route internally. Callback assumes external target if unset.
+		needsCallbackSourceHeader := false
 
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
@@ -157,21 +158,19 @@ func clientProviderFactory(
 		case *persistencespb.NexusEndpointTarget_Worker_:
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
-			setCallbackSource = true
+			needsCallbackSourceHeader = true
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
 
-		httpCaller := httpClient.Do
-		if clusterID != "" {
-			httpCaller = func(r *http.Request) (*http.Response, error) {
-				if setCallbackSource {
-					r.Header.Set(nexusCallbackSourceHeader, clusterID)
-				}
-				resp, callErr := httpClient.Do(r)
-				commonnexus.SetFailureSourceOnContext(ctx, resp)
-				return resp, callErr
+		httpCaller := func(r *http.Request) (*http.Response, error) {
+			if needsCallbackSourceHeader && clusterID != "" {
+				r.Header.Set(nexusCallbackSourceHeader, clusterID)
 			}
+			resp, callErr := httpClient.Do(r)
+			// nexusrpc.HTTPClient does not return the raw HTTP response, so copy its failure-source header into the call context.
+			commonnexus.SetFailureSourceOnContext(ctx, resp)
+			return resp, callErr
 		}
 
 		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
