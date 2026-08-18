@@ -943,7 +943,7 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		return err
 	}
 
-	e.Logger.Error("Enqueued replication task to DLQ",
+	dlqLogger := log.With(e.Logger,
 		tag.TargetShardID(shardContext.GetShardID()),
 		tag.SourceShardID(e.sourceShardKey.ShardID),
 		tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
@@ -963,11 +963,13 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 
 	err = writeTaskToDLQ(ctx, e.DLQWriter, e.sourceShardKey.ShardID, e.SourceClusterName(), shardContext.GetShardID(), taskInfo)
 	if err != nil {
+		dlqLogger.Error("Failed to enqueue replication task to DLQ", tag.Error(err))
 		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Failed to enqueue replication task to DLQ", err, map[string]any{
 			"target_shard": shardContext.GetShardID(),
 		})
 		return err
 	}
+	dlqLogger.Error("Enqueued replication task to DLQ")
 	e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Enqueued replication task to DLQ", nil, map[string]any{
 		"target_shard": shardContext.GetShardID(),
 		"disposition":  wideevents.ReplDispositionEnqueued,
