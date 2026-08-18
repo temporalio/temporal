@@ -248,9 +248,10 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	// live ms after the lock is released would race with the next writer.
 	var ms historyi.MutableState
 	var appliedMS *persistencespb.WorkflowMutableState
+	origin := wideevents.ReplicationTaskOriginFromContext(ctx)
 	defer func() {
 		if emitApplied && retError == nil {
-			r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS)
+			r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS, sourceClusterName, origin)
 		}
 	}()
 
@@ -381,6 +382,8 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 	workflowID string,
 	runID string,
 	ms *persistencespb.WorkflowMutableState,
+	sourceClusterName string,
+	origin wideevents.ReplicationTaskOrigin,
 ) {
 	var nsName string
 	if name, err := r.namespaceRegistry.GetNamespaceName(namespaceID); err == nil {
@@ -388,14 +391,17 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 	}
 
 	payload := wideevents.ReplicationLifecyclePayload{
-		Phase:       wideevents.ReplicationApplied,
-		TaskType:    wideevents.ReplTaskSyncVersionedTransition,
-		Shard:       r.shardContext.GetShardID(),
-		Namespace:   nsName,
-		NamespaceID: namespaceID.String(),
-		WorkflowID:  workflowID,
-		RunID:       runID,
-		Outcome:     "applied",
+		Phase:         wideevents.ReplicationApplied,
+		TaskType:      wideevents.ReplTaskSyncVersionedTransition,
+		Shard:         r.shardContext.GetShardID(),
+		Namespace:     nsName,
+		NamespaceID:   namespaceID.String(),
+		WorkflowID:    workflowID,
+		RunID:         runID,
+		Outcome:       "applied",
+		SourceCluster: sourceClusterName,
+		SourceShard:   origin.ShardID,
+		SourceTaskID:  origin.TaskID,
 	}
 	if ms != nil {
 		info := ms.GetExecutionInfo()
@@ -412,6 +418,9 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 				})
 			}
 			payload.TransitionHistory = entries
+			last := th[len(th)-1]
+			payload.FailoverVersion = last.GetNamespaceFailoverVersion()
+			payload.TransitionCount = last.GetTransitionCount()
 		}
 		if currentHistory, err := versionhistory.GetCurrentVersionHistory(info.GetVersionHistories()); err == nil {
 			if lastItem, itemErr := versionhistory.GetLastVersionHistoryItem(currentHistory); itemErr == nil {
@@ -1130,6 +1139,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunWorkflow(
 		r.logger,
 		r.shardContext.GetThrottledLogger(),
 		r.shardContext.GetMetricsHandler(),
+		nil, // no pagination buffer limiter as it is a transient context
 	)
 
 	return NewWorkflow(

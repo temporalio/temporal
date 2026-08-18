@@ -29,6 +29,7 @@ const (
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
+	pollerScaleDecisionTag  = "decision"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -46,7 +47,6 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
-	taskExpireStage                                = "task_expire_stage"
 	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
@@ -334,6 +334,25 @@ func TaskAddResultTag(result string) Tag {
 	return Tag{Key: taskAddResult, Value: result}
 }
 
+const (
+	PollerScaleDecisionUp   = "scale_up"
+	PollerScaleDecisionDown = "scale_down"
+	PollerScaleDecisionHold = "hold"
+)
+
+const (
+	PollerScaleReasonIdle        ReasonString = "idle"
+	PollerScaleReasonBacklog     ReasonString = "backlog"
+	PollerScaleReasonTaskRate    ReasonString = "task_rate"
+	PollerScaleReasonRateLimited ReasonString = "rate_limited"
+)
+
+// PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
+// down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
+func PollerScaleDecisionTag(decision string) Tag {
+	return Tag{Key: pollerScaleDecisionTag, Value: decision}
+}
+
 func MatchingTaskPriorityTag(value int32) Tag {
 	priStr := ""
 	if value != 0 {
@@ -566,10 +585,6 @@ func ToUnversionedTag(version string) Tag {
 	}
 	return Tag{Key: toUnversioned, Value: falseValue}
 }
-
-var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
-var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
-var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
 
 // ClientNameTag returns a new client_name tag for the SDK client name.
 func ClientNameTag(value string) Tag {

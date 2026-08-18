@@ -27,12 +27,16 @@ import (
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
+
+// Minimum interval between (traffic-triggered) sweeps of shut-down connections.
+const internodeConnCleanupInterval = 30 * time.Minute
 
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
@@ -55,7 +59,18 @@ type RPCFactory struct {
 	requireRemoteClusterAuth bool
 	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
-	localFrontendClient func() (*common.FrontendHTTPClient, error)
+	localFrontendClient      func() (*common.FrontendHTTPClient, error)
+	internodeGRPCConnections struct {
+		sync.RWMutex
+		conns map[string]*grpc.ClientConn
+	}
+	internodeConnCleanupTicker *time.Ticker
+	// A OnceValue wrapper for createLocalFrontendGRPCConnection.
+	localFrontendGRPCConn func() *grpc.ClientConn
+
+	// Remote frontend connections, keyed by rpcAddress. Dialing one address
+	// must not block lookups for another.
+	remoteFrontendGRPCConns sync.Map // map[string]*grpc.ClientConn
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -104,6 +119,9 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
+	f.internodeGRPCConnections.conns = make(map[string]*grpc.ClientConn)
+	f.internodeConnCleanupTicker = time.NewTicker(internodeConnCleanupInterval)
+	f.localFrontendGRPCConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
 	return f
 }
 
@@ -215,14 +233,35 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	return ip
 }
 
-// CreateRemoteFrontendGRPCConnection creates a gRPC connection for cross-cluster calls.
+// CreateRemoteFrontendGRPCConnection returns the shared connection for cross-cluster
+// calls to rpcAddress, dialing it on first use. Callers must not close it.
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+	if conn, ok := d.remoteFrontendGRPCConns.Load(rpcAddress); ok {
+		return conn.(*grpc.ClientConn) //nolint:revive // unchecked-type-assertion
+	}
+
+	conn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
+	// Fatal may return under a non-fatal logger; caching nil would wedge this address.
+	if conn == nil {
+		return nil
+	}
+
+	// Dialed outside the lock, so concurrent callers can race; the loser closes its own.
+	actual, loaded := d.remoteFrontendGRPCConns.LoadOrStore(rpcAddress, conn)
+	if loaded {
+		_ = conn.Close()
+	}
+	return actual.(*grpc.ClientConn) //nolint:revive // unchecked-type-assertion
+}
+
+func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
 		hostname, _, err2 := net.SplitHostPort(rpcAddress)
 		if err2 != nil {
 			d.logger.Fatal("Invalid rpcAddress for remote cluster", tag.Error(err2))
+			return nil
 		}
 		tlsClientConfig, err = d.tlsFactory.GetRemoteClusterClientConfig(hostname)
 		if err != nil {
@@ -259,8 +298,13 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	return d.dial(rpcAddress, tlsClientConfig, append(additionalDialOptions, keepAliveOption)...)
 }
 
-// CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
+// CreateLocalFrontendGRPCConnection returns the shared connection for internal frontend
+// calls, dialing it on first use. Callers must not close it.
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+	return d.localFrontendGRPCConn()
+}
+
+func (d *RPCFactory) createLocalFrontendGRPCConnection() *grpc.ClientConn {
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
 
 	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
@@ -268,6 +312,16 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 
 // createInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName primitives.ServiceName) *grpc.ClientConn {
+	d.maybeCleanupInternodeConns()
+
+	// Reuse the cached connection unless it has been shut down, in which case re-dial.
+	d.internodeGRPCConnections.RLock()
+	conn, ok := d.internodeGRPCConnections.conns[hostName]
+	d.internodeGRPCConnections.RUnlock()
+	if ok && conn.GetState() != connectivity.Shutdown {
+		return conn
+	}
+
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -278,7 +332,39 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 		}
 	}
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[serviceName]...)
-	return d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
+	newConn := d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
+	if newConn == nil {
+		return nil
+	}
+
+	d.internodeGRPCConnections.Lock()
+	defer d.internodeGRPCConnections.Unlock()
+	if existing, ok := d.internodeGRPCConnections.conns[hostName]; ok && existing.GetState() != connectivity.Shutdown {
+		_ = newConn.Close()
+		return existing
+	}
+	d.internodeGRPCConnections.conns[hostName] = newConn
+	return newConn
+}
+
+// Triggers a sweep at most once per interval, off the connection path.
+func (d *RPCFactory) maybeCleanupInternodeConns() {
+	select {
+	case <-d.internodeConnCleanupTicker.C:
+		go d.cleanupInternodeConns()
+	default:
+	}
+}
+
+// Removes shut-down cached connections; never closes live ones.
+func (d *RPCFactory) cleanupInternodeConns() {
+	d.internodeGRPCConnections.Lock()
+	defer d.internodeGRPCConnections.Unlock()
+	for hostName, conn := range d.internodeGRPCConnections.conns {
+		if conn.GetState() == connectivity.Shutdown {
+			delete(d.internodeGRPCConnections.conns, hostName)
+		}
+	}
 }
 
 func (d *RPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {
@@ -298,6 +384,26 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 	}
 
 	return connection
+}
+
+func (d *RPCFactory) Close() {
+	d.internodeConnCleanupTicker.Stop()
+
+	d.internodeGRPCConnections.Lock()
+	for _, conn := range d.internodeGRPCConnections.conns {
+		_ = conn.Close()
+	}
+	clear(d.internodeGRPCConnections.conns)
+	d.internodeGRPCConnections.Unlock()
+
+	d.remoteFrontendGRPCConns.Range(func(_, v any) bool {
+		if conn, ok := v.(*grpc.ClientConn); ok {
+			_ = conn.Close()
+		}
+		return true
+	})
+
+	_ = d.localFrontendGRPCConn().Close()
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {
@@ -326,26 +432,15 @@ func (d *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 // createLocalFrontendHTTPClient creates an HTTP client for communicating with the frontend.
 // It uses either the provided frontendURL or membership to resolve the frontend address.
 func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient, error) {
-	// dialer and transport field values copied from http.DefaultTransport.
-	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           dialer.DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+	transport, err := common.NewHTTPTransport(d.frontendTLSConfig)
+	if err != nil {
+		return nil, err
 	}
 	client := http.Client{}
 
 	// Default to http unless TLS is configured.
 	scheme := "http"
 	if d.frontendTLSConfig != nil {
-		transport.TLSClientConfig = d.frontendTLSConfig
 		scheme = "https"
 	}
 

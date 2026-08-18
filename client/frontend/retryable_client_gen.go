@@ -971,6 +971,21 @@ func (c *retryableClient) PollNexusTaskQueue(
 	return resp, err
 }
 
+func (c *retryableClient) PollWorkflowExecutionTimeSkipping(
+	ctx context.Context,
+	request *workflowservice.PollWorkflowExecutionTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	var resp *workflowservice.PollWorkflowExecutionTimeSkippingResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollWorkflowExecutionTimeSkipping(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PollWorkflowExecutionUpdate(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowExecutionUpdateRequest,

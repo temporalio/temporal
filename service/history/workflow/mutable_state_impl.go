@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -202,7 +203,11 @@ type (
 		visibilityUpdated     bool
 		executionStateUpdated bool
 		workflowTaskUpdated   bool
-		updateInfoUpdated     map[string]struct{}
+		// chasmRequestIDsAdded is set when a CHASM request ID is attached in the current transaction
+		// (via AttachChasmRequestID). It gates the lazy request-ID sweep at transaction close so only
+		// transactions that added an ID pay for the scan.
+		chasmRequestIDsAdded bool
+		updateInfoUpdated    map[string]struct{}
 		// following xxxUserDataUpdated fields are for tracking if activity/timer user data updated.
 		// This help to determine if we need to update transition history: For
 		// user data change, we need to update transition history. No update for
@@ -686,6 +691,11 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 func (ms *MutableStateImpl) ChasmEnabled() bool {
 	_, isNoop := ms.chasmTree.(*noopChasmTree)
 	return !isNoop
+}
+
+func (ms *MutableStateImpl) ChasmSkipPersistenceEnabled() bool {
+	return ms.config.EnableCHASMSkipPersistence != nil &&
+		ms.config.EnableCHASMSkipPersistence(ms.GetNamespaceEntry().Name().String())
 }
 
 // chasmCallbacksEnabled returns true if CHASM callbacks are enabled for this workflow.
@@ -2594,6 +2604,41 @@ func (ms *MutableStateImpl) AttachRequestID(
 	ms.approximateSize += ms.executionState.Size()
 }
 
+// AttachChasmRequestID records a request ID attached by the CHASM framework for UpdateComponent
+// idempotency. Unlike AttachRequestID (used for the create request ID and event-backed request IDs),
+// the entry carries a non-nil AttachTime, which marks it as CHASM-attached (and therefore sweepable)
+// and serves as the oldest-first ordering key for the lazy sweep at transaction close
+// (see closeTransactionSweepChasmRequestIDs). It never touches CreateRequestId.
+func (ms *MutableStateImpl) AttachChasmRequestID(requestID string) {
+	if requestID == "" {
+		return
+	}
+	// The caller (updateComponent) dedups via HasRequestID first, so an already-recorded ID here is a
+	// bug: the write below is unconditional and would overwrite the existing entry.
+	softassert.That(ms.logger, !ms.HasRequestID(requestID),
+		"AttachChasmRequestID called with an already-recorded request ID")
+	if ms.executionState.RequestIds == nil {
+		ms.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+	}
+	entry := &persistencespb.RequestIDInfo{
+		EventType:  enumspb.EVENT_TYPE_UNSPECIFIED,
+		EventId:    common.EmptyEventID,
+		AttachTime: timestamppb.New(ms.timeSource.Now()),
+	}
+	ms.executionState.RequestIds[requestID] = entry
+	ms.approximateSize += chasmRequestIDApproxSize(requestID, entry)
+	// Force the execution state blob to be persisted even if the CHASM tree made no other change,
+	// so the recorded request ID is durable. Also gate the lazy sweep on this transaction.
+	ms.executionStateUpdated = true
+	ms.chasmRequestIDsAdded = true
+}
+
+// chasmRequestIDApproxSize approximates a CHASM request-ID map entry's contribution to
+// approximateSize.
+func chasmRequestIDApproxSize(requestID string, info *persistencespb.RequestIDInfo) int {
+	return len(requestID) + info.Size()
+}
+
 func (ms *MutableStateImpl) HasRequestID(
 	requestID string,
 ) bool {
@@ -2602,6 +2647,70 @@ func (ms *MutableStateImpl) HasRequestID(
 	}
 	_, ok := ms.executionState.RequestIds[requestID]
 	return ok
+}
+
+// closeTransactionSweepChasmRequestIDs bounds the CHASM-attached request IDs (those recorded via
+// AttachChasmRequestID) retained per execution for UpdateComponent idempotency. It first evicts every
+// entry older than RequestIDMaxAge, then evicts the oldest of the survivors beyond the
+// MaximumRequestIDsPerExecution count cap. Sweeping by age first reclaims stale entries in a batch,
+// rather than a single oldest entry per transaction once at the cap.
+//
+// Only entries with a non-nil AttachTime are sweepable; the create request ID and event-backed request
+// IDs always have a nil AttachTime and are never swept. Run lazily on transaction close, when a request
+// ID has been added.
+func (ms *MutableStateImpl) closeTransactionSweepChasmRequestIDs(transactionPolicy historyi.TransactionPolicy) {
+	if !ms.chasmRequestIDsAdded || transactionPolicy != historyi.TransactionPolicyActive {
+		return
+	}
+
+	nsName := ms.namespaceEntry.Name().String()
+	limit := ms.config.MaximumRequestIDsPerExecution(nsName)
+	maxAge := ms.config.RequestIDMaxAge(nsName)
+	if limit <= 0 && maxAge <= 0 {
+		return // both count cap and age sweep disabled
+	}
+
+	evicted := 0
+	evict := func(id string, info *persistencespb.RequestIDInfo) {
+		delete(ms.executionState.RequestIds, id)
+		ms.approximateSize -= chasmRequestIDApproxSize(id, info)
+		evicted++
+	}
+
+	// First sweep entries older than maxAge; the rest are candidates for the count cap.
+	type sweepable struct {
+		id   string
+		info *persistencespb.RequestIDInfo
+	}
+	candidates := make([]sweepable, 0, len(ms.executionState.RequestIds))
+	cutoff := ms.timeSource.Now().Add(-maxAge)
+	for id, info := range ms.executionState.RequestIds {
+		if info.GetAttachTime() == nil {
+			continue // create and event-backed request IDs are never swept
+		}
+		if maxAge > 0 && info.GetAttachTime().AsTime().Before(cutoff) {
+			evict(id, info)
+			continue
+		}
+		candidates = append(candidates, sweepable{id: id, info: info})
+	}
+
+	// Enforce hard length limit.
+	if limit > 0 && len(candidates) > limit {
+		slices.SortFunc(candidates, func(a, b sweepable) int {
+			return cmp.Or(
+				a.info.GetAttachTime().AsTime().Compare(b.info.GetAttachTime().AsTime()),
+				cmp.Compare(a.id, b.id),
+			)
+		})
+		for _, c := range candidates[:len(candidates)-limit] {
+			evict(c.id, c.info)
+		}
+	}
+
+	metrics.CHASMRequestIDEvicted.With(
+		ms.metricsHandler.WithTags(metrics.NamespaceTag(nsName)),
+	).Record(int64(evicted))
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -3193,9 +3302,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.Priority = event.Priority
 
 	if tsc, stateProp := event.GetTimeSkippingConfig(), event.GetTimeSkippingStatePropagation(); tsc != nil || stateProp.GetInitialSkippedDuration().AsDuration() > 0 {
-		if err := ms.initTimeSkippingInfo(tsc, stateProp, startEvent.GetEventId()); err != nil {
-			return err
-		}
+		ms.initTimeSkippingInfo(tsc, stateProp)
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -4710,6 +4817,7 @@ func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
 			ai.Version,
 			ai.StartVersion,
 			nil,
+			0,
 		))
 		if err != nil {
 			return err
@@ -5944,13 +6052,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		tsc := attributes.GetTimeSkippingConfig()
 		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
 		if tsi == nil {
-			if err := ms.initTimeSkippingInfo(tsc, nil, event.GetEventId()); err != nil {
-				return err
-			}
+			ms.initTimeSkippingInfo(tsc, nil)
 		} else {
-			if err := ms.updateTimeSkippingInfo(tsc, event.GetEventId()); err != nil {
-				return err
-			}
+			ms.updateTimeSkippingInfo(tsc)
 		}
 	}
 
@@ -6787,7 +6891,7 @@ func (ms *MutableStateImpl) RetryActivity(
 		}
 	}
 
-	if !isRetryable(activityFailure, ai.RetryNonRetryableErrorTypes) {
+	if !retrypolicy.IsRetryableFailure(activityFailure, ai.RetryNonRetryableErrorTypes) {
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
 	}
 
@@ -7738,6 +7842,10 @@ func (ms *MutableStateImpl) closeTransaction(
 		ms.chasmNodeSizes[nodePath] = newSize
 	}
 
+	// Enforce the CHASM request-ID limit before the executionState blob is captured into the
+	// mutation/snapshot below. Gating (active + attached-this-transaction) lives in the helper.
+	ms.closeTransactionSweepChasmRequestIDs(transactionPolicy)
+
 	if isStateDirty {
 		if err := ms.closeTransactionUpdateTransitionHistory(
 			transactionPolicy,
@@ -7745,15 +7853,19 @@ func (ms *MutableStateImpl) closeTransaction(
 			return closeTransactionResult{}, err
 		}
 		ms.closeTransactionHandleUnknownVersionedTransition()
-		ms.closeTransactionUpdateLastRunningClock(transactionPolicy, workflowEventsSeq)
+		if err := ms.closeTransactionUpdateLastRunningClock(transactionPolicy, workflowEventsSeq); err != nil {
+			return closeTransactionResult{}, err
+		}
 	}
 
+	// todo@TimeSkipping, we can move update versioned transition to inside closeTransactionHandleWorkflowTimeSkipping
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
 
 	ms.closeTransactionTrackTombstones(transactionPolicy, chasmNodesMutation)
 
+	// generate tasks
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
 		eventBatches,
@@ -8013,28 +8125,68 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 func (ms *MutableStateImpl) closeTransactionUpdateLastRunningClock(
 	transactionPolicy historyi.TransactionPolicy,
 	workflowEventsSeq []*persistence.WorkflowEvents,
-) {
+) error {
 	if transactionPolicy != historyi.TransactionPolicyActive {
-		return
+		return nil
 	}
 
 	// Events can only be generated while mutable state is running,
 	// so we can update LastRunningClock blindly.
+	//
+	// NOT reusing the UpdateLastRunningClock() logic here since event taskIDs are already assigned in EventStore.
+	// TODO: Move assignTaskIDs logic in EventStore to here.
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
 		lastEvent := lastEvents[len(lastEvents)-1]
 		ms.executionInfo.LastRunningClock = lastEvent.GetTaskId()
-		return
+		return nil
 	}
 
-	if !ms.IsWorkflowExecutionRunning() && !ms.IsCurrentWorkflowGuaranteed() {
-		// If workflow currently is not running and also not running at the beginning of the transaction,
-		// then don't update the lastRunningClock
-		// NOTE: running at the beginning of the transaction == it's a current workflow in DB.
-		return
+	_, _, err := ms.UpdateLastRunningClock(nil)
+	return err
+}
+
+func (ms *MutableStateImpl) UpdateLastRunningClock(
+	eventsSeq []*persistence.WorkflowEvents,
+) (*persistencespb.WorkflowExecutionInfo, []*persistence.WorkflowEvents, error) {
+	if len(eventsSeq) > 0 || ms.IsWorkflowExecutionRunning() || ms.IsCurrentWorkflowGuaranteed() {
+		// Only update the lastRunningClock when the workflow is
+		// 1. Execution generated events in this transaction, which means it must be running at the beginning of the transaction
+		// 2. Running at the end of the transaction or
+		// 3. Running at the beginning of the transaction
+		//
+		// Condition 1 is good enough for workflow executions, but we need 2 and 3 for chasm executions.
+		//
+		// A running execution (before the transaction) is guaranteed to be the current execution.
+		// so we check 3 by calling IsCurrentWorkflowGuaranteed().
+
+		if len(eventsSeq) > 0 {
+			eventCount := 0
+			for _, batch := range eventsSeq {
+				eventCount += len(batch.Events)
+			}
+			taskIDs, err := ms.shard.GenerateTaskIDs(eventCount)
+			if err != nil {
+				return nil, nil, err
+			}
+			taskIDIndex := 0
+			for _, batch := range eventsSeq {
+				for _, event := range batch.Events {
+					event.TaskId = taskIDs[taskIDIndex]
+					taskIDIndex++
+				}
+			}
+			ms.executionInfo.LastRunningClock = taskIDs[len(taskIDs)-1]
+		} else {
+			lastRunningClock, err := ms.shard.GenerateTaskID()
+			if err != nil {
+				return nil, nil, err
+			}
+			ms.executionInfo.LastRunningClock = lastRunningClock
+		}
 	}
 
-	ms.executionInfo.LastRunningClock = ms.shard.CurrentVectorClock().GetClock()
+	return ms.executionInfo, eventsSeq, nil
 }
 
 func (ms *MutableStateImpl) closeTransactionTrackTombstones(
@@ -8367,6 +8519,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.visibilityUpdated = false
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
+	ms.chasmRequestIDsAdded = false
 	ms.isResetStateUpdated = false
 	ms.timeSkippingInfoUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})

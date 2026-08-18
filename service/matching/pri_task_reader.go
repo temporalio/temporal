@@ -33,10 +33,11 @@ const (
 
 type (
 	priTaskReader struct {
-		backlogMgr *priBacklogManagerImpl
-		subqueue   subqueueIndex
-		notifyC    chan struct{} // Used as signal to notify pump of new tasks
-		logger     log.Logger
+		backlogMgr      *priBacklogManagerImpl
+		subqueue        subqueueIndex
+		notifyC         chan struct{} // Used as signal to notify pump of new tasks
+		logger          log.Logger
+		throttledLogger log.ThrottledLogger
 
 		lock sync.Mutex
 
@@ -68,11 +69,13 @@ func newPriTaskReader(
 	subqueue subqueueIndex,
 	initialAckLevel int64,
 ) *priTaskReader {
+	subqueueTag := tag.Int("subqueue-id", int(subqueue))
 	return &priTaskReader{
-		backlogMgr: backlogMgr,
-		subqueue:   subqueue,
-		notifyC:    make(chan struct{}, 1),
-		logger:     backlogMgr.logger,
+		backlogMgr:      backlogMgr,
+		subqueue:        subqueue,
+		notifyC:         make(chan struct{}, 1),
+		logger:          log.With(backlogMgr.logger, subqueueTag),
+		throttledLogger: log.With(backlogMgr.throttledLogger, subqueueTag),
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
 			clock.NewRealTimeSource(),
@@ -146,7 +149,6 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.maybeGCLocked()
 
 	// use == so we just signal once when we cross this threshold
-	// TODO(pri): is this safe? maybe we need to improve this
 	if tr.loadedTasks == tr.backlogMgr.config.GetTasksReloadAt() {
 		tr.SignalTaskLoading()
 	}
@@ -250,7 +252,6 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 
 		if IsTaskExpired(t) {
 			// task expired when we read it
-			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
 			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
 			return true
 		}
@@ -258,6 +259,18 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 		// We may race to read tasks with signalNewTasks. If it wins, we may end up seeing
 		// tasks twice. In that case, we should just ignore them. If we win (based on
 		// readLevel), signalNewTasks will give up and signal us.
+		//
+		// It's even possible for a task from signalNewTasks to be acked, and the ack level
+		// advanced, before we see it here. This would show up as a task below the ack level.
+		if t.TaskId <= tr.ackLevel {
+			tr.throttledLogger.Info("ignoring already-acked task read from persistence",
+				tag.TaskID(t.TaskId),
+				tag.Any("ack-level", tr.ackLevel))
+			return true
+		}
+
+		// If it was added to outstandingTasks but the ack level has not advaned over it,
+		// it would show up here.
 		_, found := tr.outstandingTasks.Get(t.TaskId)
 		return found
 	})
@@ -331,11 +344,11 @@ func (tr *priTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	var invalid *serviceerror.InvalidArgument
 	var internal *serviceerror.Internal
 	if errors.As(err, &invalid) || errors.As(err, &internal) {
-		tr.backlogMgr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
+		tr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
 		return true, false // drop the task
 	}
 	// For any other error (this should be very rare), we can retry.
-	tr.backlogMgr.throttledLogger.Error("retryable error processing spooled task", tag.Error(err))
+	tr.throttledLogger.Error("retryable error processing spooled task", tag.Error(err))
 	return false, true
 }
 
@@ -472,6 +485,17 @@ func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 func (tr *priTaskReader) setReadLevelAfterGap(newReadLevel int64) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
+	if newReadLevel < tr.readLevel {
+		// The levels that getTaskBatch based this call on are stale: signalNewTasks advanced
+		// readLevel past the range we scanned while the read was in flight, and may have loaded
+		// tasks in it. Applying the read level (or ack level) update here would move it backwards.
+		//
+		// Technically we don't have to do another read here: if signalNewTasks did advance read
+		// level, it advanced it to the max. But that couples the logic more than desired, so just
+		// defensively signal another read here.
+		tr.SignalTaskLoading()
+		return
+	}
 	if tr.ackLevel == tr.readLevel {
 		// This is called after we read a range and find no tasks. The range we read was tr.readLevel to newReadLevel.
 		// (We know this because nothing should change tr.readLevel except the getTasksPump loop itself, after initialization.
@@ -480,6 +504,10 @@ func (tr *priTaskReader) setReadLevelAfterGap(newReadLevel int64) {
 		// acked all tasks up to newReadLevel too. This lets us advance the ack level on a task queue with no activity
 		// but where the rangeid has moved higher, to prevent excessive reads on the next load.
 		tr.ackLevel = newReadLevel
+		// Push the updated ack level to the db. If we didn't do this here, the updated ack level
+		// wouldn't reach the db until another task is written and acked, which could be far in the
+		// future. This also lets the approximate backlog count reset if we've reached max read level.
+		tr.backlogMgr.db.updateAckLevelAndBacklogStats(tr.subqueue, tr.ackLevel, 0, tr.backlogAge.oldestTime())
 	}
 	tr.readLevel = newReadLevel
 }

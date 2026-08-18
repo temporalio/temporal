@@ -379,6 +379,12 @@ func Invoke(
 	}
 	result.PendingNexusOperations = append(result.PendingNexusOperations, hsmNexusOpInfos...)
 
+	if executionInfo.TimeSkippingInfo != nil {
+		result.WorkflowExtendedInfo.TimeSkippingInfo = workflow.
+			NewTimeSkippingInfoUtil(executionInfo.TimeSkippingInfo).
+			ToDescribeInfo(mutableState.Now())
+	}
+
 	return result, nil
 }
 

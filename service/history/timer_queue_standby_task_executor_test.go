@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -172,14 +173,15 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		logger:             s.logger,
-		tokenSerializer:    tasktoken.NewSerializer(),
-		metricsHandler:     s.mockShard.GetMetricsHandler(),
-		eventNotifier:      events.NewNotifier(s.timeSource, metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		currentClusterName:  s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:        s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		logger:              s.logger,
+		tokenSerializer:     tasktoken.NewSerializer(),
+		metricsHandler:      s.mockShard.GetMetricsHandler(),
+		eventNotifier:       events.NewNotifier(s.timeSource, metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():    s.mockTxProcessor,
 			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
@@ -2497,13 +2499,13 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 		pms, workflowKey := makeTimeSkippingMS()
 		pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(time.Hour),
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)},
 			},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
-				SourceEventId: 1,
+				TargetTime: timestamppb.New(s.now.Add(time.Hour)),
 			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 		}
 		return pms, workflowKey
 	}
@@ -2515,7 +2517,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,
-			EventID:             1,
+			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 		}
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
@@ -2535,7 +2537,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now.Add(time.Hour),
-			EventID:             1,
+			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 		}
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
@@ -2552,7 +2554,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,
-			EventID:             1,
+			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 		}
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)

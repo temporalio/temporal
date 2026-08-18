@@ -208,6 +208,7 @@ type (
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
+		ChasmSkipPersistenceEnabled() bool
 		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
@@ -439,6 +440,9 @@ func (n *Node) markSubtreeDirty() {
 	}
 }
 
+// clearAncestorNodeValues invalidates hydrated component ancestors after tree-structure changes.
+// Replication must always call this for child-only mutations because the source may omit an
+// unchanged parent component when its skip-persistence optimization is enabled.
 func (n *Node) clearAncestorNodeValues(parent *Node) {
 	for node := parent; node != nil; node = node.parent {
 		if node.serializedNode == nil || !node.isComponent() || node.value == nil {
@@ -1933,6 +1937,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 }
 
 func (n *Node) closeTransactionSerializeNodes() error {
+	skipPersistenceIfClean := n.backend.ChasmSkipPersistenceEnabled()
 	for nodePath, node := range n.andAllChildren() {
 		if node.valueState > valueStateNeedSerialize {
 			return serviceerror.NewInternalf("invalid valueState for serializing: %v", node.valueState)
@@ -1954,7 +1959,8 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		prevVersionedTransition := common.CloneProto(
 			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		)
-		skipIfClean := (node.isComponent() || node.isData() || node.isMap()) &&
+		skipIfClean := skipPersistenceIfClean &&
+			(node.isComponent() || node.isData() || node.isMap()) &&
 			prevVersionedTransition != nil &&
 			!node.hasNewTransactionSideEffects()
 		var prevData *commonpb.DataBlob
@@ -1998,7 +2004,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	taskOffset := int64(1)
-	taskValidationContext := NewContext(newContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
+	taskValidationContext := NewContext(NewContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
 
 	archetypeID := n.ArchetypeID()
 
@@ -3506,7 +3512,7 @@ func (n *Node) ExecutePureTask(
 		return false, fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	progressIntentCtx := newContextWithOperationIntent(baseCtx, OperationIntentProgress)
+	progressIntentCtx := NewContextWithOperationIntent(baseCtx, OperationIntentProgress)
 	validationContext := NewContext(progressIntentCtx, n)
 
 	// Ensure this node's component value is hydrated before execution.
@@ -3640,7 +3646,7 @@ func (n *Node) ValidateSideEffectTask(
 	// All structural checks passed — the task exists in the tree.
 
 	// Component must be hydrated before the task's validator is called.
-	validateCtx := NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n)
+	validateCtx := NewContext(NewContextWithOperationIntent(ctx, OperationIntentProgress), n)
 	if err := node.prepareComponentValue(validateCtx); err != nil {
 		return false, false, err
 	}
@@ -3795,7 +3801,7 @@ func (n *Node) invokeSideEffectTaskFn(
 		validationFn: makeValidationFn(registrableTask, validate, chasmTask.Attempt, taskAttributes, taskValue),
 	}
 
-	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
+	ctx = NewContextWithOperationIntent(ctx, OperationIntentProgress)
 
 	defer log.CapturePanic(n.logger, &retErr)
 

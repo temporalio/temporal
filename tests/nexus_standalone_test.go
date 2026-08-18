@@ -63,8 +63,9 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 
 		testInput := payload.EncodeString("test-input")
 		testHeader := map[string]string{"test-key": "test-value"}
-		testScheduleToStartTimeout := 2 * time.Minute
-		testStartToCloseTimeout := 3 * time.Minute
+		testScheduleToCloseTimeout := 24 * time.Hour
+		testScheduleToStartTimeout := 24 * time.Hour
+		testStartToCloseTimeout := 24 * time.Hour
 		testUserMetadata := &sdkpb.UserMetadata{
 			Summary: payload.EncodeString("test-summary"),
 			Details: payload.EncodeString("test-details"),
@@ -79,6 +80,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 			Endpoint:               endpointName,
 			Input:                  testInput,
 			NexusHeader:            testHeader,
+			ScheduleToCloseTimeout: durationpb.New(testScheduleToCloseTimeout),
 			ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
 			UserMetadata:           testUserMetadata,
@@ -88,13 +90,14 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		s.True(startResp.GetStarted())
 
 		// Ensure the operation is in a stable STARTED state.
-		_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+		pollResp, err := env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 		})
 		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResp.GetWaitStage())
 
 		for _, tc := range []struct {
 			name  string
@@ -113,7 +116,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 				s.Equal(startResp.RunId, descResp.RunId)
 
 				info := descResp.GetInfo()
-				protorequire.ProtoEqual(s.T(), &nexuspb.NexusOperationExecutionInfo{
+				s.ProtoEqual(&nexuspb.NexusOperationExecutionInfo{
 					OperationId:            "test-op",
 					RunId:                  startResp.RunId,
 					Endpoint:               endpointName,
@@ -121,7 +124,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 					Operation:              "test-operation",
 					Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
 					State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED,
-					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					ScheduleToCloseTimeout: durationpb.New(testScheduleToCloseTimeout),
 					ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
 					NexusHeader:            testHeader,
@@ -950,6 +953,66 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		s.Contains(err.Error(), "cancellation already requested")
 	})
 
+	s.Run("RetryAfterTerminalStateAndIDReuse", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
+
+		firstStartResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		cancelRequest := &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       firstStartResp.RunId,
+			RequestId:   "cancel-request-id",
+		}
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(
+			s.Context(),
+			cancelRequest,
+		)
+		s.NoError(err)
+
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(
+			s.Context(),
+			&workflowservice.TerminateNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       firstStartResp.RunId,
+				RequestId:   "terminate-request-id",
+			},
+		)
+		s.NoError(err)
+
+		secondStartResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+			RequestId:   "second-start-request-id",
+		})
+		s.NoError(err)
+		s.NotEqual(firstStartResp.RunId, secondStartResp.RunId)
+
+		// The retry targets the closed execution and must not cancel its replacement.
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(
+			s.Context(),
+			cancelRequest,
+		)
+		s.NoError(err)
+
+		describeResp, err := env.FrontendClient().DescribeNexusOperationExecution(
+			s.Context(),
+			&workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       secondStartResp.RunId,
+			},
+		)
+		s.NoError(err)
+		s.Nil(describeResp.GetInfo().GetCancellationInfo())
+	})
+
 	s.Run("RequestCancel_ForwardsOriginalNexusHeaders", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
 		taskHeaderCh := make(chan string, 1)
@@ -1658,7 +1721,7 @@ func (s *NexusStandaloneTestSuite) TestCountStandaloneNexusOperation() {
 			Query:     "GROUP BY Endpoint",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-		s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
+		s.ErrorContains(err, "'GROUP BY' clause is not supported for search attribute")
 	})
 
 	s.Run("InvalidQuery", func(s *NexusStandaloneTestSuite) {
@@ -2164,7 +2227,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 	})
 }
 
-func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken() {
+func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransitionInCallbackToken() {
 	env := s.newTestEnv()
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  env.Namespace().String(),
@@ -2223,8 +2286,11 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInC
 	completionToken, err := gen.DecodeCompletion(decodedToken)
 	s.NoError(err)
 
-	// Deliberately corrupt transition fields in the callback token. Completion should
-	// still succeed because the handler strips these fields before validation.
+	// Deliberately corrupt the execution transition in the callback token. Completion should still
+	// succeed: it resolves at RefConsistencyLevelComponentCreation, which ignores the execution
+	// transition (staleness is checked against the component's creation transition instead) and
+	// re-establishes identity by request ID. The creation transition is left valid, as the framework
+	// legitimately relies on it to guarantee the loaded state knows about the operation.
 	ref := &persistencespb.ChasmComponentRef{}
 	s.NoError(ref.Unmarshal(completionToken.GetComponentRef()))
 	s.NotNil(ref.ExecutionVersionedTransition)
@@ -2232,10 +2298,6 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInC
 	ref.ExecutionVersionedTransition = &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: ref.ExecutionVersionedTransition.NamespaceFailoverVersion + 1000,
 		TransitionCount:          ref.ExecutionVersionedTransition.TransitionCount + 1000,
-	}
-	ref.ComponentInitialVersionedTransition = &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: ref.ComponentInitialVersionedTransition.NamespaceFailoverVersion + 1000,
-		TransitionCount:          ref.ComponentInitialVersionedTransition.TransitionCount + 1000,
 	}
 	completionToken.ComponentRef, err = ref.Marshal()
 	s.NoError(err)

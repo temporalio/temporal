@@ -11,7 +11,7 @@
 #       When usage crosses HEAP_PROFILE_CAPTURE_THRESHOLD, captures a heap
 #       profile in HEAP_PROFILES_DIR before running analysis.
 #
-# 3. OOM prevention:
+# 3. OOM kill:
 #       When usage crosses OOM_TERMINATION_THRESHOLD, reuses any previously
 #       captured profile, writes the latest snapshot and a synthetic JUnit
 #       report, then terminates the monitored test process group so post-test
@@ -45,7 +45,7 @@ readonly HEAP_PROFILE_REFRESH_INTERVAL_SECONDS="${HEAP_PROFILE_REFRESH_INTERVAL_
 readonly HEAP_PROFILES_DIR="${HEAP_PROFILES_DIR:-$SNAPSHOT_DIR/heap-profiles}"
 readonly PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
-# OOM prevention config.
+# OOM kill config.
 # Terminate late enough to avoid masking near-finished tests, but before the
 # runner OOM killer skips post-test artifact upload.
 readonly OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-99}"
@@ -112,8 +112,8 @@ write_oom_junit() {
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites tests="1" failures="1" errors="0" skipped="0" time="0">
   <testsuite name="memory_monitor" tests="1" failures="1" errors="0" skipped="0" time="0">
-    <testcase classname="memory_monitor" name="OOM prevention" time="0">
-      <failure type="OOM" message="OOM prevention threshold reached">Memory monitor terminated the test process at ${memory_pct}% memory before the runner OOM kill. See memory diagnostics artifacts.</failure>
+    <testcase classname="memory_monitor" name="OOM kill" time="0">
+      <failure type="OOM" message="OOM kill threshold reached">Memory monitor terminated the test process at ${memory_pct}% memory before the runner OOM kill. See memory diagnostics artifacts.</failure>
     </testcase>
   </testsuite>
 </testsuites>
