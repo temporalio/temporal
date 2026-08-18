@@ -21,12 +21,14 @@ func (f testRoundTripper) RoundTrip(request *http.Request) (*http.Response, erro
 }
 
 func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
-	errHTTPClientCalled := errors.New("HTTP client called")
+	errEndpointClientCalled := errors.New("endpoint client called")
+	errFrontendClientCalled := errors.New("frontend client called")
 
 	tests := []struct {
 		name      string
 		clusterID string
 		target    *persistencespb.NexusEndpointTarget
+		expected  error
 	}{
 		{
 			name: "external without cluster ID",
@@ -37,6 +39,7 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 					},
 				},
 			},
+			expected: errEndpointClientCalled,
 		},
 		{
 			name:      "external with cluster ID",
@@ -48,6 +51,7 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 					},
 				},
 			},
+			expected: errEndpointClientCalled,
 		},
 		{
 			name: "worker without cluster ID",
@@ -56,6 +60,7 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 					Worker: &persistencespb.NexusEndpointTarget_Worker{},
 				},
 			},
+			expected: errFrontendClientCalled,
 		},
 		{
 			name:      "worker with cluster ID",
@@ -65,20 +70,24 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 					Worker: &persistencespb.NexusEndpointTarget_Worker{},
 				},
 			},
+			expected: errFrontendClientCalled,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			transport := testRoundTripper(func(*http.Request) (*http.Response, error) {
-				return nil, errHTTPClientCalled
+			endpointTransport := testRoundTripper(func(*http.Request) (*http.Response, error) {
+				return nil, errEndpointClientCalled
+			})
+			frontendTransport := testRoundTripper(func(*http.Request) (*http.Response, error) {
+				return nil, errFrontendClientCalled
 			})
 
 			rpcFactory := common.NewMockRPCFactory(ctrl)
 			rpcFactory.EXPECT().CreateLocalFrontendHTTPClient().Return(
 				&common.FrontendHTTPClient{
-					Client:  http.Client{Transport: transport},
+					Client:  http.Client{Transport: frontendTransport},
 					Address: "frontend.invalid",
 					Scheme:  "http",
 				},
@@ -93,7 +102,7 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 
 			provider, err := clientProviderFactory(
 				func(string, string) http.RoundTripper {
-					return transport
+					return endpointTransport
 				},
 				clusterMetadata,
 				rpcFactory,
@@ -121,7 +130,7 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 				nil,
 				nexus.StartOperationOptions{},
 			)
-			require.ErrorIs(t, err, errHTTPClientCalled)
+			require.ErrorIs(t, err, test.expected)
 		})
 	}
 }
