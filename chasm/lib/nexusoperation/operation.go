@@ -195,7 +195,14 @@ func (o *Operation) RequestCancel(
 	}
 
 	cancel := newCancellation(req)
-	o.Cancellation = chasm.NewComponentField(ctx, cancel)
+	// Detach only system-initiated (auto-close) cancellations so they survive the operation/workflow
+	// close and keep delivering. A user cancel stays attached — it's bounded by the operation and
+	// stops when the operation closes on its own.
+	var opts []chasm.ComponentFieldOption
+	if isSystemPrincipal(req.GetPrincipal()) {
+		opts = append(opts, chasm.ComponentFieldDetached())
+	}
+	o.Cancellation = chasm.NewComponentField(ctx, cancel, opts...)
 	// Once started, the handler returns a token that can be used in the cancellation request.
 	// Until then, no need to schedule the cancellation.
 	if o.Status == nexusoperationpb.OPERATION_STATUS_STARTED {
