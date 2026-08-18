@@ -82,7 +82,9 @@ func NewHTTPClientTransport(
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
 		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
-			annotateHTTPClientSpan(ctx, trace.SpanFromContext(ctx))
+			if attrs, ok := ctx.Value(httpClientSpanAttributesKey{}).([]attribute.KeyValue); ok {
+				trace.SpanFromContext(ctx).SetAttributes(attrs...)
+			}
 			return &httptrace.ClientTrace{}
 		}),
 	)
@@ -202,14 +204,6 @@ type httpClientSpanAttributesKey struct{}
 // SetHTTPClientSpanAttributes adds attrs to the HTTP client span created for req.
 func SetHTTPClientSpanAttributes(req *http.Request, attrs ...attribute.KeyValue) {
 	*req = *req.WithContext(context.WithValue(req.Context(), httpClientSpanAttributesKey{}, attrs))
-}
-
-func annotateHTTPClientSpan(ctx context.Context, span trace.Span) {
-	attrs, ok := ctx.Value(httpClientSpanAttributesKey{}).([]attribute.KeyValue)
-	if !ok {
-		return
-	}
-	span.SetAttributes(attrs...)
 }
 
 type debugHTTPHandler struct {

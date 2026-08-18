@@ -88,8 +88,6 @@ type operationContext struct {
 	cleanupFunctions              []func(map[string]string, error)
 }
 
-// annotateInboundSpan sets Temporal-domain attributes from the resolved operation context
-// on the active Nexus HTTP server span.
 func (c *operationContext) annotateInboundSpan(
 	ctx context.Context,
 	service, operation, requestID string,
@@ -102,7 +100,6 @@ func (c *operationContext) annotateInboundSpan(
 	})
 }
 
-// Recovers panics, records request metrics, and runs response cleanup.
 // Used as a deferred statement in Nexus handler methods.
 func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, errPtr *error) {
 	recovered := recover() //nolint:revive
@@ -426,7 +423,6 @@ func (h *nexusHandler) StartOperation(
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
-
 	oc.annotateInboundSpan(ctx, service, operation, options.RequestID)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
@@ -669,7 +665,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, "")
-
 	oc.annotateInboundSpan(ctx, service, operation, "")
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
