@@ -147,14 +147,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
-		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
-			context.Background(),
-			callerInfo,
-		), e.NamespaceID, e.WorkflowID)
-		if nsError != nil {
-			return err
-		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
+		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, syncStateErr := e.SyncState(
@@ -176,14 +169,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		}
 		return e.Execute()
 	case *serviceerrors.RetryReplication:
-		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
-			context.Background(),
-			callerInfo,
-		), e.NamespaceID, e.WorkflowID)
-		if nsError != nil {
-			return err
-		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
+		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 		var mutation *replicationspb.SyncWorkflowStateMutationAttributes
 		var snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes

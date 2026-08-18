@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -399,6 +400,7 @@ func (d *namespaceHandler) UpdateNamespace(
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
+	oldReplicationClusters := slices.Clone(replicationConfig.Clusters)
 	failoverHistory := getResponse.Namespace.ReplicationConfig.FailoverHistory
 	configVersion := getResponse.Namespace.ConfigVersion
 	failoverVersion := getResponse.Namespace.FailoverVersion
@@ -531,6 +533,10 @@ func (d *namespaceHandler) UpdateNamespace(
 
 	if updateRequest.ReplicationConfig != nil {
 		updateReplicationConfig := updateRequest.ReplicationConfig
+		effectiveActiveCluster := replicationConfig.GetActiveClusterName()
+		if updateReplicationConfig.GetActiveClusterName() != "" {
+			effectiveActiveCluster = updateReplicationConfig.GetActiveClusterName()
+		}
 		if len(updateReplicationConfig.Clusters) != 0 {
 			configurationChanged = true
 			clusterListChanged = true
@@ -539,6 +545,13 @@ func (d *namespaceHandler) UpdateNamespace(
 				clustersNew = append(clustersNew, clusterConfig.GetClusterName())
 			}
 			replicationConfig.Clusters = clustersNew
+			replicationConfig.ClusterReplicationRamps = d.updateReplicationRamps(
+				updateRequest.GetNamespace(),
+				replicationConfig.GetClusterReplicationRamps(),
+				oldReplicationClusters,
+				clustersNew,
+				effectiveActiveCluster,
+			)
 		}
 		if updateReplicationConfig.State != enumspb.REPLICATION_STATE_UNSPECIFIED &&
 			updateReplicationConfig.State != replicationConfig.State {
@@ -650,6 +663,43 @@ func (d *namespaceHandler) UpdateNamespace(
 		tag.WorkflowNamespaceID(info.Id),
 	)
 	return response, nil
+}
+
+func (d *namespaceHandler) updateReplicationRamps(
+	namespaceName string,
+	existing map[string]*persistencespb.NamespaceReplicationRamp,
+	oldClusters []string,
+	newClusters []string,
+	activeCluster string,
+) map[string]*persistencespb.NamespaceReplicationRamp {
+	ramps := maps.Clone(existing)
+	for clusterName := range ramps {
+		if !slices.Contains(newClusters, clusterName) {
+			delete(ramps, clusterName)
+		}
+	}
+
+	duration := d.config.ReplicationGradualConnectDuration(namespaceName)
+	initialPercentage := d.config.ReplicationGradualConnectInitialPercent(namespaceName)
+	if !d.config.EnableReplicationGradualConnect() ||
+		duration <= 0 ||
+		initialPercentage < 0 || initialPercentage >= 100 {
+		return ramps
+	}
+	if ramps == nil {
+		ramps = make(map[string]*persistencespb.NamespaceReplicationRamp)
+	}
+	startTime := timestamppb.New(d.timeSource.Now())
+	for _, clusterName := range newClusters {
+		if clusterName != activeCluster && !slices.Contains(oldClusters, clusterName) {
+			ramps[clusterName] = &persistencespb.NamespaceReplicationRamp{
+				StartTime:         startTime,
+				Duration:          durationpb.New(duration),
+				InitialPercentage: int32(initialPercentage),
+			}
+		}
+	}
+	return ramps
 }
 
 // DeprecateNamespace deprecates a namespace

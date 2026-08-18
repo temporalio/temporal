@@ -584,6 +584,78 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 }
 
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UnrelatedConfigEditPreservesNoRamp() {
+	id := uuid.NewString()
+	name := "some random namespace test name"
+	updateState := enumspb.NAMESPACE_STATE_REGISTERED
+	updateDescription := "updated description, unrelated to cluster membership"
+	updateClusterActive := "other random active cluster name"
+	updateClusterStandby := "other random standby cluster name"
+	existingConfigVersion := int64(5)
+	updateConfigVersion := int64(6)
+	updateFailoverVersion := int64(59)
+	updateClusters := []*replicationpb.ClusterReplicationConfig{
+		{ClusterName: updateClusterActive},
+		{ClusterName: updateClusterStandby},
+	}
+	updateTask := &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+		Id:                 id,
+		Info: &namespacepb.NamespaceInfo{
+			Name:        name,
+			State:       updateState,
+			Description: updateDescription,
+		},
+		Config: &namespacepb.NamespaceConfig{},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: updateClusterActive,
+			Clusters:          updateClusters, // unchanged membership -- standby was already connected
+		},
+		ConfigVersion:   updateConfigVersion,
+		FailoverVersion: updateFailoverVersion, // no failover bump
+	}
+
+	s.namespaceReplicator.currentCluster = updateClusterStandby
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: name,
+	}).Return(&persistence.GetNamespaceResponse{Namespace: &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{Id: id},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: updateClusterActive,
+			// updateClusterStandby has been a member all along, with no ramp.
+			Clusters: []string{updateClusterActive, updateClusterStandby},
+		},
+		ConfigVersion:   existingConfigVersion,
+		FailoverVersion: updateFailoverVersion,
+	}}, nil).Times(2)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: updateFailoverVersion,
+	}, nil).Times(1)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), &persistence.UpdateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:          id,
+				Name:        name,
+				State:       updateState,
+				Description: updateDescription,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: updateClusterActive,
+				Clusters:          []string{updateClusterActive, updateClusterStandby},
+				// No ramp should appear -- standby was already a member.
+			},
+			ConfigVersion:               updateConfigVersion,
+			FailoverNotificationVersion: 0,
+			FailoverVersion:             updateFailoverVersion,
+		},
+		IsGlobalNamespace:   false,
+		NotificationVersion: updateFailoverVersion,
+	})
+	err := s.namespaceReplicator.Execute(context.Background(), updateTask)
+	s.NoError(err)
+}
+
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_NoUpdateConfig_UpdateActiveCluster() {
 	id := uuid.NewString()
 	name := "some random namespace test name"

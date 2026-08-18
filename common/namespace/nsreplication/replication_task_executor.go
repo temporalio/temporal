@@ -4,6 +4,7 @@ package nsreplication
 
 import (
 	"context"
+	"maps"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -151,6 +152,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 		return err
 	}
 
+	clusters := ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
 	request := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
@@ -170,10 +172,11 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				CustomSearchAttributeAliases: task.Config.GetCustomSearchAttributeAliases(),
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
-				Clusters:          ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
-				State:             task.ReplicationConfig.GetState(),
-				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
+				ActiveClusterName:       task.ReplicationConfig.GetActiveClusterName(),
+				Clusters:                clusters,
+				State:                   task.ReplicationConfig.GetState(),
+				FailoverHistory:         ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory()),
+				ClusterReplicationRamps: maps.Clone(task.GetClusterReplicationRamps()),
 			},
 			ConfigVersion:   task.GetConfigVersion(),
 			FailoverVersion: task.GetFailoverVersion(),
@@ -317,6 +320,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
 		}
 		request.Namespace.ReplicationConfig.Clusters = ConvertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
+		request.Namespace.ReplicationConfig.ClusterReplicationRamps = maps.Clone(task.GetClusterReplicationRamps())
 		request.Namespace.ConfigVersion = task.GetConfigVersion()
 	}
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {

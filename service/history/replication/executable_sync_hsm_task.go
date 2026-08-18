@@ -137,14 +137,7 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
-		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
-			context.Background(),
-			callerInfo,
-		), e.NamespaceID, e.WorkflowID)
-		if nsError != nil {
-			return err
-		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
+		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, resendErr := e.Resend(

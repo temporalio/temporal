@@ -101,6 +101,61 @@ func (s *namespaceHandlerCommonSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsDisabledByDefault() {
+	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(time.Hour)
+	ramps := s.handler.updateReplicationRamps("test-ns", nil, []string{"active"}, []string{"active", "standby"}, "active")
+	s.Empty(ramps)
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSnapshotsAndRestartsAfterReconnect() {
+	const namespaceName = "test-ns"
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
+	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(time.Hour)
+	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(10)
+	s.fakeClock.Update(now)
+
+	ramps := s.handler.updateReplicationRamps(namespaceName, nil, []string{"active"}, []string{"active", "standby"}, "active")
+	ramp := ramps["standby"]
+	s.Require().NotNil(ramp)
+	s.Equal(now, ramp.GetStartTime().AsTime())
+	s.Equal(time.Hour, ramp.GetDuration().AsDuration())
+	s.Equal(int32(10), ramp.GetInitialPercentage())
+
+	// Disabling creation and changing defaults cannot alter an in-flight connection generation.
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(false)
+	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(2 * time.Hour)
+	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(25)
+	unchanged := s.handler.updateReplicationRamps(namespaceName, ramps, []string{"active", "standby"}, []string{"active", "standby"}, "active")
+	s.Equal(ramp, unchanged["standby"])
+
+	removed := s.handler.updateReplicationRamps(namespaceName, unchanged, []string{"active", "standby"}, []string{"active"}, "active")
+	s.NotContains(removed, "standby")
+
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
+	reconnectedAt := now.Add(3 * time.Hour)
+	s.fakeClock.Update(reconnectedAt)
+	reconnected := s.handler.updateReplicationRamps(namespaceName, removed, []string{"active"}, []string{"active", "standby"}, "active")
+	s.Equal(reconnectedAt, reconnected["standby"].GetStartTime().AsTime())
+	s.Equal(2*time.Hour, reconnected["standby"].GetDuration().AsDuration())
+	s.Equal(int32(25), reconnected["standby"].GetInitialPercentage())
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSkipsEffectiveActiveCluster() {
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
+	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(time.Hour)
+	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(10)
+
+	ramps := s.handler.updateReplicationRamps(
+		"test-ns",
+		nil,
+		[]string{"old-active"},
+		[]string{"old-active", "new-active", "new-standby"},
+		"new-active",
+	)
+	s.NotContains(ramps, "new-active")
+	s.Contains(ramps, "new-standby")
+}
+
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
 	out := s.handler.mergeNamespaceData(
 		map[string]string{

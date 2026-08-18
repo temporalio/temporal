@@ -23,6 +23,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
@@ -43,6 +44,8 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -61,6 +64,7 @@ type (
 		sourceCluster           string
 		sourceShardKey          ClusterShardKey
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
+		timeSource              *clock.EventTimeSource
 		config                  *configs.Config
 		namespaceId             string
 		workflowId              string
@@ -102,6 +106,7 @@ func (s *executableTaskSuite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	s.serializer = serialization.NewSerializer()
 	s.resendHandler = eventhandler.NewMockResendHandler(s.controller)
+	s.timeSource = clock.NewEventTimeSource()
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
@@ -119,6 +124,7 @@ func (s *executableTaskSuite) SetupTest() {
 	s.taskId = rand.Int63()
 	s.toolBox = ProcessToolBox{
 		Config:                  s.config,
+		TimeSource:              s.timeSource,
 		ClusterMetadata:         s.clusterMetadata,
 		ClientBean:              s.clientBean,
 		ResendHandler:           s.resendHandler,
@@ -1068,6 +1074,130 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.False(toProcess)
 }
 
+func (s *executableTaskSuite) newGradualConnectNamespace(ramp *persistencespb.NamespaceReplicationRamp) (*namespace.Namespace, string) {
+	namespaceID := uuid.NewString()
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: cluster.TestAlternativeClusterName,
+		Clusters: []string{
+			cluster.TestCurrentClusterName,
+			cluster.TestAlternativeClusterName,
+		},
+	}
+	if ramp != nil {
+		replicationConfig.ClusterReplicationRamps = map[string]*persistencespb.NamespaceReplicationRamp{
+			cluster.TestCurrentClusterName: ramp,
+		}
+	}
+	detail := &persistencespb.NamespaceDetail{
+		Info:              &persistencespb.NamespaceInfo{Id: namespaceID, Name: uuid.NewString()},
+		Config:            &persistencespb.NamespaceConfig{},
+		ReplicationConfig: replicationConfig,
+	}
+	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
+	s.NoError(err)
+	return namespaceEntry, namespaceID
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_NoRampAdmits() {
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(nil)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.True(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInFutureUsesInitialPercent() {
+	future := s.timeSource.Now().Add(time.Hour)
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&persistencespb.NamespaceReplicationRamp{
+		StartTime:         timestamppb.New(future),
+		Duration:          durationpb.New(time.Hour),
+		InitialPercentage: 0,
+	})
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.False(toProcess, "clock skew must not temporarily admit a workflow that could be shed once clocks catch up")
+
+	s.timeSource.Update(future)
+	_, toProcess, err = s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.False(toProcess, "catching up to the ramp start must not reduce the admission percentage")
+}
+
+// TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits: a shed task is dropped for good, so
+// shedding force-replication traffic would stall migration verification until it hard-fails.
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits() {
+	connectTime := s.timeSource.Now() // freshly connected -- percent would otherwise be 0, i.e. shed
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&persistencespb.NamespaceReplicationRamp{
+		StartTime:         timestamppb.New(connectTime),
+		Duration:          durationpb.New(time.Hour),
+		InitialPercentage: 0,
+	})
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+	s.task.replicationTask.RawTaskInfo.IsForceReplication = true
+
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
+	s.NoError(err)
+	s.True(toProcess, "a force-replication task must bypass the ramp regardless of percent")
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_Admits() {
+	connectTime := s.timeSource.Now()
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&persistencespb.NamespaceReplicationRamp{
+		StartTime:         timestamppb.New(connectTime),
+		Duration:          durationpb.New(10 * time.Minute),
+		InitialPercentage: 0,
+	})
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	s.timeSource.Update(connectTime.Add(time.Hour)) // well past the ramp duration
+	for range 20 {
+		_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, uuid.NewString())
+		s.NoError(err)
+		s.True(toProcess, "every workflow ID must be admitted once the ramp has run past 100%%")
+	}
+}
+
+// TestGetNamespaceInfo_GradualConnect_Monotonicity checks that admission only grows over time: a
+// workflow ID admitted at one tick is never shed later. DELETE/VERIFY task safety depends on this.
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_Monotonicity() {
+	sampleInterval := time.Minute
+	connectTime := s.timeSource.Now()
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&persistencespb.NamespaceReplicationRamp{
+		StartTime:         timestamppb.New(connectTime),
+		Duration:          durationpb.New(10 * sampleInterval),
+		InitialPercentage: 10,
+	})
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	const numWorkflows = 2000
+	workflowIDs := make([]string, numWorkflows)
+	for i := range workflowIDs {
+		workflowIDs[i] = uuid.NewString()
+	}
+
+	admitted := make(map[string]bool, numWorkflows)
+	for tick := 0; tick <= 10; tick++ { // Sample the linear ramp once per minute.
+		s.timeSource.Update(connectTime.Add(time.Duration(tick) * sampleInterval))
+		for _, wfID := range workflowIDs {
+			_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, wfID)
+			s.NoError(err)
+			if admitted[wfID] {
+				s.True(toProcess, "workflow %s was admitted at an earlier tick; must not be shed at tick %d", wfID, tick)
+			}
+			if toProcess {
+				admitted[wfID] = true
+			}
+		}
+	}
+	for _, wfID := range workflowIDs {
+		s.True(admitted[wfID], "workflow %s must be admitted by the time the ramp reaches 100%%", wfID)
+	}
+}
+
 func (s *executableTaskSuite) TestMarkPoisonPill() {
 	shardID := rand.Int31()
 	shardContext := historyi.NewMockShardContext(s.controller)
@@ -1250,4 +1380,66 @@ func (s *executableTaskSuite) TestSyncState_NotFound() {
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
 	s.NoError(err)
 	s.False(doContinue)
+}
+
+func TestGradualConnectPercent(t *testing.T) {
+	t.Parallel()
+	connectTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	testCases := []struct {
+		name           string
+		now            time.Time
+		initialPercent int
+		duration       time.Duration
+		want           int
+	}{
+		{
+			name:           "at_connect_time_returns_initial_percent",
+			now:            connectTime,
+			initialPercent: 10,
+			duration:       50 * time.Minute,
+			want:           10,
+		},
+		{
+			name:           "elapsed_time_increases_percent",
+			now:            connectTime.Add(20 * time.Minute),
+			initialPercent: 10,
+			duration:       50 * time.Minute,
+			want:           46,
+		},
+		{
+			name:           "capped_at_100_regardless_of_how_far_past",
+			now:            connectTime.Add(365 * 24 * time.Hour),
+			initialPercent: 10,
+			duration:       50 * time.Minute,
+			want:           100,
+		},
+		{
+			name:           "negative_elapsed_uses_initial_percent",
+			now:            connectTime.Add(-time.Minute),
+			initialPercent: 10,
+			duration:       50 * time.Minute,
+			want:           10,
+		},
+		{
+			name:           "non_positive_duration_admits_everything",
+			now:            connectTime.Add(time.Minute),
+			initialPercent: 0,
+			duration:       0,
+			want:           100,
+		},
+		{
+			name:           "invalid_initial_percent_fails_open",
+			now:            connectTime.Add(15 * time.Minute),
+			initialPercent: -1,
+			duration:       50 * time.Minute,
+			want:           100,
+		},
+	}
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := gradualConnectPercent(connectTime, tt.now, tt.duration, tt.initialPercent)
+			require.Equal(t, tt.want, got)
+		})
+	}
 }

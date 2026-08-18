@@ -245,6 +245,12 @@ func (ns *Namespace) ReplicationConfig() *persistencespb.NamespaceReplicationCon
 	return ns.replicationResolver.ReplicationConfig()
 }
 
+// ReplicationRamp returns the immutable gradual-connect parameters for cluster. A nil result means
+// the namespace has no active ramp for that cluster.
+func (ns *Namespace) ReplicationRamp(cluster string) *persistencespb.NamespaceReplicationRamp {
+	return ns.ReplicationConfig().GetClusterReplicationRamps()[cluster]
+}
+
 // NotificationVersion return the global notification version of when namespace changed
 func (ns *Namespace) NotificationVersion() int64 {
 	return ns.notificationVersion
