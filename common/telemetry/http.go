@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
 // HTTPClientTransportInstrumenter instruments HTTP transports with the service's tracing configuration.
@@ -83,7 +82,7 @@ func NewHTTPClientTransport(
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
 		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
-			annotateNexusHTTPRequest(ctx, trace.SpanFromContext(ctx))
+			annotateHTTPClientSpan(ctx, trace.SpanFromContext(ctx))
 			return &httptrace.ClientTrace{}
 		}),
 	)
@@ -198,34 +197,19 @@ func (t *debugHTTPClientSpanTransport) RoundTrip(req *http.Request) (*http.Respo
 	return resp, err
 }
 
-type nexusHTTPRequestKey struct{}
+type httpClientSpanAttributesKey struct{}
 
-type nexusHTTPRequestAttrs struct {
-	namespaceName       string
-	targetNamespaceName string
-	requestID           string
+// SetHTTPClientSpanAttributes adds attrs to the HTTP client span created for req.
+func SetHTTPClientSpanAttributes(req *http.Request, attrs ...attribute.KeyValue) {
+	*req = *req.WithContext(context.WithValue(req.Context(), httpClientSpanAttributesKey{}, attrs))
 }
 
-// MarkNexusHTTPRequest annotates the HTTP client span for a Nexus request.
-func MarkNexusHTTPRequest(req *http.Request, namespaceName string, targetNamespaceName string) {
-	*req = *req.WithContext(context.WithValue(req.Context(), nexusHTTPRequestKey{}, nexusHTTPRequestAttrs{
-		namespaceName:       namespaceName,
-		targetNamespaceName: targetNamespaceName,
-		requestID:           req.Header.Get(nexusrpc.HeaderRequestID),
-	}))
-}
-
-func annotateNexusHTTPRequest(ctx context.Context, span trace.Span) {
-	nexusAttrs, ok := ctx.Value(nexusHTTPRequestKey{}).(nexusHTTPRequestAttrs)
+func annotateHTTPClientSpan(ctx context.Context, span trace.Span) {
+	attrs, ok := ctx.Value(httpClientSpanAttributesKey{}).([]attribute.KeyValue)
 	if !ok {
 		return
 	}
-	SetNexusSpanAttributes(span, NexusSpanAttributes{
-		Request:             true,
-		NamespaceName:       nexusAttrs.namespaceName,
-		TargetNamespaceName: nexusAttrs.targetNamespaceName,
-		RequestID:           nexusAttrs.requestID,
-	})
+	span.SetAttributes(attrs...)
 }
 
 type debugHTTPHandler struct {

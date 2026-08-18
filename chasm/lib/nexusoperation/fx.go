@@ -172,7 +172,7 @@ func clientProviderFactory(
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
 		httpCaller := func(r *http.Request) (*http.Response, error) {
-			telemetry.MarkNexusHTTPRequest(r, originNamespaceName, targetNamespaceName)
+			nexusrpc.MarkHTTPRequest(r, originNamespaceName, targetNamespaceName)
 			if needsCallbackSourceHeader && clusterID != "" {
 				r.Header.Set(nexusCallbackSourceHeader, clusterID)
 			}

@@ -35,7 +35,6 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -356,7 +355,7 @@ func annotateInboundSpan(
 	oc *operationContext,
 	service, operation, requestID string,
 ) {
-	telemetry.SetNexusSpanAttributes(trace.SpanFromContext(ctx), telemetry.NexusSpanAttributes{
+	nexusrpc.SetSpanAttributes(trace.SpanFromContext(ctx), nexusrpc.SpanAttributes{
 		Request:       true,
 		NamespaceName: oc.namespaceName,
 		Endpoint:      oc.endpointName,
