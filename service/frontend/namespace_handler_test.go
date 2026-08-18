@@ -122,6 +122,7 @@ func (s *namespaceHandlerCommonSuite) TearDownTest() {
 func (s *namespaceHandlerCommonSuite) TestDeprecateNamespaceEventUsesPersistedAfterState() {
 	eventLogger := &captureNamespaceEventLogger{}
 	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dc.GetBoolPropertyFn(true)
 
 	failoverEndTime := timestamppb.New(now)
 	detail := &persistencespb.NamespaceDetail{
@@ -1815,6 +1816,7 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	eventLogger := &captureNamespaceEventLogger{}
 	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dc.GetBoolPropertyFn(true)
 
 	namespaceName := "test-namespace"
 	identity := "identity"

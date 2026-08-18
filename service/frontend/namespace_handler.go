@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/common/wideevents"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -253,7 +252,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		return nil, err
 	}
 
-	wideevents.EmitNamespaceRegistered(d.eventLogger, buildNamespaceRegisteredInput(namespaceRequest, namespaceResponse.ID, registerRequest))
+	d.emitNamespaceRegistered(buildNamespaceRegisteredInput(namespaceRequest, namespaceResponse.ID, registerRequest))
 
 	err = d.namespaceReplicator.HandleTransmissionTask(
 		ctx,
@@ -632,7 +631,7 @@ func (d *namespaceHandler) UpdateNamespace(
 			return nil, err
 		}
 
-		wideevents.EmitNamespaceUpdated(d.eventLogger, buildNamespaceUpdatedInput(
+		d.emitNamespaceUpdated(buildNamespaceUpdatedInput(
 			eventBefore,
 			updateReq.Namespace,
 			isGlobalNamespace,
@@ -720,7 +719,7 @@ func (d *namespaceHandler) DeprecateNamespace(
 		return nil, err
 	}
 
-	wideevents.EmitNamespaceUpdated(d.eventLogger, buildNamespaceUpdatedInput(
+	d.emitNamespaceUpdated(buildNamespaceUpdatedInput(
 		eventBefore,
 		updateReq.Namespace,
 		getResponse.IsGlobalNamespace,
@@ -808,7 +807,7 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	updatedInput.WorkflowRuleCreatedDetail = workflowRule.String()
 	updatedInput.WorkflowRuleForceScan = forceScan
 	updatedInput.WorkflowRuleRequestID = requestID
-	wideevents.EmitNamespaceUpdated(d.eventLogger, updatedInput)
+	d.emitNamespaceUpdated(updatedInput)
 
 	return workflowRule, nil
 }
@@ -912,7 +911,7 @@ func (d *namespaceHandler) DeleteWorkflowRule(
 	updatedInput := buildNamespaceUpdatedInput(eventBefore, updateReq.Namespace, getNamespaceResponse.IsGlobalNamespace, false, false, nil)
 	updatedInput.WorkflowRuleDeleted = ruleID
 	updatedInput.WorkflowRuleDeletedDetail = deletedRule.String()
-	wideevents.EmitNamespaceUpdated(d.eventLogger, updatedInput)
+	d.emitNamespaceUpdated(updatedInput)
 	return nil
 }
 

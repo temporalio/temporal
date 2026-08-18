@@ -218,3 +218,23 @@ func TestRequestFieldsOmitSecurityToken(t *testing.T) {
 	require.Equal(t, "d", upd.Description)
 	require.Equal(t, "s3://h", upd.HistoryArchivalURI)
 }
+
+func TestNamespaceEventEmittersRespectDynamicConfig(t *testing.T) {
+	enabled := false
+	lg := &captureNamespaceEventLogger{}
+	handler := &namespaceHandler{
+		eventLogger: lg,
+		config: &Config{
+			EmitNamespaceLifecycleEvents: func() bool { return enabled },
+		},
+	}
+
+	handler.emitNamespaceRegistered(wideevents.NamespaceRegisteredInput{Namespace: "namespace"})
+	handler.emitNamespaceUpdated(wideevents.NamespaceUpdatedInput{Namespace: "namespace"})
+	require.Empty(t, lg.records)
+
+	enabled = true
+	handler.emitNamespaceRegistered(wideevents.NamespaceRegisteredInput{Namespace: "namespace"})
+	handler.emitNamespaceUpdated(wideevents.NamespaceUpdatedInput{Namespace: "namespace"})
+	require.Len(t, lg.records, 2)
+}

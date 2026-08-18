@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/embedded"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/wideevents"
@@ -44,9 +45,10 @@ func Test_RenameNamespaceActivity_EmitsNamespaceRenamed(t *testing.T) {
 	lg := &captureEventLogger{}
 
 	a := &localActivities{
-		metadataManager: metadataManager,
-		logger:          log.NewTestLogger(),
-		eventLogger:     lg,
+		metadataManager:              metadataManager,
+		logger:                       log.NewTestLogger(),
+		eventLogger:                  lg,
+		emitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true),
 	}
 
 	metadataManager.EXPECT().RenameNamespace(gomock.Any(), &persistence.RenameNamespaceRequest{
@@ -60,6 +62,22 @@ func Test_RenameNamespaceActivity_EmitsNamespaceRenamed(t *testing.T) {
 	require.Equal(t, wideevents.PhaseNamespaceRenamed, attrString(lg.records[0], "phase"))
 	require.Equal(t, "namespace", attrString(lg.records[0], "namespace"))
 	require.Equal(t, "namespace-id", attrString(lg.records[0], "namespace_id"))
+}
+
+func Test_RenameNamespaceActivity_EventDisabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	metadataManager := persistence.NewMockMetadataManager(ctrl)
+	lg := &captureEventLogger{}
+	a := &localActivities{
+		metadataManager:              metadataManager,
+		logger:                       log.NewTestLogger(),
+		eventLogger:                  lg,
+		emitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(false),
+	}
+
+	metadataManager.EXPECT().RenameNamespace(gomock.Any(), gomock.Any()).Return(nil)
+	require.NoError(t, a.RenameNamespaceActivity(context.Background(), "namespace-id", "namespace", "namespace-deleted-xyz"))
+	require.Empty(t, lg.records)
 }
 
 // A no-op rename (new == previous) neither renames nor emits.

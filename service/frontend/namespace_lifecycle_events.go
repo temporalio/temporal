@@ -258,3 +258,15 @@ func clusterNames(clusters []*replicationpb.ClusterReplicationConfig) []string {
 	}
 	return names
 }
+
+func (d *namespaceHandler) emitNamespaceRegistered(in wideevents.NamespaceRegisteredInput) {
+	if d.config.EmitNamespaceLifecycleEvents() {
+		wideevents.EmitNamespaceRegistered(d.eventLogger, in)
+	}
+}
+
+func (d *namespaceHandler) emitNamespaceUpdated(in wideevents.NamespaceUpdatedInput) {
+	if d.config.EmitNamespaceLifecycleEvents() {
+		wideevents.EmitNamespaceUpdated(d.eventLogger, in)
+	}
+}

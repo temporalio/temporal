@@ -23,11 +23,12 @@ import (
 
 type (
 	localActivities struct {
-		metadataManager      persistence.MetadataManager
-		clusterMetadata      cluster.Metadata
-		nexusEndpointManager persistence.NexusEndpointManager
-		logger               log.Logger
-		eventLogger          otellog.Logger
+		metadataManager              persistence.MetadataManager
+		clusterMetadata              cluster.Metadata
+		nexusEndpointManager         persistence.NexusEndpointManager
+		logger                       log.Logger
+		eventLogger                  otellog.Logger
+		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
 
 		protectedNamespaces                       dynamicconfig.TypedPropertyFn[[]string]
 		allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
@@ -49,17 +50,19 @@ func newLocalActivities(
 	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
 	eventLogger otellog.Logger,
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
 	protectedNamespaces dynamicconfig.TypedPropertyFn[[]string],
 	allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn,
 	nexusEndpointListDefaultPageSize dynamicconfig.IntPropertyFn,
 ) *localActivities {
 	return &localActivities{
-		metadataManager:      metadataManager,
-		clusterMetadata:      clusterMetadata,
-		nexusEndpointManager: nexusEndpointManager,
-		logger:               logger,
-		eventLogger:          eventLogger,
-		protectedNamespaces:  protectedNamespaces,
+		metadataManager:              metadataManager,
+		clusterMetadata:              clusterMetadata,
+		nexusEndpointManager:         nexusEndpointManager,
+		logger:                       logger,
+		eventLogger:                  eventLogger,
+		emitNamespaceLifecycleEvents: emitNamespaceLifecycleEvents,
+		protectedNamespaces:          protectedNamespaces,
 		allowDeleteNamespaceIfNexusEndpointTarget: allowDeleteNamespaceIfNexusEndpointTarget,
 		nexusEndpointListDefaultPageSize:          nexusEndpointListDefaultPageSize,
 	}
@@ -233,10 +236,12 @@ func (a *localActivities) RenameNamespaceActivity(ctx context.Context, nsID name
 	// name, so this is where the namespace_renamed lifecycle event is emitted. The physical record
 	// removal happens later, in the abandoned ReclaimResourcesWorkflow, by which point the original
 	// name is already gone.
-	wideevents.EmitNamespaceRenamed(a.eventLogger, wideevents.NamespaceRenamedInput{
-		Namespace:   previousName.String(),
-		NamespaceID: nsID.String(),
-		RenamedTo:   newName.String(),
-	})
+	if a.emitNamespaceLifecycleEvents != nil && a.emitNamespaceLifecycleEvents() {
+		wideevents.EmitNamespaceRenamed(a.eventLogger, wideevents.NamespaceRenamedInput{
+			Namespace:   previousName.String(),
+			NamespaceID: nsID.String(),
+			RenamedTo:   newName.String(),
+		})
+	}
 	return nil
 }
