@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -386,7 +387,7 @@ func TestDLQCommand_V2(t *testing.T) {
 				}
 			},
 			validateStdout: func(t *testing.T, b *bytes.Buffer) {
-				assert.Contains(t, b.String(), "Found last message ID: 150")
+				require.Contains(t, b.String(), "Found last message ID: 150")
 			},
 		},
 	} {
