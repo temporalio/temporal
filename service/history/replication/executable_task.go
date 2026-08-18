@@ -752,7 +752,7 @@ func (e *ExecutableTaskImpl) SyncState(
 		if errors.As(err, &workflowNotReady) {
 			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
 			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Dropped replication task because source mutable state has buffered events", err, map[string]any{
-				"disposition": wideevents.ReplDispositionDropped,
+				"disposition": wideevents.ReplDispositionDiscarded,
 			})
 			return false, nil
 		}
@@ -761,7 +761,7 @@ func (e *ExecutableTaskImpl) SyncState(
 			logger.Error(
 				"workflow not found in source cluster, proceed to cleanup")
 			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Workflow not found in source cluster; cleaning up target", err, map[string]any{
-				"disposition": wideevents.ReplDispositionCleanup,
+				"recovery_action": wideevents.ReplRecoveryActionCleanup,
 			})
 			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return false, e.DeleteWorkflow(
@@ -785,7 +785,7 @@ func (e *ExecutableTaskImpl) SyncState(
 			// Just drop the task since there's nothing to replicate in event-based stack.
 			logger.Info("Dropped replication task as there's no event-based replication task equivalent.")
 			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Dropped replication task because no event-based equivalent exists", err, map[string]any{
-				"disposition": wideevents.ReplDispositionDropped,
+				"disposition": wideevents.ReplDispositionDiscarded,
 			})
 			return false, nil
 		}
@@ -886,7 +886,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 		if err != nil {
 			e.ThrottledLogger.Error("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
 			e.emitReplicationTaskError(wideevents.ReplOperationNamespaceSync, "Failed to refresh namespace from source cluster; replication task skipped", err, map[string]any{
-				"disposition": wideevents.ReplDispositionSkipped,
+				"disposition": wideevents.ReplDispositionDiscarded,
 			})
 			return "", false, nil
 		}
@@ -928,7 +928,7 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		)
 		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Writing replication task to DLQ reached maximum attempts", nil, map[string]any{
 			"dlq_attempt": e.markPoisonPillAttempts,
-			"disposition": wideevents.ReplDispositionAbandoned,
+			"disposition": wideevents.ReplDispositionDiscarded,
 			"terminal":    true,
 		})
 		return nil
@@ -972,7 +972,7 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	dlqLogger.Error("Enqueued replication task to DLQ")
 	e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Enqueued replication task to DLQ", nil, map[string]any{
 		"target_shard": shardContext.GetShardID(),
-		"disposition":  wideevents.ReplDispositionEnqueued,
+		"disposition":  wideevents.ReplDispositionDLQ,
 		"terminal":     true,
 	})
 	return nil

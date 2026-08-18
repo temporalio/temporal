@@ -141,9 +141,9 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		details := map[string]any{}
 		switch err.(type) {
 		case *serviceerrors.SyncState:
-			details["disposition"] = wideevents.ReplDispositionSyncState
+			details["recovery_action"] = wideevents.ReplRecoveryActionSyncState
 		case *serviceerrors.RetryReplication:
-			details["disposition"] = wideevents.ReplDispositionResendHistory
+			details["recovery_action"] = wideevents.ReplRecoveryActionResendHistory
 		default:
 		}
 		emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationPassiveTaskExecution, "SyncWorkflowState replication task encountered error", err, details)

@@ -14,8 +14,15 @@ const ReplicationLifecycleEventName = "replication_lifecycle"
 
 type ReplicationPhase string
 
-// ReplicationDisposition is the stable action or outcome vocabulary stored in details.disposition.
+// ReplicationDisposition records what the task owner will do with the original replication task
+// after the error. It does not describe where the error occurred, its cause, or a recovery action.
 type ReplicationDisposition string
+
+// ReplicationRecoveryAction records a compensating action selected in response to an error.
+type ReplicationRecoveryAction string
+
+// ReplicationErrorClassification adds a queryable semantic classification to an error.
+type ReplicationErrorClassification string
 
 const (
 	ReplicationSent      ReplicationPhase = "sent"
@@ -30,17 +37,19 @@ const (
 )
 
 const (
-	ReplDispositionError         ReplicationDisposition = "error"
-	ReplDispositionRetry         ReplicationDisposition = "retry"
-	ReplDispositionDiscarded     ReplicationDisposition = "discarded"
-	ReplDispositionDropped       ReplicationDisposition = "dropped"
-	ReplDispositionCleanup       ReplicationDisposition = "cleanup"
-	ReplDispositionSkipped       ReplicationDisposition = "skipped"
-	ReplDispositionAbandoned     ReplicationDisposition = "abandoned"
-	ReplDispositionEnqueued      ReplicationDisposition = "enqueued"
-	ReplDispositionSyncState     ReplicationDisposition = "sync_state"
-	ReplDispositionResendHistory ReplicationDisposition = "resend_history"
-	ReplDispositionDuplicate     ReplicationDisposition = "duplicate"
+	ReplDispositionRetry     ReplicationDisposition = "retry"
+	ReplDispositionDiscarded ReplicationDisposition = "discarded"
+	ReplDispositionDLQ       ReplicationDisposition = "dlq"
+)
+
+const (
+	ReplRecoveryActionCleanup       ReplicationRecoveryAction = "cleanup"
+	ReplRecoveryActionSyncState     ReplicationRecoveryAction = "sync_state"
+	ReplRecoveryActionResendHistory ReplicationRecoveryAction = "resend_history"
+)
+
+const (
+	ReplErrorClassificationDuplicate ReplicationErrorClassification = "duplicate"
 )
 
 const (
@@ -63,8 +72,9 @@ const (
 	ArtifactKindMutation = "mutation"
 )
 
-// Stable values stored in the details column for replication error events. Details remains
-// extensible, but these values form the small queryable vocabulary shared by all emitters.
+// Replication operation identifies the stage or action that encountered the error. Disposition,
+// recovery_action, and classification describe what happens next and how to interpret the error;
+// they are independent of operation and remain optional fields in details.
 const (
 	ReplOperationTaskExecution                    = "task_execution"
 	ReplOperationTaskConversion                   = "task_conversion"

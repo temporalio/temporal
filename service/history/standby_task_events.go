@@ -34,21 +34,19 @@ func emitStandbyTaskError(
 		activeCluster = entry.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()})
 	}
 
-	disposition := wideevents.ReplDispositionError
-	if errors.Is(err, consts.ErrTaskRetry) {
-		disposition = wideevents.ReplDispositionRetry
-	} else if errors.Is(err, consts.ErrTaskDiscarded) {
-		disposition = wideevents.ReplDispositionDiscarded
-	}
 	details := map[string]any{
 		"active_cluster":  activeCluster,
 		"attempt":         executable.Attempt(),
 		"category":        task.GetCategory().Name(),
-		"disposition":     disposition,
 		"local_task_id":   task.GetTaskID(),
 		"local_task_type": task.GetType().String(),
 		"target_cluster":  shardContext.GetClusterMetadata().GetCurrentClusterName(),
 		"visibility_time": task.GetVisibilityTime().Format(time.RFC3339Nano),
+	}
+	if errors.Is(err, consts.ErrTaskRetry) {
+		details["disposition"] = wideevents.ReplDispositionRetry
+	} else if errors.Is(err, consts.ErrTaskDiscarded) {
+		details["disposition"] = wideevents.ReplDispositionDiscarded
 	}
 	if versionedTask, ok := task.(tasks.HasVersion); ok {
 		details["version"] = versionedTask.GetVersion()

@@ -310,7 +310,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 	)
 	details := map[string]any{}
 	if _, ok := err.(*serviceerrors.SyncState); ok {
-		details["disposition"] = wideevents.ReplDispositionSyncState
+		details["recovery_action"] = wideevents.ReplRecoveryActionSyncState
 	}
 	emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationStandbyVerification, "Standby versioned transition verification failed", err, details)
 	switch taskErr := err.(type) {
