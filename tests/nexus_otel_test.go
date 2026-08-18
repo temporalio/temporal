@@ -40,6 +40,7 @@ type nexusHTTPSpan struct {
 	ServiceName  string
 	Kind         oteltrace.SpanKind
 	URLPath      string
+	Attrs        map[string]any
 }
 
 type NexusOTELSuite struct {
@@ -119,6 +120,10 @@ func (s *NexusOTELSuite) TestCallback() {
 		Name:        "HTTP POST",
 		ServiceName: "io.temporal.history",
 		Kind:        oteltrace.SpanKindClient,
+		Attrs: map[string]any{
+			"nexus.request":     true,
+			"temporalNamespace": env.Namespace().String(),
+		},
 	}})
 	spanContext := oteltrace.SpanContextFromContext(
 		propagation.TraceContext{}.Extract(s.Context(), propagation.HeaderCarrier(headers)),
@@ -198,6 +203,10 @@ func (s *NexusOTELSuite) TestOperation() {
 			ServiceName: "io.temporal.history",
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath,
+			Attrs: map[string]any{
+				"nexus.request":     true,
+				"temporalNamespace": callerEnv.Namespace().String(),
+			},
 		},
 		{
 			TraceID:      1,
@@ -207,6 +216,13 @@ func (s *NexusOTELSuite) TestOperation() {
 			ServiceName:  "io.temporal.frontend",
 			Kind:         oteltrace.SpanKindServer,
 			URLPath:      operationURLPath,
+			Attrs: map[string]any{
+				"nexus.endpoint":    handlerWorkerEndpoint.GetSpec().GetName(),
+				"nexus.operation":   operation.Name(),
+				"nexus.request":     true,
+				"nexus.service":     service.Name,
+				"temporalNamespace": handlerEnv.Namespace().String(),
+			},
 		},
 		{
 			TraceID:     2,
@@ -215,6 +231,10 @@ func (s *NexusOTELSuite) TestOperation() {
 			ServiceName: "io.temporal.history",
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath + "/cancel",
+			Attrs: map[string]any{
+				"nexus.request":     true,
+				"temporalNamespace": callerEnv.Namespace().String(),
+			},
 		},
 		{
 			TraceID:      2,
@@ -224,6 +244,13 @@ func (s *NexusOTELSuite) TestOperation() {
 			ServiceName:  "io.temporal.frontend",
 			Kind:         oteltrace.SpanKindServer,
 			URLPath:      operationURLPath + "/cancel",
+			Attrs: map[string]any{
+				"nexus.endpoint":    handlerWorkerEndpoint.GetSpec().GetName(),
+				"nexus.operation":   operation.Name(),
+				"nexus.request":     true,
+				"nexus.service":     service.Name,
+				"temporalNamespace": handlerEnv.Namespace().String(),
+			},
 		},
 	})
 }
@@ -274,6 +301,11 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 			ServiceName: "io.temporal.history",
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath,
+			Attrs: map[string]any{
+				"nexus.namespace":   env.Namespace().String(),
+				"nexus.request":     true,
+				"temporalNamespace": env.Namespace().String(),
+			},
 		},
 		{
 			TraceID:      1,
@@ -283,6 +315,13 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 			ServiceName:  "io.temporal.frontend",
 			Kind:         oteltrace.SpanKindServer,
 			URLPath:      operationURLPath,
+			Attrs: map[string]any{
+				"nexus.endpoint":    endpoint.GetSpec().GetName(),
+				"nexus.operation":   operation.Name(),
+				"nexus.request":     true,
+				"nexus.service":     service.Name,
+				"temporalNamespace": env.Namespace().String(),
+			},
 		},
 	})
 	spanContext := oteltrace.SpanContextFromContext(
@@ -313,8 +352,10 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 		traceID      = "4bf92f3577b34da6a3ce929d0e0e4736"
 		parentSpanID = "00f067aa0ba902b7"
 	)
+	requestID := env.Tv().RequestID()
 	_, err = nexusrpc.StartOperation(s.Context(), nexusClient, op, env.Tv().Any().String(), nexus.StartOperationOptions{
-		Header: nexus.Header{"traceparent": "00-" + traceID + "-" + parentSpanID + "-01"},
+		Header:    nexus.Header{"traceparent": "00-" + traceID + "-" + parentSpanID + "-01"},
+		RequestID: requestID,
 	})
 	s.NoError(err)
 	s.NoError(<-pollerErrCh)
@@ -326,13 +367,20 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 		ServiceName: "io.temporal.frontend",
 		Kind:        oteltrace.SpanKindServer,
 		URLPath:     dispatchURL.Path + "/test-service/my-operation",
+		Attrs: map[string]any{
+			"nexus.operation":   "my-operation",
+			"nexus.request":     true,
+			"nexus.request_id":  requestID,
+			"nexus.service":     "test-service",
+			"temporalNamespace": env.Namespace().String(),
+		},
 	}})
 	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
 	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
 }
 
-// requireNexusHTTPSpans compares all exported HTTP spans after assigning stable local IDs
-// and returns the matching raw spans for context propagation assertions.
+// requireNexusHTTPSpans compares all exported HTTP spans and expected attribute subsets after
+// assigning stable local IDs, then returns the raw spans for context propagation assertions.
 func (s *NexusOTELSuite) requireNexusHTTPSpans(
 	exporter *tracetest.InMemoryExporter,
 	expected []nexusHTTPSpan,
@@ -342,7 +390,16 @@ func (s *NexusOTELSuite) requireNexusHTTPSpans(
 	s.Await(func(s *NexusOTELSuite) {
 		var actual []nexusHTTPSpan
 		actual, httpSpans = s.nexusHTTPSpans(exporter.GetSpans())
-		s.Require().Equal(expected, actual)
+		s.Require().Len(actual, len(expected))
+		for i := range actual {
+			s.Require().Subset(actual[i].Attrs, expected[i].Attrs)
+			actual[i].Attrs = nil
+		}
+		expectedWithoutAttrs := slices.Clone(expected)
+		for i := range expectedWithoutAttrs {
+			expectedWithoutAttrs[i].Attrs = nil
+		}
+		s.Require().Equal(expectedWithoutAttrs, actual)
 	}, 10*time.Second, 100*time.Millisecond)
 	return httpSpans
 }
@@ -378,12 +435,13 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 			}
 		}
 		var urlPath string
+		attrs := make(map[string]any, len(span.Attributes))
 		for _, attr := range span.Attributes {
+			attrs[string(attr.Key)] = attr.Value.AsInterface()
 			if attr.Key == semconv.URLPathKey {
 				urlPath = attr.Value.AsString()
-				break
 			}
-			if attr.Key == semconv.URLFullKey {
+			if urlPath == "" && attr.Key == semconv.URLFullKey {
 				if parsedURL, err := url.Parse(attr.Value.AsString()); err == nil {
 					urlPath = parsedURL.Path
 				}
@@ -397,6 +455,7 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 			ServiceName:  serviceName,
 			Kind:         span.SpanKind,
 			URLPath:      urlPath,
+			Attrs:        attrs,
 		})
 	}
 	return result, httpSpans
