@@ -107,6 +107,7 @@ type Config struct {
 	ForceNamespaceSelectedAPIAutoForwarding dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceMinRetentionLocal              dynamicconfig.DurationPropertyFn
 	NamespaceMinRetentionGlobal             dynamicconfig.DurationPropertyFn
+	EnableReplicationGradualConnect         dynamicconfig.BoolPropertyFn
 	ReplicationGradualConnectInitialPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ReplicationGradualConnectDuration       dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
@@ -353,6 +354,7 @@ func NewConfig(
 		ForceNamespaceSelectedAPIAutoForwarding:  dynamicconfig.ForceNamespaceSelectedAPIAutoForwarding.Get(dc),
 		NamespaceMinRetentionLocal:               dynamicconfig.NamespaceMinRetentionLocal.Get(dc),
 		NamespaceMinRetentionGlobal:              dynamicconfig.NamespaceMinRetentionGlobal.Get(dc),
+		EnableReplicationGradualConnect:          dynamicconfig.EnableReplicationGradualConnect.Get(dc),
 		ReplicationGradualConnectInitialPercent:  dynamicconfig.ReplicationGradualConnectInitialPercent.Get(dc),
 		ReplicationGradualConnectDuration:        dynamicconfig.ReplicationGradualConnectDuration.Get(dc),
 		SearchAttributesNumberOfKeysLimit:        dynamicconfig.SearchAttributesNumberOfKeysLimit.Get(dc),

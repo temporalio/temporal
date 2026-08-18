@@ -866,6 +866,12 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		10,
 		`FrontendMaxBadBinaries is the max number of bad binaries in namespace config`,
 	)
+	EnableReplicationGradualConnect = NewGlobalBoolSetting(
+		"frontend.enableReplicationGradualConnect",
+		false,
+		`Controls whether namespace cluster-list updates may create new gradual-connect ramps. Changing
+this setting does not alter ramps already in progress.`,
+	)
 	ReplicationGradualConnectInitialPercent = NewNamespaceIntSetting(
 		"frontend.replicationGradualConnectInitialPercent",
 		10,

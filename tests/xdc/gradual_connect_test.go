@@ -66,6 +66,7 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 		setting dynamicconfig.GenericSetting
 		value   any
 	}{
+		{dynamicconfig.EnableReplicationGradualConnect, true},
 		{dynamicconfig.ReplicationGradualConnectInitialPercent, 0},
 		{dynamicconfig.ReplicationGradualConnectDuration, rampStepDuration},
 	} {
@@ -87,7 +88,13 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	connectTime := ramp.GetStartTime().AsTime()
 
 	// Still inside the ramp window: a workflow started on active must not replicate to standby yet.
-	shedWorkflowID := "gc-shed-" + uuid.NewString()
+	var shedWorkflowID string
+	for {
+		shedWorkflowID = "gc-shed-" + uuid.NewString()
+		if !dynamicconfig.RolloutAccepts([]byte(shedWorkflowID), 99) {
+			break
+		}
+	}
 	s.gcStartAndCompleteWorkflow(ctx, active, ns, shedWorkflowID)
 	s.Require().Never(func() bool {
 		return s.gcWorkflowExistsOn(ctx, standby, ns, shedWorkflowID)

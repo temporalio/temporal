@@ -102,12 +102,14 @@ func (s *namespaceHandlerCommonSuite) TearDownTest() {
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsDisabledByDefault() {
+	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(time.Hour)
 	ramps := s.handler.updateReplicationRamps("test-ns", nil, []string{"active"}, []string{"active", "standby"}, "active")
 	s.Empty(ramps)
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSnapshotsAndRestartsAfterReconnect() {
 	const namespaceName = "test-ns"
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
 	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(time.Hour)
 	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(10)
 	s.fakeClock.Update(now)
@@ -119,7 +121,8 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSnapshotsAndRest
 	s.Equal(time.Hour, ramp.GetDuration().AsDuration())
 	s.Equal(int32(10), ramp.GetInitialPercentage())
 
-	// Runtime config changes cannot alter an in-flight connection generation.
+	// Disabling creation and changing defaults cannot alter an in-flight connection generation.
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(false)
 	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(2 * time.Hour)
 	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(25)
 	unchanged := s.handler.updateReplicationRamps(namespaceName, ramps, []string{"active", "standby"}, []string{"active", "standby"}, "active")
@@ -128,6 +131,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSnapshotsAndRest
 	removed := s.handler.updateReplicationRamps(namespaceName, unchanged, []string{"active", "standby"}, []string{"active"}, "active")
 	s.NotContains(removed, "standby")
 
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
 	reconnectedAt := now.Add(3 * time.Hour)
 	s.fakeClock.Update(reconnectedAt)
 	reconnected := s.handler.updateReplicationRamps(namespaceName, removed, []string{"active"}, []string{"active", "standby"}, "active")

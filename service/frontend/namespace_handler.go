@@ -677,7 +677,9 @@ func (d *namespaceHandler) updateReplicationRamps(
 
 	duration := d.config.ReplicationGradualConnectDuration(namespaceName)
 	initialPercentage := d.config.ReplicationGradualConnectInitialPercent(namespaceName)
-	if duration <= 0 || initialPercentage < 0 || initialPercentage >= 100 {
+	if !d.config.EnableReplicationGradualConnect() ||
+		duration <= 0 ||
+		initialPercentage < 0 || initialPercentage >= 100 {
 		return ramps
 	}
 	if ramps == nil {
