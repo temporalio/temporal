@@ -53,7 +53,7 @@ func httpCallerProviderProvider(
 		}
 
 		return func(r *http.Request) (*http.Response, error) {
-			nexusrpc.MarkHTTPRequest(r, namespaceName, "")
+			nexusrpc.AnnotateClientRequest(r, namespaceName, "")
 			return routeRequest(r,
 				clusterMetadata,
 				namespaceRegistry,

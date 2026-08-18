@@ -8,8 +8,8 @@ import (
 	"go.temporal.io/server/common/telemetry"
 )
 
-// SpanAttributes describes Nexus request attributes added to a trace span.
-type SpanAttributes struct {
+// ServerSpanAttributes describes Nexus request attributes added to a server trace span.
+type ServerSpanAttributes struct {
 	NamespaceName       string
 	TargetNamespaceName string
 	Endpoint            string
@@ -18,7 +18,7 @@ type SpanAttributes struct {
 	RequestID           string
 }
 
-func (a SpanAttributes) keyValues() []attribute.KeyValue {
+func (a ServerSpanAttributes) keyValues() []attribute.KeyValue {
 	kvs := make([]attribute.KeyValue, 0, 6)
 	if a.NamespaceName != "" {
 		kvs = append(kvs, attribute.String(telemetry.NamespaceKey, a.NamespaceName))
@@ -41,18 +41,18 @@ func (a SpanAttributes) keyValues() []attribute.KeyValue {
 	return kvs
 }
 
-// SetSpanAttributes adds Nexus request attributes to span.
-func SetSpanAttributes(span trace.Span, attrs SpanAttributes) {
+// AnnotateServerSpan adds Nexus request attributes to span.
+func AnnotateServerSpan(span trace.Span, attrs ServerSpanAttributes) {
 	if kvs := attrs.keyValues(); len(kvs) > 0 {
 		span.SetAttributes(kvs...)
 	}
 }
 
-// MarkHTTPRequest adds Nexus attributes to the HTTP client span created for req.
-func MarkHTTPRequest(req *http.Request, namespaceName string, targetNamespaceName string) {
-	telemetry.SetHTTPClientSpanAttributes(req, SpanAttributes{
+// AnnotateClientRequest adds Nexus attributes to the HTTP client span created for req.
+func AnnotateClientRequest(req *http.Request, namespaceName string, targetNamespaceName string) {
+	telemetry.SetHTTPClientSpanAttributes(req, ServerSpanAttributes{
 		NamespaceName:       namespaceName,
 		TargetNamespaceName: targetNamespaceName,
-		RequestID:           req.Header.Get(HeaderRequestID),
+		RequestID:           req.Header.Get(headerRequestID),
 	}.keyValues()...)
 }

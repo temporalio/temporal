@@ -26,8 +26,8 @@ const (
 	headerOperationCloseTime = "nexus-operation-close-time"
 	headerRetryable          = "nexus-request-retryable"
 
-	// HeaderRequestID is the Nexus protocol request ID header.
-	HeaderRequestID = "nexus-request-id"
+	// headerRequestID is the Nexus protocol request ID header.
+	headerRequestID = "nexus-request-id"
 
 	// HeaderTemporalNexusFailureSupport is a Temporal specific header that toggles behavior of how failures are
 	// serialized over the wire when set to the string "true".
