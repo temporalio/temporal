@@ -244,26 +244,28 @@ type Config struct {
 	NumParentClosePolicySystemWorkflows dynamicconfig.IntPropertyFn
 
 	// Size limit related settings
-	BlobSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	BlobSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitError                        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitError                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitWarn                      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeSuggestContinueAsNew           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitError                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitWarn                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountSuggestContinueAsNew          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryMaxPageSize                        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MutableStateActivityFailureSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MutableStateSizeLimitError                dynamicconfig.IntPropertyFn
-	MutableStateSizeLimitWarn                 dynamicconfig.IntPropertyFn
-	MutableStateTombstoneCountLimit           dynamicconfig.IntPropertyFn
-	NumPendingChildExecutionsLimit            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingActivitiesLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingSignalsLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingCancelsRequestLimit             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitError                             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitWarn                              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError                             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitWarn                              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitError                          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitWarn                           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeSuggestContinueAsNew                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitError                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitWarn                          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountSuggestContinueAsNew               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryMaxPageSize                             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureSizeLimitError      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureSizeLimitWarn       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureTotalSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateActivityFailureTotalSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MutableStateSizeLimitError                     dynamicconfig.IntPropertyFn
+	MutableStateSizeLimitWarn                      dynamicconfig.IntPropertyFn
+	MutableStateTombstoneCountLimit                dynamicconfig.IntPropertyFn
+	NumPendingChildExecutionsLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingActivitiesLimit                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingSignalsLimit                         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingCancelsRequestLimit                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
@@ -702,26 +704,28 @@ func NewConfig(
 		EnableParentClosePolicyWorker:       dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
 		ParentClosePolicyThreshold:          dynamicconfig.ParentClosePolicyThreshold.Get(dc),
 
-		BlobSizeLimitError:                        dynamicconfig.BlobSizeLimitError.Get(dc),
-		BlobSizeLimitWarn:                         dynamicconfig.BlobSizeLimitWarn.Get(dc),
-		MemoSizeLimitError:                        dynamicconfig.MemoSizeLimitError.Get(dc),
-		MemoSizeLimitWarn:                         dynamicconfig.MemoSizeLimitWarn.Get(dc),
-		NumPendingChildExecutionsLimit:            dynamicconfig.NumPendingChildExecutionsLimitError.Get(dc),
-		NumPendingActivitiesLimit:                 dynamicconfig.NumPendingActivitiesLimitError.Get(dc),
-		NumPendingSignalsLimit:                    dynamicconfig.NumPendingSignalsLimitError.Get(dc),
-		NumPendingCancelsRequestLimit:             dynamicconfig.NumPendingCancelRequestsLimitError.Get(dc),
-		HistorySizeLimitError:                     dynamicconfig.HistorySizeLimitError.Get(dc),
-		HistorySizeLimitWarn:                      dynamicconfig.HistorySizeLimitWarn.Get(dc),
-		HistorySizeSuggestContinueAsNew:           dynamicconfig.HistorySizeSuggestContinueAsNew.Get(dc),
-		HistoryCountLimitError:                    dynamicconfig.HistoryCountLimitError.Get(dc),
-		HistoryCountLimitWarn:                     dynamicconfig.HistoryCountLimitWarn.Get(dc),
-		HistoryCountSuggestContinueAsNew:          dynamicconfig.HistoryCountSuggestContinueAsNew.Get(dc),
-		HistoryMaxPageSize:                        dynamicconfig.HistoryMaxPageSize.Get(dc),
-		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
-		MutableStateActivityFailureSizeLimitWarn:  dynamicconfig.MutableStateActivityFailureSizeLimitWarn.Get(dc),
-		MutableStateSizeLimitError:                dynamicconfig.MutableStateSizeLimitError.Get(dc),
-		MutableStateSizeLimitWarn:                 dynamicconfig.MutableStateSizeLimitWarn.Get(dc),
-		MutableStateTombstoneCountLimit:           dynamicconfig.MutableStateTombstoneCountLimit.Get(dc),
+		BlobSizeLimitError:                             dynamicconfig.BlobSizeLimitError.Get(dc),
+		BlobSizeLimitWarn:                              dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MemoSizeLimitError:                             dynamicconfig.MemoSizeLimitError.Get(dc),
+		MemoSizeLimitWarn:                              dynamicconfig.MemoSizeLimitWarn.Get(dc),
+		NumPendingChildExecutionsLimit:                 dynamicconfig.NumPendingChildExecutionsLimitError.Get(dc),
+		NumPendingActivitiesLimit:                      dynamicconfig.NumPendingActivitiesLimitError.Get(dc),
+		NumPendingSignalsLimit:                         dynamicconfig.NumPendingSignalsLimitError.Get(dc),
+		NumPendingCancelsRequestLimit:                  dynamicconfig.NumPendingCancelRequestsLimitError.Get(dc),
+		HistorySizeLimitError:                          dynamicconfig.HistorySizeLimitError.Get(dc),
+		HistorySizeLimitWarn:                           dynamicconfig.HistorySizeLimitWarn.Get(dc),
+		HistorySizeSuggestContinueAsNew:                dynamicconfig.HistorySizeSuggestContinueAsNew.Get(dc),
+		HistoryCountLimitError:                         dynamicconfig.HistoryCountLimitError.Get(dc),
+		HistoryCountLimitWarn:                          dynamicconfig.HistoryCountLimitWarn.Get(dc),
+		HistoryCountSuggestContinueAsNew:               dynamicconfig.HistoryCountSuggestContinueAsNew.Get(dc),
+		HistoryMaxPageSize:                             dynamicconfig.HistoryMaxPageSize.Get(dc),
+		MutableStateActivityFailureSizeLimitError:      dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
+		MutableStateActivityFailureSizeLimitWarn:       dynamicconfig.MutableStateActivityFailureSizeLimitWarn.Get(dc),
+		MutableStateActivityFailureTotalSizeLimitError: dynamicconfig.MutableStateActivityFailureTotalSizeLimitError.Get(dc),
+		MutableStateActivityFailureTotalSizeLimitWarn:  dynamicconfig.MutableStateActivityFailureTotalSizeLimitWarn.Get(dc),
+		MutableStateSizeLimitError:                     dynamicconfig.MutableStateSizeLimitError.Get(dc),
+		MutableStateSizeLimitWarn:                      dynamicconfig.MutableStateSizeLimitWarn.Get(dc),
+		MutableStateTombstoneCountLimit:                dynamicconfig.MutableStateTombstoneCountLimit.Get(dc),
 
 		ThrottledLogRPS:   dynamicconfig.HistoryThrottledLogRPS.Get(dc),
 		EnableStickyQuery: dynamicconfig.EnableStickyQuery.Get(dc),
