@@ -7,7 +7,10 @@ import (
 	"time"
 )
 
-const boldFlakeRateThreshold = 5.0
+const (
+	boldFlakeRateThreshold = 5.0
+	maxReportRowsPerTable  = 100
+)
 
 var sparklineRunes = []rune("▁▂▃▄▅▆▇█")
 
@@ -68,6 +71,10 @@ func formatSparkline(points []int) string {
 	return sb.String()
 }
 
+func limitReportRows[T any](rows []T) []T {
+	return rows[:min(len(rows), maxReportRowsPerTable)]
+}
+
 // generateSuiteBreakdownTable creates a markdown table of per-suite flake data
 func generateSuiteBreakdownTable(suiteReports []SuiteReport) string {
 	if len(suiteReports) == 0 {
@@ -98,6 +105,8 @@ func generateTestReportTable(reports []TestReport, rateHeader string, maxLinks i
 	if len(reports) == 0 {
 		return ""
 	}
+
+	reports = limitReportRows(reports)
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("| Test | %s | Last Failure | Trend | Links |\n", rateHeader))

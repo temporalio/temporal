@@ -102,24 +102,20 @@ Use this core structure for every actionable finding.
 Replace `SEVERITY` with `nit`, `small`, `med`, or `high`:
 
 ```markdown
-**SEVERITY** — One-line summary.
+<details>
+<summary><strong>SEVERITY</strong> — One-line summary.</summary>
 
-**Issue:** Concise explanation of what is wrong and why it matters.
+Concise explanation of what is wrong and why it matters, followed by any
+supporting evidence, examples, or implementation notes.
+
+</details>
 
 **Suggestion:** Concrete fix or alternative.
 ```
 
-Keep the issue and suggestion self-contained.
-Put supplementary evidence, examples, or implementation notes in an optional collapsible block:
-
-```markdown
-<details>
-<summary>Additional details</summary>
-
-Supporting material.
-
-</details>
-```
+Use HTML tags rather than Markdown inside `<summary>`.
+The summary line is all a reader sees before expanding, so it must state the problem on its own.
+Keep the suggestion outside the collapsible block, as a code suggestion wherever the fix is a concrete edit.
 
 ### Severity levels
 

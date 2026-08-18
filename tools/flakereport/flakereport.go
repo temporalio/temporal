@@ -2,6 +2,7 @@ package flakereport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,11 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/tools/common/github"
 )
+
+func isGitHubRateLimitError(err error) bool {
+	var rateLimitErr *github.RateLimitError
+	return errors.As(err, &rateLimitErr)
+}
 
 const (
 	minFlakyFailures    = 3
@@ -64,6 +70,11 @@ func NewCliApp() *cli.App {
 					Name:  "concurrency",
 					Value: defaultConcurrency,
 					Usage: "Number of parallel workers for artifact processing",
+				},
+				&cli.IntFlag{
+					Name:  "rps",
+					Value: github.DefaultAPIRPS,
+					Usage: "Maximum GitHub API requests per second",
 				},
 				&cli.StringFlag{
 					Name:  "output-dir",
@@ -150,6 +161,9 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []github.Run, te
 	for i, run := range runs {
 		artifacts, err := fetchRunArtifacts(ctx, repo, run.DatabaseID)
 		if err != nil {
+			if isGitHubRateLimitError(err) {
+				return nil, fmt.Errorf("cannot generate complete report: GitHub API rate limit while fetching artifacts for workflow run %d: %w", run.DatabaseID, err)
+			}
 			fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", run.DatabaseID, err)
 			continue
 		}
@@ -186,6 +200,15 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []github.Run, te
 func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerReports []TestReport,
 	suiteReports []SuiteReport,
 	allFailures []TestFailure, allTestRuns []TestRun, runs []github.Run, successfulRuns int) *ReportSummary {
+	filteredFlakyReports := make([]TestReport, 0, len(flakyReports))
+	for _, report := range flakyReports {
+		// Tests that fail on every observed run are very likely false reporting.
+		if report.TotalRuns > 0 && report.FailureCount == report.TotalRuns {
+			continue
+		}
+		filteredFlakyReports = append(filteredFlakyReports, report)
+	}
+	flakyReports = filteredFlakyReports
 
 	// Calculate overall failure rate
 	overallFailureRate := 0.0
@@ -218,6 +241,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	workflowID := c.Int64("workflow-id")
 	maxLinks := c.Int("max-links")
 	concurrency := c.Int("concurrency")
+	rps := c.Int("rps")
 	outputDir := c.String("output-dir")
 	slackWebhook := c.String("slack-webhook")
 	runID := c.String("run-id")
@@ -233,6 +257,9 @@ func runGenerateCommand(c *cli.Context) (err error) {
 			sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
 		}
 	}()
+	if err := github.SetAPIRPS(rps); err != nil {
+		return err
+	}
 
 	fmt.Println("Starting flaky test report generation...")
 	fmt.Printf("Repository: %s\n", repo)
@@ -240,6 +267,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	fmt.Printf("Lookback days: %d\n", days)
 	fmt.Printf("Workflow ID: %d\n", workflowID)
 	fmt.Printf("Parallel workers: %d\n", concurrency)
+	fmt.Printf("GitHub API requests per second: %d\n", rps)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
@@ -275,7 +303,10 @@ func runGenerateCommand(c *cli.Context) (err error) {
 
 	// Process artifacts in parallel
 	fmt.Println("\n=== Processing artifacts in parallel ===")
-	allFailures, allTestRuns, processedArtifacts := processArtifactsParallel(ctx, jobs, concurrency)
+	allFailures, allTestRuns, processedArtifacts, err := processArtifactsParallel(ctx, jobs, concurrency)
+	if err != nil {
+		return err
+	}
 
 	fmt.Println("\n=== Processing Results ===")
 	fmt.Printf("Total test runs: %d\n", len(allTestRuns))
