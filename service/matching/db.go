@@ -344,6 +344,10 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 			tag.Int("subqueue-id", int(subqueue)),
 			tag.Any("cur-ack-level", dbQueue.AckLevel),
 			tag.Any("new-ack-level", newAckLevel))
+		// This shouldn't happen, but if it does: keep the max so that we don't re-read tasks
+		// that we already acked. This also keeps the maxReadLevel comparison consistent with
+		// what is persisted (dbQueue.AckLevel).
+		newAckLevel = dbQueue.AckLevel
 	}
 	if dbQueue.AckLevel != newAckLevel {
 		db.lastChange = time.Now()
