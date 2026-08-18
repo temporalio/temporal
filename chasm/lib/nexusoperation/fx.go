@@ -145,9 +145,10 @@ func clientProviderFactory(
 
 	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 		var url string
+		var targetNamespaceName string
+
 		var httpClient *http.Client
 		var httpCaller func(*http.Request) (*http.Response, error)
-		var targetNamespaceName string
 		// Populate source header for worker targets, and route internally. Callback assumes external target if unset.
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
@@ -183,11 +184,13 @@ func clientProviderFactory(
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
+
 		baseHTTPCaller := httpCaller
 		httpCaller = func(r *http.Request) (*http.Response, error) {
 			r = nexusrpc.AnnotateClientRequest(r, targetNamespaceName)
 			return baseHTTPCaller(r)
 		}
+
 		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 			BaseURL:    url,
 			Service:    service,
