@@ -117,9 +117,8 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	wid := executionInfo.GetWorkflowId()
 	rid := executionState.GetRunId()
-	emitError := r.eventLogger != nil && r.shardContext.GetConfig().EmitReplicationLifecycleEvents()
 	defer func() {
-		if emitError && retError != nil {
+		if retError != nil {
 			r.emitReplicationApplyError(
 				ctx, wideevents.ReplTaskSyncWorkflowState, request.GetRemoteCluster(), executionInfo, executionState,
 				"snapshot", "Failed to apply replicated workflow state", retError)
@@ -516,6 +515,10 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationError(
 	err error,
 	details map[string]any,
 ) {
+	if r.eventLogger == nil || !r.shardContext.GetConfig().EmitReplicationLifecycleEvents() {
+		return
+	}
+
 	origin := wideevents.ReplicationTaskOriginFromContext(ctx)
 	if name, nsErr := r.namespaceRegistry.GetNamespaceName(namespace.ID(payload.NamespaceID)); nsErr == nil {
 		payload.Namespace = name.String()
@@ -868,16 +871,14 @@ func (r *WorkflowStateReplicatorImpl) deleteNewBranchWhenError(
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(runID),
 			tag.ShardID(r.shardContext.GetShardID()))
-		if r.shardContext.GetConfig().EmitReplicationLifecycleEvents() {
-			r.emitReplicationError(ctx, wideevents.ReplicationLifecyclePayload{
-				TaskType:    wideevents.ReplTaskSyncVersionedTransition,
-				NamespaceID: namespaceID.String(),
-				WorkflowID:  workflowID,
-				RunID:       runID,
-			}, "", wideevents.ReplOperationHistoryBranchCleanup, "History branch cleanup skipped after apply error; branch may be orphaned", err, map[string]any{
-				"archetype_id": archetypeID,
-			})
-		}
+		r.emitReplicationError(ctx, wideevents.ReplicationLifecyclePayload{
+			TaskType:    wideevents.ReplTaskSyncVersionedTransition,
+			NamespaceID: namespaceID.String(),
+			WorkflowID:  workflowID,
+			RunID:       runID,
+		}, "", wideevents.ReplOperationHistoryBranchCleanup, "History branch cleanup skipped after apply error; branch may be orphaned", err, map[string]any{
+			"archetype_id": archetypeID,
+		})
 	}
 }
 
