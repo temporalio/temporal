@@ -211,7 +211,7 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			"http.response.status_code": int64(http.StatusOK),
 			"network.protocol.version":  "1.1",
 			"server.address":            "example.com",
-			"test.attribute":            "value",
+			"test.attribute":            "value", // the annotated attribute
 			"url.full":                  "http://example.com",
 		}, traceEnv.spanAttrs())
 	})
