@@ -972,7 +972,7 @@ type SpanExporterInputs struct {
 }
 
 type otelLoggerErrorHandler struct {
-	mu            sync.RWMutex
+	mu            sync.Mutex
 	registrations []*otelLoggerErrorHandlerRegistration
 }
 
