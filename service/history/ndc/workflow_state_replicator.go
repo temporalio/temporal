@@ -119,7 +119,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	rid := executionState.GetRunId()
 	emitError := r.eventLogger != nil && r.shardContext.GetConfig().EmitReplicationLifecycleEvents()
 	defer func() {
-		if emitError && retError != nil && !errors.Is(retError, consts.ErrDuplicate) {
+		if emitError && retError != nil {
 			r.emitReplicationApplyError(
 				ctx, wideevents.ReplTaskSyncWorkflowState, request.GetRemoteCluster(), executionInfo, executionState,
 				"snapshot", "Failed to apply replicated workflow state", retError)
@@ -260,7 +260,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	defer func() {
 		if emitLifecycle && retError == nil {
 			r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS, sourceClusterName, origin)
-		} else if emitLifecycle && !errors.Is(retError, consts.ErrDuplicate) {
+		} else if emitLifecycle {
 			r.emitReplicationVersionedTransitionApplyError(
 				ctx, wideevents.ReplTaskSyncVersionedTransition, sourceClusterName, executionInfo, executionState,
 				versionedTransitionArtifact, "Failed to apply replicated versioned transition", retError)
@@ -497,9 +497,13 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationApplyError(
 		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
 		payload.TransitionCount = vt.GetTransitionCount()
 	}
-	r.emitReplicationError(ctx, payload, sourceClusterName, wideevents.ReplOperationPassiveApply, message, err, map[string]any{
+	details := map[string]any{
 		"artifact_kind": artifactKind,
-	})
+	}
+	if errors.Is(err, consts.ErrDuplicate) {
+		details["disposition"] = "duplicate"
+	}
+	r.emitReplicationError(ctx, payload, sourceClusterName, wideevents.ReplOperationPassiveApply, message, err, details)
 }
 
 // emitReplicationError supplies fields authoritative on the applying cluster.
