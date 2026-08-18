@@ -181,6 +181,7 @@ func clientProviderFactory(
 			}
 		}
 
+		// Wrap the httpCaller to annotate requests.
 		baseHTTPCaller := httpCaller
 		httpCaller = func(r *http.Request) (*http.Response, error) {
 			r = nexusrpc.AnnotateClientRequest(r, targetNamespaceName)
