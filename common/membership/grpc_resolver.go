@@ -24,17 +24,13 @@ const (
 type (
 	// grpcBuilder implements grpc/resolver.Builder. This is a singleton that's registered with grpc.
 	grpcBuilder struct {
-		resolvers sync.Map // registration ID string -> *grpcResolverRegistration
+		resolvers sync.Map // registration ID string -> Monitor
 	}
 
 	// GRPCResolver and the resolvers map in grpcBuilder is used to pass a Monitor through a string url.
 	GRPCResolver struct {
 		registrationID string
 		cleanup        runtime.Cleanup
-	}
-
-	grpcResolverRegistration struct {
-		monitor Monitor
 	}
 
 	// grpcResolver is a single instance of a resolver.
@@ -73,6 +69,8 @@ func GetServiceResolverFromURL(u *url.URL) (ServiceResolver, error) {
 
 // This should only be used in unit tests. For normal code, use the *GRPCResolver provided by fx.
 // Monitor may be nil if it's not needed, but then note that GetServiceResolverFromURL will panic.
+// Keep the returned cleanup func reachable while using the URL so the GC fallback does not remove
+// the registration, and call it when the URL is no longer needed.
 func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) (string, func()) {
 	res := newGRPCResolverRegistration(monitor)
 	return res.MakeURL(service), res.unregister
@@ -87,7 +85,7 @@ func newGRPCResolver(lifecycle fx.Lifecycle, monitor Monitor) *GRPCResolver {
 func newGRPCResolverRegistration(monitor Monitor) *GRPCResolver {
 	registrationID := fmt.Sprintf("%d", grpcResolverID.Add(1))
 	res := &GRPCResolver{registrationID: registrationID}
-	globalGrpcBuilder.resolvers.Store(registrationID, &grpcResolverRegistration{monitor: monitor})
+	globalGrpcBuilder.resolvers.Store(registrationID, monitor)
 	// Fx does not run OnStop hooks when graph construction fails, so retain a GC fallback.
 	res.cleanup = runtime.AddCleanup(res, func(registrationID string) {
 		globalGrpcBuilder.resolvers.Delete(registrationID)
@@ -120,7 +118,7 @@ func (m *grpcBuilder) getServiceResolver(u *url.URL) (ServiceResolver, error) {
 	if !ok {
 		return nil, errNotInitialized
 	}
-	return v.(*grpcResolverRegistration).monitor.GetResolver(primitives.ServiceName(service))
+	return v.(Monitor).GetResolver(primitives.ServiceName(service))
 }
 
 func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (resolver.Resolver, error) {
