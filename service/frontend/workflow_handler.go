@@ -81,10 +81,10 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/common/workertask"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dummy"
@@ -1201,8 +1201,8 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		PollerScalingDecision:      matchingResp.PollerScalingDecision,
 	}
 	if len(resp.GetTaskToken()) > 0 {
-		attrs := telemetry.WorkerTaskSpanAttributes{
-			Type:        telemetry.WorkerTaskTypeWorkflow,
+		attrs := workertask.SpanAttributes{
+			Type:        workertask.TypeWorkflow,
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  resp.GetWorkflowExecution().GetWorkflowId(),
 			RunID:       resp.GetWorkflowExecution().GetRunId(),
@@ -1210,7 +1210,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		if startedEventID := resp.GetStartedEventId(); startedEventID != 0 {
 			attrs.ID = fmt.Sprint(startedEventID)
 		}
-		telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), attrs)
+		workertask.AnnotateSpan(trace.SpanFromContext(ctx), attrs)
 	}
 	return resp, nil
 }
@@ -1451,8 +1451,8 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		RetryPolicy:                 matchingResponse.RetryPolicy,
 	}
 	if len(resp.GetTaskToken()) > 0 {
-		telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-			Type:        telemetry.WorkerTaskTypeActivity,
+		workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+			Type:        workertask.TypeActivity,
 			ID:          resp.GetActivityId(),
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  resp.GetWorkflowExecution().GetWorkflowId(),
@@ -6444,8 +6444,8 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 		return nil, errInvalidTaskToken
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
-	telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-		Type:        telemetry.WorkerTaskTypeNexus,
+	workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+		Type:        workertask.TypeNexus,
 		ID:          tt.GetTaskId(),
 		NamespaceID: tt.GetNamespaceId(),
 		TaskQueue:   tt.GetTaskQueue(),
@@ -6502,8 +6502,8 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 		return nil, errInvalidTaskToken
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
-	telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-		Type:        telemetry.WorkerTaskTypeNexus,
+	workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+		Type:        workertask.TypeNexus,
 		ID:          tt.GetTaskId(),
 		NamespaceID: tt.GetNamespaceId(),
 		TaskQueue:   tt.GetTaskQueue(),

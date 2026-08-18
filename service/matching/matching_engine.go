@@ -58,11 +58,11 @@ import (
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/common/workertask"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/worker/workerdeployment"
@@ -726,8 +726,8 @@ pollLoop:
 			if err != nil {
 				return nil, err
 			}
-			telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-				Type:        telemetry.WorkerTaskTypeWorkflow,
+			workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+				Type:        workertask.TypeWorkflow,
 				ID:          fmt.Sprint(resp.GetStartedEventId()),
 				NamespaceID: req.GetNamespaceId(),
 				WorkflowID:  resp.GetWorkflowExecution().GetWorkflowId(),
@@ -783,8 +783,8 @@ pollLoop:
 			// Local query match. Emit the dispatch latency metric. This metric does not include the query response time.
 			e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 			resp := e.createPollWorkflowTaskQueueResponse(task, startedResp, opMetrics)
-			telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-				Type:        telemetry.WorkerTaskTypeWorkflow,
+			workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+				Type:        workertask.TypeWorkflow,
 				ID:          fmt.Sprint(resp.GetStartedEventId()),
 				NamespaceID: req.GetNamespaceId(),
 				WorkflowID:  resp.GetWorkflowExecution().GetWorkflowId(),
@@ -881,8 +881,8 @@ pollLoop:
 		task.finish(taskFinishResult{consumedToken: true})
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		resp := e.createPollWorkflowTaskQueueResponse(task, startedResp, opMetrics)
-		telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-			Type:        telemetry.WorkerTaskTypeWorkflow,
+		workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+			Type:        workertask.TypeWorkflow,
 			ID:          fmt.Sprint(resp.GetStartedEventId()),
 			NamespaceID: req.GetNamespaceId(),
 			WorkflowID:  resp.GetWorkflowExecution().GetWorkflowId(),
@@ -1027,8 +1027,8 @@ pollLoop:
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
 			resp := task.pollActivityTaskQueueResponse()
-			telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-				Type:        telemetry.WorkerTaskTypeActivity,
+			workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+				Type:        workertask.TypeActivity,
 				ID:          resp.GetActivityId(),
 				NamespaceID: req.GetNamespaceId(),
 				WorkflowID:  resp.GetWorkflowExecution().GetWorkflowId(),
@@ -1141,8 +1141,8 @@ pollLoop:
 		task.finish(taskFinishResult{consumedToken: true})
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		resp := e.createPollActivityTaskQueueResponse(task, startedResp, opMetrics)
-		telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-			Type:        telemetry.WorkerTaskTypeActivity,
+		workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+			Type:        workertask.TypeActivity,
 			ID:          resp.GetActivityId(),
 			NamespaceID: req.GetNamespaceId(),
 			WorkflowID:  resp.GetWorkflowExecution().GetWorkflowId(),
@@ -2706,8 +2706,8 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	if err != nil {
 		return nil, err
 	}
-	telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-		Type:        telemetry.WorkerTaskTypeNexus,
+	workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+		Type:        workertask.TypeNexus,
 		ID:          taskID,
 		NamespaceID: request.GetNamespaceId(),
 		TaskQueue:   request.GetTaskQueue().GetName(),
@@ -2843,8 +2843,8 @@ pollLoop:
 		}
 
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), ns.Name().String(), pollMetadata)
-		telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-			Type:        telemetry.WorkerTaskTypeNexus,
+		workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+			Type:        workertask.TypeNexus,
 			ID:          task.nexus.taskID,
 			NamespaceID: req.GetNamespaceId(),
 			TaskQueue:   taskQueueName,
@@ -2860,8 +2860,8 @@ pollLoop:
 }
 
 func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
-	telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-		Type:        telemetry.WorkerTaskTypeNexus,
+	workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+		Type:        workertask.TypeNexus,
 		ID:          request.GetTaskId(),
 		NamespaceID: request.GetNamespaceId(),
 		TaskQueue:   request.GetTaskQueue().GetName(),
@@ -2879,8 +2879,8 @@ func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, requ
 }
 
 func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
-	telemetry.AnnotateWorkerTaskSpan(trace.SpanFromContext(ctx), telemetry.WorkerTaskSpanAttributes{
-		Type:        telemetry.WorkerTaskTypeNexus,
+	workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
+		Type:        workertask.TypeNexus,
 		ID:          request.GetTaskId(),
 		NamespaceID: request.GetNamespaceId(),
 		TaskQueue:   request.GetTaskQueue().GetName(),
