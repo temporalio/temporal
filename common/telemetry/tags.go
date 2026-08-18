@@ -14,12 +14,12 @@ const (
 	BusinessIDKey = "temporalBusinessID"
 	RunIDKey      = "temporalRunID"
 
-	NamespaceKey = "temporal.namespace"
+	NamespaceKey = "temporalNamespace"
 
-	NexusEndpointKey  = "temporal.nexus.endpoint"
-	NexusNamespaceKey = "temporal.nexus.namespace"
-	NexusOperationKey = "temporal.nexus.operation"
-	NexusRequestKey   = "temporal.nexus.request"
-	NexusRequestIDKey = "temporal.nexus.request_id"
-	NexusServiceKey   = "temporal.nexus.service"
+	NexusEndpointKey  = "nexus.endpoint"
+	NexusNamespaceKey = "nexus.namespace"
+	NexusOperationKey = "nexus.operation"
+	NexusRequestKey   = "nexus.request"
+	NexusRequestIDKey = "nexus.request_id"
+	NexusServiceKey   = "nexus.service"
 )

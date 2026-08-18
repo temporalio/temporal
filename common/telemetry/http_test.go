@@ -213,10 +213,10 @@ func TestNewHTTPClientTransport(t *testing.T) {
 			"http.response.status_code": int64(http.StatusOK),
 			"network.protocol.version":  "1.1",
 			"server.address":            "example.com",
-			"temporal.namespace":        "caller-namespace",
-			"temporal.nexus.namespace":  "target-namespace",
-			"temporal.nexus.request":    true,
-			"temporal.nexus.request_id": "request-id",
+			"nexus.namespace":           "target-namespace",
+			"nexus.request":             true,
+			"nexus.request_id":          "request-id",
+			"temporalNamespace":         "caller-namespace",
 			"url.full":                  "http://example.com",
 		}, traceEnv.spanAttrs())
 	})
