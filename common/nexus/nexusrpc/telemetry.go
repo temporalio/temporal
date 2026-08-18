@@ -32,6 +32,10 @@ func (a ServerSpanAttributes) keyValues() []attribute.KeyValue {
 
 // AnnotateServerSpan adds Nexus request attributes to span.
 func AnnotateServerSpan(span trace.Span, attrs ServerSpanAttributes) {
+	// Non-recording spans discard attributes, so avoid constructing them.
+	if !span.IsRecording() {
+		return
+	}
 	span.SetAttributes(attrs.keyValues()...)
 }
 

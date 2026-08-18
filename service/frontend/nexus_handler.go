@@ -88,7 +88,7 @@ type operationContext struct {
 	cleanupFunctions              []func(map[string]string, error)
 }
 
-func (c *operationContext) annotateInboundSpan(
+func (c *operationContext) annotateServerSpan(
 	ctx context.Context,
 	service, operation, requestID string,
 ) {
@@ -424,7 +424,7 @@ func (h *nexusHandler) StartOperation(
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
-	oc.annotateInboundSpan(ctx, service, operation, options.RequestID)
+	oc.annotateServerSpan(ctx, service, operation, options.RequestID)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -666,7 +666,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, "")
-	oc.annotateInboundSpan(ctx, service, operation, "")
+	oc.annotateServerSpan(ctx, service, operation, "")
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
