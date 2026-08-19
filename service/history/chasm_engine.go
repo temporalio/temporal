@@ -728,7 +728,7 @@ func (e *ChasmEngine) pollComponent(
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
 
-	shardContext, err := e.getShardContext(requestRef)
+	shardContext, err := e.getShardContext(ctx, requestRef)
 	if err != nil {
 		return nil, err
 	}
