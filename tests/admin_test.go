@@ -138,11 +138,20 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 		TransitionCount:          response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount + 1,
 	}, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
 
-	// Rebuild explicitly sets start time, thus start time will change after rebuild.
+	// Rebuild recreates mutable state for the same run, so the recorded start time must survive it.
 	s.NotNil(response1.DatabaseMutableState.ExecutionState.StartTime)
 	s.NotNil(response2.DatabaseMutableState.ExecutionState.StartTime)
 
 	timeBefore := timestamp.TimeValue(response1.DatabaseMutableState.ExecutionState.StartTime)
 	timeAfter := timestamp.TimeValue(response2.DatabaseMutableState.ExecutionState.StartTime)
-	s.False(timeAfter.Before(timeBefore))
+	s.Equal(timeBefore, timeAfter)
+
+	s.Equal(
+		timestamp.TimeValue(response1.DatabaseMutableState.ExecutionInfo.ExecutionTime),
+		timestamp.TimeValue(response2.DatabaseMutableState.ExecutionInfo.ExecutionTime),
+	)
+	s.Equal(
+		timestamp.TimeValue(response1.DatabaseMutableState.ExecutionInfo.WorkflowRunExpirationTime),
+		timestamp.TimeValue(response2.DatabaseMutableState.ExecutionInfo.WorkflowRunExpirationTime),
+	)
 }

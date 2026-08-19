@@ -5,6 +5,7 @@ package history
 import (
 	"context"
 	"math"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -198,6 +200,31 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 	}, nil
 }
 
+// rebuildStartTime returns the start time the rebuilt mutable state should carry.
+func (r *workflowRebuilderImpl) rebuildStartTime(
+	workflowKey definition.WorkflowKey,
+	mutableState *persistencespb.WorkflowMutableState,
+) time.Time {
+	if startTime := mutableState.GetExecutionState().GetStartTime(); startTime != nil {
+		return startTime.AsTime()
+	}
+	// Fallback to ExecutionInfo.StartTime if ExecutionState.StartTime is unexpectedly nil.
+	if startTime := mutableState.GetExecutionInfo().GetStartTime(); startTime != nil {
+		r.logger.Warn("workflowRebuilder unable to find a recorded start time, falling back to ExecutionInfo.StartTime",
+			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID),
+		)
+		return startTime.AsTime()
+	}
+	r.logger.Warn("workflowRebuilder unable to find a recorded start time, falling back to current time",
+		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+		tag.WorkflowID(workflowKey.WorkflowID),
+		tag.WorkflowRunID(workflowKey.RunID),
+	)
+	return r.shard.GetTimeSource().Now()
+}
+
 func (r *workflowRebuilderImpl) replayResetWorkflow(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
@@ -208,7 +235,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 ) (historyi.MutableState, error) {
 	rebuildMutableState, rebuildStats, err := ndc.NewStateRebuilder(r.shard, r.logger).RebuildWithCurrentMutableState(
 		ctx,
-		r.shard.GetTimeSource().Now(),
+		r.rebuildStartTime(workflowKey, mutableState),
 		workflowKey,
 		branchToken,
 		math.MaxInt64-1, // NOTE: this is last event ID, layer below will +1 to calculate the next event ID
