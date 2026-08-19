@@ -626,8 +626,8 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		// grpc instrumentation reconstructs this ID from the task token,
-		// so spooled tasks remain correlated.
+		// Later poll and response spans derive the same ID from the task token,
+		// preserving correlation when the task is delivered from the backlog.
 		workerTaskID := tasktoken.WorkflowWorkerTaskID(
 			taskInfo.GetNamespaceId(),
 			taskInfo.GetRunId(),
@@ -677,8 +677,8 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		// grpc instrumentation reconstructs this ID from the task token,
-		// so spooled tasks remain correlated.
+		// Later poll and response spans derive the same ID from the task token,
+		// preserving correlation when the task is delivered from the backlog.
 		workerTaskID := tasktoken.ActivityWorkerTaskID(
 			taskInfo.GetNamespaceId(),
 			taskInfo.GetRunId(),
