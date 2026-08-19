@@ -31,6 +31,7 @@ type NamespaceReplicationTaskContext struct {
 	TargetCluster string
 	SourceTaskID  int64
 	AttemptCount  int
+	EventData     NamespaceReplicationTaskEventData
 }
 
 // SetNamespaceReplicationTaskContext stamps namespace replication metadata onto ctx.

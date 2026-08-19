@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/wideevents"
 )
 
 const replicationQueueCleanupInterval = 5 * time.Minute
@@ -39,6 +40,7 @@ type (
 		logger                           log.Logger
 		eventLogger                      otellog.Logger
 		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
+		eventDataProvider                wideevents.NamespaceReplicationTaskEventDataProvider
 		metricsHandler                   metrics.Handler
 		hostInfo                         membership.HostInfo
 		serviceResolver                  membership.ServiceResolver
@@ -63,6 +65,7 @@ func NewReplicator(
 	logger log.Logger,
 	eventLogger otellog.Logger,
 	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
+	eventDataProvider wideevents.NamespaceReplicationTaskEventDataProvider,
 	metricsHandler metrics.Handler,
 	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
@@ -82,6 +85,7 @@ func NewReplicator(
 		logger:                           log.With(logger, tag.ComponentReplicator),
 		eventLogger:                      eventLogger,
 		emitNamespaceLifecycleEvents:     emitNamespaceLifecycleEvents,
+		eventDataProvider:                eventDataProvider,
 		metricsHandler:                   metricsHandler,
 		namespaceReplicationQueue:        namespaceReplicationQueue,
 		matchingClient:                   matchingClient,
@@ -161,6 +165,7 @@ func (r *Replicator) listenToClusterMetadataChange() {
 						log.With(r.logger, tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
 						r.eventLogger,
 						r.emitNamespaceLifecycleEvents,
+						r.eventDataProvider,
 						remoteAdminClient,
 						r.metricsHandler,
 						r.namespaceReplicationTaskExecutor,

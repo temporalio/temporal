@@ -48,6 +48,7 @@ func newReplicationMessageProcessor(
 	logger log.Logger,
 	eventLogger otellog.Logger,
 	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
+	eventDataProvider wideevents.NamespaceReplicationTaskEventDataProvider,
 	remotePeer adminservice.AdminServiceClient,
 	metricsHandler metrics.Handler,
 	namespaceTaskExecutor nsreplication.TaskExecutor,
@@ -87,6 +88,7 @@ func newReplicationMessageProcessor(
 		logger:                       logger,
 		eventLogger:                  eventLogger,
 		emitNamespaceLifecycleEvents: emitNamespaceLifecycleEvents,
+		eventDataProvider:            eventDataProvider,
 		remotePeer:                   remotePeer,
 		namespaceTaskExecutor:        namespaceTaskExecutor,
 		customTaskHandler:            customTaskHandler,
@@ -111,6 +113,7 @@ type (
 		logger                       log.Logger
 		eventLogger                  otellog.Logger
 		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
+		eventDataProvider            wideevents.NamespaceReplicationTaskEventDataProvider
 		remotePeer                   adminservice.AdminServiceClient
 		namespaceTaskExecutor        nsreplication.TaskExecutor
 		customTaskHandler            func(ctx context.Context, task *replicationspb.ReplicationTask) error
@@ -186,19 +189,29 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 	taskCtx := headers.SetCallerInfo(context.TODO(), headers.SystemPreemptableCallerInfo)
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
-		p.emitNamespaceReplicationEvent(task, wideevents.NamespaceReplicationReceived, 0, nil)
+		eventData, emitEvents := p.namespaceReplicationEventData(task)
+		if emitEvents {
+			p.emitNamespaceReplicationEvent(
+				eventData,
+				task.GetSourceTaskId(),
+				wideevents.NamespaceReplicationReceived,
+				0,
+				nil,
+			)
+		}
 
 		attemptCount := 0
 		policy := p.retryPolicyForTask(task)
 		err := backoff.ThrottleRetry(func() error {
 			attemptCount++
 			attemptCtx := taskCtx
-			if p.namespaceReplicationEventsEnabled(task) {
+			if emitEvents {
 				attemptCtx = wideevents.SetNamespaceReplicationTaskContext(taskCtx, wideevents.NamespaceReplicationTaskContext{
 					SourceCluster: p.sourceCluster,
 					TargetCluster: p.currentCluster,
 					SourceTaskID:  task.GetSourceTaskId(),
 					AttemptCount:  attemptCount,
+					EventData:     eventData,
 				})
 			}
 			return p.handleReplicationTask(attemptCtx, task)
@@ -217,7 +230,15 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 				return
 			}
 
-			p.emitNamespaceReplicationEvent(task, wideevents.NamespaceReplicationDLQed, attemptCount, err)
+			if emitEvents {
+				p.emitNamespaceReplicationEvent(
+					eventData,
+					task.GetSourceTaskId(),
+					wideevents.NamespaceReplicationDLQed,
+					attemptCount,
+					err,
+				)
+			}
 		}
 	}
 
@@ -226,19 +247,15 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 }
 
 func (p *replicationMessageProcessor) emitNamespaceReplicationEvent(
-	task *replicationspb.ReplicationTask,
+	eventData wideevents.NamespaceReplicationTaskEventData,
+	sourceTaskID int64,
 	phase wideevents.NamespaceReplicationPhase,
 	attemptCount int,
 	err error,
 ) {
-	if !p.namespaceReplicationEventsEnabled(task) {
-		return
-	}
-
-	sourceTaskID := task.GetSourceTaskId()
 	wideevents.EmitNamespaceReplicationLifecycle(p.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
 		Phase:         phase,
-		Task:          task.GetNamespaceTaskAttributes(),
+		EventData:     eventData,
 		SourceCluster: p.sourceCluster,
 		TargetCluster: p.currentCluster,
 		SourceTaskID:  &sourceTaskID,
@@ -247,12 +264,13 @@ func (p *replicationMessageProcessor) emitNamespaceReplicationEvent(
 	})
 }
 
-func (p *replicationMessageProcessor) namespaceReplicationEventsEnabled(
+func (p *replicationMessageProcessor) namespaceReplicationEventData(
 	task *replicationspb.ReplicationTask,
-) bool {
-	return task.GetTaskType() == enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK &&
-		p.emitNamespaceLifecycleEvents != nil &&
-		p.emitNamespaceLifecycleEvents()
+) (wideevents.NamespaceReplicationTaskEventData, bool) {
+	if !p.emitNamespaceLifecycleEvents() {
+		return wideevents.NamespaceReplicationTaskEventData{}, false
+	}
+	return p.eventDataProvider.Extract(task)
 }
 
 func (p *replicationMessageProcessor) putNamespaceReplicationTaskToDLQ(

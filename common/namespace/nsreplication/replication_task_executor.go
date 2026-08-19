@@ -128,7 +128,12 @@ func (h *taskExecutorImpl) executeValidatedTask(
 ) error {
 	if shouldProcess, err := h.shouldProcessTask(ctx, task); !shouldProcess || err != nil {
 		if !shouldProcess && err == nil {
-			h.emitNamespaceReplicationProcessed(ctx, task, nil, nil)
+			h.emitNamespaceReplicationProcessed(
+				ctx,
+				wideevents.NamespaceReplicationOutcomeNotAdmitted,
+				nil,
+				nil,
+			)
 		}
 		return err
 	}
@@ -264,13 +269,23 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 
 		if recordExists {
 			// name -> id & id -> name check pass, this is duplication request
-			h.emitNamespaceReplicationProcessed(ctx, task, nil, nil)
+			h.emitNamespaceReplicationProcessed(
+				ctx,
+				wideevents.NamespaceReplicationOutcomeDuplicate,
+				nil,
+				nil,
+			)
 			return nil
 		}
 		return err
 	}
 
-	h.emitNamespaceReplicationProcessed(ctx, task, request, nil)
+	h.emitNamespaceReplicationProcessed(
+		ctx,
+		wideevents.NamespaceReplicationOutcomeCreated,
+		request,
+		nil,
+	)
 	return nil
 }
 
@@ -358,20 +373,30 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 
 	if !recordUpdated {
-		h.emitNamespaceReplicationProcessed(ctx, task, nil, nil)
+		h.emitNamespaceReplicationProcessed(
+			ctx,
+			wideevents.NamespaceReplicationOutcomeNoChange,
+			nil,
+			nil,
+		)
 		return nil
 	}
 
 	if err := h.metadataManager.UpdateNamespace(ctx, request); err != nil {
 		return err
 	}
-	h.emitNamespaceReplicationProcessed(ctx, task, nil, request)
+	h.emitNamespaceReplicationProcessed(
+		ctx,
+		wideevents.NamespaceReplicationOutcomeUpdated,
+		nil,
+		request,
+	)
 	return nil
 }
 
 func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 	ctx context.Context,
-	task *replicationspb.NamespaceTaskAttributes,
+	outcome wideevents.NamespaceReplicationOutcome,
 	createRequest *persistence.CreateNamespaceRequest,
 	updateRequest *persistence.UpdateNamespaceRequest,
 ) {
@@ -389,7 +414,8 @@ func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 	sourceTaskID := metadata.SourceTaskID
 	wideevents.EmitNamespaceReplicationLifecycle(h.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
 		Phase:                  wideevents.NamespaceReplicationProcessed,
-		Task:                   task,
+		Outcome:                outcome,
+		EventData:              metadata.EventData,
 		SourceCluster:          metadata.SourceCluster,
 		TargetCluster:          metadata.TargetCluster,
 		SourceTaskID:           &sourceTaskID,

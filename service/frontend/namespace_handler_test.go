@@ -94,7 +94,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		logger,
 		nil,
 		dc.GetBoolPropertyFn(false),
-		func() string { return "cluster-a" },
+		"cluster-a",
 	)
 	s.archivalMetadata = archiver.NewArchivalMetadata(
 		dcCollection,

@@ -24,11 +24,13 @@ func TestNamespaceReplicationLifecycleEventName(t *testing.T) {
 }
 
 func TestNamespaceReplicationTaskContext(t *testing.T) {
+	task := namespaceReplicationTaskForTest()
 	want := NamespaceReplicationTaskContext{
 		SourceCluster: "cluster-a",
 		TargetCluster: "cluster-b",
 		SourceTaskID:  17,
 		AttemptCount:  2,
+		EventData:     namespaceReplicationEventDataForTest(t, task),
 	}
 
 	_, ok := NamespaceReplicationTaskContextFromContext(context.Background())
@@ -47,7 +49,7 @@ func TestEmitNamespaceReplicationLifecycle(t *testing.T) {
 
 	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
 		Phase:         NamespaceReplicationDLQed,
-		Task:          task,
+		EventData:     namespaceReplicationEventDataForTest(t, task),
 		SourceCluster: "cluster-a",
 		TargetCluster: "cluster-b",
 		SourceTaskID:  &sourceTaskID,
@@ -60,6 +62,8 @@ func TestEmitNamespaceReplicationLifecycle(t *testing.T) {
 	got := namespaceReplicationRecordValues(logger.records[0])
 	require.Equal(t, map[string]any{
 		"phase":            "dlqed",
+		"task_type":        int64(enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK),
+		"task_kind":        "namespace",
 		"namespace":        "payments",
 		"namespace_id":     "namespace-id",
 		"operation":        "Create",
@@ -90,17 +94,18 @@ func TestNamespaceReplicationTaskFingerprintLinksPhases(t *testing.T) {
 	task := namespaceReplicationTaskForTest()
 
 	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
-		Phase: NamespaceReplicationCreated,
-		Task:  task,
+		Phase:     NamespaceReplicationCreated,
+		EventData: namespaceReplicationEventDataForTest(t, task),
 	})
 	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
-		Phase: NamespaceReplicationProcessed,
-		Task:  task,
+		Phase:     NamespaceReplicationProcessed,
+		Outcome:   NamespaceReplicationOutcomeCreated,
+		EventData: namespaceReplicationEventDataForTest(t, task),
 	})
 	task.ConfigVersion++
 	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
-		Phase: NamespaceReplicationCreated,
-		Task:  task,
+		Phase:     NamespaceReplicationCreated,
+		EventData: namespaceReplicationEventDataForTest(t, task),
 	})
 
 	require.Len(t, logger.records, 3)
@@ -120,7 +125,8 @@ func TestNamespaceReplicationProcessedIncludesCreatePersistenceRequest(t *testin
 
 	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
 		Phase:                  NamespaceReplicationProcessed,
-		Task:                   namespaceReplicationTaskForTest(),
+		Outcome:                NamespaceReplicationOutcomeCreated,
+		EventData:              namespaceReplicationEventDataForTest(t, namespaceReplicationTaskForTest()),
 		CreateNamespaceRequest: request,
 	})
 
@@ -148,7 +154,8 @@ func TestNamespaceReplicationProcessedIncludesUpdatePersistenceRequest(t *testin
 
 	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
 		Phase:                  NamespaceReplicationProcessed,
-		Task:                   namespaceReplicationTaskForTest(),
+		Outcome:                NamespaceReplicationOutcomeUpdated,
+		EventData:              namespaceReplicationEventDataForTest(t, namespaceReplicationTaskForTest()),
 		UpdateNamespaceRequest: request,
 	})
 
@@ -158,6 +165,48 @@ func TestNamespaceReplicationProcessedIncludesUpdatePersistenceRequest(t *testin
 	require.Equal(t, "UpdateNamespaceRequest", got["request_type"])
 	require.InDelta(t, float64(19), got["notification_version"].(float64), 0)
 	require.Equal(t, "8", got["namespace"].(map[string]any)["config_version"])
+}
+
+func TestDefaultNamespaceReplicationTaskEventDataProvider(t *testing.T) {
+	provider := NewDefaultNamespaceReplicationTaskEventDataProvider()
+	attributes := namespaceReplicationTaskForTest()
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: attributes,
+		},
+	}
+
+	eventData, ok := provider.Extract(task)
+	require.True(t, ok)
+	require.Equal(t, int32(enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK), eventData.TaskType)
+	require.Equal(t, "namespace", eventData.TaskKind)
+	require.Equal(t, "payments", eventData.Namespace)
+	require.Equal(t, "namespace-id", eventData.NamespaceID)
+	require.Equal(t, "Create", eventData.Operation)
+	require.Equal(t, int64(7), *eventData.ConfigVersion)
+	require.Equal(t, int64(11), *eventData.FailoverVersion)
+	require.Same(t, attributes, eventData.TaskPayload)
+
+	_, ok = provider.Extract(&replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
+	})
+	require.False(t, ok)
+}
+
+func namespaceReplicationEventDataForTest(
+	t *testing.T,
+	attributes *replicationspb.NamespaceTaskAttributes,
+) NamespaceReplicationTaskEventData {
+	t.Helper()
+	eventData, ok := NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(&replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
+		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: attributes,
+		},
+	})
+	require.True(t, ok)
+	return eventData
 }
 
 func namespaceReplicationTaskForTest() *replicationspb.NamespaceTaskAttributes {

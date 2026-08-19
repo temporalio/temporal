@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -112,6 +113,7 @@ var Module = fx.Options(
 	}),
 	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(nsreplication.NewDefaultAdmitter),
+	fx.Provide(wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),

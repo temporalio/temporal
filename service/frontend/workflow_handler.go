@@ -360,7 +360,7 @@ func NewWorkflowHandler(
 				logger,
 				eventLogger,
 				config.EmitNamespaceLifecycleEvents,
-				clusterMetadata.GetCurrentClusterName,
+				clusterMetadata.GetCurrentClusterName(),
 			),
 			archivalMetadata,
 			archiverProvider,

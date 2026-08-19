@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
@@ -46,6 +47,7 @@ type (
 	Service struct {
 		logger                 log.Logger
 		eventLogger            otellog.Logger
+		eventDataProvider      wideevents.NamespaceReplicationTaskEventDataProvider
 		clusterMetadata        cluster.Metadata
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
@@ -115,6 +117,7 @@ type (
 func NewService(
 	logger log.SnTaggedLogger,
 	eventLogger otellog.Logger,
+	eventDataProvider wideevents.NamespaceReplicationTaskEventDataProvider,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
 	clusterMetadata cluster.Metadata,
@@ -149,6 +152,7 @@ func NewService(
 		sdkClientFactory:          sdkClientFactory,
 		logger:                    logger,
 		eventLogger:               eventLogger,
+		eventDataProvider:         eventDataProvider,
 		clusterMetadata:           clusterMetadata,
 		clientBean:                clientBean,
 		clusterMetadataManager:    clusterMetadataManager,
@@ -380,6 +384,7 @@ func (s *Service) startReplicator() {
 		s.logger,
 		s.eventLogger,
 		s.config.EmitNamespaceLifecycleEvents,
+		s.eventDataProvider,
 		s.metricsHandler,
 		s.hostInfo,
 		s.workerServiceResolver,

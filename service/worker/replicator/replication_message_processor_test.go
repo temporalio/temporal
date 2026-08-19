@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/embedded"
+	commonpb "go.temporal.io/api/common/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -23,11 +24,30 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 type replicationEventCaptureLogger struct {
 	embedded.Logger
 	records []otellog.Record
+}
+
+type customNamespaceReplicationTaskEventDataProvider struct{}
+
+func (customNamespaceReplicationTaskEventDataProvider) Extract(
+	task *replicationspb.ReplicationTask,
+) (wideevents.NamespaceReplicationTaskEventData, bool) {
+	if int32(task.GetTaskType()) != 1002 {
+		return wideevents.NamespaceReplicationTaskEventData{}, false
+	}
+	return wideevents.NamespaceReplicationTaskEventData{
+		TaskType:            int32(task.GetTaskType()),
+		TaskKind:            "custom_namespace_config",
+		NamespaceID:         "custom-namespace-id",
+		Operation:           "update_config",
+		TaskPayload:         wrapperspb.Bytes(task.GetData().GetData()),
+		TaskFingerprintData: task.GetData().GetData(),
+	}, true
 }
 
 func (l *replicationEventCaptureLogger) Emit(_ context.Context, record otellog.Record) {
@@ -46,9 +66,10 @@ func TestRetryPolicyForTask(t *testing.T) {
 	p := newReplicationMessageProcessor(
 		"currentCluster",
 		"sourceCluster",
-		nil,                        // logger
-		nil,                        // eventLogger
-		nil,                        // emitNamespaceLifecycleEvents
+		nil, // logger
+		nil, // eventLogger
+		dynamicconfig.GetBoolPropertyFn(false),
+		wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider(),
 		nil,                        // remotePeer
 		metrics.NoopMetricsHandler, // metricsHandler — actually used by constructor
 		nil,                        // namespaceTaskExecutor
@@ -98,11 +119,14 @@ func TestHandleNamespaceReplicationTaskEmitsReceivedAndPassesProcessingContext(t
 	require.Equal(t, "cluster-a", received["source_cluster"].AsString())
 	require.Equal(t, "cluster-b", received["target_cluster"].AsString())
 	require.True(t, processingContextSet)
+	eventData, ok := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(task)
+	require.True(t, ok)
 	require.Equal(t, wideevents.NamespaceReplicationTaskContext{
 		SourceCluster: "cluster-a",
 		TargetCluster: "cluster-b",
 		SourceTaskID:  42,
 		AttemptCount:  1,
+		EventData:     eventData,
 	}, processingContext)
 }
 
@@ -154,6 +178,25 @@ func TestHandleNamespaceReplicationTaskEventsDisabled(t *testing.T) {
 	require.False(t, processingContextSet)
 }
 
+func TestCustomNamespaceReplicationTaskUsesEventDataProvider(t *testing.T) {
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.ReplicationTaskType(1002),
+		Data:     &commonpb.DataBlob{Data: []byte("custom-task")},
+	}
+	p := &replicationMessageProcessor{
+		emitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true),
+		eventDataProvider:            customNamespaceReplicationTaskEventDataProvider{},
+	}
+
+	eventData, ok := p.namespaceReplicationEventData(task)
+	require.True(t, ok)
+	require.Equal(t, int32(1002), eventData.TaskType)
+	require.Equal(t, "custom_namespace_config", eventData.TaskKind)
+	require.Equal(t, "custom-namespace-id", eventData.NamespaceID)
+	require.Equal(t, "update_config", eventData.Operation)
+	require.Equal(t, []byte("custom-task"), eventData.TaskFingerprintData)
+}
+
 func newReplicationEventTestProcessor(
 	t *testing.T,
 	enabled bool,
@@ -187,6 +230,7 @@ func newReplicationEventTestProcessor(
 		logger:                       log.NewNoopLogger(),
 		eventLogger:                  eventLogger,
 		emitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(enabled),
+		eventDataProvider:            wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider(),
 		remotePeer:                   remotePeer,
 		namespaceTaskExecutor:        executor,
 		metricsHandler:               metrics.NoopMetricsHandler,

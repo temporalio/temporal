@@ -66,7 +66,7 @@ func (s *transmissionTaskSuite) SetupTest() {
 		log.NewTestLogger(),
 		nil,
 		dynamicconfig.GetBoolPropertyFn(false),
-		func() string { return "cluster-a" },
+		"cluster-a",
 	).(*replicator)
 }
 

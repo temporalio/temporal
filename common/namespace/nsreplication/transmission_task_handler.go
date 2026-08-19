@@ -41,7 +41,7 @@ type (
 		logger                       log.Logger
 		eventLogger                  otellog.Logger
 		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
-		currentCluster               func() string
+		currentCluster               string
 	}
 )
 
@@ -51,7 +51,7 @@ func NewReplicator(
 	logger log.Logger,
 	eventLogger otellog.Logger,
 	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
-	currentCluster func() string,
+	currentCluster string,
 ) Replicator {
 	return &replicator{
 		namespaceReplicationQueue:    namespaceReplicationQueue,
@@ -125,25 +125,24 @@ func (r *replicator) HandleTransmissionTask(
 		task.NamespaceTaskAttributes.ReplicationConfig.State = replicationConfig.State
 	}
 
-	err := r.namespaceReplicationQueue.Publish(
-		ctx,
-		&replicationspb.ReplicationTask{
-			TaskType:   taskType,
-			Attributes: task,
-		})
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:   taskType,
+		Attributes: task,
+	}
+	err := r.namespaceReplicationQueue.Publish(ctx, replicationTask)
 	if err != nil {
 		return err
 	}
 
-	if r.emitNamespaceLifecycleEvents != nil && r.emitNamespaceLifecycleEvents() {
-		var sourceCluster string
-		if r.currentCluster != nil {
-			sourceCluster = r.currentCluster()
+	if r.emitNamespaceLifecycleEvents() {
+		eventData, ok := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(replicationTask)
+		if !ok {
+			return nil
 		}
 		wideevents.EmitNamespaceReplicationLifecycle(r.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
 			Phase:         wideevents.NamespaceReplicationCreated,
-			Task:          task.NamespaceTaskAttributes,
-			SourceCluster: sourceCluster,
+			EventData:     eventData,
+			SourceCluster: r.currentCluster,
 		})
 	}
 	return nil
