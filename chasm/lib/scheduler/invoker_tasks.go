@@ -226,13 +226,12 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
 	//
-	// Invoker will never have work pending for more than one of these calls (terminate,
-	// cancel, start) at a time, so it isn't sensible to run them in parallel. The
-	// structure below is simply for code simplicity.
+	// Run the phases serially so they consume the same per-task action budget.
+	// Each phase still executes its individual requests concurrently.
 	ictx := h.newInvokerTaskHandlerContext(ctx, scheduler)
-	result = result.Append(h.terminateWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
-	result = result.Append(h.cancelWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
-	result = result.Append(h.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, schedulerRef, now))
+	result = result.Append(h.terminateWorkflows(&ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
+	result = result.Append(h.cancelWorkflows(&ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
+	result = result.Append(h.startWorkflows(&ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, schedulerRef, now))
 
 	// Record action results on the Invoker (internal state), as well as the
 	// Scheduler (user-facing metrics).
@@ -271,7 +270,7 @@ func (i *invokerTaskHandlerContext) takeNextAction() bool {
 
 // cancelWorkflows does a best-effort attempt to cancel all workflow executions provided in targets.
 func (h *InvokerExecuteTaskHandler) cancelWorkflows(
-	ctx invokerTaskHandlerContext,
+	ctx *invokerTaskHandlerContext,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
@@ -313,7 +312,7 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflows(
 
 // terminateWorkflows does a best-effort attempt to terminate all workflow executions provided in targets.
 func (h *InvokerExecuteTaskHandler) terminateWorkflows(
-	ctx invokerTaskHandlerContext,
+	ctx *invokerTaskHandlerContext,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
@@ -355,7 +354,7 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 
 // startWorkflows executes the provided list of starts, returning a result with their outcomes.
 func (h *InvokerExecuteTaskHandler) startWorkflows(
-	ctx invokerTaskHandlerContext,
+	ctx *invokerTaskHandlerContext,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
