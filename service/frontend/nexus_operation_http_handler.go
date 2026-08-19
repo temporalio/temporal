@@ -260,7 +260,12 @@ func (h *NexusOperationHTTPHandler) baseNexusContext(apiName string, header http
 // endpoint is valid for dispatching.
 // For security reasons, at the moment only worker target endpoints are considered valid, in the future external
 // endpoints may also be supported.
-func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter, r *http.Request, logger log.Logger) (*nexusContext, bool) {
+func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(
+	entry *persistencespb.NexusEndpointEntry,
+	w http.ResponseWriter,
+	r *http.Request,
+	logger log.Logger,
+) (*nexusContext, bool) {
 	switch v := entry.Endpoint.Spec.GetTarget().GetVariant().(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
