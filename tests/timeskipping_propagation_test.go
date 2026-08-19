@@ -1404,6 +1404,95 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_SkipSessionPropagated() 
 		"started event carries run 1's SessionSkipCount as InitialSkipCount")
 }
 
+// TestTSPInCaN_ExecutionExpirationRemainsAbsolute verifies that time-skipping state
+// propagation does not extend the workflow execution timeout across runs. The expiration
+// timestamp is already expressed in virtual time and must remain unchanged when the next
+// run inherits the accumulated skipped duration.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_ExecutionExpirationRemainsAbsolute() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	const executionTimeout = 3 * time.Hour
+	wfType := tv.WorkflowType()
+	wfID := tv.WorkflowID()
+	tq := tv.TaskQueue()
+
+	start, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.NewString(),
+		Namespace:                env.Namespace().String(),
+		WorkflowId:               wfID,
+		WorkflowType:             wfType,
+		TaskQueue:                tq,
+		WorkflowExecutionTimeout: durationpb.New(executionTimeout),
+		WorkflowRunTimeout:       durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		TimeSkippingConfig:       &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	run1ID := start.RunId
+
+	state := 0
+	handler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		switch {
+		case state == 0:
+			state = 1
+			return cmdsResponse(timerCmd("t1", time.Hour)), nil
+		case state == 1 && fired["t1"]:
+			state = 2
+			return cmdsResponse(continueAsNewCmd(wfType, tq)), nil
+		case state == 2:
+			state = 3
+			return cmdsResponse(), nil
+		}
+		return cmdsResponse(), nil
+	}
+
+	for i := range 3 {
+		_, pollErr := env.TaskPoller().PollAndHandleWorkflowTask(tv, handler)
+		if pollErr != nil {
+			s.T().Logf("iter %d: poll error: %v", i, pollErr)
+		}
+	}
+
+	var status enumspb.WorkflowExecutionStatus
+	s.AwaitTrue(func() bool {
+		desc, describeErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: wfID},
+		})
+		if describeErr != nil {
+			return false
+		}
+		status = desc.WorkflowExecutionInfo.Status
+		return status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}, 15*time.Second, 100*time.Millisecond)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
+
+	run1MS := s.getMutableState(env, wfID, run1ID)
+	originalExpiration := run1MS.State.ExecutionInfo.GetWorkflowExecutionExpirationTime().AsTime()
+	s.False(originalExpiration.IsZero())
+
+	run2MS := s.getMutableStateByID(ctx, env, wfID)
+	run2ID := run2MS.State.ExecutionState.RunId
+	s.NotEqual(run1ID, run2ID)
+	s.Equal(originalExpiration, run2MS.State.ExecutionInfo.GetWorkflowExecutionExpirationTime().AsTime(),
+		"continue-as-new must preserve the chain's absolute virtual execution-expiration deadline")
+
+	hist2, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: run2ID},
+	})
+	s.NoError(err)
+	s.NotEmpty(hist2.History.Events)
+	terminalEvent := hist2.History.Events[len(hist2.History.Events)-1]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT, terminalEvent.GetEventType())
+	s.WithinDuration(originalExpiration, terminalEvent.GetEventTime().AsTime(), 10*time.Second,
+		"workflow must time out at the original absolute virtual deadline")
+}
+
 // TestTSPInRetry verifies that a retried run is a same-lineage continuation: it inherits
 // the previous attempt's current TimeSkippingConfig AND its in-flight accumulated skip.
 //
