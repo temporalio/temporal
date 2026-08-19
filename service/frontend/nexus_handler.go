@@ -308,6 +308,25 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 }
 
+// enrichNexusOperationLogger adds the Nexus operation context to the handler-side logger. The
+// request ID is the only identifier shared with the caller: it is generated caller-side, recorded on
+// the NexusOperationScheduled/Started/TimedOut history events, and sent on the wire, so logging it
+// here is what makes a caller-side failure and its handler-side counterpart greppable as one unit.
+//
+// Unlike enrichNexusOperationMetrics these are unconditional, since log fields carry no cardinality
+// cost. Cancel requests have no request ID, in which case the tag is omitted.
+func (c *operationContext) enrichNexusOperationLogger(service, operation, requestID string) {
+	tags := []tag.Tag{
+		tag.NexusService(service),
+		tag.NexusOperation(operation),
+		tag.Endpoint(c.endpointName),
+	}
+	if requestID != "" {
+		tags = append(tags, tag.RequestID(requestID))
+	}
+	c.logger = log.With(c.logger, tags...)
+}
+
 // Key to extract a nexusContext object from a context.Context.
 type nexusContextKey struct{}
 
@@ -397,6 +416,7 @@ func (h *nexusHandler) StartOperation(
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogger(service, operation, options.RequestID)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -637,6 +657,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogger(service, operation, "")
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
