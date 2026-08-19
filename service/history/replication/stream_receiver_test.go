@@ -354,6 +354,50 @@ func (s *streamReceiverSuite) TestMemberLane_RetiredLaneDroppedOnceDrained() {
 	s.NotSame(tracker, trackerNew)
 }
 
+func (s *streamReceiverSuite) TestMemberLane_WatermarkDoesNotHoldLaneLock() {
+	tracker := NewMockExecutableTaskTracker(s.controller)
+	lowWatermarkStarted := make(chan struct{})
+	releaseLowWatermark := make(chan struct{})
+	defer func() {
+		select {
+		case <-releaseLowWatermark:
+		default:
+			close(releaseLowWatermark)
+		}
+	}()
+	tracker.EXPECT().LowWatermark().DoAndReturn(func() *WatermarkInfo {
+		close(lowWatermarkStarted)
+		<-releaseLowWatermark
+		return nil
+	})
+	s.streamReceiver.memberLanes["ns-a"] = &memberLane{tracker: tracker}
+
+	snapshotDone := make(chan struct{})
+	go func() {
+		s.streamReceiver.memberLaneWatermarks()
+		close(snapshotDone)
+	}()
+	<-lowWatermarkStarted
+
+	laneLockAcquired := make(chan struct{})
+	go func() {
+		s.streamReceiver.memberLaneMu.Lock()
+		close(laneLockAcquired)
+		s.streamReceiver.memberLaneMu.Unlock()
+	}()
+	s.Require().Eventually(func() bool {
+		select {
+		case <-laneLockAcquired:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 10*time.Millisecond)
+
+	close(releaseLowWatermark)
+	<-snapshotDone
+}
+
 func (s *streamReceiverSuite) TestAckMessage_TieredStack_FoldsMemberLaneWatermarkIntoAck() {
 	s.streamReceiver.receiverMode = ReceiverModeTieredStack
 	highWatermarkInfo := &WatermarkInfo{Watermark: 200, Timestamp: time.Unix(0, 2000)}
