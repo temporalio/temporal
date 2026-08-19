@@ -106,6 +106,7 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 				},
 				clusterMetadata,
 				rpcFactory,
+				nil,
 			)
 			require.NoError(t, err)
 
