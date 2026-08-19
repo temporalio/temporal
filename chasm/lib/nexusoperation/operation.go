@@ -488,8 +488,9 @@ func (o *Operation) addCompletionCallbacks(
 		if err != nil {
 			return err
 		}
-		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
-		o.Callbacks[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
+		uniqueRequestID := completionCallbackID(requestID, idx)
+		callbackObj := callback.NewCallback(uniqueRequestID, registrationTime, chasmCB)
+		o.Callbacks[uniqueRequestID] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
 }

@@ -76,6 +76,22 @@ func (c *Callback) recordAttempt(ts time.Time) {
 	c.LastAttemptCompleteTime = timestamppb.New(ts)
 }
 
+// recordReceivedLinks appends the links a delivery's target returned to the callback, so that a
+// caller describing the source execution can follow the callback to whatever handled it. They are
+// appended rather than assigned: a callback may already carry links from the request that registered
+// it.
+func (c *Callback) recordReceivedLinks(links []*commonpb.Link) {
+	if len(links) == 0 {
+		return
+	}
+	cb := c.GetCallback()
+	if cb == nil {
+		// A callback with no variant never reaches an invocation, so there is nothing to link to.
+		return
+	}
+	cb.Links = append(cb.Links, common.CloneProtoSlice(links)...)
+}
+
 //nolint:revive // context.Context is an input parameter for chasm.ReadComponent, not a function parameter
 func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
@@ -152,6 +168,7 @@ func (c *Callback) saveResult(
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
 	case invocationResultOK:
+		c.recordReceivedLinks(r.receivedLinks)
 		err := TransitionSucceeded.Apply(c, ctx, EventSucceeded{Time: ctx.Now(c)})
 		return nil, err
 	case invocationResultRetry:
@@ -283,7 +300,11 @@ func (c *Callback) ToAPICallbackInfo(ctx chasm.Context) (*callbackpb.CallbackInf
 	}
 
 	info := &callbackpb.CallbackInfo{
-		Callback:                apiCb,
+		Callback: apiCb,
+		// The server-generated ID this callback is invoked under, which is what a handler dedupes a
+		// redelivery on. It is unique per callback, so it is also how a caller that registered several
+		// callbacks tells the deliveries apart.
+		RequestId:               c.RequestId,
 		RegistrationTime:        common.CloneProto(c.RegistrationTime),
 		State:                   apiState,
 		BlockedReason:           blockedReason,

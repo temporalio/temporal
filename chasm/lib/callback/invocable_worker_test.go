@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -77,12 +78,60 @@ func startOperationResponse(start *nexuspb.StartOperationResponse) *matchingserv
 	}
 }
 
-func syncSuccessResponse() *matchingservice.DispatchNexusTaskResponse {
+func syncSuccessResponse(links ...*nexuspb.Link) *matchingservice.DispatchNexusTaskResponse {
 	return startOperationResponse(&nexuspb.StartOperationResponse{
 		Variant: &nexuspb.StartOperationResponse_SyncSuccess{
-			SyncSuccess: &nexuspb.StartOperationResponse_Sync{},
+			SyncSuccess: &nexuspb.StartOperationResponse_Sync{Links: links},
 		},
 	})
+}
+
+func asyncSuccessResponse(links ...*nexuspb.Link) *matchingservice.DispatchNexusTaskResponse {
+	return startOperationResponse(&nexuspb.StartOperationResponse{
+		Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+			AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+				OperationToken: "operation-token",
+				Links:          links,
+			},
+		},
+	})
+}
+
+// testHandlerLink is the kind of link a worker returns alongside a successful delivery: one naming
+// the workflow its completion handler started to process the delivery.
+func testHandlerLink(workflowID string) *commonpb.Link_WorkflowEvent {
+	return &commonpb.Link_WorkflowEvent{
+		Namespace:  "namespace-name",
+		WorkflowId: workflowID,
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+}
+
+// testHandlerNexusLink is [testHandlerLink] as it travels on the wire, i.e. what a worker actually
+// puts on its response.
+func testHandlerNexusLink(workflowID string) *nexuspb.Link {
+	links := commonnexus.ConvertLinksToProto([]nexus.Link{
+		commonnexus.ConvertLinkWorkflowEventToNexusLink(testHandlerLink(workflowID)),
+	})
+	return links[0]
+}
+
+// requireCallbackLinks asserts the links recorded on the callback, which is where the links a
+// delivery's target returned end up.
+func requireCallbackLinks(t *testing.T, cb *Callback, want ...*commonpb.Link_WorkflowEvent) {
+	t.Helper()
+
+	expected := make([]*commonpb.Link, len(want))
+	for i, link := range want {
+		expected[i] = &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: link}}
+	}
+	protorequire.ProtoSliceEqual(t, expected, cb.GetCallback().GetLinks())
 }
 
 // handlerFailureResponse builds the response matching returns when a worker fails the Nexus task itself,
@@ -139,21 +188,70 @@ func TestExecuteInvocationTaskWorker_Outcomes(t *testing.T) {
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+				require.Empty(t, cb.GetCallback().GetLinks())
 			},
 		},
 		{
 			// The handler accepted the completion and started an operation to process it. Delivery is
 			// done as far as the callback is concerned; it doesn't wait for that operation.
-			name: "async-success",
-			response: startOperationResponse(&nexuspb.StartOperationResponse{
-				Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
-					AsyncSuccess: &nexuspb.StartOperationResponse_Async{OperationToken: "operation-token"},
-				},
-			}),
+			name:                  "async-success",
+			response:              asyncSuccessResponse(),
 			expectedMetricOutcome: "async-success",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+				require.Empty(t, cb.GetCallback().GetLinks())
+			},
+		},
+		{
+			// Links a worker returns name what handled the delivery, so they are recorded on the
+			// callback and surface on the source execution's describe response.
+			name:                  "sync-success-with-links",
+			response:              syncSuccessResponse(testHandlerNexusLink("sync-handler-workflow")),
+			expectedMetricOutcome: "sync-success",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+				requireCallbackLinks(t, cb, testHandlerLink("sync-handler-workflow"))
+			},
+		},
+		{
+			// An async handler is the case links matter most for: the callback is done, but the
+			// operation processing the completion is not, and the link is what points at it.
+			name:                  "async-success-with-links",
+			response:              asyncSuccessResponse(testHandlerNexusLink("async-handler-workflow")),
+			expectedMetricOutcome: "async-success",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+				requireCallbackLinks(t, cb, testHandlerLink("async-handler-workflow"))
+			},
+		},
+		{
+			// Links are informational: a link this server cannot parse is dropped rather than failing
+			// a delivery the handler already accepted, and the ones alongside it still land.
+			name: "success-with-an-unparseable-link",
+			response: syncSuccessResponse(
+				&nexuspb.Link{Url: "temporal:///nonsense", Type: "some.unknown.LinkType"},
+				testHandlerNexusLink("sync-handler-workflow"),
+			),
+			expectedMetricOutcome: "sync-success",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+				requireCallbackLinks(t, cb, testHandlerLink("sync-handler-workflow"))
+			},
+		},
+		{
+			// A failed delivery records no links: there is nothing the handler committed to point at,
+			// and the callback will be retried or failed instead.
+			name:                  "failed-delivery-records-no-links",
+			response:              handlerFailureResponse("BAD_REQUEST"),
+			expectedMetricOutcome: "handler-error:BAD_REQUEST",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				requireTerminalFailure(t, cb, "BAD_REQUEST")
+				require.Empty(t, cb.GetCallback().GetLinks())
 			},
 		},
 		{
@@ -524,6 +622,87 @@ func TestExecuteInvocationTaskWorker_DispatchedRequest(t *testing.T) {
 			require.NoError(t, payload.Decode(start.GetPayload(), &onComplete))
 			protorequire.ProtoEqual(t, &commonpb.Payload{Data: []byte("source-context")}, onComplete.GetSourceContext())
 			tc.assertOn(t, &onComplete)
+		})
+	}
+}
+
+// TestDispatchResponseLinks covers which dispatch responses carry links to record, independently of
+// what the callback then does with them.
+func TestDispatchResponseLinks(t *testing.T) {
+	firstLink := testHandlerLink("first-handler-workflow")
+	secondLink := testHandlerLink("second-handler-workflow")
+
+	for _, tc := range []struct {
+		name     string
+		response *matchingservice.DispatchNexusTaskResponse
+		want     []*commonpb.Link_WorkflowEvent
+	}{
+		{
+			name:     "sync success",
+			response: syncSuccessResponse(testHandlerNexusLink("first-handler-workflow")),
+			want:     []*commonpb.Link_WorkflowEvent{firstLink},
+		},
+		{
+			name:     "async success",
+			response: asyncSuccessResponse(testHandlerNexusLink("first-handler-workflow")),
+			want:     []*commonpb.Link_WorkflowEvent{firstLink},
+		},
+		{
+			// Order is the handler's, so it is preserved rather than normalized.
+			name: "several links",
+			response: syncSuccessResponse(
+				testHandlerNexusLink("first-handler-workflow"),
+				testHandlerNexusLink("second-handler-workflow"),
+			),
+			want: []*commonpb.Link_WorkflowEvent{firstLink, secondLink},
+		},
+		{
+			name:     "success without links",
+			response: syncSuccessResponse(),
+		},
+		{
+			// A link of a type this server does not know is dropped: links are informational, and a
+			// newer worker naming a variant this server cannot parse is not a delivery failure.
+			name:     "link of an unknown type",
+			response: syncSuccessResponse(&nexuspb.Link{Url: "temporal:///whatever", Type: "some.unknown.LinkType"}),
+		},
+		{
+			// A link of a known type whose URL does not match that type is dropped the same way.
+			name: "malformed link",
+			response: syncSuccessResponse(&nexuspb.Link{
+				Url:  "temporal:///not-a-workflow-event",
+				Type: string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()),
+			}),
+		},
+		{
+			// Only a successful start commits the handler to anything, so nothing else has links.
+			name:     "failed delivery",
+			response: handlerFailureResponse("INTERNAL"),
+		},
+		{
+			name: "operation failure",
+			response: startOperationResponse(&nexuspb.StartOperationResponse{
+				Variant: &nexuspb.StartOperationResponse_Failure{
+					Failure: &failurepb.Failure{Message: "handler rejected the completion"},
+				},
+			}),
+		},
+		{
+			name:     "unrecognized outcome",
+			response: &matchingservice.DispatchNexusTaskResponse{},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := dispatchResponseLinks(log.NewTestLogger(), tc.response)
+			if len(tc.want) == 0 {
+				require.Empty(t, got)
+				return
+			}
+			expected := make([]*commonpb.Link, len(tc.want))
+			for i, link := range tc.want {
+				expected[i] = &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: link}}
+			}
+			protorequire.ProtoSliceEqual(t, expected, got)
 		})
 	}
 }

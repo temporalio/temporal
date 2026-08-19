@@ -232,7 +232,7 @@ func (n invocableWorker) classifyDispatchResult(
 	// an operation to process it. The callback does not wait for that operation to finish.
 	err := commonnexus.MatchingDispatchResponseToError(resp)
 	if err == nil {
-		return invocationResultOK{}, outcome
+		return invocationResultOK{receivedLinks: dispatchResponseLinks(logger, resp)}, outcome
 	}
 
 	if !recognized {
@@ -265,6 +265,30 @@ func (n invocableWorker) classifyDispatchResult(
 		return invocationResultRetry{err}, outcome
 	}
 	return invocationResultFail{err}, outcome
+}
+
+// dispatchResponseLinks converts the links a worker returned with a successful delivery. They name
+// the resources the handler created to process the completion, e.g. the workflow backing the
+// operation it started, so that a caller describing the source execution can follow the callback to
+// what handled it.
+//
+// Links are informational, so anything this server cannot parse is dropped with a warning rather
+// than failing a delivery the handler already accepted.
+func dispatchResponseLinks(logger log.Logger, resp *matchingservice.DispatchNexusTaskResponse) []*commonpb.Link {
+	var protoLinks []*nexuspb.Link
+	switch variant := resp.GetResponse().GetStartOperation().GetVariant().(type) {
+	case *nexuspb.StartOperationResponse_SyncSuccess:
+		protoLinks = variant.SyncSuccess.GetLinks()
+	case *nexuspb.StartOperationResponse_AsyncSuccess:
+		protoLinks = variant.AsyncSuccess.GetLinks()
+	default:
+		// Only a successful start carries links to record.
+		return nil
+	}
+	if len(protoLinks) == 0 {
+		return nil
+	}
+	return commonnexus.ConvertNexusLinksToProtoLinks(commonnexus.ConvertLinksFromProto(protoLinks), logger)
 }
 
 // dispatchOutcomeTag names a dispatch outcome for metrics. Values are hyphenated to match the ones
