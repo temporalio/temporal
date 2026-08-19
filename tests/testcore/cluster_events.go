@@ -168,7 +168,11 @@ func RunTests(run func() int) int {
 	if err := testParallelFlag.Value.Set(strconv.Itoa(testParallelism)); err != nil {
 		panic("cannot set -test.parallel value")
 	}
-	exitCode := run()
+	// Two warm clusters had the best race-mode latency and memory balance; larger
+	// reserves competed with tests and consumed the scheduler headroom.
+	warmTarget := nonNegativeEnv("TEMPORAL_TEST_WARM_CLUSTERS", min(2, testParallelism))
+	refillLimit := min(2, warmTarget)
+	exitCode := testClusterRouter.perTest.runWithWarmReserve(run, warmTarget, refillLimit)
 	if recorder != nil {
 		stopRuntimeSampler()
 		recorder.sampleRuntime()

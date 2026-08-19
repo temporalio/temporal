@@ -40,6 +40,18 @@ func positiveEnv(name string, defaultValue int) int {
 	return n
 }
 
+func nonNegativeEnv(name string, defaultValue int) int {
+	value := os.Getenv(name)
+	if value == "" {
+		return defaultValue
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 {
+		panic(name + " must be a non-negative integer")
+	}
+	return n
+}
+
 // clusterRouter gives every NewEnv test a newly-created cluster. Legacy suites
 // that manage their own cluster lifetime use a separate bounded slot.
 type clusterRouter struct {
