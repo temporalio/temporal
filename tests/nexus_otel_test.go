@@ -392,7 +392,6 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	s.requireNexusTaskGRPCSpans(exporter)
 }
 
-// Verifies Xray can join the separate dispatch, poll, and response traces by task ID.
 func (s *NexusOTELSuite) requireNexusTaskGRPCSpans(exporter *tracetest.InMemoryExporter) {
 	s.T().Helper()
 	const matchingServicePrefix = "temporal.server.api.matchingservice.v1.MatchingService/"
