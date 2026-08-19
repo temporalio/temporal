@@ -54,11 +54,11 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 }
 
 // contextualDriver is the slice of a driver's API this test exercises.
-type contextualDriver interface{ context() context.Context }
+type contextualDriver interface{ testContext() context.Context }
 
 // TestDriverContextReflectsExtension proves the drivers fetch their context fresh on every call
 // instead of caching the one observed at construction, so a timeout extension made after the driver
-// starts is visible to later RPCs. env is nil: context() never touches it.
+// starts is visible to later RPCs. env is nil: testContext() never touches it.
 //
 // Runs inside a synctest bubble so it doesn't need to wait out real minutes of test-context timeout,
 // and so `go test -timeout` (a real-clock deadline, meaningless in a fake-clock bubble) can't cap the
@@ -75,7 +75,7 @@ func TestDriverContextReflectsExtension(t *testing.T) {
 
 			synctest.Test(t, func(t *testing.T) {
 				d := newDriver(t)
-				before, ok := d.context().Deadline()
+				before, ok := d.testContext().Deadline()
 				require.True(t, ok)
 
 				extended := testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout()+time.Minute)
@@ -83,7 +83,7 @@ func TestDriverContextReflectsExtension(t *testing.T) {
 				require.True(t, ok)
 				require.True(t, extendedDeadline.After(before), "test setup: EnsureRemaining should have extended the deadline")
 
-				after, ok := d.context().Deadline()
+				after, ok := d.testContext().Deadline()
 				require.True(t, ok)
 				require.Equal(t, extendedDeadline, after,
 					"driver must observe the extended deadline, not the one captured at construction")

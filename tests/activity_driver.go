@@ -306,9 +306,9 @@ func (a *activityDriverState) driverState() *activityDriverState {
 // drivenActivity is what the shared event driver needs from either implementation.
 type drivenActivity interface {
 	driverState() *activityDriverState
-	// context returns the driver's current test context, fetched fresh per
+	// testContext returns the driver's current test context, fetched fresh per
 	// call rather than cached, so a later timeout extension is visible.
-	context() context.Context
+	testContext() context.Context
 	pollForTask(require.TestingT, time.Duration) *workflowservice.PollActivityTaskQueueResponse
 	awaitDispatchDelay(testing.TB, model.Event)
 	timeoutInfo(require.TestingT) activityTimeoutInfo
@@ -339,7 +339,7 @@ func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadlin
 	state := a.driverState()
 	want := timeoutType(e)
 	var got activityTimeoutInfo
-	await.Require(a.context(), t, func(t *await.T) {
+	await.Require(a.testContext(), t, func(t *await.T) {
 		got = a.timeoutInfo(t)
 		fired := got.timeout == want && (got.terminal || got.attempt > state.startedAttempt)
 		t.Require().Truef(fired,

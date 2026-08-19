@@ -46,9 +46,9 @@ func newSAADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *saaD
 	}
 }
 
-// context returns the driver's current test context, deliberately not cached;
+// testContext returns the driver's current test context, deliberately not cached;
 // see [testcontext.EnsureRemaining].
-func (d *saaDriver) context() context.Context {
+func (d *saaDriver) testContext() context.Context {
 	return testcontext.For(d.t)
 }
 
@@ -76,8 +76,8 @@ func (a *saaHandle) driveEvent(t testing.TB, e model.Event) {
 	driveActivityEvent(t, a, e)
 }
 
-func (a *saaHandle) context() context.Context {
-	return a.d.context()
+func (a *saaHandle) testContext() context.Context {
+	return a.d.testContext()
 }
 
 func (a *saaHandle) awaitTimeout(t testing.TB, e model.Event, deadline time.Time) {
@@ -104,7 +104,7 @@ func (a *saaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 // awaitDispatchDelay waits for the public dispatch deadline to become due. A following Poll is what
 // proves that the task actually reached Matching.
 func (a *saaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
-	awaitActivityDispatchDelay(a.context(), t, e, func(t require.TestingT) (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
+	awaitActivityDispatchDelay(a.testContext(), t, e, func(t require.TestingT) (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
 		info := a.describe(t).GetInfo()
 		return info.GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			info.GetRunState(),
@@ -116,7 +116,7 @@ func (a *saaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
 func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	d.numStarted++
 	id := fmt.Sprintf("%s-%d", d.activityIDPrefix, d.numStarted)
-	resp, err := d.env.FrontendClient().StartActivityExecution(d.context(), d.startRequest(cfg, id, id))
+	resp, err := d.env.FrontendClient().StartActivityExecution(d.testContext(), d.startRequest(cfg, id, id))
 	require.NoError(t, err)
 	return &saaHandle{
 		activityDriverState: activityDriverState{cfg: cfg},
@@ -160,7 +160,7 @@ func (d *saaDriver) startRequest(c activityConfig, activityID, taskQueue string)
 // describe returns the DescribeActivityExecution response, including the outcome, the last failure,
 // and the heartbeat details.
 func (a *saaHandle) describe(t require.TestingT) *workflowservice.DescribeActivityExecutionResponse {
-	resp, err := a.d.env.FrontendClient().DescribeActivityExecution(a.context(), &workflowservice.DescribeActivityExecutionRequest{
+	resp, err := a.d.env.FrontendClient().DescribeActivityExecution(a.testContext(), &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:               a.d.env.Namespace().String(),
 		ActivityId:              a.activityID,
 		RunId:                   a.runID,
@@ -184,7 +184,7 @@ func (a *saaHandle) activityInfo(t require.TestingT) activityInfo {
 func (a *saaHandle) terminalOutcome(t require.TestingT) activityTerminalOutcome {
 	deadline := time.Now().Add(activityDriverTimeout)
 	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithDeadline(a.context(), deadline)
+		ctx, cancel := context.WithDeadline(a.testContext(), deadline)
 		resp, err := a.d.env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 			Namespace:  a.d.env.Namespace().String(),
 			ActivityId: a.activityID,
@@ -227,7 +227,7 @@ func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
 
 func (a *saaHandle) respondCanceledByID() error {
 	_, err := a.d.env.FrontendClient().RespondActivityTaskCanceledById(
-		a.context(),
+		a.testContext(),
 		&workflowservice.RespondActivityTaskCanceledByIdRequest{
 			Namespace:  a.d.env.Namespace().String(),
 			ActivityId: a.activityID,
@@ -242,7 +242,7 @@ func (a *saaHandle) respondCanceledByID() error {
 func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	fc := a.d.env.FrontendClient()
 	ns := a.d.env.Namespace().String()
-	ctx := a.context()
+	ctx := a.testContext()
 	switch e.Type {
 	case model.HeartbeatType:
 		_, err := fc.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -325,7 +325,7 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 }
 
 func (a *saaHandle) pollForTask(t require.TestingT, timeout time.Duration) *workflowservice.PollActivityTaskQueueResponse {
-	driverCtx := a.context()
+	driverCtx := a.testContext()
 	ctx, cancel := context.WithTimeout(driverCtx, timeout)
 	defer cancel()
 	resp, err := a.d.env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{

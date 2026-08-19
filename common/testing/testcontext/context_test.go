@@ -339,7 +339,7 @@ func TestEnsureRemaining(t *testing.T) {
 				}
 			})
 
-			require.Equal(t, "", tb.fatal())
+			require.Empty(t, tb.fatal())
 		})
 	})
 
@@ -373,7 +373,7 @@ func TestEnsureRemaining(t *testing.T) {
 				refreshed = EnsureRemaining(other, tb, DefaultTimeout()+10*time.Second)
 			})
 
-			require.Equal(t, "", tb.fatal())
+			require.Empty(t, tb.fatal())
 			refreshedDeadline, ok := refreshed.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(DefaultTimeout()+10*time.Second), refreshedDeadline)
