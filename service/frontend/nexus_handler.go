@@ -308,13 +308,10 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 }
 
-// enrichNexusOperationLogger adds the Nexus operation context to the handler-side logger. The
-// request ID is the only identifier shared with the caller: it is generated caller-side, recorded on
-// the NexusOperationScheduled/Started/TimedOut history events, and sent on the wire, so logging it
-// here is what makes a caller-side failure and its handler-side counterpart greppable as one unit.
-//
-// Unlike enrichNexusOperationMetrics these are unconditional, since log fields carry no cardinality
-// cost. Cancel requests have no request ID, in which case the tag is omitted.
+// enrichNexusOperationLogger adds Nexus operation context to the handler-side logger. The request ID
+// is the only identifier also recorded caller-side (on the NexusOperationScheduled/Started/TimedOut
+// events), so logging it is what makes both sides of a call greppable as one unit. Unconditional
+// unlike enrichNexusOperationMetrics, since log fields carry no cardinality cost.
 func (c *operationContext) enrichNexusOperationLogger(service, operation, requestID string) {
 	tags := []tag.Tag{
 		tag.NexusService(service),
