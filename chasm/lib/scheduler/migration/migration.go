@@ -481,7 +481,7 @@ func splitBufferedStartsForLegacy(
 		// to later non-ALLOW_ALL starts. They still appear in RecentActions above,
 		// matching V1.
 		if start.GetCompleted() == nil &&
-			start.GetOverlapPolicy() != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+			schedulerinternal.TracksCompletionResult(start.GetOverlapPolicy()) {
 			running = append(running, &commonpb.WorkflowExecution{
 				WorkflowId: start.GetWorkflowId(),
 				RunId:      start.GetRunId(),

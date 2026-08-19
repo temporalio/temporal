@@ -11,6 +11,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -405,7 +406,7 @@ func (i *Invoker) runningWorkflowExecutions() []*commonpb.WorkflowExecution {
 	var running []*commonpb.WorkflowExecution
 	for _, start := range i.GetBufferedStarts() {
 		if start.GetRunId() != "" && start.GetCompleted() == nil &&
-			start.GetOverlapPolicy() != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+			internal.TracksCompletionResult(start.GetOverlapPolicy()) {
 			running = append(running, &commonpb.WorkflowExecution{
 				WorkflowId: start.GetWorkflowId(),
 				RunId:      start.GetRunId(),

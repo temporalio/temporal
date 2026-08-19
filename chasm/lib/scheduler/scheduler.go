@@ -18,6 +18,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log/tag"
@@ -652,7 +653,7 @@ func (s *Scheduler) HandleNexusCompletion(
 		if start.GetRequestId() == info.RequestId && start.GetCompleted() == nil {
 			workflowID = start.GetWorkflowId()
 			start.OverlapPolicy = s.resolveOverlapPolicy(start.GetOverlapPolicy())
-			tracksCompletionResult = start.GetOverlapPolicy() != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+			tracksCompletionResult = internal.TracksCompletionResult(start.GetOverlapPolicy())
 			break
 		}
 	}
