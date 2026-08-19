@@ -1,8 +1,11 @@
 package objectleak
 
 import (
+	"fmt"
 	"reflect"
+	"regexp"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -35,6 +38,8 @@ type tinyZeroLengthPointerArrayValue struct {
 	Pointers [0]*byte
 	Value    byte
 }
+
+var diagnosticAddressesPattern = regexp.MustCompile(`(?m)^    addresses: \[[^\n]*\]\n`)
 
 type aliasOuter struct {
 	aliasInner
@@ -402,9 +407,30 @@ baseline retained objects:
 			for _, expected := range tc.wantErrContains {
 				require.Contains(t, err.Error(), expected)
 			}
-			require.Equal(t, tc.wantReport, report)
+			require.Equal(t, tc.wantReport, diagnosticAddressesPattern.ReplaceAllString(report, ""))
 		})
 	}
+}
+
+func TestReportStringIncludesSortedUnexpectedAddresses(t *testing.T) {
+	roots := []*graphRoot{{}, {}}
+	addresses := []uintptr{
+		reflect.ValueOf(roots[0]).Pointer(),
+		reflect.ValueOf(roots[1]).Pointer(),
+	}
+	slices.Sort(addresses)
+	check, err := NewObjectLeakCheck(WithGCSettleTimeout(testGCSettleTimeout))
+	require.NoError(t, err)
+	check.gcSettleMinWait = testGCSettleMinWait
+	check.gcSettleQuiet = testGCSettleQuiet
+	for _, root := range roots {
+		check.Track(root)
+	}
+
+	report, err := check.Check(Baseline{})
+	runtime.KeepAlive(roots)
+	require.Error(t, err)
+	require.Contains(t, report, fmt.Sprintf("    addresses: %#x", addresses))
 }
 
 func TestObjectLeak_CheckSkipsTinyPointerFreeObjects(t *testing.T) {

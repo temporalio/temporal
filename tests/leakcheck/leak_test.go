@@ -3,9 +3,12 @@ package leakcheck
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"strconv"
 	"testing"
@@ -44,6 +47,7 @@ var objectLeakOpts = []objectleak.Option{
 //	LEAK_ITERS_WARMUP  warmup clusters before snapshotting the baseline
 //	LEAK_OUTPUT_DIR    directory for diagnostics on failure
 //	LEAK_GC_SETTLE_TIMEOUT maximum time to settle object leak checks
+//	LEAK_HEAP_DUMP     set to 1 to write a raw heap dump and matching test executable on object leak failure; these files may contain sensitive data
 func TestClusterShutdownLeak(t *testing.T) {
 	iters, err := strconv.Atoi(os.Getenv("LEAK_ITERS"))
 	if err != nil {
@@ -115,6 +119,18 @@ func TestClusterShutdownLeak(t *testing.T) {
 	writeProfile(t, outputDir, "heap", "heap.txt", 1)
 	writeProfile(t, outputDir, "allocs", "allocs.pb.gz", 0)
 	writeProfile(t, outputDir, "allocs", "allocs.txt", 1)
+	if leakErr != nil && os.Getenv("LEAK_HEAP_DUMP") == "1" {
+		executable, executableErr := os.Executable()
+		if executableErr != nil {
+			t.Logf("failed to locate test executable: %v", executableErr)
+		} else if err := writeHeapDiagnostics(outputDir, executable, func(heapDump *os.File) {
+			debug.WriteHeapDump(heapDump.Fd())
+		}); err != nil {
+			t.Logf("failed to write raw heap diagnostics: %v", err)
+		} else {
+			t.Logf("raw heap diagnostics written to %s", outputDir)
+		}
+	}
 
 	if goleakErr != nil {
 		t.Error(goleakErr)
@@ -179,4 +195,30 @@ func writeProfile(t *testing.T, outputDir string, profileName string, fileName s
 	} else {
 		t.Logf("%s profile written to %s", profileName, path)
 	}
+}
+
+func writeHeapDiagnostics(
+	outputDir string,
+	executable string,
+	writeHeapDump func(*os.File),
+) error {
+	heapDump, err := os.Create(filepath.Join(outputDir, "heap.dump"))
+	if err != nil {
+		return err
+	}
+	writeHeapDump(heapDump)
+	if err := heapDump.Close(); err != nil {
+		return err
+	}
+
+	source, err := os.Open(executable)
+	if err != nil {
+		return err
+	}
+	destination, err := os.OpenFile(filepath.Join(outputDir, "leakcheck.test"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	if err != nil {
+		return errors.Join(err, source.Close())
+	}
+	_, copyErr := io.Copy(destination, source)
+	return errors.Join(copyErr, destination.Close(), source.Close())
 }
