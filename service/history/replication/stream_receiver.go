@@ -5,6 +5,7 @@ package replication
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -598,9 +599,7 @@ func (r *StreamReceiverImpl) highFamilyTrackingCount() int {
 func (r *StreamReceiverImpl) memberLaneWatermarks() map[string]WatermarkInfo {
 	r.memberLaneMu.Lock()
 	lanes := make(map[string]*memberLane, len(r.memberLanes))
-	for ns, lane := range r.memberLanes {
-		lanes[ns] = lane
-	}
+	maps.Copy(lanes, r.memberLanes)
 	r.memberLaneMu.Unlock()
 
 	out := make(map[string]WatermarkInfo, len(lanes))
