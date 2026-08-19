@@ -308,9 +308,8 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 }
 
-// enrichNexusOperationLogger adds Nexus operation context. The request ID is also recorded
-// caller-side, making both sides greppable; unconditional since logs have no cardinality cost.
-func (c *operationContext) enrichNexusOperationLogger(service, operation, requestID string) {
+// enrichNexusOperationLogs adds Nexus operation context to the handler-side logger.
+func (c *operationContext) enrichNexusOperationLogs(service, operation, requestID string) {
 	tags := []tag.Tag{
 		tag.NexusService(service),
 		tag.NexusOperation(operation),
@@ -411,7 +410,7 @@ func (h *nexusHandler) StartOperation(
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
-	oc.enrichNexusOperationLogger(service, operation, options.RequestID)
+	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -652,7 +651,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
-	oc.enrichNexusOperationLogger(service, operation, "")
+	oc.enrichNexusOperationLogs(service, operation, "")
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
