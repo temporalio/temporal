@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -385,7 +386,7 @@ func (s *streamReceiverSuite) TestMemberLane_WatermarkDoesNotHoldLaneLock() {
 		close(laneLockAcquired)
 		s.streamReceiver.memberLaneMu.Unlock()
 	}()
-	s.Require().Eventually(func() bool {
+	await.RequireTrue(s.T(), func() bool {
 		select {
 		case <-laneLockAcquired:
 			return true
