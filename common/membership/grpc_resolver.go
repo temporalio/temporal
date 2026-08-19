@@ -52,7 +52,7 @@ var (
 	globalGrpcBuilder grpcBuilder
 	grpcResolverID    atomic.Uint64
 
-	errInvalidUrl    = errors.New("invalid grpc resolver url")
+	errInvalidURL    = errors.New("invalid grpc resolver url")
 	errNotRegistered = errors.New("grpc resolver is not registered; it may not have been created or may already have been released")
 )
 
@@ -108,11 +108,11 @@ func (m *grpcBuilder) Scheme() string {
 
 func (m *grpcBuilder) getServiceResolver(u *url.URL) (ServiceResolver, error) {
 	if u.Scheme != grpcResolverScheme {
-		return nil, errInvalidUrl
+		return nil, errInvalidURL
 	}
 	service, registrationID, found := strings.Cut(u.Host, delim)
 	if !found {
-		return nil, errInvalidUrl
+		return nil, errInvalidURL
 	}
 	v, ok := m.resolvers.Load(registrationID)
 	if !ok {
