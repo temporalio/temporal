@@ -1185,6 +1185,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 	s.Equal(1, optionsUpdatedCount,
 		"reset run should contain exactly one reapplied OPTIONS_UPDATED event")
 	s.NotNil(startedEvent)
+	s.WithinDuration(startedEvent.GetEventTime().AsTime(), resetMS.State.ExecutionState.GetStartTime().AsTime(), 10*time.Second,
+		"reset/rebuild must preserve the already-materialized history start time")
+	s.WithinDuration(startedEvent.GetEventTime().AsTime(), resetMS.State.ExecutionInfo.GetStartTime().AsTime(), 10*time.Second)
 	startedTSC := startedEvent.GetWorkflowExecutionStartedEventAttributes().GetTimeSkippingConfig()
 	s.NotNil(startedTSC, "WorkflowExecutionStarted should carry the original TimeSkippingConfig")
 	s.False(startedTSC.GetEnabled(),
@@ -1303,6 +1306,11 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 	})
 	s.NoError(err)
 	s.NotEmpty(hist2.History.Events)
+	startedEventTime := hist2.History.Events[0].GetEventTime().AsTime()
+	s.WithinDuration(startedEventTime, run2MS.State.ExecutionState.GetStartTime().AsTime(), 10*time.Second,
+		"continue-as-new constructor time is already virtual and must not be shifted again")
+	s.WithinDuration(startedEventTime, run2MS.State.ExecutionInfo.GetStartTime().AsTime(), 10*time.Second)
+	s.WithinDuration(startedEventTime, run2MS.State.ExecutionInfo.GetExecutionTime().AsTime(), 10*time.Second)
 	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(startedAttr)
 	s.Equal(run1ID, startedAttr.GetContinuedExecutionRunId(),
@@ -1618,6 +1626,11 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	s.NotEmpty(hist2.History.Events)
 	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(startedAttr)
+	inheritedSkip := startedAttr.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration()
+	expectedAttempt2Start := hist2.History.Events[0].GetEventTime().AsTime().Add(inheritedSkip)
+	s.WithinDuration(expectedAttempt2Start, attempt2MS.State.ExecutionState.GetStartTime().AsTime(), 10*time.Second,
+		"WFT-completion retry starts from real shard time and must translate once into virtual time")
+	s.WithinDuration(expectedAttempt2Start, attempt2MS.State.ExecutionInfo.GetStartTime().AsTime(), 10*time.Second)
 	s.Equal(attempt1ID, startedAttr.GetContinuedExecutionRunId(),
 		"attempt 2 references attempt 1 as its predecessor via ContinuedExecutionRunId")
 	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY, startedAttr.GetInitiator(),
@@ -1760,6 +1773,11 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	s.NotEmpty(hist2.History.Events)
 	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(startedAttr)
+	inheritedSkip := startedAttr.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration()
+	expectedRun2Start := hist2.History.Events[0].GetEventTime().AsTime().Add(inheritedSkip)
+	s.WithinDuration(expectedRun2Start, run2MS.State.ExecutionState.GetStartTime().AsTime(), 90*time.Second,
+		"cron starts from real shard time and must translate once into virtual time")
+	s.WithinDuration(expectedRun2Start, run2MS.State.ExecutionInfo.GetStartTime().AsTime(), 90*time.Second)
 	s.Equal(run1ID, startedAttr.GetContinuedExecutionRunId(),
 		"run 2 references run 1 as its predecessor via ContinuedExecutionRunId")
 	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, startedAttr.GetInitiator(),

@@ -105,6 +105,16 @@ func (ms *MutableStateImpl) setAndStampFastForwardInfo(
 	return tsi.FastForwardInfoLastUpdateVersionedTransition
 }
 
+// New mutable states currently reach this function with timestamps in different clock frames:
+//   - workflow-task retry, cron, and child starts are constructed from the real shard clock; their
+//     inherited offset is discovered when the started event is applied, so their run-local times
+//     must be translated into the virtual frame;
+//   - a normal workflow start has no inherited offset, making the translation a no-op; and
+//   - continue-as-new, timer-triggered retry, and history reconstruction are constructed from an
+//     already-virtual event or mutable-state timestamp, so translating them again is incorrect.
+//
+// CONSIDER(time-skipping): initialize every new mutable state with an explicit clock frame so
+// timestamps are created directly in virtual time and this post-construction translation can go away.
 func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationpb.Duration) {
 	if initialSkippedDuration == nil || initialSkippedDuration.AsDuration() == 0 {
 		return
