@@ -1023,8 +1023,7 @@ func NexusEndpointTargetNamespaceID(namespaceID string) ZapTag {
 	return NewStringTag("nexus-endpoint-target-namespace-id", namespaceID)
 }
 
-// NexusEndpointID returns a tag for a Nexus endpoint's ID, which is all that is known when the
-// endpoint lookup itself failed.
+// NexusEndpointID returns a tag for a Nexus endpoint's ID, all that is known if its lookup failed.
 func NexusEndpointID(endpointID string) ZapTag {
 	return NewStringTag("nexus-endpoint-id", endpointID)
 }
