@@ -112,6 +112,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	default:
 		err = errUnknownTransferTask
 	}
+	emitStandbyTaskError(t.shardContext, executable, taskType, err)
 
 	return queues.ExecuteResponse{
 		ExecutionMetricTags: metricsTags,

@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -919,6 +920,7 @@ func HandlerProvider(
 	visibilityMgr manager.VisibilityManager,
 	chasmVisibilityMgr chasm.VisibilityManager,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
@@ -961,6 +963,7 @@ func HandlerProvider(
 		namespaceReplicationQueue,
 		visibilityMgr,
 		logger,
+		eventLogger,
 		throttledLogger,
 		persistenceExecutionManager.GetName(),
 		clusterMetadataManager,
