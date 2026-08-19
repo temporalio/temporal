@@ -1719,6 +1719,15 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
 	}
 
+	startTime := t.shardContext.GetTimeSource().Now()
+	statePropagation := attributes.GetTimeSkippingStatePropagation()
+	if statePropagation.GetInitialSkippedDuration().AsDuration() > 0 {
+		// The propagation state was captured while the parent was running in virtual time.
+		// The child config can be nil when propagation is disabled, but its admission time
+		// still has to remain in the parent's clock frame.
+		startTime = startTime.Add(statePropagation.GetInitialSkippedDuration().AsDuration())
+	}
+
 	request := common.CreateHistoryStartWorkflowRequest(
 		targetNamespaceID.String(),
 		startRequest,
@@ -1734,13 +1743,13 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		},
 		rootExecutionInfo,
-		t.shardContext.GetTimeSource().Now(),
+		startTime,
 	)
 
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
 	request.InheritedPinnedVersion = inheritedPinnedVersion
-	request.TimeSkippingStatePropagation = attributes.GetTimeSkippingStatePropagation()
+	request.TimeSkippingStatePropagation = statePropagation
 
 	// Only set the AutoUpgrade info if the Pinned version is not set.
 	if request.InheritedPinnedVersion == nil {

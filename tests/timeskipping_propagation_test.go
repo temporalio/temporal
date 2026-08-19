@@ -625,19 +625,18 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 		"P's initiated event for C carries P's full accumulated at command time (3h = G's 1h + P's pt1 2h)")
 }
 
-// TestTSPInChildWf_AdmissionTimestampsShifted verifies the time-shift block inside
-// initTimeSkippingInfo (mutable_state_impl.go): when a child workflow boots with a
-// non-zero PropagatedSkippedDuration, the boot-time admission timestamps on the
-// child's MS are shifted forward by accum so they live in the virtual frame, while
-// the WorkflowRunTimeoutTask's VisibilityTimestamp stays in the wall frame.
+// TestTSPInChildWf_AdmissionTimestampsShifted verifies that a child workflow with a
+// non-zero PropagatedSkippedDuration is admitted directly in the parent's virtual
+// clock frame, while the WorkflowRunTimeoutTask's VisibilityTimestamp stays in the
+// wall frame.
 //
 // Scenario:
 //   - Parent TSC enabled. Parent runs StartTimer(t1, 1h) → idle → server skips 1h.
 //     Parent's AccumulatedSkippedDuration ≈ 1h.
 //   - Parent issues StartChildWorkflow with WorkflowRunTimeout=2h. The child's
 //     initiated event carries InitialSkippedDuration=1h. On the child MS,
-//     applyTimeSkippingConfig seeds AccumulatedSkippedDuration=1h, and
-//     initTimeSkippingInfo shifts admission timestamps forward by accum=1h.
+//     applyTimeSkippingConfig seeds AccumulatedSkippedDuration=1h, and the child
+//     start request uses wallChildBoot+1h as its admission time.
 //
 // Boot-time assertions (virtual frame):
 //   - executionState.StartTime ≈ wallChildBoot + 1h
@@ -774,8 +773,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 
 	// WorkflowExecutionExpirationTime: the parent didn't set ExecutionTimeout, so the
 	// child's WorkflowExecutionTimeout is unset and the ExpirationTime is zero. The
-	// shift block in initTimeSkippingInfo only shifts non-nil values, so both branches
-	// are valid: zero is preserved as zero; non-zero is shifted by accum.
+	// direct construction preserves zero; a non-zero value is derived from the virtual start.
 	weExpiration := childMS.State.ExecutionInfo.WorkflowExecutionExpirationTime
 	if weExpiration != nil && !weExpiration.AsTime().IsZero() {
 		s.WithinDuration(expectedRunExpiration, weExpiration.AsTime(), tol,
@@ -1626,10 +1624,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	s.NotEmpty(hist2.History.Events)
 	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(startedAttr)
-	inheritedSkip := startedAttr.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration()
-	expectedAttempt2Start := hist2.History.Events[0].GetEventTime().AsTime().Add(inheritedSkip)
+	expectedAttempt2Start := hist2.History.Events[0].GetEventTime().AsTime()
 	s.WithinDuration(expectedAttempt2Start, attempt2MS.State.ExecutionState.GetStartTime().AsTime(), 10*time.Second,
-		"WFT-completion retry starts from real shard time and must translate once into virtual time")
+		"WFT-completion retry event and mutable state must be constructed in the same virtual frame")
 	s.WithinDuration(expectedAttempt2Start, attempt2MS.State.ExecutionInfo.GetStartTime().AsTime(), 10*time.Second)
 	s.Equal(attempt1ID, startedAttr.GetContinuedExecutionRunId(),
 		"attempt 2 references attempt 1 as its predecessor via ContinuedExecutionRunId")
@@ -1773,10 +1770,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	s.NotEmpty(hist2.History.Events)
 	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(startedAttr)
-	inheritedSkip := startedAttr.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration()
-	expectedRun2Start := hist2.History.Events[0].GetEventTime().AsTime().Add(inheritedSkip)
+	expectedRun2Start := hist2.History.Events[0].GetEventTime().AsTime()
 	s.WithinDuration(expectedRun2Start, run2MS.State.ExecutionState.GetStartTime().AsTime(), 90*time.Second,
-		"cron starts from real shard time and must translate once into virtual time")
+		"cron event and mutable state must be constructed in the same virtual frame")
 	s.WithinDuration(expectedRun2Start, run2MS.State.ExecutionInfo.GetStartTime().AsTime(), 90*time.Second)
 	s.Equal(run1ID, startedAttr.GetContinuedExecutionRunId(),
 		"run 2 references run 1 as its predecessor via ContinuedExecutionRunId")

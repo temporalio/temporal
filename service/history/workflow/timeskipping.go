@@ -22,6 +22,11 @@ import (
 // =============================================================================
 // Time Skipping Configuration Management
 // =============================================================================
+// Admission timestamps must already be in the correct clock frame before initialization:
+// child, workflow-task retry, and cron starts translate real shard time into inherited virtual
+// time; normal starts have no offset; and continue-as-new, timer retries, and history rebuilds
+// already supply virtual timestamps. Mutating them here would double-shift the latter paths and
+// move absolute execution-expiration deadlines.
 func (ms *MutableStateImpl) initTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
 	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
@@ -37,7 +42,6 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 		SessionSkipCount:           timeSkippingStatePropagation.GetInitialSkipCount(),
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
-	ms.wrapExecutionTimes(initialSkip)
 	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
 	ms.timeSkippingInfoUpdated = true
 }
@@ -103,38 +107,6 @@ func (ms *MutableStateImpl) setAndStampFastForwardInfo(
 		TransitionCount:          ms.NextTransitionCount(),
 	}
 	return tsi.FastForwardInfoLastUpdateVersionedTransition
-}
-
-// New mutable states currently reach this function with timestamps in different clock frames:
-//   - workflow-task retry, cron, and child starts are constructed from the real shard clock; their
-//     inherited offset is discovered when the started event is applied, so their run-local times
-//     must be translated into the virtual frame;
-//   - a normal workflow start has no inherited offset, making the translation a no-op; and
-//   - continue-as-new, timer-triggered retry, and history reconstruction are constructed from an
-//     already-virtual event or mutable-state timestamp, so translating them again is incorrect.
-//
-// CONSIDER(time-skipping): initialize every new mutable state with an explicit clock frame so
-// timestamps are created directly in virtual time and this post-construction translation can go away.
-func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationpb.Duration) {
-	if initialSkippedDuration == nil || initialSkippedDuration.AsDuration() == 0 {
-		return
-	}
-	accum := initialSkippedDuration.AsDuration()
-	if !timeNotSet(ms.executionState.StartTime) {
-		ms.executionState.StartTime = timestamppb.New(ms.executionState.StartTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.StartTime) {
-		ms.executionInfo.StartTime = timestamppb.New(ms.executionInfo.StartTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.ExecutionTime) {
-		ms.executionInfo.ExecutionTime = timestamppb.New(ms.executionInfo.ExecutionTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.WorkflowRunExpirationTime) {
-		ms.executionInfo.WorkflowRunExpirationTime = timestamppb.New(ms.executionInfo.WorkflowRunExpirationTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.WorkflowExecutionExpirationTime) {
-		ms.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(ms.executionInfo.WorkflowExecutionExpirationTime.AsTime().Add(accum))
-	}
 }
 
 // -- Propagation Methods of Time Skipping

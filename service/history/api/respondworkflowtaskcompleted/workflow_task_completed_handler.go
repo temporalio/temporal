@@ -1456,7 +1456,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.retryOrCronStartTime(),
 		handler.mutableState,
 	)
 	if err != nil {
@@ -1516,7 +1516,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.retryOrCronStartTime(),
 		handler.mutableState,
 	)
 	if err != nil {
@@ -1550,6 +1550,16 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 
 	handler.newMutableState = newMutableState
 	return nil
+}
+
+func (handler *workflowTaskCompletedHandler) retryOrCronStartTime() time.Time {
+	timeSkippingInfo := workflow.NewTimeSkippingInfoUtil(
+		handler.mutableState.GetExecutionInfo().GetTimeSkippingInfo(),
+	)
+	if timeSkippingInfo.GetAccumulatedSkippedDuration() > 0 {
+		return handler.mutableState.Now()
+	}
+	return handler.shard.GetTimeSource().Now()
 }
 
 func (handler *workflowTaskCompletedHandler) validateCommandAttr(
