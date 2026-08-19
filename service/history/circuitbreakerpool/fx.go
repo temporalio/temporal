@@ -67,7 +67,7 @@ func onStateChange(
 			"outbound queue circuit breaker state change",
 			tag.WorkflowNamespace(nsName),
 			tag.WorkflowNamespaceID(key.NamespaceID),
-			tag.NewStringTag("destination", key.Destination),
+			tag.Destination(key.Destination),
 			tag.NewStringTag("task-group", key.TaskGroup),
 			tag.NewStringTag("from-state", from.String()),
 			tag.NewStringTag("to-state", to.String()),
