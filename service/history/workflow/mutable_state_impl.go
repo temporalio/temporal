@@ -1000,6 +1000,17 @@ func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState 
 	return common.CloneProto(msProto)
 }
 
+func (ms *MutableStateImpl) eventKey(eventID int64, version int64) events.EventKey {
+	return events.EventKey{
+		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
+		WorkflowID:  ms.executionInfo.WorkflowId,
+		RunID:       ms.executionState.RunId,
+		EventID:     eventID,
+		Version:     version,
+		ShardUUID:   ms.shard.GetOwner(),
+	}
+}
+
 func (ms *MutableStateImpl) GetWorkflowKey() definition.WorkflowKey {
 	return definition.NewWorkflowKey(
 		ms.executionInfo.NamespaceId,
@@ -1426,15 +1437,7 @@ func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) 
 	if err != nil {
 		return nil, err
 	}
-	wfKey := ms.GetWorkflowKey()
-	eventKey := events.EventKey{
-		NamespaceID: namespace.ID(wfKey.NamespaceID),
-		WorkflowID:  wfKey.WorkflowID,
-		RunID:       wfKey.RunID,
-		EventID:     ref.EventId,
-		Version:     version,
-		ShardUUID:   ms.shard.GetOwner(),
-	}
+	eventKey := ms.eventKey(ref.EventId, version)
 
 	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, ref.EventBatchId, branchToken)
 }
@@ -1567,14 +1570,7 @@ func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 	if err != nil {
 		return nil, err
 	}
-	eventKey := events.EventKey{
-		NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-		WorkflowID:  ms.executionInfo.WorkflowId,
-		RunID:       ms.executionState.RunId,
-		EventID:     completion.EventId,
-		Version:     version,
-		ShardUUID:   ms.shard.GetOwner(),
-	}
+	eventKey := ms.eventKey(completion.EventId, version)
 	event, err := ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, completion.EventBatchId, currentBranchToken)
 	if err != nil {
 		return nil, err
@@ -1601,14 +1597,7 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ai.ScheduledEventId,
-			Version:     version,
-			ShardUUID:   ms.shard.GetOwner(),
-		},
+		ms.eventKey(ai.ScheduledEventId, version),
 		ai.ScheduledEventBatchId,
 		currentBranchToken,
 	)
@@ -1699,14 +1688,7 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ci.InitiatedEventId,
-			Version:     version,
-			ShardUUID:   ms.shard.GetOwner(),
-		},
+		ms.eventKey(ci.InitiatedEventId, version),
 		ci.InitiatedEventBatchId,
 		currentBranchToken,
 	)
@@ -1746,14 +1728,7 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     ri.InitiatedEventId,
-			Version:     version,
-			ShardUUID:   ms.shard.GetOwner(),
-		},
+		ms.eventKey(ri.InitiatedEventId, version),
 		ri.InitiatedEventBatchId,
 		currentBranchToken,
 	)
@@ -1827,14 +1802,7 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     si.InitiatedEventId,
-			Version:     version,
-			ShardUUID:   ms.shard.GetOwner(),
-		},
+		ms.eventKey(si.InitiatedEventId, version),
 		si.InitiatedEventBatchId,
 		currentBranchToken,
 	)
@@ -1880,14 +1848,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 	event, err = ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     completionEventID,
-			Version:     version,
-			ShardUUID:   ms.shard.GetOwner(),
-		},
+		ms.eventKey(completionEventID, version),
 		firstEventID,
 		currentBranchToken,
 	)
@@ -1979,14 +1940,7 @@ func (ms *MutableStateImpl) GetStartEvent(
 	event, err := ms.eventsCache.GetEvent(
 		ctx,
 		ms.shard.GetShardID(),
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     common.FirstEventID,
-			Version:     startVersion,
-			ShardUUID:   ms.shard.GetOwner(),
-		},
+		ms.eventKey(common.FirstEventID, startVersion),
 		common.FirstEventID,
 		currentBranchToken,
 	)
@@ -2095,14 +2049,7 @@ func (ms *MutableStateImpl) writeEventToCache(
 	// during the processing of DeleteTransferTask without loading this event from database.
 	// For Update events: store it here so that Update disposition lookups can be fast.
 	ms.eventsCache.PutEvent(
-		events.EventKey{
-			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
-			WorkflowID:  ms.executionInfo.WorkflowId,
-			RunID:       ms.executionState.RunId,
-			EventID:     event.GetEventId(),
-			Version:     event.GetVersion(),
-			ShardUUID:   ms.shard.GetOwner(),
-		},
+		ms.eventKey(event.GetEventId(), event.GetVersion()),
 		event,
 	)
 }

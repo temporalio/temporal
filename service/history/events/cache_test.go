@@ -20,15 +20,14 @@ import (
 
 const shardUUID = "events-cache-test-shard-uuid"
 
-// testEventKey keeps the field mapping in one place, out of positional literals.
-func testEventKey(namespaceID namespace.ID, workflowID, runID string, eventID int64, shard string) EventKey {
+func testEventKey(namespaceID namespace.ID, workflowID, runID string, eventID int64, shardUUID string) EventKey {
 	return EventKey{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		EventID:     eventID,
 		Version:     common.EmptyVersion,
-		ShardUUID:   shard,
+		ShardUUID:   shardUUID,
 	}
 }
 
@@ -276,42 +275,36 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 	namespaceID := namespace.ID("events-cache-invalid-key-namespace")
 	workflowID := "events-cache-invalid-key-workflow-id"
-	runID := "" // <-- this is invalid
+	runID := "events-cache-invalid-key-run-id"
 	branchToken := []byte("store_token")
-
 	shardID := int32(10)
-	event1 := &historypb.HistoryEvent{
+	event := &historypb.HistoryEvent{
 		EventId:   14,
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 	}
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    int64(11),
-		MaxEventID:    int64(15),
-		PageSize:      1,
-		NextPageToken: nil,
-		ShardID:       shardID,
-	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*historypb.HistoryEvent{event1},
-		NextPageToken: nil,
-	}, nil).Times(2) // will be called twice since the key is invalid
 
-	s.cache.PutEvent(
-		testEventKey(namespaceID, workflowID, runID, event1.EventId, shardUUID),
-		event1)
+	// An invalid key is a caller bug: serve the event from the store, but never cache it.
+	for name, key := range map[string]EventKey{
+		"empty run ID":   testEventKey(namespaceID, workflowID, "", event.EventId, shardUUID),
+		"empty shard ID": testEventKey(namespaceID, workflowID, runID, event.EventId, ""),
+	} {
+		s.Run(name, func() {
+			s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(
+				&persistence.ReadHistoryBranchResponse{
+					HistoryEvents: []*historypb.HistoryEvent{event},
+				}, nil).Times(2)
 
-	gotEvent1, _ := s.cache.GetEvent(
-		context.Background(),
-		shardID,
-		testEventKey(namespaceID, workflowID, runID, int64(14), shardUUID),
-		int64(11), branchToken)
-	s.Equal(gotEvent1, event1)
-	gotEvent2, _ := s.cache.GetEvent(
-		context.Background(),
-		shardID,
-		testEventKey(namespaceID, workflowID, runID, int64(14), shardUUID),
-		int64(11), branchToken)
-	s.Equal(gotEvent2, event1)
+			s.cache.PutEvent(key, event)
+			s.Nil(s.cache.Get(key))
+
+			for range 2 {
+				got, err := s.cache.GetEvent(context.Background(), shardID, key, int64(11), branchToken)
+				s.NoError(err)
+				s.Equal(event, got)
+				s.Nil(s.cache.Get(key))
+			}
+		})
+	}
 }
 
 // An entry cached by one shard context instance must not be visible to the next one.
@@ -353,37 +346,4 @@ func (s *eventsCacheSuite) TestEventsCacheNotSharedAcrossShardUUIDs() {
 		eventID, []byte("store_token"))
 	s.NoError(err)
 	s.Equal(persistedEvent, actualEvent)
-}
-
-// An unscoped key means a caller bug, so the entry must not be cached.
-func (s *eventsCacheSuite) TestEventsCacheNotCachedWithoutShardUUID() {
-	namespaceID := namespace.ID("events-cache-no-shard-uuid-namespace")
-	workflowID := "events-cache-no-shard-uuid-workflow-id"
-	runID := "events-cache-no-shard-uuid-run-id"
-	eventID := int64(23)
-	event := &historypb.HistoryEvent{
-		EventId:    eventID,
-		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
-	}
-
-	key := testEventKey(namespaceID, workflowID, runID, eventID, "")
-	s.cache.PutEvent(key, event)
-	s.Nil(s.cache.Get(key))
-
-	// Reads still serve from the store, but must not populate the cache.
-	shardID := int32(10)
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken:   []byte("store_token"),
-		MinEventID:    eventID,
-		MaxEventID:    eventID + 1,
-		PageSize:      1,
-		NextPageToken: nil,
-		ShardID:       shardID,
-	}).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{event}}, nil)
-
-	actualEvent, err := s.cache.GetEvent(context.Background(), shardID, key, eventID, []byte("store_token"))
-	s.NoError(err)
-	s.Equal(event, actualEvent)
-	s.Nil(s.cache.Get(key))
 }

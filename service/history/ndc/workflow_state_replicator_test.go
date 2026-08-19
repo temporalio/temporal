@@ -2050,7 +2050,10 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	mockEventsCache := events.NewMockCache(s.controller)
-	mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	// Assert the key is shard-scoped; an unscoped key would be rejected by the cache.
+	mockEventsCache.EXPECT().PutEvent(gomock.Cond(func(k events.EventKey) bool {
+		return k.ShardUUID == "test-shard-owner"
+	}), gomock.Any()).AnyTimes()
 	mockShard.EXPECT().GetEventsCache().Return(mockEventsCache).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 

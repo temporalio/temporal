@@ -103,7 +103,8 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID),
 			tag.WorkflowNamespaceID(key.NamespaceID.String()),
-			tag.WorkflowEventID(key.EventID))
+			tag.WorkflowEventID(key.EventID),
+			tag.NewStringTag("shard-uuid", key.ShardUUID))
 		return false
 	}
 	return true

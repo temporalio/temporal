@@ -1,12 +1,13 @@
 package workflow
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -14,6 +15,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
@@ -22,11 +24,12 @@ import (
 )
 
 // A failed write leaves an event cached; the shard reloads and a later transaction persists a
-// different event at that ID. The host-level cache must not serve the stale entry.
+// different event at that ID. The host-level cache must not serve the stale entry to the new
+// shard instance, while the instance that cached it still reads its own entry.
 func TestStaleCachedEventNotServedAfterShardReload(t *testing.T) {
-	const initiatedEventID = int64(5)
+	const eventID = int64(5)
 	const version = int64(1234)
-	ctx := context.Background()
+	ctx := t.Context()
 	ctrl := gomock.NewController(t)
 	cfg := tests.NewDynamicConfig()
 	logger := log.NewNoopLogger()
@@ -49,31 +52,52 @@ func TestStaleCachedEventNotServedAfterShardReload(t *testing.T) {
 		return sc
 	}
 
-	// Shard instance A, and the process-lifetime events cache introduced by #11450.
+	versionHistories := func() *historyspb.VersionHistories {
+		return &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("branch-token"),
+					Items:       []*historyspb.VersionHistoryItem{{EventId: eventID, Version: version}},
+				},
+			},
+		}
+	}
+
+	// Shard instance A, and the process-lifetime events cache shared by every shard on the host.
 	shardA := newShard(1)
 	hostCache := events.NewHostLevelEventsCache(
 		shardA.GetExecutionManager(), cfg, metrics.NoopMetricsHandler, logger, false)
-	shardA.SetEventsCacheForTesting(hostCache)
 
-	// Shard A builds a timer event at eventID 5 -- cached at build time -- then fails to persist.
+	// Shard A schedules an activity at eventID 5. Applying the event caches it, and then the
+	// transaction that built it fails to persist.
 	msA := TestGlobalMutableState(shardA, hostCache, logger, version, tests.WorkflowID, tests.RunID)
+	msA.GetExecutionInfo().VersionHistories = versionHistories()
 	staleEvent := &historypb.HistoryEvent{
-		EventId:   initiatedEventID,
+		EventId:   eventID,
 		Version:   version,
-		EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
-		Attributes: &historypb.HistoryEvent_TimerStartedEventAttributes{
-			TimerStartedEventAttributes: &historypb.TimerStartedEventAttributes{TimerId: "t1"},
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+				ActivityId:   "activity-1",
+				ActivityType: &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: "tq"},
+			},
 		},
 	}
-	msA.writeEventToCache(staleEvent)
+	_, err := msA.ApplyActivityTaskScheduledEvent(eventID, staleEvent)
+	require.NoError(t, err)
+
+	// The instance that cached it still reads its own entry, without going to the store.
+	gotA, err := msA.GetActivityScheduledEvent(ctx, eventID)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, staleEvent, gotA)
 
 	// Shard moves away and back: new shard context, same process, same host cache.
 	shardB := newShard(2)
-	shardB.SetEventsCacheForTesting(hostCache)
 
 	// The retry persisted a child-initiated event at that same event ID.
 	persistedEvent := &historypb.HistoryEvent{
-		EventId:   initiatedEventID,
+		EventId:   eventID,
 		Version:   version,
 		EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
 		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
@@ -82,29 +106,21 @@ func TestStaleCachedEventNotServedAfterShardReload(t *testing.T) {
 			},
 		},
 	}
-	// The host cache reads through the execution manager it was built with.
+	// The host cache reads through the execution manager it was built with. Exactly one read:
+	// the lookup below must miss the cache, and the one above must not have.
 	shardA.Resource.ExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(
 		&persistence.ReadHistoryBranchResponse{
 			HistoryEvents: []*historypb.HistoryEvent{persistedEvent},
-		}, nil).AnyTimes()
+		}, nil).Times(1)
 
 	msB := TestGlobalMutableState(shardB, hostCache, logger, version, tests.WorkflowID, tests.RunID)
-	msB.GetExecutionInfo().VersionHistories = &historyspb.VersionHistories{
-		Histories: []*historyspb.VersionHistory{
-			{
-				BranchToken: []byte("branch-token"),
-				Items:       []*historyspb.VersionHistoryItem{{EventId: initiatedEventID, Version: version}},
-			},
-		},
-	}
+	msB.GetExecutionInfo().VersionHistories = versionHistories()
 	msB.pendingChildExecutionInfoIDs = map[int64]*persistencespb.ChildExecutionInfo{
-		initiatedEventID: {InitiatedEventId: initiatedEventID, InitiatedEventBatchId: initiatedEventID},
+		eventID: {InitiatedEventId: eventID, InitiatedEventBatchId: eventID},
 	}
 
-	got, err := msB.GetChildExecutionInitiatedEvent(ctx, initiatedEventID)
+	// Serving shard A's entry here would hand the caller nil child attributes to dereference.
+	got, err := msB.GetChildExecutionInitiatedEvent(ctx, eventID)
 	require.NoError(t, err)
-
-	// Nil attributes are what transfer_queue_active_task_executor.go:967 dereferences.
-	require.NotNil(t, got.GetStartChildWorkflowExecutionInitiatedEventAttributes(),
-		"stale event from the previous shard instance was served for the child's initiated event ID")
+	protorequire.ProtoEqual(t, persistedEvent, got)
 }

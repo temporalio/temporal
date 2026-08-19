@@ -129,14 +129,15 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
 	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
 
-	// A real shard context always has a unique owner.
-	if config.ShardInfo.GetOwner() == "" {
-		config.ShardInfo.Owner = fmt.Sprintf("test-shard-owner-%v-%v", config.ShardInfo.GetShardId(), uuid.NewString())
+	// A real shard context always has an owner unique to that instance.
+	owner := fmt.Sprintf("test-shard-owner-%v-%v", config.ShardInfo.GetShardId(), uuid.NewString())
+	if configured := config.ShardInfo.GetOwner(); configured != "" {
+		owner = configured
 	}
 
 	ctx := &ContextImpl{
 		shardID:             config.ShardInfo.GetShardId(),
-		owner:               config.ShardInfo.GetOwner(),
+		owner:               owner,
 		stringRepr:          fmt.Sprintf("Shard(%d)", config.ShardInfo.GetShardId()),
 		executionManager:    executionManager,
 		metricsHandler:      t.MetricsHandler,
