@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -44,6 +46,7 @@ type NexusOperationHTTPHandler struct {
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
+	httpServerHandlerInstrumenter        telemetry.HTTPServerHandlerInstrumenter
 }
 
 func NewNexusOperationHTTPHandler(
@@ -64,6 +67,7 @@ func NewNexusOperationHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
+	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
 ) *NexusOperationHTTPHandler {
 	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
@@ -79,6 +83,7 @@ func NewNexusOperationHTTPHandler(
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
+		httpServerHandlerInstrumenter:        httpServerHandlerInstrumenter,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
 				logger:                        logger,
@@ -106,10 +111,22 @@ func NewNexusOperationHTTPHandler(
 }
 
 func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
-		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
-		HandlerFunc(h.dispatchNexusTaskByEndpoint)
+	register := func(route, apiName string, handler http.HandlerFunc) {
+		spanName := strings.TrimPrefix(apiName, "/")
+		instrumentedHandler := h.httpServerHandlerInstrumenter.Instrument(handler, spanName)
+		r.PathPrefix("/" + route + "/").Handler(instrumentedHandler)
+	}
+
+	register(
+		commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation(),
+		configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName,
+		h.dispatchNexusTaskByNamespaceAndTaskQueue,
+	)
+	register(
+		commonnexus.RouteDispatchNexusTaskByEndpoint.Representation(),
+		configs.DispatchNexusTaskByEndpointAPIName,
+		h.dispatchNexusTaskByEndpoint,
+	)
 }
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {

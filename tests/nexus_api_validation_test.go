@@ -34,7 +34,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 	// Also use this test to verify that namespaces are unescaped in the path.
 	taskQueue := testcore.RandomizeStr("task-queue")
 	namespace := "namespace not/found"
-	u := getDispatchByNsAndTqURL(env.HttpAPIAddress(), namespace, taskQueue)
+	u := env.dispatchByNamespaceAndTaskQueueURL(namespace, taskQueue)
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	capture := env.StartNamespaceMetricCaptureFor(namespace)
@@ -46,7 +46,13 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 
 	requests := capture.Metric("nexus_requests")
 	s.Len(requests, 1)
-	s.Equal(map[string]string{"namespace": namespace, "method": "StartNexusOperation", "outcome": "namespace_not_found", "nexus_endpoint": "_unknown_"}, requests[0].Tags)
+	s.Equal(map[string]string{
+		"namespace":      namespace,
+		"method":         "StartNexusOperation",
+		"outcome":        "namespace_not_found",
+		"nexus_endpoint": "_unknown_",
+		"service_name":   "frontend",
+	}, requests[0].Tags)
 	s.Equal(int64(1), requests[0].Value)
 }
 
@@ -59,7 +65,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 		namespace.WriteString("namespace-is-a-very-long-string")
 	}
 
-	u := getDispatchByNsAndTqURL(env.HttpAPIAddress(), namespace.String(), taskQueue)
+	u := env.dispatchByNamespaceAndTaskQueueURL(namespace.String(), taskQueue)
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	capture := env.StartGlobalMetricCapture()
@@ -187,9 +193,9 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
-			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), testEndpoint.Id)
+			dispatchURL = env.dispatchByEndpointURL(testEndpoint.Id)
 		} else {
-			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), taskQueue)
+			dispatchURL = env.dispatchByTaskQueueURL(taskQueue)
 		}
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
@@ -229,9 +235,9 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_PayloadSizeLimit()
 
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
-			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), testEndpoint.Id)
+			dispatchURL = env.dispatchByEndpointURL(testEndpoint.Id)
 		} else {
-			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), taskQueue)
+			dispatchURL = env.dispatchByTaskQueueURL(taskQueue)
 		}
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
@@ -362,7 +368,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Validate
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound() {
 	env := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
-	u := getDispatchByEndpointURL(env.HttpAPIAddress(), uuid.NewString())
+	u := env.dispatchByEndpointURL(uuid.NewString())
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	capture := env.StartGlobalMetricCapture()

@@ -13,10 +13,12 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/testlogger"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -229,6 +231,41 @@ func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 	require.Len(t, generator.FutureActionTimes, 2)
 }
 
+func TestGeneratorTask_UpdateFutureActionTimes_NegativeRemainingActionsDoesNotPanic(t *testing.T) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	engine, engineCtx := newTestEngineContext(t, logger)
+
+	input := defaultSchedule()
+	input.State.LimitedActions = true
+	input.State.RemainingActions = -1
+
+	result, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+		scheduler.CreateScheduler,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Schedule:   input,
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](result.ExecutionKey)
+	_, err = engine.FirePureTasks(rootRef, time.Now())
+	require.NoError(t, err)
+
+	_, err = chasm.ReadComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			require.Empty(t, s.Generator.Get(ctx).FutureActionTimes)
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
+}
+
 func TestGeneratorTask_Idle_SetsIdleCloseTime(t *testing.T) {
 	env := newTestEnv(t)
 	handler := newGeneratorHandler(env)
@@ -350,4 +387,61 @@ func TestUnpause_ResumesProcessing(t *testing.T) {
 	// side-effect tasks to start workflows. Without the fix, nothing runs.
 	require.True(t, env.HasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate),
 		"schedule should resume processing after unpause")
+}
+
+// A nil or non-positive catchup window means "unset" and resolves to the
+// default (large) window, so automated actions that were missed while the
+// schedule was behind are caught up rather than dropped. Only a positive value
+// below the minimum is clamped up to MinCatchupWindow, which the final case
+// exercises to prove the window is actually enforced (so the "nothing missed"
+// result for the non-positive cases is meaningful, not a dead counter).
+//
+// With the default tweakables (MinCatchupWindow=10s, DefaultCatchupWindow=365d),
+// rewinding the high water mark by 5 intervals yields 5 automated actions each
+// 1-5 minutes old. Under the fix, a zero/negative window resolves to the default
+// and all 5 are caught up; under the old behavior it resolved to the 10s minimum
+// and all 5 would be dropped.
+func TestGeneratorTask_CatchupWindowResolvesNonPositiveToDefault(t *testing.T) {
+	cases := []struct {
+		name          string
+		catchupWindow *durationpb.Duration
+		caughtUp      bool // true: default window catches up all actions; false: window is enforced
+	}{
+		{"nil resolves to default", nil, true},
+		{"zero resolves to default", durationpb.New(0), true},
+		{"negative resolves to default", durationpb.New(-5 * time.Second), true},
+		{"below-min positive is clamped and enforced", durationpb.New(time.Second), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			handler := newGeneratorHandler(env)
+
+			ctx := env.MutableContext()
+			sched := env.Scheduler
+			sched.Schedule.Policies.CatchupWindow = tc.catchupWindow
+
+			generator := sched.Generator.Get(ctx)
+			invoker := sched.Invoker.Get(ctx)
+
+			// Rewind the high water mark so the range yields 5 automated actions,
+			// each between 1 and 5 minutes old (all older than MinCatchupWindow).
+			hwm := ctx.Now(generator).UTC().Add(-defaultInterval * 5)
+			generator.LastProcessedTime = timestamppb.New(hwm)
+
+			require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+
+			if tc.caughtUp {
+				require.Len(t, invoker.BufferedStarts, 5,
+					"a non-positive window should resolve to the default and catch up every missed action")
+				require.Zero(t, sched.Info.MissedCatchupWindow,
+					"no action should be missed when the window resolves to the default")
+			} else {
+				require.Less(t, len(invoker.BufferedStarts), 5,
+					"a below-min window is clamped to MinCatchupWindow and should drop older actions")
+				require.Positive(t, sched.Info.MissedCatchupWindow,
+					"actions older than the enforced window should be counted as missed")
+			}
+		})
+	}
 }

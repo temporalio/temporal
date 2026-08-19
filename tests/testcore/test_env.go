@@ -13,6 +13,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -31,6 +32,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/temporal"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -113,6 +115,15 @@ func WithDedicatedCluster() TestOption {
 	}
 }
 
+// WithSpanExporter enables OpenTelemetry tracing with exporter on a dedicated test cluster.
+func WithSpanExporter(exporter sdktrace.SpanExporter) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withSpanExporter(exporter))
+		o.dedicatedReason = "span exporter configured"
+	}
+}
+
 // WithDisableTestloggerFailure disables the test logger's behavior of failing
 // the test when an error log matches a registered expectation (e.g. soft-assert
 // errors tagged with tag.FailedAssertion). Use for tests that intentionally
@@ -174,7 +185,7 @@ func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 func WithArchival() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithArchivalEnabled())
+		o.clusterOptions = append(o.clusterOptions, withArchivalConfig())
 		o.dedicatedReason = "archival enabled"
 	}
 }
@@ -185,10 +196,12 @@ func WithArchival() TestOption {
 func WithCustomArchivers(historyFactory provider.CustomHistoryArchiverFactory, visibilityFactory provider.CustomVisibilityArchiverFactory) TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions,
-			WithCustomHistoryArchiverFactory(historyFactory),
-			WithCustomVisibilityArchiverFactory(visibilityFactory),
-		)
+		o.clusterOptions = append(o.clusterOptions, func(params *testClusterParams) {
+			params.AdditionalServerOptions = append(params.AdditionalServerOptions,
+				temporal.WithCustomHistoryArchiverFactory(historyFactory),
+				temporal.WithCustomVisibilityArchiverFactory(visibilityFactory),
+			)
+		})
 		o.dedicatedReason = "custom archivers used"
 	}
 }

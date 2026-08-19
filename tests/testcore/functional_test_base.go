@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/temporal"
 )
 
 type (
@@ -91,18 +91,19 @@ type (
 	}
 	// testClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	testClusterParams struct {
-		DCRedirectionPolicy             config.DCRedirectionPolicy
-		DynamicConfigOverrides          map[dynamicconfig.Key]any
-		ArchivalEnabled                 bool
-		EnableMTLS                      bool
-		EnableWorkerService             bool
-		FaultInjectionConfig            *config.FaultInjection
-		NumHistoryShards                int32
-		Logger                          log.Logger
-		SharedCluster                   bool
-		EnableHistoryTaskRecorder       bool
-		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
-		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
+		DCRedirectionPolicy       config.DCRedirectionPolicy
+		DynamicConfigOverrides    map[dynamicconfig.Key]any
+		EnableMTLS                bool
+		EnableWorkerService       bool
+		FaultInjectionConfig      *config.FaultInjection
+		NumHistoryShards          int32
+		Logger                    log.Logger
+		SharedCluster             bool
+		EnableHistoryTaskRecorder bool
+		EnableReplicationRecorder bool
+		EnableArchival            bool
+		SpanExporter              sdktrace.SpanExporter
+		AdditionalServerOptions   []temporal.ServerOption
 	}
 	TestClusterOption func(params *testClusterParams)
 )
@@ -130,9 +131,9 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 	}
 }
 
-func WithArchivalEnabled() TestClusterOption {
+func withArchivalConfig() TestClusterOption {
 	return func(params *testClusterParams) {
-		params.ArchivalEnabled = true
+		params.EnableArchival = true
 	}
 }
 
@@ -174,21 +175,21 @@ func WithClusterHistoryTaskRecorder() TestClusterOption {
 	}
 }
 
+func WithReplicationStreamRecorder() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableReplicationRecorder = true
+	}
+}
+
+func withSpanExporter(exporter sdktrace.SpanExporter) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.SpanExporter = exporter
+	}
+}
+
 func WithSharedCluster() TestClusterOption {
 	return func(params *testClusterParams) {
 		params.SharedCluster = true
-	}
-}
-
-func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) TestClusterOption {
-	return func(params *testClusterParams) {
-		params.CustomHistoryArchiverFactory = factory
-	}
-}
-
-func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) TestClusterOption {
-	return func(params *testClusterParams) {
-		params.CustomVisibilityArchiverFactory = factory
 	}
 }
 
@@ -305,15 +306,18 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
-		DCRedirectionPolicy:             params.DCRedirectionPolicy,
-		DynamicConfigOverrides:          params.DynamicConfigOverrides,
-		EnableMetricsCapture:            true,
-		EnableArchival:                  params.ArchivalEnabled,
-		EnableMTLS:                      params.EnableMTLS,
-		EnableHistoryTaskRecorder:       params.EnableHistoryTaskRecorder,
-		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
-		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
-		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
+		DCRedirectionPolicy:       params.DCRedirectionPolicy,
+		DynamicConfigOverrides:    params.DynamicConfigOverrides,
+		EnableMetricsCapture:      true,
+		EnableMTLS:                params.EnableMTLS,
+		EnableHistoryTaskRecorder: params.EnableHistoryTaskRecorder,
+		EnableReplicationRecorder: params.EnableReplicationRecorder,
+		EnableArchival:            params.EnableArchival,
+		AdditionalServerOptions:   params.AdditionalServerOptions,
+		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
+	}
+	if params.SpanExporter != nil {
+		setSpanExporter(s.testClusterConfig, "test", params.SpanExporter)
 	}
 
 	// Apply configuration for shared clusters.
@@ -329,9 +333,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		s.otelExporter = testtelemetry.NewFileExporter(otelOutputDir)
 
 		// Direct the OTEL exporter to the collector.
-		s.testClusterConfig.SpanExporters = map[telemetry.SpanExporterType]sdktrace.SpanExporter{
-			telemetry.OtelTracesOtlpExporterType: s.otelExporter,
-		}
+		setSpanExporter(s.testClusterConfig, telemetry.OtelTracesOtlpExporterType, s.otelExporter)
 	}
 
 	var err error
@@ -347,6 +349,13 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
 	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
+}
+
+func setSpanExporter(clusterConfig *TestClusterConfig, exporterType telemetry.SpanExporterType, exporter sdktrace.SpanExporter) {
+	if clusterConfig.SpanExporters == nil {
+		clusterConfig.SpanExporters = make(map[telemetry.SpanExporterType]sdktrace.SpanExporter)
+	}
+	clusterConfig.SpanExporters[exporterType] = exporter
 }
 
 func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/cluster"
@@ -16,15 +17,18 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 type (
 	localActivities struct {
-		metadataManager      persistence.MetadataManager
-		clusterMetadata      cluster.Metadata
-		nexusEndpointManager persistence.NexusEndpointManager
-		logger               log.Logger
+		metadataManager              persistence.MetadataManager
+		clusterMetadata              cluster.Metadata
+		nexusEndpointManager         persistence.NexusEndpointManager
+		logger                       log.Logger
+		eventLogger                  otellog.Logger
+		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
 
 		protectedNamespaces                       dynamicconfig.TypedPropertyFn[[]string]
 		allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
@@ -45,16 +49,20 @@ func newLocalActivities(
 	clusterMetadata cluster.Metadata,
 	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
+	eventLogger otellog.Logger,
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
 	protectedNamespaces dynamicconfig.TypedPropertyFn[[]string],
 	allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn,
 	nexusEndpointListDefaultPageSize dynamicconfig.IntPropertyFn,
 ) *localActivities {
 	return &localActivities{
-		metadataManager:      metadataManager,
-		clusterMetadata:      clusterMetadata,
-		nexusEndpointManager: nexusEndpointManager,
-		logger:               logger,
-		protectedNamespaces:  protectedNamespaces,
+		metadataManager:              metadataManager,
+		clusterMetadata:              clusterMetadata,
+		nexusEndpointManager:         nexusEndpointManager,
+		logger:                       logger,
+		eventLogger:                  eventLogger,
+		emitNamespaceLifecycleEvents: emitNamespaceLifecycleEvents,
+		protectedNamespaces:          protectedNamespaces,
 		allowDeleteNamespaceIfNexusEndpointTarget: allowDeleteNamespaceIfNexusEndpointTarget,
 		nexusEndpointListDefaultPageSize:          nexusEndpointListDefaultPageSize,
 	}
@@ -204,7 +212,7 @@ func (a *localActivities) GenerateDeletedNamespaceNameActivity(ctx context.Conte
 
 }
 
-func (a *localActivities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {
+func (a *localActivities) RenameNamespaceActivity(ctx context.Context, nsID namespace.ID, previousName namespace.Name, newName namespace.Name) error {
 	if newName == previousName {
 		return nil
 	}
@@ -223,5 +231,17 @@ func (a *localActivities) RenameNamespaceActivity(ctx context.Context, previousN
 	}
 
 	a.logger.Info("Namespace renamed successfully.", tag.WorkflowNamespace(previousName.String()), tag.WorkflowNamespace(newName.String()))
+
+	// Renaming the namespace to its tombstone name is the point it ceases to exist under its real
+	// name, so this is where the namespace_renamed lifecycle event is emitted. The physical record
+	// removal happens later, in the abandoned ReclaimResourcesWorkflow, by which point the original
+	// name is already gone.
+	if a.emitNamespaceLifecycleEvents != nil && a.emitNamespaceLifecycleEvents() {
+		wideevents.EmitNamespaceRenamed(a.eventLogger, wideevents.NamespaceRenamedInput{
+			Namespace:   previousName.String(),
+			NamespaceID: nsID.String(),
+			RenamedTo:   newName.String(),
+		})
+	}
 	return nil
 }

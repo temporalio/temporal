@@ -15,8 +15,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/namespace"
-	"go.uber.org/mock/gomock"
+	"go.temporal.io/server/common/retrypolicy"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -63,13 +62,16 @@ func TestScheduleToCloseTimeoutTaskValidateStamp(t *testing.T) {
 	}
 }
 
-func TestAttemptTimeoutTaskTerminalFailureType(t *testing.T) {
+func TestTimeoutTaskTerminalFailure(t *testing.T) {
 	testCases := []struct {
 		name                string
 		timeoutType         enumspb.TimeoutType
+		startStatus         activitypb.ActivityExecutionStatus
 		maximumAttempts     int32
 		scheduleToClose     time.Duration
+		nonRetryable        bool
 		expectedTimeoutType enumspb.TimeoutType
+		expectedRetryState  enumspb.RetryState
 		expectedMessage     string
 	}{
 		{
@@ -77,6 +79,7 @@ func TestAttemptTimeoutTaskTerminalFailureType(t *testing.T) {
 			timeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			scheduleToClose:     2 * time.Second,
 			expectedTimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			expectedRetryState:  enumspb.RETRY_STATE_TIMEOUT,
 			expectedMessage:     common.FailureReasonActivityRetryScheduleToCloseTimeout,
 		},
 		{
@@ -84,6 +87,7 @@ func TestAttemptTimeoutTaskTerminalFailureType(t *testing.T) {
 			timeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 			scheduleToClose:     2 * time.Second,
 			expectedTimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			expectedRetryState:  enumspb.RETRY_STATE_TIMEOUT,
 			expectedMessage:     common.FailureReasonActivityRetryScheduleToCloseTimeout,
 		},
 		{
@@ -92,6 +96,7 @@ func TestAttemptTimeoutTaskTerminalFailureType(t *testing.T) {
 			maximumAttempts:     1,
 			scheduleToClose:     time.Minute,
 			expectedTimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			expectedRetryState:  enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 		},
 		{
 			name:                "heartbeat maximum attempts reached",
@@ -99,15 +104,36 @@ func TestAttemptTimeoutTaskTerminalFailureType(t *testing.T) {
 			maximumAttempts:     1,
 			scheduleToClose:     time.Minute,
 			expectedTimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			expectedRetryState:  enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
+		},
+		{
+			name:                "start to close non-retryable timeout",
+			timeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			scheduleToClose:     time.Minute,
+			nonRetryable:        true,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			expectedRetryState:  enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+		},
+		{
+			name:                "start to close cancellation requested",
+			timeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			startStatus:         activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			scheduleToClose:     time.Minute,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			expectedRetryState:  enumspb.RETRY_STATE_CANCEL_REQUESTED,
+		},
+		{
+			name:                "schedule to close cancellation requested",
+			timeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			startStatus:         activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			scheduleToClose:     time.Minute,
+			expectedTimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			expectedRetryState:  enumspb.RETRY_STATE_CANCEL_REQUESTED,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			nsRegistry := namespace.NewMockRegistry(ctrl)
-			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
-
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 			defer metricsHandler.StopCapture(capture)
@@ -115,25 +141,35 @@ func TestAttemptTimeoutTaskTerminalFailureType(t *testing.T) {
 				MockContext: chasm.MockContext{
 					HandleNow:            func(chasm.Component) time.Time { return defaultTime.Add(1500 * time.Millisecond) },
 					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
 							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false),
 						},
-						namespaceRegistry: nsRegistry,
 					}),
 				},
 			}
+			retryPolicy := &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(time.Second),
+				BackoffCoefficient: 1,
+				MaximumAttempts:    tc.maximumAttempts,
+			}
+			if tc.nonRetryable {
+				retryPolicy.NonRetryableErrorTypes = []string{
+					retrypolicy.TimeoutFailureTypePrefix + tc.timeoutType.String(),
+				}
+			}
+			startStatus := tc.startStatus
+			if startStatus == activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED {
+				startStatus = activitypb.ACTIVITY_EXECUTION_STATUS_STARTED
+			}
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
-					ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
-					RetryPolicy: &commonpb.RetryPolicy{
-						InitialInterval:    durationpb.New(time.Second),
-						BackoffCoefficient: 1,
-						MaximumAttempts:    tc.maximumAttempts,
-					},
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+					RetryPolicy:            retryPolicy,
 					ScheduleTime:           timestamppb.New(defaultTime),
 					ScheduleToCloseTimeout: durationpb.New(tc.scheduleToClose),
-					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+					Status:                 startStatus,
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
 				},
 				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
@@ -148,6 +184,8 @@ func TestAttemptTimeoutTaskTerminalFailureType(t *testing.T) {
 
 			var err error
 			switch tc.timeoutType {
+			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+				err = newScheduleToCloseTimeoutTaskHandler().Execute(ctx, activity, chasm.TaskAttributes{}, &activitypb.ScheduleToCloseTimeoutTask{})
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				err = newStartToCloseTimeoutTaskHandler().Execute(ctx, activity, chasm.TaskAttributes{}, &activitypb.StartToCloseTimeoutTask{})
 			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
@@ -159,15 +197,22 @@ func TestAttemptTimeoutTaskTerminalFailureType(t *testing.T) {
 
 			terminalFailure := activity.outcome(ctx).GetFailure()
 			require.Equal(t, tc.expectedTimeoutType, terminalFailure.GetTimeoutFailureInfo().GetTimeoutType())
+			require.Equal(t, tc.expectedRetryState, activity.outcome(ctx).GetRetryState())
 			if tc.expectedMessage != "" {
 				require.Equal(t, tc.expectedMessage, terminalFailure.GetMessage())
+			}
+			if tc.timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE || tc.expectedMessage != "" {
 				require.NotNil(t, activity.Outcome.Get(ctx).GetFailed())
 			} else {
 				require.Nil(t, activity.Outcome.Get(ctx).GetVariant())
 			}
-			lastFailure := activity.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure()
-			require.Equal(t, tc.timeoutType, lastFailure.GetTimeoutFailureInfo().GetTimeoutType())
-			require.Equal(t, lastFailure.GetTimeoutFailureInfo().GetLastHeartbeatDetails(), terminalFailure.GetTimeoutFailureInfo().GetLastHeartbeatDetails())
+			if tc.timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE {
+				require.Nil(t, activity.LastAttempt.Get(ctx).GetLastFailureDetails())
+			} else {
+				lastFailure := activity.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure()
+				require.Equal(t, tc.timeoutType, lastFailure.GetTimeoutFailureInfo().GetTimeoutType())
+				require.Equal(t, lastFailure.GetTimeoutFailureInfo().GetLastHeartbeatDetails(), terminalFailure.GetTimeoutFailureInfo().GetLastHeartbeatDetails())
+			}
 
 			for _, metricName := range []string{metrics.ActivityTimeout.Name(), metrics.ActivityTaskTimeout.Name()} {
 				recordings := capture.Snapshot()[metricName]

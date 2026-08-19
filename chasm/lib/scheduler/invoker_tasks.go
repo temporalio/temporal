@@ -81,7 +81,13 @@ const (
 	// Lower bound for the deadline in which buffered actions are dropped.
 	startWorkflowMinDeadline = 5 * time.Second
 
-	// Upper bound on how many times starting an individual buffered action should be retried.
+	// InvokerMaxStartAttempts is the maximum number of StartWorkflowExecution
+	// RPCs issued for an individual buffered action, counting the first call.
+	// Attempt numbers are 1-based: recordProcessBufferResult readies a start at
+	// Attempt 1, and each retryable failure increments it. The bound is
+	// therefore inclusive - a start is refused locally (and dropped) only once
+	// its Attempt exceeds this value - so a value of 10 permits ten start RPCs,
+	// i.e. the initial call plus nine retries.
 	InvokerMaxStartAttempts = 10 // TODO - dial this up/remove it
 )
 
@@ -292,7 +298,11 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflows(
 				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 			}
 
-			// Cancels are only attempted once.
+			// Cancels are only attempted once here: transient failures are
+			// already retried at the history-client layer (resource.HistoryClient
+			// is retry-wrapped), so a single best-effort attempt is intentional.
+			// todo: consider splitting these out to individual tasks so they can be retried
+			// independently
 			result.CompletedCancels = append(result.CompletedCancels, wf)
 		})
 	}
@@ -330,7 +340,11 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 			}
 
-			// Terminates are only attempted once.
+			// Terminates are only attempted once here: transient failures are
+			// already retried at the history-client layer (resource.HistoryClient
+			// is retry-wrapped), so a single best-effort attempt is intentional.
+			// todo: consider splitting these out to individual tasks so they can be retried
+			// independently
 			result.CompletedTerminates = append(result.CompletedTerminates, wf)
 		})
 	}
@@ -487,9 +501,11 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	isRunning := len(runningWorkflows) > 0
 	result.missedCatchupByActionRunning = make(map[bool]int64)
 
-	// Processing completely ignores any BufferedStart that's already executing/backing off.
+	// Processing ignores starts that are already executing or backing off. An existing
+	// deferred BUFFER_ONE start still participates so it can reject later starts.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt == 0
+		return start.Attempt == 0 ||
+			(start.Attempt == -1 && scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE)
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
@@ -622,7 +638,9 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 ) error {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
-	if start.Attempt >= InvokerMaxStartAttempts {
+	// Inclusive bound: Attempt is 1-based, so the attempt numbered
+	// InvokerMaxStartAttempts is the last one that gets an RPC.
+	if start.Attempt > InvokerMaxStartAttempts {
 		return errRetryLimitExceeded
 	}
 
@@ -677,6 +695,9 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
 		},
+	}
+	if h.config.Tweakables(scheduler.Namespace).EnableVersioningOverride {
+		request.VersioningOverride = requestSpec.VersioningOverride
 	}
 
 	result, err := h.frontendClient.StartWorkflowExecution(ctx, request)

@@ -383,7 +383,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	if paginationOverflow {
 		// Per-workflow completion buffer overflowed: terminate the workflow
 		wtFailedCause = newWorkflowTaskFailedCause(
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_PAYLOADS_TOO_LARGE,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_REQUEST_TOO_LARGE,
 			serviceerror.NewInvalidArgument(
 				"workflow task completion buffer size exceeds the per-workflow limit"),
 			true)
@@ -657,6 +657,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				handler.logger,
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),
+				nil, // no pagination buffer limiter as it is a transient context
 			),
 			newMutableState,
 		)

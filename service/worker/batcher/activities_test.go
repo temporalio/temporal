@@ -17,6 +17,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -711,6 +712,57 @@ func (s *activitiesSuite) TestIsNonRetryableError() {
 			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
 			want:      false,
 		},
+		{
+			// A completed activity never leaves its terminal state, so retrying
+			// the cancel can never succeed.
+			name:      "terminal state error for CANCEL_ACTIVITY returns true",
+			err:       serviceerror.NewFailedPreconditionf("activity is in terminal state %v", "Completed"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+			want:      true,
+		},
+		{
+			name:      "terminal state error for TERMINATE_ACTIVITY returns true",
+			err:       serviceerror.NewFailedPrecondition("invalid transition"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			want:      true,
+		},
+		{
+			// Delete gets no ExecutionStatus='Running' filter from
+			// adjustQueryBatchTypeEnum, so it never hits the stale-visibility
+			// case and keeps the default retry behavior.
+			name:      "terminal state error for DELETE_ACTIVITY returns false",
+			err:       serviceerror.NewFailedPreconditionf("activity is in terminal state %v", "Completed"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
+			want:      false,
+		},
+		{
+			// Wrapped errors must still be classified, since the task layer may
+			// annotate before processTaskWithRetries sees the error.
+			name:      "wrapped FailedPrecondition for CANCEL_ACTIVITY returns true",
+			err:       fmt.Errorf("cancel activity: %w", serviceerror.NewFailedPrecondition("activity is in terminal state Canceled")),
+			batchType: enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+			want:      true,
+		},
+		{
+			// Transient failures on activity batches must stay retryable.
+			name:      "unavailable error for CANCEL_ACTIVITY returns false",
+			err:       serviceerror.NewUnavailable("history service is unavailable"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+			want:      false,
+		},
+		{
+			name:      "generic error for CANCEL_ACTIVITY returns false",
+			err:       errors.New("some transient error"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+			want:      false,
+		},
+		{
+			// Workflow batch types must keep their existing behavior.
+			name:      "FailedPrecondition for TERMINATE_WORKFLOW returns false",
+			err:       serviceerror.NewFailedPrecondition("workflow is in terminal state"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			want:      false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -852,6 +904,75 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 			s.FailNow("timed out waiting for task response: worker is deadlocked")
 		}
 	}
+}
+
+// TestStartTaskProcessor_ActivityTerminalStateIsNotRetried verifies that a
+// FailedPrecondition from an activity cancel is attempted exactly once. A
+// terminal activity never leaves its terminal state, so retrying can never
+// succeed; because processTaskWithRetries retries in place with no backoff, a
+// misclassification here spends all AttemptsOnRetryableError attempts hammering
+// history within milliseconds.
+func (s *activitiesSuite) TestStartTaskProcessor_ActivityTerminalStateIsNotRetried() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "some-namespace-id",
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+		// Generous retry budget: the point is that none of it gets used.
+		AttemptsOnRetryableError: 50,
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace: "ns",
+			Operation: &workflowservice.StartBatchOperationRequest_CancelActivitiesOperation{
+				CancelActivitiesOperation: &batchpb.BatchOperationCancelActivities{
+					Identity: "batch-canceler",
+					Reason:   "test",
+				},
+			},
+		},
+	}
+
+	// The activity completed before the batch reached it -- exactly what a stale
+	// ExecutionStatus='Running' visibility record produces.
+	var calls atomic.Int32
+	s.mockFrontendClient.EXPECT().
+		RequestCancelActivityExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *workflowservice.RequestCancelActivityExecutionRequest, ...any) (*workflowservice.RequestCancelActivityExecutionResponse, error) {
+			calls.Add(1)
+			return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", "Completed")
+		}).
+		AnyTimes()
+
+	testPage := &page{
+		targetExecutionInfo: []*commonpb.Execution{
+			{Type: enumspb.EXECUTION_TYPE_ACTIVITY, BusinessId: "activity-id", RunId: "run-id"},
+		},
+	}
+
+	taskCh := make(chan task, 1)
+	respCh := make(chan taskResponse, 1)
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+
+	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, nil, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+	taskCh <- task{targetExecution: testPage.targetExecutionInfo[0], attempts: 1, page: testPage}
+
+	select {
+	case resp := <-respCh:
+		s.Require().Error(resp.err)
+	case <-time.After(10 * time.Second):
+		s.FailNow("timed out waiting for task response")
+	}
+
+	s.Equal(int32(1), calls.Load(), "terminal-state failure must not be retried")
 }
 
 // TestRecordCompletedPages_ResumeTracksOldestIncompletePage verifies the resume point only
@@ -1265,4 +1386,16 @@ func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	err := a.processAdminTask(ctx, batchOperation, testTask, limiter)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "unknown admin batch type")
+}
+
+// TestDeterministicRequestID_ScopedToJob ensures idempotency within a batch job.
+func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
+	const (
+		jobA = "job-a"
+		jobB = "job-b"
+	)
+	parts := []string{"signal", "workflow-id", "run-id", "signal-name"}
+
+	s.NotEqual(deterministicRequestID(jobA, parts...), deterministicRequestID(jobB, parts...))
+	s.NotEqual(deterministicRequestID(jobA, "signal", "workflow-id", "run-id", "other-signal"), deterministicRequestID(jobA, parts...))
 }

@@ -4461,8 +4461,8 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			name: "MaxElapsedDuration is never propagated to children → cleared from child snapshot",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				Config: &commonpb.TimeSkippingConfig{
-					Enabled:     true,
-					FastForward: durationpb.New(3 * time.Hour)},
+					Enabled:           true,
+					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)}},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			},
 			expectCfg:         &commonpb.TimeSkippingConfig{Enabled: true},
@@ -5291,87 +5291,6 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 	s.Equal(int64(1), tombstoneBatches[0].VersionedTransition.TransitionCount)
 }
 
-func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmNoopSkipsPersistence() {
-	dbState := s.buildWorkflowMutableState()
-
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
-	s.NoError(err)
-
-	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout.
-	_, err = mutableState.StartTransaction(s.namespaceEntry)
-	s.NoError(err)
-	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-
-	_, err = mutableState.StartTransaction(s.namespaceEntry)
-	s.NoError(err)
-
-	mockChasmTree := historyi.NewMockChasmTree(s.controller)
-	mutableState.chasmTree = mockChasmTree
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
-
-	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
-	var lastUpdateTime *timestamppb.Timestamp
-	if mutableState.executionInfo.LastUpdateTime != nil {
-		lastUpdateTime = proto.Clone(mutableState.executionInfo.LastUpdateTime).(*timestamppb.Timestamp)
-	}
-	var checksum *persistencespb.Checksum
-	if mutableState.checksum != nil {
-		checksum = proto.Clone(mutableState.checksum).(*persistencespb.Checksum)
-	}
-	dbRecordVersion := mutableState.dbRecordVersion
-
-	mutation, eventsSeq, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-	s.Nil(mutation)
-	s.Empty(eventsSeq)
-	s.False(mutableState.IsDirty())
-	s.Equal(stateTransitionCount, mutableState.executionInfo.StateTransitionCount)
-	if lastUpdateTime == nil {
-		s.Nil(mutableState.executionInfo.LastUpdateTime)
-	} else {
-		protorequire.ProtoEqual(s.T(), lastUpdateTime, mutableState.executionInfo.LastUpdateTime)
-	}
-	if checksum == nil {
-		s.Nil(mutableState.checksum)
-	} else {
-		protorequire.ProtoEqual(s.T(), checksum, mutableState.checksum)
-	}
-	s.Equal(dbRecordVersion, mutableState.dbRecordVersion)
-}
-
-func (s *mutableStateSuite) TestCloseTransactionAsMutation_WorkflowChasmNoopDoesNotSkipPersistence() {
-	dbState := s.buildWorkflowMutableState()
-
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
-	s.NoError(err)
-
-	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout.
-	_, err = mutableState.StartTransaction(s.namespaceEntry)
-	s.NoError(err)
-	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-
-	_, err = mutableState.StartTransaction(s.namespaceEntry)
-	s.NoError(err)
-
-	mockChasmTree := historyi.NewMockChasmTree(s.controller)
-	mutableState.chasmTree = mockChasmTree
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
-	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
-
-	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
-
-	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-	s.NotNil(mutation)
-	s.Equal(stateTransitionCount+1, mutableState.executionInfo.StateTransitionCount)
-}
-
 func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workflow() {
 	dbState := s.buildWorkflowMutableState()
 
@@ -5415,8 +5334,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
-	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -5454,8 +5372,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
-	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mockChasmTree.EXPECT().ApplyMutation(gomock.Any()).Return(nil).AnyTimes()
 
 	// On standby side, multiple transactions can be applied at the same time,
@@ -6274,6 +6191,155 @@ func (s *mutableStateSuite) TestRefreshTask_SameCluster_SameAttempt() {
 	s.False(shouldReset)
 }
 
+// startedActivityInfoForMask builds a started activity that has all four timer bits
+// set, so a test can assert precisely which ones survive an update.
+func startedActivityInfoForMask(version int64, attempt, stamp int32) *persistencespb.ActivityInfo {
+	scheduledTime := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+	return &persistencespb.ActivityInfo{
+		Version:                version,
+		Attempt:                attempt,
+		Stamp:                  stamp,
+		ScheduledEventId:       int64(7),
+		StartedEventId:         int64(8),
+		ScheduledTime:          timestamppb.New(scheduledTime),
+		FirstScheduledTime:     timestamppb.New(scheduledTime),
+		StartedTime:            timestamppb.New(scheduledTime.Add(time.Second)),
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+		StartToCloseTimeout:    durationpb.New(10 * time.Minute),
+		HeartbeatTimeout:       durationpb.New(time.Minute),
+		// Schedule-to-start no longer applies once the activity has started, so only the
+		// other three timers can have a task outstanding.
+		TimerTaskStatus: TimerTaskStatusCreatedScheduleToClose |
+			TimerTaskStatusCreatedStartToClose |
+			TimerTaskStatusCreatedHeartbeat,
+	}
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_DiffCluster_ResetsEverything() {
+	current := startedActivityInfoForMask(int64(100), 1, 1)
+	incoming := startedActivityInfoForMask(int64(99), 1, 1)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(current.Version, incoming.Version).Return(false)
+
+	// Tasks from the previous owning cluster are stale, so everything is recreated.
+	s.Equal(int32(TimerTaskStatusNone), s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+// retryActivityInfoForMask applies to `ai` the same field changes the active side makes
+// on a retry (UpdateActivityInfoForRetries): next attempt, started state cleared, and
+// the schedule time advanced by the retry backoff. FirstScheduledTime is untouched.
+func retryActivityInfoForMask(ai *persistencespb.ActivityInfo, backoff time.Duration) *persistencespb.ActivityInfo {
+	ai.Attempt++
+	ai.StartedEventId = common.EmptyEventID
+	ai.StartedTime = nil
+	ai.ScheduledTime = timestamppb.New(ai.ScheduledTime.AsTime().Add(backoff))
+	return ai
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Retry_KeepsOnlyScheduleToClose() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := retryActivityInfoForMask(startedActivityInfoForMask(version, 1, 1), 10*time.Second)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	// Clearing the started state removes the start-to-close and heartbeat timers, so
+	// their tasks are useless and the bits go. Schedule-to-close is anchored to the
+	// untouched FirstScheduledTime, so its pending task is still correct and survives.
+	// Note the attempt itself is never consulted: the deadlines carry the decision.
+	s.Equal(
+		int32(TimerTaskStatusCreatedScheduleToClose),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
+	)
+}
+
+// Pre-FirstScheduledTime mutable state falls back to anchoring schedule-to-close on
+// ScheduledTime, which a retry does move. The deadline comparison notices and clears the
+// bit, where keying off the attempt alone would have preserved a task pointing at the
+// old, earlier instant.
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Retry_LegacyAnchor_ClearsScheduleToClose() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	current.FirstScheduledTime = nil
+	incoming := retryActivityInfoForMask(startedActivityInfoForMask(version, 1, 1), 10*time.Second)
+	incoming.FirstScheduledTime = nil
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(int32(TimerTaskStatusNone), s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+// Attempt moving on its own decides nothing; an unchanged deadline keeps its task.
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_AttemptChangedWithoutDeadlineMove_KeepsMask() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 2, 1)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_ClearsOnlyMovedDeadlines() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	// Activity options were updated, bumping the stamp; only the heartbeat timeout was
+	// shortened, so only that deadline moves.
+	incoming := startedActivityInfoForMask(version, 1, 2)
+	incoming.HeartbeatTimeout = durationpb.New(30 * time.Second)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(
+		int32(TimerTaskStatusCreatedScheduleToClose|TimerTaskStatusCreatedStartToClose),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
+	)
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_UnrelatedOptionChanged_KeepsMask() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	// Stamp moved because some unrelated option changed; no deadline is affected, so
+	// every pending task is still correct.
+	incoming := startedActivityInfoForMask(version, 1, 2)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_TimerDisappears() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 1, 2)
+	// Heartbeat timeout removed entirely: the timer no longer applies, so its bit goes.
+	incoming.HeartbeatTimeout = nil
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(
+		int32(TimerTaskStatusCreatedScheduleToClose|TimerTaskStatusCreatedStartToClose),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
+	)
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Unchanged_KeepsMask() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 1, 1)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_NewActivity_NoMask() {
+	s.Equal(
+		int32(TimerTaskStatusNone),
+		s.mutableState.getActivityTimerTaskStatus(nil, startedActivityInfoForMask(int64(99), 1, 1)),
+	)
+}
+
 func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
 	dbState := s.buildWorkflowMutableState()
 	scheduleEventId := int64(781)
@@ -6456,6 +6522,292 @@ func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
 	for _, requestID := range testRequestIDs {
 		s.False(s.mutableState.HasRequestID(requestID), "Should return false for request ID: %s", requestID)
 	}
+}
+
+func (s *mutableStateSuite) TestAttachChasmRequestID() {
+	ts := clock.NewEventTimeSource()
+	baseTime := time.Now().UTC().Truncate(time.Second)
+	ts.Update(baseTime)
+	s.mutableState.timeSource = ts
+
+	// A pre-existing create request ID must never be treated as CHASM-attached.
+	s.mutableState.AttachRequestID("create-req", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, 1)
+	s.Equal("create-req", s.mutableState.executionState.CreateRequestId)
+
+	sizeBefore := s.mutableState.approximateSize
+	s.mutableState.AttachChasmRequestID("chasm-req")
+
+	info, ok := s.mutableState.executionState.RequestIds["chasm-req"]
+	s.True(ok)
+	s.NotNil(info.GetAttachTime(), "CHASM-attached entry must carry an attach time (the sweepable marker)")
+	s.Equal(baseTime, info.GetAttachTime().AsTime())
+	s.Equal(enumspb.EVENT_TYPE_UNSPECIFIED, info.GetEventType())
+	s.Zero(info.GetEventId())
+
+	// CreateRequestId is left untouched.
+	s.Equal("create-req", s.mutableState.executionState.CreateRequestId)
+
+	// Forces persistence and gates the lazy sweep on this transaction.
+	s.True(s.mutableState.executionStateUpdated)
+	s.True(s.mutableState.chasmRequestIDsAdded)
+	s.Greater(s.mutableState.approximateSize, sizeBefore)
+
+	// An empty request ID is a no-op.
+	s.mutableState.AttachChasmRequestID("")
+	_, ok = s.mutableState.executionState.RequestIds[""]
+	s.False(ok)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
+	baseTime := time.Now().UTC().Truncate(time.Second)
+
+	// seedPriorRequestIDs records n sweepable CHASM request IDs "prior-00".."prior-(n-1)" directly,
+	// with strictly increasing attach times, as if attached in earlier (already-closed) transactions.
+	seedPriorRequestIDs := func(n int) {
+		if s.mutableState.executionState.RequestIds == nil {
+			s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
+		}
+		for i := range n {
+			s.mutableState.executionState.RequestIds[fmt.Sprintf("prior-%02d", i)] = &persistencespb.RequestIDInfo{
+				AttachTime: timestamppb.New(baseTime.Add(time.Duration(i) * time.Second)),
+			}
+		}
+	}
+	// seedPriorAt records a single sweepable CHASM request ID at attach time t, as if attached in an
+	// earlier (already-closed) transaction.
+	seedPriorAt := func(id string, t time.Time) {
+		if s.mutableState.executionState.RequestIds == nil {
+			s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
+		}
+		s.mutableState.executionState.RequestIds[id] = &persistencespb.RequestIDInfo{
+			AttachTime: timestamppb.New(t),
+		}
+	}
+	// attachNow records a request ID via the real path at time t, marking it attached-this-transaction
+	// (satisfying the sweep gate).
+	attachNow := func(id string, t time.Time) {
+		ts := clock.NewEventTimeSource()
+		ts.Update(t)
+		s.mutableState.timeSource = ts
+		s.mutableState.AttachChasmRequestID(id)
+	}
+	countSweepable := func() int {
+		n := 0
+		for _, info := range s.mutableState.executionState.RequestIds {
+			if info.GetAttachTime() != nil {
+				n++
+			}
+		}
+		return n
+	}
+	// setLimits sets both sweep knobs. Count-focused subtests pass a large maxAge (nothing is old
+	// enough to be aged out); age-focused subtests pass a small one. Set explicitly in every subtest
+	// because SetupSubTest resets only the mutable state, not mockConfig, so values leak otherwise.
+	setLimits := func(count int, maxAge time.Duration) {
+		s.mockConfig.MaximumRequestIDsPerExecution = func(string) int { return count }
+		s.mockConfig.RequestIDMaxAge = func(string) time.Duration { return maxAge }
+	}
+	const nonTriggeringAge = 7 * 24 * time.Hour
+
+	s.Run("active + attached: count cap evicts oldest, never create/event-backed", func() {
+		s.SetupSubTest()
+		setLimits(3, nonTriggeringAge)
+		s.mutableState.AttachRequestID("create-req", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, 1)
+		s.mutableState.AttachRequestID("event-req", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 5)
+		seedPriorRequestIDs(4)
+		attachNow("current-req", baseTime.Add(time.Hour)) // newest
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// limit=3: the 3 newest sweepable entries are kept (current-req plus the two newest priors).
+		s.False(s.mutableState.HasRequestID("prior-00"))
+		s.False(s.mutableState.HasRequestID("prior-01"))
+		s.True(s.mutableState.HasRequestID("prior-02"))
+		s.True(s.mutableState.HasRequestID("prior-03"))
+		s.True(s.mutableState.HasRequestID("current-req"))
+		// Create and event-backed request IDs (nil attach time) are never swept.
+		s.True(s.mutableState.HasRequestID("create-req"))
+		s.True(s.mutableState.HasRequestID("event-req"))
+		s.Equal(3, countSweepable())
+	})
+
+	s.Run("active + attached but at count cap: no sweep", func() {
+		s.SetupSubTest()
+		setLimits(3, nonTriggeringAge)
+		seedPriorRequestIDs(2)                            // 2 priors
+		attachNow("current-req", baseTime.Add(time.Hour)) // + 1 attached = 3 sweepable == limit
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// The gate fires, but the total is at the cap and nothing is aged, so nothing is evicted.
+		s.True(s.mutableState.HasRequestID("prior-00"))
+		s.True(s.mutableState.HasRequestID("prior-01"))
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(3, countSweepable())
+	})
+
+	s.Run("age batch evicts entries below the count cap", func() {
+		s.SetupSubTest()
+		setLimits(100, 30*time.Minute) // count cap never binds
+		seedPriorRequestIDs(4)         // attached near baseTime, so older than the cutoff
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// cutoff = now(baseTime+1h) - 30m: the priors are older and swept even though we're far under
+		// the count cap; current-req is younger and kept.
+		for i := range 4 {
+			s.False(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(1, countSweepable())
+	})
+
+	s.Run("age batch exceeds count overflow: reclaims whole batch, drops below cap", func() {
+		s.SetupSubTest()
+		setLimits(3, 30*time.Minute)
+		seedPriorRequestIDs(6) // all older than the cutoff
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// overLimit=7-3=4, aged=6; max(4,6)=6 evicts the whole aged batch, leaving 1 (below the cap).
+		// This is the point of the age knob: headroom, not one-at-a-time eviction while pinned at the cap.
+		for i := range 6 {
+			s.False(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(1, countSweepable())
+	})
+
+	s.Run("count overflow exceeds age batch: count cap dominates", func() {
+		s.SetupSubTest()
+		setLimits(3, 30*time.Minute)
+		seedPriorAt("aged-0", baseTime)                       // older than cutoff
+		seedPriorAt("aged-1", baseTime.Add(time.Second))      // older than cutoff
+		seedPriorAt("recent-0", baseTime.Add(40*time.Minute)) // younger than cutoff
+		seedPriorAt("recent-1", baseTime.Add(41*time.Minute)) // younger than cutoff
+		seedPriorAt("recent-2", baseTime.Add(42*time.Minute)) // younger than cutoff
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// overLimit=6-3=3, aged=2; max(3,2)=3 evicts the 3 oldest - both aged entries plus the oldest
+		// still-fresh one - to hold the hard cap.
+		s.False(s.mutableState.HasRequestID("aged-0"))
+		s.False(s.mutableState.HasRequestID("aged-1"))
+		s.False(s.mutableState.HasRequestID("recent-0"))
+		s.True(s.mutableState.HasRequestID("recent-1"))
+		s.True(s.mutableState.HasRequestID("recent-2"))
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(3, countSweepable())
+	})
+
+	s.Run("count cap disabled (limit<=0): age still sweeps", func() {
+		s.SetupSubTest()
+		setLimits(0, 30*time.Minute)
+		seedPriorRequestIDs(4) // older than the cutoff
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		for i := range 4 {
+			s.False(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(1, countSweepable())
+	})
+
+	s.Run("age disabled (maxAge<=0): count cap only", func() {
+		s.SetupSubTest()
+		setLimits(100, 0)      // count cap never binds, age disabled
+		seedPriorRequestIDs(4) // old, but age sweeping is off
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		for i := range 4 {
+			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(5, countSweepable())
+	})
+
+	s.Run("count cap and age both disabled: no sweep", func() {
+		s.SetupSubTest()
+		setLimits(0, 0)
+		seedPriorRequestIDs(4)
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		for i := range 4 {
+			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+	})
+
+	s.Run("passive: no sweep", func() {
+		s.SetupSubTest()
+		setLimits(1, 30*time.Minute)
+		seedPriorRequestIDs(4)
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyPassive)
+
+		for i := range 4 {
+			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+	})
+
+	s.Run("active but nothing attached this transaction: no sweep", func() {
+		s.SetupSubTest()
+		setLimits(1, 30*time.Minute)
+		seedPriorRequestIDs(4) // over both limits, but none attached this transaction
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		for i := range 4 {
+			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+	})
+
+	s.Run("deterministic tie-break on equal attach time", func() {
+		s.SetupSubTest()
+		setLimits(3, nonTriggeringAge)
+		// All priors share one attach time; ties break lexicographically (largest survive).
+		s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
+		for _, id := range []string{"c", "a", "e", "b", "d"} {
+			s.mutableState.executionState.RequestIds[id] = &persistencespb.RequestIDInfo{
+				AttachTime: timestamppb.New(baseTime),
+			}
+		}
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// limit=3: current-req is strictly newest; among the equal-time priors the lexicographically
+		// largest ("d", "e") survive and the rest are evicted.
+		s.True(s.mutableState.HasRequestID("d"))
+		s.True(s.mutableState.HasRequestID("e"))
+		s.False(s.mutableState.HasRequestID("a"))
+		s.False(s.mutableState.HasRequestID("b"))
+		s.False(s.mutableState.HasRequestID("c"))
+		s.True(s.mutableState.HasRequestID("current-req"))
+	})
+
+	s.Run("eviction shrinks approximateSize", func() {
+		s.SetupSubTest()
+		setLimits(1, nonTriggeringAge)
+		seedPriorRequestIDs(4)
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		sizeBefore := s.mutableState.approximateSize
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		s.Less(s.mutableState.approximateSize, sizeBefore)
+	})
 }
 
 func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
@@ -6791,6 +7143,163 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
 	s.Equal(expectedWorkerControlTaskQueue, updatedActivityInfo.WorkerControlTaskQueue)
+}
+
+func (s *mutableStateSuite) TestAddActivityTaskStartedEventApproximateSize() {
+	for _, tc := range []struct {
+		name        string
+		retryPolicy *commonpb.RetryPolicy
+	}{
+		{
+			// Transient start: routes through UpdateActivity.
+			name:        "WithRetryPolicy",
+			retryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 5},
+		},
+		{
+			// Routes through ApplyActivityTaskStartedEvent instead; no UpdateActivity callback.
+			name:        "WithoutRetryPolicy",
+			retryPolicy: nil,
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+			_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+				&historyservice.StartWorkflowExecutionRequest{
+					NamespaceId: tests.NamespaceID.String(),
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue"},
+						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+					},
+				},
+			)
+			s.NoError(err)
+
+			di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			s.NoError(err)
+			_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+				di.ScheduledEventID,
+				di.RequestID,
+				di.TaskQueue,
+				"identity",
+				nil,
+				nil,
+				nil,
+				false,
+				nil,
+				0,
+			)
+			s.NoError(err)
+			completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+				di,
+				&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "identity"},
+				workflowTaskCompletionLimits,
+			)
+			s.NoError(err)
+
+			_, ai, err := s.mutableState.AddActivityTaskScheduledEvent(
+				completedEvent.GetEventId(),
+				&commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:   "test-activity-1",
+					ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					RetryPolicy:  tc.retryPolicy,
+				},
+				false,
+			)
+			s.NoError(err)
+			s.Equal(tc.retryPolicy != nil, ai.HasRetryPolicy)
+
+			sizeBeforeWithoutActivityInfo := s.mutableState.approximateSize - ai.Size()
+
+			_, err = s.mutableState.AddActivityTaskStartedEvent(
+				ai,
+				ai.ScheduledEventId,
+				uuid.NewString(),
+				"worker-identity",
+				nil,
+				deployment1,
+				nil,
+				"worker-control-task-queue",
+				&clockspb.VectorClock{},
+			)
+			s.NoError(err)
+
+			s.Equal(
+				sizeBeforeWithoutActivityInfo+ai.Size(),
+				s.mutableState.approximateSize,
+			)
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestUpdateActivityProgressApproximateSize() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue"},
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		di.ScheduledEventID,
+		di.RequestID,
+		di.TaskQueue,
+		"identity",
+		nil,
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+	)
+	s.NoError(err)
+	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+		di,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "identity"},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	_, ai, err := s.mutableState.AddActivityTaskScheduledEvent(
+		completedEvent.GetEventId(),
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "test-activity-1",
+			ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			RetryPolicy:  &commonpb.RetryPolicy{MaximumAttempts: 5},
+		},
+		false,
+	)
+	s.NoError(err)
+	s.Empty(ai.RetryLastWorkerIdentity)
+
+	sizeBeforeWithoutActivityInfo := s.mutableState.approximateSize - ai.Size()
+
+	s.mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		Identity: "worker-identity",
+		Details:  payloads.EncodeString("heartbeat-details"),
+	})
+
+	s.Equal("worker-identity", ai.RetryLastWorkerIdentity)
+	s.Equal(
+		sizeBeforeWithoutActivityInfo+ai.Size(),
+		s.mutableState.approximateSize,
+	)
 }
 
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
@@ -7716,8 +8225,8 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 // rebuild flows.
 func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingConfig() {
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)}}
 
 	testCases := []struct {
 		name                         string
@@ -7795,11 +8304,11 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_TimeSkippingC
 
 func (s *mutableStateSuite) TestApplyWorkflowExecutionOptionsUpdatedEvent_TimeSkippingConfig() {
 	initialConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)}}
 	updatedConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(2 * time.Hour)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)}}
 
 	testCases := []struct {
 		name              string

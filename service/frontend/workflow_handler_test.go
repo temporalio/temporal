@@ -17,6 +17,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
@@ -68,6 +69,7 @@ import (
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
@@ -206,6 +208,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetLogger(),
+		wideevents.NoopLogger(),
 		s.mockResource.GetThrottledLogger(),
 		s.mockResource.GetExecutionManager().GetName(),
 		s.mockResource.GetClusterMetadataManager(),
@@ -506,6 +509,68 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 	_, err := wh.StartWorkflowExecution(context.Background(), nil)
 	s.Error(err)
 	s.Equal(errRequestNotSet, err)
+}
+
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverride() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_AutoUpgrade{},
+		},
+	})
+
+	s.ErrorContains(err, "auto-upgrade override must be true")
+}
+
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_InvalidVersioningOverrideAllowedWhenDisabled() {
+	config := s.newConfig()
+	config.DisabledScheduleValidations = func(namespace string) []string {
+		s.Equal(s.testNamespace.String(), namespace)
+		return []string{"VERSIONING-OVERRIDE"}
+	}
+	wh := s.getWorkflowHandler(config)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(s.testNamespace).Return(nil, nil)
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_AutoUpgrade{},
+		},
+	})
+
+	s.Require().NoError(err)
+}
+
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverrideVersion() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  &deploymentpb.WorkerDeploymentVersion{BuildId: "build-id"},
+				},
+			},
+		},
+	})
+
+	s.ErrorContains(err, "WorkerDeploymentName cannot be empty")
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet() {
@@ -3686,27 +3751,147 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	var invalidArgumentErr *serviceerror.InvalidArgument
 
 	// nil config is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(nil, s.testNamespace))
 
 	// config with enabled=false but dynamic config disabled returns error
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
 
 	// config with enabled=true and dynamic config enabled is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: false, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace), &invalidArgumentErr)
+	// fast_forward set while enabled=false is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: false, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
 
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace), &invalidArgumentErr)
+	// negative fast_forward duration is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * -10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
+
+	// fast_forward set without a fast_forward_id is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10)}}, s.testNamespace), &invalidArgumentErr)
+
+	// a blank (whitespace-only) fast_forward_id is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "  "}}, s.testNamespace), &invalidArgumentErr)
+
+	// fast_forward with a valid fast_forward_id is accepted
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace))
+
+	// MaxSkipPerSession is populated from dynamic config: a per-namespace override wins for that
+	// namespace, a constraint-less (per-cell) value is the fallback for other namespaces, and a
+	// value already set on the request is left untouched.
+	const otherNamespace = "other-namespace"
+	maxSkipClient := dc.StaticClient{
+		dc.WorkflowTimeSkippingEnabled.Key(): true,
+		dc.WorkflowTimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
+			{Value: 42}, // per-cell (constraint-less) value
+			{Constraints: dc.Constraints{Namespace: s.testNamespace.String()}, Value: 7}, // per-namespace override
+		},
+	}
+	maxSkipWH := s.getWorkflowHandler(NewConfig(dc.NewCollection(maxSkipClient, log.NewNoopLogger()), numHistoryShards))
+
+	// namespace with a per-namespace override uses that value
+	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
+	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(7), tsc.GetMaxSessionSkipCount())
+
+	// namespace without a per-namespace setting falls back to the per-cell value
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true}
+	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
+	s.Require().Equal(int32(42), tsc.GetMaxSessionSkipCount())
+
+	// a value already on the request is preserved, not overwritten by dynamic config
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 999}
+	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
+}
+
+func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
+	validExecution := &commonpb.WorkflowExecution{WorkflowId: "wf-id"}
+	newReq := func(fastForwardID string) *workflowservice.PollWorkflowExecutionTimeSkippingRequest {
+		return &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+			Namespace:         s.testNamespace.String(),
+			WorkflowExecution: validExecution,
+			FastForwardId:     fastForwardID,
+		}
+	}
+	handler := func(timeSkippingEnabled bool) *WorkflowHandler {
+		config := s.newConfig()
+		config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(timeSkippingEnabled)
+		return s.getWorkflowHandler(config)
+	}
+
+	s.Run("nil request is rejected", func() {
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), nil)
+		s.ErrorIs(err, errRequestNotSet)
+	})
+
+	s.Run("invalid execution is rejected before namespace lookup", func() {
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(),
+			&workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+				Namespace:         s.testNamespace.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{}, // no workflow id
+				FastForwardId:     "ff-id",
+			})
+		s.ErrorIs(err, errWorkflowIDNotSet)
+	})
+
+	s.Run("disabled dynamic config is rejected", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+		_, err := handler(false).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("ff-id"))
+		s.ErrorIs(err, errWorkflowTimeSkippingNotEnabled)
+	})
+
+	s.Run("blank fast_forward_id is rejected", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("   "))
+		s.ErrorIs(err, errTimeSkippingFastForwardIDNotSet)
+	})
+
+	s.Run("valid request forwards to history and returns its response", func() {
+		req := newReq("ff-id")
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+
+		want := &workflowservice.PollWorkflowExecutionTimeSkippingResponse{
+			FastForwardPollingResult: enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED,
+			FastForwardInfo: &commonpb.TimeSkippingFastForwardInfo{
+				FastForwardId: "ff-id",
+				HasCompleted:  true,
+			},
+		}
+		s.mockHistoryClient.EXPECT().
+			PollWorkflowExecutionTimeSkipping(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, histReq *historyservice.PollWorkflowExecutionTimeSkippingRequest, _ ...grpc.CallOption) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+				// The frontend stamps the resolved namespace id and forwards the request verbatim.
+				s.Equal(s.testNamespaceID.String(), histReq.GetNamespaceId())
+				s.Same(req, histReq.GetRequest())
+				return &historyservice.PollWorkflowExecutionTimeSkippingResponse{Response: want}, nil
+			})
+
+		resp, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), req)
+		s.NoError(err)
+		s.Same(want, resp)
+	})
+
+	s.Run("history error is propagated", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+		s.mockHistoryClient.EXPECT().
+			PollWorkflowExecutionTimeSkipping(gomock.Any(), gomock.Any()).
+			Return(nil, serviceerror.NewUnavailable("history unavailable"))
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("ff-id"))
+		var unavailable *serviceerror.Unavailable
+		s.ErrorAs(err, &unavailable)
+	})
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
@@ -3714,7 +3899,7 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 // as a MultiOperationExecution error with the per-operation InvalidArgument at index 0.
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	// Namespace lookup happens before operation validation.
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
@@ -3762,7 +3947,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled
 // forwarded to the history client inside the StartWorkflow request.
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCEnabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
@@ -3819,7 +4004,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCEnabled(
 // a StartWorkflowExecution with a TimeSkippingConfig is rejected.
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 
@@ -3842,7 +4027,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisable
 // forwarded to the history client inside the StartWorkflow request.
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCEnabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
@@ -3867,7 +4052,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCEnabled
 // a SignalWithStartWorkflowExecution with a TimeSkippingConfig is rejected.
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 
@@ -3891,7 +4076,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 // forwarded to the history client inside the request.
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping_DCEnabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
@@ -3917,7 +4102,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 // a ResetWorkflowExecution request with a TimeSkippingConfig inside PostResetOperations is rejected.
 func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 
 	_, err := wh.ResetWorkflowExecution(context.Background(), &workflowservice.ResetWorkflowExecutionRequest{
@@ -3949,7 +4134,7 @@ func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisable
 // is off, a batch reset with a TimeSkippingConfig inside PostResetOperations is rejected.
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -3989,7 +4174,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkippi
 // when the DC gate is off, a batch UpdateWorkflowOptions with a TimeSkippingConfig is rejected.
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -5084,6 +5269,19 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 		s.Equal(errRequestNotSet, err)
 	})
 
+	s.Run("nil patch should return error", func() {
+		request := &workflowservice.PatchScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Patch:      nil,
+		}
+
+		resp, err := wh.PatchSchedule(ctx, request)
+		s.Nil(resp)
+		var invalidArgErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgErr)
+	})
+
 	s.Run("schedules disabled should return error", func() {
 		disabledConfig := s.newConfig()
 		disabledConfig.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(false)
@@ -5126,6 +5324,291 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 		resp, err := wh.PatchSchedule(ctx, request)
 		s.Nil(resp)
 		s.Error(err)
+	})
+}
+
+// maxProtoDurationSeconds is the largest seconds value a google.protobuf.Duration may
+// carry (10000 years). Anything beyond it fails durationpb's CheckValid.
+const maxProtoDurationSeconds = int64(315576000000)
+
+// newScheduleSpecHandler builds the minimum WorkflowHandler that canonicalizeScheduleSpec
+// needs: a config, a spec builder, and a logger for the non-enforcing path. configure is
+// nil to exercise the shipped dynamic config defaults.
+func newScheduleSpecHandler(configure func(*Config)) *WorkflowHandler {
+	config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
+	if configure != nil {
+		configure(config)
+	}
+	return &WorkflowHandler{
+		config:              config,
+		throttledLogger:     log.NewNoopLogger(),
+		scheduleSpecBuilder: scheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }),
+	}
+}
+
+// Regression test for SCH-057. Malformed interval/phase duration protobufs (mismatched
+// seconds/nanos signs, nanos outside the protobuf range, seconds outside the protobuf
+// range) normalize to Go durations that satisfy the semantic interval checks, so schedule
+// intake used to accept them and persist the invalid wire form verbatim.
+func TestCanonicalizeScheduleSpec_IntervalDurationValidation(t *testing.T) {
+	testCases := []struct {
+		name        string
+		interval    *durationpb.Duration
+		phase       *durationpb.Duration
+		errContains string
+	}{
+		// Valid boundary values: these must keep working, and must not be capped or
+		// otherwise rewritten by the validation.
+		{
+			name:     "minimum valid interval",
+			interval: &durationpb.Duration{Seconds: 1},
+		},
+		{
+			name:     "maximum valid nanos",
+			interval: &durationpb.Duration{Seconds: 1, Nanos: 999999999},
+		},
+		{
+			name:     "valid interval and phase",
+			interval: durationpb.New(time.Hour),
+			phase:    durationpb.New(30 * time.Minute),
+		},
+		{
+			name:     "maximum protobuf seconds",
+			interval: &durationpb.Duration{Seconds: maxProtoDurationSeconds},
+		},
+		{
+			name:     "zero phase is valid",
+			interval: durationpb.New(time.Hour),
+			phase:    &durationpb.Duration{},
+		},
+
+		// Malformed protobuf wire values.
+		{
+			name:        "interval with mismatched signs",
+			interval:    &durationpb.Duration{Seconds: 2, Nanos: -1},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "interval with nanos at 1e9",
+			interval:    &durationpb.Duration{Nanos: 1000000000},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "interval with seconds above the protobuf range",
+			interval:    &durationpb.Duration{Seconds: maxProtoDurationSeconds + 1},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "interval with seconds below the protobuf range",
+			interval:    &durationpb.Duration{Seconds: -maxProtoDurationSeconds - 1},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "phase with nanos at 1e9",
+			interval:    &durationpb.Duration{Seconds: 2},
+			phase:       &durationpb.Duration{Nanos: 1000000000},
+			errContains: "phase is not a valid duration",
+		},
+		{
+			name:        "phase with mismatched signs",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       &durationpb.Duration{Seconds: 1, Nanos: -1},
+			errContains: "phase is not a valid duration",
+		},
+		{
+			name:        "phase with nanos at -1e9",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       &durationpb.Duration{Nanos: -1000000000},
+			errContains: "phase is not a valid duration",
+		},
+
+		// Controls: well-formed protobufs that violate the pre-existing semantic checks
+		// must still be rejected with the pre-existing messages.
+		{
+			name:        "normalized interval below the minimum",
+			interval:    &durationpb.Duration{Nanos: 500000000},
+			errContains: "interval is too small",
+		},
+		{
+			name:        "negative phase",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       &durationpb.Duration{Seconds: -1},
+			errContains: "phase is negative",
+		},
+		{
+			name:        "phase not less than interval",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       durationpb.New(10 * time.Second),
+			errContains: "phase cannot be greater than Interval",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(nil)
+			schedule := &schedulepb.Schedule{
+				Spec: &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{{
+						Interval: tc.interval,
+						Phase:    tc.phase,
+					}},
+				},
+			}
+
+			err := wh.canonicalizeScheduleSpec(schedule, "test-namespace")
+			if tc.errContains == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.Contains(t, err.Error(), tc.errContains)
+		})
+	}
+}
+
+// The duration validation is enforced by default, but operators can disable it for a
+// namespace with frontend.disabledScheduleValidations. When disabled, a malformed duration
+// is logged and allowed through, and the spec still compiles on its normalized value.
+func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
+	testCases := []struct {
+		name string
+		// configure is nil when the case exercises the shipped default.
+		configure   func(*Config)
+		errContains string
+	}{
+		{
+			name:        "enforced by default",
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name: "unrelated validation disabled",
+			configure: func(c *Config) {
+				c.DisabledScheduleValidations = dc.GetTypedPropertyFnFilteredByNamespace(
+					[]string{scheduleValidationVersioningOverride},
+				)
+			},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name: "duration validation disabled",
+			configure: func(c *Config) {
+				c.DisabledScheduleValidations = func(namespace string) []string {
+					require.Equal(t, "test-namespace", namespace)
+					return []string{"Scheduler-Duration"}
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(tc.configure)
+
+			schedule := &schedulepb.Schedule{
+				Spec: &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{{
+						Interval: &durationpb.Duration{Seconds: 2, Nanos: -1},
+					}},
+				},
+			}
+
+			err := wh.canonicalizeScheduleSpec(schedule, "test-namespace")
+			if tc.errContains != "" {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Contains(t, err.Error(), tc.errContains)
+				return
+			}
+			require.NoError(t, err)
+			// Canonicalization still ran, on the malformed duration's normalized value.
+			require.Equal(t, 2*time.Second-time.Nanosecond,
+				schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration())
+		})
+	}
+}
+
+// Regression test for SCH-057: CreateSchedule and UpdateSchedule must reject malformed
+// interval duration protobufs with InvalidArgument before either the V1 or the CHASM
+// backend is invoked.
+func (s *WorkflowHandlerSuite) TestCreateUpdateSchedule_RejectsMalformedIntervalDuration() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	// Mismatched seconds/nanos signs normalize to ~2s, and nanos=1e9 normalizes to 1s,
+	// so both satisfy the semantic interval/phase checks while being invalid on the wire.
+	malformedSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: &durationpb.Duration{Seconds: 2, Nanos: -1},
+					Phase:    &durationpb.Duration{Nanos: 1000000000},
+				}},
+			},
+		}
+	}
+
+	// No backend call is expected: the scheduler (CHASM) client is nil in this suite and
+	// the history client mock has no expectations registered, so reaching either backend
+	// fails the test.
+	s.Run("CreateSchedule", func() {
+		resp, err := wh.CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Schedule:   malformedSchedule(),
+			RequestId:  uuid.NewString(),
+			Identity:   "test-identity",
+		})
+		s.Nil(resp)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), "not a valid duration")
+	})
+
+	s.Run("UpdateSchedule", func() {
+		resp, err := wh.UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Schedule:   malformedSchedule(),
+			RequestId:  uuid.NewString(),
+			Identity:   "test-identity",
+		})
+		s.Nil(resp)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), "not a valid duration")
+	})
+}
+
+func (s *WorkflowHandlerSuite) TestUpdateSchedule_ValidationAndErrors() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	// Note: a nil request is only reachable from direct in-process callers. Standard
+	// gRPC transport always decodes into a non-nil (possibly empty) request message.
+	s.Run("nil request should return error", func() {
+		resp, err := wh.UpdateSchedule(ctx, nil)
+		s.Nil(resp)
+		s.Equal(errRequestNotSet, err)
+	})
+
+	s.Run("schedules disabled should return error", func() {
+		disabledConfig := s.newConfig()
+		disabledConfig.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(false)
+		disabledWh := s.getWorkflowHandler(disabledConfig)
+
+		request := &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+		}
+
+		resp, err := disabledWh.UpdateSchedule(ctx, request)
+		s.Nil(resp)
+		s.Equal(errSchedulesNotAllowed, err)
 	})
 }
 
@@ -5217,7 +5700,7 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
 // off, UpdateWorkflowExecutionOptions rejects a request containing a TimeSkippingConfig.
 func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 
 	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -5234,6 +5717,117 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
 	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+}
+
+func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
+	config := s.newConfig()
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
+	wh := s.getWorkflowHandler(config)
+	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.testNamespace.String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+			Request: &updatepb.Request{
+				Meta:                &updatepb.Meta{UpdateId: "update-id"},
+				Input:               &updatepb.Input{Name: "update-name"},
+				RequestId:           "request-id",
+				CompletionCallbacks: callbacks,
+			},
+		}
+	}
+
+	s.Run("invalid callback", func() {
+		err := wh.prepareUpdateWorkflowRequest(
+			context.Background(),
+			s.testNamespace,
+			newRequest([]*commonpb.Callback{{}}),
+		)
+
+		var unimplemented *serviceerror.Unimplemented
+		s.ErrorAs(err, &unimplemented)
+		s.ErrorContains(err, "unknown callback variant")
+	})
+
+	s.Run("normalizes callback headers", func() {
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url:    "http://localhost/callback",
+					Header: map[string]string{"X-Request-ID": "value"},
+				},
+			},
+		}})
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		s.NoError(err)
+		s.Equal(map[string]string{"x-request-id": "value"}, request.GetRequest().GetCompletionCallbacks()[0].GetNexus().GetHeader())
+	})
+
+	s.Run("deduplicates links from Nexus callbacks", func() {
+		callbackLink := &commonpb.Link{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "job-id"},
+			},
+		}
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback"},
+			},
+			Links: []*commonpb.Link{callbackLink},
+		}})
+		request.Request.Links = []*commonpb.Link{common.CloneProto(callbackLink)}
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		s.NoError(err)
+		s.Empty(request.GetRequest().GetLinks())
+	})
+
+	s.Run("rejects invalid callback links", func() {
+		err := wh.prepareUpdateWorkflowRequest(
+			context.Background(),
+			s.testNamespace,
+			newRequest([]*commonpb.Callback{{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{{
+					Variant: &commonpb.Link_BatchJob_{
+						BatchJob: &commonpb.Link_BatchJob{},
+					},
+				}},
+			}}),
+		)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "batch job link must not have an empty job ID")
+	})
+
+	s.Run("rejects too many combined links", func() {
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{{
+				Variant: &commonpb.Link_BatchJob_{
+					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+				},
+			}},
+		}})
+		request.Request.Links = []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}}
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "cannot attach more than 1 links per request, got 2")
+	})
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {

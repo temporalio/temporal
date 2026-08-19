@@ -656,6 +656,13 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 		Priority:                    ai.Priority,
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:        ai.RetryInitialInterval,
+			BackoffCoefficient:     ai.RetryBackoffCoefficient,
+			MaximumInterval:        ai.RetryMaximumInterval,
+			MaximumAttempts:        ai.RetryMaximumAttempts,
+			NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
+		},
 	}
 	metrics.ActivityEagerExecutionCounter.With(
 		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
@@ -1449,7 +1456,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.Now(),
 		handler.mutableState,
 	)
 	if err != nil {
@@ -1509,7 +1516,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.Now(),
 		handler.mutableState,
 	)
 	if err != nil {

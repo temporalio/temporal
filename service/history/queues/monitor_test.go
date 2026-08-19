@@ -9,8 +9,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/service/history/tasks"
 )
+
+var monitorTestFireTime = time.Unix(1000, 0).UTC()
 
 type (
 	monitorSuite struct {
@@ -36,9 +41,12 @@ func (s *monitorSuite) SetupTest() {
 	s.monitor = newMonitor(
 		tasks.CategoryTypeScheduled,
 		s.mockTimeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
 		&MonitorOptions{
 			PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+			ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(false),
 			SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 		},
 	)
@@ -104,7 +112,7 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	s.False(ok)
 
 	now := time.Now().Truncate(monitorWatermarkPrecision)
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	watermark, ok := s.monitor.GetReaderWatermark(DefaultReaderId)
 	s.True(ok)
 	s.Equal(tasks.NewKey(
@@ -114,7 +122,7 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 
 	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
 		now = now.Add(time.Millisecond * 100)
-		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	}
 
 	alert := <-s.alertCh
@@ -130,7 +138,7 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	}
 	s.Equal(expectedAlert, *alert)
 
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	select {
 	case <-s.alertCh:
 		s.Fail("should have only one outstanding slice count alert")
@@ -138,9 +146,134 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	}
 
 	s.monitor.ResolveAlert(alert.AlertType)
-	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()), true)
 	alert = <-s.alertCh
 	s.Equal(expectedAlert, *alert)
+}
+
+func (s *monitorSuite) receivedStuckAlert() bool {
+	select {
+	case alert := <-s.alertCh:
+		s.Equal(AlertTypeReaderStuck, alert.AlertType)
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_DrainedReadClearsAttempts() {
+	key := tasks.NewKey(monitorTestFireTime, 1)
+	criticalAttempts := s.monitor.options.ReaderStuckCriticalAttempts()
+
+	for i := 0; i != criticalAttempts-1; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, key, true)
+	}
+
+	s.monitor.SetReaderWatermark(DefaultReaderId, key, false)
+	s.False(s.receivedStuckAlert(), "a drained read must not count toward the threshold")
+
+	for i := 0; i != criticalAttempts-1; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, key, true)
+	}
+	s.False(s.receivedStuckAlert(), "a drained read must clear what earlier reads accumulated")
+
+	s.monitor.SetReaderWatermark(DefaultReaderId, key, true)
+	s.True(s.receivedStuckAlert(), "consecutive reads that leave tasks behind must still alert")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_DrainedReadRecordsItsWatermark() {
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), false)
+
+	watermark, ok := s.monitor.GetReaderWatermark(DefaultReaderId)
+	s.True(ok)
+	s.Equal(tasks.NewKey(monitorTestFireTime, 0), watermark)
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_AlertsOnFirstCutShortReadWhenThresholdIsOne() {
+	s.monitor.options.ReaderStuckCriticalAttempts = dynamicconfig.GetIntPropertyFn(1)
+
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+
+	s.True(s.receivedStuckAlert(), "a threshold of one should alert on the first read that left tasks behind")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_AdvancingWatermarkResetsAttempts() {
+	criticalAttempts := s.monitor.options.ReaderStuckCriticalAttempts()
+	inWindow := tasks.NewKey(monitorTestFireTime, 1)
+	inNextWindow := tasks.NewKey(monitorTestFireTime.Add(monitorWatermarkPrecision), 1)
+
+	for i := 0; i != criticalAttempts-1; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, inWindow, true)
+	}
+	for i := 0; i != criticalAttempts-1; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, inNextWindow, true)
+	}
+
+	s.False(s.receivedStuckAlert(), "attempts from earlier windows must not carry into the current one")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_ZeroThresholdDisablesTheAlert() {
+	s.monitor.options.ReaderStuckCriticalAttempts = dynamicconfig.GetIntPropertyFn(0)
+
+	for i := 0; i != 10; i++ {
+		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+	}
+
+	s.False(s.receivedStuckAlert(), "a threshold of zero must disable the alert")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_ShadowModeReportsWithoutAlerting() {
+	options := *s.monitor.options
+	options.ReaderStuckShadowMode = dynamicconfig.GetBoolPropertyFn(true)
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	monitor := newMonitor(tasks.CategoryTypeScheduled, s.mockTimeSource, log.NewTestLogger(), metricsHandler, &options)
+	defer monitor.Close()
+
+	start := s.mockTimeSource.Now()
+	for i := 0; i != options.ReaderStuckCriticalAttempts()*2; i++ {
+		monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+	}
+
+	select {
+	case <-monitor.AlertCh():
+		s.Fail("shadow mode must not raise the alert")
+	default:
+	}
+
+	// Silenced after the first report, so a run of reads past the threshold reports once.
+	records := capture.Snapshot()["queue_alert_shadow"]
+	s.Len(records, 1)
+	s.Equal(readerStuckActionName, records[0].Tags[metrics.QueueActionTagName])
+
+	s.mockTimeSource.Update(start.Add(defaultAlertSilenceDuration + time.Second))
+	monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+	s.Len(capture.Snapshot()["queue_alert_shadow"], 2, "a reader still stuck must report again once the silence expires")
+}
+
+func (s *monitorSuite) TestReaderWatermarkStats_ShadowModeStopsReportingAfterClose() {
+	options := *s.monitor.options
+	options.ReaderStuckShadowMode = dynamicconfig.GetBoolPropertyFn(true)
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	monitor := newMonitor(tasks.CategoryTypeScheduled, s.mockTimeSource, log.NewTestLogger(), metricsHandler, &options)
+	start := s.mockTimeSource.Now()
+	for i := 0; i != options.ReaderStuckCriticalAttempts(); i++ {
+		monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+	}
+	s.Len(capture.Snapshot()["queue_alert_shadow"], 1)
+
+	monitor.Close()
+	s.mockTimeSource.Update(start.Add(defaultAlertSilenceDuration + time.Second))
+	monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(monitorTestFireTime, 1), true)
+
+	s.Len(capture.Snapshot()["queue_alert_shadow"], 1, "a closed monitor must not keep reporting")
 }
 
 func (s *monitorSuite) TestSliceCount() {

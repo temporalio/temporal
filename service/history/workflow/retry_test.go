@@ -7,125 +7,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/number"
-	"go.temporal.io/server/common/retrypolicy"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-func Test_IsRetryable(t *testing.T) {
-	a := assert.New(t)
-
-	f := &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TerminatedFailureInfo{TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{}},
-	}
-	a.False(isRetryable(f, nil))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}},
-	}
-	a.False(isRetryable(f, nil))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-			TimeoutType: enumspb.TIMEOUT_TYPE_UNSPECIFIED,
-		}},
-	}
-	a.False(isRetryable(f, nil))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-			TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		}},
-	}
-	a.True(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-			TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		}},
-	}
-	a.False(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()}))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-			TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-		}},
-	}
-	a.False(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-			TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
-		}},
-	}
-	a.True(isRetryable(f, nil))
-	a.False(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}))
-	a.True(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
-	a.True(isRetryable(f, []string{retrypolicy.TimeoutFailureTypePrefix + "unknown timeout type string"}))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
-			NonRetryable: false,
-		}},
-	}
-	a.True(isRetryable(f, nil))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
-			NonRetryable: true,
-		}},
-	}
-	a.False(isRetryable(f, nil))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			NonRetryable: true,
-		}},
-	}
-	a.False(isRetryable(f, nil))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			NonRetryable: false,
-			Type:         "type",
-		}},
-	}
-	a.True(isRetryable(f, nil))
-	a.True(isRetryable(f, []string{"otherType"}))
-	a.False(isRetryable(f, []string{"otherType", "type"}))
-	a.False(isRetryable(f, []string{"type"}))
-
-	// When any failure is inside ChildWorkflowExecutionFailure, it is always retryable because ChildWorkflow is always retryable.
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
-		Cause: &failurepb.Failure{
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				NonRetryable: true,
-			}},
-		},
-	}
-	a.True(isRetryable(f, nil))
-
-	f = &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
-		Cause: &failurepb.Failure{
-			FailureInfo: &failurepb.Failure_ActivityFailureInfo{ActivityFailureInfo: &failurepb.ActivityFailureInfo{}},
-			Cause: &failurepb.Failure{
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: true,
-				}},
-			},
-		},
-	}
-	a.True(isRetryable(f, nil))
-}
 
 func Test_NonRetriableErrors(t *testing.T) {
 	attempt := int32(1)

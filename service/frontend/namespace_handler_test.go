@@ -2,12 +2,15 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -26,12 +29,18 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
+	captureNamespaceEventLogger struct {
+		embedded.Logger
+		records []otellog.Record
+	}
+
 	namespaceHandlerCommonSuite struct {
 		suite.Suite
 
@@ -50,6 +59,14 @@ type (
 		handler *namespaceHandler
 	}
 )
+
+func (l *captureNamespaceEventLogger) Emit(_ context.Context, record otellog.Record) {
+	l.records = append(l.records, record)
+}
+
+func (l *captureNamespaceEventLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
+}
 
 var now = time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
 
@@ -86,6 +103,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.config = NewConfig(dc.NewNoopCollection(), 1024)
 	s.handler = newNamespaceHandler(
 		logger,
+		wideevents.NoopLogger(),
 		s.mockMetadataMgr,
 		namespace.NewMockRegistry(s.controller),
 		s.mockClusterMetadata,
@@ -99,6 +117,60 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 
 func (s *namespaceHandlerCommonSuite) TearDownTest() {
 	s.controller.Finish()
+}
+
+func (s *namespaceHandlerCommonSuite) TestDeprecateNamespaceEventUsesPersistedAfterState() {
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dc.GetBoolPropertyFn(true)
+
+	failoverEndTime := timestamppb.New(now)
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:    "namespace-id",
+			Name:  "namespace",
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+		},
+		Config:          &persistencespb.NamespaceConfig{},
+		FailoverEndTime: failoverEndTime,
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName},
+		},
+	}
+
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "namespace"}).Return(
+		&persistence.GetNamespaceResponse{Namespace: detail},
+		nil,
+	)
+
+	var persistedAfter wideevents.NamespaceStateFields
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			persistedAfter = namespaceStateFields(request.Namespace, request.IsGlobalNamespace)
+			return nil
+		},
+	)
+
+	_, err := s.handler.DeprecateNamespace(context.Background(), &workflowservice.DeprecateNamespaceRequest{Namespace: "namespace"})
+	s.Require().NoError(err)
+	s.Require().Len(eventLogger.records, 1)
+
+	var detailsJSON string
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Key == "details" {
+			detailsJSON = kv.Value.AsString()
+		}
+		return true
+	})
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(detailsJSON), &details))
+	after, ok := details["after"].(map[string]any)
+	s.Require().True(ok)
+	s.Require().Equal(persistedAfter.FailoverEndTime, after["failover_end_time"])
+	s.Require().NotEqual(failoverEndTime.AsTime().Format(time.RFC3339), after["failover_end_time"])
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
@@ -387,6 +459,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
@@ -397,6 +470,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+	s.Equal(int64(40*1024*1024), resp.NamespaceInfo.Limits.WorkflowTaskCompletionSizeLimitError)
 
 	// Second call: Override the default value of dynamic configs.
 	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
@@ -405,9 +479,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = dc.GetIntPropertyFnFilteredByNamespace(5)
 	s.config.WorkerHeartbeatsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.WorkflowPauseEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.config.EnableBatchOperationsForStandaloneActivities = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.EnableChasm = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.StandaloneNexusOperationsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1024)
@@ -416,6 +488,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.WorkerCommandsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.PollerAutoscalingAutoEnroll = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.EnableWorkflowTaskCompletionPagination = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.WorkflowTaskCompletionBufferSizeLimit = dc.GetIntPropertyFnFilteredByNamespace(4096)
 
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
@@ -427,9 +500,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowPause)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivities)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerCommands)
@@ -437,6 +508,16 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
+	s.Equal(int64(4096), resp.NamespaceInfo.Limits.WorkflowTaskCompletionSizeLimitError)
+
+	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.config.Activity.EnableStandaloneActivityOperatorCommands = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: "ns",
+	})
+	s.Require().NoError(err)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {
@@ -1733,6 +1814,10 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 }
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dc.GetBoolPropertyFn(true)
+
 	namespaceName := "test-namespace"
 	identity := "identity"
 	description := "description"
@@ -1742,7 +1827,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	version := int64(100)
 
 	// first call returns error, because ID is not set
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName, false, "")
 	s.Error(err)
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1761,13 +1846,26 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
 
 	spec.Id = "test-id"
-	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName, true, "request-id")
 	s.NoError(err)
 	s.NotNil(rule)
 	s.NotNil(rule.Spec)
 	s.NotNil(rule.CreateTime)
 	s.Equal(identity, rule.CreatedByIdentity)
 	s.Equal(description, rule.Description)
+	s.Require().Len(eventLogger.records, 1)
+
+	var detailsJSON string
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Key == "details" {
+			detailsJSON = kv.Value.AsString()
+		}
+		return true
+	})
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(detailsJSON), &details))
+	s.Require().Equal(true, details["workflow_rule_force_scan"])
+	s.Require().Equal("request-id", details["workflow_rule_request_id"])
 }
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
@@ -1800,7 +1898,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 		},
 	}, nil)
 
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName, false, "")
 	s.Error(err)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)

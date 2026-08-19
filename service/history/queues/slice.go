@@ -33,6 +33,8 @@ type (
 		ShrinkScope() int
 		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
 		MoreTasks() bool
+		// TaskStats returns a shallow copy.
+		// Deep copy fields before using them outside a reader lock.
 		TaskStats() TaskStats
 		Clear()
 	}
