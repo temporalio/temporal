@@ -56,18 +56,10 @@ func OutboundQueueCircuitBreakerPoolProvider(
 	}
 }
 
-// onStateChange returns the gobreaker state-change hook that logs the transition. Without it an
-// opening breaker is invisible: the blocked tasks are counted by circuit_breaker_executable_blocked,
-// but nothing says when the breaker opened, for which destination, or when it recovered.
-//
-// This logs rather than emitting a metric because destination is unbounded for callback targets
-// (customer-controlled URLs), so a metric keyed on it would be a high-cardinality addition.
-//
-// gobreaker invokes this hook while holding its internal mutex, so it must stay cheap. Transitions
-// are bounded by the breaker's own Interval/Timeout settings, not by request volume.
-//
-// Note that TwoStepCircuitBreakerWithDynamicSettings replaces the underlying gobreaker instance when
-// its dynamic config changes, which resets state without a transition being observed here.
+// onStateChange logs breaker transitions, which are otherwise invisible: blocked tasks are counted
+// by circuit_breaker_executable_blocked, but nothing records when a breaker opened or recovered.
+// Logged rather than emitted as a metric because destination is unbounded for callback targets.
+// gobreaker calls this under its own mutex, so it must stay cheap.
 func onStateChange(
 	key tasks.TaskGroupNamespaceIDAndDestination,
 	nsName string,
