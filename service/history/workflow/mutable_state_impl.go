@@ -653,9 +653,9 @@ func NewMutableStateInChain(
 	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
 	newMutableState.executionInfo.ChildrenInitializedPostResetPoint = currentMutableState.GetExecutionInfo().ChildrenInitializedPostResetPoint
 
-	// The pause dedup id follows the chain to de-dupe a retry with no run id, which would otherwise
-	// pause the successor run. The unpause id is not carried: such a retry only fails with "not
-	// paused" instead of succeeding as a no-op, which is acceptable and not worth the added size.
+	// LastPauseRequestId follows the chain to de-dupe a retry with no run id.
+	// LastUnpauseRequestId does not carry over, not worth the added size, and just
+	// caused "not paused" error instead of success/no-op on stale retry of unpause.
 	lastPauseRequestID := currentMutableState.GetExecutionInfo().GetLastPauseRequestId()
 	newMutableState.executionInfo.LastPauseRequestId = lastPauseRequestID
 	newMutableState.approximateSize += len(lastPauseRequestID)
