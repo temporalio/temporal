@@ -1,9 +1,7 @@
 package telemetry_test
 
 import (
-	"context"
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,47 +21,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func Test_ServerStatsHandler(t *testing.T) {
-
-	makeRequest := func(responseErr error) map[string]attribute.KeyValue {
-		t.Helper()
-
-		exporter := tracetest.NewInMemoryExporter()
-		tp := trace.NewTracerProvider(trace.WithSyncer(exporter))
-		tmp := propagation.TraceContext{}
-		otelStatsHandler := telemetry.NewServerStatsHandler(tp, tmp, nil)
-
-		ctx := otelStatsHandler.TagRPC(context.Background(), &stats.RPCTagInfo{
-			FullMethodName: api.WorkflowServicePrefix,
-		})
-		otelStatsHandler.HandleRPC(ctx, &stats.InPayload{
-			Payload: &workflowservice.TerminateWorkflowExecutionRequest{
-				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: "WF-ID",
-					RunId:      "RUN-ID",
-				},
-			},
-		})
-		if responseErr == nil {
-			otelStatsHandler.HandleRPC(ctx, &stats.OutPayload{
-				Payload: &workflowservice.TerminateWorkflowExecutionResponse{},
-			})
-		}
-		otelStatsHandler.HandleRPC(ctx, &stats.End{
-			Error: responseErr,
-		})
-
-		exportedSpans := exporter.GetSpans()
-		require.Len(t, exportedSpans, 1)
-		attrByKey := map[string]attribute.KeyValue{}
-		for _, a := range exportedSpans[0].Attributes {
-			attrByKey[string(a.Key)] = a
-		}
-		return attrByKey
-	}
-
+func TestServerStatsHandler(t *testing.T) {
 	t.Run("annotate span with workflow tags", func(t *testing.T) {
-		spanAttrsByKey := makeRequest(nil)
+		t.Parallel()
+
+		spanAttrsByKey := captureTerminateWorkflowAttributes(t, nil)
 
 		require.Equal(t, "WF-ID", spanAttrsByKey["temporalWorkflowID"].Value.AsString())
 		require.Equal(t, "RUN-ID", spanAttrsByKey["temporalRunID"].Value.AsString())
@@ -74,10 +36,9 @@ func Test_ServerStatsHandler(t *testing.T) {
 	})
 
 	t.Run("annotate span with request/response payload in debug mode", func(t *testing.T) {
-		os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
-		defer os.Unsetenv("TEMPORAL_OTEL_DEBUG")
+		t.Setenv("TEMPORAL_OTEL_DEBUG", "true")
 
-		spanAttrsByKey := makeRequest(nil)
+		spanAttrsByKey := captureTerminateWorkflowAttributes(t, nil)
 
 		require.JSONEq(t,
 			`{"workflowExecution":{"workflowId":"WF-ID","runId":"RUN-ID"}}`,
@@ -86,10 +47,9 @@ func Test_ServerStatsHandler(t *testing.T) {
 	})
 
 	t.Run("annotate span with response error payload in debug mode", func(t *testing.T) {
-		os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
-		defer os.Unsetenv("TEMPORAL_OTEL_DEBUG")
+		t.Setenv("TEMPORAL_OTEL_DEBUG", "true")
 
-		spanAttrsByKey := makeRequest(status.Errorf(codes.Internal, "Something went wrong"))
+		spanAttrsByKey := captureTerminateWorkflowAttributes(t, status.Errorf(codes.Internal, "Something went wrong"))
 
 		require.JSONEq(t,
 			`{"code":13,"message":"Something went wrong"}`,
@@ -97,159 +57,199 @@ func Test_ServerStatsHandler(t *testing.T) {
 	})
 
 	t.Run("skip if noop trace provider", func(t *testing.T) {
+		t.Parallel()
+
 		tp := telemetry.NoopTracerProvider
 		tmp := propagation.TraceContext{}
 		otelStatsHandler := telemetry.NewServerStatsHandler(tp, tmp, nil)
 		require.Nil(t, otelStatsHandler)
 	})
+
+	t.Run("annotate spans with worker task ID", func(t *testing.T) {
+		t.Parallel()
+
+		serializer := tasktoken.NewSerializer()
+		taskToken, err := serializer.Serialize(&tokenspb.Task{
+			NamespaceId:      "namespace-id",
+			RunId:            "run-id",
+			ScheduledEventId: 42,
+		})
+		require.NoError(t, err)
+		queryToken, err := serializer.SerializeQueryTaskToken(&tokenspb.QueryTask{
+			NamespaceId: "namespace-id",
+			TaskId:      "query-id",
+		})
+		require.NoError(t, err)
+		nexusToken, err := serializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+			NamespaceId: "namespace-id",
+			TaskId:      "nexus-id",
+		})
+		require.NoError(t, err)
+
+		for _, tc := range []struct {
+			name         string
+			method       string
+			payload      any
+			outbound     bool
+			workerTaskID string
+		}{
+			{
+				name:         "WorkflowPoll",
+				method:       "PollWorkflowTaskQueue",
+				payload:      &workflowservice.PollWorkflowTaskQueueResponse{TaskToken: taskToken},
+				outbound:     true,
+				workerTaskID: "workflow/namespace-id/run-id/42",
+			},
+			{
+				name:         "WorkflowCompletion",
+				method:       "RespondWorkflowTaskCompleted",
+				payload:      &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: taskToken},
+				workerTaskID: "workflow/namespace-id/run-id/42",
+			},
+			{
+				name:         "WorkflowFailure",
+				method:       "RespondWorkflowTaskFailed",
+				payload:      &workflowservice.RespondWorkflowTaskFailedRequest{TaskToken: taskToken},
+				workerTaskID: "workflow/namespace-id/run-id/42",
+			},
+			{
+				name:         "ActivityPoll",
+				method:       "PollActivityTaskQueue",
+				payload:      &workflowservice.PollActivityTaskQueueResponse{TaskToken: taskToken},
+				outbound:     true,
+				workerTaskID: "activity/namespace-id/run-id/42",
+			},
+			{
+				name:         "ActivityCompletion",
+				method:       "RespondActivityTaskCompleted",
+				payload:      &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: taskToken},
+				workerTaskID: "activity/namespace-id/run-id/42",
+			},
+			{
+				name:         "ActivityHeartbeat",
+				method:       "RecordActivityTaskHeartbeat",
+				payload:      &workflowservice.RecordActivityTaskHeartbeatRequest{TaskToken: taskToken},
+				workerTaskID: "activity/namespace-id/run-id/42",
+			},
+			{
+				name:         "ActivityFailure",
+				method:       "RespondActivityTaskFailed",
+				payload:      &workflowservice.RespondActivityTaskFailedRequest{TaskToken: taskToken},
+				workerTaskID: "activity/namespace-id/run-id/42",
+			},
+			{
+				name:         "ActivityCancellation",
+				method:       "RespondActivityTaskCanceled",
+				payload:      &workflowservice.RespondActivityTaskCanceledRequest{TaskToken: taskToken},
+				workerTaskID: "activity/namespace-id/run-id/42",
+			},
+			{
+				name:         "QueryPoll",
+				method:       "PollWorkflowTaskQueue",
+				payload:      &workflowservice.PollWorkflowTaskQueueResponse{TaskToken: queryToken, Query: &querypb.WorkflowQuery{}},
+				outbound:     true,
+				workerTaskID: "query/namespace-id/query-id",
+			},
+			{
+				name:         "QueryCompletion",
+				method:       "RespondQueryTaskCompleted",
+				payload:      &workflowservice.RespondQueryTaskCompletedRequest{TaskToken: queryToken},
+				workerTaskID: "query/namespace-id/query-id",
+			},
+			{
+				name:         "NexusPoll",
+				method:       "PollNexusTaskQueue",
+				payload:      &workflowservice.PollNexusTaskQueueResponse{TaskToken: nexusToken},
+				outbound:     true,
+				workerTaskID: "nexus/namespace-id/nexus-id",
+			},
+			{
+				name:         "NexusCompletion",
+				method:       "RespondNexusTaskCompleted",
+				payload:      &workflowservice.RespondNexusTaskCompletedRequest{TaskToken: nexusToken},
+				workerTaskID: "nexus/namespace-id/nexus-id",
+			},
+			{
+				name:         "NexusFailure",
+				method:       "RespondNexusTaskFailed",
+				payload:      &workflowservice.RespondNexusTaskFailedRequest{TaskToken: nexusToken},
+				workerTaskID: "nexus/namespace-id/nexus-id",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				var payloadStats stats.RPCStats
+				if tc.outbound {
+					payloadStats = &stats.OutPayload{Payload: tc.payload}
+				} else {
+					payloadStats = &stats.InPayload{Payload: tc.payload}
+				}
+
+				attrs := captureServerRPCAttributes(t, tc.method, payloadStats, &stats.End{})
+				workerTaskID, ok := attrs[telemetry.WorkerTaskIDKey]
+				require.True(t, ok)
+				require.Equal(t, tc.workerTaskID, workerTaskID.Value.AsString())
+			})
+		}
+	})
 }
 
-func TestServerStatsHandlerAnnotatesWorkerTask(t *testing.T) {
+func TestClientStatsHandler(t *testing.T) {
 	t.Parallel()
 
-	serializer := tasktoken.NewSerializer()
-	taskToken, err := serializer.Serialize(&tokenspb.Task{
-		NamespaceId:      "namespace-id",
-		RunId:            "run-id",
-		ScheduledEventId: 42,
-	})
-	require.NoError(t, err)
-	queryToken, err := serializer.SerializeQueryTaskToken(&tokenspb.QueryTask{
-		NamespaceId: "namespace-id",
-		TaskId:      "query-id",
-	})
-	require.NoError(t, err)
-	nexusToken, err := serializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
-		NamespaceId: "namespace-id",
-		TaskId:      "nexus-id",
-	})
-	require.NoError(t, err)
-
-	testCases := []struct {
-		name         string
-		method       string
-		payload      any
-		outbound     bool
-		workerTaskID string
-	}{
-		{
-			name:         "WorkflowPoll",
-			method:       "PollWorkflowTaskQueue",
-			payload:      &workflowservice.PollWorkflowTaskQueueResponse{TaskToken: taskToken},
-			outbound:     true,
-			workerTaskID: "workflow/namespace-id/run-id/42",
-		},
-		{
-			name:         "WorkflowCompletion",
-			method:       "RespondWorkflowTaskCompleted",
-			payload:      &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: taskToken},
-			workerTaskID: "workflow/namespace-id/run-id/42",
-		},
-		{
-			name:         "WorkflowFailure",
-			method:       "RespondWorkflowTaskFailed",
-			payload:      &workflowservice.RespondWorkflowTaskFailedRequest{TaskToken: taskToken},
-			workerTaskID: "workflow/namespace-id/run-id/42",
-		},
-		{
-			name:         "ActivityPoll",
-			method:       "PollActivityTaskQueue",
-			payload:      &workflowservice.PollActivityTaskQueueResponse{TaskToken: taskToken},
-			outbound:     true,
-			workerTaskID: "activity/namespace-id/run-id/42",
-		},
-		{
-			name:         "ActivityCompletion",
-			method:       "RespondActivityTaskCompleted",
-			payload:      &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: taskToken},
-			workerTaskID: "activity/namespace-id/run-id/42",
-		},
-		{
-			name:         "ActivityHeartbeat",
-			method:       "RecordActivityTaskHeartbeat",
-			payload:      &workflowservice.RecordActivityTaskHeartbeatRequest{TaskToken: taskToken},
-			workerTaskID: "activity/namespace-id/run-id/42",
-		},
-		{
-			name:         "ActivityFailure",
-			method:       "RespondActivityTaskFailed",
-			payload:      &workflowservice.RespondActivityTaskFailedRequest{TaskToken: taskToken},
-			workerTaskID: "activity/namespace-id/run-id/42",
-		},
-		{
-			name:         "ActivityCancellation",
-			method:       "RespondActivityTaskCanceled",
-			payload:      &workflowservice.RespondActivityTaskCanceledRequest{TaskToken: taskToken},
-			workerTaskID: "activity/namespace-id/run-id/42",
-		},
-		{
-			name:         "QueryPoll",
-			method:       "PollWorkflowTaskQueue",
-			payload:      &workflowservice.PollWorkflowTaskQueueResponse{TaskToken: queryToken, Query: &querypb.WorkflowQuery{}},
-			outbound:     true,
-			workerTaskID: "query/namespace-id/query-id",
-		},
-		{
-			name:         "QueryCompletion",
-			method:       "RespondQueryTaskCompleted",
-			payload:      &workflowservice.RespondQueryTaskCompletedRequest{TaskToken: queryToken},
-			workerTaskID: "query/namespace-id/query-id",
-		},
-		{
-			name:         "NexusPoll",
-			method:       "PollNexusTaskQueue",
-			payload:      &workflowservice.PollNexusTaskQueueResponse{TaskToken: nexusToken},
-			outbound:     true,
-			workerTaskID: "nexus/namespace-id/nexus-id",
-		},
-		{
-			name:         "NexusCompletion",
-			method:       "RespondNexusTaskCompleted",
-			payload:      &workflowservice.RespondNexusTaskCompletedRequest{TaskToken: nexusToken},
-			workerTaskID: "nexus/namespace-id/nexus-id",
-		},
-		{
-			name:         "NexusFailure",
-			method:       "RespondNexusTaskFailed",
-			payload:      &workflowservice.RespondNexusTaskFailedRequest{TaskToken: nexusToken},
-			workerTaskID: "nexus/namespace-id/nexus-id",
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			exporter := tracetest.NewInMemoryExporter()
-			tp := trace.NewTracerProvider(trace.WithSyncer(exporter))
-			handler := telemetry.NewServerStatsHandler(tp, propagation.TraceContext{}, nil)
-			ctx := handler.TagRPC(t.Context(), &stats.RPCTagInfo{
-				FullMethodName: api.WorkflowServicePrefix + tc.method,
-			})
-			if tc.outbound {
-				handler.HandleRPC(ctx, &stats.OutPayload{Payload: tc.payload})
-			} else {
-				handler.HandleRPC(ctx, &stats.InPayload{Payload: tc.payload})
-			}
-			handler.HandleRPC(ctx, &stats.End{})
-
-			spans := exporter.GetSpans()
-			require.Len(t, spans, 1)
-			attrs := attribute.NewSet(spans[0].Attributes...)
-			workerTaskID, ok := attrs.Value(telemetry.WorkerTaskIDKey)
-			require.True(t, ok)
-			require.Equal(t, tc.workerTaskID, workerTaskID.AsString())
-		})
-	}
-}
-
-func Test_ClientStatsHandler(t *testing.T) {
-
 	t.Run("skip if noop trace provider", func(t *testing.T) {
+		t.Parallel()
+
 		tp := telemetry.NoopTracerProvider
 		tmp := propagation.TraceContext{}
 		otelStatsHandler := telemetry.NewClientStatsHandler(tp, tmp)
 		require.Nil(t, otelStatsHandler)
 	})
+}
+
+func captureTerminateWorkflowAttributes(t *testing.T, responseErr error) map[string]attribute.KeyValue {
+	t.Helper()
+
+	rpcStats := []stats.RPCStats{&stats.InPayload{
+		Payload: &workflowservice.TerminateWorkflowExecutionRequest{
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: "WF-ID",
+				RunId:      "RUN-ID",
+			},
+		},
+	}}
+	if responseErr == nil {
+		rpcStats = append(rpcStats, &stats.OutPayload{
+			Payload: &workflowservice.TerminateWorkflowExecutionResponse{},
+		})
+	}
+	rpcStats = append(rpcStats, &stats.End{
+		Error: responseErr,
+	})
+	return captureServerRPCAttributes(t, "TerminateWorkflowExecution", rpcStats...)
+}
+
+func captureServerRPCAttributes(t *testing.T, method string, rpcStats ...stats.RPCStats) map[string]attribute.KeyValue {
+	t.Helper()
+
+	exporter := tracetest.NewInMemoryExporter()
+	tp := trace.NewTracerProvider(trace.WithSyncer(exporter))
+	handler := telemetry.NewServerStatsHandler(tp, propagation.TraceContext{}, nil)
+	ctx := handler.TagRPC(t.Context(), &stats.RPCTagInfo{
+		FullMethodName: api.WorkflowServicePrefix + method,
+	})
+	for _, rpcStat := range rpcStats {
+		handler.HandleRPC(ctx, rpcStat)
+	}
+
+	exportedSpans := exporter.GetSpans()
+	require.Len(t, exportedSpans, 1)
+	attrByKey := map[string]attribute.KeyValue{}
+	for _, a := range exportedSpans[0].Attributes {
+		attrByKey[string(a.Key)] = a
+	}
+	return attrByKey
 }
 
 func toStr(t *testing.T, v attribute.Value) string {
