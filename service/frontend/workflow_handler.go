@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/temporalio/sqlparser"
+	"go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/trace"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -81,10 +82,10 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/common/workertask"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dummy"
@@ -1200,17 +1201,17 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		Messages:                   matchingResp.Messages,
 		PollerScalingDecision:      matchingResp.PollerScalingDecision,
 	}
-	if len(resp.GetTaskToken()) > 0 {
-		attrs := workertask.SpanAttributes{
-			Type:        workertask.TypeWorkflow,
-			NamespaceID: namespaceID.String(),
-			WorkflowID:  resp.GetWorkflowExecution().GetWorkflowId(),
-			RunID:       resp.GetWorkflowExecution().GetRunId(),
+	if span := trace.SpanFromContext(ctx); len(resp.GetTaskToken()) > 0 && span.IsRecording() {
+		attrs := []attribute.KeyValue{
+			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeWorkflow),
+			attribute.String(telemetry.WorkerTaskNamespaceIDKey, namespaceID.String()),
+			attribute.String(telemetry.WorkerTaskWorkflowIDKey, resp.GetWorkflowExecution().GetWorkflowId()),
+			attribute.String(telemetry.WorkerTaskRunIDKey, resp.GetWorkflowExecution().GetRunId()),
 		}
 		if startedEventID := resp.GetStartedEventId(); startedEventID != 0 {
-			attrs.ID = fmt.Sprint(startedEventID)
+			attrs = append(attrs, attribute.String(telemetry.WorkerTaskIDKey, fmt.Sprint(startedEventID)))
 		}
-		workertask.AnnotateSpan(trace.SpanFromContext(ctx), attrs)
+		span.SetAttributes(attrs...)
 	}
 	return resp, nil
 }
@@ -1450,15 +1451,15 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		Priority:                    matchingResponse.Priority,
 		RetryPolicy:                 matchingResponse.RetryPolicy,
 	}
-	if len(resp.GetTaskToken()) > 0 {
-		workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
-			Type:        workertask.TypeActivity,
-			ID:          resp.GetActivityId(),
-			NamespaceID: namespaceID.String(),
-			WorkflowID:  resp.GetWorkflowExecution().GetWorkflowId(),
-			RunID:       resp.GetWorkflowExecution().GetRunId(),
-			ActivityID:  resp.GetActivityId(),
-		})
+	if span := trace.SpanFromContext(ctx); len(resp.GetTaskToken()) > 0 && span.IsRecording() {
+		span.SetAttributes(
+			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeActivity),
+			attribute.String(telemetry.WorkerTaskIDKey, resp.GetActivityId()),
+			attribute.String(telemetry.WorkerTaskNamespaceIDKey, namespaceID.String()),
+			attribute.String(telemetry.WorkerTaskWorkflowIDKey, resp.GetWorkflowExecution().GetWorkflowId()),
+			attribute.String(telemetry.WorkerTaskRunIDKey, resp.GetWorkflowExecution().GetRunId()),
+			attribute.String(telemetry.WorkerTaskActivityIDKey, resp.GetActivityId()),
+		)
 	}
 	return resp, nil
 }
@@ -6444,12 +6445,14 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 		return nil, errInvalidTaskToken
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
-	workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
-		Type:        workertask.TypeNexus,
-		ID:          tt.GetTaskId(),
-		NamespaceID: tt.GetNamespaceId(),
-		TaskQueue:   tt.GetTaskQueue(),
-	})
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		span.SetAttributes(
+			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeNexus),
+			attribute.String(telemetry.WorkerTaskIDKey, tt.GetTaskId()),
+			attribute.String(telemetry.WorkerTaskNamespaceIDKey, tt.GetNamespaceId()),
+			attribute.String(telemetry.WorkerTaskTaskQueueKey, tt.GetTaskQueue()),
+		)
+	}
 
 	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
@@ -6502,12 +6505,14 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 		return nil, errInvalidTaskToken
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
-	workertask.AnnotateSpan(trace.SpanFromContext(ctx), workertask.SpanAttributes{
-		Type:        workertask.TypeNexus,
-		ID:          tt.GetTaskId(),
-		NamespaceID: tt.GetNamespaceId(),
-		TaskQueue:   tt.GetTaskQueue(),
-	})
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		span.SetAttributes(
+			attribute.String(telemetry.WorkerTaskTypeKey, telemetry.WorkerTaskTypeNexus),
+			attribute.String(telemetry.WorkerTaskIDKey, tt.GetTaskId()),
+			attribute.String(telemetry.WorkerTaskNamespaceIDKey, tt.GetNamespaceId()),
+			attribute.String(telemetry.WorkerTaskTaskQueueKey, tt.GetTaskQueue()),
+		)
+	}
 
 	if request.Error == nil && request.Failure == nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
 		return nil, serviceerror.NewInvalidArgument("request must contain error or failure")
