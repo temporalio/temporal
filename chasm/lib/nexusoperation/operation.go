@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -77,6 +78,9 @@ type OperationStore interface {
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
 	OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, operation *Operation) error
 	OnNexusOperationCancellationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	// OnNexusOperationAutoCloseCancelRequested records a NexusOperationCancelRequested event (so the
+	// auto-close cancellation is reconstructible on reset).
+	OnNexusOperationAutoCloseCancelRequested(ctx chasm.MutableContext, operation *Operation) error
 	// NexusOperationInvocationData loads invocation data (Input, Header, NexusLinks) from the scheduled history event.
 	NexusOperationInvocationData(ctx chasm.Context, operation *Operation) (InvocationData, error)
 	WorkflowTypeName() string
@@ -191,13 +195,43 @@ func (o *Operation) RequestCancel(
 	}
 
 	cancel := newCancellation(req)
-	o.Cancellation = chasm.NewComponentField(ctx, cancel)
+	// Detach only system-initiated (auto-close) cancellations so they survive the operation/workflow
+	// close and keep delivering. A user cancel stays attached — it's bounded by the operation and
+	// stops when the operation closes on its own.
+	var opts []chasm.ComponentFieldOption
+	if isSystemPrincipal(req.GetPrincipal()) {
+		opts = append(opts, chasm.ComponentFieldDetached())
+	}
+	o.Cancellation = chasm.NewComponentField(ctx, cancel, opts...)
 	// Once started, the handler returns a token that can be used in the cancellation request.
 	// Until then, no need to schedule the cancellation.
 	if o.Status == nexusoperationpb.OPERATION_STATUS_STARTED {
 		return TransitionCancellationScheduled.Apply(cancel, ctx, EventCancellationScheduled{
 			Destination: o.GetEndpoint(),
 		})
+	}
+	return nil
+}
+
+// RequestCancelOnAutoClose requests a CancelOperation when the operation is auto-closed (its own
+// timeout, or standalone terminate). No-op unless STARTED (a handler exists) and not already cancelling.
+func (o *Operation) RequestCancelOnAutoClose(ctx chasm.MutableContext) error {
+	if o.Status != nexusoperationpb.OPERATION_STATUS_STARTED {
+		return nil
+	}
+	if _, ok := o.Cancellation.TryGet(ctx); ok {
+		return nil
+	}
+	// Workflow-backed ops event-source the request (so a reset can rebuild it); standalone ops have no
+	// store and just carry the detached cancellation on their close snapshot.
+	if store, ok := o.Store.TryGet(ctx); ok {
+		return store.OnNexusOperationAutoCloseCancelRequested(ctx, o)
+	}
+	if err := o.RequestCancel(ctx, &nexusoperationpb.CancellationState{Principal: SystemPrincipal()}); err != nil {
+		if errors.Is(err, ErrCancellationAlreadyRequested) || errors.Is(err, ErrOperationAlreadyCompleted) {
+			return nil
+		}
+		return err
 	}
 	return nil
 }

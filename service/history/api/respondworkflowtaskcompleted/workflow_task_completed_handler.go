@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/nexusclose"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -835,6 +836,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
+	if err := nexusclose.CancelPendingNexusOperations(ctx, handler.mutableState,
+		nexusclose.NexusOperationAutoClosePolicy(handler.config.NexusOperationAutoClosePolicy())); err != nil {
+		return nil, err
+	}
+
 	// Always add workflow completed event to this one
 	event, err := handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr, newExecutionRunID)
 	if err != nil {
@@ -895,6 +901,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 	var newExecutionRunID string
 	if retryBackoff != backoff.NoBackoff || cronBackoff != backoff.NoBackoff {
 		newExecutionRunID = uuid.NewString()
+	}
+
+	if err := nexusclose.CancelPendingNexusOperations(ctx, handler.mutableState,
+		nexusclose.NexusOperationAutoClosePolicy(handler.config.NexusOperationAutoClosePolicy())); err != nil {
+		return nil, err
 	}
 
 	// Always add workflow failed event
@@ -970,6 +981,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandCancelWorkflow(
 			tag.ErrorTypeMultipleCompletionCommands,
 		)
 		return nil, nil
+	}
+
+	if err := nexusclose.CancelPendingNexusOperations(ctx, handler.mutableState,
+		nexusclose.NexusOperationAutoClosePolicy(handler.config.NexusOperationAutoClosePolicy())); err != nil {
+		return nil, err
 	}
 
 	return handler.mutableState.AddWorkflowExecutionCanceledEvent(handler.workflowTaskCompletedID, attr)
@@ -1132,6 +1148,12 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		if err == nil {
 			parentNamespace = parentNamespaceEntry.Name()
 		}
+	}
+
+	// Continue-as-new drops the caller's pending Nexus operations, so notify handlers like other closes.
+	if err := nexusclose.CancelPendingNexusOperations(ctx, handler.mutableState,
+		nexusclose.NexusOperationAutoClosePolicy(handler.config.NexusOperationAutoClosePolicy())); err != nil {
+		return nil, err
 	}
 
 	event, newMutableState, err := handler.mutableState.AddContinueAsNewEvent(

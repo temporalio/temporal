@@ -843,12 +843,47 @@ func TestStartToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_STARTED
 
-	handler := &operationStartToCloseTimeoutTaskHandler{}
+	handler := &operationStartToCloseTimeoutTaskHandler{
+		config: &Config{AutoClosePolicy: func() int { return 0 }},
+	}
 	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.StartToCloseTimeoutTask{})
 	require.NoError(t, err)
 
 	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, op.Status)
 	require.Empty(t, ctx.Tasks)
+}
+
+// With REQUEST_CANCEL, a start-to-close timeout on a started operation requests a cancel (creating a
+// detached auto-close cancellation) before timing the operation out.
+func TestStartToCloseTimeoutTaskHandler_Execute_RequestCancel(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "ns-id"}
+			},
+			HandleNamespaceEntry: func() *namespace.Namespace {
+				return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0)
+			},
+			GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+				MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+			}),
+		},
+	}
+
+	op := newTestOperation()
+	op.Status = nexusoperationpb.OPERATION_STATUS_STARTED
+
+	handler := &operationStartToCloseTimeoutTaskHandler{
+		config: &Config{AutoClosePolicy: func() int { return AutoClosePolicyRequestCancel }},
+	}
+	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.StartToCloseTimeoutTask{})
+	require.NoError(t, err)
+
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, op.Status)
+	cancel, ok := op.Cancellation.TryGet(ctx)
+	require.True(t, ok, "expected an auto-close cancellation to be created for the started op")
+	require.True(t, isSystemPrincipal(cancel.GetPrincipal()))
 }
 
 func TestScheduleToCloseTimeoutTaskHandler_Validate(t *testing.T) {
@@ -913,7 +948,9 @@ func TestScheduleToCloseTimeoutTaskHandler_Execute(t *testing.T) {
 	op := newTestOperation()
 	op.Status = nexusoperationpb.OPERATION_STATUS_SCHEDULED
 
-	handler := &operationScheduleToCloseTimeoutTaskHandler{}
+	handler := &operationScheduleToCloseTimeoutTaskHandler{
+		config: &Config{AutoClosePolicy: func() int { return 0 }},
+	}
 	err := handler.Execute(ctx, op, chasm.TaskAttributes{}, &nexusoperationpb.ScheduleToCloseTimeoutTask{})
 	require.NoError(t, err)
 

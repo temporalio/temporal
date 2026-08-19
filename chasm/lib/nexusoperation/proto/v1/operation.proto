@@ -122,6 +122,12 @@ message CancellationState {
   string request_id = 8;
   string identity = 9;
   string reason = 10;
+  reserved 11;  // was: bool auto_close
+  // principal identifies who requested the cancellation. A Temporal system principal marks a
+  // system-initiated (auto-close) cancel — which is not clamped to the operation's remaining timeout,
+  // so it is delivered even at/after that deadline. Stored here (not just on the request event) so the
+  // dispatch decision survives a workflow reset that rebuilds the cancellation from history.
+  temporal.api.common.v1.Principal principal = 12;
 }
 
 enum CancellationStatus {

@@ -361,6 +361,11 @@ func (h *operationStartToCloseTimeoutTaskHandler) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.StartToCloseTimeoutTask,
 ) error {
+	if h.config.AutoClosePolicy() == AutoClosePolicyRequestCancel {
+		if err := op.RequestCancelOnAutoClose(ctx); err != nil {
+			return err
+		}
+	}
 	return op.onTimedOut(ctx, &failurepb.Failure{
 		Message: "operation timed out",
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
@@ -402,6 +407,11 @@ func (h *operationScheduleToCloseTimeoutTaskHandler) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.ScheduleToCloseTimeoutTask,
 ) error {
+	if h.config.AutoClosePolicy() == AutoClosePolicyRequestCancel {
+		if err := op.RequestCancelOnAutoClose(ctx); err != nil {
+			return err
+		}
+	}
 	return op.onTimedOut(ctx, &failurepb.Failure{
 		Message: "operation timed out",
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{

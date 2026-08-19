@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"errors"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -176,7 +177,29 @@ func (w *Workflow) OnNexusOperationTimedOut(
 	return err
 }
 
+// removeNexusOperationIfTerminal drops an operation whose cancel has resolved if it was already
+// terminal (kept resident only to deliver the cancel). A still-"started" op is left as-is.
+func (w *Workflow) removeNexusOperationIfTerminal(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
+	if op.LifecycleState(ctx) == chasm.LifecycleStateRunning {
+		return nil
+	}
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+	w.removeNexusOperation(parentData.GetScheduledEventId())
+	return nil
+}
+
 func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
+	if !w.IsRunning() {
+		// Workflow already closed: resolve the cancellation and drop an already-terminal op, but skip
+		// the history event (sealed). A still-"started" op stays "started".
+		if err := nexusoperation.TransitionCancellationSucceeded.Apply(op.Cancellation.Get(ctx), ctx, nexusoperation.EventCancellationSucceeded{}); err != nil {
+			return err
+		}
+		return w.removeNexusOperationIfTerminal(ctx, op)
+	}
 	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
@@ -201,6 +224,14 @@ func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContex
 }
 
 func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, op *nexusoperation.Operation, failure *failurepb.Failure) error {
+	if !w.IsRunning() {
+		// Workflow already closed: record the failed cancellation and drop an already-terminal op, but
+		// skip the history event (sealed). A still-"started" op stays "started".
+		if err := nexusoperation.TransitionCancellationFailed.Apply(op.Cancellation.Get(ctx), ctx, nexusoperation.EventCancellationFailed{Failure: failure}); err != nil {
+			return err
+		}
+		return w.removeNexusOperationIfTerminal(ctx, op)
+	}
 	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
 		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
@@ -223,6 +254,90 @@ func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, 
 		e.WorkerMayIgnore = true // For compatibility with older SDKs.
 	})
 	return err
+}
+
+// RequestCancelPendingNexusOperations requests cancellation of every STARTED async Nexus
+// operation owned by the workflow, recording a NexusOperationCancelRequested event for each so
+// the cancellation is visible in the caller's history. It is intended to be called from
+// workflow-close paths (Nexus auto-close policy) while mutable state is still writable, i.e.
+// before the workflow close event is added.
+//
+// Semantics worth noting:
+//   - Only STARTED operations are cancelled — they are the only ones with a running handler (and a
+//     token) to notify. Not-yet-started operations (SCHEDULED/BACKING_OFF) are skipped: once the
+//     workflow closes their start task is dropped (the Operation, unlike Cancellation, is not
+//     detached), so they can never reach STARTED, and requesting a cancel would only record an
+//     undeliverable event. A start racing the close (in-flight when the workflow closes) is likewise
+//     abandoned — the caller never recorded a token to cancel with.
+//   - The Nexus protocol's CancelOperation carries no reason/identity, so the cause of the
+//     cancellation is only recorded caller-side (via the event added here), not forwarded to
+//     the handler.
+//
+// Must be called from the pre-close hooks (before the close event is added) so the recorded
+// NexusOperationCancelRequested events land in the caller's history ahead of the close event.
+//
+// The auto-close distinction is event-sourced: the NexusOperationCancelRequested event is stamped with
+// the system principal, which the event's Apply copies onto the cancellation. This keeps it correct
+// when a reset rebuilds a still-pending cancellation from history.
+//
+// CONSIDER(stephanos): this fans out inline within the workflow-close transaction, one event +
+// cancellation component per pending operation. The count is bounded by
+// nexusoperation.MaxConcurrentOperationsPerWorkflow (default 2000), so it is not unbounded, but a
+// close transaction carrying up to that many events is still heavy. If that becomes a problem,
+// mirror the child-workflow parent-close design and offload large fan-outs to the system worker pool.
+func (w *Workflow) RequestCancelPendingNexusOperations(ctx chasm.MutableContext) error {
+	for scheduledEventID, field := range w.Operations {
+		op := field.Get(ctx)
+		// Only STARTED operations have a running handler (and a token) to cancel; skip the rest.
+		if op.GetStatus() != nexusoperationpb.OPERATION_STATUS_STARTED {
+			continue
+		}
+		if err := w.requestAutoCloseCancel(ctx, scheduledEventID, op); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// OnNexusOperationAutoCloseCancelRequested event-sources an auto-close cancel request for a single
+// operation. Used by the operation's own schedule-to-close timeout, where the operation (not the
+// workflow) is closing while the caller keeps running.
+func (w *Workflow) OnNexusOperationAutoCloseCancelRequested(ctx chasm.MutableContext, op *nexusoperation.Operation) error {
+	parentData := &chasmworkflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewInternalf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+	return w.requestAutoCloseCancel(ctx, parentData.GetScheduledEventId(), op)
+}
+
+// requestAutoCloseCancel records a NexusOperationCancelRequested event stamped with the system
+// principal; the event's Apply reads it to flag the cancellation as auto-close. Event-sourcing the
+// flag (vs. a post-hoc component write) keeps it correct across reset. No-op if one already exists.
+func (w *Workflow) requestAutoCloseCancel(ctx chasm.MutableContext, scheduledEventID int64, op *nexusoperation.Operation) error {
+	if _, ok := op.Cancellation.TryGet(ctx); ok {
+		return nil // cancellation already requested (e.g. by the workflow itself)
+	}
+
+	_, err := addAndApplyHistoryEvent[CancelRequestedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId: scheduledEventID,
+			},
+		}
+		// System principal → Apply flags it auto-close. Survives close-transaction stamping, which
+		// only fills nil principals.
+		e.Principal = nexusoperation.SystemPrincipal()
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.WorkerMayIgnore = true // For compatibility with older SDKs.
+	})
+	if err != nil {
+		if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) ||
+			errors.Is(err, nexusoperation.ErrOperationAlreadyCompleted) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // NexusOperationInvocationData loads invocation data from the scheduled history event.

@@ -580,10 +580,15 @@ type CancellationState struct {
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
 	// The cancellation component itself does not interpret this field.
-	ParentData    *anypb.Any `protobuf:"bytes,7,opt,name=parent_data,json=parentData,proto3" json:"parent_data,omitempty"`
-	RequestId     string     `protobuf:"bytes,8,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Identity      string     `protobuf:"bytes,9,opt,name=identity,proto3" json:"identity,omitempty"`
-	Reason        string     `protobuf:"bytes,10,opt,name=reason,proto3" json:"reason,omitempty"`
+	ParentData *anypb.Any `protobuf:"bytes,7,opt,name=parent_data,json=parentData,proto3" json:"parent_data,omitempty"`
+	RequestId  string     `protobuf:"bytes,8,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Identity   string     `protobuf:"bytes,9,opt,name=identity,proto3" json:"identity,omitempty"`
+	Reason     string     `protobuf:"bytes,10,opt,name=reason,proto3" json:"reason,omitempty"`
+	// principal identifies who requested the cancellation. A Temporal system principal marks a
+	// system-initiated (auto-close) cancel — which is not clamped to the operation's remaining timeout,
+	// so it is delivered even at/after that deadline. Stored here (not just on the request event) so the
+	// dispatch decision survives a workflow reset that rebuilds the cancellation from history.
+	Principal     *v11.Principal `protobuf:"bytes,12,opt,name=principal,proto3" json:"principal,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -686,6 +691,13 @@ func (x *CancellationState) GetReason() string {
 		return x.Reason
 	}
 	return ""
+}
+
+func (x *CancellationState) GetPrincipal() *v11.Principal {
+	if x != nil {
+		return x.Principal
+	}
+	return nil
 }
 
 type OperationRequestData struct {
@@ -888,7 +900,7 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"\x06result\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x06result\x1aD\n" +
 	"\x06Failed\x12:\n" +
 	"\afailure\x18\x01 \x01(\v2 .temporal.api.failure.v1.FailureR\afailureB\t\n" +
-	"\avariant\"\xdf\x04\n" +
+	"\avariant\"\xa6\x05\n" +
 	"\x11CancellationState\x12]\n" +
 	"\x06status\x18\x01 \x01(\x0e2E.temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatusR\x06status\x12A\n" +
 	"\x0erequested_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rrequestedTime\x12\x18\n" +
@@ -902,7 +914,8 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"request_id\x18\b \x01(\tR\trequestId\x12\x1a\n" +
 	"\bidentity\x18\t \x01(\tR\bidentity\x12\x16\n" +
 	"\x06reason\x18\n" +
-	" \x01(\tR\x06reason\"\xee\x02\n" +
+	" \x01(\tR\x06reason\x12?\n" +
+	"\tprincipal\x18\f \x01(\v2!.temporal.api.common.v1.PrincipalR\tprincipalJ\x04\b\v\x10\f\"\xee\x02\n" +
 	"\x14OperationRequestData\x125\n" +
 	"\x05input\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05input\x12{\n" +
 	"\fnexus_header\x18\x02 \x03(\v2X.temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.NexusHeaderEntryR\vnexusHeader\x12F\n" +
@@ -960,8 +973,9 @@ var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_goTyp
 	(*anypb.Any)(nil),                    // 12: google.protobuf.Any
 	(*v1.Failure)(nil),                   // 13: temporal.api.failure.v1.Failure
 	(*v11.Link)(nil),                     // 14: temporal.api.common.v1.Link
-	(*v11.Payload)(nil),                  // 15: temporal.api.common.v1.Payload
-	(*v12.UserMetadata)(nil),             // 16: temporal.api.sdk.v1.UserMetadata
+	(*v11.Principal)(nil),                // 15: temporal.api.common.v1.Principal
+	(*v11.Payload)(nil),                  // 16: temporal.api.common.v1.Payload
+	(*v12.UserMetadata)(nil),             // 17: temporal.api.sdk.v1.UserMetadata
 }
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatus
@@ -985,16 +999,17 @@ var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depId
 	13, // 18: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
 	10, // 19: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
 	12, // 20: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.parent_data:type_name -> google.protobuf.Any
-	15, // 21: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.input:type_name -> temporal.api.common.v1.Payload
-	9,  // 22: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.nexus_header:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.NexusHeaderEntry
-	16, // 23: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
-	15, // 24: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Successful.result:type_name -> temporal.api.common.v1.Payload
-	13, // 25: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	15, // 21: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.principal:type_name -> temporal.api.common.v1.Principal
+	16, // 22: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.input:type_name -> temporal.api.common.v1.Payload
+	9,  // 23: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.nexus_header:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.NexusHeaderEntry
+	17, // 24: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
+	16, // 25: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Successful.result:type_name -> temporal.api.common.v1.Payload
+	13, // 26: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_init() }

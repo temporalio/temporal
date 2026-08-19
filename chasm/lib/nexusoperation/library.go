@@ -63,6 +63,9 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				},
 			}),
 		),
+		// Detachment is decided per-cancellation in Operation.RequestCancel: only system-initiated
+		// (auto-close) cancellations are detached, so they keep running after the operation/workflow
+		// closes. User cancels stay attached and are bounded by the operation.
 		chasm.NewRegistrableComponent[*Cancellation]("cancellation"),
 	}
 }

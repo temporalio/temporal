@@ -123,16 +123,20 @@ func (h *cancellationInvocationTaskHandler) Execute(
 
 	callTimeout := h.config.RequestTimeout(ns.Name().String(), attrs.Destination)
 	var timeoutType enumspb.TimeoutType
-	if args.startToCloseTimeout > 0 {
-		if t := args.startToCloseTimeout - args.currentTime.Sub(args.startedTime); t < callTimeout {
-			callTimeout = t
-			timeoutType = enumspb.TIMEOUT_TYPE_START_TO_CLOSE
+	// Auto-close (system-initiated) cancels fire at the operation's ~expired deadline, so clamping would
+	// starve the call below MinRequestTimeout and it'd never reach the handler. Only user cancels clamp.
+	if !isSystemPrincipal(args.principal) {
+		if args.startToCloseTimeout > 0 {
+			if t := args.startToCloseTimeout - args.currentTime.Sub(args.startedTime); t < callTimeout {
+				callTimeout = t
+				timeoutType = enumspb.TIMEOUT_TYPE_START_TO_CLOSE
+			}
 		}
-	}
-	if args.scheduleToCloseTimeout > 0 {
-		if t := args.scheduleToCloseTimeout - args.currentTime.Sub(args.scheduledTime); t < callTimeout {
-			callTimeout = t
-			timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		if args.scheduleToCloseTimeout > 0 {
+			if t := args.scheduleToCloseTimeout - args.currentTime.Sub(args.scheduledTime); t < callTimeout {
+				callTimeout = t
+				timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+			}
 		}
 	}
 

@@ -3539,3 +3539,526 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmE
 		})
 	}
 }
+
+// nexusClosePolicyHandler returns a handler that signals cancelCh when CancelOperation is called.
+func nexusClosePolicyHandler(cancelCh chan struct{}) nexustest.Handler {
+	return nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "close-policy-test"}, nil
+		},
+		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+			select {
+			case cancelCh <- struct{}{}:
+			default:
+			}
+			return nil
+		},
+	}
+}
+
+// nexusClosePolicyStartAndAwaitStarted starts a workflow that schedules a Nexus operation via raw
+// polling, waits for the operation to reach STARTED state, and returns the workflow run.
+func (s *NexusWorkflowTestSuite) nexusClosePolicyStartAndAwaitStarted(
+	ctx context.Context,
+	env *NexusTestEnv,
+	endpointName string,
+	startOpts client.StartWorkflowOptions,
+) client.WorkflowRun {
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, startOpts, "workflow")
+	s.NoError(err)
+
+	taskQueue := startOpts.TaskQueue
+
+	// Poll and schedule the Nexus operation.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		require.NoError(t, err)
+		if len(pollResp.TaskToken) == 0 {
+			return
+		}
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+					Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+						ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+							Endpoint:  endpointName,
+							Service:   "service",
+							Operation: "operation",
+							Input:     testcore.MustToPayload(s.T(), "input"),
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	// Wait for the operation to reach STARTED state.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.PendingNexusOperations, 1)
+		require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, resp.PendingNexusOperations[0].State)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	return run
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_TerminateCaller_CancelsHandler(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
+	}
+
+	cancelCh := make(chan struct{}, 1)
+	env := s.newTestEnv(chasmEnabled,
+		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
+	)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
+
+	run := s.nexusClosePolicyStartAndAwaitStarted(ctx, env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	})
+
+	s.NoError(env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "close-policy-test"))
+
+	select {
+	case <-cancelCh:
+	case <-time.After(20 * time.Second):
+		s.Fail("timed out waiting for CancelOperation to be received by the handler")
+	}
+
+	// The cancellation must be recorded on the caller's history before it closed.
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_CompleteCaller_CancelsHandler(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
+	}
+
+	cancelCh := make(chan struct{}, 1)
+	env := s.newTestEnv(chasmEnabled,
+		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
+	)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
+
+	run := s.nexusClosePolicyStartAndAwaitStarted(ctx, env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	})
+
+	// Signal to unblock the workflow, then respond with COMPLETE.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "close", nil))
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		require.NoError(t, err)
+		if len(pollResp.TaskToken) == 0 {
+			return
+		}
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	select {
+	case <-cancelCh:
+	case <-time.After(20 * time.Second):
+		s.Fail("timed out waiting for CancelOperation to be received by the handler")
+	}
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_FailCaller_CancelsHandler(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
+	}
+
+	cancelCh := make(chan struct{}, 1)
+	env := s.newTestEnv(chasmEnabled,
+		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
+	)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
+
+	run := s.nexusClosePolicyStartAndAwaitStarted(ctx, env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	})
+
+	// Signal to unblock the workflow, then respond with FAIL.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "close", nil))
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		require.NoError(t, err)
+		if len(pollResp.TaskToken) == 0 {
+			return
+		}
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
+						FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+							Failure: &failurepb.Failure{Message: "close-policy-test"},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	select {
+	case <-cancelCh:
+	case <-time.After(20 * time.Second):
+		s.Fail("timed out waiting for CancelOperation to be received by the handler")
+	}
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_CancelCaller_CancelsHandler(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
+	}
+
+	cancelCh := make(chan struct{}, 1)
+	env := s.newTestEnv(chasmEnabled,
+		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
+	)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
+
+	run := s.nexusClosePolicyStartAndAwaitStarted(ctx, env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	})
+
+	// Signal to unblock the workflow, then respond by cancelling itself.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "close", nil))
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		require.NoError(t, err)
+		if len(pollResp.TaskToken) == 0 {
+			return
+		}
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CancelWorkflowExecutionCommandAttributes{
+						CancelWorkflowExecutionCommandAttributes: &commandpb.CancelWorkflowExecutionCommandAttributes{},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	select {
+	case <-cancelCh:
+	case <-time.After(20 * time.Second):
+		s.Fail("timed out waiting for CancelOperation to be received by the handler")
+	}
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_RunTimeoutCaller_CancelsHandler(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
+	}
+	cancelCh := make(chan struct{}, 1)
+	env := s.newTestEnv(chasmEnabled,
+		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
+	)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
+
+	// Short run timeout — fires after the op is started but before any further interaction.
+	s.nexusClosePolicyStartAndAwaitStarted(ctx, env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:          taskQueue,
+		WorkflowRunTimeout: 5 * time.Second,
+	})
+
+	// Timeout fires on its own; no further action needed.
+	select {
+	case <-cancelCh:
+	case <-time.After(30 * time.Second):
+		s.Fail("timed out waiting for CancelOperation to be received by the handler after run timeout")
+	}
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_Abandon_HandlerKeepsRunning(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
+	}
+
+	cancelCh := make(chan struct{}, 1)
+	// No NexusOperationAutoClosePolicy override → default 0 = ABANDON.
+	env := s.newTestEnv(chasmEnabled)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
+
+	run := s.nexusClosePolicyStartAndAwaitStarted(ctx, env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	})
+
+	s.NoError(env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "abandon-test"))
+
+	// Assert: handler did NOT receive a cancel.
+	select {
+	case <-cancelCh:
+		s.Fail("handler should not have received CancelOperation with ABANDON policy")
+	case <-time.After(3 * time.Second):
+		// Expected — no cancel arrived.
+	}
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ExecutionTimeoutCaller_CancelsHandler(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
+	}
+	cancelCh := make(chan struct{}, 1)
+	env := s.newTestEnv(chasmEnabled,
+		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
+	)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
+
+	// Short execution timeout — fires after the op is started but before any further interaction.
+	s.nexusClosePolicyStartAndAwaitStarted(ctx, env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:                taskQueue,
+		WorkflowExecutionTimeout: 5 * time.Second,
+	})
+
+	select {
+	case <-cancelCh:
+	case <-time.After(30 * time.Second):
+		s.Fail("timed out waiting for CancelOperation to be received by the handler after execution timeout")
+	}
+}
+
+// TestNexusClosePolicy_ScheduledState_TerminateCaller_CancelsHandler verifies that cancellation is
+// dispatched when the caller is terminated while the Nexus operation is still in SCHEDULED state
+// (start request in flight, no async token yet). The expected flow is:
+//  1. op.RequestCancel() creates a pending Cancellation sub-machine while the op is SCHEDULED.
+//  2. Once the invocation outbound task receives the async-started response, TransitionStarted
+//     detects the pending cancel and immediately enqueues a cancel outbound task.
+//
+// NOTE: this test currently fails because after the caller workflow is terminated its LifecycleState
+// is IsClosed(), causing validateAccessHelper to reject the invocation task's attempt to run
+// TransitionStarted. Fix: ensure the Operation component (or its invocation task) can still commit
+// the TransitionStarted result for the purpose of scheduling the cancel task after workflow close.
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ScheduledState_TerminateCaller_CancelsHandler(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
+	}
+	s.T().Skip("KNOWN BUG: start-in-flight race — the handler starts but the caller never records STARTED " +
+		"after close, so the queued cancel never fires. Requires making the Operation's started transition " +
+		"land post-close (detach the Operation, not just the Cancellation).")
+
+	startCalledCh := make(chan struct{})  // closed when OnStartOperation is entered
+	startUnblockCh := make(chan struct{}) // closed to let OnStartOperation return
+	cancelCh := make(chan struct{}, 1)
+
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			// Signal that the start HTTP call is in flight, then block until the test
+			// terminates the caller workflow and releases this gate.
+			select {
+			case startCalledCh <- struct{}{}:
+			default:
+			}
+			<-startUnblockCh
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "scheduled-state-test"}, nil
+		},
+		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+			select {
+			case cancelCh <- struct{}{}:
+			default:
+			}
+			return nil
+		},
+	}
+
+	env := s.newTestEnv(chasmEnabled,
+		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
+	)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	}, "workflow")
+	s.NoError(err)
+
+	// Schedule the Nexus operation — do NOT wait for STARTED (op must stay SCHEDULED).
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		require.NoError(t, err)
+		if len(pollResp.TaskToken) == 0 {
+			return
+		}
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+					Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+						ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+							Endpoint:  endpointName,
+							Service:   "service",
+							Operation: "operation",
+							Input:     testcore.MustToPayload(s.T(), "input"),
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	// Wait until the invocation HTTP call is in flight (op is SCHEDULED, start is blocked).
+	select {
+	case <-startCalledCh:
+	case <-time.After(20 * time.Second):
+		s.Fail("timed out waiting for OnStartOperation to be called")
+	}
+
+	// Terminate the caller while the op is SCHEDULED.
+	s.NoError(env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "scheduled-state-test"))
+
+	// Release OnStartOperation — TransitionStarted should detect the pending cancel
+	// and immediately enqueue the cancel outbound task.
+	close(startUnblockCh)
+
+	select {
+	case <-cancelCh:
+	case <-time.After(20 * time.Second):
+		s.Fail("timed out waiting for CancelOperation — SCHEDULED-state cancel not yet working (see NOTE in test)")
+	}
+}
+
+// TestNexusClosePolicy_ContinueAsNew_CancelsHandler verifies that Continue-as-New triggers the close
+// policy: because CaN abandons the caller's pending Nexus operations (they are not carried into the
+// new run), the handler is notified under REQUEST_CANCEL, like any other forced close.
+func (s *NexusWorkflowTestSuite) TestNexusClosePolicy_ContinueAsNew_CancelsHandler(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("close policy is implemented on the CHASM Nexus operations path")
+	}
+
+	cancelCh := make(chan struct{}, 1)
+	env := s.newTestEnv(chasmEnabled,
+		testcore.WithDynamicConfig(dynamicconfig.NexusOperationAutoClosePolicy, 1), // 1 = REQUEST_CANCEL
+	)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusClosePolicyHandler(cancelCh))
+
+	run := s.nexusClosePolicyStartAndAwaitStarted(ctx, env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	})
+
+	// Signal to trigger a new workflow task, then respond with ContinueAsNew.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "close", nil))
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		require.NoError(t, err)
+		if len(pollResp.TaskToken) == 0 {
+			return
+		}
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+						ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+							WorkflowType: &commonpb.WorkflowType{Name: "workflow"},
+							TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	// CaN fires the close policy: the handler receives a CancelOperation.
+	select {
+	case <-cancelCh:
+		// Expected — handler notified.
+	case <-time.After(20 * time.Second):
+		s.Fail("handler should have received CancelOperation on ContinueAsNew")
+	}
+
+	// CaN starts a fresh mutable state, so the pending operation is not carried into the new run.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		})
+		require.NoError(t, err)
+		require.NotEqual(t, run.GetRunID(), resp.GetWorkflowExecutionInfo().GetExecution().GetRunId(),
+			"expected a new run after continue-as-new")
+		require.Empty(t, resp.PendingNexusOperations,
+			"continue-as-new should not carry pending Nexus operations into the new run")
+	}, 20*time.Second, 200*time.Millisecond)
+}

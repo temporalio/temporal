@@ -96,6 +96,9 @@ func (d CancelRequestedEventDefinition) Apply(ctx chasm.MutableContext, wf *Work
 
 	return op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
 		ParentData: cancelParentData,
+		// Carry the event's principal onto the cancellation so the dispatch clamp decision (system vs
+		// user) is reconstructed correctly when a reset rebuilds this from history.
+		Principal: event.GetPrincipal(),
 	})
 }
 
@@ -123,8 +126,16 @@ func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, w
 		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
 	// Cancellation must be present to deliver a cancel request.
-	cancellation := field.Get(ctx).Cancellation.Get(ctx)
-	return nexusoperation.TransitionCancellationSucceeded.Apply(cancellation, ctx, nexusoperation.EventCancellationSucceeded{})
+	op := field.Get(ctx)
+	if err := nexusoperation.TransitionCancellationSucceeded.Apply(op.Cancellation.Get(ctx), ctx, nexusoperation.EventCancellationSucceeded{}); err != nil {
+		return err
+	}
+	// An operation that was already terminal (timed out on its own schedule-to-close) was kept resident
+	// only to deliver this cancel; now that it has resolved, remove it.
+	if op.LifecycleState(ctx) != chasm.LifecycleStateRunning {
+		wf.removeNexusOperation(attrs.GetScheduledEventId())
+	}
+	return nil
 }
 
 func (d CancelRequestCompletedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -153,10 +164,18 @@ func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *
 		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
 	// Cancellation must be present to deliver a cancel request.
-	cancellation := field.Get(ctx).Cancellation.Get(ctx)
-	return nexusoperation.TransitionCancellationFailed.Apply(cancellation, ctx, nexusoperation.EventCancellationFailed{
+	op := field.Get(ctx)
+	if err := nexusoperation.TransitionCancellationFailed.Apply(op.Cancellation.Get(ctx), ctx, nexusoperation.EventCancellationFailed{
 		Failure: attrs.GetFailure(),
-	})
+	}); err != nil {
+		return err
+	}
+	// An operation that was already terminal (timed out on its own schedule-to-close) was kept resident
+	// only to deliver this cancel; the cancel is now resolved (failed), so remove it.
+	if op.LifecycleState(ctx) != chasm.LifecycleStateRunning {
+		wf.removeNexusOperation(attrs.GetScheduledEventId())
+	}
+	return nil
 }
 
 func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -338,6 +357,14 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, e
 		Failure: attrs.GetFailure().GetCause(),
 	}); err != nil {
 		return err
+	}
+	// If any cancellation is pending when the operation times out — auto-close on the operation's own
+	// schedule-to-close timeout, or a user cancel still in flight — keep the timed-out operation
+	// resident so the cancel can still be delivered to the handler. It is removed once the cancel
+	// resolves (see CancelRequestCompleted/Failed apply). The retained operation keeps counting against
+	// the per-workflow pending-operation limit until then.
+	if _, ok := op.Cancellation.TryGet(ctx); ok {
+		return nil
 	}
 	wf.removeNexusOperation(attrs.GetScheduledEventId())
 	return nil
