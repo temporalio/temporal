@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/tests/testcore"
@@ -335,6 +336,7 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	s.Require().True(spanContext.IsValid())
 	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
 	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
+	s.requireNexusTaskIDSpans(exporter, "RespondNexusTaskCompleted")
 }
 
 // Verifies the namespace and task queue route propagates tracing and records handler failures without forwarding.
@@ -387,6 +389,42 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	}})
 	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
 	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
+	s.requireNexusTaskIDSpans(exporter, "RespondNexusTaskFailed")
+}
+
+// Verifies Xray can join the separate dispatch, poll, and response traces by task ID.
+func (s *NexusOTELSuite) requireNexusTaskIDSpans(
+	exporter *tracetest.InMemoryExporter,
+	respondMethod string,
+) {
+	s.T().Helper()
+	const matchingServicePrefix = "temporal.server.api.matchingservice.v1.MatchingService/"
+	spanNames := []string{
+		matchingServicePrefix + "DispatchNexusTask",
+		matchingServicePrefix + "PollNexusTaskQueue",
+		matchingServicePrefix + respondMethod,
+	}
+	s.Await(func(s *NexusOTELSuite) {
+		taskIDs := make(map[string]string)
+		for _, span := range exporter.GetSpans() {
+			if !slices.Contains(spanNames, span.Name) {
+				continue
+			}
+			for _, attr := range span.Attributes {
+				if string(attr.Key) == telemetry.WorkerTaskIDKey {
+					taskIDs[span.Name] = attr.Value.AsString()
+				}
+			}
+		}
+		s.Require().Len(taskIDs, len(spanNames))
+		taskID := taskIDs[spanNames[0]]
+		s.Require().NotEmpty(taskID)
+		s.Require().Equal(map[string]string{
+			spanNames[0]: taskID,
+			spanNames[1]: taskID,
+			spanNames[2]: taskID,
+		}, taskIDs)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 // requireNexusHTTPSpans compares all exported HTTP spans and their Nexus attributes after

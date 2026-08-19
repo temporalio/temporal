@@ -14,8 +14,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -385,64 +383,6 @@ func (s *WorkflowHandlerSuite) TestPollNexusTaskQueue_EmptyLongPollReturnsNonNil
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-}
-
-func (s *WorkflowHandlerSuite) TestPollWorkflowTaskQueue_EmptyLongPollDoesNotAnnotateWorkerTask() {
-	wh := s.getWorkflowHandler(s.newConfig())
-	ns := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: s.testNamespaceID.String(), Name: s.testNamespace.String()},
-		nil,
-		cluster.TestCurrentClusterName,
-	)
-	s.mockNamespaceCache.EXPECT().GetNamespace(s.testNamespace).Return(ns, nil)
-	s.mockMatchingClient.EXPECT().
-		PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&matchingservice.PollWorkflowTaskQueueResponse{}, nil)
-
-	recorder := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	ctx, span := tp.Tracer("test").Start(ctx, "poll")
-	resp, err := wh.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.testNamespace.String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-	})
-	span.End()
-	s.NoError(err)
-	s.NotNil(resp)
-	s.False(spanHasAttribute(recorder.Ended()[0], "worker_task.type"))
-}
-
-func (s *WorkflowHandlerSuite) TestPollActivityTaskQueue_EmptyLongPollDoesNotAnnotateWorkerTask() {
-	wh := s.getWorkflowHandler(s.newConfig())
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
-	s.mockMatchingClient.EXPECT().
-		PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&matchingservice.PollActivityTaskQueueResponse{}, nil)
-
-	recorder := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	ctx, span := tp.Tracer("test").Start(ctx, "poll")
-	resp, err := wh.PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: s.testNamespace.String(),
-		TaskQueue: &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-	})
-	span.End()
-	s.NoError(err)
-	s.NotNil(resp)
-	s.False(spanHasAttribute(recorder.Ended()[0], "worker_task.type"))
-}
-
-func spanHasAttribute(span sdktrace.ReadOnlySpan, key string) bool {
-	for _, attr := range span.Attributes() {
-		if string(attr.Key) == key {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *WorkflowHandlerSuite) TestCheckWorkerDeploymentReadRateLimitResourceExhaustedScope() {
