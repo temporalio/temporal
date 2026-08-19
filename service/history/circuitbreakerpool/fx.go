@@ -56,8 +56,7 @@ func OutboundQueueCircuitBreakerPoolProvider(
 	}
 }
 
-// onStateChange logs breaker transitions. Logged rather than emitted as a metric because
-// destination is unbounded for callback targets. gobreaker calls this under its own mutex.
+// onStateChange logs breaker transitions.
 func onStateChange(
 	key tasks.TaskGroupNamespaceIDAndDestination,
 	nsName string,
