@@ -728,9 +728,13 @@ func (e *ChasmEngine) pollComponent(
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
 
+	shardContext, err := e.getShardContext(requestRef)
+	if err != nil {
+		return nil, err
+	}
+
 	var ch <-chan struct{}
 	var unsubscribe func()
-	var shardContext historyi.ShardContext
 	defer func() {
 		if unsubscribe != nil {
 			unsubscribe()
@@ -738,11 +742,10 @@ func (e *ChasmEngine) pollComponent(
 	}()
 
 	checkPredicateOrSubscribe := func() ([]byte, error) {
-		sc, executionLease, err := e.getExecutionLease(ctx, requestRef)
+		_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 		if err != nil {
 			return nil, err
 		}
-		shardContext = sc
 		defer executionLease.GetReleaseFn()(nil) //nolint:revive
 
 		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
