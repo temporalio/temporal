@@ -259,7 +259,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Create the test context before any expensive setup, so that the deadline
 	// extension below can compensate for the time setup takes.
-	testcontext.GetOrCreate(t)
+	testcontext.For(t)
 
 	var options testOptions
 	for _, opt := range opts {
@@ -314,8 +314,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Attach version headers decorator to the test context.
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
 
-	// Give the test its full timeout budget back, now that setup is done.
-	testcontext.EnsureRemaining(testcontext.GetOrCreate(t), t, testcontext.DefaultTimeout())
+	// Restore as much of the test's timeout budget as the context's 2-minute
+	// ceiling allows, now that setup is done.
+	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
 
 	env := &TestEnv{
 		FunctionalTestBase: base,
@@ -465,13 +466,11 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
 //
-// The context is not cached: it is replaced when its deadline is extended, and
-// a cached copy would keep the old, shorter deadline. [NewEnv] created it, so
-// the lookup only falls back to the testing context after the test is over.
+// The context is deliberately not cached; see [testcontext.EnsureRemaining].
 //
 // Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
-	return testcontext.GetOrDefault(e.t)
+	return testcontext.For(e.t)
 }
 
 // WaitForChannel waits for ch to receive using the TestEnv context.

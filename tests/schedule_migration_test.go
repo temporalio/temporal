@@ -1319,7 +1319,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		testcore.WithSdkWorker(),
 	)
 
-	ctx := testcontext.GetOrCreate(t)
+	ctx := testcore.NewContext()
 	sid := testcore.RandomizeStr("sched-migrate-no-dup")
 	wid := testcore.RandomizeStr("sched-migrate-no-dup-wf")
 	wt := testcore.RandomizeStr("sched-migrate-no-dup-wt")
@@ -1467,7 +1467,7 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, false),
 	)
 
-	ctx := testcontext.GetOrCreate(t)
+	ctx := testcore.NewContext()
 	sid := testcore.RandomizeStr("sched-migrate-defer-running")
 	wid := testcore.RandomizeStr("sched-migrate-defer-running-wf")
 	wt := testcore.RandomizeStr("sched-migrate-defer-running-wt")
@@ -1968,7 +1968,7 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
-	ctx := testcontext.GetOrCreate(t)
+	ctx := testcore.NewContext()
 	sid := testcore.RandomizeStr("sched-stale-running")
 	pendingWid := testcore.RandomizeStr("sched-stale-running-pending-wf")
 	runningWid := testcore.RandomizeStr("sched-stale-running-running-wf")
@@ -2242,7 +2242,7 @@ func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
 	)
 	env.OverrideDynamicConfig(chasmscheduler.CurrentTweakables, tweakables)
 
-	ctx := testcontext.GetOrCreate(t)
+	ctx := testcontext.For(t)
 	sid := testcore.RandomizeStr("sched-migrate-no-running")
 	wid := testcore.RandomizeStr("sched-migrate-no-running-wf")
 	wt := testcore.RandomizeStr("sched-migrate-no-running-wt")

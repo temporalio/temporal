@@ -22,7 +22,7 @@ const softDeadlockTimeoutEnvVar = "TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT"
 const defaultSoftDeadlockTimeout = 30 * time.Second
 
 func softDeadlockTimeout() time.Duration {
-	return effectiveEnvDuration(softDeadlockTimeoutEnvVar, defaultSoftDeadlockTimeout)
+	return envDuration(softDeadlockTimeoutEnvVar, defaultSoftDeadlockTimeout)
 }
 
 // hardDeadlockTimeoutEnvVar overrides the default hard-deadlock timeout.
@@ -37,19 +37,11 @@ const hardDeadlockTimeoutEnvVar = "TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT"
 const defaultHardDeadlockTimeout = 10 * time.Second
 
 func hardDeadlockTimeout() time.Duration {
-	return effectiveEnvDuration(hardDeadlockTimeoutEnvVar, defaultHardDeadlockTimeout)
+	return envDuration(hardDeadlockTimeoutEnvVar, defaultHardDeadlockTimeout)
 }
 
-// postAwaitTimeoutReserveEnvVar overrides the default post-await reserve.
-// Parsed as a Go duration, e.g. "10s".
-const postAwaitTimeoutReserveEnvVar = "TEMPORAL_AWAIT_POST_TIMEOUT_RESERVE"
-
-// defaultPostAwaitTimeoutReserve is the minimum time for *after* Await returns.
-const defaultPostAwaitTimeoutReserve = 10 * time.Second
-
-func postAwaitTimeoutReserve() time.Duration {
-	return effectiveEnvDuration(postAwaitTimeoutReserveEnvVar, defaultPostAwaitTimeoutReserve)
-}
+// postAwaitTimeoutReserve is the minimum time to keep for *after* Await returns.
+const postAwaitTimeoutReserve = 10 * time.Second
 
 // Require polls condition until it returns without assertion failures, or
 // until ctx is canceled or timeout expires (whichever is earliest).
@@ -69,7 +61,7 @@ func Requiref(ctx context.Context, tb testing.TB, condition func(*T), timeout, p
 }
 
 func run(
-	ctx context.Context,
+	parentCtx context.Context,
 	tb testing.TB,
 	condition func(*T),
 	cfg config,
@@ -85,33 +77,35 @@ func run(
 		return
 	}
 	// Guard: context.WithDeadline panics on a nil parent.
-	if ctx == nil {
+	if parentCtx == nil {
 		tb.Fatalf("%s: nil context", funcName)
 		return
 	}
 
 	// Ensure enough context time for the await itself plus post-await reserve.
 	// This only works for [testcontext]s; other contexts will be left unchanged.
-	ctx = testcontext.EnsureRemaining(ctx, tb, cfg.totalTimeout+postAwaitTimeoutReserve())
+	parentCtx = testcontext.EnsureRemaining(parentCtx, tb, cfg.totalTimeout+postAwaitTimeoutReserve)
 
-	awaitDeadline := time.Now().Add(cfg.totalTimeout)
-	if ctxDeadline, hasDeadline := ctx.Deadline(); hasDeadline {
-		// Cap await deadline at the ctx's deadline.
-		awaitDeadline = util.MinTime(awaitDeadline, ctxDeadline)
+	deadline := time.Now().Add(cfg.totalTimeout)
+	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline {
+		// Cap at the parent context's deadline if it's earlier than our timeout.
+		deadline = util.MinTime(deadline, parentDeadline)
 	}
 
+	// Cap at the test's deadline if it's earlier than our deadline.
+	// Ideally, the parent context already accounts for the test's deadline - but we are being defensive.
 	if testDeadline, hasDeadline := testcontext.GoTestDeadline(tb); hasDeadline {
-		awaitDeadline = util.MinTime(awaitDeadline, testDeadline)
+		deadline = util.MinTime(deadline, testDeadline)
 	}
 
-	awaitCtx, awaitCancel := context.WithDeadline(ctx, awaitDeadline)
+	awaitCtx, awaitCancel := context.WithDeadline(parentCtx, deadline)
 	defer awaitCancel()
 
-	report := timeoutReport{effectiveTimeout: max(0, time.Until(awaitDeadline))}
+	report := timeoutReport{effectiveTimeout: max(0, time.Until(deadline))}
 
 	for {
 		// Parent context was canceled while we were sleeping (not our deadline).
-		if err := awaitCtx.Err(); err != nil && !deadlineReached(awaitDeadline) {
+		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
 			report.reportAttemptErrors(tb)
 			tb.Fatalf("%s: context canceled before condition was satisfied: %v", funcName, err)
 			return
@@ -146,8 +140,8 @@ func run(
 		// Attempt-timeout expiry: attemptCtx is done but awaitCtx is not.
 		// An attempt timeout is retryable while the await is still active. Track
 		// it separately so the final report identifies the responsible timeout.
-		attemptTimedOut := attemptCtx.Err() == context.DeadlineExceeded && awaitCtx.Err() == nil
-		if attemptTimedOut {
+		attemptHitOwnTimeout := attemptCtx.Err() == context.DeadlineExceeded && awaitCtx.Err() == nil
+		if attemptHitOwnTimeout {
 			report.recordAttemptTimeout()
 		}
 
@@ -158,25 +152,25 @@ func run(
 		}
 
 		// Parent context was canceled during the attempt (not our deadline).
-		if err := awaitCtx.Err(); err != nil && !deadlineReached(awaitDeadline) {
+		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
 			report.reportAttemptErrors(tb)
 			tb.Fatalf("%s: context canceled before condition was satisfied: %v", funcName, err)
 			return
 		}
 
 		// Our deadline expired.
-		if deadlineReached(awaitDeadline) {
+		if deadlineReached(deadline) {
 			report.reportTimeout(tb, funcName, cfg.timeoutMsg)
 			return
 		}
 
 		// Success: attempt completed without failures.
-		if !res.stopped && !t.Failed() && !attemptTimedOut {
+		if !res.stopped && !t.Failed() && !attemptHitOwnTimeout {
 			return
 		}
 
 		// Wait for pollInterval, or context is canceled or deadline is reached.
-		sleep(awaitCtx, awaitDeadline, cfg.pollInterval)
+		sleep(awaitCtx, deadline, cfg.pollInterval)
 	}
 }
 
@@ -266,8 +260,8 @@ func runAttempt(
 	}
 }
 
-func sleep(ctx context.Context, awaitDeadline time.Time, pollInterval time.Duration) {
-	remaining := time.Until(awaitDeadline)
+func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) {
+	remaining := time.Until(deadline)
 	if remaining < pollInterval {
 		pollInterval = remaining
 	}
@@ -281,6 +275,6 @@ func sleep(ctx context.Context, awaitDeadline time.Time, pollInterval time.Durat
 	}
 }
 
-func deadlineReached(awaitDeadline time.Time) bool {
-	return !time.Now().Before(awaitDeadline)
+func deadlineReached(deadline time.Time) bool {
+	return !time.Now().Before(deadline)
 }

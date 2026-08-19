@@ -100,7 +100,7 @@ func TestRequire_PropagatesParentContextValues(t *testing.T) {
 func TestRequire_SetsTimeoutContextDeadline(t *testing.T) {
 	t.Parallel()
 
-	longCtx := testcontext.GetOrCreate(t)
+	longCtx := testcontext.For(t)
 	longDeadline, ok := longCtx.Deadline()
 	require.True(t, ok)
 
@@ -155,7 +155,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("reports timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.GetOrCreate(t)
+		ctx := testcontext.For(t)
 		tb := newRecordingTB()
 		tb.run(func() {
 			await.Require(ctx, tb, func(t *await.T) {
@@ -169,7 +169,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("cancels attempt context on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.GetOrCreate(t)
+		ctx := testcontext.For(t)
 		tb := newRecordingTB()
 		tb.run(func() {
 			await.Require(ctx, tb, func(t *await.T) {
@@ -189,7 +189,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		pollInterval := 100 * time.Millisecond
 		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeoutEnv.String())
 
-		ctx := testcontext.GetOrCreate(t)
+		ctx := testcontext.For(t)
 		var attempts atomic.Int32
 		var firstAttemptRemaining time.Duration
 
@@ -214,7 +214,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("does not poll again after attempt consumes timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.GetOrCreate(t)
+		ctx := testcontext.For(t)
 		var attempts atomic.Int32
 
 		tb := newRecordingTB()
@@ -232,7 +232,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("caps attempt context with parent deadline", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, cancel := context.WithTimeout(testcontext.GetOrCreate(t), time.Second)
+		ctx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
 		defer cancel()
 
 		tb := newRecordingTB()
@@ -258,7 +258,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("parent context cancellation stops polling", func(t *testing.T) {
 		t.Parallel()
 
-		ctx, cancel := context.WithCancel(testcontext.GetOrCreate(t))
+		ctx, cancel := context.WithCancel(testcontext.For(t))
 		defer cancel()
 		var attempts atomic.Int32
 
@@ -279,7 +279,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("reports all attempt errors on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.GetOrCreate(t)
+		ctx := testcontext.For(t)
 		var attempts atomic.Int32
 		tb := newRecordingTB()
 		tb.run(func() {
@@ -301,7 +301,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("truncates middle attempts when many fail", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.GetOrCreate(t)
+		ctx := testcontext.For(t)
 		var attempts atomic.Int32
 		tb := newRecordingTB()
 		tb.run(func() {
@@ -328,7 +328,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("Requiref includes message on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.GetOrCreate(t)
+		ctx := testcontext.For(t)
 		tb := newRecordingTB()
 		tb.run(func() {
 			await.Requiref(ctx, tb, func(t *await.T) {
@@ -362,7 +362,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 
-				ctx := testcontext.GetOrCreate(t)
+				ctx := testcontext.For(t)
 				tb := newRecordingTB()
 				tb.run(func() {
 					await.Require(ctx, tb, func(_ *await.T) {
@@ -378,7 +378,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("does not poll after prior failure", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.GetOrCreate(t)
+		ctx := testcontext.For(t)
 		conditionCalled := false
 		tb := newRecordingTB()
 		tb.run(func() {
@@ -398,9 +398,9 @@ func TestRequire_SoftDeadlockLogsAndCancels(t *testing.T) {
 	t.Setenv("TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT", "50ms")
 	t.Setenv("TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT", "5s")
 
-	const awaitTimeout = 10 * time.Second * debug.TimeoutMultiplier
+	const awaitTimeout = 10 * time.Second
 
-	ctx := testcontext.GetOrCreate(t)
+	ctx := testcontext.For(t)
 	tb := newRecordingTB()
 	start := time.Now()
 	tb.run(func() {
@@ -424,9 +424,9 @@ func TestRequire_DeadlockDetected(t *testing.T) {
 	t.Setenv("TEMPORAL_AWAIT_SOFT_DEADLOCK_TIMEOUT", "50ms")
 	t.Setenv("TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT", "100ms")
 
-	const awaitTimeout = 10 * time.Second * debug.TimeoutMultiplier
+	const awaitTimeout = 10 * time.Second
 
-	ctx := testcontext.GetOrCreate(t)
+	ctx := testcontext.For(t)
 	tb := newRecordingTB()
 	start := time.Now()
 	tb.run(func() {
@@ -447,7 +447,7 @@ func TestRequire_WaitsForInFlightAttemptOnTimeout(t *testing.T) {
 	t.Parallel()
 
 	var finished atomic.Bool
-	ctx := testcontext.GetOrCreate(t)
+	ctx := testcontext.For(t)
 	tb := newRecordingTB()
 	tb.run(func() {
 		await.Require(ctx, tb, func(t *await.T) {

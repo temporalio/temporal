@@ -199,7 +199,7 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 		const message = "the terminal timeout must chain the underlying application failure as its Cause"
 		t.Run("WorkflowActivity", func(t *testing.T) {
 			activity := newWFADriver(t, env, cfg).driveTrace(t, trace)
-			timeout, ok := errors.AsType[*temporal.TimeoutError](activity.run.Get(activity.d.ctx, nil))
+			timeout, ok := errors.AsType[*temporal.TimeoutError](activity.run.Get(activity.context(), nil))
 			require.True(t, ok)
 			appErr, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap())
 			require.True(t, ok)
@@ -718,7 +718,7 @@ func (s *activityParityTestSuite) TestRetryableFailureTruncation() {
 				status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
 				retryState: enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 			}, a.terminalOutcome(t))
-			appErr, ok := errors.AsType[*temporal.ApplicationError](errors.Unwrap(a.run.Get(a.d.ctx, nil)))
+			appErr, ok := errors.AsType[*temporal.ApplicationError](errors.Unwrap(a.run.Get(a.context(), nil)))
 			require.True(t, ok)
 			require.Equal(t, "TestFailure", appErr.Type())
 			require.Equal(t, activityLargeFailureMessage, appErr.Message(),

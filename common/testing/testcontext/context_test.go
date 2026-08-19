@@ -23,7 +23,7 @@ func TestWithTimeout(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := GetOrCreate(t)
+			ctx := For(t)
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(DefaultTimeout()), deadline)
@@ -36,7 +36,7 @@ func TestWithTimeout(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := GetOrCreate(t, WithTimeout(time.Second))
+			ctx := For(t, WithTimeout(time.Second))
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(time.Second*debug.TimeoutMultiplier), deadline)
@@ -47,7 +47,7 @@ func TestWithTimeout(t *testing.T) {
 func TestNameMetadata(t *testing.T) {
 	t.Parallel()
 
-	ctx := GetOrCreate(t)
+	ctx := For(t)
 	md, ok := metadata.FromOutgoingContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
@@ -68,11 +68,11 @@ func TestContextDecorators(t *testing.T) {
 		}
 
 		AttachDecorator(t, key{}, decorator)
-		ctx := GetOrCreate(t)
+		ctx := For(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 
 		AttachDecorator(t, key{}, decorator)
-		ctx = GetOrCreate(t)
+		ctx = For(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 		require.Equal(t, int32(1), calls.Load(), "decorator should only be applied once")
 	})
@@ -90,7 +90,7 @@ func TestContextDecorators(t *testing.T) {
 
 		AttachDecorator(t, key{}, decorator)
 		AttachDecorator(t, key{}, decorator)
-		ctx := GetOrCreate(t)
+		ctx := For(t)
 
 		require.Equal(t, "decorated", ctx.Value(key{}))
 		require.Equal(t, int32(1), calls.Load(), "decorator should only be applied once")
@@ -108,7 +108,7 @@ func TestContextDecorators(t *testing.T) {
 		AttachDecorator(t, key2{}, func(ctx context.Context) context.Context {
 			return context.WithValue(ctx, key2{}, "two")
 		})
-		ctx := GetOrCreate(t)
+		ctx := For(t)
 
 		require.Equal(t, "one", ctx.Value(key1{}))
 		require.Equal(t, "two", ctx.Value(key2{}))
@@ -119,13 +119,13 @@ func TestContextDecorators(t *testing.T) {
 
 		type key struct{}
 
-		ctx := GetOrCreate(t)
+		ctx := For(t)
 		require.Nil(t, ctx.Value(key{}))
 
 		AttachDecorator(t, key{}, func(ctx context.Context) context.Context {
 			return context.WithValue(ctx, key{}, "decorated")
 		})
-		ctx = GetOrCreate(t)
+		ctx = For(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 	})
 }
@@ -135,7 +135,7 @@ func TestCleanupCancelsContext(t *testing.T) {
 
 	var ctx context.Context
 	t.Run("subtest", func(t *testing.T) {
-		ctx = GetOrCreate(t)
+		ctx = For(t)
 		require.NoError(t, ctx.Err())
 	})
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
@@ -152,35 +152,12 @@ func TestCleanup(t *testing.T) {
 
 			tb := newRecordingTB()
 			tb.run(func() {
-				ctx := GetOrCreate(tb, WithTimeout(time.Millisecond))
+				ctx := For(tb, WithTimeout(time.Millisecond))
 				<-ctx.Done() // let the deadline pass
 			})
 
 			require.Equal(t, fmt.Sprintf("test exceeded timeout of %v", timeout), tb.error())
 		})
-	})
-
-	t.Run("leaves a canceled context behind", func(t *testing.T) {
-		t.Parallel()
-
-		tb := newRecordingTB()
-		var st *contextState
-		tb.run(func() {
-			GetOrCreate(tb)
-
-			testContexts.Lock()
-			st = testContexts.byTest[tb]
-			testContexts.Unlock()
-		})
-
-		// Helpers racing with teardown still hold the state: they must see a
-		// canceled context, not a panic. Cleaning up twice is also harmless.
-		timedOut, _ := st.cleanup()
-		require.False(t, timedOut)
-		require.ErrorIs(t, st.current.Err(), context.Canceled)
-
-		// The test is deregistered, so lookups fall back to the testing context.
-		require.Equal(t, tb.Context(), GetOrDefault(tb))
 	})
 }
 
@@ -190,7 +167,7 @@ func TestEnvTimeout(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := GetOrCreate(t)
+			ctx := For(t)
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(10*time.Second*debug.TimeoutMultiplier), deadline)
@@ -202,7 +179,7 @@ func TestEnvTimeout(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := GetOrCreate(t, WithTimeout(time.Second))
+			ctx := For(t, WithTimeout(time.Second))
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(time.Second*debug.TimeoutMultiplier), deadline)
@@ -218,7 +195,7 @@ func TestEnsureRemaining(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := GetOrCreate(t)
+			ctx := For(t)
 			originalDeadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(DefaultTimeout()), originalDeadline)
@@ -236,7 +213,7 @@ func TestEnsureRemaining(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := GetOrCreate(t)
+			ctx := For(t)
 			originalDeadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(DefaultTimeout()), originalDeadline)
@@ -254,7 +231,7 @@ func TestEnsureRemaining(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := GetOrCreate(t, WithTimeout(100*time.Millisecond))
+			ctx := For(t, WithTimeout(100*time.Millisecond))
 
 			refreshed := EnsureRemaining(ctx, t, 10*time.Minute)
 
@@ -265,21 +242,31 @@ func TestEnsureRemaining(t *testing.T) {
 		})
 	})
 
-	t.Run("accepts a derived context", func(t *testing.T) {
+	t.Run("keeps a caller-derived context's own deadline", func(t *testing.T) {
 		t.Parallel()
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := GetOrCreate(t)
+			ctx := For(t)
 
+			// The caller wrapped the test context with its own, tighter
+			// deadline (e.g. context.WithTimeout(env.Context(), ...)).
+			// Swapping it for the extended test context would silently
+			// discard that wrapping, so it must come back unchanged.
 			derived, cancel := context.WithTimeout(ctx, time.Second)
 			defer cancel()
 
 			refreshed := EnsureRemaining(derived, t, DefaultTimeout()+10*time.Second)
 
+			require.Same(t, derived, refreshed, "the caller's own wrapping must not be discarded")
 			refreshedDeadline, ok := refreshed.Deadline()
 			require.True(t, ok)
-			require.Equal(t, start.Add(DefaultTimeout()+10*time.Second), refreshedDeadline)
+			require.Equal(t, start.Add(time.Second), refreshedDeadline, "the caller's tighter deadline still governs")
+
+			// The underlying test context is still extended for later callers.
+			extendedDeadline, ok := For(t).Deadline()
+			require.True(t, ok)
+			require.Equal(t, start.Add(DefaultTimeout()+10*time.Second), extendedDeadline)
 		})
 	})
 
@@ -291,7 +278,7 @@ func TestEnsureRemaining(t *testing.T) {
 		AttachDecorator(t, key{}, func(ctx context.Context) context.Context {
 			return context.WithValue(ctx, key{}, "decorated")
 		})
-		ctx := GetOrCreate(t)
+		ctx := For(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 
 		refreshed := EnsureRemaining(ctx, t, DefaultTimeout()+10*time.Second)
@@ -303,7 +290,7 @@ func TestEnsureRemaining(t *testing.T) {
 	t.Run("preserves test name metadata", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := GetOrCreate(t)
+		ctx := For(t)
 		refreshed := EnsureRemaining(ctx, t, DefaultTimeout()+10*time.Second)
 
 		require.NotSame(t, ctx, refreshed, "context should have been replaced")
@@ -312,20 +299,11 @@ func TestEnsureRemaining(t *testing.T) {
 		require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
 	})
 
-	t.Run("preserves original configured timeout", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := GetOrCreate(t, WithTimeout(100*time.Millisecond))
-		EnsureRemaining(ctx, t, time.Second)
-
-		GetOrCreate(t, WithTimeout(100*time.Millisecond))
-	})
-
 	t.Run("recognizes older context after repeated extensions", func(t *testing.T) {
 		t.Parallel()
 
 		synctest.Test(t, func(t *testing.T) {
-			original := GetOrCreate(t)
+			original := For(t)
 
 			firstRefresh := EnsureRemaining(original, t, DefaultTimeout()+10*time.Second)
 			firstDeadline, ok := firstRefresh.Deadline()
@@ -340,62 +318,68 @@ func TestEnsureRemaining(t *testing.T) {
 		})
 	})
 
-	t.Run("fails for unowned context with earlier deadline", func(t *testing.T) {
+	t.Run("leaves a foreign context unchanged", func(t *testing.T) {
 		t.Parallel()
 
 		synctest.Test(t, func(t *testing.T) {
 			tb := newRecordingTB()
 			tb.run(func() {
-				GetOrCreate(tb, WithTimeout(5*time.Millisecond))
-				unowned, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+				For(tb, WithTimeout(5*time.Millisecond))
+
+				withDeadline, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 				defer cancel()
 
-				EnsureRemaining(unowned, tb, 10*time.Millisecond)
+				// Neither context is derived from a test context - e.g. a
+				// standalone RPC context built from context.Background().
+				// Extending is an optimization, so it isn't in a position to
+				// fail the call; leave the caller's own deadline and
+				// cancellation intact.
+				for _, foreign := range []context.Context{withDeadline, context.Background()} {
+					require.Equal(t, foreign, EnsureRemaining(foreign, tb, 10*time.Millisecond))
+				}
 			})
 
-			require.Equal(t, notDerivedMessage, tb.fatal())
-		})
-	})
-
-	t.Run("fails for unowned context without earlier deadline", func(t *testing.T) {
-		t.Parallel()
-
-		synctest.Test(t, func(t *testing.T) {
-			tb := newRecordingTB()
-			tb.run(func() {
-				GetOrCreate(tb, WithTimeout(5*time.Millisecond))
-
-				EnsureRemaining(context.Background(), tb, 10*time.Millisecond)
-			})
-
-			require.Equal(t, notDerivedMessage, tb.fatal())
+			require.Equal(t, "", tb.fatal())
 		})
 	})
 
 	t.Run("accepts the testing context unchanged", func(t *testing.T) {
 		t.Parallel()
 
-		GetOrCreate(t)
+		For(t)
 
-		// t.Context() is the test context's parent: nothing to extend, but not
-		// a foreign context either.
+		// t.Context() is the test context's parent, so it carries no owner
+		// marker and has no deadline to extend: it comes back unchanged.
 		require.Same(t, t.Context(), EnsureRemaining(t.Context(), t, DefaultTimeout()))
 	})
 
-	t.Run("fails for another test's context", func(t *testing.T) {
+	t.Run("extends a context belonging to a different tb", func(t *testing.T) {
 		t.Parallel()
 
+		// Mirrors the dominant pattern in tests/: a suite's context is
+		// handed to a subtest, whose own tb differs from the one the
+		// context was created for. Ownership is resolved from ctx, not
+		// tb, so this must extend the owning (here, parent) state rather
+		// than failing or silently no-op'ing.
 		synctest.Test(t, func(t *testing.T) {
-			other := GetOrCreate(t)
+			start := time.Now()
+			other := For(t)
 
 			tb := newRecordingTB()
+			var refreshed context.Context
 			tb.run(func() {
-				GetOrCreate(tb)
+				For(tb) // tb has its own, unrelated state too
 
-				EnsureRemaining(other, tb, 10*time.Millisecond)
+				refreshed = EnsureRemaining(other, tb, DefaultTimeout()+10*time.Second)
 			})
 
-			require.Equal(t, notDerivedMessage, tb.fatal())
+			require.Equal(t, "", tb.fatal())
+			refreshedDeadline, ok := refreshed.Deadline()
+			require.True(t, ok)
+			require.Equal(t, start.Add(DefaultTimeout()+10*time.Second), refreshedDeadline)
+
+			// The extension is visible to the owning test too.
+			require.Same(t, refreshed, For(t))
 		})
 	})
 
@@ -404,7 +388,7 @@ func TestEnsureRemaining(t *testing.T) {
 
 		tb := newRecordingTB()
 		tb.run(func() {
-			ctx := GetOrCreate(tb, WithTimeout(5*time.Millisecond))
+			ctx := For(tb, WithTimeout(5*time.Millisecond))
 
 			EnsureRemaining(ctx, tb, 0)
 		})
@@ -420,7 +404,7 @@ func TestEnsureRemaining(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := GetOrCreate(t)
+			ctx := For(t)
 
 			var wg sync.WaitGroup
 			refreshed := make([]context.Context, 8)
@@ -438,33 +422,6 @@ func TestEnsureRemaining(t *testing.T) {
 				require.Equal(t, start.Add(DefaultTimeout()+10*time.Second), deadline)
 			}
 		})
-	})
-}
-
-func TestGetOrDefault(t *testing.T) {
-	t.Parallel()
-
-	t.Run("returns testing context when no test context exists", func(t *testing.T) {
-		t.Parallel()
-
-		require.Same(t, t.Context(), GetOrDefault(t))
-	})
-
-	t.Run("returns current test context", func(t *testing.T) {
-		t.Parallel()
-
-		want := GetOrCreate(t)
-
-		require.Same(t, want, GetOrDefault(t))
-	})
-
-	t.Run("returns extended test context", func(t *testing.T) {
-		t.Parallel()
-
-		ctx := GetOrCreate(t)
-		want := EnsureRemaining(ctx, t, DefaultTimeout()+10*time.Second)
-
-		require.Same(t, want, GetOrDefault(t))
 	})
 }
 

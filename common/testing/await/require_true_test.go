@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/testing/await"
 )
 
@@ -116,7 +115,7 @@ func TestRequireTrue_DeadlockDetected(t *testing.T) {
 	// not using T.Parallel() so it can use t.Setenv to override the deadlock timeouts
 	t.Setenv("TEMPORAL_AWAIT_HARD_DEADLOCK_TIMEOUT", "100ms")
 
-	const awaitTimeout = 10 * time.Second * debug.TimeoutMultiplier
+	const awaitTimeout = 10 * time.Second
 
 	tb := newRecordingTB()
 	start := time.Now()

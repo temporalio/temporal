@@ -18,7 +18,7 @@ type config struct {
 
 func newConfig() config {
 	return config{
-		attemptTimeout: effectiveEnvDuration(attemptTimeoutEnvVar, 10*time.Second),
+		attemptTimeout: envDuration(attemptTimeoutEnvVar, 10*time.Second) * debug.TimeoutMultiplier,
 	}
 }
 
@@ -30,15 +30,11 @@ func legacyConfig(timeout, pollInterval time.Duration, timeoutMsg string) config
 	return cfg
 }
 
-func effectiveEnvDuration(name string, defaultTimeout time.Duration) (timeout time.Duration) {
-	defer func() {
-		timeout *= debug.TimeoutMultiplier
-	}()
-
+func envDuration(name string, fallback time.Duration) time.Duration {
 	if s := os.Getenv(name); s != "" {
 		if d, err := time.ParseDuration(s); err == nil && d > 0 {
 			return d
 		}
 	}
-	return defaultTimeout
+	return fallback
 }
