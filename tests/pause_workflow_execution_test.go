@@ -1793,6 +1793,110 @@ func (s *PauseWorkflowExecutionSuite) TestPauseIdempotentSameRequestId() {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
+// TestConcurrentPauseRequestIDs verifies serialization and request-ID handling
+// for concurrent Pause calls: equal IDs both succeed with one event, while
+// different IDs yield one success and one FailedPrecondition with one event.
+func (s *PauseWorkflowExecutionSuite) TestConcurrentPauseRequestIDs() {
+	env := s.newTestEnv()
+	tv := env.Tv()
+
+	type callResult struct {
+		response *workflowservice.PauseWorkflowExecutionResponse
+		err      error
+	}
+
+	for _, tc := range []struct {
+		name          string
+		sameRequestID bool
+	}{
+		{name: "same request ID", sameRequestID: true},
+		{name: "different request IDs", sameRequestID: false},
+	} {
+		s.Run(tc.name, func(s *PauseWorkflowExecutionSuite) {
+			workflowID := testcore.RandomizeStr("concurrent-pause-" + tc.name)
+			startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:           uuid.NewString(),
+				Namespace:           env.Namespace().String(),
+				WorkflowId:          workflowID,
+				WorkflowType:        tv.WorkflowType(),
+				TaskQueue:           tv.TaskQueue(),
+				WorkflowRunTimeout:  durationpb.New(60 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+				Identity:            tv.WorkerIdentity(),
+			})
+			s.Require().NoError(err)
+			runID := startResp.GetRunId()
+
+			requestIDs := []string{uuid.NewString(), uuid.NewString()}
+			if tc.sameRequestID {
+				requestIDs[1] = requestIDs[0]
+			}
+			startCalls := make(chan struct{})
+			results := make(chan callResult, len(requestIDs))
+			for _, requestID := range requestIDs {
+				go func() {
+					<-startCalls
+					response, callErr := env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+						Namespace:  env.Namespace().String(),
+						WorkflowId: workflowID,
+						RunId:      runID,
+						Identity:   env.pauseIdentity,
+						Reason:     env.pauseReason,
+						RequestId:  requestID,
+					})
+					results <- callResult{response: response, err: callErr}
+				}()
+			}
+			close(startCalls)
+
+			successes := 0
+			failedPreconditions := 0
+			for range requestIDs {
+				result := <-results
+				if result.err == nil {
+					s.Require().NotNil(result.response)
+					successes++
+					continue
+				}
+				s.Require().Nil(result.response)
+				var failedPrecondition *serviceerror.FailedPrecondition
+				s.Require().ErrorAs(result.err, &failedPrecondition)
+				failedPreconditions++
+			}
+			if tc.sameRequestID {
+				s.Require().Equal(2, successes)
+				s.Require().Zero(failedPreconditions)
+			} else {
+				s.Require().Equal(1, successes)
+				s.Require().Equal(1, failedPreconditions)
+			}
+
+			events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
+			})
+			pauseEvents := 0
+			for _, event := range events {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED {
+					pauseEvents++
+				}
+			}
+			s.Require().Equal(1, pauseEvents)
+
+			_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				Reason:   "cleanup after concurrent Workflow Pause audit",
+				Identity: tv.WorkerIdentity(),
+			})
+			s.Require().NoError(err)
+		})
+	}
+}
+
 // TestUnpauseIdempotentSameRequestId asserts that retrying a committed unpause with the same
 // request ID succeeds as a no-op, while a new request ID still fails with "not paused". The shard
 // is closed between calls so the dedup decision comes from reloaded state, not a cached copy.
