@@ -108,7 +108,7 @@ func NewStreamSender(
 	// tier loops — until the recv loop's config guard restarts the stream.
 	tieredStackEnabled := config.EnableReplicationTaskTieredProcessing()
 	isolationEnabled := tieredStackEnabled && config.EnableReplicationNamespaceIsolation()
-	throttledTierCount := config.ReplicationStreamSenderThrottledTierCount()
+	throttledTierCount := normalizedThrottledTierCount(config.ReplicationStreamSenderThrottledTierCount())
 	return &StreamSenderImpl{
 		server:                  server,
 		shardContext:            shardContext,
@@ -225,7 +225,7 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		if (s.isolation != nil) != (s.config.EnableReplicationNamespaceIsolation() && s.isTieredStackEnabled) {
 			return NewStreamError("StreamSender detected namespace isolation config change, restart the stream", nil)
 		}
-		if s.isolation != nil && s.isolation.TierCount() != s.config.ReplicationStreamSenderThrottledTierCount() {
+		if s.isolation != nil && s.isolation.TierCount() != normalizedThrottledTierCount(s.config.ReplicationStreamSenderThrottledTierCount()) {
 			return NewStreamError("StreamSender detected throttled tier count change, restart the stream", nil)
 		}
 
@@ -606,7 +606,7 @@ func newTierRateLimiters(config *configs.Config, enabled bool, tierCount int) []
 	}
 	// Clamped exactly like newIsolationManager's tierCount, so len(tierRateLimiters)
 	// always equals TierCount().
-	count := max(1, tierCount)
+	count := normalizedThrottledTierCount(tierCount)
 	limiters := make([]quotas.RateLimiter, count)
 	for i := range limiters {
 		depth := i + 1 // tier number (1-based)
@@ -624,6 +624,10 @@ func newTierRateLimiters(config *configs.Config, enabled bool, tierCount int) []
 		)
 	}
 	return limiters
+}
+
+func normalizedThrottledTierCount(configured int) int {
+	return max(1, configured)
 }
 
 // defaultLaneFilter returns the task filter for the shared HIGH lane: it excludes

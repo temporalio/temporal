@@ -1257,6 +1257,18 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 	s.ErrorAs(err, new(*StreamError))
 }
 
+func (s *streamSenderSuite) TestRecvEventLoop_ClampedTierCountDoesNotRestartStream() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.isolation = newIsolationManager(0, 1, 1, 0)
+	s.config.EnableReplicationTaskTieredProcessing = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnableReplicationNamespaceIsolation = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.ReplicationStreamSenderThrottledTierCount = dynamicconfig.GetIntPropertyFn(0)
+	s.server.EXPECT().Recv().Return(nil, errors.New("rpc error"))
+
+	err := s.streamSender.recvEventLoop()
+	s.ErrorContains(err, "StreamSender failed to receive")
+}
+
 func (s *streamSenderSuite) TestLivenessMonitor() {
 	s.streamSender.recvSignalChan <- struct{}{}
 	livenessMonitor(
