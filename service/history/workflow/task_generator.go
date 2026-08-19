@@ -1067,20 +1067,19 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 	}
 
 	// (2) execution and run timeout timers.
-	// The WorkflowExecutionTimeoutTask only exists when the feature is enabled — see
-	// GenerateWorkflowStartTasks — so re-stamping one without checking the flag would create a
-	// task the start path never generated.
-	executionTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
-	if r.config.EnableWorkflowExecutionTimeoutTimer() && !timeNotSet(executionTimeoutTimer) {
+	executionInfo := r.mutableState.GetExecutionInfo()
+	executionTimeoutTimer := executionInfo.WorkflowExecutionExpirationTime
+	if !timeNotSet(executionTimeoutTimer) &&
+		executionInfo.WorkflowExecutionTimerTaskStatus == TimerTaskStatusCreated {
 		r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
 			// TaskID is set by shard
-			NamespaceID:         r.mutableState.GetExecutionInfo().NamespaceId,
-			WorkflowID:          r.mutableState.GetExecutionInfo().WorkflowId,
-			FirstRunID:          r.mutableState.GetExecutionInfo().FirstExecutionRunId,
+			NamespaceID:         executionInfo.NamespaceId,
+			WorkflowID:          executionInfo.WorkflowId,
+			FirstRunID:          executionInfo.FirstExecutionRunId,
 			VisibilityTimestamp: timestamp.TimeValue(executionTimeoutTimer),
 		})
 	}
-	runTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime
+	runTimeoutTimer := executionInfo.WorkflowRunExpirationTime
 	if !timeNotSet(runTimeoutTimer) {
 		// Version must match the workflow's start version so the executor's
 		// CheckTaskVersion passes for global namespaces (see timer_queue_active_task_executor.go).

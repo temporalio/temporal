@@ -1371,16 +1371,18 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t
 		name                       string
 		execExpirationTime         *timestamppb.Timestamp
 		runExpirationTime          *timestamppb.Timestamp
+		executionTimerTaskStatus   int32
 		executionTimeoutTimerOffDC bool
 		wantExecTimeout            bool
 		wantRunTimeout             bool
 	}{
 		{
-			name:               "both execution and run expirations set",
-			execExpirationTime: timestamppb.New(execExpiry),
-			runExpirationTime:  timestamppb.New(runExpiry),
-			wantExecTimeout:    true,
-			wantRunTimeout:     true,
+			name:                     "both execution and run expirations set",
+			execExpirationTime:       timestamppb.New(execExpiry),
+			runExpirationTime:        timestamppb.New(runExpiry),
+			executionTimerTaskStatus: TimerTaskStatusCreated,
+			wantExecTimeout:          true,
+			wantRunTimeout:           true,
 		},
 		{
 			name:               "only run expiration set",
@@ -1390,15 +1392,20 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t
 			wantRunTimeout:     true,
 		},
 		{
-			// GenerateWorkflowStartTasks never creates a WorkflowExecutionTimeoutTask when the
-			// feature is off, so regen must not create one either — there is nothing to re-stamp.
-			// The run timeout task still carries the deadline (run expiration is clamped to
-			// execution expiration).
-			name:                       "execution timeout timer feature disabled",
+			name:                       "execution timeout timer not created",
 			execExpirationTime:         timestamppb.New(execExpiry),
 			runExpirationTime:          timestamppb.New(runExpiry),
 			executionTimeoutTimerOffDC: true,
 			wantExecTimeout:            false,
+			wantRunTimeout:             true,
+		},
+		{
+			name:                       "created execution timeout timer with feature disabled",
+			execExpirationTime:         timestamppb.New(execExpiry),
+			runExpirationTime:          timestamppb.New(runExpiry),
+			executionTimerTaskStatus:   TimerTaskStatusCreated,
+			executionTimeoutTimerOffDC: true,
+			wantExecTimeout:            true,
 			wantRunTimeout:             true,
 		},
 	} {
@@ -1410,11 +1417,12 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t
 			mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
 			mutableState.EXPECT().Now().Return(time.Now().UTC()).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-				NamespaceId:                     namespaceID,
-				WorkflowId:                      workflowID,
-				FirstExecutionRunId:             firstRunID,
-				WorkflowExecutionExpirationTime: tc.execExpirationTime,
-				WorkflowRunExpirationTime:       tc.runExpirationTime,
+				NamespaceId:                      namespaceID,
+				WorkflowId:                       workflowID,
+				FirstExecutionRunId:              firstRunID,
+				WorkflowExecutionExpirationTime:  tc.execExpirationTime,
+				WorkflowRunExpirationTime:        tc.runExpirationTime,
+				WorkflowExecutionTimerTaskStatus: tc.executionTimerTaskStatus,
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 					AccumulatedSkippedDuration: durationpb.New(skippedDuration),
 				},
@@ -1988,11 +1996,12 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 	mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
 	mutableState.EXPECT().Now().Return(now).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId:                     tests.NamespaceID.String(),
-		WorkflowId:                      tests.WorkflowID,
-		FirstExecutionRunId:             tests.RunID,
-		WorkflowExecutionExpirationTime: timestamppb.New(now.Add(24 * time.Hour)),
-		WorkflowRunExpirationTime:       timestamppb.New(now.Add(3 * time.Hour)),
+		NamespaceId:                      tests.NamespaceID.String(),
+		WorkflowId:                       tests.WorkflowID,
+		FirstExecutionRunId:              tests.RunID,
+		WorkflowExecutionExpirationTime:  timestamppb.New(now.Add(24 * time.Hour)),
+		WorkflowRunExpirationTime:        timestamppb.New(now.Add(3 * time.Hour)),
+		WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
 		// StartTime < ExecutionTime with a cron schedule drives the backoff-timer block
 		// (WORKFLOW_BACKOFF_TYPE_CRON, a non-zero enum value).
 		StartTime:     timestamppb.New(now),
