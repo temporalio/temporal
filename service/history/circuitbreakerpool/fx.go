@@ -56,10 +56,8 @@ func OutboundQueueCircuitBreakerPoolProvider(
 	}
 }
 
-// onStateChange logs breaker transitions, which are otherwise invisible: blocked tasks are counted
-// by circuit_breaker_executable_blocked, but nothing records when a breaker opened or recovered.
-// Logged rather than emitted as a metric because destination is unbounded for callback targets.
-// gobreaker calls this under its own mutex, so it must stay cheap.
+// onStateChange logs breaker transitions. Logged rather than emitted as a metric because
+// destination is unbounded for callback targets. gobreaker calls this under its own mutex.
 func onStateChange(
 	key tasks.TaskGroupNamespaceIDAndDestination,
 	nsName string,
