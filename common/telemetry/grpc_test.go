@@ -146,6 +146,12 @@ func TestServerStatsHandlerAnnotatesWorkerTask(t *testing.T) {
 			workerTaskID: "v1/workflow/namespace-id/run-id/42",
 		},
 		{
+			name:         "WorkflowFailure",
+			method:       "RespondWorkflowTaskFailed",
+			payload:      &workflowservice.RespondWorkflowTaskFailedRequest{TaskToken: taskToken},
+			workerTaskID: "v1/workflow/namespace-id/run-id/42",
+		},
+		{
 			name:         "ActivityPoll",
 			method:       "PollActivityTaskQueue",
 			payload:      &workflowservice.PollActivityTaskQueueResponse{TaskToken: taskToken},
@@ -156,6 +162,24 @@ func TestServerStatsHandlerAnnotatesWorkerTask(t *testing.T) {
 			name:         "ActivityCompletion",
 			method:       "RespondActivityTaskCompleted",
 			payload:      &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: taskToken},
+			workerTaskID: "v1/activity/namespace-id/run-id/42",
+		},
+		{
+			name:         "ActivityHeartbeat",
+			method:       "RecordActivityTaskHeartbeat",
+			payload:      &workflowservice.RecordActivityTaskHeartbeatRequest{TaskToken: taskToken},
+			workerTaskID: "v1/activity/namespace-id/run-id/42",
+		},
+		{
+			name:         "ActivityFailure",
+			method:       "RespondActivityTaskFailed",
+			payload:      &workflowservice.RespondActivityTaskFailedRequest{TaskToken: taskToken},
+			workerTaskID: "v1/activity/namespace-id/run-id/42",
+		},
+		{
+			name:         "ActivityCancellation",
+			method:       "RespondActivityTaskCanceled",
+			payload:      &workflowservice.RespondActivityTaskCanceledRequest{TaskToken: taskToken},
 			workerTaskID: "v1/activity/namespace-id/run-id/42",
 		},
 		{
@@ -187,6 +211,12 @@ func TestServerStatsHandlerAnnotatesWorkerTask(t *testing.T) {
 			payload:      &workflowservice.RespondNexusTaskCompletedRequest{TaskToken: nexusToken},
 			workerTaskID: "v1/nexus/namespace-id/nexus-id",
 		},
+		{
+			name:         "NexusFailure",
+			method:       "RespondNexusTaskFailed",
+			payload:      &workflowservice.RespondNexusTaskFailedRequest{TaskToken: nexusToken},
+			workerTaskID: "v1/nexus/namespace-id/nexus-id",
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -195,7 +225,7 @@ func TestServerStatsHandlerAnnotatesWorkerTask(t *testing.T) {
 			exporter := tracetest.NewInMemoryExporter()
 			tp := trace.NewTracerProvider(trace.WithSyncer(exporter))
 			handler := telemetry.NewServerStatsHandler(tp, propagation.TraceContext{}, nil)
-			ctx := handler.TagRPC(context.Background(), &stats.RPCTagInfo{
+			ctx := handler.TagRPC(t.Context(), &stats.RPCTagInfo{
 				FullMethodName: api.WorkflowServicePrefix + tc.method,
 			})
 			if tc.outbound {

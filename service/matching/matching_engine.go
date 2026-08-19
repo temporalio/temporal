@@ -626,6 +626,8 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// grpc instrumentation reconstructs this ID from the task token,
+		// so spooled tasks remain correlated.
 		workerTaskID := tasktoken.WorkflowWorkerTaskID(
 			taskInfo.GetNamespaceId(),
 			taskInfo.GetRunId(),
@@ -633,6 +635,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		)
 		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
+
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
 		forwardInfo: addRequest.ForwardInfo,
@@ -674,6 +677,8 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// grpc instrumentation reconstructs this ID from the task token,
+		// so spooled tasks remain correlated.
 		workerTaskID := tasktoken.ActivityWorkerTaskID(
 			taskInfo.GetNamespaceId(),
 			taskInfo.GetRunId(),
@@ -681,6 +686,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		)
 		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
+
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
 		forwardInfo: addRequest.ForwardInfo,
