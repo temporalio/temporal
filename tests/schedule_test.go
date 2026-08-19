@@ -593,7 +593,7 @@ func testAllowAllDoesNotRemainActive(t *testing.T, newContext contextFactory) {
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
 
-	ctx := newContext(s.Context())
+	ctx := newContext(testcore.NewContext())
 	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
 		Spec:     &schedulepb.ScheduleSpec{},
 		Action:   startWorkflowAction(s, wid, wt),
