@@ -183,12 +183,9 @@ func TestServerStatsHandlerAnnotatesWorkerTask(t *testing.T) {
 			workerTaskID: "v1/activity/namespace-id/run-id/42",
 		},
 		{
-			name:   "QueryPoll",
-			method: "PollWorkflowTaskQueue",
-			payload: &workflowservice.PollWorkflowTaskQueueResponse{
-				TaskToken: queryToken,
-				Query:     &querypb.WorkflowQuery{},
-			},
+			name:         "QueryPoll",
+			method:       "PollWorkflowTaskQueue",
+			payload:      &workflowservice.PollWorkflowTaskQueueResponse{TaskToken: queryToken, Query: &querypb.WorkflowQuery{}},
 			outbound:     true,
 			workerTaskID: "v1/query/namespace-id/query-id",
 		},
