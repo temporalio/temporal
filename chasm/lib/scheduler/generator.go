@@ -92,7 +92,7 @@ func (g *Generator) computeFutureActionTimes(
 
 	count := recentActionCount
 	if sched.Schedule.State.LimitedActions {
-		count = min(int(sched.Schedule.State.RemainingActions), recentActionCount)
+		count = max(min(int(sched.Schedule.State.RemainingActions), recentActionCount), 0)
 	}
 
 	futureTimes := make([]*timestamppb.Timestamp, 0, count)
