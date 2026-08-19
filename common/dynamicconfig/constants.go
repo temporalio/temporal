@@ -3602,7 +3602,7 @@ is non-fatal: the search continues past this threshold.`,
 		"worker.schedulerV1VersionCeiling",
 		-1,
 		`SchedulerV1VersionCeiling caps the workflow version the V1 scheduler records into history, so histories written on this cluster stay replayable on peer clusters that do not support newer versions. Set it to the highest scheduler version supported by the lowest peer. Intended for multi-cluster failover and rollback.
-The recorded TweakablePolicies.Version is clamped to min(current, ceiling). A negative value (the default) disables the clamp. A value at or above the highest supported version is a no-op. The ceiling is read once, when a worker starts running a schedule, and then held fixed for that run.`,
+The recorded TweakablePolicies.Version is clamped to min(current, ceiling). A negative value (the default) disables the clamp. A value at or above the highest supported version is a no-op. The ceiling is read once, when a worker starts running a schedule, and then held fixed for that run, while the effective version may advance up to that ceiling.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
