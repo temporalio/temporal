@@ -139,3 +139,13 @@ func GetSQLiteMemoryTestClusterOption() *TestBaseOptions {
 		ConnectAttributes: map[string]string{"mode": testSQLiteMode, "cache": testSQLiteCache},
 	}
 }
+
+func GetEsTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		DBName:     "temporal_visibility_v1_" + GenerateRandomDBName(),
+		DBUsername: "",
+		DBPassword: "",
+		DBHost:     environment.GetESAddress(),
+		DBPort:     environment.GetESPort(),
+	}
+}

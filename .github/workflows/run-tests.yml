@@ -340,7 +340,7 @@ jobs:
     needs: [pre-build, test-setup]
     runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     env:
-      CONTAINERS: cassandra mysql postgresql
+      CONTAINERS: cassandra mysql postgresql elasticsearch
       TEST_TIMEOUT: 10m
       GITHUB_TIMEOUT: 15
     steps:
