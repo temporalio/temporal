@@ -2443,7 +2443,7 @@ func (s *workflowSuite) TestAutoMigrateReconcilesRunningWorkflowBeforeCheck() {
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		// enableCHASMMigration=true, migrateWithRunningWorkflows=false (guard on).
 		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
-			func() bool { return true }, func() bool { return false })
+			func() bool { return true }, func() bool { return false }, func() int { return -1 })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -2517,7 +2517,7 @@ func (s *workflowSuite) TestAutoMigrateStaysDeferredAtOldVersionWhileBusy() {
 		// enableCHASMMigration=true, migrateWithRunningWorkflows=false (guard on) --
 		// same knobs as TestAutoMigrateReconcilesRunningWorkflowBeforeCheck.
 		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
-			func() bool { return true }, func() bool { return false })
+			func() bool { return true }, func() bool { return false }, func() int { return -1 })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -2768,7 +2768,7 @@ func (s *workflowSuite) TestMigrateRollbackDoesNotBlockScheduleActions() {
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
-			func() bool { return enableMigration }, func() bool { return true })
+			func() bool { return enableMigration }, func() bool { return true }, func() int { return -1 })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
