@@ -3,6 +3,7 @@ package migration
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"time"
 
@@ -15,8 +16,11 @@ import (
 	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const legacyRecentActionCount = 10
 
 // LegacyToCreateFromMigrationStateRequest converts legacy (workflow-backed) scheduler
 // state to a CreateFromMigrationStateRequest proto. This is the primary V1-to-V2
@@ -164,6 +168,17 @@ func CHASMToLegacyStartScheduleArgs(
 		invokerBuffered = invoker.GetBufferedStarts()
 	}
 	bufferedStarts, running, recent := splitBufferedStartsForLegacy(invokerBuffered)
+	if invoker != nil {
+		storedRecent := make([]*schedulepb.ScheduleActionResult, 0, len(invoker.GetRecentActions()))
+		for _, action := range invoker.GetRecentActions() {
+			storedRecent = append(storedRecent, common.CloneProto(action))
+		}
+		recent = append(storedRecent, recent...)
+		slices.SortFunc(recent, func(a, b *schedulepb.ScheduleActionResult) int {
+			return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+		})
+		recent = util.SliceTail(recent, legacyRecentActionCount)
+	}
 	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(backfillers, migrationTime)
 	bufferedStarts = append(bufferedStarts, triggerStarts...)
 

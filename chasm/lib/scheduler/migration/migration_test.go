@@ -233,6 +233,15 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 	}
 	generator := &schedulerpb.GeneratorState{LastProcessedTime: timestamppb.New(now.Add(-time.Minute))}
 	invoker := &schedulerpb.InvokerState{
+		RecentActions: []*schedulepb.ScheduleActionResult{{
+			ScheduleTime: timestamppb.New(now.Add(-4 * time.Minute)),
+			ActualTime:   timestamppb.New(now.Add(-4 * time.Minute)),
+			StartWorkflowResult: &commonpb.WorkflowExecution{
+				WorkflowId: "wf-start-only",
+				RunId:      "run-start-only",
+			},
+			StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		}},
 		BufferedStarts: []*schedulespb.BufferedStart{
 			{
 				NominalTime:   timestamppb.New(now.Add(-10 * time.Minute)),
@@ -299,7 +308,8 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 	require.Equal(t, "wf-running", args.Info.RunningWorkflows[0].WorkflowId)
 	require.Equal(t, "run-running", args.Info.RunningWorkflows[0].RunId)
 
-	require.Len(t, args.Info.RecentActions, 2)
+	require.Len(t, args.Info.RecentActions, 3)
+	require.Equal(t, "run-start-only", args.Info.RecentActions[2].GetStartWorkflowResult().GetRunId())
 	require.Len(t, args.State.BufferedStarts, 2) // pending + trigger
 	require.Len(t, args.State.OngoingBackfills, 1)
 	require.Equal(t, backfillProgress.AsTime(), args.State.OngoingBackfills[0].StartTime.AsTime())

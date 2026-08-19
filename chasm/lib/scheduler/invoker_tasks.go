@@ -381,6 +381,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		// Clone start before concurrent access. The clone will have RunId/StartTime
 		// set by startWorkflow, then copied back to the original in recordExecuteResult.
 		start = common.CloneProto(start)
+		start.OverlapPolicy = scheduler.resolveOverlapPolicy(start.GetOverlapPolicy())
 
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
@@ -660,20 +661,29 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
+	tracksCompletionResult := start.GetOverlapPolicy() != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
 	var lcr []*commonpb.Payload
-	if lastCompletionState.Success != nil {
+	continuedFailure := lastCompletionState.Failure
+	if tracksCompletionResult && lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
 	}
-	// Build the completion callback with this start's request ID packed into its token, so the
-	// completion is matched by a request ID that rides in the callback header and survives
-	// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
-	// new run.
-	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
-	if err != nil {
-		return err
+	if !tracksCompletionResult {
+		continuedFailure = nil
+	}
+	var completionCallbacks []*commonpb.Callback
+	if tracksCompletionResult {
+		// Build the completion callback with this start's request ID packed into its token, so the
+		// completion is matched by a request ID that rides in the callback header and survives
+		// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
+		// new run.
+		callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
+		if err != nil {
+			return err
+		}
+		completionCallbacks = []*commonpb.Callback{callback}
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		CompletionCallbacks:      []*commonpb.Callback{callback},
+		CompletionCallbacks:      completionCallbacks,
 		Header:                   requestSpec.Header,
 		Identity:                 scheduler.identity(),
 		Input:                    requestSpec.Input,
@@ -691,7 +701,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
 		Priority:                 requestSpec.Priority,
-		ContinuedFailure:         lastCompletionState.Failure,
+		ContinuedFailure:         continuedFailure,
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
 		},
@@ -711,7 +721,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	// BufferedStarts in recordExecuteResult.
 	start.RunId = result.RunId
 	start.StartTime = timestamppb.New(actualStartTime)
-	start.HasCallback = true
+	start.HasCallback = tracksCompletionResult
 
 	// Record time taken from action eligible to workflow started.
 	if !start.Manual {

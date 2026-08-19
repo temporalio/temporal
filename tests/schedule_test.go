@@ -521,6 +521,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestBasics", func(t *testing.T) { t.Parallel(); testBasics(t, newContext) })
 	t.Run("TestInput", func(t *testing.T) { t.Parallel(); testInput(t, newContext) })
 	t.Run("TestLastCompletionAndError", func(t *testing.T) { t.Parallel(); testLastCompletionAndError(t, newContext) })
+	t.Run("TestAllowAllDoesNotRemainActive", func(t *testing.T) { t.Parallel(); testAllowAllDoesNotRemainActive(t, newContext) })
 	t.Run("TestScheduleContinuesAfterWorkflowRetryFailure", func(t *testing.T) { t.Parallel(); testScheduleContinuesAfterWorkflowRetryFailure(t, newContext) })
 	t.Run("TestListSchedulesReturnsWorkflowStatus", func(t *testing.T) { t.Parallel(); testListSchedulesReturnsWorkflowStatus(t, newContext) })
 	t.Run("TestListSchedulesRecentActionsCapped", func(t *testing.T) { t.Parallel(); testListSchedulesRecentActionsCapped(t, newContext) })
@@ -565,6 +566,87 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestListSchedulesFilterByScheduleId", func(t *testing.T) { t.Parallel(); testListSchedulesFilterByScheduleID(t, newContext) })
 	t.Run("TestBufferSizeReportedWhenBuffered", func(t *testing.T) { t.Parallel(); testBufferSizeReportedWhenBuffered(t, newContext) })
 	t.Run("TestBufferOneDeferredFiresAfterCompletion", func(t *testing.T) { t.Parallel(); testBufferOneDeferredFiresAfterCompletion(t, newContext) })
+}
+
+func testAllowAllDoesNotRemainActive(t *testing.T, newContext contextFactory) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	sid := testcore.RandomizeStr("sched-allow-all-active")
+	wid := testcore.RandomizeStr("sched-allow-all-active-wf")
+	wt := testcore.RandomizeStr("sched-allow-all-active-wt")
+
+	var runs atomic.Int32
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { runs.Add(1); return 0 })
+		failed := false
+		selector := workflow.NewSelector(ctx)
+		selector.AddReceive(workflow.GetSignalChannel(ctx, "complete"), func(c workflow.ReceiveChannel, _ bool) {
+			c.Receive(ctx, nil)
+		})
+		selector.AddReceive(workflow.GetSignalChannel(ctx, "fail"), func(c workflow.ReceiveChannel, _ bool) {
+			c.Receive(ctx, nil)
+			failed = true
+		})
+		selector.Select(ctx)
+		if failed {
+			return errors.New("allow-all failure")
+		}
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+
+	ctx := newContext(s.Context())
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:     &schedulepb.ScheduleSpec{},
+		Action:   startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{PauseOnFailure: true},
+	})
+
+	patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
+	var allowAllRun *commonpb.WorkflowExecution
+	require.Eventually(t, func() bool {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		if err != nil || runs.Load() != 1 || len(desc.GetInfo().GetRecentActions()) != 1 {
+			return false
+		}
+		require.Empty(t, desc.GetInfo().GetRunningWorkflows())
+		allowAllRun = desc.GetInfo().GetRecentActions()[0].GetStartWorkflowResult()
+		return allowAllRun.GetRunId() != ""
+	}, awaitTimeout, pollInterval, "ALLOW_ALL start should be recent but not active")
+
+	allowAllNominal, err := time.Parse(time.RFC3339, strings.TrimPrefix(allowAllRun.GetWorkflowId(), wid+"-"))
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return time.Now().UTC().Truncate(time.Second).After(allowAllNominal)
+	}, awaitTimeout, pollInterval, "next trigger should receive a distinct timestamp-based workflow ID")
+
+	patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP))
+	var sequentialRun *commonpb.WorkflowExecution
+	require.Eventually(t, func() bool {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		if err != nil || runs.Load() != 2 || len(desc.GetInfo().GetRunningWorkflows()) != 1 {
+			return false
+		}
+		sequentialRun = desc.GetInfo().GetRunningWorkflows()[0]
+		return sequentialRun.GetRunId() != "" && sequentialRun.GetRunId() != allowAllRun.GetRunId()
+	}, awaitTimeout, pollInterval, "ALLOW_ALL execution should not block a sequential trigger")
+
+	require.NoError(t, s.SdkClient().SignalWorkflow(ctx, allowAllRun.GetWorkflowId(), allowAllRun.GetRunId(), "fail", nil))
+	require.Eventually(t, func() bool {
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(), Execution: allowAllRun,
+		})
+		return err == nil && resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	}, awaitTimeout, pollInterval, "ALLOW_ALL workflow should fail")
+
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace: s.Namespace().String(), ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.False(t, desc.GetSchedule().GetState().GetPaused())
+	require.NoError(t, s.SdkClient().SignalWorkflow(ctx, sequentialRun.GetWorkflowId(), sequentialRun.GetRunId(), "complete", nil))
 }
 
 // testBufferSizeReportedWhenBuffered verifies that ScheduleInfo.BufferSize is

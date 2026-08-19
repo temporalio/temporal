@@ -622,7 +622,16 @@ func (s *Scheduler) HandleNexusCompletion(
 	invoker := s.Invoker.Get(ctx)
 	metricsHandler := newTaggedMetricsHandler(ctx.MetricsHandler(), s)
 
-	workflowID := invoker.runningWorkflowID(info.RequestId)
+	workflowID := ""
+	tracksCompletionResult := true
+	for _, start := range invoker.GetBufferedStarts() {
+		if start.GetRequestId() == info.RequestId && start.GetCompleted() == nil {
+			workflowID = start.GetWorkflowId()
+			start.OverlapPolicy = s.resolveOverlapPolicy(start.GetOverlapPolicy())
+			tracksCompletionResult = start.GetOverlapPolicy() != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+			break
+		}
+	}
 	if workflowID == "" {
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
@@ -650,23 +659,27 @@ func (s *Scheduler) HandleNexusCompletion(
 	var wfStatus enumspb.WorkflowExecutionStatus
 	switch outcome := info.Outcome.(type) {
 	case *persistencespb.ChasmNexusCompletion_Failure:
-		previousResult := s.LastCompletionResult.Get(ctx) // Most-recent success is kept after failure.
 		wfStatus = executionStatusFromFailure(outcome.Failure)
-		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-			Failure: outcome.Failure,
-			Success: previousResult.Success,
-		})
+		if tracksCompletionResult {
+			previousResult := s.LastCompletionResult.Get(ctx) // Most-recent success is kept after failure.
+			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
+				Failure: outcome.Failure,
+				Success: previousResult.Success,
+			})
+		}
 	case *persistencespb.ChasmNexusCompletion_Success:
 		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-			Success: outcome.Success,
-		})
+		if tracksCompletionResult {
+			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
+				Success: outcome.Success,
+			})
+		}
 	default:
 		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	}
 
 	// Handle pause-on-failure.
-	if countsAsFailureForPause(wfStatus) &&
+	if tracksCompletionResult && countsAsFailureForPause(wfStatus) &&
 		s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
 		s.Schedule.State.Paused = true
 		s.Schedule.State.Notes = fmt.Sprintf(
@@ -737,9 +750,8 @@ func (s *Scheduler) Describe(
 	info.RunningWorkflows = invoker.runningWorkflowExecutions()
 	info.RecentActions = invoker.recentActions()
 	info.FutureActionTimes = futureActionTimes
-	// BufferedStarts holds waiting, running, and recently-completed entries; only the
-	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
-	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
+	// Only starts that have not reached StartWorkflowExecution count as buffered.
+	info.BufferSize = int64(invoker.bufferedStartsCount())
 
 	executionInfo := ctx.ExecutionInfo()
 	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
@@ -1017,7 +1029,7 @@ func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeK
 
 		invoker := s.Invoker.Get(ctx)
 		runningWorkflowCount := int64(len(invoker.runningWorkflowExecutions()))
-		bufferedStartsCount := int64(len(invoker.GetBufferedStarts()) - len(invoker.recentActions()))
+		bufferedStartsCount := int64(invoker.bufferedStartsCount())
 
 		// Emitted even when zero so that exact and range queries both work.
 		out = append(out,

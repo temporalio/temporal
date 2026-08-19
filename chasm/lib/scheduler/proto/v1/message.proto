@@ -68,6 +68,9 @@ message InvokerState {
   // Buffered starts that will be started by the Invoker.
   repeated temporal.server.api.schedule.v1.BufferedStart buffered_starts = 2;
 
+  // Bounded history for actions that do not remain active after they start.
+  repeated temporal.api.schedule.v1.ScheduleActionResult recent_actions = 7;
+
   // Workflow executions that will be cancelled due to overlap policy.
   repeated temporal.api.common.v1.WorkflowExecution cancel_workflows = 3;
 
