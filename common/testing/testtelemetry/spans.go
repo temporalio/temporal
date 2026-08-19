@@ -95,7 +95,7 @@ func SpanAttribute(span tracetest.SpanStub, key attribute.Key) (attribute.Value,
 	return attribute.Value{}, false
 }
 
-// FilterSpans returns matching spans without modifying the exporter's snapshot.
+// FilterSpans returns matching spans without modifying the input slice.
 func FilterSpans(spans tracetest.SpanStubs, keep func(tracetest.SpanStub) bool) tracetest.SpanStubs {
 	filtered := slices.Clone(spans)
 	return slices.DeleteFunc(filtered, func(span tracetest.SpanStub) bool {
