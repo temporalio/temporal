@@ -13,6 +13,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -111,6 +112,15 @@ type versionHeadersContextKey struct{}
 func WithDedicatedCluster() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
+	}
+}
+
+// WithSpanExporter enables OpenTelemetry tracing with exporter on a dedicated test cluster.
+func WithSpanExporter(exporter sdktrace.SpanExporter) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withSpanExporter(exporter))
+		o.dedicatedReason = "span exporter configured"
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/telemetry"
 	"go.uber.org/fx"
 )
 
@@ -122,6 +123,7 @@ func clientProviderFactory(
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
 	rpcFactory common.RPCFactory,
+	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -135,7 +137,7 @@ func clientProviderFactory(
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
 		return &http.Client{
-			Transport: responseSizeLimiter{transport},
+			Transport: httpClientTransportInstrumenter.Instrument(responseSizeLimiter{transport}),
 		}, nil
 	})
 

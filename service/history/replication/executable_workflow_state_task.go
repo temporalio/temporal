@@ -109,6 +109,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	}
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
+	ctx = setReplicationTaskOrigin(ctx, e.ExecutableTask, wideevents.ReplApplyArtifactSourceTaskPayload)
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
@@ -134,6 +135,18 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 	if errors.Is(err, consts.ErrDuplicate) {
 		e.MarkTaskDuplicated()
 		return nil
+	}
+	var notFoundErr *serviceerror.NotFound
+	if err != nil && !errors.As(err, &notFoundErr) {
+		details := map[string]any{}
+		switch err.(type) {
+		case *serviceerrors.SyncState:
+			details["recovery_action"] = wideevents.ReplRecoveryActionSyncState
+		case *serviceerrors.RetryReplication:
+			details["recovery_action"] = wideevents.ReplRecoveryActionResendHistory
+		default:
+		}
+		emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationPassiveTaskExecution, "SyncWorkflowState replication task encountered error", err, details)
 	}
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	switch retryErr := err.(type) {
@@ -161,6 +174,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 					tag.TaskID(e.TaskID()),
 					tag.Error(syncStateErr),
 				)
+				emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationSyncWorkflowStateSyncState, "SyncWorkflowState recovery failed during sync state", syncStateErr, nil)
 				return err
 			}
 			return nil
@@ -185,6 +199,9 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 			retryErr,
 			ResendAttempt,
 		); resendErr != nil || !doContinue {
+			if resendErr != nil {
+				emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationHistoryResend, "SyncWorkflowState history resend failed", resendErr, nil)
+			}
 			return err
 		}
 		return e.Execute()

@@ -13,7 +13,7 @@ import (
 
 func TestCreateLocalFrontendGRPCConnectionIsCached(t *testing.T) {
 	f := NewFactory(nil, primitives.FrontendService, log.NewNoopLogger(),
-		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil)
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
 	first := f.CreateLocalFrontendGRPCConnection()
 	second := f.CreateLocalFrontendGRPCConnection()
 	require.NotNil(t, first)
@@ -23,7 +23,7 @@ func TestCreateLocalFrontendGRPCConnectionIsCached(t *testing.T) {
 
 func TestCreateRemoteFrontendGRPCConnection_CachedPerAddress(t *testing.T) {
 	f := NewFactory(nil, primitives.FrontendService, log.NewNoopLogger(),
-		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil)
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
 
 	firstA := f.CreateRemoteFrontendGRPCConnection("remote-a:7233")
 	secondA := f.CreateRemoteFrontendGRPCConnection("remote-a:7233")
@@ -43,7 +43,7 @@ func TestCreateRemoteFrontendGRPCConnection_CachedPerAddress(t *testing.T) {
 // Concurrent first callers for one rpcAddress converge on a single connection.
 func TestCreateRemoteFrontendGRPCConnection_ConcurrentSameAddressConverges(t *testing.T) {
 	f := NewFactory(nil, primitives.FrontendService, log.NewNoopLogger(),
-		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil)
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
 
 	const goroutines = 20
 	conns := make([]*grpc.ClientConn, goroutines)
