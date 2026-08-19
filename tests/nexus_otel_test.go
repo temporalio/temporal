@@ -336,7 +336,7 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	s.Require().True(spanContext.IsValid())
 	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
 	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
-	s.requireNexusTaskIDSpans(exporter)
+	s.requireNexusTaskGRPCSpans(exporter)
 }
 
 // Verifies the namespace and task queue route propagates tracing and records handler failures without forwarding.
@@ -389,11 +389,11 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	}})
 	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
 	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
-	s.requireNexusTaskIDSpans(exporter)
+	s.requireNexusTaskGRPCSpans(exporter)
 }
 
 // Verifies Xray can join the separate dispatch, poll, and response traces by task ID.
-func (s *NexusOTELSuite) requireNexusTaskIDSpans(exporter *tracetest.InMemoryExporter) {
+func (s *NexusOTELSuite) requireNexusTaskGRPCSpans(exporter *tracetest.InMemoryExporter) {
 	s.T().Helper()
 	const matchingServicePrefix = "temporal.server.api.matchingservice.v1.MatchingService/"
 	respondSpanName := matchingServicePrefix + "RespondNexusTask"
