@@ -212,10 +212,8 @@ func (g *GeneratorTaskHandler) Validate(
 	)
 }
 
-// generatorBufferCapacity returns how many additional BufferedStarts the
-// Generator may buffer before hitting maxBufferSize. completedCount must be
-// the actual number of completed BufferedStarts currently buffered (see
-// incompleteBufferedStartCount), not the recentActionCount retention cap.
+// generatorBufferCapacity returns the number of starts the Generator can add.
+// Completed starts are retained for reporting and do not consume capacity.
 func generatorBufferCapacity(bufferedCount, completedCount, maxBufferSize int) int {
 	return maxBufferSize - incompleteBufferedStartCount(bufferedCount, completedCount)
 }

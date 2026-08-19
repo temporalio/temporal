@@ -289,14 +289,16 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 	), nil
 }
 
-// backfillerBufferCapacity returns how many additional BufferedStarts a single
-// Backfiller may buffer. Backfillers collectively get at most half of
-// maxBufferSize, minus a reserve held back for the Generator, split evenly
-// across all concurrently active backfillers. completedCount must be the
-// actual number of completed BufferedStarts currently buffered (see
-// incompleteBufferedStartCount), not the recentActionCount retention cap.
+// backfillerBufferCapacity returns the number of starts one Backfiller can add.
+// Backfillers share half the buffer after pending starts and the Generator's
+// reserve are removed. Completed starts do not consume capacity.
 func backfillerBufferCapacity(bufferedCount, completedCount, maxBufferSize, generatorReserve, backfillerCount int) int {
 	backfillerCount = max(1, backfillerCount)
-	available := max(0, (maxBufferSize/2)-incompleteBufferedStartCount(bufferedCount, completedCount)-generatorReserve)
+	available := max(0, backfillerBufferPoolSize(maxBufferSize, generatorReserve)-incompleteBufferedStartCount(bufferedCount, completedCount))
 	return available / backfillerCount
+}
+
+// backfillerBufferPoolSize returns the buffer capacity shared by Backfillers.
+func backfillerBufferPoolSize(maxBufferSize, generatorReserve int) int {
+	return max(0, maxBufferSize/2-generatorReserve)
 }

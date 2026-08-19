@@ -431,13 +431,8 @@ func (i *Invoker) waitingBufferedStartCount() int {
 	return count
 }
 
-// completedBufferedStartCount returns the number of BufferedStarts that have
-// finished execution and are retained purely for recent-action reporting
-// (applyCompletedRetention caps this at recentActionCount, but the live count
-// can be lower, e.g. early in a schedule's life). This is the actual discount
-// the capacity calculations in generator_tasks.go and backfiller_tasks.go
-// apply — using the retention cap instead of this live count would let
-// unrelated pending/running starts be mistaken for discountable history.
+// completedBufferedStartCount returns the number of completed starts currently
+// retained for reporting.
 func (i *Invoker) completedBufferedStartCount() int {
 	count := 0
 	for _, start := range i.GetBufferedStarts() {
@@ -474,15 +469,8 @@ func (i *Invoker) applyCompletedRetention() {
 	i.BufferedStarts = append(nonCompleted, completed...)
 }
 
-// incompleteBufferedStartCount discounts the actual number of completed
-// BufferedStarts (see Invoker.completedBufferedStartCount) from the raw
-// buffered count, so that entries applyCompletedRetention keeps around purely
-// for recent-action reporting don't themselves consume admission capacity.
-// completedCount must be the live count, not the recentActionCount retention
-// cap: subtracting the cap unconditionally would discount unrelated
-// pending/running starts whenever the buffer holds fewer completions than the
-// cap allows, letting MaxBufferSize be exceeded. Shared by the Generator's and
-// Backfiller's capacity calculations so the two can't drift out of sync.
+// incompleteBufferedStartCount returns the number of starts that are pending
+// or running. Completed starts are retained for reporting only.
 func incompleteBufferedStartCount(bufferedCount, completedCount int) int {
 	return max(0, bufferedCount-completedCount)
 }
