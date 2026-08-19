@@ -3,7 +3,10 @@ package circuitbreakerpool
 import (
 	"fmt"
 
+	"github.com/sony/gobreaker"
 	"go.temporal.io/server/common/circuitbreaker"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -21,6 +24,7 @@ type OutboundQueueCircuitBreakerPool struct {
 func OutboundQueueCircuitBreakerPoolProvider(
 	namespaceRegistry namespace.Registry,
 	config *configs.Config,
+	logger log.Logger,
 ) *OutboundQueueCircuitBreakerPool {
 	return &OutboundQueueCircuitBreakerPool{
 		CircuitBreakerPool: NewCircuitBreakerPool(
@@ -37,6 +41,7 @@ func OutboundQueueCircuitBreakerPoolProvider(
 						key.NamespaceID,
 						key.Destination,
 					),
+					OnStateChange: onStateChange(key, nsName.String(), logger),
 				})
 				initial, cancel := config.OutboundQueueCircuitBreakerSettings(
 					nsName.String(),
@@ -48,5 +53,35 @@ func OutboundQueueCircuitBreakerPoolProvider(
 				return cb
 			},
 		),
+	}
+}
+
+// onStateChange returns the gobreaker state-change hook that logs the transition. Without it an
+// opening breaker is invisible: the blocked tasks are counted by circuit_breaker_executable_blocked,
+// but nothing says when the breaker opened, for which destination, or when it recovered.
+//
+// This logs rather than emitting a metric because destination is unbounded for callback targets
+// (customer-controlled URLs), so a metric keyed on it would be a high-cardinality addition.
+//
+// gobreaker invokes this hook while holding its internal mutex, so it must stay cheap. Transitions
+// are bounded by the breaker's own Interval/Timeout settings, not by request volume.
+//
+// Note that TwoStepCircuitBreakerWithDynamicSettings replaces the underlying gobreaker instance when
+// its dynamic config changes, which resets state without a transition being observed here.
+func onStateChange(
+	key tasks.TaskGroupNamespaceIDAndDestination,
+	nsName string,
+	logger log.Logger,
+) func(name string, from gobreaker.State, to gobreaker.State) {
+	return func(_ string, from gobreaker.State, to gobreaker.State) {
+		logger.Warn(
+			"outbound queue circuit breaker state change",
+			tag.WorkflowNamespace(nsName),
+			tag.WorkflowNamespaceID(key.NamespaceID),
+			tag.NewStringTag("destination", key.Destination),
+			tag.NewStringTag("task-group", key.TaskGroup),
+			tag.NewStringTag("from-state", from.String()),
+			tag.NewStringTag("to-state", to.String()),
+		)
 	}
 }
