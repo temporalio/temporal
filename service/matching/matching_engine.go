@@ -627,7 +627,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		// Later poll and response spans derive the same ID from the task token,
-		// preserving correlation when the task is delivered from the backlog.
+		// allowing them to be correlated with this span.
 		workerTaskID := tasktoken.WorkflowWorkerTaskID(
 			taskInfo.GetNamespaceId(),
 			taskInfo.GetRunId(),
@@ -678,7 +678,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		// Later poll and response spans derive the same ID from the task token,
-		// preserving correlation when the task is delivered from the backlog.
+		// allowing them to be correlated with this span.
 		workerTaskID := tasktoken.ActivityWorkerTaskID(
 			taskInfo.GetNamespaceId(),
 			taskInfo.GetRunId(),
@@ -1172,8 +1172,8 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return resp, err
 	}
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		// grpc instrumentation reconstructs this locally assigned ID from the task token,
-		// correlating the poll and response RPCs.
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
 		workerTaskID := tasktoken.QueryWorkerTaskID(queryRequest.GetNamespaceId(), taskID)
 		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
@@ -2718,11 +2718,12 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return resp, nil
 	}
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		// grpc instrumentation reconstructs this locally assigned ID from the task token,
-		// correlating the poll and response RPCs.
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
 		workerTaskID := tasktoken.NexusWorkerTaskID(request.GetNamespaceId(), taskID)
 		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
+
 	// If we get here it means that task dispatch has occurred locally.
 	// Must wait on result channel to get query result.
 	select {
