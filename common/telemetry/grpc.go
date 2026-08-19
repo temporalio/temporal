@@ -28,6 +28,11 @@ type (
 	// ClientStatsHandler gives a named type to the grpc.UnaryClientInterceptor implementation provided by otelgrpc.
 	ClientStatsHandler stats.Handler
 
+	// taskTokenCarrier is implemented by RPC payloads carrying serialized task tokens.
+	taskTokenCarrier interface {
+		GetTaskToken() []byte
+	}
+
 	customServerStatsHandler struct {
 		isDebug         bool
 		wrapped         stats.Handler
@@ -193,8 +198,9 @@ func (c *customServerStatsHandler) annotateTags(
 	}
 }
 
+// workerTaskID returns the correlation ID from a supported task-token payload, or empty if unavailable.
 func (c *customServerStatsHandler) workerTaskID(payload any) string {
-	tokenCarrier, ok := payload.(interface{ GetTaskToken() []byte })
+	tokenCarrier, ok := payload.(taskTokenCarrier)
 	if !ok {
 		return ""
 	}
@@ -222,11 +228,11 @@ func (c *customServerStatsHandler) workerTaskID(payload any) string {
 			if err == nil {
 				return tasktoken.QueryWorkerTaskID(token.GetNamespaceId(), token.GetTaskId())
 			}
-			return ""
-		}
-		token, err := c.tokenSerializer.Deserialize(taskToken)
-		if err == nil {
-			return tasktoken.WorkflowWorkerTaskID(token.GetNamespaceId(), token.GetRunId(), token.GetScheduledEventId())
+		} else {
+			token, err := c.tokenSerializer.Deserialize(taskToken)
+			if err == nil {
+				return tasktoken.WorkflowWorkerTaskID(token.GetNamespaceId(), token.GetRunId(), token.GetScheduledEventId())
+			}
 		}
 	case *workflowservice.RespondWorkflowTaskCompletedRequest,
 		*workflowservice.RespondWorkflowTaskFailedRequest:
