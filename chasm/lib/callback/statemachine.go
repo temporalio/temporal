@@ -12,9 +12,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// callbackDestination returns the "destination" the callback is targeting. This value is used for the
-// outbound queue's rate limits and circuit breaking. For Nexus deliveries it is the target URL's scheme and
-// host. For Worker callbacks, it is the target task queue.
+// callbackDestination returns the "destination" the callback is targeting. On the outbound queue
+// this keys the per-(namespace, destination) rate limits and circuit breaking. It also picks the
+// queue: a task with an empty destination goes to the transfer queue instead, see taskCategory
+// in chasm/tree.go.
 func callbackDestination(cb *callbackspb.Callback) (string, error) {
 	switch variant := cb.GetVariant().(type) {
 	case *callbackspb.Callback_Nexus_:
@@ -27,6 +28,10 @@ func callbackDestination(cb *callbackspb.Callback) (string, error) {
 		// Use a new "worker" scheme to avoid colliding with any other type of callback variant.
 		return "worker://" + variant.Worker.GetTaskQueueName(), nil
 	default:
+		// Only reachable if a newer server persisted a variant this build doesn't know about.
+		// Returning an error would fail the whole transaction that completed the execution,
+		// which is worse. An empty destination is valid: the task lands on the transfer queue,
+		// which runs CHASM side-effect tasks just fine.
 		return "", nil
 	}
 }

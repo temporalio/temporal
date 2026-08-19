@@ -9876,10 +9876,11 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		tests := []struct {
 			Name     string
 			Callback *commonpb.Callback
+			ErrMsg   string
 		}{
 			{
-				"worker",
-				&commonpb.Callback{
+				Name: "worker",
+				Callback: &commonpb.Callback{
 					Variant: &commonpb.Callback_Worker_{
 						Worker: &commonpb.Callback_Worker{
 							TaskQueueName: "completions-task-queue",
@@ -9888,10 +9889,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 						},
 					},
 				},
+				// The validator rejects the Worker variant explicitly, before it reaches
+				// the unknown-variant fallback.
+				ErrMsg: "worker callbacks are not enabled for this execution type",
 			},
 			{
-				"nil",
-				&commonpb.Callback{},
+				Name:     "nil",
+				Callback: &commonpb.Callback{},
+				ErrMsg:   "unknown callback variant",
 			},
 		}
 		for _, test := range tests {
@@ -9911,10 +9916,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 				})
 
 				require.Nil(t, resp)
-
-				var unimplementedErr *serviceerror.Unimplemented
-				require.ErrorAs(t, err, &unimplementedErr)
-				require.ErrorContains(t, err, "unknown callback variant")
+				require.ErrorContains(t, err, test.ErrMsg)
 			})
 		}
 	})

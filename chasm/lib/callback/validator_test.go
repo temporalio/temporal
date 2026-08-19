@@ -149,9 +149,9 @@ func TestValidateCallbacks(t *testing.T) {
 			}},
 		}
 		err := v.Validate(context.Background(), "ns", cbs)
-		var unimplementedErr *serviceerror.Unimplemented
-		require.ErrorAs(t, err, &unimplementedErr)
-		require.Contains(t, err.Error(), "unknown callback variant")
+		var argError *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &argError)
+		require.Contains(t, err.Error(), "worker callbacks are not enabled for this execution type")
 	})
 
 	t.Run("EmptyCallbacksNoError", func(t *testing.T) {

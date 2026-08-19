@@ -1177,10 +1177,12 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 	tests := []struct {
 		Name     string
 		Callback *commonpb.Callback
+		// ErrTarget is a pointer to a serviceerror pointer, as expected by ErrorAs.
+		ErrMsg string
 	}{
 		{
-			"worker",
-			&commonpb.Callback{
+			Name: "worker",
+			Callback: &commonpb.Callback{
 				Variant: &commonpb.Callback_Worker_{
 					Worker: &commonpb.Callback_Worker{
 						TaskQueueName: "completions-task-queue",
@@ -1189,19 +1191,21 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 					},
 				},
 			},
+			// The validator rejects the Worker variant explicitly, before it reaches
+			// the unknown-variant fallback.
+			ErrMsg: "worker callbacks are not enabled for this execution type",
 		},
 		{
-			"nil variant",
-			&commonpb.Callback{},
+			Name:     "nil variant",
+			Callback: &commonpb.Callback{},
+			ErrMsg:   "unknown callback variant",
 		},
 	}
 
 	for _, test := range tests {
 		s.Run(test.Name, func() {
-			var unimplementedErr *serviceerror.Unimplemented
 			_, err := s.startWorkflowWithCallbacks([]*commonpb.Callback{test.Callback})
-			s.ErrorAs(err, &unimplementedErr)
-			s.ErrorContains(err, "unknown callback variant")
+			s.Require().ErrorContains(err, test.ErrMsg)
 		})
 	}
 }

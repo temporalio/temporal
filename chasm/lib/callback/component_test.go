@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -87,11 +88,14 @@ func TestFromAPICallback(t *testing.T) {
 				},
 			},
 			{
-				Variant: &commonpb.Link_NexusOperationCallback_{
-					NexusOperationCallback: &commonpb.Link_NexusOperationCallback{
-						OperationId: "operation-id",
-						RequestId:   "request-id",
-						RunId:       "run-id",
+				Variant: &commonpb.Link_Callback_{
+					Callback: &commonpb.Link_Callback{
+						Execution: &commonpb.Execution{
+							Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+							BusinessId: "nexus-operation-id",
+							RunId:      "run-id",
+						},
+						RequestId: "request-id",
 					},
 				},
 			},
@@ -114,7 +118,7 @@ func TestFromAPICallback(t *testing.T) {
 				gotLinks := got.GetLinks()
 				require.Len(t, gotLinks, 2)
 				require.NotNil(t, gotLinks[0].GetWorkflowEvent())
-				require.NotNil(t, gotLinks[1].GetNexusOperationCallback())
+				require.NotNil(t, gotLinks[1].GetCallback())
 
 				// Verify that a deep copy was used. (Different references.)
 				require.NotSame(t, links[0], gotLinks[0])

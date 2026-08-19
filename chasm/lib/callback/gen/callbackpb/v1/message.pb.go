@@ -401,13 +401,17 @@ func (x *Callback_Nexus) GetHeader() map[string]string {
 	return nil
 }
 
-// Forked from the definition in the api repo with comments stripped.
+// Forked from temporal.api.common.v1.Callback.Worker in the api repo, with abbreviated comments.
 type Callback_Worker struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskQueueName string                 `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
-	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
-	Operation     string                 `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
-	SourceContext *v11.Payload           `protobuf:"bytes,4,opt,name=source_context,json=sourceContext,proto3" json:"source_context,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Nexus task queue the Temporal worker is listening on.
+	TaskQueueName string `protobuf:"bytes,1,opt,name=task_queue_name,json=taskQueueName,proto3" json:"task_queue_name,omitempty"`
+	// Target Nexus service.
+	Service string `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
+	// Target operation.
+	Operation string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
+	// Arbitrary user-supplied data from the source operation's callsite.
+	SourceContext *v11.Payload `protobuf:"bytes,4,opt,name=source_context,json=sourceContext,proto3" json:"source_context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -485,7 +489,7 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\x1anext_attempt_schedule_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\t \x01(\tR\trequestId\x1a\x10\n" +
-	"\x0eWorkflowClosed\"\xf0\x04\n" +
+	"\x0eWorkflowClosed\"\xea\x04\n" +
 	"\bCallback\x12T\n" +
 	"\x05nexus\x18\x02 \x01(\v2<.temporal.server.chasm.lib.callbacks.proto.v1.Callback.NexusH\x00R\x05nexus\x12W\n" +
 	"\x06worker\x18\x04 \x01(\v2=.temporal.server.chasm.lib.callbacks.proto.v1.Callback.WorkerH\x00R\x06worker\x122\n" +
@@ -501,7 +505,7 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1c\n" +
 	"\toperation\x18\x03 \x01(\tR\toperation\x12F\n" +
 	"\x0esource_context\x18\x04 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\rsourceContextB\t\n" +
-	"\avariantJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04*\xc9\x01\n" +
+	"\avariantJ\x04\b\x01\x10\x02*\xc9\x01\n" +
 	"\x0eCallbackStatus\x12\x1f\n" +
 	"\x1bCALLBACK_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CALLBACK_STATUS_STANDBY\x10\x01\x12\x1d\n" +

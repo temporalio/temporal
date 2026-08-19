@@ -79,7 +79,7 @@ func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (invocable, error) {
-	// Only Nexus-variant callbacks are supported.
+	// Only Nexus-variant callbacks are supported for now.
 	callback := c.GetCallback().GetNexus()
 	if callback == nil {
 		return nil, queueserrors.NewUnprocessableTaskError(
@@ -191,8 +191,9 @@ func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
 		}
 		return res, nil
 	case *commonpb.Callback_Worker_:
-		// Conversion is supported so worker callbacks can be persisted, but
-		// invoking them is not yet implemented.
+		// Conversion is implemented ahead of the rest of the feature, but is currently
+		// unreachable. If somehow this gets persisted, executing the callback will
+		// fail with an UnprocessableTaskError and retried until it is DLQ'd.
 		res.Variant = &callbackspb.Callback_Worker_{
 			Worker: &callbackspb.Callback_Worker{
 				TaskQueueName: variant.Worker.GetTaskQueueName(),
