@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/temporalio/sqlparser"
+	otellog "go.opentelemetry.io/otel/log"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -311,6 +312,7 @@ func NewWorkflowHandler(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
+	eventLogger otellog.Logger,
 	throttledLogger log.Logger,
 	persistenceExecutionName string,
 	clusterMetadataManager persistence.ClusterMetadataManager,
@@ -349,6 +351,7 @@ func NewWorkflowHandler(
 		versionChecker:        headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
 			logger,
+			eventLogger,
 			persistenceMetadataManager,
 			namespaceRegistry,
 			clusterMetadata,
@@ -685,12 +688,12 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
 
-	allLinks := make([]*commonpb.Link, 0, len(request.GetLinks())+len(request.GetCompletionCallbacks()))
-	allLinks = append(allLinks, request.GetLinks()...)
-	for _, cb := range request.GetCompletionCallbacks() {
-		allLinks = append(allLinks, cb.GetLinks()...)
-	}
-	if err := commonlinks.Validate(allLinks, wh.config.MaxLinksPerRequest(namespaceName.String()), wh.config.LinkMaxSize(namespaceName.String())); err != nil {
+	if err := commonlinks.ValidateRequest(
+		request.GetLinks(),
+		request.GetCompletionCallbacks(),
+		wh.config.MaxLinksPerRequest(namespaceName.String()),
+		wh.config.LinkMaxSize(namespaceName.String()),
+	); err != nil {
 		return nil, err
 	}
 
@@ -5478,7 +5481,17 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		}
 	}
 
-	return nil
+	request.GetRequest().Links = dedupLinksFromCallbacks(
+		request.GetRequest().GetLinks(),
+		request.GetRequest().GetCompletionCallbacks(),
+	)
+
+	return commonlinks.ValidateRequest(
+		request.GetRequest().GetLinks(),
+		request.GetRequest().GetCompletionCallbacks(),
+		wh.config.MaxLinksPerRequest(namespaceName.String()),
+		wh.config.LinkMaxSize(namespaceName.String()),
+	)
 }
 
 func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
@@ -7252,7 +7265,9 @@ func (wh *WorkflowHandler) CreateWorkflowRule(
 		request.GetSpec(),
 		request.GetIdentity(),
 		request.GetDescription(),
-		request.GetNamespace())
+		request.GetNamespace(),
+		request.GetForceScan(),
+		request.GetRequestId())
 	if err != nil {
 		return nil, err
 	}

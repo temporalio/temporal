@@ -2111,6 +2111,9 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	}
 	ai.Version = ms.GetCurrentVersion()
 	ai.LastHeartbeatDetails = request.Details
+	if identity := request.GetIdentity(); identity != "" {
+		ai.RetryLastWorkerIdentity = identity
+	}
 	now := ms.timeSource.Now()
 	ai.LastHeartbeatUpdateTime = timestamppb.New(now)
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
@@ -4475,13 +4478,14 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		}
 	}
 
+	ms.approximateSize -= ai.Size()
 	if deployment != nil {
 		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment))
 		ai.LastDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)
 	}
-
 	ai.WorkerControlTaskQueue = workerControlTaskQueue
 	ai.StartedClock = startedClock
+	ms.approximateSize += ai.Size()
 
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
@@ -4501,8 +4505,11 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 
 	// This is a transient start so no events is being created for it. But we still need to process possible build
 	// ID redirect.
-	if err := ms.applyActivityBuildIdRedirect(ai, buildId, redirectCounter); err != nil {
-		return nil, err
+	ms.approximateSize -= ai.Size()
+	redirectErr := ms.applyActivityBuildIdRedirect(ai, buildId, redirectCounter)
+	ms.approximateSize += ai.Size()
+	if redirectErr != nil {
+		return nil, redirectErr
 	}
 
 	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
@@ -4545,9 +4552,9 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	ai.StartedTime = event.GetEventTime()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
-	ms.approximateSize += ai.Size()
 
 	err := ms.applyActivityBuildIdRedirect(ai, worker_versioning.BuildIdIfUsingVersioning(attributes.GetWorkerVersion()), attributes.GetBuildIdRedirectCounter())
+	ms.approximateSize += ai.Size()
 	return err
 }
 
