@@ -12,8 +12,11 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	commonpb "go.temporal.io/api/common/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/api"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/stats"
@@ -99,6 +102,117 @@ func Test_ServerStatsHandler(t *testing.T) {
 		otelStatsHandler := telemetry.NewServerStatsHandler(tp, tmp, nil)
 		require.Nil(t, otelStatsHandler)
 	})
+}
+
+func TestServerStatsHandlerAnnotatesWorkerTask(t *testing.T) {
+	t.Parallel()
+
+	serializer := tasktoken.NewSerializer()
+	taskToken, err := serializer.Serialize(&tokenspb.Task{
+		NamespaceId:      "namespace-id",
+		RunId:            "run-id",
+		ScheduledEventId: 42,
+	})
+	require.NoError(t, err)
+	queryToken, err := serializer.SerializeQueryTaskToken(&tokenspb.QueryTask{
+		NamespaceId: "namespace-id",
+		TaskId:      "query-id",
+	})
+	require.NoError(t, err)
+	nexusToken, err := serializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+		NamespaceId: "namespace-id",
+		TaskId:      "nexus-id",
+	})
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name         string
+		method       string
+		payload      any
+		outbound     bool
+		workerTaskID string
+	}{
+		{
+			name:         "WorkflowPoll",
+			method:       "PollWorkflowTaskQueue",
+			payload:      &workflowservice.PollWorkflowTaskQueueResponse{TaskToken: taskToken},
+			outbound:     true,
+			workerTaskID: "v1/workflow/namespace-id/run-id/42",
+		},
+		{
+			name:         "WorkflowCompletion",
+			method:       "RespondWorkflowTaskCompleted",
+			payload:      &workflowservice.RespondWorkflowTaskCompletedRequest{TaskToken: taskToken},
+			workerTaskID: "v1/workflow/namespace-id/run-id/42",
+		},
+		{
+			name:         "ActivityPoll",
+			method:       "PollActivityTaskQueue",
+			payload:      &workflowservice.PollActivityTaskQueueResponse{TaskToken: taskToken},
+			outbound:     true,
+			workerTaskID: "v1/activity/namespace-id/run-id/42",
+		},
+		{
+			name:         "ActivityCompletion",
+			method:       "RespondActivityTaskCompleted",
+			payload:      &workflowservice.RespondActivityTaskCompletedRequest{TaskToken: taskToken},
+			workerTaskID: "v1/activity/namespace-id/run-id/42",
+		},
+		{
+			name:   "QueryPoll",
+			method: "PollWorkflowTaskQueue",
+			payload: &workflowservice.PollWorkflowTaskQueueResponse{
+				TaskToken: queryToken,
+				Query:     &querypb.WorkflowQuery{},
+			},
+			outbound:     true,
+			workerTaskID: "v1/query/namespace-id/query-id",
+		},
+		{
+			name:         "QueryCompletion",
+			method:       "RespondQueryTaskCompleted",
+			payload:      &workflowservice.RespondQueryTaskCompletedRequest{TaskToken: queryToken},
+			workerTaskID: "v1/query/namespace-id/query-id",
+		},
+		{
+			name:         "NexusPoll",
+			method:       "PollNexusTaskQueue",
+			payload:      &workflowservice.PollNexusTaskQueueResponse{TaskToken: nexusToken},
+			outbound:     true,
+			workerTaskID: "v1/nexus/namespace-id/nexus-id",
+		},
+		{
+			name:         "NexusCompletion",
+			method:       "RespondNexusTaskCompleted",
+			payload:      &workflowservice.RespondNexusTaskCompletedRequest{TaskToken: nexusToken},
+			workerTaskID: "v1/nexus/namespace-id/nexus-id",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			exporter := tracetest.NewInMemoryExporter()
+			tp := trace.NewTracerProvider(trace.WithSyncer(exporter))
+			handler := telemetry.NewServerStatsHandler(tp, propagation.TraceContext{}, nil)
+			ctx := handler.TagRPC(context.Background(), &stats.RPCTagInfo{
+				FullMethodName: api.WorkflowServicePrefix + tc.method,
+			})
+			if tc.outbound {
+				handler.HandleRPC(ctx, &stats.OutPayload{Payload: tc.payload})
+			} else {
+				handler.HandleRPC(ctx, &stats.InPayload{Payload: tc.payload})
+			}
+			handler.HandleRPC(ctx, &stats.End{})
+
+			spans := exporter.GetSpans()
+			require.Len(t, spans, 1)
+			attrs := attribute.NewSet(spans[0].Attributes...)
+			workerTaskID, ok := attrs.Value(telemetry.WorkerTaskIDKey)
+			require.True(t, ok)
+			require.Equal(t, tc.workerTaskID, workerTaskID.AsString())
+		})
+	}
 }
 
 func Test_ClientStatsHandler(t *testing.T) {

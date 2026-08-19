@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -59,7 +58,6 @@ import (
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -625,6 +623,9 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		Priority:         addRequest.Priority,
 	}
 
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		annotateWorkerTask(span, workflowWorkerTaskID(taskInfo))
+	}
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
 		forwardInfo: addRequest.ForwardInfo,
@@ -665,6 +666,9 @@ func (e *matchingEngineImpl) AddActivityTask(
 		ComponentRef:     addRequest.ComponentRef,
 	}
 
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		annotateWorkerTask(span, activityWorkerTaskID(taskInfo))
+	}
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
 		forwardInfo: addRequest.ForwardInfo,
@@ -1149,7 +1153,9 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if resp != nil || err != nil {
 		return resp, err
 	}
-
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		annotateWorkerTask(span, queryWorkerTaskID(queryRequest.GetNamespaceId(), taskID))
+	}
 	// if we get here it means that dispatch of query task has occurred locally
 	// must wait on result channel to get query result
 	select {
@@ -2662,10 +2668,6 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	if err != nil {
 		return nil, err
 	}
-	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, taskID))
-	}
-
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
 	defer cancel()
@@ -2693,7 +2695,9 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	if resp != nil {
 		return resp, nil
 	}
-
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		annotateWorkerTask(span, nexusWorkerTaskID(request.GetNamespaceId(), taskID))
+	}
 	// If we get here it means that task dispatch has occurred locally.
 	// Must wait on result channel to get query result.
 	select {
@@ -2796,9 +2800,6 @@ pollLoop:
 		}
 
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), ns.Name().String(), pollMetadata)
-		if span := trace.SpanFromContext(ctx); span.IsRecording() {
-			span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, task.nexus.taskID))
-		}
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken:             serializedToken,
@@ -2809,10 +2810,7 @@ pollLoop:
 	}
 }
 
-func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
-	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, request.GetTaskId()))
-	}
+func (e *matchingEngineImpl) RespondNexusTaskCompleted(_ context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
@@ -2825,10 +2823,7 @@ func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, requ
 	return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
 }
 
-func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
-	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, request.GetTaskId()))
-	}
+func (e *matchingEngineImpl) RespondNexusTaskFailed(_ context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)

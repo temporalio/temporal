@@ -345,17 +345,17 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskSpan{
 		{
 			TraceID: 1,
-			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
+			Name:    "temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue",
 			TaskID:  1,
 		},
 		{
 			TraceID: 2,
-			Name:    "temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue",
+			Name:    "temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted",
 			TaskID:  1,
 		},
 		{
 			TraceID: 3,
-			Name:    "temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskCompleted",
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
 			TaskID:  1,
 		},
 	})
@@ -414,76 +414,49 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskSpan{
 		{
 			TraceID: 1,
-			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
+			Name:    "temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue",
 			TaskID:  1,
 		},
 		{
 			TraceID: 2,
-			Name:    "temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue",
+			Name:    "temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed",
 			TaskID:  1,
 		},
 		{
 			TraceID: 3,
-			Name:    "temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed",
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
 			TaskID:  1,
 		},
 	})
 }
 
-// requireNexusTaskGRPCSpans compares matching gRPC spans after assigning stable trace and task IDs.
+// requireNexusTaskGRPCSpans compares worker task gRPC spans after assigning stable trace and task IDs.
 func (s *NexusOTELSuite) requireNexusTaskGRPCSpans(
 	exporter *tracetest.InMemoryExporter,
 	expected []nexusTaskSpan,
 ) {
 	s.T().Helper()
-	s.Await(func(s *NexusOTELSuite) {
-		actual := s.nexusTaskGRPCSpans(exporter.GetSpans())
-		s.Require().Len(actual, len(expected))
-		s.Require().Equal(expected, actual)
-	}, 10*time.Second, 100*time.Millisecond)
+	requireExportedSpans(s, exporter, expected, s.nexusTaskGRPCSpans)
 }
 
 func (s *NexusOTELSuite) nexusTaskGRPCSpans(spans tracetest.SpanStubs) []nexusTaskSpan {
-	const matchingServicePrefix = "temporal.server.api.matchingservice.v1.MatchingService/"
-	spans = slices.DeleteFunc(spans, func(span tracetest.SpanStub) bool {
-		if !strings.HasPrefix(span.Name, matchingServicePrefix) {
-			return true
-		}
-		for _, attr := range span.Attributes {
-			if string(attr.Key) == telemetry.WorkerTaskIDKey {
-				return false
-			}
-		}
-		return true
+	spans = testtelemetry.FilterSpans(spans, func(span tracetest.SpanStub) bool {
+		_, ok := testtelemetry.SpanAttribute(span, telemetry.WorkerTaskIDKey)
+		return ok
 	})
 	slices.SortFunc(spans, func(a, b tracetest.SpanStub) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 
-	traceIDs := make(map[oteltrace.TraceID]int)
-	taskIDs := make(map[string]int)
+	localSpanIDs := testtelemetry.LocalSpanIDs(spans)
+	localTaskIDs := testtelemetry.LocalAttributeIDs(spans, telemetry.WorkerTaskIDKey)
+
 	result := make([]nexusTaskSpan, 0, len(spans))
-	for _, span := range spans {
-		traceID := span.SpanContext.TraceID()
-		if _, ok := traceIDs[traceID]; !ok {
-			traceIDs[traceID] = len(traceIDs) + 1
-		}
-		var taskID string
-		for _, attr := range span.Attributes {
-			if string(attr.Key) == telemetry.WorkerTaskIDKey {
-				taskID = attr.Value.AsString()
-				break
-			}
-		}
-		if taskID != "" {
-			if _, ok := taskIDs[taskID]; !ok {
-				taskIDs[taskID] = len(taskIDs) + 1
-			}
-		}
+	for i, span := range spans {
 		result = append(result, nexusTaskSpan{
-			TraceID: traceIDs[traceID],
+			TraceID: localSpanIDs[i].Trace,
 			Name:    span.Name,
-			TaskID:  taskIDs[taskID],
+			TaskID:  localTaskIDs[i],
 		})
 	}
 	return result
