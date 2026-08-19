@@ -935,14 +935,12 @@ func (s *timerSequenceSuite) TestGetUserTimerTimeout() {
 		Attempt:      1,
 	}
 
-	timerSequence, ok := s.timerSequence.getUserTimerTimeout(timerInfo)
-	s.True(ok)
+	timerSequence := s.timerSequence.getUserTimerTimeout(timerInfo)
 	s.Equal(expectedTimerSequence, timerSequence)
 
 	timerInfo.TaskStatus = TimerTaskStatusNone
 	expectedTimerSequence.TimerCreated = false
-	timerSequence, ok = s.timerSequence.getUserTimerTimeout(timerInfo)
-	s.True(ok)
+	timerSequence = s.timerSequence.getUserTimerTimeout(timerInfo)
 	s.Equal(expectedTimerSequence, timerSequence)
 }
 

@@ -171,11 +171,7 @@ func (t *timerSequenceImpl) LoadAndSortUserTimers() []TimerSequenceID {
 
 	for _, timerInfo := range pendingTimers {
 
-		if sequenceID, ok := t.getUserTimerTimeout(
-			timerInfo,
-		); ok {
-			timers = append(timers, sequenceID)
-		}
+		timers = append(timers, t.getUserTimerTimeout(timerInfo))
 	}
 
 	sort.Sort(timers)
@@ -224,7 +220,7 @@ func (t *timerSequenceImpl) LoadAndSortActivityTimers() []TimerSequenceID {
 
 func (t *timerSequenceImpl) getUserTimerTimeout(
 	timerInfo *persistencespb.TimerInfo,
-) (TimerSequenceID, bool) {
+) TimerSequenceID {
 
 	expiryTime := timerInfo.ExpiryTime
 
@@ -234,7 +230,7 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 		TimerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		TimerCreated: timerInfo.TaskStatus == TimerTaskStatusCreated,
 		Attempt:      1,
-	}, true
+	}
 }
 
 // activityTimerMasks is every activity timer task bit, ordered to match the entries of
