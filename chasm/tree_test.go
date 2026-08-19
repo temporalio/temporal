@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -34,6 +35,14 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func logTagValues(tags []tag.Tag) map[string]any {
+	values := make(map[string]any, len(tags))
+	for _, logTag := range tags {
+		values[logTag.Key()] = logTag.Value()
+	}
+	return values
+}
 
 type (
 	nodeSuite struct {
@@ -3824,11 +3833,12 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 		},
 	)
 
-	// One valid task, one invalid task
+	// One valid task, one invalid task.
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).Return(false, nil).Times(1)
-	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).Return(true, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).
+		DoAndReturn(func(_ Context, _ any, _ TaskInvocation, task *TestPureTask) (bool, error) {
+			return string(task.Data) != "root-task-payload", nil
+		}).Times(2)
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Execute(
 			gomock.AssignableToTypeOf(&mutableCtx{}),
@@ -3901,6 +3911,45 @@ func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 	s.NoError(err)
 	s.Empty(mutations.DeletedNodes)
 	s.Equal([]time.Time{taskStartTime, nextTaskTime}, observedTimes)
+}
+
+// TestExecuteImmediatePureTaskSkipsPostExecutionValidation verifies that immediate pure tasks
+// do not undergo post-execution validation, even when DLQScheduledPureTaskOnValidation is enabled.
+// Immediate tasks that remain valid after execution succeed without error.
+func (s *nodeSuite) TestExecuteImmediatePureTaskSkipsPostExecutionValidation() {
+	root := s.testComponentTree()
+	// Enable the DLQ validation flag to confirm it has no effect on immediate tasks.
+	s.nodeBackend.HandleChasmDLQScheduledPureTaskOnValidationEnabled = func() bool { return true }
+
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
+	pureTask := &TestPureTask{
+		Data: []byte("root-task-payload"),
+	}
+	mutableContext.AddTask(testComponent, taskAttributes, pureTask)
+
+	// Pre-execution validate (true) then execute succeed; no post-execution validate expected.
+	gomock.InOrder(
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Eq(pureTask)).Return(true, nil).Times(1),
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Execute(
+				gomock.AssignableToTypeOf(&mutableCtx{}),
+				gomock.Any(),
+				gomock.Eq(taskAttributes),
+				gomock.Eq(pureTask),
+			).Return(nil).Times(1),
+	)
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
 }
 
 func (s *nodeSuite) TestEachPureTask() {
@@ -4095,11 +4144,12 @@ func (s *nodeSuite) TestExecutePureTask() {
 		},
 	}
 
-	taskAttributes := TaskAttributes{}
+	taskAttributes := TaskAttributes{ScheduledTime: s.timeSource.Now()}
 	pureTask := &TestPureTask{
 		Data: []byte("some-random-data"),
 	}
 
+	s.nodeBackend.HandleChasmDLQScheduledPureTaskOnValidationEnabled = func() bool { return true }
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	s.NotNil(root)
@@ -4121,11 +4171,31 @@ func (s *nodeSuite) TestExecutePureTask() {
 			Return(retValue, errValue).
 			Times(1)
 	}
+	type validateResult struct {
+		valid bool
+		err   error
+	}
+	expectValidateSequence := func(results ...validateResult) {
+		calls := make([]*gomock.Call, 0, len(results))
+		for _, result := range results {
+			calls = append(calls, s.testLibrary.mockPureTaskHandler.EXPECT().
+				Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).
+				Return(result.valid, result.err).Times(1))
+		}
+		orderedCalls := make([]any, 0, len(calls))
+		for _, call := range calls {
+			orderedCalls = append(orderedCalls, call)
+		}
+		gomock.InOrder(orderedCalls...)
+	}
 
-	// Succeed task execution and validation (happy case).
+	// Succeed task execution and post-execution validation reports the task is invalid.
 	root.setValueState(valueStateSynced)
 	expectExecute(nil)
-	expectValidate(true, nil)
+	expectValidateSequence(
+		validateResult{valid: true},
+		validateResult{valid: false},
+	)
 	executed, err := root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.True(executed)
@@ -4137,6 +4207,45 @@ func (s *nodeSuite) TestExecutePureTask() {
 	root.setValueState(valueStateSynced)
 	expectExecute(expectedErr)
 	expectValidate(true, nil)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	s.ErrorIs(expectedErr, err)
+	s.Equal(valueStateNeedSyncStructure, root.valueState)
+
+	// Succeed execution, but post-execution validation still returns valid.
+	root.setValueState(valueStateSynced)
+	expectExecute(nil)
+	expectValidateSequence(
+		validateResult{valid: true},
+		validateResult{valid: true},
+	)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
+	s.ErrorContains(err, "CHASM pure task remained valid after successful execution")
+	s.NotContains(err.Error(), "LogicalTask{")
+	var taskNotInvalidatedErr *TaskNotInvalidatedError
+	s.ErrorAs(err, &taskNotInvalidatedErr)
+	s.True(taskNotInvalidatedErr.IsTerminalTaskError())
+	s.Equal("pure", taskNotInvalidatedErr.TaskKind)
+	s.Equal(testPureTaskFQN, taskNotInvalidatedErr.TaskType)
+	s.Equal(testPureTaskTypeID, taskNotInvalidatedErr.TaskTypeID)
+	s.Equal(testComponentTypeID, taskNotInvalidatedErr.ArchetypeID)
+	s.Empty(taskNotInvalidatedErr.ComponentPath)
+	s.Empty(taskNotInvalidatedErr.EncodedComponentPath)
+	s.Equal(taskAttributes.ScheduledTime, taskNotInvalidatedErr.TaskAttributes.ScheduledTime)
+	s.False(taskNotInvalidatedErr.TaskAttributes.IsImmediate())
+	logTags := logTagValues(taskNotInvalidatedErr.LogTags())
+	s.Equal(testPureTaskFQN, logTags["chasm-task-type"])
+	s.Equal(testPureTaskTypeID, logTags["chasm-task-type-id"])
+	s.Empty(logTags["chasm-component-path"])
+	s.Equal(taskAttributes.ScheduledTime, logTags["chasm-task-scheduled-time"])
+	s.Equal(valueStateNeedSyncStructure, root.valueState)
+
+	// Succeed execution, but post-execution validation errors.
+	root.setValueState(valueStateSynced)
+	expectExecute(nil)
+	expectValidateSequence(
+		validateResult{valid: true},
+		validateResult{valid: false, err: expectedErr},
+	)
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 	s.Equal(valueStateNeedSyncStructure, root.valueState)
@@ -4156,6 +4265,25 @@ func (s *nodeSuite) TestExecutePureTask() {
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
+
+	// When DLQScheduledPureTaskOnValidation is disabled, remaining valid after execution is not an error.
+	s.nodeBackend.HandleChasmDLQScheduledPureTaskOnValidationEnabled = func() bool { return false }
+	rootNoDLQ, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+	rootNoDLQ.setValueState(valueStateSynced)
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Eq(pureTask)).
+		Return(true, nil).Times(1)
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Execute(
+			gomock.AssignableToTypeOf(&mutableCtx{}),
+			gomock.AssignableToTypeOf(&TestComponent{}),
+			gomock.Eq(taskAttributes),
+			gomock.Eq(pureTask),
+		).Return(nil).Times(1)
+	executed, err = rootNoDLQ.ExecutePureTask(ctx, taskAttributes, pureTask)
+	s.NoError(err)
+	s.True(executed)
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
