@@ -587,21 +587,35 @@ func (r *StreamReceiverImpl) highFamilyTrackingCount() int {
 // once drained.
 func (r *StreamReceiverImpl) memberLaneWatermarks() map[string]WatermarkInfo {
 	r.memberLaneMu.Lock()
-	defer r.memberLaneMu.Unlock()
-	out := make(map[string]WatermarkInfo, len(r.memberLanes))
+	lanes := make(map[string]*memberLane, len(r.memberLanes))
 	for ns, lane := range r.memberLanes {
+		lanes[ns] = lane
+	}
+	r.memberLaneMu.Unlock()
+
+	out := make(map[string]WatermarkInfo, len(lanes))
+	for ns, lane := range lanes {
 		wm := lane.tracker.LowWatermark()
+
+		r.memberLaneMu.Lock()
+		currentLane, ok := r.memberLanes[ns]
+		if !ok || currentLane != lane {
+			r.memberLaneMu.Unlock()
+			continue
+		}
 		// Drop only lanes that are retiring, drained, have tracked at least one
 		// batch (wm != nil), and have no batch between lane resolution and
 		// tracking: deleting a lane mid-batch would orphan that batch outside the
 		// ack fold.
 		if lane.retiring && lane.tracking == 0 && lane.tracker.Size() == 0 && wm != nil {
 			delete(r.memberLanes, ns)
+			r.memberLaneMu.Unlock()
 			continue
 		}
 		if wm != nil {
 			out[ns] = *wm
 		}
+		r.memberLaneMu.Unlock()
 	}
 	return out
 }
