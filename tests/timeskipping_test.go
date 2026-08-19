@@ -74,6 +74,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
+	beforeStart := time.Now()
 
 	// Request leaves MaxSkipPerSession empty; the frontend populates it from dynamic config.
 	inputConfig := &commonpb.TimeSkippingConfig{
@@ -92,11 +93,17 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 		TimeSkippingConfig:  inputConfig,
 	})
 	s.NoError(err)
+	afterStart := time.Now()
 
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
 	s.True(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
 	inputConfig.MaxSessionSkipCount = defaultMaxSkipPerSession // frontend populated this from dynamic config
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
+	startTime := ms.State.ExecutionState.GetStartTime().AsTime()
+	s.False(startTime.Before(beforeStart), "zero-offset start must not move before the admission window")
+	s.False(startTime.After(afterStart), "zero-offset start must not move after the admission window")
+	s.Equal(startTime, ms.State.ExecutionInfo.GetStartTime().AsTime())
+	s.Equal(startTime, ms.State.ExecutionInfo.GetExecutionTime().AsTime())
 }
 
 // TestTimeSkipping_SignalWithStart_DCEnabled verifies that SignalWithStartWorkflowExecution
@@ -237,6 +244,17 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	// No time-skipping config before any update.
 	ms := s.getMutableState(env, tv.WorkflowID(), runID)
 	s.Nil(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig())
+	initialStateStart := ms.State.ExecutionState.GetStartTime().AsTime()
+	initialInfoStart := ms.State.ExecutionInfo.GetStartTime().AsTime()
+	initialExecutionTime := ms.State.ExecutionInfo.GetExecutionTime().AsTime()
+	initialRunExpiration := ms.State.ExecutionInfo.GetWorkflowRunExpirationTime().AsTime()
+	assertAdmissionTimesUnchanged := func() {
+		current := s.getMutableState(env, tv.WorkflowID(), runID)
+		s.Equal(initialStateStart, current.State.ExecutionState.GetStartTime().AsTime())
+		s.Equal(initialInfoStart, current.State.ExecutionInfo.GetStartTime().AsTime())
+		s.Equal(initialExecutionTime, current.State.ExecutionInfo.GetExecutionTime().AsTime())
+		s.Equal(initialRunExpiration, current.State.ExecutionInfo.GetWorkflowRunExpirationTime().AsTime())
+	}
 
 	// First update: enable with a max_elapsed_duration. MaxSkipPerSession is left empty and
 	// populated by the frontend from dynamic config; the persisted config and event carry it.
@@ -249,6 +267,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	ms = s.getMutableState(env, tv.WorkflowID(), runID)
 	s.True(proto.Equal(config1, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
+	assertAdmissionTimesUnchanged()
 	events := collectOptionsEvents()
 	s.Len(events, 1)
 	s.True(proto.Equal(config1, events[0].GetWorkflowExecutionOptionsUpdatedEventAttributes().GetTimeSkippingConfig()))
@@ -263,6 +282,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	ms = s.getMutableState(env, tv.WorkflowID(), runID)
 	s.True(proto.Equal(config2, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
+	assertAdmissionTimesUnchanged()
 	events = collectOptionsEvents()
 	s.Len(events, 2)
 	s.True(proto.Equal(config2, events[1].GetWorkflowExecutionOptionsUpdatedEventAttributes().GetTimeSkippingConfig()))
@@ -275,6 +295,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	ms = s.getMutableState(env, tv.WorkflowID(), runID)
 	s.True(proto.Equal(config3, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
+	assertAdmissionTimesUnchanged()
 	events = collectOptionsEvents()
 	s.Len(events, 3)
 	s.True(proto.Equal(config3, events[2].GetWorkflowExecutionOptionsUpdatedEventAttributes().GetTimeSkippingConfig()))

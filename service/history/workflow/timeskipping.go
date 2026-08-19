@@ -37,7 +37,6 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 		SessionSkipCount:           timeSkippingStatePropagation.GetInitialSkipCount(),
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
-	ms.wrapExecutionTimes(initialSkip)
 	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
 	ms.timeSkippingInfoUpdated = true
 }
@@ -103,28 +102,6 @@ func (ms *MutableStateImpl) setAndStampFastForwardInfo(
 		TransitionCount:          ms.NextTransitionCount(),
 	}
 	return tsi.FastForwardInfoLastUpdateVersionedTransition
-}
-
-func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationpb.Duration) {
-	if initialSkippedDuration == nil || initialSkippedDuration.AsDuration() == 0 {
-		return
-	}
-	accum := initialSkippedDuration.AsDuration()
-	if !timeNotSet(ms.executionState.StartTime) {
-		ms.executionState.StartTime = timestamppb.New(ms.executionState.StartTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.StartTime) {
-		ms.executionInfo.StartTime = timestamppb.New(ms.executionInfo.StartTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.ExecutionTime) {
-		ms.executionInfo.ExecutionTime = timestamppb.New(ms.executionInfo.ExecutionTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.WorkflowRunExpirationTime) {
-		ms.executionInfo.WorkflowRunExpirationTime = timestamppb.New(ms.executionInfo.WorkflowRunExpirationTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.WorkflowExecutionExpirationTime) {
-		ms.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(ms.executionInfo.WorkflowExecutionExpirationTime.AsTime().Add(accum))
-	}
 }
 
 // -- Propagation Methods of Time Skipping
@@ -283,6 +260,15 @@ func (t *timeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 // =============================================================================
 // Time Skipping Utility Functions
 // =============================================================================
+
+// AdjustNowWithTimeSkipping converts a real clock reading to the virtual clock frame inherited
+// through time-skipping state propagation.
+func AdjustNowWithTimeSkipping(
+	now time.Time,
+	statePropagation *commonpb.TimeSkippingStatePropagation,
+) time.Time {
+	return now.Add(statePropagation.GetInitialSkippedDuration().AsDuration())
+}
 
 func NewTimeSkippingInfoUtil(tsi *persistencespb.TimeSkippingInfo) *TimeSkippingInfoUtil {
 	return &TimeSkippingInfoUtil{tsi: tsi}
