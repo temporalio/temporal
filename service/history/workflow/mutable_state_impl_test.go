@@ -5491,7 +5491,7 @@ func (s *mutableStateSuite) verifyChildExecutionInfos(expectedMap, actualMap, or
 	}
 }
 
-func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64]*persistencespb.ActivityInfo) {
+func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap, originMap map[int64]*persistencespb.ActivityInfo) {
 	s.Equal(len(expectedMap), len(actualMap))
 	for k, expected := range expectedMap {
 		actual, ok := actualMap[k]
@@ -5532,7 +5532,15 @@ func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64
 		s.True(proto.Equal(expected.LastUpdateVersionedTransition, actual.LastUpdateVersionedTransition), "LastUpdateVersionedTransition mismatch")
 
 		// special handled fields
-		s.Equal(int32(TimerTaskStatusNone), actual.TimerTaskStatus, "TimerTaskStatus mismatch")
+		// TimerTaskStatus is not replicated state: it records which timer tasks this
+		// cluster created locally. Applying an update may carry over or drop those local
+		// bits (see getActivityTimerTaskStatus), but must never introduce a bit that was
+		// not already set locally, which would claim a task exists when none does.
+		originStatus := int32(TimerTaskStatusNone)
+		if origin, ok := originMap[k]; ok {
+			originStatus = origin.TimerTaskStatus
+		}
+		s.Zero(actual.TimerTaskStatus&^originStatus, "TimerTaskStatus gained a bit that was not set locally")
 	}
 }
 
@@ -5636,7 +5644,7 @@ func (s *mutableStateSuite) verifyMutableState(current, target, origin *MutableS
 	s.True(proto.Equal(target.executionState, current.executionState), "executionState mismatch")
 
 	s.Equal(target.pendingActivityTimerHeartbeats, current.pendingActivityTimerHeartbeats, "pendingActivityTimerHeartbeats mismatch")
-	s.verifyActivityInfos(target.pendingActivityInfoIDs, current.pendingActivityInfoIDs)
+	s.verifyActivityInfos(target.pendingActivityInfoIDs, current.pendingActivityInfoIDs, origin.pendingActivityInfoIDs)
 	s.Equal(target.pendingActivityIDToEventID, current.pendingActivityIDToEventID, "pendingActivityIDToEventID mismatch")
 	compareMapOfProto(s, current.pendingActivityInfoIDs, current.updateActivityInfos)
 	s.Equal(map[int64]struct{}{89: {}}, current.deleteActivityInfos, "deleteActivityInfos mismatch")
@@ -5896,6 +5904,10 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 
 			snapshot := s.buildSnapshot(targetMS)
 			s.Nil(snapshot.ExecutionInfo.SubStateMachinesByType)
+			// Applying an activity update consults the cluster of the local activity info.
+			s.mockShard.Resource.ClusterMetadata.EXPECT().
+				IsVersionFromSameCluster(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
 			err = currentMS.ApplySnapshot(snapshot)
 			s.NoError(err)
 			s.NotNil(currentMS.GetExecutionInfo().SubStateMachinesByType)
@@ -6121,6 +6133,10 @@ func (s *mutableStateSuite) TestApplyMutation() {
 				UpdatedNodes: updateChasmNodes,
 			}).Return(nil).Times(1)
 
+			// Applying an activity update consults the cluster of the local activity info.
+			s.mockShard.Resource.ClusterMetadata.EXPECT().
+				IsVersionFromSameCluster(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
 			err = currentMS.ApplyMutation(mutation)
 			s.NoError(err)
 			s.verifyMutableState(currentMS, targetMS, originMS)
@@ -6339,6 +6355,116 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_NewActivity_NoMask() {
 		int32(TimerTaskStatusNone),
 		s.mutableState.getActivityTimerTaskStatus(nil, startedActivityInfoForMask(int64(99), 1, 1)),
 	)
+}
+
+// TestApplyUpdatesToSubStateMachines_ActivityTimerTaskStatusCarriedOver covers the wiring
+// between applyUpdatesToSubStateMachines and getActivityTimerTaskStatus, rather than the
+// decision function on its own.
+//
+// The getActivityTimerTaskStatus tests above call it directly with a non-nil `current`, so
+// they cannot catch a caller that fails to hand over the local activity info. If `current`
+// arrives nil the function short-circuits to TimerTaskStatusNone and the entire deadline
+// comparison silently degrades to "always reset every bit", which is invisible at the unit
+// level but is the whole behavior in production.
+func (s *mutableStateSuite) TestApplyUpdatesToSubStateMachines_ActivityTimerTaskStatusCarriedOver() {
+	scheduledEventID := int64(90)
+	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
+	scheduledTime := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+
+	// A started activity with a task outstanding for each timer that applies to it.
+	expectedStatus := int32(TimerTaskStatusCreatedScheduleToClose |
+		TimerTaskStatusCreatedStartToClose |
+		TimerTaskStatusCreatedHeartbeat)
+	local := &persistencespb.ActivityInfo{
+		Version:                       failoverVersion,
+		ScheduledEventId:              scheduledEventID,
+		ActivityId:                    "activityID_timer_task_status",
+		ScheduledTime:                 timestamppb.New(scheduledTime),
+		FirstScheduledTime:            timestamppb.New(scheduledTime),
+		StartedEventId:                int64(91),
+		StartedTime:                   timestamppb.New(scheduledTime.Add(time.Second)),
+		ScheduleToCloseTimeout:        durationpb.New(time.Hour),
+		StartToCloseTimeout:           durationpb.New(10 * time.Minute),
+		HeartbeatTimeout:              durationpb.New(time.Minute),
+		TimerTaskStatus:               expectedStatus,
+		LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+	}
+
+	dbState := s.buildWorkflowMutableState()
+	dbState.ActivityInfos[scheduledEventID] = local
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// The replicated copy advances the versioned transition (otherwise the update is
+	// skipped as already applied) but leaves every deadline input untouched.
+	incoming := common.CloneProto(local)
+	incoming.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: failoverVersion,
+		TransitionCount:          2,
+	}
+	incoming.TimerTaskStatus = TimerTaskStatusNone // replicated state carries the peer's bits
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().
+		IsVersionFromSameCluster(failoverVersion, failoverVersion).Return(true).AnyTimes()
+
+	err = mutableState.applyUpdatesToSubStateMachines(
+		map[int64]*persistencespb.ActivityInfo{scheduledEventID: incoming},
+		nil, nil, nil, nil,
+		false,
+	)
+	s.NoError(err)
+
+	// No deadline moved, so every pending timer task is still valid and its bit must be
+	// carried over from the local activity info.
+	applied, ok := mutableState.pendingActivityInfoIDs[scheduledEventID]
+	s.True(ok)
+	s.Equal(expectedStatus, applied.TimerTaskStatus)
+}
+
+// TestApplyUpdatesToSubStateMachines_ChildExecutionClockCarriedOver covers the other
+// sanitizeFn that depends on the local sub state machine, alongside the activity one.
+//
+// ChildExecutionInfo.Clock is a local shard vector clock, and sanitizeChildExecutionInfo
+// strips it before replicating, so the incoming copy always arrives nil. The local value
+// therefore has to be restored on apply, otherwise every replicated update to an existing
+// child execution erases it.
+func (s *mutableStateSuite) TestApplyUpdatesToSubStateMachines_ChildExecutionClockCarriedOver() {
+	initiatedEventID := int64(80)
+	localClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
+
+	dbState := s.buildWorkflowMutableState()
+	local := dbState.ChildExecutionInfos[initiatedEventID]
+	s.NotNil(local, "expected the fixture to have a pending child execution")
+	local.Clock = localClock
+	local.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: local.Version,
+		TransitionCount:          1,
+	}
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// The replicated copy advances the versioned transition and, as the sender sanitized
+	// it, carries no clock.
+	incoming := common.CloneProto(local)
+	incoming.Clock = nil
+	incoming.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: local.Version,
+		TransitionCount:          2,
+	}
+
+	err = mutableState.applyUpdatesToSubStateMachines(
+		nil,
+		nil,
+		map[int64]*persistencespb.ChildExecutionInfo{initiatedEventID: incoming},
+		nil, nil,
+		false,
+	)
+	s.NoError(err)
+
+	applied, ok := mutableState.pendingChildExecutionInfoIDs[initiatedEventID]
+	s.True(ok)
+	s.True(proto.Equal(localClock, applied.Clock), "local child execution clock was not carried over")
 }
 
 func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
