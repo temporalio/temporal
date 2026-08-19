@@ -36,7 +36,7 @@ const (
 	chasmTestTimeout = 10 * time.Second * debug.TimeoutMultiplier
 )
 
-// ChasmSuite runs CHASM functional tests using a pooled dedicated cluster.
+// ChasmSuite runs CHASM functional tests using per-test clusters.
 // Each test is exercised with both the legacy and unified visibility query converters
 // via s.Run subtests named "unified=false" and "unified=true".
 type ChasmSuite struct {
@@ -53,16 +53,13 @@ type chasmTestEnv struct {
 	chasmCtx context.Context
 }
 
-// newChasmTestEnv creates a chasmTestEnv backed by a dedicated cluster with
+// newChasmTestEnv creates a chasmTestEnv with
 // EnableChasm and VisibilityEnableUnifiedQueryConverter overridden for the test.
 func newChasmTestEnv(suiteContext func() context.Context, t *testing.T, unified bool) chasmTestEnv {
 	t.Helper()
 
-	// WithDedicatedCluster acquires an exclusive pooled slot — no fresh cluster
-	// creation per test, unlike passing startup dynamic config.
 	env := testcore.NewEnv(
 		t,
-		testcore.WithDedicatedCluster(),
 		testcore.WithWorkerService("delete namespace workflow"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityEnableUnifiedQueryConverter, unified),

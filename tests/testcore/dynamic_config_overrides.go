@@ -1,6 +1,7 @@
 package testcore
 
 import (
+	"maps"
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -89,3 +90,12 @@ var (
 		dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Key(): 100,
 	}
 )
+
+func defaultDynamicConfigOverridesForCluster(globalNamespacesEnabled bool) map[dynamicconfig.Key]any {
+	overrides := maps.Clone(defaultDynamicConfigOverrides)
+	if globalNamespacesEnabled {
+		delete(overrides, dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Key())
+		delete(overrides, dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Key())
+	}
+	return overrides
+}

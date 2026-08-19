@@ -31,8 +31,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -66,11 +64,13 @@ type (
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
 
-		t *sharedClusterT // proxy T backing Logger; tracks active tests and cluster poison state
+		t *clusterTestOwner // proxy T backing Logger and cluster boot failures
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
-		testClusterConfig *TestClusterConfig
+		testClusterConfig    *TestClusterConfig
+		clusterEventID       int64
+		clusterEventRecorder *clusterEventRecorder
 
 		namespace         namespace.Name
 		namespaceID       namespace.ID
@@ -83,11 +83,10 @@ type (
 
 		// TODO (alex): replace with v2
 		taskPoller *taskpoller.TaskPoller
-
-		// isShared indicates whether this cluster is shared between multiple tests.
-		// Certain operations (e.g. InjectHook, CloseShard) are not safe on shared clusters
-		// and will panic if called.
-		isShared bool
+	}
+	preseededNamespace struct {
+		name namespace.Name
+		id   namespace.ID
 	}
 	// testClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	testClusterParams struct {
@@ -98,14 +97,51 @@ type (
 		FaultInjectionConfig      *config.FaultInjection
 		NumHistoryShards          int32
 		Logger                    log.Logger
-		SharedCluster             bool
 		EnableHistoryTaskRecorder bool
 		EnableReplicationRecorder bool
 		EnableArchival            bool
 		AdditionalServerOptions   []temporal.ServerOption
+		bootPhaseObserver         func(string, time.Duration)
 	}
 	TestClusterOption func(params *testClusterParams)
 )
+
+func newPreseededNamespace(name namespace.Name) preseededNamespace {
+	return preseededNamespace{name: name, id: namespace.ID(uuid.NewString())}
+}
+
+func (n preseededNamespace) createRequest(activeClusterName string) *persistence.CreateNamespaceRequest {
+	aliases := make(map[string]string)
+	expectedSearchAttributes := searchattribute.TestSearchAttributesToRegister()
+	for field, alias := range searchattribute.TestAliases {
+		if _, ok := expectedSearchAttributes[alias]; ok {
+			aliases[field] = alias
+		}
+	}
+	return &persistence.CreateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:          n.id.String(),
+				Name:        n.name.String(),
+				State:       enumspb.NAMESPACE_STATE_REGISTERED,
+				Description: "namespace for functional tests",
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:                    timestamp.DurationFromDays(1),
+				HistoryArchivalState:         enumspb.ARCHIVAL_STATE_DISABLED,
+				VisibilityArchivalState:      enumspb.ARCHIVAL_STATE_DISABLED,
+				BadBinaries:                  &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+				CustomSearchAttributeAliases: aliases,
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: activeClusterName,
+				Clusters:          []string{activeClusterName},
+			},
+			FailoverVersion: common.EmptyVersion,
+		},
+		IsGlobalNamespace: false,
+	}
+}
 
 func init() {
 	// By default, the SDK worker will calculate a checksum of the binary and use that as an identifier.
@@ -148,6 +184,12 @@ func withWorkerService(enabled bool) TestClusterOption {
 	}
 }
 
+func withBootPhaseObserver(observer func(string, time.Duration)) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.bootPhaseObserver = observer
+	}
+}
+
 func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
 	return func(params *testClusterParams) {
 		params.FaultInjectionConfig = cfg
@@ -177,12 +219,6 @@ func WithClusterHistoryTaskRecorder() TestClusterOption {
 func WithReplicationStreamRecorder() TestClusterOption {
 	return func(params *testClusterParams) {
 		params.EnableReplicationRecorder = true
-	}
-}
-
-func WithSharedCluster() TestClusterOption {
-	return func(params *testClusterParams) {
-		params.SharedCluster = true
 	}
 }
 
@@ -262,18 +298,29 @@ func (s *FunctionalTestBase) TearDownSuite() {
 }
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
-	// Reserve a slot from the dedicated test cluster pool.
-	testClusterRouter.dedicated.reserveSlot(s.T())
-	s.setupCluster(options...)
-	clusterRequest{
-		kind:              clusterKindDedicated,
-		dedicatedReason:   "legacy-suite",
+	// Legacy suites own one cluster for their full lifetime.
+	testClusterRouter.reserveLegacyCluster(s.T())
+	request := clusterRequest{
+		reason:            "legacy-suite",
 		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
-	}.recordCreation(s.T())
+	}
+	createdAt := time.Now()
+	phases := newBootPhaseDurations()
+	s.setupCluster(append(options, withBootPhaseObserver(phases.record))...)
+	testClusterRouter.recordClusterCreation(s.T().Name(), s, request, createdAt, phases.snapshot())
 }
 
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
+	s.Require().NoError(s.setupClusterWithOwner(s.T(), options...))
+}
+
+func (s *FunctionalTestBase) setupClusterWithOwner(owner clusterTest, options ...TestClusterOption) error {
 	params := ApplyTestClusterOptions(options)
+	primaryNamespace := newPreseededNamespace(namespace.Name(RandomizeStr("namespace")))
+	externalNamespace := newPreseededNamespace(namespace.Name(RandomizeStr("external-namespace")))
+	s.namespace = primaryNamespace.name
+	s.namespaceID = primaryNamespace.id
+	s.externalNamespace = externalNamespace.name
 
 	// A custom logger supplied via WithClusterLogger takes precedence.
 	if params.Logger != nil {
@@ -284,9 +331,10 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	if s.Logger == nil {
 		// The cluster outlives any single test and s.T() changes as different tests use it,
 		// but the proxy T's Name() must be stable, so this is never updated.
-		s.t = &sharedClusterT{
-			name:      s.T().Name(),
-			logFanout: os.Getenv("CI") != "",
+		if proxy, ok := owner.(*clusterTestOwner); ok {
+			s.t = proxy
+		} else {
+			s.t = &clusterTestOwner{name: owner.Name()}
 		}
 		tl := testlogger.NewTestLogger(s.t, testlogger.FailOnExpectedErrorOnly)
 		// Fail tests when a soft assertion fires (see `softassert` package).
@@ -308,12 +356,8 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableArchival:            params.EnableArchival,
 		AdditionalServerOptions:   params.AdditionalServerOptions,
 		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
-	}
-
-	// Apply configuration for shared clusters.
-	if params.SharedCluster {
-		s.testClusterConfig.Persistence = sharedClusterPersistence(GetPersistenceTestDefaults())
-		s.isShared = true
+		preseededNamespaces:       []preseededNamespace{primaryNamespace, externalNamespace},
+		bootPhaseObserver:         params.bootPhaseObserver,
 	}
 
 	// Initialize the OTEL collector if OTEL is enabled.
@@ -330,25 +374,12 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	var err error
 	testClusterFactory := NewTestClusterFactory()
-	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
-	s.Require().NoError(err)
-
-	// Setup test cluster namespaces.
-	s.namespace = namespace.Name(RandomizeStr("namespace"))
-	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.Require().NoError(err)
-
-	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
-	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.Require().NoError(err)
-}
-
-func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
-	if defaults.StoreType == config.StoreTypeSQL && defaults.SQLDBPluginName == sqlite.PluginName {
-		// Use file-based SQLite for shared clusters to support parallel test access.
-		return *persistencetests.GetSQLiteFileTestClusterOption()
+	clusterOwner := owner
+	if s.t != nil {
+		clusterOwner = s.t
 	}
-	return defaults
+	s.testCluster, err = testClusterFactory.NewCluster(clusterOwner, s.testClusterConfig, s.Logger)
+	return err
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
@@ -461,6 +492,10 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 	}
 	err := s.testCluster.TearDownCluster()
 	s.testCluster = nil
+	if s.clusterEventRecorder != nil {
+		s.clusterEventRecorder.recordClusterDestroyed(s.clusterEventID)
+		s.clusterEventRecorder = nil
+	}
 	return err
 }
 
@@ -583,6 +618,9 @@ func (s *FunctionalTestBase) RegisterNamespace(
 		tag.WorkflowNamespace(nsName.String()),
 		tag.WorkflowNamespaceID(nsID.String()),
 	)
+	if s.clusterEventRecorder != nil {
+		s.clusterEventRecorder.recordNamespaceRegistered(s.clusterEventID, nsName.String())
+	}
 	return nsID, nil
 }
 
@@ -655,11 +693,7 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 }
 
 // CloseShard closes the shard that contains the given workflow.
-// This is a cluster-global operation and cannot be called on shared clusters.
 func (s *FunctionalTestBase) CloseShard(namespaceID string, workflowID string) {
-	if s.isShared {
-		s.T().Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
-	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	_, err := s.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
 		ShardId: shardID,

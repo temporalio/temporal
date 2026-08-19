@@ -57,7 +57,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceTooLong() {
-	env := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
+	env := newNexusTestEnv(s.T(), false)
 	taskQueue := testcore.RandomizeStr("task-queue")
 
 	var namespace strings.Builder
@@ -367,7 +367,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Validate
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound() {
-	env := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
+	env := newNexusTestEnv(s.T(), false)
 	u := getDispatchByEndpointURL(env.HttpAPIAddress(), uuid.NewString())
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)

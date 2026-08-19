@@ -21,7 +21,7 @@ type Versioning3QuerySuite struct {
 }
 
 func TestVersioning3QueryFunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                              //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
+	testcore.UseWorkerServiceForSuite(t, "worker versioning APIs")
 	parallelsuite.RunLegacySequential(t, &Versioning3QuerySuite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
 }
 

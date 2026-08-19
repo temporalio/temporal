@@ -31,8 +31,8 @@ type PollerScalingIntegSuite struct {
 }
 
 func TestPollerScalingFunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                                //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-	parallelsuite.RunLegacySequential(t, &PollerScalingIntegSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	testcore.UseWorkerServiceForSuite(t, "poller scaling deployment APIs")
+	parallelsuite.RunLegacySequential(t, &PollerScalingIntegSuite{}) //nolint:staticcheck // SA1019: suite requires legacy sequential execution.
 }
 
 func (s *PollerScalingIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {

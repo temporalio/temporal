@@ -307,7 +307,7 @@ func (s *HttpApiTestSuite) TestHTTPHostValidation() {
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPIHeaders() {
-	env := s.newTestEnv(testcore.WithDedicatedCluster())
+	env := s.newTestEnv()
 	// Make a claim mapper and authorizer that capture info
 	var lastInfo *authorization.AuthInfo
 	var listWorkflowMetadata metadata.MD
