@@ -1172,9 +1172,12 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return resp, err
 	}
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// grpc instrumentation reconstructs this locally assigned ID from the task token,
+		// correlating the poll and response RPCs.
 		workerTaskID := tasktoken.QueryWorkerTaskID(queryRequest.GetNamespaceId(), taskID)
 		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
+
 	// if we get here it means that dispatch of query task has occurred locally
 	// must wait on result channel to get query result
 	select {
@@ -2715,6 +2718,8 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return resp, nil
 	}
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// grpc instrumentation reconstructs this locally assigned ID from the task token,
+		// correlating the poll and response RPCs.
 		workerTaskID := tasktoken.NexusWorkerTaskID(request.GetNamespaceId(), taskID)
 		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
