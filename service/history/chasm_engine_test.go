@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -1538,8 +1539,8 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 }
 
 // TestPollComponent_ShardClosed verifies that a poll blocked waiting for notifications returns a
-// ShardOwnershipLostError as soon as the shard moves off this host, rather than blocking until the
-// context deadline.
+// ShardOwnershipLost service error as soon as the shard moves off this host, rather than blocking
+// until the context deadline.
 func (s *chasmEngineSuite) TestPollComponent_ShardClosed() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
@@ -1562,12 +1563,21 @@ func (s *chasmEngineSuite) TestPollComponent_ShardClosed() {
 		}, nil).
 		AnyTimes()
 
+	s.mockShard.Resource.HistoryServiceResolver.EXPECT().
+		Lookup(convert.Int32ToString(s.mockShard.GetShardID())).
+		Return(membership.NewHostInfoFromAddress("owner-host:1234"), nil).
+		Times(1)
+	s.mockShard.Resource.HostInfoProvider.EXPECT().
+		HostInfo().
+		Return(membership.NewHostInfoFromAddress("current-host:5678")).
+		Times(1)
+
 	pollErr := make(chan error, 1)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		// Predicate is never satisfied, so the poll subscribes and blocks.
-		_, err := s.engine.pollComponent(
+		_, err := s.engine.PollComponent(
 			ctx,
 			pollRef,
 			func(chasm.Context, chasm.Component) (bool, error) {
@@ -1583,9 +1593,10 @@ func (s *chasmEngineSuite) TestPollComponent_ShardClosed() {
 
 	select {
 	case err := <-pollErr:
-		var solErr *persistence.ShardOwnershipLostError
+		var solErr *serviceerrors.ShardOwnershipLost
 		s.ErrorAs(err, &solErr)
-		s.Equal(s.mockShard.GetShardID(), solErr.ShardID)
+		s.Equal("owner-host:1234", solErr.OwnerHost)
+		s.Equal("current-host:5678", solErr.CurrentHost)
 	case <-time.After(5 * time.Second):
 		s.FailNow("poll did not return after shard close")
 	}
