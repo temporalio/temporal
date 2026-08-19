@@ -14,6 +14,7 @@ func SchedulerWorkflowWithSpecBuilder(b *SpecBuilder) func(workflow.Context, *sc
 			ctx, args, b,
 			func() bool { return false }, // enableCHASMMigration
 			func() bool { return false }, // migrateWithRunningWorkflows
+			func() int { return -1 },     // versionCeiling (no clamp)
 		)
 	}
 }
