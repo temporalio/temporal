@@ -1989,9 +1989,9 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", pauseRequestID)
 	s.NoError(err)
 
-	// Recorded twice: on the pause info, and separately so it survives that being cleared on unpause.
+	// While paused the id lives only on the pause info; it moves to LastPauseRequestId on unpause.
 	s.Equal(pauseRequestID, s.mutableState.executionInfo.GetPauseInfo().GetRequestId())
-	s.Equal(pauseRequestID, s.mutableState.executionInfo.GetLastPauseRequestId())
+	s.Empty(s.mutableState.executionInfo.GetLastPauseRequestId())
 
 	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
@@ -2130,7 +2130,8 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	s.Nil(s.mutableState.executionInfo.PauseInfo)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.mutableState.executionState.Status)
 
-	// Both ids outlive the cleared pause info, so either request's retry can be deduplicated.
+	// Both ids outlive the cleared pause info, so either request's retry can be deduplicated. The
+	// pause id was moved here out of the pause info as it was cleared.
 	s.Equal(unpauseRequestID, s.mutableState.executionInfo.GetLastUnpauseRequestId())
 	s.Equal(pauseRequestID, s.mutableState.executionInfo.GetLastPauseRequestId())
 
@@ -2369,10 +2370,10 @@ func (s *mutableStateSuite) TestNewMutableStateInChain() {
 	}
 }
 
-// TestNewMutableStateInChain_CarriesPauseDedupRequestIDs verifies that the pause and unpause dedup
-// request ids follow the workflow chain, so a successor run recognizes a retry of a request that
-// already took effect on its predecessor.
-func (s *mutableStateSuite) TestNewMutableStateInChain_CarriesPauseDedupRequestIDs() {
+// TestNewMutableStateInChain_CarriesPauseDedupRequestID verifies that the pause dedup request id
+// follows the workflow chain, so a successor run recognizes a pause retry that already took effect
+// on its predecessor, while the unpause id deliberately does not follow it.
+func (s *mutableStateSuite) TestNewMutableStateInChain_CarriesPauseDedupRequestID() {
 	pauseRequestID := uuid.NewString()
 	unpauseRequestID := uuid.NewString()
 
@@ -2399,7 +2400,9 @@ func (s *mutableStateSuite) TestNewMutableStateInChain_CarriesPauseDedupRequestI
 	)
 	s.NoError(err)
 	s.Equal(pauseRequestID, newMutableState.GetExecutionInfo().GetLastPauseRequestId())
-	s.Equal(unpauseRequestID, newMutableState.GetExecutionInfo().GetLastUnpauseRequestId())
+	// A stale unpause retry against the successor only fails with "not paused", so its id is not
+	// worth carrying.
+	s.Empty(newMutableState.GetExecutionInfo().GetLastUnpauseRequestId())
 }
 
 func (s *mutableStateSuite) TestSanitizedMutableState() {

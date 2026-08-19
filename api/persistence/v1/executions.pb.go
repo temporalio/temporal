@@ -375,12 +375,12 @@ type WorkflowExecutionInfo struct {
 	DeclinedTargetVersionUpgrade *v17.DeclinedTargetVersionUpgrade `protobuf:"bytes,114,opt,name=declined_target_version_upgrade,json=declinedTargetVersionUpgrade,proto3" json:"declined_target_version_upgrade,omitempty"`
 	// Time skipping info that contains the config and runtime history of the time skipping for the workflow.
 	TimeSkippingInfo *TimeSkippingInfo `protobuf:"bytes,115,opt,name=time_skipping_info,json=timeSkippingInfo,proto3" json:"time_skipping_info,omitempty"`
-	// Request ids of the most recently applied unpause and pause requests, used to de-dupe those
-	// requests. pause_info carries the pause request id as well, but only while the workflow stays
-	// paused; these outlive it, so a retry of a request that already took effect is recognized as a
-	// duplicate instead of being replayed against a workflow that a later transition moved on. Both
-	// are carried across continue-as-new, since a request naming no run id resolves to whichever run
-	// is current.
+	// Most recently applied unpause and pause request ids, needed to dedupuplicate these.
+	// Since pause_info is no longer available in unpaused, fallback to last_pause_request_id
+	// to de-dupe a pause. last_pause_request_id is written on unpause, moved out of pause_info
+	// as that is cleared, so the id is never held in both at once. Only last_pause_request_id is
+	// carried across continue-as-new, to stop a retry with no run id from pausing the successor;
+	// a stale unpause retry there merely fails with "not paused", so it is not worth the size.
 	LastUnpauseRequestId string `protobuf:"bytes,116,opt,name=last_unpause_request_id,json=lastUnpauseRequestId,proto3" json:"last_unpause_request_id,omitempty"`
 	LastPauseRequestId   string `protobuf:"bytes,117,opt,name=last_pause_request_id,json=lastPauseRequestId,proto3" json:"last_pause_request_id,omitempty"`
 	unknownFields        protoimpl.UnknownFields
