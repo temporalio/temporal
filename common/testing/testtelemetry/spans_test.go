@@ -26,15 +26,15 @@ func TestLocalSpanIDs(t *testing.T) {
 
 	traceID1 := oteltrace.TraceID{1}
 	traceID2 := oteltrace.TraceID{2}
-	spanID1 := oteltrace.SpanID{1}
-	spanID2 := oteltrace.SpanID{2}
+	parentSpanID := oteltrace.SpanID{1}
+	childSpanID := oteltrace.SpanID{2}
 	spanContext := func(traceID oteltrace.TraceID, spanID oteltrace.SpanID) oteltrace.SpanContext {
 		return oteltrace.NewSpanContext(oteltrace.SpanContextConfig{TraceID: traceID, SpanID: spanID})
 	}
 	spans := tracetest.SpanStubs{
-		{SpanContext: spanContext(traceID1, spanID2), Parent: spanContext(traceID1, spanID1)},
-		{SpanContext: spanContext(traceID1, spanID1)},
-		{SpanContext: spanContext(traceID2, spanID1)},
+		{SpanContext: spanContext(traceID1, childSpanID), Parent: spanContext(traceID1, parentSpanID)},
+		{SpanContext: spanContext(traceID1, parentSpanID)},
+		{SpanContext: spanContext(traceID2, parentSpanID)},
 	}
 	require.Equal(t, []LocalSpanID{
 		{Trace: 1, Span: 1, Parent: 2},
