@@ -63,12 +63,21 @@ type (
 		frontendClient workflowservice.WorkflowServiceClient
 	}
 
-	// Per-task context.
-	invokerTaskHandlerContext struct {
-		context.Context
+	// invokerTaskRun holds state shared by one ExecuteTask.
+	invokerTaskRun struct {
+		h              *InvokerExecuteTaskHandler
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		scheduler      *Scheduler
 
-		actionsTaken int
-		maxActions   int
+		budget actionBudget
+	}
+
+	// actionBudget caps the total number of actions a single ExecuteTask may
+	// perform across all phases.
+	actionBudget struct {
+		taken int
+		max   int
 	}
 
 	rateLimitedError struct {
@@ -228,10 +237,10 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	//
 	// Run the phases serially so they consume the same per-task action budget.
 	// Each phase still executes its individual requests concurrently.
-	ictx := h.newInvokerTaskHandlerContext(ctx, scheduler)
-	result = result.Append(h.terminateWorkflows(&ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
-	result = result.Append(h.cancelWorkflows(&ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
-	result = result.Append(h.startWorkflows(&ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, schedulerRef, now))
+	run := h.newTaskRun(logger, metricsHandler, scheduler)
+	result = result.Append(run.terminateWorkflows(ctx, invoker.GetTerminateWorkflows()))
+	result = result.Append(run.cancelWorkflows(ctx, invoker.GetCancelWorkflows()))
+	result = result.Append(run.startWorkflows(ctx, invoker, lastCompletionState, schedulerRef, now))
 
 	// Record action results on the Invoker (internal state), as well as the
 	// Scheduler (user-facing metrics).
@@ -258,43 +267,39 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	return nil
 }
 
-// takeNextAction increments the context's actionTaken counter, returning true if
-// the action should be executed, and false if the task should instead yield.
-func (i *invokerTaskHandlerContext) takeNextAction() bool {
-	allowed := i.actionsTaken < i.maxActions
+// tryTake consumes one unit of the budget, returning true if the action should
+// be executed, and false if the task has exhausted its budget and should yield.
+func (b *actionBudget) tryTake() bool {
+	allowed := b.taken < b.max
 	if allowed {
-		i.actionsTaken++
+		b.taken++
 	}
 	return allowed
 }
 
 // cancelWorkflows does a best-effort attempt to cancel all workflow executions provided in targets.
-func (h *InvokerExecuteTaskHandler) cancelWorkflows(
-	ctx *invokerTaskHandlerContext,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	scheduler *Scheduler,
+func (r *invokerTaskRun) cancelWorkflows(
+	ctx context.Context,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
 	var wg sync.WaitGroup
 	var resultMutex sync.Mutex
 
 	for _, wf := range targets {
-		if !ctx.takeNextAction() {
+		if !r.budget.tryTake() {
 			break
 		}
 
 		// Run all cancels concurrently.
-		newCtx := ctx.Clone()
 		wg.Go(func() {
-			err := h.cancelWorkflow(newCtx, scheduler, wf)
+			err := r.h.cancelWorkflow(ctx, r.scheduler, wf)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Info("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
-				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
+				r.logger.Info("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
+				r.metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 			}
 
 			// Cancels are only attempted once here: transient failures are
@@ -311,32 +316,28 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflows(
 }
 
 // terminateWorkflows does a best-effort attempt to terminate all workflow executions provided in targets.
-func (h *InvokerExecuteTaskHandler) terminateWorkflows(
-	ctx *invokerTaskHandlerContext,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	scheduler *Scheduler,
+func (r *invokerTaskRun) terminateWorkflows(
+	ctx context.Context,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
 	var wg sync.WaitGroup
 	var resultMutex sync.Mutex
 
 	for _, wf := range targets {
-		if !ctx.takeNextAction() {
+		if !r.budget.tryTake() {
 			break
 		}
 
 		// Run all terminates concurrently.
-		newCtx := ctx.Clone()
 		wg.Go(func() {
-			err := h.terminateWorkflow(newCtx, scheduler, wf)
+			err := r.h.terminateWorkflow(ctx, r.scheduler, wf)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Info("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
-				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
+				r.logger.Info("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
+				r.metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 			}
 
 			// Terminates are only attempted once here: transient failures are
@@ -353,17 +354,14 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 }
 
 // startWorkflows executes the provided list of starts, returning a result with their outcomes.
-func (h *InvokerExecuteTaskHandler) startWorkflows(
-	ctx *invokerTaskHandlerContext,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-	scheduler *Scheduler,
+func (r *invokerTaskRun) startWorkflows(
+	ctx context.Context,
 	invoker *Invoker,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	schedulerRef []byte,
 	now time.Time,
 ) (result executeResult) {
-	metricsWithTag := metricsHandler.WithTags(
+	metricsWithTag := r.metricsHandler.WithTags(
 		metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 
 	var wg sync.WaitGroup
@@ -373,7 +371,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		// Starts that haven't been executed yet will remain in `BufferedStarts`,
 		// without change, so another ExecuteTask will be immediately created to continue
 		// processing in a new task.
-		if !ctx.takeNextAction() {
+		if !r.budget.tryTake() {
 			break
 		}
 
@@ -382,15 +380,14 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		start = common.CloneProto(start)
 
 		// Run all starts concurrently.
-		newCtx := ctx.Clone()
 		wg.Go(func() {
-			err := h.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, schedulerRef)
+			err := r.h.startWorkflow(ctx, r.metricsHandler, r.scheduler, start, lastCompletionState, schedulerRef)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Info("failed to start workflow", tag.Error(err))
+				r.logger.Info("failed to start workflow", tag.Error(err))
 
 				// Don't count "already started" for the error metric or retry, as it is most likely
 				// due to misconfiguration.
@@ -399,7 +396,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 				}
 
 				if isRetryableError(err) {
-					h.applyBackoff(start, err, now)
+					r.h.applyBackoff(start, err, now)
 					result.RetryableStarts = append(result.RetryableStarts, start)
 				} else {
 					// Drop the start from the buffer.
@@ -801,27 +798,22 @@ func (r *rateLimitedError) Error() string {
 	return fmt.Sprintf("rate limited for %s", r.delay)
 }
 
-func (h *InvokerExecuteTaskHandler) newInvokerTaskHandlerContext(
-	ctx context.Context,
+func (h *InvokerExecuteTaskHandler) newTaskRun(
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
-) invokerTaskHandlerContext {
+) *invokerTaskRun {
 	tweakables := h.config.Tweakables(scheduler.Namespace)
 	maxActions := tweakables.MaxActionsPerExecution
 	if maxActions <= 0 {
 		maxActions = DefaultTweakables.MaxActionsPerExecution
 	}
 
-	return invokerTaskHandlerContext{
-		Context:      ctx,
-		actionsTaken: 0,
-		maxActions:   maxActions,
-	}
-}
-
-func (i invokerTaskHandlerContext) Clone() invokerTaskHandlerContext {
-	return invokerTaskHandlerContext{
-		Context:      i.Context,
-		actionsTaken: i.actionsTaken,
-		maxActions:   i.maxActions,
+	return &invokerTaskRun{
+		h:              h,
+		logger:         logger,
+		metricsHandler: metricsHandler,
+		scheduler:      scheduler,
+		budget:         actionBudget{max: maxActions},
 	}
 }
