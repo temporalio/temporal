@@ -309,9 +309,8 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 }
 
 // enrichNexusOperationLogger adds Nexus operation context to the handler-side logger. The request ID
-// is the only identifier also recorded caller-side (on the NexusOperationScheduled/Started/TimedOut
-// events), so logging it is what makes both sides of a call greppable as one unit. Unconditional
-// unlike enrichNexusOperationMetrics, since log fields carry no cardinality cost.
+// is the only identifier also recorded caller-side, making both sides of a call greppable together.
+// Unconditional unlike the metrics variant, since log fields carry no cardinality cost.
 func (c *operationContext) enrichNexusOperationLogger(service, operation, requestID string) {
 	tags := []tag.Tag{
 		tag.NexusService(service),
