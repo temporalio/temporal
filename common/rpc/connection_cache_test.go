@@ -20,7 +20,7 @@ const (
 )
 
 func newCacheTestFactory() *RPCFactory {
-	return NewFactory(nil, "tester", log.NewNoopLogger(), metrics.NoopMetricsHandler, nil, "", "", 0, nil, nil, nil, nil, nil)
+	return NewFactory(nil, "tester", log.NewNoopLogger(), metrics.NoopMetricsHandler, nil, "", "", 0, nil, nil, nil, nil, nil, nil)
 }
 
 func cachedConn(f *RPCFactory, hostName string) (*grpc.ClientConn, bool) {
