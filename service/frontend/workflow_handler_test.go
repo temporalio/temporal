@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
@@ -207,6 +208,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetLogger(),
+		wideevents.NoopLogger(),
 		s.mockResource.GetThrottledLogger(),
 		s.mockResource.GetExecutionManager().GetName(),
 		s.mockResource.GetClusterMetadataManager(),
@@ -5329,6 +5331,90 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 // carry (10000 years). Anything beyond it fails durationpb's CheckValid.
 const maxProtoDurationSeconds = int64(315576000000)
 
+func TestValidateActivityFailureNextRetryDelays(t *testing.T) {
+	applicationFailure := func(delay *durationpb.Duration, cause *failurepb.Failure) *failurepb.Failure {
+		return &failurepb.Failure{
+			Cause: cause,
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NextRetryDelay: delay},
+			},
+		}
+	}
+
+	testCases := []struct {
+		name    string
+		failure *failurepb.Failure
+		wantErr bool
+	}{
+		{name: "nil failure"},
+		{name: "nil retry delay", failure: applicationFailure(nil, nil)},
+		{name: "zero retry delay", failure: applicationFailure(durationpb.New(0), nil)},
+		{name: "negative retry delay", failure: applicationFailure(durationpb.New(-time.Second), nil)},
+		{
+			name:    "maximum duration",
+			failure: applicationFailure(&durationpb.Duration{Seconds: maxProtoDurationSeconds}, nil),
+		},
+		{
+			name:    "minimum duration",
+			failure: applicationFailure(&durationpb.Duration{Seconds: -maxProtoDurationSeconds}, nil),
+		},
+		{
+			name:    "mismatched positive seconds",
+			failure: applicationFailure(&durationpb.Duration{Seconds: 1, Nanos: -1}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "mismatched negative seconds",
+			failure: applicationFailure(&durationpb.Duration{Seconds: -1, Nanos: 1}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "nanos above range",
+			failure: applicationFailure(&durationpb.Duration{Nanos: 1000000000}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "nanos below range",
+			failure: applicationFailure(&durationpb.Duration{Nanos: -1000000000}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "seconds above range",
+			failure: applicationFailure(&durationpb.Duration{Seconds: maxProtoDurationSeconds + 1}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "seconds below range",
+			failure: applicationFailure(&durationpb.Duration{Seconds: -maxProtoDurationSeconds - 1}, nil),
+			wantErr: true,
+		},
+		{
+			name: "invalid nested retry delay",
+			failure: applicationFailure(nil, &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+					TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{},
+				},
+				Cause: applicationFailure(&durationpb.Duration{Seconds: 1, Nanos: -1}, nil),
+			}),
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateActivityFailureNextRetryDelays(tc.failure)
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, "NextRetryDelay is not a valid duration")
+		})
+	}
+}
+
 // newScheduleSpecHandler builds the minimum WorkflowHandler that canonicalizeScheduleSpec
 // needs: a config, a spec builder, and a logger for the non-enforcing path. configure is
 // nil to exercise the shipped dynamic config defaults.
@@ -5718,7 +5804,9 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 }
 
 func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
-	wh := s.getWorkflowHandler(s.newConfig())
+	config := s.newConfig()
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
+	wh := s.getWorkflowHandler(config)
 	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
 		return &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         s.testNamespace.String(),
@@ -5758,6 +5846,71 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 
 		s.NoError(err)
 		s.Equal(map[string]string{"x-request-id": "value"}, request.GetRequest().GetCompletionCallbacks()[0].GetNexus().GetHeader())
+	})
+
+	s.Run("deduplicates links from Nexus callbacks", func() {
+		callbackLink := &commonpb.Link{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "job-id"},
+			},
+		}
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback"},
+			},
+			Links: []*commonpb.Link{callbackLink},
+		}})
+		request.Request.Links = []*commonpb.Link{common.CloneProto(callbackLink)}
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		s.NoError(err)
+		s.Empty(request.GetRequest().GetLinks())
+	})
+
+	s.Run("rejects invalid callback links", func() {
+		err := wh.prepareUpdateWorkflowRequest(
+			context.Background(),
+			s.testNamespace,
+			newRequest([]*commonpb.Callback{{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{{
+					Variant: &commonpb.Link_BatchJob_{
+						BatchJob: &commonpb.Link_BatchJob{},
+					},
+				}},
+			}}),
+		)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "batch job link must not have an empty job ID")
+	})
+
+	s.Run("rejects too many combined links", func() {
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{{
+				Variant: &commonpb.Link_BatchJob_{
+					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+				},
+			}},
+		}})
+		request.Request.Links = []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}}
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "cannot attach more than 1 links per request, got 2")
 	})
 }
 

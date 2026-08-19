@@ -236,6 +236,11 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		2*time.Second,
 		`NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config`,
 	)
+	EmitNamespaceLifecycleEvents = NewGlobalBoolSetting(
+		"system.emitNamespaceLifecycleEvents",
+		false,
+		`EmitNamespaceLifecycleEvents controls whether services emit NamespaceLifecycle wide events for namespace CRUD and handover phases. Cluster-level; default off.`,
+	)
 	PersistenceHealthSignalMetricsEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalMetricsEnabled",
 		true,
@@ -1720,7 +1725,7 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
 		"history.emitReplicationLifecycleEvents",
 		false,
-		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied phases). Cluster-level; default off.`,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied/skipped/error phases). Cluster-level; default off.`,
 	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
@@ -2017,6 +2022,11 @@ NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskC
 		`QueueReaderStuckCriticalAttempts is the max number of task loading attempts for a certain task range
 before that task range is split into a separate slice to unblock loading for later range.
 currently only work for scheduled queues and the task range is 1s.`,
+	)
+	QueueReaderStuckShadowMode = NewGlobalBoolSetting(
+		"history.queueReaderStuckShadowMode",
+		false,
+		`QueueReaderStuckShadowMode controls whether reader stuck alerts are suppressed and only logged.`,
 	)
 	QueueCriticalSlicesCount = NewGlobalIntSetting(
 		"history.queueCriticalSlicesCount",

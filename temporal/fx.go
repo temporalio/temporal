@@ -1036,6 +1036,8 @@ var TraceExportModule = fx.Options(
 //     default: propagation.TraceContext{}
 //   - telemetry.ServerStatsHandler
 //   - telemetry.ClientStatsHandler
+//   - telemetry.HTTPClientTransportInstrumenter
+//   - telemetry.HTTPServerHandlerInstrumenter
 var ServiceTracingModule = fx.Options(
 	fx.Supply([]otelsdktrace.BatchSpanProcessorOption{}),
 	fx.Provide(
@@ -1105,6 +1107,8 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
 	fx.Provide(telemetry.NewServerStatsHandler),
 	fx.Provide(telemetry.NewClientStatsHandler),
+	fx.Provide(telemetry.NewHTTPClientTransportInstrumenter),
+	fx.Provide(telemetry.NewHTTPServerHandlerInstrumenter),
 	fx.Provide(metrics.NewServerStatsHandler),
 )
 
