@@ -769,10 +769,9 @@ func testFutureActionTimesAdvanceWhilePaused(t *testing.T, newContext contextFac
 }
 
 // testBufferOneDeferredFiresAfterCompletion exercises the BUFFER_ONE deferred
-// lifecycle end-to-end: an action that gets buffered while a workflow is
-// running must fire once that workflow completes. Without re-enabling the
-// deferred start (Attempt=-1 -> 0 in recordCompletedAction), the buffered
-// fire would be stranded.
+// lifecycle end-to-end. Later ticks must not displace or accumulate alongside
+// the first buffered action, and that action must fire once the running workflow
+// completes.
 func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextFactory) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
@@ -803,6 +802,19 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 && len(desc.GetInfo().GetRunningWorkflows()) == 1
 	}, awaitTimeout, pollInterval, "expected exactly one running workflow with one deferred start buffered behind it")
 	require.Equal(t, int32(1), runs.Load(), "only the first workflow should have fired before the running one completes")
+
+	// Keep the first workflow open across several more ticks. V1 evaluates the
+	// complete buffer and keeps its first entry; CHASM must do the same even after
+	// that entry has been marked deferred (Attempt=-1).
+	require.Never(t, func() bool {
+		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return descErr == nil && (desc.GetInfo().GetBufferSize() != 1 ||
+			len(desc.GetInfo().GetRunningWorkflows()) != 1 || runs.Load() != 1)
+	}, 3*fastInterval, pollInterval,
+		"V1 and CHASM must retain exactly one buffered occurrence while later ticks arrive")
 
 	// Releasing the running workflow must re-enable the deferred start (Attempt=-1 -> 0) so it fires.
 	require.Equal(t, 1, completeRunningWorkflows(ctx, t, s, sid))
