@@ -274,6 +274,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	logTags := outboundCallLogTags(
 		"StartOperation",
 		ns.Name().String(),
+		endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
 		args.requestID,
 		args.operation,
 		args.endpointName,
@@ -733,6 +734,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	logTags := outboundCallLogTags(
 		"CancelOperation",
 		ns.Name().String(),
+		endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
 		args.requestID,
 		args.operation,
 		args.endpointName,
@@ -957,7 +959,7 @@ func createNexusOperationFailure(operation Operation, scheduledEventID int64, ca
 
 func outboundCallLogTags(
 	method string,
-	namespaceName, requestID, operation, endpointName string,
+	namespaceName, targetNamespaceID, requestID, operation, endpointName string,
 	workflowKey definition.WorkflowKey,
 	attemptStart time.Time,
 	attempt int32,
@@ -965,6 +967,7 @@ func outboundCallLogTags(
 	return []tag.Tag{
 		tag.Operation(method),
 		tag.WorkflowNamespace(namespaceName),
+		tag.NexusEndpointTargetNamespaceID(targetNamespaceID),
 		tag.RequestID(requestID),
 		tag.NexusOperation(operation),
 		tag.Endpoint(endpointName),
