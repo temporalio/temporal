@@ -648,12 +648,12 @@ func NewMutableStateInChain(
 	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
 	newMutableState.executionInfo.ChildrenInitializedPostResetPoint = currentMutableState.GetExecutionInfo().ChildrenInitializedPostResetPoint
 
-	// Pause/unpause dedup ids follow the chain to de-dupe the retry request with no run id.
+	// The pause dedup id follows the chain to de-dupe a retry with no run id, which would otherwise
+	// pause the successor run. The unpause id is not carried: such a retry only fails with "not
+	// paused" instead of succeeding as a no-op, which is acceptable and not worth the added size.
 	lastPauseRequestID := currentMutableState.GetExecutionInfo().GetLastPauseRequestId()
-	lastUnpauseRequestID := currentMutableState.GetExecutionInfo().GetLastUnpauseRequestId()
 	newMutableState.executionInfo.LastPauseRequestId = lastPauseRequestID
-	newMutableState.executionInfo.LastUnpauseRequestId = lastUnpauseRequestID
-	newMutableState.approximateSize += len(lastPauseRequestID) + len(lastUnpauseRequestID)
+	newMutableState.approximateSize += len(lastPauseRequestID)
 
 	// TODO: Today other information like autoResetPoints, previousRunID, firstRunID, etc.
 	// are carried over in AddWorkflowExecutionStartedEventWithOptions. Ideally all information
@@ -3246,11 +3246,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 		RequestId: event.GetWorkflowExecutionPausedEventAttributes().GetRequestId(),
 	}
 
-	// Also recorded outside the pause info above, which is cleared on unpause, to de-dupe a retry.
-	requestID := event.GetWorkflowExecutionPausedEventAttributes().GetRequestId()
-	ms.approximateSize += len(requestID) - len(ms.executionInfo.LastPauseRequestId)
-	ms.executionInfo.LastPauseRequestId = requestID
-
 	// Update approximate size of the mutable state. This will be decreased when the pause info is removed (when the workflow is unpaused)
 	ms.approximateSize += ms.executionInfo.PauseInfo.Size()
 
@@ -3327,6 +3322,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 	pauseInfoSize := 0
 	if ms.executionInfo.PauseInfo != nil {
 		pauseInfoSize = ms.GetExecutionInfo().GetPauseInfo().Size()
+		// The pause request id moves out of the pause info as it is cleared, rather than being
+		// stored in both places while paused, so a retry of that pause is still de-duped.
+		pauseRequestID := ms.executionInfo.PauseInfo.GetRequestId()
+		ms.approximateSize += len(pauseRequestID) - len(ms.executionInfo.LastPauseRequestId)
+		ms.executionInfo.LastPauseRequestId = pauseRequestID
 		// Clear pause info in mutable state.
 		ms.executionInfo.PauseInfo = nil
 	}
