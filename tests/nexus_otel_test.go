@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -396,39 +397,27 @@ func (s *NexusOTELSuite) requireNexusHTTPSpans(
 ) tracetest.SpanStubs {
 	s.T().Helper()
 	var httpSpans tracetest.SpanStubs
-	s.Await(func(s *NexusOTELSuite) {
+	requireExportedSpans(s, exporter, expected, func(spans tracetest.SpanStubs) []nexusHTTPSpan {
 		var actual []nexusHTTPSpan
-		actual, httpSpans = s.nexusHTTPSpans(exporter.GetSpans())
-		s.Require().Len(actual, len(expected))
-		s.Require().Equal(expected, actual)
-	}, 10*time.Second, 100*time.Millisecond)
+		actual, httpSpans = s.nexusHTTPSpans(spans)
+		return actual
+	})
 	return httpSpans
 }
 
 func (s *NexusOTELSuite) nexusHTTPSpans(
 	spans tracetest.SpanStubs,
 ) ([]nexusHTTPSpan, tracetest.SpanStubs) {
-	httpSpans := slices.DeleteFunc(spans, func(span tracetest.SpanStub) bool {
-		return span.InstrumentationScope.Name != otelhttp.ScopeName
+	httpSpans := testtelemetry.FilterSpans(spans, func(span tracetest.SpanStub) bool {
+		return span.InstrumentationScope.Name == otelhttp.ScopeName
 	})
 	slices.SortFunc(httpSpans, func(a, b tracetest.SpanStub) int {
 		return a.StartTime.Compare(b.StartTime)
 	})
-
-	traceIDs := make(map[oteltrace.TraceID]int)
-	spanIDs := make(map[oteltrace.TraceID]map[oteltrace.SpanID]int)
-	for _, span := range httpSpans {
-		traceID := span.SpanContext.TraceID()
-		if _, ok := traceIDs[traceID]; !ok {
-			traceIDs[traceID] = len(traceIDs) + 1
-			spanIDs[traceID] = make(map[oteltrace.SpanID]int)
-		}
-		spanIDs[traceID][span.SpanContext.SpanID()] = len(spanIDs[traceID]) + 1
-	}
+	localIDs := testtelemetry.LocalSpanIDs(httpSpans)
 
 	result := make([]nexusHTTPSpan, 0, len(httpSpans))
-	for _, span := range httpSpans {
-		traceID := span.SpanContext.TraceID()
+	for i, span := range httpSpans {
 		var serviceName string
 		if span.Resource != nil {
 			if value, ok := span.Resource.Set().Value(semconv.ServiceNameKey); ok {
@@ -455,9 +444,9 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 			}
 		}
 		result = append(result, nexusHTTPSpan{
-			TraceID:      traceIDs[traceID],
-			SpanID:       spanIDs[traceID][span.SpanContext.SpanID()],
-			ParentSpanID: spanIDs[traceID][span.Parent.SpanID()],
+			TraceID:      localIDs[i].Trace,
+			SpanID:       localIDs[i].Span,
+			ParentSpanID: localIDs[i].Parent,
 			Name:         span.Name,
 			ServiceName:  serviceName,
 			Kind:         span.SpanKind,
@@ -467,4 +456,18 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 		})
 	}
 	return result, httpSpans
+}
+
+func requireExportedSpans[T any](
+	s *NexusOTELSuite,
+	exporter *tracetest.InMemoryExporter,
+	expected []T,
+	project func(tracetest.SpanStubs) []T,
+) {
+	s.T().Helper()
+	s.Await(func(s *NexusOTELSuite) {
+		actual := project(exporter.GetSpans())
+		s.Require().Len(actual, len(expected))
+		s.Require().Equal(expected, actual)
+	}, 10*time.Second, 100*time.Millisecond)
 }
