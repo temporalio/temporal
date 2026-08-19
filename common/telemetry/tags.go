@@ -20,9 +20,8 @@ const (
 	NexusRequestIDKey = "nexus.request_id"
 	NexusServiceKey   = "nexus.service"
 
-	WorkerTaskTypeKey = "worker_task.type"
-	WorkerTaskIDKey   = "worker_task.id"
-
+	WorkerTaskTypeKey        = "worker_task.type"
+	WorkerTaskIDKey          = "worker_task.id"
 	WorkerTaskNamespaceIDKey = "worker_task.namespace_id"
 	WorkerTaskWorkflowIDKey  = "worker_task.workflow_id"
 	WorkerTaskRunIDKey       = "worker_task.run_id"
