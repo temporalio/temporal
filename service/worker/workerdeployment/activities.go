@@ -174,6 +174,11 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 		},
 	)
 	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			// The version is already gone or being deleted, so deletion is idempotently successful.
+			return nil
+		}
 		return err
 	}
 
