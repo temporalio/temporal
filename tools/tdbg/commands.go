@@ -1100,11 +1100,11 @@ func describeScheduleMigrationStatus(c *cli.Context, clientFactory ClientFactory
 			"true at the same time. This needs manual investigation.\n", scheduleID)
 	}
 
-	_, _ = fmt.Fprintf(w, "\nDetails:\n")
+	_, _ = fmt.Fprint(w, "\nDetails:\n")
 	_, _ = fmt.Fprintf(w, "  %-22s[workflow ID %s]: %s\n", "V1 (workflow-backed)", v1ID, v1.describe())
 	_, _ = fmt.Fprintf(w, "  %-22s[business ID %s]: %s\n", "V2 (CHASM)", rawID, v2.describe())
 
-	_, _ = fmt.Fprintf(w, "\nInspect further:\n")
+	_, _ = fmt.Fprint(w, "\nInspect further:\n")
 	_, _ = fmt.Fprintf(w, "  V1: tdbg execution describe --workflow-id %s -n %s\n", v1ID, ns)
 	_, _ = fmt.Fprintf(w, "  V2: tdbg execution describe --workflow-id %s --archetype %s -n %s\n", rawID, chasm.SchedulerArchetype, ns)
 
