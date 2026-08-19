@@ -3,13 +3,13 @@ package callback
 import (
 	"fmt"
 	"maps"
-	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -79,18 +79,18 @@ func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (invocable, error) {
-	target := c.CompletionSource.Get(ctx)
-
-	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
-	if err != nil {
-		return nil, err
-	}
-
+	// Only Nexus-variant callbacks are supported for now.
 	callback := c.GetCallback().GetNexus()
 	if callback == nil {
 		return nil, queueserrors.NewUnprocessableTaskError(
-			fmt.Sprintf("unprocessable callback variant: %v", callback),
+			fmt.Sprintf("unprocessable callback variant: %T", c.GetCallback().GetVariant()),
 		)
+	}
+
+	target := c.CompletionSource.Get(ctx)
+	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
+	if err != nil {
+		return nil, err
 	}
 
 	if callback.Url == chasm.NexusCompletionHandlerURL {
@@ -148,11 +148,11 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	// Convert CHASM callback proto to API callback proto
 	chasmCB := c.GetCallback()
 	res := &commonpb.Callback{
-		Links: slices.Clone(chasmCB.GetLinks()),
+		Links: common.CloneProtoSlice(chasmCB.GetLinks()),
 	}
 
-	// CHASM currently only supports Nexus callbacks
-	if variant, ok := chasmCB.Variant.(*callbackspb.Callback_Nexus_); ok {
+	switch variant := chasmCB.GetVariant().(type) {
+	case *callbackspb.Callback_Nexus_:
 		res.Variant = &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
 				Url:    variant.Nexus.GetUrl(),
@@ -160,10 +160,52 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 			},
 		}
 		return res, nil
+	case *callbackspb.Callback_Worker_:
+		res.Variant = &commonpb.Callback_Worker_{
+			Worker: &commonpb.Callback_Worker{
+				TaskQueueName: variant.Worker.GetTaskQueueName(),
+				Service:       variant.Worker.GetService(),
+				Operation:     variant.Worker.GetOperation(),
+				SourceContext: common.CloneProto(variant.Worker.GetSourceContext()),
+			},
+		}
+		return res, nil
+	default:
+		return nil, serviceerror.NewInternalf("unsupported CHASM callback type: %T", variant)
+	}
+}
+
+// FromAPICallback converts an API callback into a CHASM callback proto.
+func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
+	res := &callbackspb.Callback{
+		Links: common.CloneProtoSlice(cb.GetLinks()),
 	}
 
-	// This should not happen as CHASM only supports Nexus callbacks currently
-	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
+	switch variant := cb.GetVariant().(type) {
+	case *commonpb.Callback_Nexus_:
+		res.Variant = &callbackspb.Callback_Nexus_{
+			Nexus: &callbackspb.Callback_Nexus{
+				Url:    variant.Nexus.GetUrl(),
+				Header: maps.Clone(variant.Nexus.GetHeader()),
+			},
+		}
+		return res, nil
+	case *commonpb.Callback_Worker_:
+		// Conversion is implemented ahead of the rest of the feature, but is currently
+		// unreachable. If somehow this gets persisted, executing the callback will
+		// fail with an UnprocessableTaskError and retried until it is DLQ'd.
+		res.Variant = &callbackspb.Callback_Worker_{
+			Worker: &callbackspb.Callback_Worker{
+				TaskQueueName: variant.Worker.GetTaskQueueName(),
+				Service:       variant.Worker.GetService(),
+				Operation:     variant.Worker.GetOperation(),
+				SourceContext: common.CloneProto(variant.Worker.GetSourceContext()),
+			},
+		}
+		return res, nil
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
+	}
 }
 
 // ScheduleStandbyCallbacks transitions all STANDBY callbacks to SCHEDULED state,

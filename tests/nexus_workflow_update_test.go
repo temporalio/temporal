@@ -593,6 +593,83 @@ func (s *NexusWorkflowUpdateTestSuite) TestDescribeWorkflowShowsUpdateCallbacks(
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
 }
 
+func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateRejectsNonNexusCallbacks() {
+	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+
+	wf := newUpdateChildWorkflow(false)
+	s.startWorker(env, taskQueue, wf)
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, wf, "initial input")
+	s.NoError(err)
+
+	tests := []struct {
+		Name     string
+		Callback *commonpb.Callback
+		ErrMsg   string
+	}{
+		{
+			Name: "worker",
+			Callback: &commonpb.Callback{
+				Variant: &commonpb.Callback_Worker_{
+					Worker: &commonpb.Callback_Worker{
+						TaskQueueName: "completions-task-queue",
+						Service:       "HTTPAdapter",
+						Operation:     "DeliverAsWebhook",
+					},
+				},
+			},
+			// The validator rejects the Worker variant explicitly, before it reaches
+			// the unknown-variant fallback.
+			ErrMsg: "worker callbacks are not enabled for this execution type",
+		},
+		{
+			Name:     "nil variant",
+			Callback: &commonpb.Callback{},
+			ErrMsg:   "unknown callback variant",
+		},
+	}
+
+	// Not using subtests since the the test scenarios are all using the same
+	// workflow and test environment.
+	for _, test := range tests {
+		resp, err := env.FrontendClient().UpdateWorkflowExecution(ctx, &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: run.GetID(),
+				RunId:      run.GetRunID(),
+			},
+			WaitPolicy: &updatepb.WaitPolicy{
+				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
+			},
+			Request: &updatepb.Request{
+				Meta: &updatepb.Meta{
+					UpdateId: testcore.RandomizeStr("update-id"),
+				},
+				Input: &updatepb.Input{
+					Name: "update",
+					Args: &commonpb.Payloads{
+						Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")},
+					},
+				},
+				RequestId:           uuid.NewString(),
+				CompletionCallbacks: []*commonpb.Callback{test.Callback},
+			},
+		})
+		s.Nil(resp, test.Name)
+		s.ErrorContains(err, test.ErrMsg, test.Name)
+	}
+
+	// The requested updates never reached the workflow. Signal it to stop gracefully.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("done: initial input", result)
+}
+
 // TestWorkflowUpdateCallbackAfterResetInflightUpdate verifies that when a workflow is
 // reset while an update with completion callbacks is in-flight (accepted but not completed),
 // the update is reapplied in the new run and the callback fires when the update completes.

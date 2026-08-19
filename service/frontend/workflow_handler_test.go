@@ -1125,7 +1125,11 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() 
 	s.ErrorContains(err, "nexus operation link must not have an empty run ID field")
 }
 
-func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallbackLinks() {
+// Creates a valid StartWorkflowExecution request, but overwrites the CompletionCallbacks field with
+// the supplied data. Returns the result.
+func (s *WorkflowHandlerSuite) startWorkflowWithCallbacks(
+	cbs []*commonpb.Callback,
+) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -1139,17 +1143,23 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		RequestId: uuid.NewString(),
-		CompletionCallbacks: []*commonpb.Callback{
-			{
-				Variant: &commonpb.Callback_Internal_{
-					Internal: &commonpb.Callback_Internal{},
-				},
-				Links: []*commonpb.Link{
-					{
-						Variant: &commonpb.Link_WorkflowEvent_{
-							WorkflowEvent: &commonpb.Link_WorkflowEvent{},
-						},
+		RequestId:           uuid.NewString(),
+		CompletionCallbacks: cbs,
+	}
+
+	return wh.StartWorkflowExecution(context.Background(), req)
+}
+
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallbackLinks() {
+	cbs := []*commonpb.Callback{
+		{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{
+				{
+					Variant: &commonpb.Link_WorkflowEvent_{
+						WorkflowEvent: &commonpb.Link_WorkflowEvent{},
 					},
 				},
 			},
@@ -1157,9 +1167,47 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 	}
 
 	var invalidArgument *serviceerror.InvalidArgument
-	_, err := wh.StartWorkflowExecution(context.Background(), req)
+	_, err := s.startWorkflowWithCallbacks(cbs)
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "workflow event link must not have an empty namespace field")
+}
+
+// Assert that Workflows can only accept Nexus-variant callbacks. (Or Internal.)
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallback() {
+	tests := []struct {
+		Name     string
+		Callback *commonpb.Callback
+		// ErrTarget is a pointer to a serviceerror pointer, as expected by ErrorAs.
+		ErrMsg string
+	}{
+		{
+			Name: "worker",
+			Callback: &commonpb.Callback{
+				Variant: &commonpb.Callback_Worker_{
+					Worker: &commonpb.Callback_Worker{
+						TaskQueueName: "completions-task-queue",
+						Service:       "HTTPAdapter",
+						Operation:     "DeliverAsWebhook",
+					},
+				},
+			},
+			// The validator rejects the Worker variant explicitly, before it reaches
+			// the unknown-variant fallback.
+			ErrMsg: "worker callbacks are not enabled for this execution type",
+		},
+		{
+			Name:     "nil variant",
+			Callback: &commonpb.Callback{},
+			ErrMsg:   "unknown callback variant",
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.Name, func() {
+			_, err := s.startWorkflowWithCallbacks([]*commonpb.Callback{test.Callback})
+			s.Require().ErrorContains(err, test.ErrMsg)
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregatedLinks() {
