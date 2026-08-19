@@ -26,5 +26,5 @@ func NexusWorkerTaskID(namespaceID string, taskID string) string {
 }
 
 func workerTaskID(taskType string, parts ...string) string {
-	return "v1/" + taskType + "/" + strings.Join(parts, "/")
+	return taskType + "/" + strings.Join(parts, "/")
 }
