@@ -129,35 +129,46 @@ func TestHandleNexusCompletion_Success(t *testing.T) {
 }
 
 func TestHandleNexusCompletion_ExistingAllowAllDoesNotUpdateCompletionState(t *testing.T) {
-	sched, ctx, node := setupSchedulerForTest(t)
-	initial := &schedulerpb.LastCompletionResult{Success: &commonpb.Payload{Data: []byte("previous-result")}}
-	sched.LastCompletionResult = chasm.NewDataField(ctx, initial)
-	sched.Schedule.Policies.PauseOnFailure = true
-	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
-		RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
-		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-		ActualTime:    timestamppb.New(time.Now().Add(-time.Minute)),
-		StartTime:     timestamppb.New(time.Now().Add(-30 * time.Second)),
-	}}
+	for _, tc := range []struct {
+		name   string
+		manual bool
+	}{
+		{name: "generator", manual: false},
+		{name: "backfiller", manual: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sched, ctx, node := setupSchedulerForTest(t)
+			initial := &schedulerpb.LastCompletionResult{Success: &commonpb.Payload{Data: []byte("previous-result")}}
+			sched.LastCompletionResult = chasm.NewDataField(ctx, initial)
+			sched.Schedule.Policies.PauseOnFailure = true
+			sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
+				RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				ActualTime:    timestamppb.New(time.Now().Add(-time.Minute)),
+				StartTime:     timestamppb.New(time.Now().Add(-30 * time.Second)),
+				Manual:        tc.manual,
+			}}
 
-	err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
-		RequestId: "req-1",
-		Outcome: &persistencespb.ChasmNexusCompletion_Failure{
-			Failure: &failurepb.Failure{Message: "allow-all failure"},
-		},
-		CloseTime: timestamppb.Now(),
-	})
-	require.NoError(t, err)
-	_, err = node.CloseTransaction()
-	require.NoError(t, err)
+			err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: "req-1",
+				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+					Failure: &failurepb.Failure{Message: "allow-all failure"},
+				},
+				CloseTime: timestamppb.Now(),
+			})
+			require.NoError(t, err)
+			_, err = node.CloseTransaction()
+			require.NoError(t, err)
 
-	readCtx := chasm.NewContext(context.Background(), node)
-	require.Equal(t, initial, sched.LastCompletionResult.Get(readCtx))
-	require.False(t, sched.Schedule.State.Paused)
-	invoker := sched.Invoker.Get(readCtx)
-	require.Empty(t, invoker.GetBufferedStarts())
-	require.Len(t, sched.Info.GetRecentActions(), 1)
-	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, sched.Info.GetRecentActions()[0].GetStartWorkflowStatus())
+			readCtx := chasm.NewContext(context.Background(), node)
+			require.Equal(t, initial, sched.LastCompletionResult.Get(readCtx))
+			require.False(t, sched.Schedule.State.Paused)
+			invoker := sched.Invoker.Get(readCtx)
+			require.Empty(t, invoker.GetBufferedStarts())
+			require.Len(t, sched.Info.GetRecentActions(), 1)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, sched.Info.GetRecentActions()[0].GetStartWorkflowStatus())
+		})
+	}
 }
 
 // TestHandleNexusCompletion_Failure verifies that a failed workflow completion

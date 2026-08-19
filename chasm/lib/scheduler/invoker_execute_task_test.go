@@ -439,6 +439,29 @@ func TestExecuteTask_DistinctRequestsCanReuseCompletedWorkflowID(t *testing.T) {
 	})
 }
 
+func TestExecuteTask_PersistsResolvedOverlapPolicy(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	env.Scheduler.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL
+	startTime := timestamppb.New(env.TimeSource.Now())
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
+			RequestId: "request-id", WorkflowId: "workflow-id", Attempt: 1,
+		}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, _ *invokerExecuteTestEnv) {
+			require.Equal(t, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL, invoker.BufferedStarts[0].GetOverlapPolicy())
+		},
+	})
+}
+
 // Execute is scheduled with an empty buffer.
 func TestExecuteTask_Empty(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)

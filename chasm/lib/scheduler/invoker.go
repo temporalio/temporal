@@ -217,6 +217,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		}
 		if completedStart, ok := completed[start.RequestId]; ok {
 			newlyStarted++
+			start.OverlapPolicy = completedStart.GetOverlapPolicy()
 			if completedStart.GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
 				i.Scheduler.Get(ctx).recordRecentAction(completedStart, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 				startedAllowAll[start.RequestId] = struct{}{}
