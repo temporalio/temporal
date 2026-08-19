@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
@@ -207,6 +208,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetLogger(),
+		wideevents.NoopLogger(),
 		s.mockResource.GetThrottledLogger(),
 		s.mockResource.GetExecutionManager().GetName(),
 		s.mockResource.GetClusterMetadataManager(),
@@ -5718,7 +5720,9 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 }
 
 func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
-	wh := s.getWorkflowHandler(s.newConfig())
+	config := s.newConfig()
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
+	wh := s.getWorkflowHandler(config)
 	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
 		return &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         s.testNamespace.String(),
@@ -5758,6 +5762,71 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 
 		s.NoError(err)
 		s.Equal(map[string]string{"x-request-id": "value"}, request.GetRequest().GetCompletionCallbacks()[0].GetNexus().GetHeader())
+	})
+
+	s.Run("deduplicates links from Nexus callbacks", func() {
+		callbackLink := &commonpb.Link{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "job-id"},
+			},
+		}
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback"},
+			},
+			Links: []*commonpb.Link{callbackLink},
+		}})
+		request.Request.Links = []*commonpb.Link{common.CloneProto(callbackLink)}
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		s.NoError(err)
+		s.Empty(request.GetRequest().GetLinks())
+	})
+
+	s.Run("rejects invalid callback links", func() {
+		err := wh.prepareUpdateWorkflowRequest(
+			context.Background(),
+			s.testNamespace,
+			newRequest([]*commonpb.Callback{{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{{
+					Variant: &commonpb.Link_BatchJob_{
+						BatchJob: &commonpb.Link_BatchJob{},
+					},
+				}},
+			}}),
+		)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "batch job link must not have an empty job ID")
+	})
+
+	s.Run("rejects too many combined links", func() {
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{{
+				Variant: &commonpb.Link_BatchJob_{
+					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+				},
+			}},
+		}})
+		request.Request.Links = []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}}
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "cannot attach more than 1 links per request, got 2")
 	})
 }
 
