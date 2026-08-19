@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -142,57 +143,126 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {
 	env := testcore.NewEnv(s.T())
+	queryName := "query"
+	signalName := "test"
 	workflowFn := func(ctx workflow.Context) error {
-		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
-			return "", nil
+		orderStatus := "initialized"
+		_ = workflow.SetQueryHandler(ctx, queryName, func(_ string) (string, error) {
+			return orderStatus, nil
 		})
-		workflow.GetSignalChannel(ctx, "test").Receive(ctx, nil)
+		workflow.GetSignalChannel(ctx, signalName).Receive(ctx, &orderStatus)
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	ctx := s.Context()
 
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
-	wid := "test-query-result-link-wid"
-	run, err := env.SdkClient().ExecuteWorkflow(ctx,
-		sdkclient.StartWorkflowOptions{ID: wid, TaskQueue: env.WorkerTaskQueue()}, workflowFn)
+	wid := "nexus-query-workflow-tests"
+	run, err := env.SdkClient().ExecuteWorkflow(
+		ctx,
+		sdkclient.StartWorkflowOptions{
+			ID:        wid,
+			TaskQueue: env.WorkerTaskQueue()},
+		workflowFn,
+	)
 	s.NoError(err)
 
-	// use frontend client to query workflow so that the resp can be
-	// inspected directly instead of using the sdkclient
-	resp, err := env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
-		Namespace:            env.Namespace().String(),
-		Execution:            &commonpb.WorkflowExecution{WorkflowId: wid},
-		Query:                &querypb.WorkflowQuery{QueryType: "test"},
-		QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN, // set here too so the second query below differs only by the workflow being closed
-	})
-	s.NoError(err)
+	type testCase struct {
+		name                 string
+		query                *querypb.WorkflowQuery
+		err                  bool
+		reason               string
+		result               string
+		queryRejectCondition enumspb.QueryRejectCondition
+	}
 
-	link := resp.GetLink().GetWorkflow()
-	s.NotNil(link, "query must carry a link of type workflow")
-	s.Equal(env.Namespace().String(), link.GetNamespace())
-	s.Equal(wid, link.GetWorkflowId())
-	s.Equal(run.GetRunID(), link.GetRunId())
-	s.Equal("Query processed", link.GetReason())
+	runTestCase := func(tc testCase) {
+		resp, err := env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+			Namespace:            env.Namespace().String(),
+			Execution:            &commonpb.WorkflowExecution{WorkflowId: wid},
+			Query:                tc.query,
+			QueryRejectCondition: tc.queryRejectCondition,
+		})
+		if tc.err {
+			s.Error(err)
+			return
+		}
+		s.NoError(err)
+		link := resp.GetLink().GetWorkflow()
+		s.NotNil(link, "query must carry a link of type workflow")
+		s.Equal(env.Namespace().String(), link.GetNamespace())
+		s.Equal(wid, link.GetWorkflowId())
+		s.Equal(run.GetRunID(), link.GetRunId())
+		s.Equal(tc.reason, link.GetReason())
+		if tc.result != "" {
+			s.Equal(tc.result, testcore.DecodeString(s.T(), resp.QueryResult))
+		}
+	}
 
-	s.NoError(env.SdkClient().SignalWorkflow(ctx, wid, "", "test", ""))
+	runCases := func(groupName string, cases []testCase) {
+		for _, tc := range cases {
+			s.T().Run(groupName+"/"+tc.name, func(t *testing.T) { //nolint:testifylint // subtests need serialized execution(running, completed)
+				runTestCase(tc)
+			})
+		}
+	}
+
+	// TCs that are expected to fail on both running and completed workflows identically
+	invalidTestCases := []testCase{
+		{
+			name: "malformed args",
+			query: &querypb.WorkflowQuery{
+				QueryType: queryName,
+				QueryArgs: &commonpb.Payloads{
+					Payloads: []*commonpb.Payload{{
+						Metadata: map[string][]byte{
+							converter.MetadataEncoding: []byte(converter.MetadataEncodingJSON),
+						},
+						Data: []byte("dummy data"), // invalid JSON, fails to decode
+					}},
+				},
+			},
+			err: true,
+		},
+		{
+			name:  "unknown query type",
+			query: &querypb.WorkflowQuery{QueryType: "some unknown query"},
+			err:   true,
+		},
+	}
+
+	runningWorkflowTestCases := []testCase{
+		{
+			name:   "well-formed query",
+			query:  &querypb.WorkflowQuery{QueryType: queryName},
+			reason: "Query processed",
+			result: "initialized",
+		},
+	}
+	runCases("running-workflow", runningWorkflowTestCases)
+	runCases("running-workflow", invalidTestCases)
+
+	// set the query result via signal so that query "reload" on completed workflow is verified inline
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, wid, "", signalName, "order-delivered"))
 	s.NoError(run.Get(ctx, nil))
-	// run same after workflow closed, should reject due to QueryRejectCondition
-	resp, err = env.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
-		Namespace:            env.Namespace().String(),
-		Execution:            &commonpb.WorkflowExecution{WorkflowId: wid},
-		Query:                &querypb.WorkflowQuery{QueryType: "test"},
-		QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
-	})
-	s.NoError(err)
 
-	link = resp.GetLink().GetWorkflow()
-	s.NotNil(link, "query must carry a link of type workflow")
-	s.Equal(env.Namespace().String(), link.GetNamespace())
-	s.Equal(wid, link.GetWorkflowId())
-	s.Equal(run.GetRunID(), link.GetRunId())
-	s.Equal("Query rejected", link.GetReason())
+	completedWorkflowTestCases := []testCase{
+		{
+			name:   "well-formed replayable query succeeds",
+			query:  &querypb.WorkflowQuery{QueryType: queryName},
+			reason: "Query processed",
+			result: "order-delivered",
+		},
+		{
+			name:                 "well-formed non-replayable query fails",
+			query:                &querypb.WorkflowQuery{QueryType: queryName},
+			reason:               "Query rejected",
+			queryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+		},
+	}
+
+	runCases("completed-workflow", completedWorkflowTestCases)
+	runCases("completed-workflow", invalidTestCases)
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
