@@ -140,8 +140,6 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	var err error
 	nc := h.baseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, r.Header)
 	params := prepareRequest(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
-	// Bound from the raw route params, since the failures below happen before those params are
-	// parsed and would otherwise name neither the namespace nor the task queue they were for.
 	logger := log.With(
 		h.logger,
 		tag.WorkflowNamespace(params.Namespace),
