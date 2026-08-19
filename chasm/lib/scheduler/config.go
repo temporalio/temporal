@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"time"
 
 	"go.temporal.io/server/chasm"
@@ -114,4 +115,8 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 			)
 		},
 	}
+}
+
+func (c *Config) serviceCallContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, c.ServiceCallTimeout())
 }

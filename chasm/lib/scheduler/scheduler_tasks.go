@@ -247,7 +247,8 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	schedulerRef []byte,
 ) (*watchResult, error) {
 	// Describe the workflow to ensure it exists and is still running.
-	descResp, err := r.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+	callCtx, cancel := r.config.serviceCallContext(ctx)
+	descResp, err := r.historyClient.DescribeWorkflowExecution(callCtx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: scheduler.NamespaceId,
 		Request: &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: scheduler.Namespace,
@@ -257,6 +258,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 			},
 		},
 	})
+	cancel()
 	if err != nil {
 		var notFoundErr *serviceerror.NotFound
 		if errors.As(err, &notFoundErr) {
@@ -296,7 +298,8 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		return nil, err
 	}
 
-	_, err = r.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	callCtx, cancel = r.config.serviceCallContext(ctx)
+	_, err = r.frontendClient.StartWorkflowExecution(callCtx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                scheduler.Namespace,
 		WorkflowId:               start.WorkflowId,
 		RequestId:                start.RequestId,
@@ -311,6 +314,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 			AttachCompletionCallbacks: true,
 		},
 	})
+	cancel()
 	if err != nil {
 		// WorkflowExecutionAlreadyStarted: workflow completed between describe
 		// and this attach call (REJECT_DUPLICATE rejects completed workflows).
