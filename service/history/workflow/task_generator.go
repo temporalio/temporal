@@ -1039,7 +1039,7 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 // refreshTasksForTimeSkipping).
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
-	if accumulatedSkippedDuration(r.mutableState.GetExecutionInfo()) <= 0 {
+	if NewTimeSkippingInfoUtil(r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()).GetAccumulatedSkippedDuration() <= 0 {
 		return nil
 	}
 
@@ -1103,7 +1103,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 				// TaskID is set by shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
 				VisibilityTimestamp: fastForward.GetTargetTime().AsTime(),
-				VersionedTransition: fastForward.GetLastUpdateVersionedTransition(),
+				VersionedTransition: tsi.GetFastForwardInfoLastUpdateVersionedTransition(),
 				ArchetypeID:         r.mutableState.ChasmTree().ArchetypeID(),
 			})
 		}

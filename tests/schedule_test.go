@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -32,13 +31,13 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -292,6 +291,114 @@ func completeRunningWorkflows(ctx context.Context, t *testing.T, env *testcore.T
 	return len(running)
 }
 
+// terminalStop selects how a fired run is stopped in
+// testPauseOnFailureIgnoresCancelTerminate.
+type terminalStop int
+
+const (
+	stopByCancel terminalStop = iota
+	stopByTerminate
+)
+
+// testPauseOnFailureIgnoresCancelTerminate verifies that manually canceling or
+// terminating a fired run of a PauseOnFailure schedule does NOT pause the
+// schedule. CanceledTerminatedCountAsFailures defaults to false, so a cancel or
+// terminate is a routine operation, not an application failure -- matching V1.
+//
+// Regression guard for the CHASM HandleNexusCompletion fix: previously any
+// non-COMPLETED status paused a PauseOnFailure schedule (and terminated runs
+// were mislabeled FAILED), so a manual cancel/terminate would silently stop all
+// future runs.
+func testPauseOnFailureIgnoresCancelTerminate(t *testing.T, newContext contextFactory, stop terminalStop) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := newContext(testcore.NewContext())
+
+	sid := testcore.RandomizeStr("sched-pauseonfail")
+	wid := testcore.RandomizeStr("sched-pauseonfail-wf")
+	wt := testcore.RandomizeStr("sched-pauseonfail-wt")
+
+	// A run that stays running until it is canceled or terminated. On
+	// cancellation workflow.Sleep returns the cancellation error, which the
+	// workflow returns so the run closes as CANCELED (rather than COMPLETED); a
+	// terminate closes it forcefully as TERMINATED.
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		return workflow.Sleep(ctx, time.Hour)
+	}, workflow.RegisterOptions{Name: wt})
+
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:     intervalSpec(fastInterval),
+		Action:   startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{PauseOnFailure: true},
+	})
+
+	describe := func() *workflowservice.DescribeScheduleResponse {
+		d, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(t, err)
+		return d
+	}
+
+	// Wait for the schedule to fire a run that is RUNNING, and capture its actual
+	// started execution (the started workflow id may differ from the configured
+	// wid, e.g. a timestamp suffix, so read it from the action result rather than
+	// assuming wid).
+	var exec *commonpb.WorkflowExecution
+	require.Eventually(t, func() bool {
+		for _, a := range describe().GetInfo().GetRecentActions() {
+			if a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+				exec = a.GetStartWorkflowResult()
+				return exec.GetRunId() != ""
+			}
+		}
+		return false
+	}, awaitTimeout, pollInterval, "schedule should fire a running workflow")
+	runID := exec.GetRunId()
+
+	// Stop that run the way a user would.
+	wantStatus := enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED
+	if stop == stopByTerminate {
+		wantStatus = enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+		_, err := s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: exec,
+			Reason:            t.Name(),
+			Identity:          "test",
+		})
+		require.NoError(t, err)
+	} else {
+		_, err := s.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: exec,
+			Identity:          "test",
+			RequestId:         uuid.NewString(),
+		})
+		require.NoError(t, err)
+	}
+
+	// Once the run's terminal status is recorded on the schedule,
+	// HandleNexusCompletion has processed the completion -- and, in the same
+	// mutation, made (or correctly declined) the pause-on-failure decision. So
+	// reading Paused from the SAME describe response as the terminal status is
+	// race-free: no later pause can slip in.
+	var pausedAfter bool
+	require.Eventually(t, func() bool {
+		d := describe()
+		for _, a := range d.GetInfo().GetRecentActions() {
+			if a.GetStartWorkflowResult().GetRunId() == runID && a.GetStartWorkflowStatus() == wantStatus {
+				pausedAfter = d.GetSchedule().GetState().GetPaused()
+				return true
+			}
+		}
+		return false
+	}, awaitTimeout, pollInterval, "run %s should reach %s and be recorded on the schedule", runID, wantStatus)
+
+	require.False(t, pausedAfter,
+		"a %s workflow must not pause a PauseOnFailure schedule by default "+
+			"(CanceledTerminatedCountAsFailures defaults to false)", wantStatus)
+}
+
 func TestScheduleCHASM(t *testing.T) {
 	t.Parallel()
 	runSharedScheduleTests(t, chasmContextFactory)
@@ -308,10 +415,15 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestMigrationCallbackAttach", func(t *testing.T) { t.Parallel(); testMigrationCallbackAttach(t, newContext) })
 	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { t.Parallel(); testCreatesWorkflowSentinel(t, newContext) })
 	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
+	t.Run("TestLargeScheduleID", func(t *testing.T) { t.Parallel(); testLargeScheduleID(t, newContext) })
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemo(t, newContext) })
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoOnly(t, newContext) })
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
 	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
+	t.Run("TestDescribeCatchupWindowAfterCreateAndUpdate", func(t *testing.T) {
+		t.Parallel()
+		testDescribeCatchupWindowAfterCreateAndUpdate(t)
+	})
 	t.Run("IdleClose", func(t *testing.T) {
 		t.Parallel()
 		testScheduleClosesFromIdle(t, newContext)
@@ -327,6 +439,65 @@ func TestScheduleCHASM(t *testing.T) {
 		t.Run("BackfillDrains", func(t *testing.T) { t.Parallel(); testBackfillOnPausedSchedule(t, newContext) })
 	})
 	t.Run("TestScheduledWorkflowContinueAsNewCompletion", func(t *testing.T) { t.Parallel(); testScheduledWorkflowContinueAsNewCompletion(t, newContext) })
+	t.Run("PauseOnFailure_CancelDoesNotPause", func(t *testing.T) {
+		t.Parallel()
+		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByCancel)
+	})
+	t.Run("PauseOnFailure_TerminateDoesNotPause", func(t *testing.T) {
+		t.Parallel()
+		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByTerminate)
+	})
+}
+
+func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	ctx := chasmContextFactory(testcontext.For(t))
+	sid := testcore.RandomizeStr("sched-catchup-window-desc")
+	schedule := &schedulepb.Schedule{
+		Spec:     intervalSpec(noOpInterval),
+		Action:   startWorkflowAction(s, "catchup-window-wf", "catchup-window-wt"),
+		Policies: &schedulepb.SchedulePolicies{},
+		State:    &schedulepb.ScheduleState{Paused: true},
+	}
+	createSchedule(ctx, t, s, sid, schedule)
+
+	describe := func(t *testing.T) time.Duration {
+		t.Helper()
+		resp, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(t, err)
+		return resp.GetSchedule().GetPolicies().GetCatchupWindow().AsDuration()
+	}
+	require.Equal(t, chasmscheduler.DefaultTweakables.DefaultCatchupWindow, describe(t))
+
+	updates := []struct {
+		name     string
+		window   *durationpb.Duration
+		expected time.Duration
+	}{
+		{name: "unset", expected: chasmscheduler.DefaultTweakables.DefaultCatchupWindow},
+		{name: "zero", window: durationpb.New(0), expected: chasmscheduler.DefaultTweakables.DefaultCatchupWindow},
+		{name: "negative", window: durationpb.New(-time.Second), expected: chasmscheduler.DefaultTweakables.DefaultCatchupWindow},
+		{name: "below minimum", window: durationpb.New(time.Second), expected: chasmscheduler.DefaultTweakables.MinCatchupWindow},
+		{name: "above minimum", window: durationpb.New(time.Hour), expected: time.Hour},
+	}
+	for _, tc := range updates {
+		t.Run(tc.name, func(t *testing.T) {
+			schedule.Policies.CatchupWindow = tc.window
+			_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+				Schedule:   schedule,
+				Identity:   "test",
+				RequestId:  uuid.NewString(),
+			})
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, describe(t))
+		})
+	}
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -352,6 +523,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestLastCompletionAndError", func(t *testing.T) { t.Parallel(); testLastCompletionAndError(t, newContext) })
 	t.Run("TestScheduleContinuesAfterWorkflowRetryFailure", func(t *testing.T) { t.Parallel(); testScheduleContinuesAfterWorkflowRetryFailure(t, newContext) })
 	t.Run("TestListSchedulesReturnsWorkflowStatus", func(t *testing.T) { t.Parallel(); testListSchedulesReturnsWorkflowStatus(t, newContext) })
+	t.Run("TestListSchedulesRecentActionsCapped", func(t *testing.T) { t.Parallel(); testListSchedulesRecentActionsCapped(t, newContext) })
 	t.Run("TestUpdateIntervalTakesEffect", func(t *testing.T) { t.Parallel(); testUpdateIntervalTakesEffect(t, newContext) })
 	t.Run("TestListScheduleMatchingTimes", func(t *testing.T) { t.Parallel(); testListScheduleMatchingTimes(t, newContext) })
 	t.Run("TestLimitMemoSpecSize", func(t *testing.T) { t.Parallel(); testLimitMemoSpecSize(t, newContext) })
@@ -597,10 +769,9 @@ func testFutureActionTimesAdvanceWhilePaused(t *testing.T, newContext contextFac
 }
 
 // testBufferOneDeferredFiresAfterCompletion exercises the BUFFER_ONE deferred
-// lifecycle end-to-end: an action that gets buffered while a workflow is
-// running must fire once that workflow completes. Without re-enabling the
-// deferred start (Attempt=-1 -> 0 in recordCompletedAction), the buffered
-// fire would be stranded.
+// lifecycle end-to-end. Later ticks must not displace or accumulate alongside
+// the first buffered action, and that action must fire once the running workflow
+// completes.
 func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextFactory) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
@@ -631,6 +802,19 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 && len(desc.GetInfo().GetRunningWorkflows()) == 1
 	}, awaitTimeout, pollInterval, "expected exactly one running workflow with one deferred start buffered behind it")
 	require.Equal(t, int32(1), runs.Load(), "only the first workflow should have fired before the running one completes")
+
+	// Keep the first workflow open across several more ticks. V1 evaluates the
+	// complete buffer and keeps its first entry; CHASM must do the same even after
+	// that entry has been marked deferred (Attempt=-1).
+	require.Never(t, func() bool {
+		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return descErr == nil && (desc.GetInfo().GetBufferSize() != 1 ||
+			len(desc.GetInfo().GetRunningWorkflows()) != 1 || runs.Load() != 1)
+	}, 3*fastInterval, pollInterval,
+		"V1 and CHASM must retain exactly one buffered occurrence while later ticks arrive")
 
 	// Releasing the running workflow must re-enable the deferred start (Attempt=-1 -> 0) so it fires.
 	require.Equal(t, 1, completeRunningWorkflows(ctx, t, s, sid))
@@ -1592,6 +1776,53 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 	assertRecentActionsNoDuplicateRunIDs(s.T(), listResp.Info.RecentActions)
 }
 
+// testListSchedulesRecentActionsCapped verifies that RecentActions on the
+// ListSchedules visibility memo stay hard-capped, independent of the (larger)
+// window DescribeSchedule reports. The memo is persisted to visibility, so it
+// must stay bounded no matter how many actions the schedule takes. Both the V1
+// and V2 (CHASM) schedulers apply this cap, so it runs as a shared test.
+func testListSchedulesRecentActionsCapped(t *testing.T, newContext contextFactory) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := newContext(testcore.NewContext())
+
+	// The list memo caps RecentActions at this many entries (V1
+	// RecentActionCountForList / V2 recentActionCountForList).
+	const memoCap = 5
+
+	sid := testcore.RandomizeStr("sched-list-cap")
+	wid := testcore.RandomizeStr("sched-list-cap-wf")
+	wt := testcore.RandomizeStr("sched-list-cap-wt")
+
+	// A workflow that returns immediately, so actions accrue quickly as completed
+	// recent actions; a fast interval fires more than the memo cap in short order.
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(fastInterval),
+		Action: startWorkflowAction(s, wid, wt),
+	})
+
+	// DescribeSchedule reports a wider recent-action window than the memo. Wait
+	// until it exceeds the cap, proving the two projections are independent.
+	var describeResp *workflowservice.DescribeScheduleResponse
+	require.Eventually(t, func() bool {
+		var err error
+		describeResp, err = s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return err == nil && len(describeResp.GetInfo().GetRecentActions()) > memoCap
+	}, awaitTimeout, pollInterval, "DescribeSchedule should report more than %d recent actions", memoCap)
+
+	// The ListSchedules memo must stay capped even though more actions exist.
+	listResp := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+		return len(ent.GetInfo().GetRecentActions()) >= memoCap
+	})
+	require.Len(t, listResp.Info.RecentActions, memoCap,
+		"ListSchedules memo RecentActions must be capped at %d (Describe reported %d)",
+		memoCap, len(describeResp.Info.RecentActions))
+}
+
 func testUpdateIntervalTakesEffect(t *testing.T, newContext contextFactory) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
@@ -2403,20 +2634,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 	wid := "sched-test-reset-extra-cb-wf"
 	wt := "sched-test-reset-extra-cb-wt"
 
-	ch := &completionHandler{
-		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
-		requestCompleteCh: make(chan error, 1),
-	}
-	defer func() {
-		close(ch.requestCh)
-		close(ch.requestCompleteCh)
-	}()
-	secondCallbackURL := func() string {
-		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch})
-		srv := httptest.NewServer(hh)
-		t.Cleanup(func() { srv.Close() })
-		return srv.URL + "/callback"
-	}()
+	ch, secondCallbackURL := newNexusCompletionHandler(t)
 
 	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 		sigCh := workflow.GetSignalChannel(ctx, "complete")
@@ -2946,14 +3164,26 @@ func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
 }
 
 func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) {
-	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	// Hold all 100 backfillers alive through legitimate buffer backpressure rather
+	// than starvation. Backfillers are given a real (non-zero) share of an empty
+	// buffer, but each is pointed at a range far larger than the buffer under
+	// BUFFER_ALL with no worker registered: the first start runs forever (nothing
+	// completes it) and the rest fill the shared buffer, so every backfiller stalls
+	// with range still to process and none can finish and self-delete before the
+	// 101st patch is rejected. (Before the capacity fix this test passed only
+	// because all 100 backfillers were starved to zero capacity and never drained.)
+	tweakables := chasmscheduler.DefaultTweakables
+	tweakables.MaxBufferSize = 300
+	tweakables.GeneratorBufferReserveSize = 25
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(chasmscheduler.CurrentTweakables, tweakables))
+	s := newScheduleEnv(t, opts...)
 	sid := "sched-test-too-many-backfillers"
 	wt := "sched-test-too-many-backfillers-wt"
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(1 * time.Hour)},
+				{Interval: durationpb.New(fastInterval)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -2984,9 +3214,11 @@ func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) 
 		backfills := make([]*schedulepb.BackfillRequest, 50)
 		for j := range backfills {
 			backfills[j] = &schedulepb.BackfillRequest{
-				StartTime:     timestamppb.New(now),
-				EndTime:       timestamppb.New(now.Add(time.Minute)),
-				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				// A range far larger than the buffer (fastInterval fires over an hour)
+				// so no backfiller can finish processing it and self-delete.
+				StartTime:     timestamppb.New(now.Add(-time.Hour)),
+				EndTime:       timestamppb.New(now),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 			}
 		}
 		_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
@@ -3008,9 +3240,9 @@ func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) 
 		Patch: &schedulepb.SchedulePatch{
 			BackfillRequest: []*schedulepb.BackfillRequest{
 				{
-					StartTime:     timestamppb.New(now),
-					EndTime:       timestamppb.New(now.Add(time.Minute)),
-					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+					StartTime:     timestamppb.New(now.Add(-time.Hour)),
+					EndTime:       timestamppb.New(now),
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 				},
 			},
 		},
@@ -4438,6 +4670,30 @@ func testUpdateScheduleRequestIDTooLong(t *testing.T, newContext contextFactory)
 	})
 	var invalidArgReqID *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgReqID)
+}
+
+func testLargeScheduleID(t *testing.T, newContext contextFactory) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := newContext(testcore.NewContext())
+
+	// The V1 sentinel shares the SQL workflow ID limit with the schedule ID
+	// prefix, so this is the largest schedule ID supported by every SQL backend.
+	const workflowIDColumnLimit = 255
+	scheduleIDLength := workflowIDColumnLimit - len(scheduler.WorkflowIDPrefix)
+	sid := strings.Repeat("a", scheduleIDLength)
+	wid := testcore.RandomizeStr("sched-large-id-wf")
+	wt := testcore.RandomizeStr("sched-large-id-wt")
+
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(fastInterval),
+		Action: startWorkflowAction(s, wid, wt),
+	})
+
+	await.RequireTruef(t, func() bool { return runs.Load() > 0 }, awaitTimeout, pollInterval,
+		"schedule ID of length %d should start a workflow", scheduleIDLength)
 }
 
 func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {

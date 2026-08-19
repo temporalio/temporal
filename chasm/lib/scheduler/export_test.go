@@ -44,6 +44,13 @@ func (i *Invoker) RunningWorkflowID(requestID string) string {
 	return i.runningWorkflowID(requestID)
 }
 
+func ContextWithTweakables(ctx chasm.Context, tweakables Tweakables) chasm.Context {
+	config := Config{
+		Tweakables: func(string) Tweakables { return tweakables },
+	}
+	return chasm.ContextWithValue(ctx, tweakablesCtxKey, config.Tweakables)
+}
+
 // RecentActionCount exposes the completed-retention limit for tests.
 const RecentActionCount = recentActionCount
 
@@ -63,4 +70,21 @@ func (i *Invoker) RecordExecuteResult(
 		CompletedStarts: completed,
 		RetryableStarts: retryable,
 	})
+}
+
+func (b *BackfillerTaskHandler) ProcessBackfill(
+	scheduler *Scheduler,
+	backfiller *Backfiller,
+	limit int,
+) (backfillProgressResult, error) {
+	return b.processBackfill(nil, scheduler, backfiller, limit)
+}
+
+func (b *BackfillerTaskHandler) AllowedBufferedStarts(
+	ctx chasm.Context,
+	scheduler *Scheduler,
+	invoker *Invoker,
+	tweakables Tweakables,
+) (int, error) {
+	return b.allowedBufferedStarts(ctx, scheduler, invoker, tweakables)
 }

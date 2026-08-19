@@ -31,6 +31,15 @@ const (
 	TimerTaskStatusCreatedHeartbeat
 )
 
+// TimerTaskStatusCreatedPerAttempt is the set of activity timer task bits scoped to a
+// single attempt. They must be cleared when an activity moves to a new attempt so the
+// timers are recreated against the new deadlines. TimerTaskStatusCreatedScheduleToClose
+// is deliberately excluded: it is a whole-activity deadline that spans retries, so
+// clearing it would regenerate a timeout task that is already pending.
+const TimerTaskStatusCreatedPerAttempt = TimerTaskStatusCreatedStartToClose |
+	TimerTaskStatusCreatedScheduleToStart |
+	TimerTaskStatusCreatedHeartbeat
+
 type (
 	// TimerSequenceID represent a in mem timer
 	TimerSequenceID struct {
@@ -228,7 +237,66 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 	}, true
 }
 
+// activityTimerMasks is every activity timer task bit, ordered to match the entries of
+// activityTimerDeadlines.
+var activityTimerMasks = [4]int32{
+	TimerTaskStatusCreatedScheduleToClose,
+	TimerTaskStatusCreatedScheduleToStart,
+	TimerTaskStatusCreatedStartToClose,
+	TimerTaskStatusCreatedHeartbeat,
+}
+
+// activityTimerDeadlines holds, for each entry of activityTimerMasks, when that timer
+// fires. A nil entry means the timer does not currently apply to the activity: it is
+// not scheduled, not started, or has no timeout configured.
+type activityTimerDeadlines [4]*time.Time
+
+// getActivityTimerDeadlines computes all four timer deadlines for a single activity. It
+// goes through the same getters the timer sequence itself uses, so there is exactly one
+// definition of each deadline.
+func getActivityTimerDeadlines(activityInfo *persistencespb.ActivityInfo) activityTimerDeadlines {
+	var deadlines activityTimerDeadlines
+	for i, getTimeout := range [4]func(*persistencespb.ActivityInfo) (TimerSequenceID, bool){
+		getActivityScheduleToCloseTimeout,
+		getActivityScheduleToStartTimeout,
+		getActivityStartToCloseTimeout,
+		getActivityHeartbeatTimeout,
+	} {
+		if sequenceID, ok := getTimeout(activityInfo); ok {
+			deadline := sequenceID.Timestamp
+			deadlines[i] = &deadline
+		}
+	}
+	return deadlines
+}
+
+// changedMask returns the timer task bits whose deadline differs between the two
+// snapshots, i.e. the timers whose already-created task no longer matches the activity
+// and has to be recreated. A timer that appears or disappears counts as changed; a
+// timer whose deadline is untouched keeps its bit, leaving its pending task alone.
+func (d activityTimerDeadlines) changedMask(other activityTimerDeadlines) int32 {
+	var changed int32
+	for i, mask := range activityTimerMasks {
+		curr, next := d[i], other[i]
+		if curr == nil && next == nil {
+			// timer applies to neither state, so there is nothing to recreate
+			continue
+		}
+		if curr == nil || next == nil || !curr.Equal(*next) {
+			// timer appeared, disappeared, or moved
+			changed |= mask
+		}
+	}
+	return changed
+}
+
 func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
+	activityInfo *persistencespb.ActivityInfo,
+) (TimerSequenceID, bool) {
+	return getActivityScheduleToStartTimeout(activityInfo)
+}
+
+func getActivityScheduleToStartTimeout(
 	activityInfo *persistencespb.ActivityInfo,
 ) (TimerSequenceID, bool) {
 
@@ -259,6 +327,12 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
+	activityInfo *persistencespb.ActivityInfo,
+) (TimerSequenceID, bool) {
+	return getActivityScheduleToCloseTimeout(activityInfo)
+}
+
+func getActivityScheduleToCloseTimeout(
 	activityInfo *persistencespb.ActivityInfo,
 ) (TimerSequenceID, bool) {
 
@@ -293,6 +367,12 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 	activityInfo *persistencespb.ActivityInfo,
 ) (TimerSequenceID, bool) {
+	return getActivityStartToCloseTimeout(activityInfo)
+}
+
+func getActivityStartToCloseTimeout(
+	activityInfo *persistencespb.ActivityInfo,
+) (TimerSequenceID, bool) {
 
 	// activity is not scheduled yet, probably due to retry & backoff
 	if activityInfo.ScheduledEventId == common.EmptyEventID {
@@ -321,6 +401,12 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 }
 
 func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
+	activityInfo *persistencespb.ActivityInfo,
+) (TimerSequenceID, bool) {
+	return getActivityHeartbeatTimeout(activityInfo)
+}
+
+func getActivityHeartbeatTimeout(
 	activityInfo *persistencespb.ActivityInfo,
 ) (TimerSequenceID, bool) {
 

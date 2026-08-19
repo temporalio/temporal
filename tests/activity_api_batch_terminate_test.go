@@ -59,7 +59,6 @@ func newStandaloneActivityBatchEnvWithBatchOperations(t *testing.T, enabled bool
 	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableCallbacks, nsValues(true))
-	cluster.OverrideDynamicConfig(t, activity.StartDelayEnabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities, nsValues(enabled))
 	return env
 }
@@ -112,6 +111,42 @@ func assertBatchOperationType(
 		require.NotNil(c, found, "job %s not found in ListBatchOperations", jobID)
 		require.Equal(c, expected, found.GetOperationType())
 	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// waitForRunningFilterToSettle waits until visibility has settled on the target
+// set that a terminate/cancel batch over `query` will actually see: `wantTotal`
+// executions match `query`, and `wantRunning` of those also match the
+// `ExecutionStatus='Running'` filter the batcher appends
+// (adjustQueryBatchTypeEnum).
+func waitForRunningFilterToSettle(
+	ctx context.Context,
+	t *testing.T,
+	env *standaloneActivityEnv,
+	query string,
+	wantTotal int,
+	wantRunning int,
+) {
+	t.Helper()
+
+	//nolint:forbidigo // for tests with waits
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		listResp, err := env.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  10,
+			Query:     query,
+		})
+		require.NoError(c, err)
+		require.Len(c, listResp.GetExecutions(), wantTotal)
+
+		// Mirrors the query the batcher itself counts with, so this waits on
+		// exactly the value that drives TotalOperationCount.
+		countResp, err := env.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			Query:     fmt.Sprintf("(%s) AND (ExecutionStatus='Running')", query),
+		})
+		require.NoError(c, err)
+		require.EqualValues(c, wantRunning, countResp.GetCount())
+	}, 20*time.Second, 100*time.Millisecond)
 }
 
 // batchTargetSelector describes a way to scope a batch operation's targets:
@@ -383,17 +418,9 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ex
 	// Query intentionally omits ExecutionStatus = 'Running'.
 	query := fmt.Sprintf("ActivityType = '%s'", activityType)
 
-	// Wait for both activities (one Running, one Completed) to be indexed.
-	//nolint:forbidigo // for tests with waits
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		listResp, err := env.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
-			Namespace: env.Namespace().String(),
-			PageSize:  10,
-			Query:     query,
-		})
-		require.NoError(c, err)
-		require.Len(c, listResp.GetExecutions(), 2)
-	}, testcore.WaitForESToSettle, 100*time.Millisecond)
+	// Wait for both activities to be indexed *and* for the completed one to no
+	// longer be indexed as Running, so the batch sees exactly one target.
+	waitForRunningFilterToSettle(ctx, t, env, query, 2, 1)
 
 	jobID := uuid.NewString()
 	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{

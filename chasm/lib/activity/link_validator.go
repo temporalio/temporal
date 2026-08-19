@@ -34,6 +34,20 @@ func (v *linkValidator) ValidateRequest(namespaceName string, links []*commonpb.
 	return commonlinks.Validate(links, v.maxLinksPerRequest(namespaceName), v.linkMaxSize(namespaceName))
 }
 
+// ValidateStartRequest also includes links embedded in completion callbacks.
+func (v *linkValidator) ValidateStartRequest(
+	namespaceName string,
+	links []*commonpb.Link,
+	callbacks []*commonpb.Callback,
+) error {
+	return commonlinks.ValidateRequest(
+		links,
+		callbacks,
+		v.maxLinksPerRequest(namespaceName),
+		v.linkMaxSize(namespaceName),
+	)
+}
+
 // ValidateComponentTotal checks that adding addingCount links to a component
 // already holding existingCount links would not exceed the per-component cap.
 func (v *linkValidator) ValidateComponentTotal(namespaceName string, existingCount, addingCount int) error {

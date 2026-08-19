@@ -656,6 +656,13 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 		Priority:                    ai.Priority,
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:        ai.RetryInitialInterval,
+			BackoffCoefficient:     ai.RetryBackoffCoefficient,
+			MaximumInterval:        ai.RetryMaximumInterval,
+			MaximumAttempts:        ai.RetryMaximumAttempts,
+			NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
+		},
 	}
 	metrics.ActivityEagerExecutionCounter.With(
 		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),

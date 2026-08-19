@@ -131,7 +131,16 @@ func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *ca
 	if options.DBName == "" {
 		options.DBName = GenerateRandomDBName()
 	}
-	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := cassandra.NewTestCluster(
+		options.DBName,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBHost,
+		options.DBPort,
+		options.SchemaDir,
+		options.FaultInjection,
+		logger,
+	)
 	return testCluster
 }
 
@@ -166,7 +175,42 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.ConnectAttributes, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := sql.NewTestCluster(
+		options.SQLDBPluginName,
+		options.DBName,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBHost,
+		options.DBPort,
+		options.ConnectAttributes,
+		options.SchemaDir,
+		options.FaultInjection,
+		logger,
+	)
+	return NewTestBaseForCluster(testCluster, logger)
+}
+
+func NewTestBaseWithEs(options *TestBaseOptions) *TestBase {
+	logger := options.Logger
+	if logger == nil {
+		logger = log.NewTestLogger()
+	}
+
+	if options.DBHost == "" {
+		options.DBHost = environment.GetESAddress()
+	}
+	if options.DBPort == 0 {
+		options.DBPort = environment.GetESPort()
+	}
+
+	testCluster := newEsTestCluster(
+		options.DBHost,
+		options.DBPort,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBName,
+		logger,
+	)
 	return NewTestBaseForCluster(testCluster, logger)
 }
 

@@ -30,8 +30,8 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun_FastForwardInfo()
 		src := &persistencespb.WorkflowExecutionInfo{
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 				Config: &commonpb.TimeSkippingConfig{
-					Enabled:     true,
-					FastForward: durationpb.New(3 * time.Hour),
+					Enabled:           true,
+					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)},
 				},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
@@ -51,8 +51,8 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun_FastForwardInfo()
 		src := &persistencespb.WorkflowExecutionInfo{
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 				Config: &commonpb.TimeSkippingConfig{
-					Enabled:     false,
-					FastForward: durationpb.New(3 * time.Hour),
+					Enabled:           false,
+					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)},
 				},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
@@ -72,8 +72,8 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun_FastForwardInfo()
 		src := &persistencespb.WorkflowExecutionInfo{
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 				Config: &commonpb.TimeSkippingConfig{
-					Enabled:     false,
-					FastForward: durationpb.New(3 * time.Hour),
+					Enabled:           false,
+					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)},
 				},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
@@ -107,8 +107,8 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun_FastForwardInfo()
 		src := &persistencespb.WorkflowExecutionInfo{
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 				Config: &commonpb.TimeSkippingConfig{
-					Enabled:     true,
-					FastForward: durationpb.New(3 * time.Hour),
+					Enabled:           true,
+					FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)},
 				},
 				// no AccumulatedSkippedDuration
 				FastForwardInfo: &persistencespb.FastForwardInfo{
@@ -138,23 +138,68 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun_FastForwardInfo()
 		s.Nil(stateProp, "no accumulated time and no active fast-forward means nothing to propagate")
 	})
 
-	s.Run("NilTimeSkippingInfoPropagatesNothing", func() {
+	s.Run("NoTimeSkippingInfoPropagatesNothing", func() {
 		tsc, stateProp := propagateTimeSkippingToNextRun(&persistencespb.WorkflowExecutionInfo{})
 		s.Nil(tsc)
 		s.Nil(stateProp)
 	})
+
+	s.Run("SkipCountAloneStillPropagates", func() {
+		tsc, stateProp := propagateTimeSkippingToNextRun(&persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config:           &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 50},
+				SessionSkipCount: 2,
+			},
+		})
+		s.Require().NotNil(tsc)
+		s.Require().NotNil(stateProp)
+		s.Nil(stateProp.GetInitialSkippedDuration())
+		s.Equal(int32(2), stateProp.GetInitialSkipCount())
+		s.Equal(int32(50), tsc.MaxSessionSkipCount)
+	})
+
+	s.Run("FullPropagationOfAllTimeSippingStates", func() {
+		tsc, stateProp := propagateTimeSkippingToNextRun(&persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 50},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				SessionSkipCount:           3,
+			},
+		})
+		s.Require().NotNil(tsc)
+		s.Equal(int32(50), tsc.GetMaxSessionSkipCount())
+		s.Require().NotNil(stateProp)
+		s.Equal(int32(3), stateProp.GetInitialSkipCount())
+	})
+
+	s.Run("SessionSkipCountWontPropagateWhenTimeSkippingDisabled", func() {
+		tsc, stateProp := propagateTimeSkippingToNextRun(&persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: false, MaxSessionSkipCount: 50},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				SessionSkipCount:           3,
+			},
+		})
+		s.Nil(tsc)
+		s.Require().NotNil(stateProp)
+		s.Equal(int32(0), stateProp.GetInitialSkipCount())
+	})
 }
 
 func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
+	accumSkip := time.Hour
+	sessionMaxSkipCount := int32(10)
 	newSource := func() *persistencespb.WorkflowExecutionInfo {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		return &persistencespb.WorkflowExecutionInfo{
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
 				Config: &commonpb.TimeSkippingConfig{
-					Enabled:     true,
-					FastForward: durationpb.New(3 * time.Hour),
+					Enabled:             true,
+					FastForwardConfig:   &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)},
+					MaxSessionSkipCount: sessionMaxSkipCount,
 				},
-				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				AccumulatedSkippedDuration: durationpb.New(accumSkip),
+				SessionSkipCount:           3,
 				FastForwardInfo: &persistencespb.FastForwardInfo{
 					TargetTime: timestamppb.New(s.mutableState.timeSource.Now().Add(3 * time.Hour)),
 					HasReached: false,
@@ -163,12 +208,25 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 		}
 	}
 
-	s.Run("child workflows have no fast-forward", func() {
-		tsc, propagatedState := propagateTimeSkippingToChild(newSource())
+	s.Run("nil-safe check", func() {
+		tsc, propagatedState := propagateTimeSkippingToChild(&persistencespb.WorkflowExecutionInfo{})
+		s.Nil(tsc)
+		s.Nil(propagatedState)
+	})
+
+	s.Run("a valid full propagation of config and virtual time", func() {
+		src := newSource()
+		tsc, propagatedState := propagateTimeSkippingToChild(src)
 		s.Require().NotNil(tsc)
 		s.True(tsc.GetEnabled())
-		s.Nil(tsc.GetFastForward())
-		s.Equal(time.Hour, propagatedState.GetInitialSkippedDuration().AsDuration())
+		// no fast-forward
+		s.Nil(tsc.GetFastForwardConfig().GetDuration())
+		// has virtual time
+		s.Equal(accumSkip, propagatedState.GetInitialSkippedDuration().AsDuration())
+		// has config of max skip
+		s.Equal(sessionMaxSkipCount, tsc.GetMaxSessionSkipCount())
+		// no accumulated session skip
+		s.Equal(int32(0), propagatedState.GetInitialSkipCount())
 	})
 
 	s.Run("child workflow propagation can be turned off", func() {
@@ -177,8 +235,9 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 		tsc, propagatedState := propagateTimeSkippingToChild(src)
 		s.Nil(tsc)
 		s.Require().NotNil(propagatedState)
-		s.Equal(time.Hour, propagatedState.GetInitialSkippedDuration().AsDuration(),
-			"virtual time is always propagated, even when config propagation is disabled")
+		s.Equal(accumSkip, propagatedState.GetInitialSkippedDuration().AsDuration())
+		s.Equal(int32(0), propagatedState.GetInitialSkipCount())
+		s.Nil(propagatedState.GetFastForwardTargetTime())
 	})
 
 	s.Run("nil config still propagates virtual time", func() {
@@ -187,12 +246,13 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 		tsc, propagatedState := propagateTimeSkippingToChild(src)
 		s.Nil(tsc)
 		s.Require().NotNil(propagatedState)
+		s.Equal(int32(0), propagatedState.GetInitialSkipCount())
 		s.Equal(time.Hour, propagatedState.GetInitialSkippedDuration().AsDuration(),
 			"virtual time is always propagated, even when config propagation is disabled")
 		s.Nil(propagatedState.GetFastForwardTargetTime())
 	})
 
-	s.Run("disablePropagation still propagates virtual time", func() {
+	s.Run("disabled propagation still propagates virtual time", func() {
 		src := newSource()
 		src.TimeSkippingInfo.Config.Enabled = false
 		tsc, propagatedState := propagateTimeSkippingToChild(src)
@@ -201,7 +261,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 		s.Equal(time.Hour, propagatedState.GetInitialSkippedDuration().AsDuration(),
 			"virtual time is always propagated, even when config propagation is disabled")
 		s.Nil(propagatedState.GetFastForwardTargetTime())
-
+		s.Equal(int32(0), propagatedState.GetInitialSkipCount())
 	})
 
 }
@@ -360,7 +420,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
 		s.NotPanics(func() {
-			s.Require().NoError(s.mutableState.initTimeSkippingInfo(nil, nil))
+			s.mutableState.initTimeSkippingInfo(nil, nil)
 		})
 		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo)
 		s.Equal(baseTime, s.mutableState.Now())
@@ -373,10 +433,10 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		nextVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: tests.Version, TransitionCount: 6}
 		s.mutableState.executionInfo.TransitionHistory = []*persistencespb.VersionedTransition{currentVT}
 		cfg := &commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(3 * time.Hour)}
+			Enabled:           true,
+			FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)}}
 
-		s.Require().NoError(s.mutableState.initTimeSkippingInfo(cfg, nil))
+		s.mutableState.initTimeSkippingInfo(cfg, nil)
 		s.Equal(baseTime, s.mutableState.Now())
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
@@ -387,7 +447,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Require().Equal(baseTime.Add(3*time.Hour).UTC(),
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
 		// the fast-forward records the current versioned transition
-		s.Require().True(proto.Equal(nextVT, tsi.GetFastForwardInfo().GetLastUpdateVersionedTransition()))
+		s.Require().True(proto.Equal(nextVT, tsi.GetFastForwardInfoLastUpdateVersionedTransition()))
 	})
 
 	s.Run("InitWithPropagation_ForExecutionsWithTSStartedByPropagation", func() {
@@ -402,14 +462,14 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 
 		cfg := &commonpb.TimeSkippingConfig{
 			Enabled:            true,
-			FastForward:        durationpb.New(fastForward),
+			FastForwardConfig:  &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward)},
 			DisablePropagation: true,
 		}
 		propagation := &commonpb.TimeSkippingStatePropagation{
 			InitialSkippedDuration: durationpb.New(hasSkipped),
 			FastForwardTargetTime:  timestamppb.New(targetTime),
 		}
-		s.Require().NoError(s.mutableState.initTimeSkippingInfo(cfg, propagation))
+		s.mutableState.initTimeSkippingInfo(cfg, propagation)
 
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
@@ -418,20 +478,44 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Equal(targetTime.UTC(),
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
 	})
+
+	s.Run("SessionSkipCountSeededFromPropagation", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		cfg := &commonpb.TimeSkippingConfig{Enabled: true}
+		propagation := &commonpb.TimeSkippingStatePropagation{InitialSkipCount: 4}
+
+		s.mutableState.initTimeSkippingInfo(cfg, propagation)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.Equal(int32(4), tsi.GetSessionSkipCount())
+	})
+
+	s.Run("SessionSkipCountDefaultsToZeroWithoutPropagation", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		cfg := &commonpb.TimeSkippingConfig{Enabled: true}
+
+		s.mutableState.initTimeSkippingInfo(cfg, nil)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.Equal(int32(0), tsi.GetSessionSkipCount())
+	})
 }
 
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 
 	// update assumes the TS info was already initialized; updating a workflow that never
-	// started time skipping is an internal error and must not initialize it as a side effect.
-	s.Run("ErrorWhenTimeSkippingInfoNil", func() {
+	// started time skipping is a no-op and must not initialize it as a side effect.
+	s.Run("NoopWhenTimeSkippingInfoNil", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
 		s.mutableState.timeSkippingInfoUpdated = false
 
-		err := s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: true})
-		s.Error(err)
+		s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: true})
 		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo(), "must not initialize TS info on update")
-		s.False(s.mutableState.timeSkippingInfoUpdated, "must not mark updated on a failed update")
+		s.False(s.mutableState.timeSkippingInfoUpdated, "must not mark updated when there is nothing to update")
 	})
 
 	s.Run("UpdateTimeSkippingInfo_UpdateWithNil", func() {
@@ -439,23 +523,26 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		baseTime := s.mutableState.timeSource.Now()
 		currentTSI := &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(time.Hour),
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)},
 			},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:                    timestamppb.New(baseTime.Add(time.Hour)),
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 7},
-				HasReached:                    false,
+				TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
+				HasReached: false,
 			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 7},
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo = currentTSI
 		s.mutableState.timeSkippingInfoUpdated = false
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(nil))
+		s.mutableState.updateTimeSkippingInfo(nil)
 		newTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(newTSI)
 		s.Nil(newTSI.GetConfig())
 		s.Nil(newTSI.GetFastForwardInfo())
+		// clearing the fast-forward still stamps the versioned transition; the field is never cleared
+		s.Require().NotNil(newTSI.GetFastForwardInfoLastUpdateVersionedTransition())
+		s.Equal(s.mutableState.NextTransitionCount(), newTSI.GetFastForwardInfoLastUpdateVersionedTransition().GetTransitionCount())
 		s.Equal(currentTSI.GetAccumulatedSkippedDuration(), newTSI.GetAccumulatedSkippedDuration())
 		s.True(s.mutableState.timeSkippingInfoUpdated)
 	})
@@ -477,10 +564,10 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		// new config
 		newConfig := &commonpb.TimeSkippingConfig{
 			Enabled:            true,
-			FastForward:        durationpb.New(2 * time.Hour),
+			FastForwardConfig:  &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)},
 			DisablePropagation: true,
 		}
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(newConfig))
+		s.mutableState.updateTimeSkippingInfo(newConfig)
 		newTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 
 		s.Require().NotNil(newTSI)
@@ -488,7 +575,7 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		s.Require().NotNil(newTSI.GetFastForwardInfo())
 		// re-installing the fast-forward records the current versioned transition, so a task
 		// emitted here validates against a stable reference after a failover.
-		s.True(proto.Equal(nextVT, newTSI.GetFastForwardInfo().GetLastUpdateVersionedTransition()))
+		s.True(proto.Equal(nextVT, newTSI.GetFastForwardInfoLastUpdateVersionedTransition()))
 		s.Equal(baseTime.Add(2*time.Hour).UTC(), newTSI.GetFastForwardInfo().GetTargetTime().AsTime())
 		s.False(newTSI.GetFastForwardInfo().GetHasReached())
 		s.Equal(time.Hour, newTSI.GetAccumulatedSkippedDuration().AsDuration())
@@ -502,31 +589,31 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		s.mutableState.executionInfo.TransitionHistory = []*persistencespb.VersionedTransition{currentVT}
 		currentTSI := persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(time.Hour),
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)},
 			},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:                    timestamppb.New(baseTime.Add(time.Hour)),
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 5},
-				HasReached:                    false,
+				TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
+				HasReached: false,
 			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 5},
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo = &currentTSI
 
 		// update with new config with a new FF
 		tsc2 := &commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(2 * time.Hour),
+			Enabled:           true,
+			FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)},
 		}
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(tsc2))
+		s.mutableState.updateTimeSkippingInfo(tsc2)
 		tsc2TSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 
 		s.Require().NotNil(tsc2TSI)
 		s.True(proto.Equal(tsc2, tsc2TSI.GetConfig()))
 		s.Require().NotNil(tsc2TSI.GetFastForwardInfo())
 		// re-applying records the current versioned transition, replacing the previous one
-		s.True(proto.Equal(nextVT, tsc2TSI.GetFastForwardInfo().GetLastUpdateVersionedTransition()))
+		s.True(proto.Equal(nextVT, tsc2TSI.GetFastForwardInfoLastUpdateVersionedTransition()))
 		s.Equal(baseTime.Add(2*time.Hour).UTC(), tsc2TSI.GetFastForwardInfo().GetTargetTime().AsTime())
 		s.False(tsc2TSI.GetFastForwardInfo().GetHasReached())
 		s.Equal(time.Hour, tsc2TSI.GetAccumulatedSkippedDuration().AsDuration())
@@ -535,13 +622,34 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		tsc3 := &commonpb.TimeSkippingConfig{
 			Enabled: false,
 		}
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(tsc3))
+		s.mutableState.updateTimeSkippingInfo(tsc3)
 		tsc3TSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsc3TSI)
 		s.True(proto.Equal(tsc3, tsc3TSI.GetConfig()))
 		s.Nil(tsc3TSI.GetFastForwardInfo())
+		s.True(proto.Equal(nextVT, tsc3TSI.GetFastForwardInfoLastUpdateVersionedTransition()),
+			"clearing the fast-forward re-stamps the versioned transition rather than clearing it")
 		s.Equal(time.Hour, tsc3TSI.GetAccumulatedSkippedDuration().AsDuration())
 
+	})
+
+	// Updating the config restarts the skip session: the per-session skip counter from the
+	// previous session must be cleared.
+	s.Run("ClearsSessionSkipCount", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:             false,
+				MaxSessionSkipCount: 10,
+			},
+			SessionSkipCount: 7,
+		}
+
+		s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 10})
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.Equal(int32(0), tsi.GetSessionSkipCount())
 	})
 }
 
@@ -593,8 +701,8 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(fastForwardDuration)},
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForwardDuration)}},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
 		s.mutableState.applyFastForward(nil)
@@ -602,7 +710,7 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		s.Require().NotNil(fastForward)
 		s.False(fastForward.GetHasReached())
 		s.WithinDuration(fastForward.GetTargetTime().AsTime(), baseTime.Add(fastForwardDuration), 1*time.Second)
-		s.True(proto.Equal(nextVT, fastForward.GetLastUpdateVersionedTransition()))
+		s.True(proto.Equal(nextVT, s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfoLastUpdateVersionedTransition()))
 	})
 
 	s.Run("FastForward_WithPropagatedTargetTime", func() {
@@ -611,8 +719,8 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		s.mutableState.timeSource = clock.NewEventTimeSource().Update(fixed)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(3 * time.Hour)},
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(3 * time.Hour)}},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
 		s.mutableState.applyFastForward(timestamppb.New(propagatedTarget))
@@ -620,7 +728,7 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		s.Require().NotNil(fastForward)
 		s.Equal(propagatedTarget, fastForward.GetTargetTime().AsTime(),
 			"propagated target used directly, not recomputed from ff duration")
-		s.NotNil(fastForward.GetLastUpdateVersionedTransition())
+		s.NotNil(s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfoLastUpdateVersionedTransition())
 	})
 
 	s.Run("FastForward_NilDuration_NoOp", func() {
@@ -633,33 +741,53 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 	})
 
 	s.Run("FastForward_ClearsExistingInfo", func() {
+		staleVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 7}
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: false},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:                    timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 7},
+				TargetTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
 			},
+			FastForwardInfoLastUpdateVersionedTransition: staleVT,
 		}
 		s.mutableState.applyFastForward(nil)
-		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo())
+		tsi := s.mutableState.executionInfo.TimeSkippingInfo
+		s.Nil(tsi.GetFastForwardInfo())
+		ffVT := tsi.GetFastForwardInfoLastUpdateVersionedTransition()
+		s.Require().NotNil(ffVT)
+		s.False(proto.Equal(staleVT, ffVT), "removing the fast-forward re-stamps the versioned transition")
+		s.Equal(s.mutableState.NextTransitionCount(), ffVT.GetTransitionCount())
+	})
+
+	s.Run("FastForward_AlreadyNil_LeavesVersionedTransitionUntouched", func() {
+		staleVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 7}
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: false},
+			FastForwardInfoLastUpdateVersionedTransition: staleVT,
+		}
+		s.mutableState.applyFastForward(nil)
+		tsi := s.mutableState.executionInfo.TimeSkippingInfo
+		s.Nil(tsi.GetFastForwardInfo())
+		s.True(proto.Equal(staleVT, tsi.GetFastForwardInfoLastUpdateVersionedTransition()))
 	})
 
 	s.Run("FastForward_OverridesExistingInfo", func() {
 		fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 		s.mutableState.timeSource = clock.NewEventTimeSource().Update(fixed)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(time.Hour)},
+			Config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)}},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:                    timestamppb.New(fixed), // stale bound that must be overridden
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 5},
+				TargetTime: timestamppb.New(fixed), // stale bound that must be overridden
 			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 5},
 		}
 		s.mutableState.applyFastForward(nil)
-		ff := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
+		tsi := s.mutableState.executionInfo.TimeSkippingInfo
+		ff := tsi.GetFastForwardInfo()
 		s.Require().NotNil(ff)
 		s.Equal(fixed.Add(time.Hour), ff.GetTargetTime().AsTime(), "stale bound is replaced by now+FastForward")
-		s.Equal(tests.Version, ff.GetLastUpdateVersionedTransition().NamespaceFailoverVersion)
-		s.Equal(s.mutableState.NextTransitionCount(), ff.GetLastUpdateVersionedTransition().TransitionCount)
+		ffVT := tsi.GetFastForwardInfoLastUpdateVersionedTransition()
+		s.Equal(tests.Version, ffVT.GetNamespaceFailoverVersion())
+		s.Equal(s.mutableState.NextTransitionCount(), ffVT.GetTransitionCount())
 	})
 }
 
@@ -1245,6 +1373,90 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
 		s.Require().Equal(2*time.Hour, accumulated.AsDuration())
 	})
+
+	// Regression: a fast-forward-completion transition must both disable the config and record
+	// the fast-forward as reached. A previous bug left Enabled unchanged on this path.
+	s.Run("FastForwardCompletionDisables", func() {
+		targetTime := baseTime.Add(2 * time.Hour)
+		staleVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 3}
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(2 * time.Hour)},
+			},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(targetTime),
+				HasReached: false,
+			},
+			FastForwardInfoLastUpdateVersionedTransition: staleVT,
+		}
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, true),
+		)
+		s.Require().NoError(err)
+
+		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
+		s.Require().False(tsi.GetConfig().GetEnabled())
+		s.Require().True(tsi.GetFastForwardInfo().GetHasReached())
+		// reaching the target is an update to the fast-forward, so the stamp advances too
+		ffVT := tsi.GetFastForwardInfoLastUpdateVersionedTransition()
+		s.Require().NotNil(ffVT)
+		s.False(proto.Equal(staleVT, ffVT))
+		s.Equal(s.mutableState.NextTransitionCount(), ffVT.GetTransitionCount())
+	})
+
+	// Every applied transition increments SessionSkipCount by one, and once the count reaches
+	// the per-session cap the config is disabled.
+	s.Run("SessionSkipCountIncrementsUntilCapDisables", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:             true,
+				MaxSessionSkipCount: 2,
+			},
+		}
+		targetTime := baseTime.Add(time.Hour)
+
+		// first skip: count 1, below cap, stays enabled
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().NoError(err)
+		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
+		s.Require().Equal(int32(1), tsi.GetSessionSkipCount())
+		s.Require().True(tsi.GetConfig().GetEnabled())
+
+		// second skip: count reaches the cap of 2, disables
+		err = s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().NoError(err)
+		s.Require().Equal(int32(2), tsi.GetSessionSkipCount())
+		s.Require().False(tsi.GetConfig().GetEnabled())
+	})
+
+	// A MaxSkipPerSession of 0 caps on the very first skip (1 >= 0), disabling immediately.
+	// The frontend guarantees a populated config carries at least 1, so a 0 reaching the
+	// runtime (e.g. a config that never had the cap populated) kills skipping right away.
+	s.Run("SessionSkipCountCapsImmediatelyWhenMaxUnset", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		targetTime := baseTime.Add(time.Hour)
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().NoError(err)
+
+		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
+		s.Require().Equal(int32(1), tsi.GetSessionSkipCount())
+		s.Require().False(tsi.GetConfig().GetEnabled())
+	})
 }
 
 func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
@@ -1338,6 +1550,14 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		s.False(util.IsEnabled())
 	})
 
+	s.Run("NilReceiverSafe", func() {
+		var util *TimeSkippingInfoUtil
+		s.False(util.IsEnabled())
+		s.False(util.HasPendingFastForward())
+		s.Zero(util.GetAccumulatedSkippedDuration())
+		s.Nil(util.ToDescribeInfo(time.Now()))
+	})
+
 	s.Run("NilFFISafe", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config:          &commonpb.TimeSkippingConfig{Enabled: true},
@@ -1347,16 +1567,32 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		s.False(util.HasPendingFastForward())
 	})
 
+	s.Run("NoPendingFastForwardWhenTargetTimeNil", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config:          &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{HasReached: false, TargetTime: nil},
+		})
+		s.False(util.HasPendingFastForward())
+	})
+
+	s.Run("NoPendingFastForwardWhenTargetTimeZero", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config:          &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{HasReached: false, TargetTime: timestamppb.New(time.Time{})},
+		})
+		s.False(util.HasPendingFastForward())
+	})
+
 	s.Run("NoPendingFastForwardWhenHasReached", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
 				HasReached: true,
 				TargetTime: timestamppb.New(time.Now()),
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-					TransitionCount:          1,
-					NamespaceFailoverVersion: 1,
-				},
+			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount:          1,
+				NamespaceFailoverVersion: 1,
 			},
 		}
 		util := NewTimeSkippingInfoUtil(s.mutableState.executionInfo.TimeSkippingInfo)
@@ -1369,10 +1605,10 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 			FastForwardInfo: &persistencespb.FastForwardInfo{
 				HasReached: false,
 				TargetTime: timestamppb.New(time.Now()),
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-					TransitionCount:          1,
-					NamespaceFailoverVersion: 1,
-				},
+			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount:          1,
+				NamespaceFailoverVersion: 1,
 			},
 		}
 		util := NewTimeSkippingInfoUtil(s.mutableState.executionInfo.TimeSkippingInfo)
@@ -1385,10 +1621,10 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 			FastForwardInfo: &persistencespb.FastForwardInfo{
 				HasReached: false,
 				TargetTime: timestamppb.New(time.Now()),
-				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-					TransitionCount:          1,
-					NamespaceFailoverVersion: 1,
-				},
+			},
+			FastForwardInfoLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount:          1,
+				NamespaceFailoverVersion: 1,
 			},
 		}
 		util := NewTimeSkippingInfoUtil(s.mutableState.executionInfo.TimeSkippingInfo)
@@ -1402,4 +1638,46 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		util := NewTimeSkippingInfoUtil(s.mutableState.executionInfo.TimeSkippingInfo)
 		s.True(util.IsEnabled())
 	})
+
+	s.Run("IsEnabledNilConfig", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{Config: nil})
+		s.False(util.IsEnabled())
+	})
+
+	s.Run("GetAccumulatedSkippedDuration", func() {
+		s.Zero(NewTimeSkippingInfoUtil(nil).GetAccumulatedSkippedDuration(), "nil info")
+		s.Zero(NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{}).GetAccumulatedSkippedDuration(), "unset duration")
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(90 * time.Minute),
+		})
+		s.Equal(90*time.Minute, util.GetAccumulatedSkippedDuration())
+	})
+
+	s.Run("ToDescribeInfoNilTSI", func() {
+		s.Nil(NewTimeSkippingInfoUtil(nil).ToDescribeInfo(time.Now()))
+	})
+
+	s.Run("ToDescribeInfoEnabled", func() {
+		now := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		})
+		info := util.ToDescribeInfo(now)
+		s.NotNil(info)
+		s.True(info.GetEffectiveConfig().GetEnabled())
+		s.Equal(now, info.GetCurrentTime().AsTime())
+	})
+
+	s.Run("ToDescribeInfoDisabled", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+			AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+		})
+		msNow := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+		info := util.ToDescribeInfo(msNow)
+		s.NotNil(info)
+		s.False(info.GetEffectiveConfig().GetEnabled())
+		s.Equal(msNow, info.GetCurrentTime().AsTime())
+	})
+
 }

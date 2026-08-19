@@ -2,6 +2,7 @@ package scheduler_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -21,7 +22,9 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -43,6 +46,114 @@ func TestListInfo(t *testing.T) {
 	require.NotNil(t, listInfo.WorkflowType)
 	require.NotEmpty(t, listInfo.FutureActionTimes)
 	require.Equal(t, expectedFutureTimes, listInfo.FutureActionTimes)
+}
+
+func TestCreateScheduler_InitialPauseState(t *testing.T) {
+	tests := []struct {
+		name          string
+		initialPaused bool
+		patch         *schedulepb.SchedulePatch
+		wantPaused    bool
+		wantNotes     string
+		wantToken     int64
+	}{
+		{
+			name:       "pause",
+			patch:      &schedulepb.SchedulePatch{Pause: "maintenance"},
+			wantPaused: true,
+			wantNotes:  "maintenance",
+			wantToken:  legacyscheduler.InitialConflictToken,
+		},
+		{
+			name:          "unpause",
+			initialPaused: true,
+			patch:         &schedulepb.SchedulePatch{Unpause: "resume"},
+			wantPaused:    false,
+			wantNotes:     "resume",
+			wantToken:     legacyscheduler.InitialConflictToken,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			_, engineCtx := newTestEngineContext(t, logger)
+			input := defaultSchedule()
+			input.State.Paused = tc.initialPaused
+
+			result, err := chasm.StartExecution(
+				engineCtx,
+				chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+				scheduler.CreateScheduler,
+				&schedulerpb.CreateScheduleRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.CreateScheduleRequest{
+						Namespace:    namespace,
+						ScheduleId:   scheduleID,
+						Schedule:     input,
+						InitialPatch: tc.patch,
+					},
+				},
+			)
+			require.NoError(t, err)
+
+			_, err = chasm.ReadComponent(
+				engineCtx,
+				chasm.NewComponentRef[*scheduler.Scheduler](result.ExecutionKey),
+				func(sched *scheduler.Scheduler, _ chasm.Context, _ struct{}) (struct{}, error) {
+					require.Equal(t, tc.wantPaused, sched.Schedule.State.Paused)
+					require.Equal(t, tc.wantNotes, sched.Schedule.State.Notes)
+					require.Equal(t, tc.wantToken, sched.ConflictToken)
+					return struct{}{}, nil
+				},
+				struct{}{},
+			)
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestListInfo_RecentActionsCapped verifies that the ScheduleListInfo memo
+// hard-caps RecentActions. recentActions() includes running starts, which
+// aren't bounded by completed-action retention, so without the cap the
+// persisted memo would grow with the number of live starts. The cap keeps the
+// most recently started actions.
+func TestListInfo_RecentActionsCapped(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	// Anchor in the past so every start/close time is a plausible already-happened
+	// action; the +i minutes below stay well before now.
+	base := time.Now().UTC().Add(-time.Hour)
+	// Twelve started workflows, more than the memo cap. StartTimes are inserted
+	// out of order to prove selection is by recency, not buffer position.
+	order := []int{7, 2, 11, 0, 5, 9, 1, 8, 3, 10, 4, 6}
+	var starts []*schedulespb.BufferedStart
+	for _, i := range order {
+		start := &schedulespb.BufferedStart{
+			RequestId:  fmt.Sprintf("req-%d", i),
+			WorkflowId: fmt.Sprintf("wf-%d", i),
+			RunId:      fmt.Sprintf("run-%d", i),
+			StartTime:  timestamppb.New(base.Add(time.Duration(i) * time.Minute)),
+		}
+		// Mix in some completed starts alongside running ones; the cap spans both.
+		if i%2 == 0 {
+			start.Completed = &schedulespb.CompletedResult{
+				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				CloseTime: timestamppb.New(base.Add(time.Duration(i) * time.Minute)),
+			}
+		}
+		starts = append(starts, start)
+	}
+	sched.Invoker.Get(ctx).BufferedStarts = starts
+
+	listInfo := sched.ListInfo(ctx)
+
+	// Capped to the memo limit, keeping the most recent by start time, ascending.
+	require.Len(t, listInfo.RecentActions, 5)
+	for idx, action := range listInfo.RecentActions {
+		wantIdx := 7 + idx // most recent five: wf-7 .. wf-11
+		require.Equal(t, fmt.Sprintf("wf-%d", wantIdx), action.GetStartWorkflowResult().GetWorkflowId())
+	}
 }
 
 func TestCreateSchedulerFromMigration(t *testing.T) {
@@ -724,4 +835,39 @@ func TestScheduler_Describe_DoesNotMutateCachedComponent(t *testing.T) {
 		"Describe must not write the default catch-up window back onto the cached component")
 	require.Nil(t, generator.GetFutureActionTimes(),
 		"Describe must not store computed FutureActionTimes back onto the Generator")
+}
+
+func TestScheduler_Describe_ResolvesCatchupWindowFromTweakables(t *testing.T) {
+	tweakables := scheduler.DefaultTweakables
+	tweakables.DefaultCatchupWindow = 2 * time.Hour
+	tweakables.MinCatchupWindow = 5 * time.Minute
+
+	testCases := []struct {
+		name     string
+		window   *durationpb.Duration
+		expected time.Duration
+	}{
+		{name: "unset", window: nil, expected: tweakables.DefaultCatchupWindow},
+		{name: "zero", window: durationpb.New(0), expected: tweakables.DefaultCatchupWindow},
+		{name: "negative", window: durationpb.New(-time.Second), expected: tweakables.DefaultCatchupWindow},
+		{name: "below minimum", window: durationpb.New(time.Minute), expected: tweakables.MinCatchupWindow},
+		{name: "above minimum", window: durationpb.New(time.Hour), expected: time.Hour},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			sched, ctx, _ := setupSchedulerForTest(t)
+			sched.Schedule.Policies.CatchupWindow = tc.window
+			persistedWindow := sched.Schedule.Policies.CatchupWindow
+
+			resp, err := sched.Describe(
+				scheduler.ContextWithTweakables(ctx, tweakables),
+				&schedulerpb.DescribeScheduleRequest{},
+				newLegacySpecBuilder(0, 0),
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, resp.GetFrontendResponse().GetSchedule().GetPolicies().GetCatchupWindow().AsDuration())
+			require.Same(t, persistedWindow, sched.Schedule.Policies.CatchupWindow)
+		})
+	}
 }

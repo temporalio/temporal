@@ -70,7 +70,7 @@ func UpdateActivityInfoForRetries(
 	ai.ScheduledTime = nextScheduledTime
 	ClearActivityStartedState(ai)
 	// Mark per-attempt timers for recreation.
-	ai.TimerTaskStatus &^= TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose | TimerTaskStatusCreatedScheduleToStart
+	ai.TimerTaskStatus &^= TimerTaskStatusCreatedPerAttempt
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
 	// this flag means the user resets the activity with "--reset-heartbeat" flag
@@ -120,17 +120,15 @@ func GetPendingActivityInfo(
 		p.Attempt = ai.Attempt
 		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 			scheduledTime := ai.ScheduledTime.AsTime()
-			if now.Before(scheduledTime) {
-				// in this case activity is waiting for a retry
+			if now.Before(scheduledTime) && !ai.Paused {
+				// waiting for the retry to be dispatched to Matching
 				p.NextAttemptScheduleTime = ai.ScheduledTime
 				currentRetryDuration := p.NextAttemptScheduleTime.AsTime().Sub(p.LastAttemptCompleteTime.AsTime())
 				p.CurrentRetryInterval = durationpb.New(currentRetryDuration)
 			} else {
-				// in this case activity is at least scheduled
+				// retry has been dispatched to Matching, or the activity is paused so no dispatch will occur
 				p.NextAttemptScheduleTime = nil
-				// we rely on the fact that ExponentialBackoffAlgorithm is deterministic, and  there's no random jitter
-				interval := backoff.ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, p.Attempt)
-				p.CurrentRetryInterval = durationpb.New(interval)
+				p.CurrentRetryInterval = nil
 			}
 		}
 	}

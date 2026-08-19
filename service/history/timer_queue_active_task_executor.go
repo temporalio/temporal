@@ -315,7 +315,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	// always resolved as failed.
 	if retryState == enumspb.RETRY_STATE_TIMEOUT && timerSequenceID.TimerType != enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		timeoutFailure = failure.NewTimeoutFailure(
-			"Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying",
+			common.FailureReasonActivityRetryScheduleToCloseTimeout,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		)
 	}
@@ -788,6 +788,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 			t.logger,
 			t.shardContext.GetThrottledLogger(),
 			t.shardContext.GetMetricsHandler(),
+			nil, // no pagination buffer limiter as it is a transient context
 		),
 		newMutableState,
 	)
@@ -961,7 +962,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return errNoTimerFired
 	}
 
-	ffVT := tsi.GetFastForwardInfo().GetLastUpdateVersionedTransition()
+	ffVT := tsi.GetFastForwardInfoLastUpdateVersionedTransition()
 	if ffVT == nil || task.VersionedTransition == nil {
 		// Invariant: when a pending fast-forward and a task both exist, they must both have a
 		// non-nil versioned transition. A nil here is a "should never happen" state bug, not lost
