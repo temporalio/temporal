@@ -60,7 +60,8 @@ func LocalAttributeIDs(spans tracetest.SpanStubs, key attribute.Key) []int {
 	return localIDs(values)
 }
 
-// LocalSpanIDs assigns stable trace and trace-local span IDs in input order.
+// LocalSpanIDs assigns stable, one-based IDs in the order spans are provided.
+// Callers must sort spans first when they need deterministic ordering.
 func LocalSpanIDs(spans tracetest.SpanStubs) []LocalSpanID {
 	var traceIDs idGenerator[oteltrace.TraceID]
 	spanIDs := make(map[oteltrace.TraceID]*idGenerator[oteltrace.SpanID])
