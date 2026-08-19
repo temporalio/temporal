@@ -1,0 +1,7 @@
+name = "nexusautoclose"
+defaultTargets = ["NexusAutoClose"]
+
+# No external dependencies: the model is standard-library only, on purpose. Anything that needs
+# mathlib does not belong in a model whose whole claim is that it is small enough to read.
+[[lean_lib]]
+name = "NexusAutoClose"

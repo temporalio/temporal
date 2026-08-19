@@ -1,0 +1,7 @@
+# Pinned Lean toolchain for the offline AutoClose model.
+#
+# mise's first-party `github` backend (not the deprecated `ubi` backend) verifies release
+# provenance and unpacks the official Lean release archive, which carries lean, lake, and the
+# standard library together — so no separate elan bootstrap is needed.
+[tools]
+"github:leanprover/lean4" = "4.33.0"

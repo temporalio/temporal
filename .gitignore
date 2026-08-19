@@ -44,6 +44,9 @@ testdata/
 # Goreleaser
 /dist
 
+# Lake build output for the offline Lean model
+/model/.lake/
+
 # direnv
 .envrc
 
