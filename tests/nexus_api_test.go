@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -273,9 +272,9 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 		endpoint := env.createNexusEndpoint(s.Context(), s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
-			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), endpoint.Id)
+			dispatchURL = env.dispatchByEndpointURL(endpoint.Id)
 		} else {
-			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), endpoint.Spec.Target.GetWorker().TaskQueue)
+			dispatchURL = env.dispatchByTaskQueueURL(endpoint.Spec.Target.GetWorker().TaskQueue)
 		}
 
 		httpCaller, headerCapture := newHeaderCaptureCaller()
@@ -420,9 +419,9 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 		testEndpoint := env.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
-			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), testEndpoint.Id)
+			dispatchURL = env.dispatchByEndpointURL(testEndpoint.Id)
 		} else {
-			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), taskQueue)
+			dispatchURL = env.dispatchByTaskQueueURL(taskQueue)
 		}
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
@@ -534,9 +533,9 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		endpoint := env.createNexusEndpoint(s.Context(), s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
-			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), endpoint.Id)
+			dispatchURL = env.dispatchByEndpointURL(endpoint.Id)
 		} else {
-			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), endpoint.Spec.Target.GetWorker().TaskQueue)
+			dispatchURL = env.dispatchByTaskQueueURL(endpoint.Spec.Target.GetWorker().TaskQueue)
 		}
 
 		httpCaller, headerCapture := newHeaderCaptureCaller()
@@ -631,7 +630,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	})
 	s.NoError(err)
 
-	u := getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), taskQueue)
+	u := env.dispatchByTaskQueueURL(taskQueue)
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	// Versioned poller gets task
@@ -687,7 +686,7 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFail
 
 	// Trigger a Nexus start operation via HTTP to unblock the poller.
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
-		BaseURL: getDispatchByEndpointURL(env.HttpAPIAddress(), endpoint.Id),
+		BaseURL: env.dispatchByEndpointURL(endpoint.Id),
 		Service: "test-service",
 	})
 	s.NoError(err)
@@ -711,20 +710,4 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFail
 
 func nexusEchoHandler(_ *testing.T, res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
 	return &nexusTaskResponse{StartResult: &nexus.HandlerStartOperationResultSync[*commonpb.Payload]{Value: res.Request.GetStartOperation().GetPayload()}}, nil
-}
-
-func getDispatchByNsAndTqURL(address string, namespace string, taskQueue string) string {
-	return fmt.Sprintf(
-		"http://%s/%s",
-		address,
-		commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.
-			Path(commonnexus.NamespaceAndTaskQueue{
-				Namespace: namespace,
-				TaskQueue: taskQueue,
-			}),
-	)
-}
-
-func getDispatchByEndpointURL(address string, endpoint string) string {
-	return fmt.Sprintf("http://%s/%s", address, commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint))
 }

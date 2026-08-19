@@ -26,18 +26,20 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type nexusHTTPSpan struct {
-	TraceID     int
-	SpanID      int
-	Name        string
-	ServiceName string
-	Kind        oteltrace.SpanKind
-	URLPath     string
+	TraceID      int
+	SpanID       int
+	ParentSpanID int
+	Name         string
+	ServiceName  string
+	Kind         oteltrace.SpanKind
+	URLPath      string
 }
 
 type NexusOTELSuite struct {
@@ -126,7 +128,7 @@ func (s *NexusOTELSuite) TestCallback() {
 	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
 }
 
-// Verifies asynchronous start and cancellation use the instrumented external Nexus HTTP client.
+// Verifies asynchronous start and cancellation connect real History client and Frontend server spans.
 func (s *NexusOTELSuite) TestOperation() {
 	exporter := tracetest.NewInMemoryExporter()
 	callerEnv := s.newTestEnv(exporter)
@@ -198,6 +200,15 @@ func (s *NexusOTELSuite) TestOperation() {
 			URLPath:     operationURLPath,
 		},
 		{
+			TraceID:      1,
+			SpanID:       2,
+			ParentSpanID: 1,
+			Name:         "temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint",
+			ServiceName:  "io.temporal.frontend",
+			Kind:         oteltrace.SpanKindServer,
+			URLPath:      operationURLPath,
+		},
+		{
 			TraceID:     2,
 			SpanID:      1,
 			Name:        "HTTP POST",
@@ -205,10 +216,19 @@ func (s *NexusOTELSuite) TestOperation() {
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath + "/cancel",
 		},
+		{
+			TraceID:      2,
+			SpanID:       2,
+			ParentSpanID: 1,
+			Name:         "temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint",
+			ServiceName:  "io.temporal.frontend",
+			Kind:         oteltrace.SpanKindServer,
+			URLPath:      operationURLPath + "/cancel",
+		},
 	})
 }
 
-// Verifies worker-target Nexus operations trace requests routed through the local frontend client.
+// Verifies worker-target Nexus operations connect local Frontend client and server spans.
 func (s *NexusOTELSuite) TestWorkerOperation() {
 	exporter := tracetest.NewInMemoryExporter()
 	env := s.newTestEnv(exporter)
@@ -246,20 +266,69 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 		s.FailNow("timed out waiting for Nexus operation", s.Context().Err().Error())
 	}
 	operationURLPath := "/nexus/endpoints/" + endpoint.Id + "/services/" + service.Name + "/" + operation.Name()
-	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
-		TraceID:     1,
-		SpanID:      1,
-		Name:        "HTTP POST",
-		ServiceName: "io.temporal.history",
-		Kind:        oteltrace.SpanKindClient,
-		URLPath:     operationURLPath,
-	}})
+	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{
+		{
+			TraceID:     1,
+			SpanID:      1,
+			Name:        "HTTP POST",
+			ServiceName: "io.temporal.history",
+			Kind:        oteltrace.SpanKindClient,
+			URLPath:     operationURLPath,
+		},
+		{
+			TraceID:      1,
+			SpanID:       2,
+			ParentSpanID: 1,
+			Name:         "temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint",
+			ServiceName:  "io.temporal.frontend",
+			Kind:         oteltrace.SpanKindServer,
+			URLPath:      operationURLPath,
+		},
+	})
 	spanContext := oteltrace.SpanContextFromContext(
 		propagation.TraceContext{}.Extract(s.Context(), propagation.MapCarrier(headers)),
 	)
 	s.Require().True(spanContext.IsValid())
 	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
 	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
+}
+
+// Verifies the namespace and task queue dispatch route is instrumented independently of forwarding.
+func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
+	exporter := tracetest.NewInMemoryExporter()
+	env := s.newTestEnv(exporter)
+	taskQueue := env.Tv().TaskQueue().GetName()
+	pollerErrCh := env.nexusTaskPoller(s.Context(), s.T(), taskQueue, nexusEchoHandler)
+	dispatchURL, err := url.Parse(env.dispatchByTaskQueueURL(taskQueue))
+	s.NoError(err)
+	nexusClient, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
+		BaseURL: dispatchURL.String(),
+		Service: "test-service",
+	})
+	s.NoError(err)
+
+	// Inject a fixed traceparent so this test exercises the server independently of client instrumentation.
+	// Nexus API tests separately verify that frontend request headers reach workers.
+	const (
+		traceID      = "4bf92f3577b34da6a3ce929d0e0e4736"
+		parentSpanID = "00f067aa0ba902b7"
+	)
+	_, err = nexusrpc.StartOperation(s.Context(), nexusClient, op, env.Tv().Any().String(), nexus.StartOperationOptions{
+		Header: nexus.Header{"traceparent": "00-" + traceID + "-" + parentSpanID + "-01"},
+	})
+	s.NoError(err)
+	s.NoError(<-pollerErrCh)
+
+	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
+		TraceID:     1,
+		SpanID:      1,
+		Name:        "temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue",
+		ServiceName: "io.temporal.frontend",
+		Kind:        oteltrace.SpanKindServer,
+		URLPath:     dispatchURL.Path + "/test-service/my-operation",
+	}})
+	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
+	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
 }
 
 // requireNexusHTTPSpans compares all exported HTTP spans after assigning stable local IDs
@@ -321,12 +390,13 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 			}
 		}
 		result = append(result, nexusHTTPSpan{
-			TraceID:     traceIDs[traceID],
-			SpanID:      spanIDs[traceID][span.SpanContext.SpanID()],
-			Name:        span.Name,
-			ServiceName: serviceName,
-			Kind:        span.SpanKind,
-			URLPath:     urlPath,
+			TraceID:      traceIDs[traceID],
+			SpanID:       spanIDs[traceID][span.SpanContext.SpanID()],
+			ParentSpanID: spanIDs[traceID][span.Parent.SpanID()],
+			Name:         span.Name,
+			ServiceName:  serviceName,
+			Kind:         span.SpanKind,
+			URLPath:      urlPath,
 		})
 	}
 	return result, httpSpans

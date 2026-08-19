@@ -13,6 +13,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -158,6 +159,17 @@ func TestHandleNexusCompletion(t *testing.T) {
 		require.NoError(t, TransitionStarted.Apply(op, ctx, EventStarted{OperationToken: "tok"}))
 		return op
 	}
+	newBackingOffOp := func(t *testing.T, ctx *chasm.MockMutableContext) *Operation {
+		t.Helper()
+		op := newScheduledTestOperation(t, ctx)
+		require.NoError(t, transitionAttemptFailed.Apply(op, ctx, EventAttemptFailed{
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+			},
+			RetryPolicy: backoff.NewConstantDelayRetryPolicy(time.Minute),
+		}))
+		return op
+	}
 	ctrl := gomock.NewController(t)
 	nsRegistry := namespace.NewMockRegistry(ctrl)
 	nsRegistry.EXPECT().GetNamespaceName(namespace.ID("ns-id")).Return(namespace.Name("ns-name"), nil).AnyTimes()
@@ -225,6 +237,29 @@ func TestHandleNexusCompletion(t *testing.T) {
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
 			require.Equal(t, "tok", op.GetOperationToken())
 			require.Equal(t, defaultTime, op.GetStartedTime().AsTime())
+		})
+
+		t.Run("CompletionDuringRetryBackoff", func(t *testing.T) {
+			ctx := newCtx()
+			op := newBackingOffOp(t, ctx)
+			startTime := defaultTime.Add(-time.Second)
+
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				StartTime:      timestamppb.New(startTime),
+				RequestId:      op.GetRequestId(),
+				OperationToken: "tok",
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: mustToPayload(t, "result"),
+				},
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
+			require.Equal(t, "tok", op.GetOperationToken())
+			require.Equal(t, startTime, op.GetStartedTime().AsTime())
+			require.Equal(t, startTime, op.GetLastAttemptCompleteTime().AsTime())
+			require.Nil(t, op.GetLastAttemptFailure())
+			require.Nil(t, op.GetNextAttemptScheduleTime())
 		})
 	})
 

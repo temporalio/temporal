@@ -37,8 +37,8 @@ import (
 )
 
 const (
-	pageSize                 = 1000
-	statusRunningQueryFilter = "ExecutionStatus='Running'"
+	pageSize                         = 1000
+	statusRunningOrPausedQueryFilter = "ExecutionStatus='Running' OR ExecutionStatus='Paused'"
 
 	// defaultTaskTimeout bounds how long processing a single task may take so
 	// that one hung operation cannot block the task processor forever.
@@ -540,9 +540,10 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 		enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
 		enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
 		enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
-		enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY,
-		enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY:
-		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningQueryFilter)
+		enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS,
+		enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY:
+		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningOrPausedQueryFilter)
 	default:
 		return query
 	}
@@ -867,8 +868,8 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 		// spending every AttemptsOnRetryableError -- processTaskWithRetries
 		// retries in place with no backoff.
 		//
-		// Only these two are listed. UNPAUSE_ACTIVITY, UPDATE_ACTIVITY_OPTIONS
-		// and RESET_ACTIVITY get the same Running filter appended by
+		// Only these two are listed. UNPAUSE_ACTIVITY, UPDATE_ACTIVITY_OPTIONS,
+		// and RESET_ACTIVITY get the same open-status filter appended by
 		// adjustQueryBatchTypeEnum and so reach this path too, but their
 		// FailedPreconditions include states a retry does clear (pending reset,
 		// pending cancellation, deferred Reset(RestoreOriginalOptions)).
