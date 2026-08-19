@@ -2,6 +2,7 @@ package replicator
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -114,10 +115,10 @@ func TestHandleNamespaceReplicationTaskEmitsReceivedAndPassesProcessingContext(t
 	p.handleReplicationTasks()
 	require.Equal(t, []string{"received"}, replicationEventPhases(eventLogger.records))
 
-	received := replicationEventValues(eventLogger.records[0])
-	require.Equal(t, int64(42), received["source_task_id"].AsInt64())
-	require.Equal(t, "cluster-a", received["source_cluster"].AsString())
-	require.Equal(t, "cluster-b", received["target_cluster"].AsString())
+	received := replicationEventDetails(t, eventLogger.records[0])
+	require.InDelta(t, float64(42), received["source_task_id"], 0)
+	require.Equal(t, "cluster-a", received["source_cluster"])
+	require.Equal(t, "cluster-b", received["target_cluster"])
 	require.True(t, processingContextSet)
 	eventData, ok := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(task)
 	require.True(t, ok)
@@ -157,9 +158,9 @@ func TestHandleNamespaceReplicationTaskEmitsDLQed(t *testing.T) {
 
 	p.handleReplicationTasks()
 	require.Equal(t, []string{"received", "dlqed"}, replicationEventPhases(eventLogger.records))
-	dlqed := replicationEventValues(eventLogger.records[1])
-	require.Equal(t, int64(1), dlqed["attempt_count"].AsInt64())
-	require.Equal(t, "bad task", dlqed["error"].AsString())
+	dlqed := replicationEventDetails(t, eventLogger.records[1])
+	require.InDelta(t, float64(1), dlqed["attempt_count"], 0)
+	require.Equal(t, "bad task", dlqed["error"])
 	require.NotContains(t, dlqed, "persistence_request")
 }
 
@@ -272,4 +273,11 @@ func replicationEventValues(record otellog.Record) map[string]otellog.Value {
 		return true
 	})
 	return values
+}
+
+func replicationEventDetails(t *testing.T, record otellog.Record) map[string]any {
+	t.Helper()
+	var details map[string]any
+	require.NoError(t, json.Unmarshal([]byte(replicationEventValues(record)["details"].AsString()), &details))
+	return details
 }

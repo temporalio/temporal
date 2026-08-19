@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -131,6 +132,7 @@ func (h *taskExecutorImpl) executeValidatedTask(
 			h.emitNamespaceReplicationProcessed(
 				ctx,
 				wideevents.NamespaceReplicationOutcomeNotAdmitted,
+				nil,
 				nil,
 				nil,
 			)
@@ -274,6 +276,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 				wideevents.NamespaceReplicationOutcomeDuplicate,
 				nil,
 				nil,
+				nil,
 			)
 			return nil
 		}
@@ -283,6 +286,7 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 	h.emitNamespaceReplicationProcessed(
 		ctx,
 		wideevents.NamespaceReplicationOutcomeCreated,
+		nil,
 		request,
 		nil,
 	)
@@ -320,6 +324,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		}
 		return err
 	}
+	localNamespacePreMutation := h.cloneLocalNamespaceForReplicationEvent(ctx, resp.Namespace)
 
 	recordUpdated := false
 	request := &persistence.UpdateNamespaceRequest{
@@ -373,30 +378,57 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 
 	if !recordUpdated {
-		h.emitNamespaceReplicationProcessed(
-			ctx,
-			wideevents.NamespaceReplicationOutcomeNoChange,
-			nil,
-			nil,
-		)
+		if localNamespacePreMutation != nil {
+			h.emitNamespaceReplicationProcessed(
+				ctx,
+				wideevents.NamespaceReplicationOutcomeNoChange,
+				localNamespacePreMutation,
+				nil,
+				nil,
+			)
+		}
 		return nil
 	}
 
 	if err := h.metadataManager.UpdateNamespace(ctx, request); err != nil {
 		return err
 	}
-	h.emitNamespaceReplicationProcessed(
-		ctx,
-		wideevents.NamespaceReplicationOutcomeUpdated,
-		nil,
-		request,
-	)
+	if localNamespacePreMutation != nil {
+		h.emitNamespaceReplicationProcessed(
+			ctx,
+			wideevents.NamespaceReplicationOutcomeUpdated,
+			localNamespacePreMutation,
+			nil,
+			request,
+		)
+	}
 	return nil
+}
+
+func (h *taskExecutorImpl) cloneLocalNamespaceForReplicationEvent(
+	ctx context.Context,
+	namespaceDetail *persistencespb.NamespaceDetail,
+) *persistencespb.NamespaceDetail {
+	if h.eventLogger == nil ||
+		h.emitNamespaceLifecycleEvents == nil ||
+		!h.emitNamespaceLifecycleEvents() {
+		return nil
+	}
+	if _, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx); !ok {
+		return nil
+	}
+	clonedNamespace, ok := proto.Clone(namespaceDetail).(*persistencespb.NamespaceDetail)
+	if !ok {
+		h.logger.Error("Failed to clone local namespace for namespace replication lifecycle event")
+		return nil
+	}
+	return clonedNamespace
 }
 
 func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 	ctx context.Context,
 	outcome wideevents.NamespaceReplicationOutcome,
+	localNamespacePreMutation *persistencespb.NamespaceDetail,
 	createRequest *persistence.CreateNamespaceRequest,
 	updateRequest *persistence.UpdateNamespaceRequest,
 ) {
@@ -413,15 +445,16 @@ func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 
 	sourceTaskID := metadata.SourceTaskID
 	wideevents.EmitNamespaceReplicationLifecycle(h.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
-		Phase:                  wideevents.NamespaceReplicationProcessed,
-		Outcome:                outcome,
-		EventData:              metadata.EventData,
-		SourceCluster:          metadata.SourceCluster,
-		TargetCluster:          metadata.TargetCluster,
-		SourceTaskID:           &sourceTaskID,
-		AttemptCount:           metadata.AttemptCount,
-		CreateNamespaceRequest: createRequest,
-		UpdateNamespaceRequest: updateRequest,
+		Phase:                     wideevents.NamespaceReplicationProcessed,
+		Outcome:                   outcome,
+		EventData:                 metadata.EventData,
+		SourceCluster:             metadata.SourceCluster,
+		TargetCluster:             metadata.TargetCluster,
+		SourceTaskID:              &sourceTaskID,
+		AttemptCount:              metadata.AttemptCount,
+		LocalNamespacePreMutation: localNamespacePreMutation,
+		CreateNamespaceRequest:    createRequest,
+		UpdateNamespaceRequest:    updateRequest,
 	})
 }
 

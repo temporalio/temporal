@@ -2,6 +2,7 @@ package nsreplication
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -178,9 +179,14 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	s.Equal("created", attrs["phase"].AsString())
 	s.Equal(name, attrs["namespace"].AsString())
 	s.Equal(id, attrs["namespace_id"].AsString())
-	s.Equal("cluster-a", attrs["source_cluster"].AsString())
-	s.NotEmpty(attrs["task_fingerprint"].AsString())
-	s.Contains(attrs["task"].AsString(), `"owner_email":"some random test owner"`)
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(attrs["details"].AsString()), &details))
+	s.Equal("cluster-a", details["source_cluster"])
+	s.NotEmpty(details["task_fingerprint"])
+	s.Equal(
+		"some random test owner",
+		details["task"].(map[string]any)["info"].(map[string]any)["owner_email"],
+	)
 
 	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
 	s.namespaceReplicator.emitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(false)

@@ -46,10 +46,12 @@ func TestEmitNamespaceReplicationLifecycle(t *testing.T) {
 	logger := &captureLogger{}
 	sourceTaskID := int64(0)
 	task := namespaceReplicationTaskForTest()
+	eventData := namespaceReplicationEventDataForTest(t, task)
+	eventData.Details = map[string]any{"custom_detail": "custom-value"}
 
 	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
 		Phase:         NamespaceReplicationDLQed,
-		EventData:     namespaceReplicationEventDataForTest(t, task),
+		EventData:     eventData,
 		SourceCluster: "cluster-a",
 		TargetCluster: "cluster-b",
 		SourceTaskID:  &sourceTaskID,
@@ -61,26 +63,26 @@ func TestEmitNamespaceReplicationLifecycle(t *testing.T) {
 	require.Equal(t, NamespaceReplicationLifecycleEventName, logger.records[0].EventName())
 	got := namespaceReplicationRecordValues(logger.records[0])
 	require.Equal(t, map[string]any{
-		"phase":            "dlqed",
-		"task_type":        int64(enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK),
-		"task_kind":        "namespace",
-		"namespace":        "payments",
-		"namespace_id":     "namespace-id",
-		"operation":        "Create",
-		"config_version":   int64(7),
-		"failover_version": int64(11),
-		"source_cluster":   "cluster-a",
-		"target_cluster":   "cluster-b",
-		"source_task_id":   int64(0),
-		"attempt_count":    int64(3),
-		"error":            "persistence unavailable",
-		"task_fingerprint": got["task_fingerprint"],
-		"task":             got["task"],
+		"phase":        "dlqed",
+		"namespace":    "payments",
+		"namespace_id": "namespace-id",
+		"details":      got["details"],
 	}, got)
-	require.Len(t, got["task_fingerprint"], 64)
+	details := namespaceReplicationRecordDetails(t, logger.records[0])
+	require.InDelta(t, float64(enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK), details["task_type"], 0)
+	require.Equal(t, "namespace", details["task_kind"])
+	require.Equal(t, "Create", details["operation"])
+	require.InDelta(t, float64(7), details["config_version"], 0)
+	require.InDelta(t, float64(11), details["failover_version"], 0)
+	require.Equal(t, "cluster-a", details["source_cluster"])
+	require.Equal(t, "cluster-b", details["target_cluster"])
+	require.InDelta(t, float64(0), details["source_task_id"], 0)
+	require.InDelta(t, float64(3), details["attempt_count"], 0)
+	require.Equal(t, "persistence unavailable", details["error"])
+	require.Equal(t, "custom-value", details["custom_detail"])
+	require.Len(t, details["task_fingerprint"], 64)
 
-	var taskJSON map[string]any
-	require.NoError(t, json.Unmarshal([]byte(got["task"].(string)), &taskJSON))
+	taskJSON := details["task"].(map[string]any)
 	require.Equal(t, "NAMESPACE_OPERATION_CREATE", taskJSON["namespace_operation"])
 	require.Equal(t, "namespace-id", taskJSON["id"])
 	require.Equal(t, "7", taskJSON["config_version"])
@@ -109,9 +111,9 @@ func TestNamespaceReplicationTaskFingerprintLinksPhases(t *testing.T) {
 	})
 
 	require.Len(t, logger.records, 3)
-	first := namespaceReplicationRecordValues(logger.records[0])["task_fingerprint"]
-	require.Equal(t, first, namespaceReplicationRecordValues(logger.records[1])["task_fingerprint"])
-	require.NotEqual(t, first, namespaceReplicationRecordValues(logger.records[2])["task_fingerprint"])
+	first := namespaceReplicationRecordDetails(t, logger.records[0])["task_fingerprint"]
+	require.Equal(t, first, namespaceReplicationRecordDetails(t, logger.records[1])["task_fingerprint"])
+	require.NotEqual(t, first, namespaceReplicationRecordDetails(t, logger.records[2])["task_fingerprint"])
 }
 
 func TestNamespaceReplicationProcessedIncludesCreatePersistenceRequest(t *testing.T) {
@@ -130,9 +132,8 @@ func TestNamespaceReplicationProcessedIncludesCreatePersistenceRequest(t *testin
 		CreateNamespaceRequest: request,
 	})
 
-	record := namespaceReplicationRecordValues(logger.records[0])
-	var got map[string]any
-	require.NoError(t, json.Unmarshal([]byte(record["persistence_request"].(string)), &got))
+	details := namespaceReplicationRecordDetails(t, logger.records[0])
+	got := details["persistence_request"].(map[string]any)
 	require.Equal(t, "CreateNamespaceRequest", got["request_type"])
 	require.Equal(t, true, got["is_global_namespace"])
 	require.NotContains(t, got, "notification_version")
@@ -143,6 +144,10 @@ func TestNamespaceReplicationProcessedIncludesCreatePersistenceRequest(t *testin
 
 func TestNamespaceReplicationProcessedIncludesUpdatePersistenceRequest(t *testing.T) {
 	logger := &captureLogger{}
+	localNamespacePreMutation := &persistencespb.NamespaceDetail{
+		Info:          &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
+		ConfigVersion: 7,
+	}
 	request := &persistence.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info:          &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "payments"},
@@ -153,18 +158,22 @@ func TestNamespaceReplicationProcessedIncludesUpdatePersistenceRequest(t *testin
 	}
 
 	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
-		Phase:                  NamespaceReplicationProcessed,
-		Outcome:                NamespaceReplicationOutcomeUpdated,
-		EventData:              namespaceReplicationEventDataForTest(t, namespaceReplicationTaskForTest()),
-		UpdateNamespaceRequest: request,
+		Phase:                     NamespaceReplicationProcessed,
+		Outcome:                   NamespaceReplicationOutcomeUpdated,
+		EventData:                 namespaceReplicationEventDataForTest(t, namespaceReplicationTaskForTest()),
+		LocalNamespacePreMutation: localNamespacePreMutation,
+		UpdateNamespaceRequest:    request,
 	})
 
-	record := namespaceReplicationRecordValues(logger.records[0])
-	var got map[string]any
-	require.NoError(t, json.Unmarshal([]byte(record["persistence_request"].(string)), &got))
+	details := namespaceReplicationRecordDetails(t, logger.records[0])
+	got := details["persistence_request"].(map[string]any)
 	require.Equal(t, "UpdateNamespaceRequest", got["request_type"])
 	require.InDelta(t, float64(19), got["notification_version"].(float64), 0)
 	require.Equal(t, "8", got["namespace"].(map[string]any)["config_version"])
+
+	before := details["local_namespace_pre_mutation"].(map[string]any)
+	require.Equal(t, "7", before["config_version"])
+	require.Equal(t, "payments", before["info"].(map[string]any)["name"])
 }
 
 func TestDefaultNamespaceReplicationTaskEventDataProvider(t *testing.T) {
@@ -253,4 +262,13 @@ func namespaceReplicationRecordValues(record log.Record) map[string]any {
 		return true
 	})
 	return values
+}
+
+func namespaceReplicationRecordDetails(t *testing.T, record log.Record) map[string]any {
+	t.Helper()
+	detailsJSON, ok := namespaceReplicationRecordValues(record)["details"].(string)
+	require.True(t, ok)
+	var details map[string]any
+	require.NoError(t, json.Unmarshal([]byte(detailsJSON), &details))
+	return details
 }
