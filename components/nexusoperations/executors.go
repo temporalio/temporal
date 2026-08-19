@@ -955,10 +955,9 @@ func createNexusOperationFailure(operation Operation, scheduledEventID int64, ca
 	}
 }
 
-// outboundCallLogTags returns the structured log tags describing an outbound Nexus call. It mirrors
-// chasm/lib/nexusoperation's invocationTraceContext.tags() so that HSM and CHASM operations are
-// searchable by the same fields during the HSM->CHASM migration; a query written against one
-// implementation's tags would otherwise silently return only that half of a namespace's traffic.
+// outboundCallLogTags mirrors chasm/lib/nexusoperation's invocationTraceContext.tags() so HSM and
+// CHASM operations stay searchable by the same fields during the migration; a query written against
+// one implementation's tags would otherwise silently return only half a namespace's traffic.
 func outboundCallLogTags(
 	method string,
 	namespaceName, requestID, operation, endpointName string,
@@ -979,9 +978,8 @@ func outboundCallLogTags(
 	}
 }
 
-// logOutboundCallFailure logs a failed outbound Nexus call. Failures whose source is the customer's
-// worker are logged at debug: a Nexus operation failing is not a server error and should not clutter
-// server error logs.
+// logOutboundCallFailure logs a failed outbound Nexus call. Worker-sourced failures log at debug: a
+// Nexus operation failing is not a server error and should not clutter server error logs.
 func (e taskExecutor) logOutboundCallFailure(method string, logTags []tag.Tag, callErr error, failureSource string) {
 	if callErr == nil {
 		return
