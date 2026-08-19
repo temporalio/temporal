@@ -6928,7 +6928,7 @@ func validateScheduleTimestamps(spec *schedulepb.ScheduleSpec) error {
 
 func validateScheduleRemainingActions(schedule *schedulepb.Schedule) error {
 	if schedule.GetState().GetRemainingActions() < 0 {
-		return fmt.Errorf("remaining actions cannot be negative")
+		return errors.New("remaining actions cannot be negative")
 	}
 	return nil
 }
