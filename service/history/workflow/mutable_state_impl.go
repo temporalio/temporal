@@ -9354,8 +9354,8 @@ func applyUpdatesToSubStateMachine[K comparable, V lastUpdatedStateTransitionGet
 	}
 
 	for key, updated := range updatedSubStateMachine {
-		var existing V
-		if existing, ok := pendingInfos[key]; ok {
+		existing, ok := pendingInfos[key]
+		if ok {
 			if transitionhistory.Compare(existing.GetLastUpdateVersionedTransition(), updated.GetLastUpdateVersionedTransition()) == 0 {
 				continue
 			}
