@@ -955,8 +955,6 @@ func createNexusOperationFailure(operation Operation, scheduledEventID int64, ca
 	}
 }
 
-// outboundCallLogTags mirrors chasm/lib/nexusoperation's invocationTraceContext.tags() so one log
-// query matches both implementations during the HSM->CHASM migration.
 func outboundCallLogTags(
 	method string,
 	namespaceName, requestID, operation, endpointName string,
