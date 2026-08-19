@@ -77,7 +77,7 @@ func (s *transmissionTaskSuite) TearDownTest() {
 func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask_IsGlobalNamespace() {
 	eventLogger := &transmissionCaptureLogger{}
 	s.namespaceReplicator.eventLogger = eventLogger
-	s.namespaceReplicator.emitNamespaceReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.namespaceReplicator.emitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	id := primitives.NewUUID().String()
@@ -183,7 +183,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	s.Contains(attrs["task"].AsString(), `"owner_email":"some random test owner"`)
 
 	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
-	s.namespaceReplicator.emitNamespaceReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(false)
+	s.namespaceReplicator.emitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(false)
 	err = s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
 		namespaceOperation,

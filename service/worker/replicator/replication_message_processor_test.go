@@ -48,7 +48,7 @@ func TestRetryPolicyForTask(t *testing.T) {
 		"sourceCluster",
 		nil,                        // logger
 		nil,                        // eventLogger
-		nil,                        // emitNamespaceReplicationLifecycleEvents
+		nil,                        // emitNamespaceLifecycleEvents
 		nil,                        // remotePeer
 		metrics.NoopMetricsHandler, // metricsHandler — actually used by constructor
 		nil,                        // namespaceTaskExecutor
@@ -180,20 +180,20 @@ func newReplicationEventTestProcessor(
 		nil,
 	)
 	p := &replicationMessageProcessor{
-		hostInfo:                                hostInfo,
-		serviceResolver:                         serviceResolver,
-		currentCluster:                          "cluster-b",
-		sourceCluster:                           "cluster-a",
-		logger:                                  log.NewNoopLogger(),
-		eventLogger:                             eventLogger,
-		emitNamespaceReplicationLifecycleEvents: dynamicconfig.GetBoolPropertyFn(enabled),
-		remotePeer:                              remotePeer,
-		namespaceTaskExecutor:                   executor,
-		metricsHandler:                          metrics.NoopMetricsHandler,
-		retryPolicyForTask:                      func(*replicationspb.ReplicationTask) backoff.RetryPolicy { return policy },
-		lastProcessedMessageID:                  -1,
-		lastRetrievedMessageID:                  -1,
-		namespaceReplicationQueue:               queue,
+		hostInfo:                     hostInfo,
+		serviceResolver:              serviceResolver,
+		currentCluster:               "cluster-b",
+		sourceCluster:                "cluster-a",
+		logger:                       log.NewNoopLogger(),
+		eventLogger:                  eventLogger,
+		emitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(enabled),
+		remotePeer:                   remotePeer,
+		namespaceTaskExecutor:        executor,
+		metricsHandler:               metrics.NoopMetricsHandler,
+		retryPolicyForTask:           func(*replicationspb.ReplicationTask) backoff.RetryPolicy { return policy },
+		lastProcessedMessageID:       -1,
+		lastRetrievedMessageID:       -1,
+		namespaceReplicationQueue:    queue,
 	}
 	return p, task, executor, queue, eventLogger
 }

@@ -37,11 +37,11 @@ type (
 	}
 
 	replicator struct {
-		namespaceReplicationQueue               persistence.NamespaceReplicationQueue
-		logger                                  log.Logger
-		eventLogger                             otellog.Logger
-		emitNamespaceReplicationLifecycleEvents dynamicconfig.BoolPropertyFn
-		currentCluster                          func() string
+		namespaceReplicationQueue    persistence.NamespaceReplicationQueue
+		logger                       log.Logger
+		eventLogger                  otellog.Logger
+		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
+		currentCluster               func() string
 	}
 )
 
@@ -50,15 +50,15 @@ func NewReplicator(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.Logger,
 	eventLogger otellog.Logger,
-	emitNamespaceReplicationLifecycleEvents dynamicconfig.BoolPropertyFn,
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
 	currentCluster func() string,
 ) Replicator {
 	return &replicator{
-		namespaceReplicationQueue:               namespaceReplicationQueue,
-		logger:                                  logger,
-		eventLogger:                             eventLogger,
-		emitNamespaceReplicationLifecycleEvents: emitNamespaceReplicationLifecycleEvents,
-		currentCluster:                          currentCluster,
+		namespaceReplicationQueue:    namespaceReplicationQueue,
+		logger:                       logger,
+		eventLogger:                  eventLogger,
+		emitNamespaceLifecycleEvents: emitNamespaceLifecycleEvents,
+		currentCluster:               currentCluster,
 	}
 }
 
@@ -135,7 +135,7 @@ func (r *replicator) HandleTransmissionTask(
 		return err
 	}
 
-	if r.emitNamespaceReplicationLifecycleEvents != nil && r.emitNamespaceReplicationLifecycleEvents() {
+	if r.emitNamespaceLifecycleEvents != nil && r.emitNamespaceLifecycleEvents() {
 		var sourceCluster string
 		if r.currentCluster != nil {
 			sourceCluster = r.currentCluster()

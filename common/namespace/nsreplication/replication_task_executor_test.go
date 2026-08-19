@@ -123,11 +123,11 @@ func (s *namespaceReplicationTaskExecutorSuite) TestEmitProcessedRequiresExplici
 		Info: &namespacepb.NamespaceInfo{Name: "namespace-name"},
 	}
 
-	s.namespaceReplicator.emitNamespaceReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(false)
+	s.namespaceReplicator.emitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(false)
 	s.namespaceReplicator.emitNamespaceReplicationProcessed(s.replicationEventContext(), task, nil, nil)
 	s.Empty(s.eventLogger.records)
 
-	s.namespaceReplicator.emitNamespaceReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.namespaceReplicator.emitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	s.namespaceReplicator.emitNamespaceReplicationProcessed(context.Background(), task, nil, nil)
 	s.Empty(s.eventLogger.records)
 

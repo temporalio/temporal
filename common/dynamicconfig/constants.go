@@ -239,12 +239,7 @@ response to a StartWorkflowExecution request and skipping the trip through match
 	EmitNamespaceLifecycleEvents = NewGlobalBoolSetting(
 		"system.emitNamespaceLifecycleEvents",
 		false,
-		`EmitNamespaceLifecycleEvents controls whether services emit NamespaceLifecycle wide events for namespace CRUD and handover phases. Cluster-level; default off.`,
-	)
-	EmitNamespaceReplicationLifecycleEvents = NewGlobalBoolSetting(
-		"system.emitNamespaceReplicationLifecycleEvents",
-		false,
-		`EmitNamespaceReplicationLifecycleEvents controls whether services emit NamespaceReplicationLifecycle wide events. Cluster-level; default off.`,
+		`EmitNamespaceLifecycleEvents controls whether services emit NamespaceLifecycle and NamespaceReplicationLifecycle wide events. Cluster-level; default off.`,
 	)
 	PersistenceHealthSignalMetricsEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalMetricsEnabled",

@@ -106,7 +106,7 @@ var Module = fx.Options(
 			testHooks,
 			nsreplication.WithNamespaceReplicationLifecycleEvents(
 				eventLogger,
-				serviceConfig.EmitNamespaceReplicationLifecycleEvents,
+				serviceConfig.EmitNamespaceLifecycleEvents,
 			),
 		)
 	}),

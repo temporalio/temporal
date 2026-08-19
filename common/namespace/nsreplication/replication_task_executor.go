@@ -56,14 +56,14 @@ type (
 	TaskExecutorOption func(*taskExecutorImpl)
 
 	taskExecutorImpl struct {
-		currentCluster                          string
-		metadataManager                         persistence.MetadataManager
-		dataMerger                              NamespaceDataMerger
-		admitter                                NamespaceReplicationAdmitter
-		logger                                  log.Logger
-		eventLogger                             otellog.Logger
-		emitNamespaceReplicationLifecycleEvents dynamicconfig.BoolPropertyFn
-		testHooks                               testhooks.TestHooks
+		currentCluster               string
+		metadataManager              persistence.MetadataManager
+		dataMerger                   NamespaceDataMerger
+		admitter                     NamespaceReplicationAdmitter
+		logger                       log.Logger
+		eventLogger                  otellog.Logger
+		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
+		testHooks                    testhooks.TestHooks
 	}
 )
 
@@ -94,11 +94,11 @@ func NewTaskExecutor(
 // WithNamespaceReplicationLifecycleEvents configures processed lifecycle event emission.
 func WithNamespaceReplicationLifecycleEvents(
 	eventLogger otellog.Logger,
-	emitNamespaceReplicationLifecycleEvents dynamicconfig.BoolPropertyFn,
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
 ) TaskExecutorOption {
 	return func(executor *taskExecutorImpl) {
 		executor.eventLogger = eventLogger
-		executor.emitNamespaceReplicationLifecycleEvents = emitNamespaceReplicationLifecycleEvents
+		executor.emitNamespaceLifecycleEvents = emitNamespaceLifecycleEvents
 	}
 }
 
@@ -376,8 +376,8 @@ func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 	updateRequest *persistence.UpdateNamespaceRequest,
 ) {
 	if h.eventLogger == nil ||
-		h.emitNamespaceReplicationLifecycleEvents == nil ||
-		!h.emitNamespaceReplicationLifecycleEvents() {
+		h.emitNamespaceLifecycleEvents == nil ||
+		!h.emitNamespaceLifecycleEvents() {
 		return
 	}
 

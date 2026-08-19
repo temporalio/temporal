@@ -34,16 +34,15 @@ const (
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards                        int32
-	EmitNamespaceLifecycleEvents            dynamicconfig.BoolPropertyFn
-	EmitNamespaceReplicationLifecycleEvents dynamicconfig.BoolPropertyFn
-	PersistenceMaxQPS                       dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS                 dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceGlobalNamespaceMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceDynamicRateLimitingParams    dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
-	PersistenceQPSBurstRatio                dynamicconfig.FloatPropertyFn
+	NumHistoryShards                     int32
+	EmitNamespaceLifecycleEvents         dynamicconfig.BoolPropertyFn
+	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
+	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
 	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
@@ -288,16 +287,15 @@ func NewConfig(
 	numHistoryShards int32,
 ) *Config {
 	return &Config{
-		NumHistoryShards:                        numHistoryShards,
-		EmitNamespaceLifecycleEvents:            dynamicconfig.EmitNamespaceLifecycleEvents.Get(dc),
-		EmitNamespaceReplicationLifecycleEvents: dynamicconfig.EmitNamespaceReplicationLifecycleEvents.Get(dc),
-		PersistenceMaxQPS:                       dynamicconfig.FrontendPersistenceMaxQPS.Get(dc),
-		PersistenceGlobalMaxQPS:                 dynamicconfig.FrontendPersistenceGlobalMaxQPS.Get(dc),
-		PersistenceNamespaceMaxQPS:              dynamicconfig.FrontendPersistenceNamespaceMaxQPS.Get(dc),
-		PersistenceGlobalNamespaceMaxQPS:        dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS.Get(dc),
-		PersistencePerShardNamespaceMaxQPS:      dynamicconfig.DefaultPerShardNamespaceRPSMax,
-		PersistenceDynamicRateLimitingParams:    dynamicconfig.FrontendPersistenceDynamicRateLimitingParams.Get(dc),
-		PersistenceQPSBurstRatio:                dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		NumHistoryShards:                     numHistoryShards,
+		EmitNamespaceLifecycleEvents:         dynamicconfig.EmitNamespaceLifecycleEvents.Get(dc),
+		PersistenceMaxQPS:                    dynamicconfig.FrontendPersistenceMaxQPS.Get(dc),
+		PersistenceGlobalMaxQPS:              dynamicconfig.FrontendPersistenceGlobalMaxQPS.Get(dc),
+		PersistenceNamespaceMaxQPS:           dynamicconfig.FrontendPersistenceNamespaceMaxQPS.Get(dc),
+		PersistenceGlobalNamespaceMaxQPS:     dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS.Get(dc),
+		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.DefaultPerShardNamespaceRPSMax,
+		PersistenceDynamicRateLimitingParams: dynamicconfig.FrontendPersistenceDynamicRateLimitingParams.Get(dc),
+		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
 
 		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),

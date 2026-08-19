@@ -359,7 +359,7 @@ func NewWorkflowHandler(
 				namespaceReplicationQueue,
 				logger,
 				eventLogger,
-				config.EmitNamespaceReplicationLifecycleEvents,
+				config.EmitNamespaceLifecycleEvents,
 				clusterMetadata.GetCurrentClusterName,
 			),
 			archivalMetadata,
