@@ -362,6 +362,9 @@ func (p ReplicationLifecyclePayload) appendApplied(attrs []log.KeyValue) []log.K
 	if p.Error != "" {
 		attrs = append(attrs, log.String("error", p.Error))
 	}
+	if p.NewRunID != "" {
+		attrs = append(attrs, log.String("new_run_id", p.NewRunID))
+	}
 	if p.State == "" {
 		return attrs
 	}
