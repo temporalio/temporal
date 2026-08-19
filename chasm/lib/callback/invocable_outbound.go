@@ -46,7 +46,7 @@ func (n invocableOutbound) Invoke(
 		traceLogger := log.With(h.logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
-			tag.String("destination", taskAttr.Destination),
+			tag.Destination(taskAttr.Destination),
 			tag.WorkflowID(n.workflowID),
 			tag.WorkflowRunID(n.runID),
 			tag.AttemptStart(time.Now().UTC()),
