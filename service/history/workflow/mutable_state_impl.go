@@ -1433,6 +1433,7 @@ func (ms *MutableStateImpl) LoadHistoryEvent(ctx context.Context, token []byte) 
 		RunID:       wfKey.RunID,
 		EventID:     ref.EventId,
 		Version:     version,
+		ShardUUID:   ms.shard.GetOwner(),
 	}
 
 	return ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, ref.EventBatchId, branchToken)
@@ -1572,6 +1573,7 @@ func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 		RunID:       ms.executionState.RunId,
 		EventID:     completion.EventId,
 		Version:     version,
+		ShardUUID:   ms.shard.GetOwner(),
 	}
 	event, err := ms.eventsCache.GetEvent(ctx, ms.shard.GetShardID(), eventKey, completion.EventBatchId, currentBranchToken)
 	if err != nil {
@@ -1605,6 +1607,7 @@ func (ms *MutableStateImpl) GetActivityScheduledEvent(
 			RunID:       ms.executionState.RunId,
 			EventID:     ai.ScheduledEventId,
 			Version:     version,
+			ShardUUID:   ms.shard.GetOwner(),
 		},
 		ai.ScheduledEventBatchId,
 		currentBranchToken,
@@ -1702,6 +1705,7 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 			RunID:       ms.executionState.RunId,
 			EventID:     ci.InitiatedEventId,
 			Version:     version,
+			ShardUUID:   ms.shard.GetOwner(),
 		},
 		ci.InitiatedEventBatchId,
 		currentBranchToken,
@@ -1748,6 +1752,7 @@ func (ms *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 			RunID:       ms.executionState.RunId,
 			EventID:     ri.InitiatedEventId,
 			Version:     version,
+			ShardUUID:   ms.shard.GetOwner(),
 		},
 		ri.InitiatedEventBatchId,
 		currentBranchToken,
@@ -1828,6 +1833,7 @@ func (ms *MutableStateImpl) GetSignalExternalInitiatedEvent(
 			RunID:       ms.executionState.RunId,
 			EventID:     si.InitiatedEventId,
 			Version:     version,
+			ShardUUID:   ms.shard.GetOwner(),
 		},
 		si.InitiatedEventBatchId,
 		currentBranchToken,
@@ -1880,6 +1886,7 @@ func (ms *MutableStateImpl) GetCompletionEvent(
 			RunID:       ms.executionState.RunId,
 			EventID:     completionEventID,
 			Version:     version,
+			ShardUUID:   ms.shard.GetOwner(),
 		},
 		firstEventID,
 		currentBranchToken,
@@ -1978,6 +1985,7 @@ func (ms *MutableStateImpl) GetStartEvent(
 			RunID:       ms.executionState.RunId,
 			EventID:     common.FirstEventID,
 			Version:     startVersion,
+			ShardUUID:   ms.shard.GetOwner(),
 		},
 		common.FirstEventID,
 		currentBranchToken,
@@ -2093,6 +2101,7 @@ func (ms *MutableStateImpl) writeEventToCache(
 			RunID:       ms.executionState.RunId,
 			EventID:     event.GetEventId(),
 			Version:     event.GetVersion(),
+			ShardUUID:   ms.shard.GetOwner(),
 		},
 		event,
 	)

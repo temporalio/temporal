@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/google/uuid"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -127,6 +128,11 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	}
 	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
 	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
+
+	// A real shard context always has a unique owner.
+	if config.ShardInfo.GetOwner() == "" {
+		config.ShardInfo.Owner = fmt.Sprintf("test-shard-owner-%v-%v", config.ShardInfo.GetShardId(), uuid.NewString())
+	}
 
 	ctx := &ContextImpl{
 		shardID:             config.ShardInfo.GetShardId(),
