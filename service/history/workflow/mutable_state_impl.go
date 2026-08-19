@@ -648,6 +648,14 @@ func NewMutableStateInChain(
 	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
 	newMutableState.executionInfo.ChildrenInitializedPostResetPoint = currentMutableState.GetExecutionInfo().ChildrenInitializedPostResetPoint
 
+	// Pause/unpause dedup ids follow the chain: a request naming no run id resolves to whichever run
+	// is current, so a successor must recognize a retry that already took effect on its predecessor.
+	lastPauseRequestID := currentMutableState.GetExecutionInfo().GetLastPauseRequestId()
+	lastUnpauseRequestID := currentMutableState.GetExecutionInfo().GetLastUnpauseRequestId()
+	newMutableState.executionInfo.LastPauseRequestId = lastPauseRequestID
+	newMutableState.executionInfo.LastUnpauseRequestId = lastUnpauseRequestID
+	newMutableState.approximateSize += len(lastPauseRequestID) + len(lastUnpauseRequestID)
+
 	// TODO: Today other information like autoResetPoints, previousRunID, firstRunID, etc.
 	// are carried over in AddWorkflowExecutionStartedEventWithOptions. Ideally all information
 	// should be carried over here since some information is not part of the startedEvent.
@@ -3239,6 +3247,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 		RequestId: event.GetWorkflowExecutionPausedEventAttributes().GetRequestId(),
 	}
 
+	// Also recorded outside the pause info above, which is cleared on unpause, to de-dupe a retry.
+	requestID := event.GetWorkflowExecutionPausedEventAttributes().GetRequestId()
+	ms.approximateSize += len(requestID) - len(ms.executionInfo.LastPauseRequestId)
+	ms.executionInfo.LastPauseRequestId = requestID
+
 	// Update approximate size of the mutable state. This will be decreased when the pause info is removed (when the workflow is unpaused)
 	ms.approximateSize += ms.executionInfo.PauseInfo.Size()
 
@@ -3305,6 +3318,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 	if _, err := ms.UpdateWorkflowStateStatus(ms.executionState.GetState(), enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING); err != nil {
 		return err
 	}
+
+	// Outlives the pause info cleared below, to de-dupe a retry.
+	requestID := event.GetWorkflowExecutionUnpausedEventAttributes().GetRequestId()
+	ms.approximateSize += len(requestID) - len(ms.executionInfo.LastUnpauseRequestId)
+	ms.executionInfo.LastUnpauseRequestId = requestID
 
 	// save pauseInfoSize before clearing so that we can adjust approximate size later before returning success
 	pauseInfoSize := 0

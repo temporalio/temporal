@@ -1985,8 +1985,13 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.NoError(err)
 
 	// Pause and assert activity stamps incremented.
-	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.NewString())
+	pauseRequestID := uuid.NewString()
+	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", pauseRequestID)
 	s.NoError(err)
+
+	// Recorded twice: on the pause info, and separately so it survives that being cleared on unpause.
+	s.Equal(pauseRequestID, s.mutableState.executionInfo.GetPauseInfo().GetRequestId())
+	s.Equal(pauseRequestID, s.mutableState.executionInfo.GetLastPauseRequestId())
 
 	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
@@ -2098,7 +2103,8 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	s.Equal(pendingWFT.ScheduledEventID, s.mutableState.GetPendingWorkflowTask().ScheduledEventID)
 
 	// Pause first to simulate paused workflow state.
-	_, err = s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.NewString())
+	pauseRequestID := uuid.NewString()
+	_, err = s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", pauseRequestID)
 	s.NoError(err)
 
 	// Capture activity stamp after pause.
@@ -2116,12 +2122,17 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_PAUSE_REQUESTED_BEFORE_TASK_STARTED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
 
 	// Unpause and verify.
-	unpausedEvent, err := s.mutableState.AddWorkflowExecutionUnpausedEvent("tester", "reason", uuid.NewString())
+	unpauseRequestID := uuid.NewString()
+	unpausedEvent, err := s.mutableState.AddWorkflowExecutionUnpausedEvent("tester", "reason", unpauseRequestID)
 	s.NoError(err)
 
 	// PauseInfo should be cleared and status should be RUNNING.
 	s.Nil(s.mutableState.executionInfo.PauseInfo)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.mutableState.executionState.Status)
+
+	// Both ids outlive the cleared pause info, so either request's retry can be deduplicated.
+	s.Equal(unpauseRequestID, s.mutableState.executionInfo.GetLastUnpauseRequestId())
+	s.Equal(pauseRequestID, s.mutableState.executionInfo.GetLastPauseRequestId())
 
 	// Stamps should be incremented again (only for activities) on unpause.
 	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
@@ -2356,6 +2367,39 @@ func (s *mutableStateSuite) TestNewMutableStateInChain() {
 			},
 		)
 	}
+}
+
+// TestNewMutableStateInChain_CarriesPauseDedupRequestIDs verifies that the pause and unpause dedup
+// request ids follow the workflow chain, so a successor run recognizes a retry of a request that
+// already took effect on its predecessor.
+func (s *mutableStateSuite) TestNewMutableStateInChain_CarriesPauseDedupRequestIDs() {
+	pauseRequestID := uuid.NewString()
+	unpauseRequestID := uuid.NewString()
+
+	currentMutableState := TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		1000,
+		tests.WorkflowID,
+		uuid.NewString(),
+	)
+	currentMutableState.GetExecutionInfo().LastPauseRequestId = pauseRequestID
+	currentMutableState.GetExecutionInfo().LastUnpauseRequestId = unpauseRequestID
+
+	newMutableState, err := NewMutableStateInChain(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		tests.GlobalNamespaceEntry,
+		tests.WorkflowID,
+		uuid.NewString(),
+		s.mockShard.GetTimeSource().Now(),
+		currentMutableState,
+	)
+	s.NoError(err)
+	s.Equal(pauseRequestID, newMutableState.GetExecutionInfo().GetLastPauseRequestId())
+	s.Equal(unpauseRequestID, newMutableState.GetExecutionInfo().GetLastUnpauseRequestId())
 }
 
 func (s *mutableStateSuite) TestSanitizedMutableState() {
